@@ -1,5 +1,4 @@
 import { uploadBlob } from "../../../../packages/mcps/src/shared/blob-client.ts";
-import { put as putBlob } from "../../../host/src/action-blobs.ts";
 import { serveRoutes } from "../../../host/tests/real-server.ts";
 import { mintContext } from "../../../host/src/control.ts";
 import { HOST_CONTEXT_HEADER } from "@pe/host-contracts/contracts";
@@ -16,16 +15,13 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { NodeServices } from "../../../host/tests/family-attach-host.fixture.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { bindWork, canonicalRouteInput, familyDraftRouteState, podMemberCode, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
+import { bindWork, canonicalRouteInput, podMemberCode, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
 import { module } from "./route";
 import { direct, mountTypedRoute } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client.ts";
 import { admittedBuiltinsLayer, AdmittedBuiltins } from "../../../host/src/admitted-builtins.ts";
 import { Scope, Exit } from "effect";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store.ts";
-import { familySpecExecutor } from "../../../host/src/family-spec.ts";
-import { commandResources } from "../../../host/src/command-reads.ts";
-import { ActionIncomplete } from "../../../host/src/action-journal.ts";
 import { SdkDriver } from "../../../host/src/sdk-session.ts";
 import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
 import { detachedBridge, testHostInputs, journalAt, callRouteOver } from "../../../host/tests/effect-test.ts";
@@ -133,50 +129,4 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     if(process.env.PE_START_ATTACH_EVIDENCE) await writeFile(process.env.PE_START_ATTACH_EVIDENCE, JSON.stringify({startReturnHandle, stored: await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)), truncated: writer.capture.truncated(), receipts: await journal.list()}, null, 2));
     mount.dispose(); stop(); await Effect.runPromise(feed.seal); await Effect.runPromise(feed.close); vi.unstubAllGlobals(); await journal.close(); await web.close(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true});
   }
-});
-
-
-test("resume reads prepared Family assets by digest without parsing again", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-attach-resume-"));
-  const member = {pod: "test", path: "settings/family/HCB.json"};
-  const key = bindWork("family", null);
-  const work = new RouteWorkspace({publicationAuthor: () => "human", registrations: [{spec: familyDraftRouteState}], store: fileRouteDocumentStore(stateFixture(join(dir, "work")))});
-  const bridge = detachedBridge();
-  const parsePdf = vi.fn(async () => ({jobId: "retained", fileName: "source.pdf", pages: [], blocks: [], images: []}));
-  const deps = {workspace: work, podsRoot: dir, parsePdf};
-  await mkdir(join(dir, member.pod, "settings/family"), {recursive: true});
-  await writeFile(join(dir, member.pod, "pod.json"), JSON.stringify({id: member.pod}));
-  await writeFile(join(dir, member.pod, member.path), JSON.stringify({family: {name: "HCB"}}));
-  const pdf = join(dir, "source.pdf");
-  await writeFile(pdf, "%PDF-retained");
-  const executor = familySpecExecutor(deps);
-  const path = join(dir, "journal.jsonl");
-  let stopAfterPrepare = true;
-  const open = () => {
-    const journal = journalAt(path, Date.now);
-    journal.bindCommands({...commandResources(bridge, deps, async id => (await journal.list(undefined, id))[0]),
-      resolve: () => ({...executor, run: (ctx, execution) =>
-        executor.run(ctx, {...execution, step: (kind, key, input, execute, options) =>
-          Effect.tap(execution.step(kind, key, input, execute, options), () => {
-            if (!stopAfterPrepare) return Effect.void;
-            stopAfterPrepare = false;
-            return Effect.fail(new ActionIncomplete("Interrupted after first prepared asset", null));
-          })})})});
-    return journal;
-  };
-  let journal = open();
-  try {
-    const view = (await work.view(key, "family"))!;
-    const crossing = {caller: {kind: "human" as const, via: "local" as const}, basis: {kind: "human" as const}};
-    await journal.invoke({id: "resume", key: "family.attach-spec", target: {kind: "host"}, input: {member, source: await putBlob(await readFile(pdf), "source.pdf"), work: {key, revision: view.revision}}}, crossing);
-    const prepared = await journal.wait("resume");
-    expect(prepared.state, JSON.stringify(prepared)).toBe("incomplete");
-    await journal.close();
-    journal = open();
-    await journal.resume("resume", crossing);
-    expect((await journal.wait("resume")).state).toBe("succeeded");
-    expect(parsePdf).toHaveBeenCalledOnce();
-    expect(await readFile(join(dir, member.pod, "settings/family/source-retained/source.pdf"), "utf8")).toBe("%PDF-retained");
-    expect(await readFile(path, "utf8")).not.toMatch(/"(?:base64|bytesBase64)"/);
-  } finally { await journal.close(); await rm(dir, {recursive: true, force: true}); }
 });

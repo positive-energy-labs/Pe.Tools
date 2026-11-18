@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { executionTargetSchema, persistedActionReceiptSchema, persistedReceiptSchema, type RetainedOriginalTarget } from "@pe/agent-contracts";
 import { fixtureNative } from "./fixture-native.ts";
 
-test("INT-RECEIPT original-ID controls retain evidence and refuse unavailable resume before invocation",async()=>{
+test("INT-RECEIPT original-ID controls retain evidence: read answers and Stop refuses a settled action",async()=>{
   const directory=await mkdtemp(join(tmpdir(),"pe-receipt-controls-"));
   const exact={kind:"document" as const,ref:{session:"sdk-original",processIncarnation:{pid:42,startedAt:1000},openId:"original-open"}};
   const historical:RetainedOriginalTarget=executionTargetSchema.safeParse(exact).success
@@ -25,7 +25,7 @@ test("INT-RECEIPT original-ID controls retain evidence and refuse unavailable re
   }
   const path=join(directory,"partition-operations.json"),original=Buffer.from(lines.join("\n")+"\n");
   await writeFile(path,original);
-  const native=await fixtureNative(directory),post=native.actions(),resume=vi.spyOn(native.journal,"resume");
+  const native=await fixtureNative(directory),post=native.actions();
   const control=(verb:string,id:string)=>post.request(new Request(`http://host/actions/${verb}`,{
     method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({id}),
   }));
@@ -35,16 +35,7 @@ test("INT-RECEIPT original-ID controls retain evidence and refuse unavailable re
     expect(await read.json()).toMatchObject([{id:"historical",target:{kind:"unavailable-original",original:historical},result:{original:true}}]);
     const cancelled=await control("cancel","historical");expect(cancelled.status).toBe(409);
     expect(await cancelled.text()).toContain("only an active action can be cancelled");
-    for(const verb of ["recover"]){
-      const response=await control(verb,"historical"),body=await response.json();
-      expect(response.status,JSON.stringify({verb,body})).toBeLessThan(400);
-      expect(body).toMatchObject({id:"historical",target:{kind:"unavailable-original",original:historical},result:{original:true}});
-    }
-    const refused=await control("resume","historical");expect(refused.status).toBe(409);
-    expect(await refused.text()).toContain("Original execution target is unavailable");expect(resume).not.toHaveBeenCalled();
-    const live=await control("resume","current");expect(live.status).toBe(200);
-    expect(await live.json()).toMatchObject({id:"current",target:{kind:"host"},result:{original:true}});
-    expect(resume).toHaveBeenCalledOnce();expect(native.calls).toEqual([]);
+    expect(native.calls).toEqual([]);
     expect(await readFile(path)).toEqual(original);
-  }finally{resume.mockRestore();await native.close();}
+  }finally{await native.close();}
 });

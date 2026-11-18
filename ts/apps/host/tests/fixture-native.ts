@@ -63,11 +63,14 @@ export async function fixtureNative(
   let lostReply: { requestId: string; operation: string; openDocumentId: string | null; value: unknown; touched?: Touched } | undefined;
   const touched = new Map<string, Touched>();
   const recoveryReplies = new Map<string, NonNullable<typeof lostReply>>();
+  let opResultReads = 0;
   const calls: { key: string; input: unknown; action: string | null | undefined }[] = [];
   const tokens = new Map<string, string>();
   const handlers: Promise<{ close(): Promise<void> }>[] = [];
   return {
     bridge, journal, calls,
+    /** SDK `op result` reads, the only native evidence recovery asks for. */
+    get opResultReads() { return opResultReads; },
     // Controlled scenario evidence, separate from the unchanged pre-touched recordings.
     // Never infer a clean outcome from the operation catalog or the retained payload's status.
     reportTouched(operation: string, value: Touched) { touched.set(operation, value); },
@@ -110,6 +113,7 @@ export async function fixtureNative(
     actions(deps: Parameters<typeof makeCallRoute>[1] = {}, captures?: Parameters<typeof makeCallRoute>[0], composition: Parameters<typeof makeCallRoute>[2] = {}, routes: Layer.Layer<never, any, any> = Layer.empty) {
       const readSdk = deps.sdk ?? sdkSessions;
       const dependencies = { ...deps, sdk: async (args: readonly string[]) => {
+        if (args[0] === "op" && args[1] === "result") opResultReads++;
         const reply = args[0] === "op" && args[1] === "result" ? recoveryReplies.get(args[2]!) : undefined;
         if (!reply) return readSdk(args);
         const step = (await journal.list()).flatMap(row => row.steps).find(step => step.id === reply.requestId);

@@ -7,7 +7,7 @@ import {
   NATIVE_BODY_VERSION_HEADER,
   DUCTS_REFRESH_HEADER,
 } from "@pe/agent-contracts";
-import { actionControls, commandTool, receiptsForWork } from "@pe/agent-contracts";
+import { commandTool, receiptsForWork } from "@pe/agent-contracts";
 import type { Caller } from "@pe/agent-contracts";
 import { ADMISSION_RESEND_HEADER, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import {
@@ -726,55 +726,30 @@ function callRoutes(
       ),
     );
   });
-  // action.read is GET /actions; every other control is POST /actions/<verb>, the path the client builds.
-  const { "action.read": _readControl, ...writeControls } = actionControls;
-  const controlVerbs = Object.keys(writeControls) as (keyof typeof writeControls)[];
-  const controls = controlVerbs.map((id) => {
-    const choice = id.slice("action.".length);
-    return HttpRouter.add(peRoutes[id].method, peRoutes[id].path, (req) => {
-      if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
-      const caller = currentCaller();
-      return RevitBridge.use((_bridge) =>
-        Effect.flatMap(req.json, (body) => Effect.tryPromise({
-          try: async () => {
-            if (!isRecord(body) || typeof body.id !== "string")
-              throw Error("An original action ID is required");
-            const controlled = (await owner().readFor(caller, undefined, body.id))[0];
-            if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
-            // The journal resolves control behavior from the same executor as invocation.
-            if (choice === "cancel")
-              return Response.jsonUnsafe(await owner().cancel(body.id), { status: 202 });
-            if (choice === "recover") return Response.jsonUnsafe(await owner().recover(body.id));
-            if (choice !== "resume") throw Error(`Action control '${choice}' has no handler`);
-            if (controlled.target.kind === "unavailable-original")
-              throw new CommandRejected({ kind: "domain", code: "target.original-unavailable",
-                message: "Original execution target is unavailable; inspect or recover its original action ID" });
-            const crossing = {
-              caller,
-              basis: admitCrossing(
-                caller,
-                controlled.target,
-                "/actions/resume",
-                readsOnly(controlled.key, controlled.input),
-              ),
-            };
-            const row = await owner().resume(body.id, crossing);
-            return Response.jsonUnsafe(row, {
-              status: row.state === "running" ? 202 : 200,
-            });
-          },
-          catch: (error) => error,
-        })).pipe(
-          Effect.catch((error) =>
-            Effect.succeed(
-              error instanceof Refused
-                ? refusedResponse(error)
-                : Response.jsonUnsafe({ error: said(error) }, { status: 409 }),
-            ),
+  // action.read is GET /actions; Stop is the one write control (K1b deleted Recover and Resume).
+  const cancelControl = HttpRouter.add(peRoutes["action.cancel"].method, peRoutes["action.cancel"].path, (req) => {
+    if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
+    const caller = currentCaller();
+    return RevitBridge.use((_bridge) =>
+      Effect.flatMap(req.json, (body) => Effect.tryPromise({
+        try: async () => {
+          if (!isRecord(body) || typeof body.id !== "string")
+            throw Error("An original action ID is required");
+          const controlled = (await owner().readFor(caller, undefined, body.id))[0];
+          if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
+          return Response.jsonUnsafe(await owner().cancel(body.id), { status: 202 });
+        },
+        catch: (error) => error,
+      })).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(
+            error instanceof Refused
+              ? refusedResponse(error)
+              : Response.jsonUnsafe({ error: said(error) }, { status: 409 }),
           ),
         ),
-      );
-    });
+      ),
+    );
   });
   const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
     RevitBridge.use((bridge) =>
@@ -889,7 +864,7 @@ function callRoutes(
     actionReads,
     familyReadings,
     scheduleReadings,
-    ...controls,
+    cancelControl,
   ).pipe(
     HttpRouter.provideRequest(Layer.effect(PictureCaptureStore, PictureCaptureStore)),
     HttpRouter.provideRequest(Layer.effectContext(Effect.gen(function* () {

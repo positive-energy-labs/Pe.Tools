@@ -178,4 +178,9 @@ export function bindCommandRuntime(
     readOwnership: owned.readOwnership,
     resolve: commandRegistry(bridge, captures, { ...deps, nativeRead: owned.nativeRead }, local, origin),
   });
+  // K1b: recover has no door, so the journal calls it itself: once at boot, then on each connect.
+  void owner.reconcile();
+  bridge.subscribe((event) => {
+    if (event.kind === "connected") void owner.reconcile(event.sessionId);
+  });
 }

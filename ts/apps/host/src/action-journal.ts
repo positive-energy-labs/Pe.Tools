@@ -109,6 +109,15 @@ const undispatched = (steps: readonly ActionStep[]) =>
       (step.state === "failed" || step.state === "cancelled") &&
       step.notDispatched === true,
   );
+/**
+ * K1b: a reply about the model settles a step forever, so recovery asks only a step without one.
+ * An `unknown` step is asked whatever it carries; a bridge step was dispatched, and its reply counts
+ * only with a valid `touched`. The SDK lane stamps dispatch after its answer, so no stamp is no proof.
+ */
+const unanswered = (step: ActionStep) =>
+  step.state === "unknown" || (step.transport === "bridge" && step.bridgeReply !== "touched");
+const targetSession = (target: ActionReceipt["target"]) =>
+  target.kind === "document" ? target.ref.session : target.kind === "session" ? target.session : undefined;
 /** Only native terminal evidence can clear a possible document write. */
 const effected = (step: ActionStep) =>
   step.kind !== "publication" &&
@@ -257,7 +266,6 @@ export type ActionExecution = {
   ): Step<{ retired: WorkPath[]; revision: number }>;
   readonly prepared: unknown;
   recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
-  retire(id: string, reason: string): Step<ActionStep>;
 };
 /** Fibers by key in the journal Layer's scope; a fork under a running key joins it, never replaces it. */
 export type FiberOwner = {
@@ -290,6 +298,11 @@ const ownerIdentity = (row: ActionReceipt, parent?: string): RequestIdentityData
     }),
   });
 };
+/** A step whose effect returned but whose `check` threw; live and recovery reads share it (K1b). */
+export const checkFailure = (error: unknown, result: unknown): DispatchFailure =>
+  error instanceof StepFailure && error.outcome !== "refused"
+    ? failure(error)
+    : { state: "failed", error: messageOf(error), status: 409, evidence: { result: structuredClone(result) } };
 /** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
 const CANCELLED_STATUS = 499;
 type DispatchFailure =
@@ -509,6 +522,8 @@ export class ActionJournal implements ReceiptReader {
   /** Action id to its receipt id, and step id to its action id. */
   private readonly actionReceipt = new Map<string, string>();
   private readonly stepAction = new Map<string, string>();
+  /** Rows this load found running and interrupted: each may re-enter for retirement once (K1b). */
+  private readonly interrupted = new Set<string>();
   /** Mapping keys minted since the last append, and since the last compaction. */
   private fresh: string[] = [];
   private minted = new Set<string>();
@@ -983,7 +998,7 @@ export class ActionJournal implements ReceiptReader {
         if (!view) {
           if (original?.kind === "work") {
             if (original.probe.handle.revision !== handle.revision)
-              throw Error("Resume changed its observed Work revision");
+              throw Error("A recovered action's observed Work revision changed");
             view = { doc: structuredClone(original.expected), revision: handle.revision };
           } else {
             const current = await workspace?.view(handle.key, spec.route);
@@ -1175,28 +1190,10 @@ export class ActionJournal implements ReceiptReader {
     }
   }
 
-  /** Identity, binding, reservations and execution have one owner and one durable row. */
-  async resume(id: string, crossing: Crossing): Promise<ActionReceipt> {
-    const row = (await this.readFor(crossing.caller, undefined, id))[0];
-    if (!row) throw Error("Original command is unavailable");
-    if (row.target.kind === "unavailable-original") {
-      if (row.state === "unknown") return this.recover(id);
-      if (row.state !== "incomplete" && row.state !== "running") return row;
-      throw refused("Original execution identity is unavailable", "target.original-unavailable");
-    }
-    if (!this.environment) throw Error("Original executor is unavailable");
-    if (row.state === "unknown") return this.recover(id);
-    return this.invoke(
-      { id: row.id, key: row.key, target: row.target, input: row.input },
-      crossing,
-      true,
-    );
-  }
-
   async invoke(
     raw: unknown,
     crossing: Crossing,
-    resume = false,
+    /** Only `recover` sets it: replay recorded steps and run nothing but Work retirement. */
     retirementOnly = false,
   ): Promise<ActionReceipt> {
     const request = z.object({ id: z.string().min(1), key: z.string().min(1) }).parse(raw);
@@ -1211,8 +1208,6 @@ export class ActionJournal implements ReceiptReader {
       const identity = { id: original.id, key: original.key, target: original.target, input: original.input };
       if (canonicalRouteInput(identity) !== canonicalRouteInput(raw))
         throw refused("Request conflicts with its original retained intent", "id-conflict");
-      if (resume)
-        throw refused("Original execution identity is unavailable", "target.original-unavailable");
       return structuredClone(retained);
     }
     const attempts = this.owners?.attempts;
@@ -1252,16 +1247,9 @@ export class ActionJournal implements ReceiptReader {
           code: "id-conflict",
           message: `request id '${admission.id}' conflicts with its admitted intent or target`,
         });
-      if (!resume || (prior.state !== "unknown" && prior.state !== "incomplete"))
+      if (!retirementOnly || (prior.state !== "unknown" && prior.state !== "incomplete"))
         return structuredClone(prior);
-      if (prior.refusal?.kind === "domain" && prior.refusal.code === "historical-schema")
-        throw Error(
-          "Historical schema cannot authorize resumed execution; inspect its archived journal",
-        );
-      if (prior.prepared.state !== "ready")
-        throw Error("Original consumed values were not frozen; cannot resume this attempt");
-      if (prior.steps.some((step) => step.state === "unknown" || step.state === "running"))
-        throw Error("Recover every uncertain step before resuming the original action");
+      // recover re-enters only a ready, current-schema row whose steps all succeeded.
     }
     // Native evidence authorizes only its host-owned retirement, never a fresh external effect.
     const gate = (
@@ -1590,25 +1578,6 @@ export class ActionJournal implements ReceiptReader {
               Effect.ensuring(Effect.sync(() => void (cursor = continuation))),
             );
         }),
-        retire: (id, reason) => io(async () => {
-          const ended = row.steps.find((step) => step.id === id);
-          if (!resume || ended?.state !== "succeeded")
-            throw Error("Only a resumed attempt retires a succeeded step");
-          const { result: _result, state: _state, ...intent } = ended;
-          const retired: ActionStep = {
-            ...intent,
-            state: "failed",
-            error: reason,
-            status: 410,
-            retired: true,
-            evidence: { result: ended.result },
-          };
-          await save((current) => ({
-            ...current,
-            steps: current.steps.map((step) => (step.id === id ? retired : step)),
-          }));
-          return structuredClone(retired);
-        }),
         step: (kind, key, input, effect, options) =>
           Effect.gen(function* () {
             const begun = yield* io(async (): Promise<{ replayed: unknown } | { step: ActionStep }> => {
@@ -1623,7 +1592,7 @@ export class ActionJournal implements ReceiptReader {
                   key !== "work.retire"
                 )
                   continue;
-                if (resume && previous.state === "failed") {
+                if (retirementOnly && previous.state === "failed") {
                   if (previous.notDispatched || previous.retired) continue;
                   throw Error(
                     "A dispatched failed effect needs explicit reconciliation before it can repeat",
@@ -1647,7 +1616,7 @@ export class ActionJournal implements ReceiptReader {
               }
               if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
                 throw new ActionIncomplete(
-                  "Recovered effects require explicit resume before new external work",
+                  "A recovered action only retires its Work; submit a new action for the rest",
                   null,
                 );
               const incarnation = row.consumes.find(
@@ -1751,14 +1720,7 @@ export class ActionJournal implements ReceiptReader {
                           notDispatched: true,
                         }
                       : returned
-                        ? error instanceof StepFailure && error.outcome !== "refused"
-                          ? failure(error)
-                          : {
-                              state: "failed",
-                              error: messageOf(error),
-                              status: 409,
-                              evidence: { result: structuredClone(result) },
-                            }
+                        ? checkFailure(error, result)
                         : failure(error);
                     // A domain refusal cannot erase the journal's durable dispatch evidence.
                     if (held.dispatchedAt && "notDispatched" in outcome && outcome.notDispatched) {
@@ -1922,7 +1884,7 @@ export class ActionJournal implements ReceiptReader {
       );
       return structuredClone(row);
     });
-    return admitted ?? this.invoke(raw, crossing, resume);
+    return admitted ?? this.invoke(raw, crossing, retirementOnly);
   }
   /**
    * Signal the running action's in-flight bridge request. `signal` is given the step id, which IS
@@ -1962,59 +1924,66 @@ export class ActionJournal implements ReceiptReader {
     if (!executor?.recover) throw Error("This command has no recovery adapter");
     if (original.prepared.state === "ready") executor.prepared.parse(original.prepared.value);
     const recover = executor.recover;
-    const incomplete = original.state === "incomplete";
     if (original.prepared.state !== "ready") return original;
+    // An answered row is never asked again; one whose answers all succeeded still finishes below.
+    const asked = original.steps.filter(unanswered);
+    // Only this boot's interruption, or an answer this call reads, re-enters; then never again.
+    const interrupted = this.interrupted.delete(id);
+    if (!asked.length && !interrupted) return original;
+    let answered = false;
     const updates: {
       step: ActionStep;
       evidence: unknown;
       observation?: Extract<ReceiptFact, { kind: "native" }>;
     }[] = [];
-    for (const step of original.steps)
-      if (step.kind === "native" || step.state === "unknown" || incomplete) {
-        try {
-          const update = await recover(
-            structuredClone(step),
-            structuredClone(original.prepared.value),
-            structuredClone(original.target),
-          );
-          if (
-            update.step.id !== step.id ||
-            update.step.key !== step.key ||
-            update.step.kind !== step.kind ||
-            update.step.transport !== step.transport ||
-            canonicalRouteInput(update.step.input) !== canonicalRouteInput(step.input) ||
-            (step.process &&
-              update.step.process &&
-              canonicalRouteInput(step.process) !== canonicalRouteInput(update.step.process))
-          )
-            throw Error("Recovery cannot change a step's immutable intent or process");
-          // Recovery supplies a new outcome. Obsolete fields from the previous state are not
-          // part of that outcome; the journal retains immutable intent and dispatch evidence.
-          const variant = actionStepSchema.options.map((option) => option.options).flat().find(
-            (schema) => schema.shape.state.value === update.step.state && schema.shape.transport.safeParse(update.step.transport).success &&
-              ("opReceipt" in schema.shape) === ("opReceipt" in update.step),
-          )!;
-          update.step = actionStepSchema.parse({
-            ...variant.strip().parse(update.step),
-            ...(step.process ? { process: step.process } : {}),
-            ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
-            ...(step.releases ? { releases: step.releases } : {}),
-          });
-          updates.push({
-            ...update,
-            evidence:
-              incomplete || step.state !== update.step.state
-                ? { previous: step, receipt: update.evidence }
-                : update.evidence,
-          });
-        } catch (error) {
-          updates.push({ step, evidence: { error: String(error) } });
-        }
+    for (const step of asked)
+      try {
+        const update = await recover(
+          structuredClone(step),
+          structuredClone(original.prepared.value),
+          structuredClone(original.target),
+        );
+        if (
+          update.step.id !== step.id ||
+          update.step.key !== step.key ||
+          update.step.kind !== step.kind ||
+          update.step.transport !== step.transport ||
+          canonicalRouteInput(update.step.input) !== canonicalRouteInput(step.input) ||
+          (step.process &&
+            update.step.process &&
+            canonicalRouteInput(step.process) !== canonicalRouteInput(update.step.process))
+        )
+          throw Error("Recovery cannot change a step's immutable intent or process");
+        // Recovery supplies a new outcome. Obsolete fields from the previous state are not
+        // part of that outcome; the journal retains immutable intent and dispatch evidence.
+        const variant = actionStepSchema.options.map((option) => option.options).flat().find(
+          (schema) => schema.shape.state.value === update.step.state && schema.shape.transport.safeParse(update.step.transport).success &&
+            ("opReceipt" in schema.shape) === ("opReceipt" in update.step),
+        )!;
+        update.step = actionStepSchema.parse({
+          ...variant.strip().parse(update.step),
+          ...(step.process ? { process: step.process } : {}),
+          ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
+          ...(step.releases ? { releases: step.releases } : {}),
+        });
+        updates.push({
+          ...update,
+          evidence:
+            step.state !== update.step.state
+              ? { previous: step, receipt: update.evidence }
+              : update.evidence,
+        });
+      } catch (error) {
+        updates.push({ step, evidence: { error: String(error) } });
       }
     const recovered = await this.serial(async () => {
       const current = this.rows.get(id)!;
-      if (canonicalRouteInput(current) !== canonicalRouteInput(original))
+      // A read that changed no step proves nothing new and writes no revision.
+      const changed = updates.some(({ step }) =>
+        canonicalRouteInput(step) !== canonicalRouteInput(original.steps.find((held) => held.id === step.id)));
+      if (!changed || canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
+      answered = true;
       let nextRow: ActionReceipt = {
         ...current,
         steps: current.steps.map(
@@ -2063,6 +2032,7 @@ export class ActionJournal implements ReceiptReader {
     // Re-enter only after every effect has a confirmed answer. Step replay reuses results;
     // conditional retirement compares the frozen edit and preserves newer Work edits.
     if (
+      (interrupted || answered) &&
       (recovered.state === "unknown" || recovered.state === "incomplete") &&
       recovered.steps.length > 0 &&
       recovered.target.kind !== "unavailable-original" &&
@@ -2074,11 +2044,23 @@ export class ActionJournal implements ReceiptReader {
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
         { caller: recovered.caller, basis: executable.data.basis },
         true,
-        true,
       );
       return this.wait(id);
     }
     return recovered;
+  }
+  /**
+   * K1b's automatic caller of `recover`. At boot (no session) it asks about every unknown row,
+   * whatever its target, and re-enters each row this load interrupted once; on a bridge connect it
+   * asks once about each unknown row on that session with an unanswered step. A row the SDK cannot
+   * settle waits for the next connect.
+   */
+  async reconcile(session?: string): Promise<void> {
+    for (const row of await this.list())
+      if (session === undefined
+        ? row.state === "unknown" || this.interrupted.has(row.id)
+        : row.state === "unknown" && targetSession(row.target) === session && row.steps.some(unanswered))
+        await this.recover(row.id).catch((error) => console.error(`action-journal: reconcile ${row.id} failed`, error));
   }
   /**
    * Host shutdown, last of the host's finalizers: refuse admission, join every admitted command
@@ -2130,6 +2112,7 @@ export class ActionJournal implements ReceiptReader {
         this.mappings,
         this.actionReceipt,
         this.stepAction,
+        this.interrupted,
       ])
         held.clear();
       this.fresh = [];
@@ -2192,6 +2175,7 @@ export class ActionJournal implements ReceiptReader {
     for (const row of current) {
       let next = row;
       if (row.state === "running") {
+        this.interrupted.add(row.id);
         const steps = interruptedSteps(row.steps);
         next = {
           ...unsettled(row),

@@ -1,6 +1,6 @@
 /**
  * The transcript's record lines for Pea's route work. No verbs: `open ›` hosts the owning route
- * beside the thread, where the Work's cells and a receipt's recover/resume/stop verbs live.
+ * beside the thread, where the Work's cells and a receipt's read and stop verbs live.
  */
 import { Link } from "@tanstack/react-router";
 import type { ActionReceipt } from "@pe/agent-contracts";
@@ -59,7 +59,7 @@ export function ActionLine({
   const { store } = useWorkbench();
   const reading = useReading<ActionReceipt[]>({ kind: "receipts", id: call.id });
   const row = previousOf(reading)?.find((candidate) => candidate.id === call.id);
-  // A control (`action.resume`) names the original receipt; its key is the action's own.
+  // A control (`action.cancel`) names the original receipt; its key is the action's own.
   const key = row?.key ?? call.key;
   const route = receiptRoute(key, row);
   const place = route ? actionPlace(route, row) : null;

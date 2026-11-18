@@ -45,7 +45,6 @@ effectTest("PUR-FFX-RETIRE-DEPTH-01: cancelled apply preserves consumed Work at 
       effect: () => Effect.die("Unexpected effect"),
       publishWork: () => Effect.die("Unexpected publication"),
       recorded: () => undefined,
-      retire: () => Effect.die("Unexpected step retirement"),
     };
     const caller = { kind: "human" as const, via: "local" as const };
     const ctx: CommandContext = {
