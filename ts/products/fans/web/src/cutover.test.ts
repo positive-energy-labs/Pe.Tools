@@ -27,7 +27,7 @@ const settle = (write: Observation<WorkWriteOutcome>) =>
     ),
   );
 const witness = () => createWitness(closes);
-test("human calculation/drop/flow edits stay in Fans Work, preserve siblings and restore named history after a cold shell reload", async () => {
+test("human drop/flow edits stay in Fans Work, preserve siblings and restore named history after a cold shell reload", async () => {
   const f = await witness();
 
   await vi.waitFor(() => {
@@ -38,12 +38,6 @@ test("human calculation/drop/flow edits stay in Fans Work, preserve siblings and
     workKey(f.fans.workBasis()!.token.scope.identity.work!),
   );
   const edits = [
-    {
-      history: { label: "Fan calculation" },
-      patches: [
-        { path: ["calculation", "fanFlow"], value: { edit: { value: { kind: "balanced-design", source: "test" } } } },
-      ],
-    },
     {
       history: {
         label: "Part drop DS-1",
@@ -71,7 +65,6 @@ test("human calculation/drop/flow edits stay in Fans Work, preserve siblings and
   expect(ductsDocumentSchema.parse(f.owner.work()!.value).rules).toEqual({});
   expect(f.owner.work()?.revision).toBe(0);
   const value = fansDocumentSchema.parse(f.fans.work()!.value);
-  expect(value.calculation.fanFlow?.edit?.value).toEqual({ kind: "balanced-design", source: "test" });
   expect(value.componentDrops[part]?.edit?.value.inWg).toBe(0.18);
   f.fans.close();
   const next = f.mount(f.admitted.presenter);

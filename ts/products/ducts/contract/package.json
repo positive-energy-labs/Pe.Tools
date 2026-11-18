@@ -7,7 +7,6 @@
     "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
     "./pea-guide": "./src/pea-guide.ts",
     "./criterion-words.neutral": "./src/criterion-words.neutral.ts",
-    "./duct-calculation": "./src/duct-calculation.ts",
     "./duct-catalog": "./src/duct-catalog.ts",
     "./duct-inputs": "./src/duct-inputs.ts",
     "./duct-loss-read": "./src/duct-loss-read.ts",

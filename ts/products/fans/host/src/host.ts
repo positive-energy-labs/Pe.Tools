@@ -27,7 +27,6 @@ import {
   fanOverview,
   fanRoster,
   fanCalcBreakdown,
-  espOptions,
 } from "./fan-calc.ts";
 const openFan = read("fans.open", {
   input: fansReadArgs
@@ -88,10 +87,6 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
             if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
             return row;
           });
-    const options = await ctx.read(espOptions, {
-      target: args.target,
-      units: chosen.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
-    });
     if (chosen.length > FAN_READ_MAX) throw Error("Open at most 32 fan ports in one sheet");
     const opened = await ctx.collect(chosen, {
       read: openFan,
@@ -158,7 +153,6 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
         })
       : null;
     return ctx.compute(fansCalcData, { opened, rows, fans, geometry }, (data) => ({
-      ...options,
       open: data.opened[0] ?? null,
       opened: [...data.opened],
       rows: data.rows,

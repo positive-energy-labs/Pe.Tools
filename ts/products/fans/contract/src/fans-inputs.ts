@@ -15,7 +15,6 @@ export type FanInputRow<T> = {
   role: "input" | "result";
   on: "fan" | "terminal" | "component" | "fitting" | "criteria";
   domain: Domain;
-  home: "Work" | "project" | "firm" | "model" | "derived";
   owner: "fans" | "duct-systems";
   layers: readonly ValueSource[];
   segment: string | null;
@@ -127,29 +126,29 @@ const row = <const R extends Omit<FanInputRow<unknown>, "accepts" | "layers">>(d
   accepts: (value: unknown): value is unknown => schemaOf(definition.domain).safeParse(value).success,
 });
 const input = <const D extends Domain>(name: string, on: FanInputRow<unknown>["on"], segment: string, parameter: FanInputRow<unknown>["parameter"], domain: D) =>
-  row({ name, role: "input", on, domain, home: "Work", owner: "fans", segment, parameter, write: "stated-only" } as const);
+  row({ name, role: "input", on, domain, owner: "fans", segment, parameter, write: "stated-only" } as const);
 /**
  * The Fans Work cells, by segment name: the rows the Fans document schema and the Fans sheet read
  * by name, so neither restates a domain nor counts positions in the table below.
  */
 export const FAN_CELLS = {
   /** The ESP the fan is rated for, as someone stated it. Work or a separately named rated parameter, never the required ESP write target (P-030). */
-  ratedEsp: row({ name: "ratedEsp", role: "input", on: "fan", domain: inWg, home: "Work", owner: "fans", segment: "ratedEsp", parameter: "ratedEsp", write: "never" }),
+  ratedEsp: row({ name: "ratedEsp", role: "input", on: "fan", domain: inWg, owner: "fans", segment: "ratedEsp", parameter: "ratedEsp", write: "never" }),
   equipmentFlows: input("equipmentFlows", "fan", "equipmentFlows", "fanFlow", numberDomain("cfm")),
   flows: input("flows", "terminal", "flows", "terminalFlow", numberDomain("cfm")),
   terminalDrops: input("terminalDrops", "terminal", "terminalDrops", "terminalDrop", inWg),
   componentDrops: input("componentDrops", "component", "componentDrops", "componentDrop", inWg),
-  roles: row({ name: "roles", role: "input", on: "fan", domain: { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(value => ({ value, label: value })) } } }, home: "Work", owner: "fans", segment: "roles", parameter: null, write: "never" }),
+  roles: row({ name: "roles", role: "input", on: "fan", domain: { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(value => ({ value, label: value })) } } }, owner: "fans", segment: "roles", parameter: null, write: "never" }),
 };
 /** Phase 2 keeps metadata beside its existing consumer; phase 4 moves this single table to fans/contract. */
 export const FAN_INPUTS = [
   FAN_CELLS.ratedEsp, FAN_CELLS.equipmentFlows, FAN_CELLS.flows, FAN_CELLS.terminalDrops, FAN_CELLS.componentDrops,
-  row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), home: "model", owner: "duct-systems", segment: null, parameter: "fittingCoefficient", write: "never" }),
+  row({ name: "fittingCoefficient", role: "input", on: "fitting", domain: numberDomain(""), owner: "duct-systems", segment: null, parameter: "fittingCoefficient", write: "never" }),
   FAN_CELLS.roles,
-  row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, home: "Work", owner: "duct-systems", segment: "kinds", parameter: null, write: "never" }),
-  row({ name: "derivedFlow", role: "result", on: "fan", domain: numberDomain("cfm"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
-  row({ name: "requiredEsp", role: "result", on: "fan", domain: numberDomain("in-wg"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
-  ...Object.entries(FAN_CRITERIA_CELLS).map(([name, cell]) => row({ name, role: "input", on: "criteria", domain: cell.domain, home: "project", owner: "duct-systems", segment: "criteria", parameter: null, write: "never" })),
+  row({ name: "kinds", role: "input", on: "fan", domain: { kind: "enum", shape: z.enum(DUCT_UNIT_KINDS), choices: DUCT_UNIT_KINDS.map(value => ({ value, label: value })) }, owner: "duct-systems", segment: "kinds", parameter: null, write: "never" }),
+  row({ name: "derivedFlow", role: "result", on: "fan", domain: numberDomain("cfm"), owner: "fans", segment: null, parameter: null, write: "never" }),
+  row({ name: "requiredEsp", role: "result", on: "fan", domain: numberDomain("in-wg"), owner: "fans", segment: null, parameter: null, write: "never" }),
+  ...Object.entries(FAN_CRITERIA_CELLS).map(([name, cell]) => row({ name, role: "input", on: "criteria", domain: cell.domain, owner: "duct-systems", segment: "criteria", parameter: null, write: "never" })),
 ] as const satisfies readonly FanInputRow<unknown>[];
 export const fanInputRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.role === "input");
 export const fanWriteRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.write === "stated-only" && r.segment !== null);

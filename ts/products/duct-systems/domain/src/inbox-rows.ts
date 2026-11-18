@@ -870,7 +870,6 @@ const FOCUS_SEGMENTS = new Set([
   "esp",
   "equipmentFlows",
   "roles",
-  "calculation",
 ]);
 
 export const cellFocus = (segment: string, key: string) => `${segment}:${key}`;

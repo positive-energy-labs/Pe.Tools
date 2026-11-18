@@ -39,8 +39,6 @@ export const fansReadArgs = z.strictObject({
 export const fansReadRequest = publicationRequest(fansReadArgs);
 
 export const fansCalcData = fanCalcSchema.extend({
-  espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
-  espOptionsError:z.string().nullable(),
   calcView: z.object({
     blockers: detail[4].shape.blockers,
     tiers: z.record(z.enum(["taken", "accept", "preview"]), z.number()),
