@@ -40,10 +40,37 @@ it("D3: a receipt whose parameter no longer reads is missing, never the stored n
   expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({ status: "valid", source: "firm" });
 });
 
-it("with no TerminalDrop slot named the model rung reads the connector's assigned drop, where Pe writes it", () => {
-  const snapshot = snapshotOf(terminal({ assignedPressureDropInWg: 0.07 }), { terminalFlow: "PE_M_Grd_AirFlow" });
-  expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.drop)
-    .toMatchObject({ value: 0.07, source: "model", ref: "model:1/AssignedPressureDrop" });
+it("a written zero is a value: the reader's 0 resolves 0 from the model with no drift, and an absent parameter is still missing", () => {
+  // The reader's real shape: a parameter that reads 0 is a `0` fact; an absent one is a `null` fact or no drop.
+  const zeros = { terminalFlows: { "1": { cfm: 0 } }, terminals: { "1": { inWg: 0 } }, equipmentFlows: { "2": { cfm: 0 } } };
+  const zeroUnit = { ...unit, facts: [{ key: "fanFlow", value: 0 }] };
+  const read = { nodes: [terminal({ catalogDropInWg: 0 }, [{ key: "flow", value: 0 }]), zeroUnit], segments: [], slots: { terminalFlow: "PE_M_Grd_AirFlow", terminalDrop: "PE_Drop" }, store: zeros } as never;
+  const r = resolveInputs({ snapshot: read, firm: TEST_FIRM, store: zeros });
+  for (const value of [r.terminals["1"]!.cfm, r.terminals["1"]!.drop, r.units["2"]!.cfm])
+    expect(value).toMatchObject({ status: "valid", value: 0, source: "model" });
+  for (const [segment, id] of [["flows", 1], ["terminalDrops", 1], ["equipmentFlows", 2]] as const)
+    expect(drift(read, segment, id)).toBeNull();
+  // Pe never wrote: the same zeros state nothing, so the flow is missing and the firm criterion serves the drop.
+  const unwritten = resolveInputs({ snapshot: { ...(read as object), store: undefined } as never, firm: TEST_FIRM });
+  expect(unwritten.terminals["1"]!.cfm.status).toBe("missing");
+  expect(unwritten.terminals["1"]!.drop).toMatchObject({ source: "firm" });
+  // The parameter is gone (a null fact, a null drop): missing, and the note says so.
+  const absent = { ...(read as object), nodes: [terminal({ catalogDropInWg: null }, [{ key: "flow", value: null }]), zeroUnit] } as never;
+  const gone = resolveInputs({ snapshot: absent, firm: TEST_FIRM, store: zeros }).terminals["1"]!;
+  expect(gone.cfm.status).toBe("missing");
+  expect(gone.drop.status).toBe("missing");
+  expect(drift(absent, "terminalDrops", 1)).toBe("Pe wrote 0 in-wg to PE_Drop, which no longer reads");
+});
+
+it("a receipt agrees with its parameter as the reader rounds it (4 places): no drift on an untouched model", () => {
+  const wrote = { terminals: { "1": { inWg: 0.07312 } } };
+  expect(drift(snapshotOf(terminal({ catalogDropInWg: 0.0731 }), undefined, wrote), "terminalDrops", 1)).toBeNull();
+  expect(drift(snapshotOf(terminal({ catalogDropInWg: 0.0733 }), undefined, wrote), "terminalDrops", 1)).toBe("Changed in Revit since Pe wrote 0.07312 in-wg");
+});
+
+it("the connector's assigned drop is not a rung: the applier never writes it under a named slot", () => {
+  const snapshot = snapshotOf(terminal({ assignedPressureDropInWg: 0.07 }));
+  expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({ source: "firm" });
 });
 
 const axis = { quantity: "flow", unit: "cfm", values: [0, 1000], input: { field: "flowCfm", scale: 1 } };

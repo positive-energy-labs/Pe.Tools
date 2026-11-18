@@ -116,15 +116,16 @@ const factOf = (n: Node, key: string) => n.facts.find((f) => f.key === key)?.val
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
 type Slots = Partial<NonNullable<CalcSnapshot["slots"]>>;
-/** One design value where Pe writes it: the parameter (`at`), what it reads now, and the receipt of what Pe last wrote there. A parameter Pe has written reads as it stands, zero included; one Pe never wrote states a value only when positive. `WRITTEN` is keyed by the Work segment that stages each value. */
-const written = (at: string, raw: number | null | undefined, wrote: number | undefined, unit: string) =>
-  ({ at, wrote, unit, live: wrote == null ? positive(raw) : (raw ?? null) });
-const WRITTEN = {
-  flows: (n: Node, slots: Slots, store: StoreLayer) =>
-    written(slots.terminalFlow ?? "terminalFlow", slotFlowOf(n, slots.terminalFlow ?? "terminalFlow").cfm, store.terminalFlows?.[n.id]?.cfm, "cfm"),
-  // With no TerminalDrop slot named, Pe writes the connector's AssignedPressureDrop, so that is the live read.
-  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) =>
-    written(slots.terminalDrop ?? "AssignedPressureDrop", slots.terminalDrop ? n.terminalDrop?.catalogDropInWg : n.terminalDrop?.assignedPressureDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
+// One design value where Pe writes it: the slot parameter (`at`), what it reads now, and the receipt of what Pe last wrote there.
+// The reader says null for an absent parameter and 0 for one that reads 0. A written parameter reads as it stands; an unwritten one states a value only when positive.
+const written = (at: string, read: number | null | undefined, wrote: number | undefined, unit: string) => {
+  const live = wrote == null ? positive(read) : (read ?? null);
+  return { at, wrote, unit, live };
+};
+const WRITTEN = { // keyed by the Work segment that stages each value
+  flows: (n: Node, slots: Slots, store: StoreLayer, slot = slots.terminalFlow ?? "terminalFlow") =>
+    written(slot, slotFlowOf(n, slot).cfm, store.terminalFlows?.[n.id]?.cfm, "cfm"),
+  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) => written(slots.terminalDrop ?? "terminalDrop", n.terminalDrop?.catalogDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
   equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => written(slots.fanFlow ?? "fanFlow", factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]?.cfm, "cfm"),
 };
 
@@ -134,8 +135,8 @@ export function receiptDrift(snapshot: Pick<CalcSnapshot, "nodes" | "slots"> & {
   const { at, live, wrote, unit } = node ? WRITTEN[segment](node, snapshot.slots ?? {}, snapshot.store ?? {}) : { at: "", live: null, wrote: undefined, unit: "" };
   if (wrote == null) return null;
   if (live == null) return `Pe wrote ${wrote} ${unit} to ${at}, which no longer reads`;
-  // ponytail: 1e-6 relative absorbs Revit's unit round trip; widen it if an untouched model shows drift.
-  return Math.abs(live - wrote) <= 1e-6 * Math.max(1, Math.abs(wrote)) ? null : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
+  // The reader rounds a slot parameter to 4 places (`Reading` in DuctSnapshots.cs); the receipt is unrounded, so they agree within half that step.
+  return Math.abs(live - wrote) <= 0.5e-4 + 1e-9 ? null : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
 }
 
 export const JOIN_KEY = (pair: readonly [string, string]) => `join:${[...pair].sort().join("|")}`;
@@ -302,6 +303,10 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const parameter = WRITTEN.terminalDrops(n, slots, store);
       const model = observed("model", `${id}/${parameter.at}`, parameter.live);
       const served = firm.served?.terminalDropInWg ?? "firm";
+      // Below Work, one of three (ADR 0053). Written: the parameter Pe wrote, missing when it no longer reads (D2, D3).
+      // Catalog: the lookup, under its home's tier. Fallback: the parameter, over the criterion's base under the tier that served it.
+      const catalogRung = catalog?.dp != null ? { [catalog.tier]: observed(catalog.tier, `${id}/${catalog.table}`, catalog.dp) } : null;
+      const fallbackRung = { model, [served]: observed(served, dropCell, firm.criteria.terminalDropInWg, firm.version) };
       const drop = pick(
         {
           run: run.terminalDrops?.[key]
@@ -310,10 +315,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           Work: work.terminalDrops?.[key]
             ? staged(work.terminalDrops[key])
             : authored(work, dropCell, work.criteria?.terminalDropInWg),
-          // Below Work, one of three (ADR 0053): a parameter Pe has written, missing when it no longer reads (D2, D3); else the catalog lookup under its home's tier; else the parameter over the criterion's base under the tier that served it.
-          ...(parameter.wrote != null ? { model }
-            : catalog?.dp != null ? { [catalog.tier]: observed(catalog.tier, `${id}/${catalog.table}`, catalog.dp) }
-            : { model, [served]: observed(served, dropCell, firm.criteria.terminalDropInWg, firm.version) }),
+          ...(parameter.wrote != null ? { model } : (catalogRung ?? fallbackRung)),
         },
         "in-wg",
       );

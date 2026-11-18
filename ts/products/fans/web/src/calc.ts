@@ -57,7 +57,7 @@ const layer = (resolved: { readonly value: unknown; readonly source: string; rea
 /** A design value's model layer with its drift: what Revit holds now, and a note where that is not what Pe last wrote. */
 const live = (read: Read, segment: Parameters<typeof receiptDrift>[1], row: string | undefined, resolved: Parameters<typeof layer>[0], wrap: (v: unknown) => unknown): CellLayer | null => {
   const snapshot = snapshotOf(read), id = idOf(read, row), base = layer(resolved, wrap, read);
-  const note = snapshot && id != null ? receiptDrift(snapshot as Parameters<typeof receiptDrift>[0], segment, id) : null;
+  const note = snapshot && id != null ? receiptDrift(snapshot, segment, id) : null;
   return note ? { ...(base ?? { value: null }), note } : base;
 };
 

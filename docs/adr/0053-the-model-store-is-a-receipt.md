@@ -11,10 +11,10 @@ The stored number is our own metadata. Revit's parameter is what schedules, Revi
 ## Decision
 
 1. **Live Revit wins.** A design value (terminal cfm, terminal drop, unit cfm) resolves from the parameter it is written to, read live. The model store supplies no design value, and no criterion: the layers for a value are run → Work → the live parameter (`model`) → the homes → default.
-2. **The store keeps a receipt.** What Pe last wrote to a parameter stays in the store as evidence. It is compared with the live read in one place (`receiptDrift` in the ducts domain) and a disagreement is shown as drift on the cell. Drift never blocks, and no write re-asserts a receipt.
+2. **The store keeps a receipt.** What Pe last wrote to a parameter stays in the store as evidence. It is compared with the live read in one place (`receiptDrift` in the ducts domain) and a disagreement is shown as drift on the cell. The comparison allows for the reader's rounding (4 places on a slot parameter). Drift never blocks, and no write re-asserts a receipt.
 3. **A written parameter outranks the catalog lookup** (D2), whether or not its receipt still agrees. Without a receipt the catalog keeps its place above the parameter.
-4. **A receipt whose parameter no longer reads makes the value missing** (D3), never the stored number and never the firm fallback beneath it. The drift note names the parameter.
-5. **The live read is where the write lands.** A terminal drop is written to the TerminalDrop slot's parameter, or to the connector's AssignedPressureDrop where no slot is named, and it is read from the same place.
+4. **A receipt whose parameter no longer reads makes the value missing** (D3), never the stored number and never the firm fallback beneath it. The drift note names the parameter. The reader tells absence from a reading: an absent or empty parameter is null, and one that reads 0 is 0, so a written zero stays a value.
+5. **A terminal drop is read from its TerminalDrop slot parameter only.** Resolved slots always name one, and with a slot named the applier refuses a terminal that lacks the parameter; it never falls back to the connector's AssignedPressureDrop. So no receipt points at the connector, and the connector's drop is not a rung.
 6. **Rulings stay store-homed.** A role, a verdict and a rule table have no Revit parameter, so they still retire from Work into the store and resolve from it at the `model-store` rung.
 7. **A catalog lookup is labelled by its home's tier** (D8): `user`, `project` or `firm`, the words `homesStatus` uses. The catalog reader takes the tiered home list as given and stamps each table with the tier and its file; it never assigns a tier itself.
 

@@ -52,6 +52,20 @@ test("D25: a retained resolved Work airflow keeps Work provenance after its live
   expect(view.container.textContent).toContain("1234");
 });
 
+test("ADR 0053: a receipt that disagrees with the live parameter is the cell's drift note, beside the live value", () => {
+  const terminal = { id: 9, kind: "terminal", uniqueId: "terminal-9", flowParameter: "PE_Flow", connectors: [], facts: [{ key: "flow", value: 200 }], terminalDrop: { catalogDropInWg: 0.5 } };
+  const slots = { ...snapshot.slots, terminalFlow: "PE_Flow", terminalDrop: "PE_Drop" };
+  const inputs = { terminals: { "9": { cfm: { value: 200, source: "model" }, drop: { value: 0.5, source: "model" } } }, units: {} };
+  const read = (store: object) => ({ calcSnapshot: { ...snapshot, slots, nodes: [terminal], store }, calcView: { inputs } });
+  const model = (binding: "flows" | "terminalDrops", store: object) =>
+    (fansCalc.bindings[binding] as unknown as { model: (read: object, row: string) => object }).model(read(store), elementSubject(terminal));
+  const store = { terminalFlows: { "9": { cfm: 150 } }, terminals: { "9": { inWg: 0.5 } } };
+  expect(model("flows", store)).toMatchObject({ value: 200, source: "model", note: "Changed in Revit since Pe wrote 150 cfm" });
+  // An agreeing receipt, and an element Pe never wrote, draw no note.
+  expect(model("terminalDrops", store)).not.toHaveProperty("note");
+  expect(model("flows", {})).not.toHaveProperty("note");
+});
+
 test("slot names use project and firm settings and never stage Work", () => {
   const binding = Object.entries(fansCalc.bindings).find(([key]) => key === "setting.ducts.parameters.fanFlow")?.[1];
   expect(binding).toMatchObject({ home: { at: "setting", owner: "ducts", path: ["parameters", "fanFlow"], tiers: ["project", "firm"] } });

@@ -35,7 +35,7 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", user);
   const axis = { quantity: "flow", unit: "cfm", values: [0, 1000], input: { field: "flowCfm" } };
-  for (const [home, id, value] of [[user, "host-table", 0.1], [project, "project-table", 0.73]] as const) {
+  for (const [home, id, value] of [[user, "host-table", 0.1], [project, "project-table", 0.73], [firm, "firm-table", 0.4]] as const) {
     const folder = join(home, "Catalogs", id);
     await mkdir(folder, { recursive: true }); await writeFile(join(folder, "fixture.pdf"), "%PDF-fixture");
     await writeFile(join(folder, "catalog.json"), JSON.stringify({ version: 1, tables: [{ id, title: id,
@@ -76,4 +76,5 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
   // D8: each table carries the tier of the home it was read from, as the home list gave it.
   expect(catalogs.tables["project-table"].home).toEqual({ tier: "project", file: join(project, "Catalogs", "project-table", "catalog.json") });
   expect(catalogs.tables["host-table"].home.tier).toBe("user");
+  expect(catalogs.tables["firm-table"].home.tier).toBe("firm");
 });

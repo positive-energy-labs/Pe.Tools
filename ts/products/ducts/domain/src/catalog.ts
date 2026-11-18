@@ -32,7 +32,6 @@ export type CatalogLoss = {
   source?: CatalogTable["source"];
   notes: string[];
 } & (
-  // A priced lookup names the tier of the home its table was read from (D8); the reader stamps it, never this module.
   | { dp: number; tier: NonNullable<CatalogTable["home"]>["tier"]; staticInWg: number | null; pv: number; fpm: number }
   | { dp: null; finding: CatalogFinding; error: string }
 );

@@ -11,8 +11,6 @@ import { hostState } from "@pe/host/host-ownership";
   segments: (library: string, id: string) => [library, id, "catalog.json"],
 });
 
-/** The product's Catalogs in every home, in list order (user, project, firm). The home list is the only source of a tier (D8). */
-export const productCatalogsRoots = (pointer?: string | null): readonly Home[] => homes({ pointer });
 export interface CatalogReading {
   tables: Catalogs;
   findings: string[];
@@ -21,13 +19,13 @@ export interface CatalogReading {
 /**
  * The `DuctFiles` layer body. Read-only portable units, no registration and no product-home
  * creation on a missing root. A table id is unique across every catalog in every home: an id
- * claimed twice admits no table, with a finding. Nothing shadows. Each table carries its home's tier as the list gave it, and its file.
+ * claimed twice admits no table, with a finding. Nothing shadows. Each table carries its home's tier as the home list (`list`: user, project, firm) gave it, the only source of a tier (D8), and its file.
  */
-export async function readDuctCatalogs(homes: readonly Home[] = productCatalogsRoots()): Promise<CatalogReading> {
+export async function readDuctCatalogs(list: readonly Home[] = homes()): Promise<CatalogReading> {
   const tables: Record<string, CatalogTable> = Object.create(null);
   const findings: string[] = [];
   const duplicates = new Set<string>();
-  for (const home of homes) await readCatalogsFolder(home, tables, duplicates, findings);
+  for (const home of list) await readCatalogsFolder(home, tables, duplicates, findings);
   return { tables, findings };
 }
 
