@@ -28,8 +28,9 @@ export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnaps
 }
 
 /**
- * The segments `ducts.apply` writes to elements and the store; `loads` stays in Pe, and the rulings
- * (`assumptions` verdicts, `roles`) are written to the store as deltas (`pendingRulings`).
+ * The staged segments the /duct-systems pending count names. A /fans apply writes the Fans Work segments and a
+ * scoped rule's fitting coefficients to elements, and roles to the store; `rules` tables and `assumptions`
+ * verdicts stay staged in /duct-systems Work (D9).
  */
 export const WRITTEN = [
   "rules",
@@ -87,7 +88,8 @@ export function scopeApplyRequest(
 ): DuctsApplyInput {
   if (!cells) return request;
   const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && (s === "rules" ? k === key : workElementId(snapshot, k) === key));
-  const fittings = request.fittings.filter(row => row.ruleKey && has("rules", row.ruleKey));
+  // D9: a scoped rule's fittings are written as element values; without `ruleKey` the native store composes no rule from them.
+  const fittings = request.fittings.filter(row => row.ruleKey && has("rules", row.ruleKey)).map(({ ruleKey: _rule, ...row }) => row);
   const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
   const components = request.components.filter(row => has("componentDrops", row.id));
   const equipment = request.equipment;
@@ -99,7 +101,7 @@ export function scopeApplyRequest(
   });
   return { ...request, fittings, terminals, components, equipment, terminalFlows, equipmentFlows,
     store: { ...store, version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
-      rules: { ...store?.rules, ...Object.fromEntries(Object.entries(request.store?.rules ?? {}).filter(([key]) => has("rules", key))) },
+      rules: store?.rules ?? {},
       instances: merge("instances", fittings.map(row => row.id)),
       terminals: merge("terminals", terminals.map(row => row.id)),
       terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),

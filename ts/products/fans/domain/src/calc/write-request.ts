@@ -19,7 +19,7 @@ export interface FanWriteContext {
    * complete claim's written precision). Missing/incomplete/unequal peers refuse the whole write.
    * The active unit uses the claim argument; instance-owned ESP needs no peer entry. */
   peerClaims: ReadonlyMap<number, DomainClaim>;
-  rulings: Pick<NonNullable<DuctsApplyInput["store"]>, "verdicts" | "roles">;
+  rulings: Pick<NonNullable<DuctsApplyInput["store"]>, "roles">;
   storeDeletes: NonNullable<DuctsApplyInput["storeDeletes"]>;
 }
 

@@ -27,18 +27,25 @@ async function apply(executor: { run: (ctx: never, execution: never) => Effect.E
   return { key, calls: retireWork.mock.calls };
 }
 
-test("a /fans apply retires its own role and leaves the /duct-systems verdict and rule staged", async () => {
+// A fake action that asks to retire one cell of each route, so the runtime's own filter is what is tested.
+const both = (bridge: never) => ductActionExecutors({
+  snapshot: async () => { throw Error("unused"); }, derive: async () => { throw Error("unused"); },
+  entry: { key: "ducts.heal", native: "ducts.heal.preview", refusePlan: null,
+    retires: () => [["assumptions", "open-end:101:1"], ["roles", role]] },
+  bindings: [["ducts.apply-heal", "heal", "apply"]],
+}, bridge)["ducts.apply-heal"] as never;
+
+test("the real /fans apply asks to retire its own role only, and retires it under /fans", async () => {
   const { key, calls } = await apply(fansExecutors({} as never)["sheet.apply"] as never, "fans");
   expect(calls).toEqual([[key, "fans", [["roles", role]]]]);
 });
 
+test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
+  const { key, calls } = await apply(both({} as never), "fans");
+  expect(calls).toEqual([[key, "fans", [["roles", role]]]]);
+});
+
 test("a /duct-systems apply still retires its own verdict, under its own route", async () => {
-  const executors = ductActionExecutors({
-    snapshot: async () => { throw Error("unused"); }, derive: async () => { throw Error("unused"); },
-    entry: { key: "ducts.heal", native: "ducts.heal.preview", refusePlan: null,
-      retires: () => [["assumptions", "open-end:101:1"], ["roles", role]] },
-    bindings: [["ducts.apply-heal", "heal", "apply"]],
-  }, {} as never);
-  const { key, calls } = await apply(executors["ducts.apply-heal"] as never, "duct-systems");
+  const { key, calls } = await apply(both({} as never), "duct-systems");
   expect(calls).toEqual([[key, "duct-systems", [["assumptions", "open-end:101:1"]]]]);
 });
