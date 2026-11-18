@@ -195,6 +195,8 @@ Shared base for [Fans](../fans/LEDGER.md) and [Duct systems](../duct-systems/LED
 
 ## Owed
 
+- 2026-11-18, design friction is still resolved twice (field-20261118, backlog S8(a); older than the run). /duct-systems resolves it in the web with `settingLayer` (`ts/products/duct-systems/web/src/design-calc.ts:18`) beside the pricing read's own serve (`ts/products/duct-systems/domain/src/pricing-value.ts:50`), with two defaults (`setting-owners.ts:25`, `equivalent-length.ts:12`). ADR 0053's one resolution is not complete until the pricing read carries the served friction and its source; sized at 15 to 20 lines.
+- 2026-11-18, the TS decoder refuses a C# `long` above 2^53 in the duct contracts (`dotnet/Pe.Shared.RevitData/Ducts/DuctContracts.cs` against `ts/packages/host-contracts/src/generated/host-catalog.generated.ts:473`). Found by a census of 296 native field paths against the TS contracts, which found no field missing or refused. No Revit element id reaches that range today.
 - MAP retirement 2026-11-17: the fan crusade's current decisions and remaining acceptance work live in [Fans](../fans/LEDGER.md) and [Duct systems](../duct-systems/LEDGER.md). Git at 6648a9bf retains the readiness findings and original map evidence. Keep `.artifacts/runs/fans-20261116/` and its cited source captures until the outstanding proof rows can be replayed from retained inputs.
 
 - MAP D7: settle the owner and values of firm defaults. The firm file is `<firm>/Settings/ducts.json`; older `<shared>/Firm/ducts.json` references describe the prior home, not the current contract.
