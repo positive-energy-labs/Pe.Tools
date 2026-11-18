@@ -142,10 +142,6 @@ export function systemScope(snapshot: DuctSnapshot, name: string): SystemScope {
   return scope;
 }
 
-/** The system a group is read under: its first system name, else `no system`. */
-export const systemOfGroup = (snapshot: Pick<DuctSnapshot, "groups">, group: string) =>
-  snapshot.groups.find((g) => g.id === group)?.systemNames[0] ?? NO_SYSTEM;
-
 /**
  * "SA 19 · FC-17": each group of a system named by the system and the units rooting it; two that
  * read the same are numbered ("SA 19 · no fan 2"), never told apart by a group id.

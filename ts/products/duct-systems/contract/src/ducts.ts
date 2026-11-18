@@ -53,16 +53,12 @@ export function encounterPatches(issue: FanIssue, choice: "connect" | "ignore", 
 const OVERRIDES = ["flex-roughness", "fan-static", "component-drop"] as const;
 export type DuctOverrideKind = (typeof OVERRIDES)[number];
 
-/** The cell key of an override: `<kind>:<subject>`. Any other key is an issue id and holds a verdict. */
-export const ductOverrideKey = (kind: DuctOverrideKind, subject: string | number) =>
-  `${kind}:${subject}`;
 const kindOfKey = (key: string): DuctAssumption["kind"] => {
   const head = key.slice(0, key.indexOf(":"));
   return (OVERRIDES as readonly string[]).includes(head) ? (head as DuctOverrideKind) : "verdict";
 };
 
 export { DUCT_PARAMETER_KEYS } from "@pe/ducts-contract/duct-inputs";
-export type DuctParameterKey = (typeof DUCT_PARAMETER_KEYS)[number];
 
 export const DUCT_AIR_TYPES = ["supply", "return", "exhaust", "fresh", "unknown"] as const;
 export type DuctAirType = (typeof DUCT_AIR_TYPES)[number];
@@ -415,7 +411,6 @@ export const ductsHealInputSchema = z.strictObject({
     )
     .min(1),
 });
-export type DuctsHealInput = z.infer<typeof ductsHealInputSchema>;
 
 /**
  * What `ducts.plan-assign-fan` seals and `ducts.apply-assign-fan` sends; `ducts.rehearse-assign-fan` calls the native
@@ -426,7 +421,6 @@ export const ductsAssignFanInputSchema = z.strictObject({
   systemId: z.number().int().positive(),
   unitId: z.number().int().positive(),
 });
-export type DuctsAssignFanInput = z.infer<typeof ductsAssignFanInputSchema>;
 
 /** What a person says when they want the Ducts page: the whole route family answers to these words. */
 export const DUCTS_FINDS = [

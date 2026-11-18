@@ -121,8 +121,8 @@ export interface CellAddress {
 }
 
 /**
- * Where the drawn value came from (ADR 0026 layers: Work → model store → project → firm → default), or
- * the model itself. `user`, `project` and `firm` name the home that served it; a home that was not
+ * Where the drawn value came from: Work, model-store receipts, the model, a home tier or default.
+ * `user`, `project` and `firm` name the home that served it; a home that was not
  * found is never a source.
  */
 export type CellSource = "work" | "model-store" | SettingTier | "default" | "model";

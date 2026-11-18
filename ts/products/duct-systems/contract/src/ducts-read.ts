@@ -119,7 +119,6 @@ export const ductsFanCalcSchema = z.object({
   fittings: details[4].shape.fittings,
   walkedElementIds: details[2].shape.walkedElementIds,
 });
-export type DuctsFanCalc = z.infer<typeof ductsFanCalcSchema>;
 export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
   espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
@@ -131,7 +130,7 @@ export const ductsPricingData = z.object({
   ductSystemsWork: ductsDocumentSchema,
   fansWork: fansDocumentSchema,
   catalogFindings: z.array(z.string()),
-  /** The design criteria as they stand under Work (the store over the firm file), each with its source: the /ducts design sheet's model layer. */
+  /** The resolved design criteria, each with the source pricing used. */
   criteria: ductsInputsSchema.shape.criteria,
   /** The firm line, or refused without a shared root (slice 2b): criteria then resolve on the seed. */
   firm: ductFirmLineSchema,
@@ -203,7 +202,6 @@ export const ductsReadResponse = z.union([
   ductsRosterReadResponse,
   ductsPricingReadResponse,
 ]);
-export type DuctsRosterData = z.infer<typeof ductsRosterData>;
 export type DuctsNetworkData = z.infer<typeof ductsNetworkData>;
 export type DuctsPricingData = z.infer<typeof ductsPricingData>;
 
