@@ -1110,6 +1110,25 @@ async function crashWorld() {
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   return { f, world, rows, row, die, input: { source, into: newRevit({ owner: "pea" }) } };
 }
+test("K1b boot asks an unknown host-target instances.open once, with no bridge, and it settles from the answer", async () => {
+  const { f, world, row, die, input } = await crashWorld();
+  world.crash = "open";
+  const lost = await f.admit("instances.open", input);
+  expect(lost).toMatchObject({ target: { kind: "host" }, state: "unknown" });
+  const open = lost.steps.at(-1)!;
+  const revit = row(acquisitionSessionId(lost.id))!.process;
+  die();
+  world.ops[open.id] = abandonedOp(open.id, "doc.open", revit);
+  const reads = () => f.calls.filter((argv) => argv[0] === "op" && argv[1] === "result").length;
+  const before = reads();
+  await f.owner.reconcile();
+  const settled = (await f.owner.list(undefined, lost.id))[0]!;
+  expect(settled.steps.at(-1)).toMatchObject({ key: "instances.open", state: "failed" });
+  expect(settled.state).not.toBe("unknown");
+  expect(reads() - before).toBe(1);
+  await f.owner.reconcile();
+  expect(reads() - before).toBe(1);
+});
 test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what is left", async () => {
   const { f, world, row, die, input } = await crashWorld();
   world.crash = "open";

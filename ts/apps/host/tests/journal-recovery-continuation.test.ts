@@ -159,6 +159,7 @@ test.each([
         ? await vi.waitFor(async () => {
             const row = (await restarted!.list(undefined, "once"))[0]!;
             expect(row.steps.at(-1)).toMatchObject({ kind: "publication", key: "work.retire", state: "succeeded" });
+            expect(row.state).not.toBe("running");
             return row;
           }, { timeout: 10_000 })
         : (await restarted.list(undefined, "once"))[0]!;
@@ -176,6 +177,20 @@ test.each([
       expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ width: 13, height: 14 });
       expect((await stat(file, { bigint: true })).mtimeNs).toBe(landed.mtimeNs);
       expect(originalSnapshot).toMatchObject({ address: key, workRevision: staged.revision });
+      // Its one re-entry is spent: two further boots neither re-enter it nor add a revision.
+      await restarted.reconcile();
+      await restarted.close();
+      const settledBytes = await readFile(path);
+      for (let boot = 0; boot < 2; boot++) {
+        restarted = journalAt(path, Date.now);
+        bindCommandRuntime(restarted, bridge, captures, { workspace: restoredWork, podsRoot: directory },
+          () => Effect.fail(Error("settings.write owns its writer")));
+        await restarted.reconcile();
+        expect((await restarted.list(undefined, "once"))[0]!.state).toBe(crash ? "incomplete" : "succeeded");
+        await restarted.close();
+        expect(await readFile(path)).toEqual(settledBytes);
+      }
+      restarted = undefined;
     } finally {
       runs.closeAll();
       if (restarted) await restarted.close();

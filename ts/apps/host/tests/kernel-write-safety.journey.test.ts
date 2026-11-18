@@ -248,7 +248,8 @@ test("E7 recovery reads the original native UUID and never dispatches a second w
     f.native.makeLostReplyRecoverable();
     const connection = await f.native.connect();
     await f.native.deliverLostReply(connection);
-    await f.native.journal.recover(original.id);
+    // The connect itself asks; a second caller of recover would only race it.
+    await vi.waitFor(async () => expect(await f.native.journal.wait(original.id)).toMatchObject({ state: "succeeded" }), { timeout: 10_000 });
     // The fake pid is already dead, so its late socket reply may be unknown to the mailbox.
     // The exact op receipt must still replace that host-created uncertainty, without a new write.
     expect(await f.native.journal.wait(original.id)).toMatchObject({ steps: expect.arrayContaining([

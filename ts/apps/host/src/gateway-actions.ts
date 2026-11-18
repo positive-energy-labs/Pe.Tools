@@ -26,6 +26,7 @@ import { projectNativeOutput } from "./native-output.ts";
 import { isViewImage } from "@pe/agent-contracts/native-output-read";
 import { Effect, Schema } from "effect";
 import {
+  actionStepSchema,
   commands,
   type Consumed,
   type Command,
@@ -40,7 +41,7 @@ import {
   tsOnlyOperationSchemas,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import type { ActionExecution, AttemptHost } from "./action-journal.ts";
+import { checkFailure, type ActionExecution, type AttemptHost } from "./action-journal.ts";
 import type { RevitBridge } from "./bridge.ts";
 import { gatewayTarget, operationDefinition, requireEligibleCaller } from "./gateway-catalog.ts";
 import {
@@ -426,11 +427,7 @@ export function gatewayExecutor(
         },
         {
           process: prepared.kind === "native-leaf" ? prepared.process : undefined,
-          check: (value) => {
-            if (key === "scripting.execute") requireScriptSuccess(value);
-            if (isTemporary(key) && !temporarySucceeded(value))
-              throw refused("Temporary lifecycle requires reconciliation");
-          },
+          check: stepCheck(key),
         },
       ).pipe(Effect.mapError((error) => {
         if (key !== "settings.tiers.write" || !(error instanceof StepFailure) ||
@@ -455,15 +452,26 @@ export function gatewayExecutor(
         sdk,
         await successorOf(bridge, prepared.sdkSession),
       );
-      return isTemporary(step.key) &&
-        read.step.state === "succeeded" &&
-        !temporarySucceeded(read.step.result)
-        ? { step, evidence: read.evidence }
-        : read;
+      if (read.step.state !== "succeeded") return read;
+      // The live step's own check decides a read-back success too: an op that answered ok with a
+      // failed script is a failed step, exactly as it would have been had its reply arrived.
+      try {
+        stepCheck(step.key)(read.step.result);
+        return read;
+      } catch (error) {
+        const { result, state: _state, ...intent } = read.step;
+        return { ...read, step: actionStepSchema.parse({ ...intent, ...checkFailure(error, result) }) };
+      }
     },
   };
 }
 
+/** Whether a native step's answer is a success; the live step and its recovery read share it. */
+const stepCheck = (key: string) => (value: unknown) => {
+  if (key === "scripting.execute") requireScriptSuccess(value);
+  if (isTemporary(key) && !temporarySucceeded(value))
+    throw refused("Temporary lifecycle requires reconciliation");
+};
 const isTemporary = (key: string) =>
   key === "family.temporary.acquire" || key === "document.temporary.release";
 function temporarySucceeded(value: unknown): boolean {

@@ -649,15 +649,7 @@ function startSession(
       "The original SDK project was not sealed; retain this receipt and submit a new command.",
     );
   const created = acquisition?.process.kind === "create";
-  let prior = execution.recorded("native", key);
-  if (created && prior?.state === "succeeded") {
-    const { process } = (prior.result as { session: { process: NativeProcess } }).session;
-    if (!(yield* io(() => readTarget(null, process, read))))
-      prior = yield* execution.retire(
-        prior.id,
-        `Revit pid ${process.pid} started ${process.processStartUtc} is gone; resume starts a new one`,
-      );
-  }
+  const prior = execution.recorded("native", key);
   const expectSession =
     created && prior?.state === "failed"
       ? ((yield* io(() => namedSdkSession(acquisitionSessionId(acquisition!.id), read)))?.receipt

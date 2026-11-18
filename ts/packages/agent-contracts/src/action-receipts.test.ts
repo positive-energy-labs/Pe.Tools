@@ -4,8 +4,8 @@ import { actionReceiptListDecoder, actionStatusSchema } from "./action-receipts.
 
 test.each([
   ["running", "running", undefined],
-  ["unknown", "outcome-unknown", "reconcile"],
-  ["incomplete", "outcome-unknown", "resume"],
+  ["unknown", "outcome-unknown", undefined],
+  ["incomplete", "outcome-unknown", undefined],
   ["cancelled", "cancelled", undefined],
   ["failed", "refused", "retry"],
   ["succeeded", "succeeded", undefined],

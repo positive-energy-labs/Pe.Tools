@@ -81,7 +81,7 @@ it("C3 refuses a Pod script before execution on any missing or mismatched probe,
   const run = (bundle = sourceBundle) => {
     const execution: ActionExecution = { prepared: { kind: "native-leaf", script: { sourceBundle: bundle } },
       step: (_kind, _key, _input, execute) => execute("run"),
-      effect: unused, publishWork: unused, retireWork: unused, recorded: unused, retire: unused,
+      effect: unused, publishWork: unused, retireWork: unused, recorded: unused,
     };
     const ctx: CommandContext = { caller: { kind: "human", via: "local" }, admission: { id: "run", key: "scripting.execute",
       target: { kind: "document", ref: { session: "s", openId: "d" } }, input: { sourcePath: "src/Run.cs" },
