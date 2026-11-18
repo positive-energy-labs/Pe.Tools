@@ -1,6 +1,8 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve, relative, isAbsolute } from "node:path";
-import { catalogSchema, type Catalogs, type CatalogTable } from "@pe/ducts-domain/catalog";
+import { catalogSchema, type CatalogTable } from "@pe/ducts-domain/catalog";
+import { type ductCatalogReadingSchema } from "@pe/agent-contracts";
+import type { z } from "zod";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homes, type Home } from "@pe/host-contracts/product-paths";
 import { read as readStoredFile, homeKind } from "@pe/host-contracts/kinds";
@@ -11,10 +13,7 @@ import { hostState } from "@pe/host/host-ownership";
   segments: (library: string, id: string) => [library, id, "catalog.json"],
 });
 
-export interface CatalogReading {
-  tables: Catalogs;
-  findings: string[];
-}
+export type CatalogReading = z.infer<typeof ductCatalogReadingSchema>;
 
 /**
  * The `DuctFiles` layer body. Read-only portable units, no registration and no product-home

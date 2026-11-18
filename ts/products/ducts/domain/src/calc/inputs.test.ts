@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import * as inputs from "./inputs.ts";
 import { catalogLoss, catalogSchema, catalogTableSchema, type Catalogs } from "../catalog.ts";
+import { ductCatalogReadingSchema } from "@pe/agent-contracts";
 import { TEST_FIRM, TEST_SLOTS } from "../test-inputs.ts";
 
 const { resolveInputs } = inputs;
@@ -105,4 +106,13 @@ it("P25: a written terminal next to a homeless table prices the parameter and do
   expect(catalogTableSchema.safeParse(table("firm")).success).toBe(true);
   // A catalog file states no home; the host's reader stamps it.
   expect(catalogSchema.safeParse({ version: 1, tables: [homeless] }).success).toBe(true);
+  expect(catalogSchema.safeParse({ version: 1, tables: [table("firm")] }).success).toBe(false);
+});
+
+it("S5: a catalog reading requires the reader-stamped home on every table", () => {
+  const { home: _home, ...homeless } = table("firm");
+  expect(ductCatalogReadingSchema.safeParse({ tables: { t: homeless }, findings: [] }).success).toBe(false);
+  expect(ductCatalogReadingSchema.safeParse({ tables: { t: table("firm") }, findings: [] }).success).toBe(true);
+  for (const home of [{ tier: "model", file: "catalog.json" }, { tier: "firm", file: "" }, { tier: "firm", file: "catalog.json", extra: true }])
+    expect(ductCatalogReadingSchema.safeParse({ tables: { t: { ...table("firm"), home } }, findings: [] }).success).toBe(false);
 });

@@ -13,7 +13,7 @@ import { z } from "zod";
 import { existsSync, watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
+import { ductCatalogReadingSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { firmSettingsDir, homes, type Home } from "@pe/host-contracts/product-paths";
 import { productPathNames } from "@pe/host-contracts/contracts";
@@ -59,10 +59,7 @@ export const firmReading = z.union([
   }),
   z.strictObject({ refused: z.literal("no-shared-root") }),
 ]);
-export const catalogReading = z.strictObject({
-  tables: z.record(z.string(), catalogTableSchema),
-  findings: z.array(z.string()),
-});
+export const catalogReading = ductCatalogReadingSchema.strict();
 const firmCodec = Schema.declare((u): u is FirmFile => firmFileSchema.safeParse(u).success);
 const catalogsCodec = Schema.declare(
   (u): u is CatalogReading => catalogReading.safeParse(u).success,
@@ -78,8 +75,7 @@ export class DuctFiles extends Context.Service<
   DuctFiles,
   {
     readonly firm: (owner: string) => Effect.Effect<FirmFile, DoorFailure>;
-    readonly ductCatalogs: Effect.Effect<CatalogReading, DoorFailure>;
-    readonly catalogsFor?: (pointer: string | null | undefined) => Effect.Effect<CatalogReading, DoorFailure>;
+    readonly catalogsFor: (pointer: string | null | undefined) => Effect.Effect<CatalogReading, DoorFailure>;
     readonly subscribe?: (changed: (name: string) => void) => () => void;
   }
 >()("pe/DuctFiles") {
@@ -92,7 +88,6 @@ export class DuctFiles extends Context.Service<
     const firmRoot = () => typeof roots.firm === "function" ? roots.firm() : roots.firm;
     return Layer.succeed(DuctFiles, {
       firm: (owner) => Effect.sync(() => readFirmFile(firmRoot(), owner)),
-      ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
       catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? homes({ pointer }) : roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
@@ -173,14 +168,6 @@ export class DuctFiles extends Context.Service<
         catalogsFor: pointer => captureInput(writer, CATALOGS, catalogScope(pointer), catalogsCodec, catalogsFor(live, pointer), observed),
         firm: (owner) =>
           captureInput(writer, FIRM, firmScope(owner), firmCodec, live.firm(owner), observed),
-        ductCatalogs: captureInput(
-          writer,
-          CATALOGS,
-          SCOPE,
-          catalogsCodec,
-          live.ductCatalogs,
-          observed,
-        ),
       })),
     );
   /** Recorded files only: a miss refuses, and neither the disk nor the firm seed is read. */
@@ -198,13 +185,6 @@ export class DuctFiles extends Context.Service<
           firmCodec,
           bindings.get(inputBindingKey(FIRM, firmScope(owner))),
         ),
-      ductCatalogs: replayInput(
-        reader,
-        CATALOGS,
-        SCOPE,
-        catalogsCodec,
-        bindings.get(inputBindingKey(CATALOGS, SCOPE)),
-      ),
     });
 }
 
@@ -222,4 +202,4 @@ export const ductCatalogsRoute = HttpRouter.use((router) =>
 );
 
 export const catalogsFor = (files: DuctFiles["Service"], pointer?: string | null) =>
-  files.catalogsFor ? files.catalogsFor(pointer) : files.ductCatalogs;
+  files.catalogsFor(pointer);
