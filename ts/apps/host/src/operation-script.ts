@@ -102,7 +102,6 @@ export const scriptMemberFacts = (pod: string, files: readonly { path: string; b
     kind: "member" as const,
     probe: { pod, path: file.path },
     expected: createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex"),
-    bytesBase64: file.bytesBase64,
   }));
 
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };

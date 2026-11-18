@@ -702,7 +702,6 @@ export function scheduleExecutors(
                     kind: "member" as const,
                     probe: { pod: source.id, path: source.path },
                     expected: source.sha256,
-                    bytesBase64: source.bytesBase64,
                   },
                 ]
               : [],

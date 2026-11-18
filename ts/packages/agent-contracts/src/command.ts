@@ -68,6 +68,8 @@ export const consumedSchema = z.discriminatedUnion("kind", [
     jsonValue,
   ),
   observed("member", { pod: z.string(), path: z.string() }, sha.nullable()).extend({
+    // Decode only (K2): the gate compares `expected`, and no reader needs a member's bytes, so no
+    // producer writes them now. Journals written before that still carry them and must load.
     bytesBase64: z.string().optional(),
     blob: blobRefSchema.optional(),
   }),
