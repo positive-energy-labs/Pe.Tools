@@ -19,8 +19,6 @@ import { projectReader, type FamilyActionDependencies } from "../family-actions.
 
 const PLAN_LEAF = "revit.detail.parameter-values";
 const APPLY_LEAF = "revit.apply.parameter-values";
-// ponytail: the ducts losses store keeps its own native leaf (`ducts.apply`) until its owner moves onto store bindings.
-const LOSSES_ROUTES = new Set(["ducts", "fans"]);
 
 type Edit = RevitDetailParameterValues.Req.ParameterValueEdit;
 type PlanData = RevitDetailParameterValues.Res.Response;
@@ -145,11 +143,18 @@ function parameterExecutor(
 
 const via = z.object({ via: z.enum(["losses", "parameters"]), value: z.unknown() });
 
-/** One entry per key: the Work handle's route picks the leaf (the ducts losses store, or parameter values). */
-function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], deps: FamilyActionDependencies, byVia: Record<z.output<typeof via>["via"], CommandExecutor>): CommandExecutor {
+/** One entry per key: product composition selects the executor for the Work handle's route. */
+function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], deps: FamilyActionDependencies, byVia: Record<string, CommandExecutor>, routes: Readonly<Record<string, string>>): CommandExecutor {
+  const executorFor = (name: string) => {
+    const executor = Object.hasOwn(byVia, name) ? byVia[name] : undefined;
+    if (!via.shape.via.safeParse(name).success || !executor)
+      throw refused(`Unknown sheet executor via: ${name}`, "sheet.executor-unknown");
+    return executor;
+  };
   const inner = (value: unknown) => {
     const p = via.parse(value);
-    return { executor: byVia[p.via], value: byVia[p.via].prepared.parse(p.value) };
+    const executor = executorFor(p.via);
+    return { executor, value: executor.prepared.parse(p.value) };
   };
   return {
     definition: commands[key],
@@ -164,8 +169,9 @@ function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], dep
       const sheet = deps.workspace?.sheet(work.key.route);
       if (!sheet) throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
       validateSheetValues(sheet, doc);
-      const name = LOSSES_ROUTES.has(work.key.route) ? "losses" : "parameters";
-      const bound = await byVia[name].bind(ctx);
+      const name = Object.hasOwn(routes, work.key.route) ? routes[work.key.route] : "parameters";
+      if (name === undefined) throw refused("Missing sheet executor via", "sheet.executor-unknown");
+      const bound = await executorFor(name).bind(ctx);
       return { ...bound, prepare: async () => ({ via: name, value: await bound.prepare?.() }) };
     },
     run: (ctx, execution) => {
@@ -175,16 +181,17 @@ function dispatch(key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], dep
   };
 }
 
-/** `sheet.plan` and `sheet.apply` for every route; `losses` are the ducts executors of the same two keys. */
+/** Product registration selects specialized sheet writes; unregistered routes use parameter values. */
 export function sheetExecutors(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies,
   losses: Record<string, CommandExecutor>,
+  routes: Readonly<Record<string, string>> = {},
 ): Record<string, CommandExecutor> {
   return Object.fromEntries(
     Object.values(SHEET_COMMANDS).map((key) => [
       key,
-      dispatch(key, deps, { losses: losses[key]!, parameters: parameterExecutor(bridge, deps, key) }),
+      dispatch(key, deps, { losses: losses[key]!, parameters: parameterExecutor(bridge, deps, key) }, routes),
     ]),
   );
 }

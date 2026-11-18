@@ -34,11 +34,43 @@ const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
 const FIRM = { kind: "files", file: "firm" } as const;
 const recipe: ConsumerRecipe = {
-  key: "ducts.sheet",
+  key: "fans.calc-detail",
   input: { fan: "F-1", mode: "sheet" },
   scope: '["bridge-1","A"]',
 };
 const codec = Schema.Unknown;
+effectTest("recording export metadata comes from the registered product contract", () => Effect.gen(function* () {
+  const dir = yield* bundle;
+  const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+  const owner = yield* readSets({ kind: "live", captureStore: writer });
+  const context = yield* owner.open(recipe, null);
+  const contract = { key: "registered.calc" };
+  yield* context.exportBasis(contract, "basis");
+  yield* context.seal;
+  yield* context.close;
+  const reader = yield* openRecordingReader(dir, identity, bounds);
+  expect((yield* reader.readSets.get(context.id)).exports).toEqual([{ kind: contract.key, basis: "basis" }]);
+  const replay = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
+  const historical = yield* replay.open(recipe, context.id);
+  yield* historical.exportBasis(contract, "basis");
+  expect(yield* problem(historical.exportBasis({ key: "another.calc" }, "basis"))).toBe("recording.mismatch");
+}));
+
+effectTest("retired recording read sets are refused with a notice and unchanged bytes", () => Effect.gen(function* () {
+  const dir = yield* bundle;
+  const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+  const id = randomUUID();
+  yield* writer.readSets.keep(record({ id, recipe }));
+  const path = join(dir, "read-sets", `${id}.json`);
+  const bytes = JSON.stringify({ ...record({ id, recipe }), version: 1,
+    exports: [{ kind: "ducts.sheet", basis: "sheet/4" }] });
+  yield* Effect.promise(() => writeFile(path, bytes));
+  const reader = yield* openRecordingReader(dir, identity, bounds);
+  const refusal = yield* Effect.flip(reader.readSets.get(id));
+  expect(refusal.message).toContain("retired");
+  expect(refusal.message).toContain("bytes were not changed");
+  expect(yield* Effect.promise(() => readFile(path, "utf8"))).toBe(bytes);
+}));
 const bundle = Effect.promise(() => mkdtemp(join(tmpdir(), "pe-occurrence-")));
 const readSets = (lane: HostInputLane, limits?: InputReadSetLimits) =>
   Effect.map(Layer.build(HostInputReadSets.layer(lane, limits)), (context) =>
@@ -215,7 +247,7 @@ effectTest("no mutation after seal or close, and a dependency never rebinds", ()
     expect(yield* problem(attempt.observed(late))).toBe("recording.context");
     expect(yield* problem(root.linkTaking("native", "t1"))).toBe("recording.context");
     expect(yield* problem(root.linkReadSet("other", first))).toBe("recording.context");
-    expect(yield* problem(root.exportBasis("basis"))).toBe("recording.context");
+    expect(yield* problem(root.exportBasis({ key: "test.calc" }, "basis"))).toBe("recording.context");
     expect(failed(root.start(FIRM, "{}"))).toBe("recording.context");
     const closed = yield* live.open(recipe, null);
     yield* closed.close;
@@ -226,7 +258,7 @@ effectTest("no mutation after seal or close, and a dependency never rebinds", ()
 const record = (
   fields: Partial<InputReadSetRecord> & { id: string; recipe: ConsumerRecipe },
 ): InputReadSetRecord => ({
-  version: 1,
+  version: 2,
   identity,
   state: "complete",
   inputs: [],

@@ -149,9 +149,7 @@ test("cell authorship comes from host provenance even when values match", () => 
       { value: "250" },
     ).author,
   ).toBe("pea");
-  expect(cellFromDraft({ edit: { ...same, by: "unknown" } }, { value: "250" }).author).toBe(
-    "unknown",
-  );
+  // RULES: unknown is deleted from stored Work authors; only admitted writers are exercised here.
 });
 
 const KINDS = [

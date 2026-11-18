@@ -28,7 +28,7 @@ import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { MachineOwner } from "../src/machine.ts";
@@ -120,7 +120,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
   const query = (doc = b, target = doc.address) =>
     new URLSearchParams({ open: `${doc.session}/${doc.openId}`, target }).toString();
   const request = (search: string, patches?: unknown[], revision = 0, caller: Caller = pea()) =>
-    fetch(`${base}/pe/route-state/ducts${patches ? "/apply" : ""}?${search}`, {
+    fetch(`${base}/pe/route-state/duct-systems${patches ? "/apply" : ""}?${search}`, {
       headers: { "content-type": "application/json", "x-test-author": caller.kind },
       ...(patches
         ? {
@@ -151,7 +151,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
       { kind: "external-mcp", context: "device-context", label: "paired test device" },
     ] as Caller[]) {
       expect((await request(query(), proposed, 0, caller)).status).toBe(403);
-      const command = await fetch(`${base}/pe/route-state/ducts/command?${query()}`, {
+      const command = await fetch(`${base}/pe/route-state/duct-systems/command?${query()}`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-test-author": caller.kind },
         body: JSON.stringify({ command: "not-a-command", input: {}, expectedRevision: 0 }),
@@ -221,8 +221,8 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
       ok: true,
       revision: 4,
     });
-    const key = bindWork("ducts", b.address);
-    const before = await app.workspace.readRaw(key, "ducts");
+    const key = bindWork("duct-systems", b.address);
+    const before = await app.workspace.readRaw(key, "duct-systems");
     expect(before).toMatchObject({
       revision: 4,
       doc: {
@@ -230,7 +230,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
         workingPhase: { edit: { value: "Existing", by: "pea" } },
       },
     });
-    expect(await app.workspace.readRaw(key, "ducts")).toEqual(before);
+    expect(await app.workspace.readRaw(key, "duct-systems")).toEqual(before);
     const navigation = await fetch(`${base}/pe/navigation`, {
       headers: { "x-test-author": "human" },
     });
@@ -238,7 +238,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
       works: expect.arrayContaining([
         expect.objectContaining({
           id: workKey(key),
-          route: "ducts",
+          route: "duct-systems",
           label: expect.any(String),
           state: "ready",
           revision: 4,
@@ -252,7 +252,7 @@ test("HTTP Work shares edits independently of thread targets and refuses forged 
       registrations: [{ spec: tools.ducts.work }],
       store,
     });
-    expect(await restarted.readRaw(key, "ducts")).toEqual(before);
+    expect(await restarted.readRaw(key, "duct-systems")).toEqual(before);
   } finally {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));

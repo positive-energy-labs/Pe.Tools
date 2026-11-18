@@ -1,7 +1,7 @@
 import { observeResources, resourceResponse, updateResourceSubscriptions } from "../src/resource-stream.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { address, routeBindingsSchema } from "@pe/agent-contracts";
+import { address, draftCellSchema, routeBindingsSchema, workKey, resolveValue } from "@pe/agent-contracts";
 import type { WorkAuthor, RouteStatePatch, RouteStateSpec, WorkKey } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../src/route-workspace.ts";
 import type {
@@ -58,6 +58,14 @@ const documentA: WorkKey = {
   route: "test-route",
   target: address("C:\\Models\\A.rvt"),
 };
+
+test("trusted publish requires a resolvable caller and stamps the resolved author", async () => {
+  const options = { registrations: [{ spec: cellSpec }], store: memoryStore().store };
+  expect(() => new RouteWorkspace(options).publish(documentA, "test-route", [], 0)).toThrow("admitted caller");
+  const routes = new RouteWorkspace({ ...options, publicationAuthor: () => "pea" });
+  expect(await routes.publish(documentA, "test-route", [{ path: ["esp", "a"], value: { edit: { value: { inWg: 1 } } } }], 0))
+    .toMatchObject({ ok: true, doc: { esp: { a: { edit: { by: "pea" } } } } });
+});
 const documentB: WorkKey = {
   binding: "address" as const,
   route: "test-route",
@@ -538,4 +546,112 @@ test("metadata without an admitted schema is refused before creating Work", asyn
     }),
   ).toMatchObject({ ok: false, kind: "refused", code: "invalid_meta" });
   expect(await module.read(documentA, "test-route")).toBeNull();
+});
+
+const cellSpec = {
+  route: "test-route", title: "Cells", description: "Staged cells.",
+  schema: z.object({ esp: z.record(z.string(), draftCellSchema(z.object({ inWg: z.number(), source: z.string().optional() }))).default({}) }),
+} satisfies RouteStateSpec<z.ZodType>;
+
+test("seed preflight refuses invalid route-level fields without creating Work", async () => {
+  const routes = workspace(memoryStore().store);
+  expect(() => routes.validateSeed(documentA, { count: "wrong" })).toThrow();
+  expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+});
+
+test("a publish seed cannot name its own author: every seeded cell is stamped with the caller", async () => {
+  for (const { by, supplied } of [
+    { by: "human", supplied: false },
+    { by: "pea", supplied: true },
+    { by: "pea", supplied: false },
+  ] as const) {
+    const routes = workspace(memoryStore().store, { registration: { spec: cellSpec } });
+    const seed = { esp: { a: { edit: { value: { inWg: 1 }, ...(supplied ? { by: "human" } : {}) } } } };
+    if (supplied) {
+      await expect(routes.start(documentA, seed, by)).rejects.toThrow();
+      expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+      continue;
+    }
+    // work.start preflights this same seed before publishing with its admitted caller.
+    routes.validateSeed(documentA, seed);
+    expect(await routes.start(documentA, seed, by)).toMatchObject({ ok: true, doc: { esp: { a: { edit: { by, base: 0 } } } } });
+    expect(await routes.readUncaptured(documentA, "test-route")).toMatchObject({ doc: { esp: { a: { edit: { by } } } } });
+  }
+});
+
+test("refused stored Work is set aside with one reason that lists each staged row once, unstamped rows without invented provenance", async () => {
+  const { store } = memoryStore(), reasons: (string | undefined)[] = [];
+  const recording: RouteDocumentStore = { ...store, setState: async (input) => { if (input.value == null) reasons.push(input.reason); return store.setState(input); } };
+  const routes = workspace(recording, { registration: { spec: cellSpec } });
+  await store.setState({ targetKey: workKey(documentA), route: "test-route", value: { version: 1, schemaVersion: 99, revision: 3, doc: {
+    esp: { legacy: { edit: { value: { inWg: 0.4 } } }, cited: { edit: { value: { inWg: 1, source: "submittal p3" }, by: "pea" } }, torn: { edit: { value: "not a drop" } }, bare: {} },
+    writeIntent: { edit: { value: { walk: 1 } } },
+  } } });
+  expect(await routes.readUncaptured(documentA, "test-route")).toBeNull();
+  expect(reasons).toHaveLength(1);
+  const reason = reasons[0]!;
+  expect(reason).toContain("Set aside 4 staged rows");
+  expect(reason).toMatch(/^Set aside 4 staged rows of test-route: /);
+  for (const row of ["esp/legacy by nobody;", "esp/cited by pea source submittal p3;", "esp/torn by nobody;", "writeIntent by nobody."])
+    expect(reason.split(row)).toHaveLength(2);
+  expect(reason).not.toContain("bare");
+});
+
+test.each([
+  { value: { inWg: 0.4 } },
+  { value: { cfm: 100, source: "legacy" }, by: "pea" },
+])("one invalid cell preserves its valid neighbor, retains original bytes once, and blocks fallback: %j", async bad => {
+  const { store } = memoryStore(), reasons: (string | undefined)[] = [];
+  const recording: RouteDocumentStore = { ...store, setState: async (input) => { if (input.value == null) reasons.push(input.reason); return store.setState(input); } };
+  const spec = { ...cellSpec, schema: z.object({ esp: z.record(z.string(), draftCellSchema(z.object({ inWg: z.number() }))).default({}) }) };
+  const routes = workspace(recording, { registration: { spec } });
+  await store.setState({ targetKey: workKey(documentA), route: "test-route", value: { version: 1, schemaVersion: 1, revision: 3,
+    doc: { esp: { stamped: { edit: { value: { inWg: 1 }, by: "human" } }, legacy: { edit: bad } } } } });
+  const original = await store.getState({ targetKey: workKey(documentA), route: "test-route" });
+  let kept: unknown;
+  recording.setState = async input => {
+    if (input.value == null) { kept = await store.getState(input); reasons.push(input.reason); }
+    return store.setState(input);
+  };
+  const read = await routes.readUncaptured(documentA, "test-route");
+  expect(read).toMatchObject({ doc: { esp: { stamped: { edit: { value: { inWg: 1 }, by: "human" } }, legacy: { invalid: expect.any(String) } } } });
+  expect(kept).toEqual(original);
+  expect(reasons).toHaveLength(1);
+  expect(reasons[0]!.split("esp/legacy by")).toHaveLength(2);
+  expect(reasons[0]).not.toContain("esp/stamped");
+  const cell = (read!.doc as { esp: { legacy: { invalid: string } } }).esp.legacy;
+  expect(resolveValue({ Work: { value: cell, author: null, ref: "work:test-route/esp/legacy" },
+    firm: { value: { invalid: "fallback" }, author: null, ref: "firm" } })).toMatchObject({ status: "invalid", source: "Work" });
+  expect(await workspace(recording, { registration: { spec } }).readUncaptured(documentA, "test-route")).toEqual(read);
+  expect(reasons).toHaveLength(1);
+  expect(await routes.apply(documentA, "test-route", "pea", [{ path: ["esp", "stamped", "edit"], value: { value: { inWg: 2 } } }], 3))
+    .toMatchObject({ ok: true, doc: { esp: { legacy: cell, stamped: { edit: { value: { inWg: 2 }, by: "pea" } } } } });
+});
+
+test("caller seeds, edits and trusted publication cannot forge invalid cells", async () => {
+  const routes = new RouteWorkspace({ registrations: [{ spec: cellSpec }], store: memoryStore().store, publicationAuthor: () => "pea" });
+  await expect(routes.start(documentA, { esp: { a: { invalid: "forged" } } }, "pea")).rejects.toThrow("invalid markers");
+  for (const patch of [{ path: ["esp", "a"], value: { invalid: "forged" } }, { path: ["esp", "a", "invalid"], value: "forged" }]) {
+    expect(await routes.apply(documentA, "test-route", "pea", [patch], 0)).toMatchObject({ ok: false });
+    expect(await routes.publish(documentA, "test-route", [patch], 0)).toMatchObject({ ok: false });
+  }
+});
+
+test("typed caller cell patches admit a value without by and refuse host metadata", () => {
+  type Patch = import("../../agent-contracts/src/route-kernel-bodies.ts").WorkPatch<typeof cellSpec.schema>;
+  const patch = { path: ["esp", "a", "edit"], value: { value: { inWg: 1 } } } satisfies Patch;
+  // @ts-expect-error Caller patches cannot choose the host stamp.
+  const forged: Patch = { path: ["esp", "a", "edit"], value: { value: { inWg: 1 }, by: "human" } };
+  expect(patch.value).not.toHaveProperty("by");
+  expect(forged.value).toHaveProperty("by");
+});
+
+test("a record with more rows than one notice holds names how many it left to the kept bytes", async () => {
+  const { store } = memoryStore(), reasons: (string | undefined)[] = [];
+  const recording: RouteDocumentStore = { ...store, setState: async (input) => { if (input.value == null) reasons.push(input.reason); return store.setState(input); } };
+  const esp = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`unit-${i}`, { edit: { value: { inWg: 1 } } }]));
+  await store.setState({ targetKey: workKey(documentA), route: "test-route", value: { version: 1, schemaVersion: 99, revision: 3, doc: { esp } } });
+  expect(await workspace(recording, { registration: { spec: cellSpec } }).readUncaptured(documentA, "test-route")).toBeNull();
+  expect(reasons[0]).toMatch(/^Set aside 60 staged rows of test-route: esp\/unit-0 by nobody; .*; and \d+ more in the kept bytes\. /);
+  expect(reasons[0]!.indexOf("schemaVersion")).toBeLessThan(450);
 });

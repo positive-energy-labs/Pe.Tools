@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
-import { systemCode } from "../ducts/identity";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
+import { systemCode } from "@pe/ducts-web/identity";
 import { useSyncExternalStore } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -10,8 +10,8 @@ import { machineFixture } from "../../../../packages/agent-contracts/tests/machi
 import { RouteViewStore } from "@pe/runtime";
 import { route, namesOf, type TypedRoute } from "./typed-route";
 import { scrollBody } from "./defaults";
-import { module as ducts } from "../ducts/route";
-import { module as fans } from "../fans/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
+import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { useRouteViewBridge } from "./view-bridge";
 import { peReadings } from "../host/resource-stream";
@@ -24,14 +24,14 @@ import { peClient } from "../host/pe-client";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
-test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the mounted typed view", async key => {
+test.each(["duct-systems", "fans"] as const)("Pea resolves %s subject names through the mounted typed view", async key => {
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   fakeRuntimeHost("http://127.0.0.1:19999");
   vi.stubEnv("PE_CONTEXT", "casing-context");
   // Retain the production fields and subject options. Native roster delivery is the only data adapter.
   // The kernel links layout ids to declared panes, so the one layout pane is declared and draws nothing.
   const options = { edits: undefined, commands: {}, reads: {}, panes: { unused: { title: "unused", purpose: "Casing fixture", body: "scroll", draw: () => scrollBody(null) } }, picture: undefined, title: undefined, layout: { kind: "pane", id: "unused" } } as const;
-  const module: TypedRoute = key === "ducts"
+  const module: TypedRoute = key === "duct-systems"
     ? route({ ...ducts.spec, ...options, core: ducts.spec.subject!.read! })
     : route({ ...fans.spec, ...options, core: fans.spec.subject!.read! });
   const roster = module.spec.subject!.read!;
@@ -42,7 +42,7 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
     read: "ducts.roster", args: { target: ref }, subscription: "casing-roster", generation: 1,
   })).json();
   let rosterData: any = structuredClone(packet.value!.data);
-  if (key === "ducts") rosterData.systems = [{ ...rosterData.systems[0], name: "SA 19" }];
+  if (key === "duct-systems") rosterData.systems = [{ ...rosterData.systems[0], name: "SA 19" }];
   else rosterData.rows = [{ ...rosterData.rows[0], mark: "MUAS-1" }];
   const fanIdentity = key === "fans" ? stableFanKey(rosterData.rows[0]) : "";
   const fanPort = key === "fans" ? rosterData.rows[0].portIndex : 0;
@@ -96,21 +96,21 @@ test.each(["ducts", "fans"] as const)("Pea resolves %s subject names through the
   try {
     render(<RouterProvider router={router} />);
     await waitFor(() => expect(store.select("casing", key)).toHaveProperty("instance"));
-    const exact = key === "ducts" ? "SA 19" : `MUAS-1 / port ${fanPort}`;
-    const identity = key === "ducts" ? systemCode(exact) : fanIdentity;
+    const exact = key === "duct-systems" ? "SA 19" : `MUAS-1 / port ${fanPort}`;
+    const identity = key === "duct-systems" ? systemCode(exact) : fanIdentity;
     const lower = await call(exact.toLowerCase());
     expect(lower, JSON.stringify(lower)).toMatchObject({ ok: true, result: { outcome: "rendered" } });
     expect(mount.page.read()[field]).toEqual({ kind: "ids", ids: [identity] });
     // A fan identity carries a port sub, so it is not a plain name: the ids equality above proves it.
-    if (key === "ducts") expect(namesOf(mount.page.read()[field])).toEqual(["SA 19"]);
+    if (key === "duct-systems") expect(namesOf(mount.page.read()[field])).toEqual(["SA 19"]);
     // Add a differently-cased twin: exact spelling wins; a third casing must refuse the whole move.
-    rosterData = key === "ducts" ? { ...rosterData, systems: [rosterData.systems[0], { ...rosterData.systems[0], id: 999999, name: exact.toLowerCase() }] } : {
+    rosterData = key === "duct-systems" ? { ...rosterData, systems: [rosterData.systems[0], { ...rosterData.systems[0], id: 999999, name: exact.toLowerCase() }] } : {
       ...rosterData, rows: [rosterData.rows[0], { ...rosterData.rows[0], mark: "muas-1", uniqueId: "other-fan" }],
     };
     await act(async () => mount.refresh(roster));
     expect(await call(exact)).toMatchObject({ ok: true, result: { outcome: "rendered" } });
     const before = mount.page.read();
-    expect(await call(key === "ducts" ? "Sa 19" : `Muas-1 / port ${fanPort}`)).toMatchObject({ ok: false, result: { outcome: "refused", refusal: { message: expect.stringContaining("Ambiguous") } } });
+    expect(await call(key === "duct-systems" ? "Sa 19" : `Muas-1 / port ${fanPort}`)).toMatchObject({ ok: false, result: { outcome: "refused", refusal: { message: expect.stringContaining("Ambiguous") } } });
     expect(mount.page.read()).toBe(before);
   } finally { cleanup(); mount.dispose(); await host.close(); }
 });

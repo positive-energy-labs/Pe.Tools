@@ -11,14 +11,11 @@ import { TeachPage, TeachRegion, TeachTarget, useTeaching } from "@pe/kit/lang/u
 import { KeyScope, useScopeKeys } from "@pe/kit/keys";
 import { QueryBox } from "@pe/kit/table/query";
 import { HelpOwner, HelpWorld, RouteHelpButton } from "#/route/help";
-import { ductsDocs } from "#/ducts/docs";
-import { DUCTS_COMPARE } from "@pe/agent-contracts/ducts-guide";
+import { Deferred } from "@pe/kit/lang/section";
+import { Table } from "@pe/kit/table/table";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
-const diagram = vi.hoisted(() => vi.fn(() => null));
-vi.mock("#/product-map/diagram", async (original) => ({
-  ...(await original<typeof import("#/product-map/diagram")>()),
-  Mermaid: diagram,
-}));
+const diagram = vi.fn(() => null);
+function LocalDiagram() { return diagram(); }
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
@@ -52,6 +49,23 @@ afterEach(() => {
   expect(readTeaching()).toEqual([]);
 });
 const noop = () => {};
+const helpDocs = (
+  <>
+    <Deferred>
+      <p>Local help prose</p>
+    </Deferred>
+    <Deferred>
+      <article id="case-local">Local help case</article>
+      <LocalDiagram />
+      <Table
+        rows={[{ key: "local", name: "Local row" }]}
+        columns={[{ key: "name", label: "Name", cell: (row) => row.name }]}
+        rowKey={(row) => row.key}
+        label="Local help table"
+      />
+    </Deferred>
+  </>
+);
 test("quantity leaders still connect their track to composed rows in either direction", () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
     function (this: HTMLElement) {
@@ -75,22 +89,25 @@ test("Help paints its generated screen before mounting prose, cases or invoking 
   render(
     <>
       <HelpOwner />
-      <RouteHelpButton name="Ducts" docs={ductsDocs} />
+      <RouteHelpButton name="Example" docs={helpDocs} />
     </>,
   );
   fireEvent.click(screen.getByRole("button", { name: "How this tool works" }));
   expect(document.querySelector("[data-teach-legend]")).toBeTruthy();
+  expect(screen.queryByText("Local help prose")).toBeNull();
   expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
   expect(screen.queryAllByRole("grid")).toHaveLength(0);
   reveal();
   expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(0);
+  expect(screen.queryByText("Local help prose")).toBeNull();
   expect(diagram).not.toHaveBeenCalled();
   reveal();
   reveal();
-  expect(document.querySelectorAll("article[id^=case-]").length).toBeGreaterThan(0);
-  expect(diagram).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("Local help prose")).toBeTruthy();
+  expect(document.querySelectorAll("article[id^=case-]")).toHaveLength(1);
+  expect(diagram).toHaveBeenCalledTimes(1);
   const tables = screen.getAllByRole("grid");
-  expect(tables).toHaveLength(DUCTS_COMPARE.length + 2);
+  expect(tables).toHaveLength(1);
   tables.forEach((table) => {
     expect(table.closest("[data-table-scroll]")).toBeTruthy();
     within(table)
@@ -104,11 +121,11 @@ test("Help paints its generated screen before mounting prose, cases or invoking 
   ).toEqual(["How this tool works"]);
 });
 test("Alt+/ teaches the URL's page even from Pea's composer; Pea's own trigger teaches Pea", async () => {
-  window.history.pushState({}, "", "/ducts");
+  window.history.pushState({}, "", "/duct-systems");
   render(
     <>
       <HelpOwner />
-      <TeachTarget value="/ducts">
+      <TeachTarget value="/duct-systems">
         <RouteHelpButton name="Ducts" />
         <TeachPage value="/pea">
           <RouteHelpButton name="Pea" />
@@ -132,11 +149,11 @@ test("Alt+/ teaches the URL's page even from Pea's composer; Pea's own trigger t
   window.history.pushState({}, "", "/");
 });
 test("Alt+/ toggles; a page's later trigger unmounting restores the earlier one", async () => {
-  window.history.pushState({}, "", "/ducts");
+  window.history.pushState({}, "", "/duct-systems");
   const view = render(
     <>
       <HelpOwner />
-      <TeachTarget value="/ducts">
+      <TeachTarget value="/duct-systems">
         <RouteHelpButton name="Ducts" />
         <RouteHelpButton name="Ducts later" />
       </TeachTarget>
@@ -159,7 +176,7 @@ test("Alt+/ toggles; a page's later trigger unmounting restores the earlier one"
   view.rerender(
     <>
       <HelpOwner />
-      <TeachTarget value="/ducts">
+      <TeachTarget value="/duct-systems">
         <RouteHelpButton name="Ducts" />
       </TeachTarget>
     </>,

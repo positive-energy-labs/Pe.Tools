@@ -14,7 +14,7 @@ const port = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("9e9fb
 const said = { by: "pea", at: "2026-11-10T12:00:00.000Z" } as const;
 const claim: Finding = { id: "p1", subject: port, kind: "claim", text: "pea on p1", said, verdict: { ...said, value: "no" } };
 
-test.each(["families/matrix.tsx", "families/pivot-grid.tsx", "fans/mount.tsx", "ducts/proto/e/screen.tsx", "ducts/sheet/view.tsx"])("%s never mounts finding verbs or pointer citations", path => {
+test.each(["families/matrix.tsx", "families/pivot-grid.tsx", "../../../products/fans/web/src/mount.tsx", "../../../products/duct-systems/web/src/screen/screen.tsx", "../../../products/fans/web/src/calc/view.tsx"])("%s never mounts finding verbs or pointer citations", path => {
     const source = readFileSync(new URL(`../../../${path}`, import.meta.url), "utf8");
     expect(source, path).not.toMatch(/route\/slots\/findings|FindingVerb|PointerCite|pointerRefs/);
 });

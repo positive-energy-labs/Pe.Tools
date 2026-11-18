@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import {
   buildBuiltinClosure,
@@ -122,7 +123,7 @@ test("explicit roots are portable and producer works in another process cwd", as
   const first = await f.build();
   expect((await fixture().build()).fingerprint).toBe(first.fingerprint);
   const producer = fileURLToPath(new URL("./route-source-hash.ts", import.meta.url));
-  const jiti = new URL("../../node_modules/jiti/lib/jiti.mjs", import.meta.url).href;
+  const jiti = pathToFileURL(createRequire(import.meta.url).resolve("jiti")).href;
   const runner = join(f.root, "probe.mjs");
   writeFileSync(
     runner,
@@ -161,12 +162,12 @@ test("computed imports refuse, external content integrity affects the envelope",
 
 test("builtin closures hash independently in declaration order", async () => {
   const f = fixture();
-  const options = ["fans", "ducts"].map((key) => ({
+  const options = ["fans", "duct-systems"].map((key) => ({
     ...f.options,
     data: { ...builtinData, key, address: `/${key}`, work: { ...builtinData.work, route: key } },
   }));
   const closures = await buildBuiltinClosures(options);
-  expect([...closures.keys()]).toEqual(["fans", "ducts"]);
+  expect([...closures.keys()]).toEqual(["fans", "duct-systems"]);
   const alone = await buildBuiltinClosures([options[0]!]);
   expect(alone.get("fans")).toEqual(closures.get("fans"));
 });

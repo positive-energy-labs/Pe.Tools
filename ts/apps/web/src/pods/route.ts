@@ -4,7 +4,7 @@ import { handle } from "@pe/agent-contracts/handle";
 import { read } from "../route/defaults";
 import { z } from "zod";
 import { memberWork, settingsRouteState, type Immutable } from "@pe/agent-contracts";
-import { field, route, split, subjectSchema } from "../route/defaults.ts";
+import { field, route, split, subjectSchema } from "../route/defaults";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 

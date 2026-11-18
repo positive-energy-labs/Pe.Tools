@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
+import { z } from "zod";
 import { link, type CatalogLink } from "./catalog.ts";
 const errorsOf = (entries: readonly CatalogLink[]) => {
   const result = link(entries);
@@ -27,7 +28,7 @@ describe("catalog dependency graph", () => {
         expect(route.touches).toEqual(expect.arrayContaining([...child.touches]));
       }
     }
-    for (const id of ["thread.export", "turn.element-names", "ducts.analysis"] as const)
+    for (const id of ["thread.export", "turn.element-names"] as const)
       expect(peRoutes[id].catalog.effect).toBe("SessionWrite");
   });
   test("refuses uncapped geometry cardinality", () => {
@@ -118,4 +119,16 @@ test("the capture policy rows are exactly the view-image keys, and the focused t
   expect(effect("revit.context.view-image.focus")).toBe("SessionWrite");
   for (const key of captures)
     expect(JSON.stringify(nativeOutputSchema(key as never).toJSONSchema()), key).not.toContain("filePath");
+});
+
+test("named reads cannot fall through the advertised open read arm", () => {
+  const input = peRoutes["reads.value"].catalog.discovery!.input as { anyOf: { properties: { read: { pattern?: string } } }[] };
+  const open = input.anyOf.at(-1)!.properties.read.pattern!;
+  expect(new RegExp(open).test("fans.roster")).toBe(false);
+  expect(new RegExp(open).test("fans.calc-detail")).toBe(false);
+  expect(new RegExp(open).test("other.read")).toBe(true);
+  const advertised = z.fromJSONSchema(input);
+  for (const read of ["fans.roster", "fans.calc-detail"])
+    expect(advertised.safeParse({ read, args: { proposal: {}, edits: [] }, subscription: "test", generation: 0 }).success).toBe(false);
+  expect(advertised.safeParse({ read: "other.read", args: {}, subscription: "test", generation: 0 }).success).toBe(true);
 });

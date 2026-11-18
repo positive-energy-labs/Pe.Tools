@@ -10,7 +10,7 @@ import { PlaceBoundary, admittedRouterAddress } from "#/shell/typed-place-bounda
 import type { AdmittedPlace } from "#/shell/typed-place";
 afterEach(cleanup);
 
-test.each(["families", "fans", "ducts"])("N-03 %s retains codec bytes before resolving Page or target on return", async (route) => {
+test.each(["families", "fans", "duct-systems"])("N-03 %s retains codec bytes before resolving Page or target on return", async (route) => {
   const query = new URLSearchParams({
     subject: JSON.stringify({ kind: "ids", ids: ["one"] }),
     selected: JSON.stringify([{ kind: "item", id: "one" }]),
@@ -91,7 +91,7 @@ test("an untabbed route keeps custody across its own history push, before the ba
     const location = useRouterState({ select: (state) => state.location });
     return (
       <RouteRetention
-        route={location.pathname === "/ducts" ? "ducts" : null}
+        route={location.pathname === "/duct-systems" ? "duct-systems" : null}
         active={null}
         tabs={[]}
         ready
@@ -100,15 +100,15 @@ test("an untabbed route keeps custody across its own history push, before the ba
     );
   }
   const root = createRootRoute({ component: Root });
-  const ducts = createRoute({ getParentRoute: () => root, path: "/ducts", component: Capture });
+  const ducts = createRoute({ getParentRoute: () => root, path: "/duct-systems", component: Capture });
   const router = createRouter({
     routeTree: root.addChildren([ducts]),
-    history: createMemoryHistory({ initialEntries: ["/ducts?selected=1"] }),
+    history: createMemoryHistory({ initialEntries: ["/duct-systems?selected=1"] }),
   });
   await router.load();
   render(<RouterProvider router={router} />);
   await waitFor(() => expect(scope?.current()).toBe(true));
   // The route's address port pushes; history updates synchronously, the bank re-renders later.
-  router.history.push("/ducts?selected=2");
+  router.history.push("/duct-systems?selected=2");
   expect(scope!.current()).toBe(true);
 });

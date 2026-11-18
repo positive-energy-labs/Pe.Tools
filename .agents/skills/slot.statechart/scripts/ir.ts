@@ -422,7 +422,10 @@ const functionKey = ({ keys, values }: { keys: Value[]; values: Value[] }) => {
     keyTexts.push(key(keys[i]));
     if (typeof keys[i] === "number") ints++;
   }
-  const rank = (i: number) => (typeof keys[i] === "number" ? (keys[i] as number) : Infinity);
+  const rank = (i: number) => {
+    const value = keys[i];
+    return typeof value === "number" ? value : Infinity;
+  };
   order.sort((a, b) => rank(a) - rank(b) || byText(keyTexts[a], keyTexts[b]) || a - b);
   let tuple = ints === keys.length;
   for (let i = 0; tuple && i < order.length; i++) tuple = keys[order[i]] === i + 1;

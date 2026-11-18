@@ -4,6 +4,7 @@
 // once its host holds the service claim, start a controlled Revit from the same checkout with the
 // same PE_TOOLS_PRODUCT_HOME and open a Chadds copy. Pe.App then joins that host.
 import { execFileSync } from "node:child_process";
+import { fansPanes } from "../../products/fans/web/src/panes.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, test } from "vite-plus/test";
@@ -14,7 +15,7 @@ import { workEvidence } from "./conversation-work.fixture.ts";
 import { marks, settled } from "./marks.ts";
 import { connectTypedPage, type TypedPage } from "./typed-page.ts";
 
-const FANS_PANES = ["sheet-roster", "sheet-inputs", "sheet-picture", "sheet-ledger"];
+const FANS_PANES = [fansPanes.roster, fansPanes.inputs, fansPanes.picture, fansPanes.ledger];
 // Rulings (e-inbox) folds to a rail at the 1600 px owned viewport; case 2 unfolds it.
 const DUCTS_PANES = ["e-systems", "e-picture"];
 const MALFORMED = /Malformed route value/;
@@ -136,7 +137,7 @@ async function openFans(page: TypedPage) {
   await expect
     .poll(
       async () =>
-        (await reading(page)).panes.includes("sheet-roster") ||
+        (await reading(page)).panes.includes(fansPanes.roster) ||
         !!(await find(page, "body", "^choose$")),
       {
         timeout: 120_000,
@@ -144,14 +145,14 @@ async function openFans(page: TypedPage) {
       },
     )
     .toBe(true);
-  if (!(await reading(page)).panes.includes("sheet-roster")) {
+  if (!(await reading(page)).panes.includes(fansPanes.roster)) {
     await press(page, "body", "^choose$");
     // Revit boots and opens the copy while this waits; the launcher's host starts first.
     await press(page, "body", doc, 600_000);
   }
   // A cold document read takes minutes; the roster row is the readiness signal. A retained
   // selection is kept: pressing a selected row would close it.
-  const roster = '[data-pane-id="sheet-roster"]';
+  const roster = `[data-pane-id="${fansPanes.roster}"]`;
   // A read admitted while Revit attaches keeps its 409 until Refresh (observed on e6069eb6);
   // the person presses the roster's visible Refresh, as the pane offers.
   for (let end = Date.now() + 600_000; !(await find(page, roster, "^MUAS-1")); ) {
@@ -208,7 +209,7 @@ test("MUAS-1 return join is accepted from a visible enabled control and stages a
         .catch(() => undefined);
       return find(page, scope, pattern);
     };
-    let scope = '[data-pane-id="sheet-ledger"]';
+    let scope = `[data-pane-id="${fansPanes.ledger}"]`;
     let control = await drawn(scope, join);
     seen.push({ route: "/fans", control });
     if (!control || control.disabled) {
@@ -351,7 +352,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     // A cold sheet read may stay unavailable until the pane's visible Refresh, as on the roster.
     // Every fans pane draws the same readings; the roster's Refresh stays on screen at 1600 px
     // where the Inputs header clips its own.
-    const roster = '[data-pane-id="sheet-roster"]';
+    const roster = `[data-pane-id="${fansPanes.roster}"]`;
     for (let end = Date.now() + 300_000; !(await espRow()); ) {
       if (Date.now() > end) throw new Error("MUAS-1's Unit ESP row never drew");
       await new Promise((done) => setTimeout(done, 30_000));
@@ -415,8 +416,8 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     // The Inputs pane's reading status (PaneStatus) is absent only when every reading it draws is
     // current. Its other status cells (the write scope's) are not readings.
     const status = () =>
-      page.evaluate(() =>
-        [...document.querySelectorAll('[data-pane-id="sheet-inputs"] [role="status"]')]
+      page.evaluate((inputs) =>
+        [...document.querySelectorAll(`[data-pane-id="${inputs}"] [role="status"]`)]
           .map((e) => e.textContent!.trim())
           .filter((text) =>
             /^Showing previous reading|^Reading\.\.\.$|unavailable|Reading is stale|Explicit demand/.test(
@@ -424,6 +425,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
             ),
           )
           .join(" "),
+        fansPanes.inputs,
       );
     await expect
       .poll(status, { timeout: 15_000 })

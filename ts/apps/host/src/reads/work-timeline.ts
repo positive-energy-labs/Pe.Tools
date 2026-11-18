@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { authorSchema } from "@pe/agent-contracts";
 import {
   actionStatusSchema,
   refuse,
@@ -25,7 +25,7 @@ import type { DocumentRow } from "../session-inventory.ts";
  * for the Works of one Place: its rows oldest first, and the caller's next step each way.
  */
 export interface TimelineSource {
-  read(works: readonly WorkKey[], by: WorkAuthor, documents: readonly DocumentRow[]): Promise<TimelinePart> | TimelinePart;
+  read(works: readonly WorkKey[], by: WorkAuthor, documents: readonly DocumentRow[], settingsOwners: readonly string[]): Promise<TimelinePart> | TimelinePart;
   /** Takes the step the Timeline chose from this source; the result is the door's response. */
   step(direction: "undo" | "redo", expected: StepRef, caller: Caller): Promise<unknown>;
 }
@@ -60,7 +60,7 @@ export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJourn
   /** The action journal, or the reader a host with no journal of its own supplies. */
   const receiptsNow: TimelineReceipts = typeof source === "function" ? source : () => timelineReceipts(source);
   const parts = async (works: readonly WorkKey[], by: WorkAuthor, receipts: readonly ActionStatus[]) =>
-    documents().then((docs) => Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by, docs))]));
+    documents().then((docs) => Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by, docs, workspace.settingsOwners(works)))]));
   return {
     async read(works: readonly WorkKey[], by: WorkAuthor, document?: WorkKey): Promise<WorkTimeline> {
       const members = membersOf(works, document);
@@ -88,7 +88,7 @@ export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJourn
 }
 export type HostTimeline = ReturnType<typeof hostTimeline>;
 
-const timelineInput = workTimelineArgsSchema.extend({ by: z.enum(["human", "pea"]) });
+const timelineInput = workTimelineArgsSchema.extend({ by: authorSchema });
 /** Tracked input: it moves with any Work write and any action receipt (`reads/invalidations.ts`). */
 export const workTimelineInput = leaf("work-timeline", timelineInput, workTimelineSchema, false);
 /**

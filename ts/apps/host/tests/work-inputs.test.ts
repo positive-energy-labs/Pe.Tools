@@ -108,7 +108,7 @@ const firstFeed = (
   });
 
 const recipe: ConsumerRecipe = {
-  key: "ducts.sheet",
+  key: "fans.calc-detail",
   input: { fan: "F-1" },
   scope: '["work-inputs"]',
 };
@@ -157,7 +157,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
         key,
         "fans",
         "human",
-        [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm } } }],
+        [{ path: ["flows", terminalSubject, "edit"], value: { value: cfm } }],
         revision,
       ),
     ).toMatchObject({ ok: true });
@@ -205,7 +205,7 @@ test("a recorded workspace with no store serves the delivered Work, feed and his
       key,
       "fans",
       "human",
-      [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 1 } } }],
+      [{ path: ["flows", terminalSubject, "edit"], value: { value: 1 } }],
       2,
     ),
   ).rejects.toThrow("recorded workspace refuses Work edit");
@@ -281,7 +281,7 @@ async function instrumented(capture: import("@pe/runtime").WorkReadCapture) {
         key,
         "fans",
         "human",
-        [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 100 + revision } } }],
+        [{ path: ["flows", terminalSubject, "edit"], value: { value: 100 + revision } }],
         revision++,
       ),
     ).toMatchObject({ ok: true });
@@ -571,7 +571,7 @@ test("two request contexts cross the Work queue with reverse capture completion;
     key,
     "fans",
     "human",
-    [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 7 } } }],
+    [{ path: ["flows", terminalSubject, "edit"], value: { value: 7 } }],
     0,
   );
   expect(await live.view(key, "fans", pea.context)).toMatchObject({ revision: 1 });
@@ -648,7 +648,7 @@ test("absent Work feeds capture and replay null without stopping recording", asy
 
 test("command Work reads carry context through binding and revalidation", async () => {
   const { dir, writer } = await bundle();
-  const commandWorkKey = { ...key, route: "ducts" };
+  const commandWorkKey = { ...key, route: "duct-systems" };
   const { ActionJournal } = await import("../src/action-journal.ts");
   const { commands, tools } = await import("@pe/agent-contracts");
   const { z } = await import("zod");
@@ -711,5 +711,5 @@ test("command Work reads carry context through binding and revalidation", async 
     { kind: "recording", recordingStore: store, at: null },
     request.consumption.id,
   );
-  expect((await replay.view(commandWorkKey, "ducts", again.context))?.revision).toBe(0);
+  expect((await replay.view(commandWorkKey, "duct-systems", again.context))?.revision).toBe(0);
 });

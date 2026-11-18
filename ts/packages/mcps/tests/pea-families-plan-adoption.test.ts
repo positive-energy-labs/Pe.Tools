@@ -8,7 +8,7 @@ import { bindWork } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { markDispatched } from "../../../apps/host/src/action-dispatch.ts";
 import { admittedBuiltinsLayer } from "../../../apps/host/src/admitted-builtins.ts";
-import { DuctFiles } from "../../../apps/host/src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { PictureCaptureStore } from "../../../apps/host/src/captures-route.ts";
 import { hostOwnership } from "../../../apps/host/src/host-ownership.ts";
 import { fileRouteDocumentStore } from "../../../apps/host/src/route-document-store.ts";

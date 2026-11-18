@@ -41,9 +41,25 @@ public sealed class DuctTypeFootprintTests {
             }
             double TypeValue() => type.LookupParameter(TypeStatic).AsDouble();
             var before = TypeValue();
+            var cohort = DuctApplier.ParameterCohort(project, one.Id.Value(), TypeStatic, "snapshot:1")!;
+            var instanceCohort = DuctApplier.ParameterCohort(project, one.Id.Value(), InstanceStatic, "snapshot:1")!;
+            Assert.Multiple(() => {
+                Assert.That(cohort.Complete, Is.True);
+                Assert.That(cohort.Owner, Is.EqualTo(new DuctParameterOwner(DuctParameterOwnerKind.Type, type.Id.Value())));
+                Assert.That(cohort.Members.Select(m => m.ElementId), Is.EquivalentTo(new[] { one.Id.Value(), two.Id.Value() }), "includes the off-walk peer");
+                Assert.That(cohort.Members.Select(m => m.UniqueId), Is.EquivalentTo(new[] { one.UniqueId, two.UniqueId }));
+                Assert.That(instanceCohort.Members, Has.Count.EqualTo(1));
+                Assert.That(instanceCohort.Owner.Kind, Is.EqualTo(DuctParameterOwnerKind.Instance));
+            });
             var store = new DuctLossStore { Version = DuctLossStore.CurrentVersion };
             DuctApplyRequest Ask(DuctParameterSlotOverrides? slots, params DuctEquipmentWrite[] writes) =>
                 new(slots, [], [], [], writes, [], [], store);
+
+            // Phase-3 fresh-rung falsifiers: an ESP-only write carries no flow; none never plans equipment.
+            var none = DuctApplier.Apply(project, Ask(new(RequiredEsp: ""), new DuctEquipmentWrite(one.Id.Value(), 0.8)), true);
+            Assert.That(none.Writes.Where(w => w.Kind == "equipment"), Is.Empty);
+            Assert.Throws<ArgumentException>(() => DuctApplier.Apply(project,
+                Ask(new(RequiredEsp: TypeStatic, RatedEsp: TypeStatic.ToLowerInvariant()), new DuctEquipmentWrite(one.Id.Value(), 0.8)), true));
 
             var request = Ask(null, new DuctEquipmentWrite(one.Id.Value(), 2.6581));
             foreach (var preview in new[] { true, false }) {
@@ -66,13 +82,29 @@ public sealed class DuctTypeFootprintTests {
             Assert.That(DuctApplier.Apply(project, Ask(null, new(one.Id.Value(), 1), new(two.Id.Value(), 2)), true)
                 .Writes.Where(w => w.Kind == "equipment").Select(w => w.Outcome), Is.All.EqualTo("refused"));
 
+            // A refused member still belongs to the shared type's requested value cohort.
+            foreach (var preview in new[] { true, false }) {
+                var refusedPeer = DuctApplier.Apply(project, Ask(null, new(one.Id.Value(), 1), new(two.Id.Value(), -1)), preview);
+                Assert.Multiple(() => {
+                    Assert.That(refusedPeer.Writes.Where(w => w.Kind == "equipment").Select(w => w.Outcome), Is.All.EqualTo("refused"));
+                    Assert.That(refusedPeer.Writes.Single(w => w.Kind == "equipment" && w.Id == one.Id.Value()).Reason,
+                        Does.Contain("different").And.Contain(two.Id.Value().ToString()));
+                    Assert.That(two.Symbol.LookupParameter(TypeStatic).AsDouble(), Is.EqualTo(before), "B's shared static must not move when B=-1 refuses");
+                    Assert.That(DuctApplier.ReadStore(project).Store, Is.Null);
+                });
+            }
+
             // Control: an instance-owned static writes one unit and leaves its peer alone.
-            var control = DuctApplier.Apply(project, Ask(new DuctParameterSlotOverrides(FanStatic: InstanceStatic), new DuctEquipmentWrite(one.Id.Value(), 1.5)), false);
+            var espOnly = Ask(new DuctParameterSlotOverrides(RequiredEsp: InstanceStatic), new DuctEquipmentWrite(one.Id.Value(), 0.8));
+            Assert.That(espOnly.TerminalFlows, Is.Empty);
+            Assert.That(espOnly.EquipmentFlows, Is.Empty);
+            var control = DuctApplier.Apply(project, espOnly, false);
             Assert.Multiple(() => {
                 Assert.That(control.Writes.Single(w => w.Kind == "equipment").Outcome, Is.EqualTo("written"));
                 Assert.That(one.LookupParameter(InstanceStatic).AsDouble(), Is.Not.EqualTo(0));
                 Assert.That(two.LookupParameter(InstanceStatic).AsDouble(), Is.EqualTo(0));
                 Assert.That(TypeValue(), Is.EqualTo(before));
+                Assert.That(UnitUtils.ConvertFromInternalUnits(one.LookupParameter(InstanceStatic).AsDouble(), UnitTypeId.InchesOfWater60DegreesFahrenheit), Is.EqualTo(0.8).Within(1e-6));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(family);

@@ -40,7 +40,7 @@ function measureDocument() {
       const nodes = [];
       for (
         let el = document.querySelector<HTMLElement>(
-          '[data-pane-id="e-picture"], [data-pane-id="sheet-picture"]',
+          '[data-pane-id="e-picture"], [data-pane-id="calc-picture"]',
         );
         el;
         el = el.parentElement
@@ -157,12 +157,12 @@ try {
               hostRequests.push(request.url());
           });
           await page.goto(
-            `${origin}/ducts?fixture=layout${stage === "sheet" ? "&stage=sheet&fan=14577391%3A2" : ""}${scoped ? `&system=${encodeURIComponent(JSON.stringify(["SA 19 - Supply Air - Level 2 North"]))}` : ""}`,
+            `${origin}/duct-systems?fixture=layout${stage === "sheet" ? "&stage=sheet&fan=14577391%3A2" : ""}${scoped ? `&system=${encodeURIComponent(JSON.stringify(["SA 19 - Supply Air - Level 2 North"]))}` : ""}`,
           );
           // __root -> RouteDock -> ChatShell: the product dock and chat, with fresh device state.
           await page.locator("[data-chat-column]").waitFor({ state: "visible", timeout: 20000 });
           await page
-            .locator(`[data-pane-id="${stage === "network" ? "e-picture" : "sheet-picture"}"]`)
+            .locator(`[data-pane-id="${stage === "network" ? "e-picture" : "calc-picture"}"]`)
             .waitFor({ state: "attached" });
           const record = async (action: string) => {
             await page.waitForTimeout(1000);
@@ -210,7 +210,7 @@ try {
                 );
               }
               const pane = (id: string) => measurement.panes.find((p) => p.id === id)!;
-              const picture = pane(stage === "network" ? "e-picture" : "sheet-picture");
+              const picture = pane(stage === "network" ? "e-picture" : "calc-picture");
               assert(
                 picture.rect.width >= 360 && picture.rect.height >= 100 && !picture.rail,
                 "the subject lost its floor",

@@ -1,12 +1,12 @@
 import { valueOf } from "./typed-route";
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
 import { historyPointSchema, workFingerprintSchema } from "@pe/agent-contracts";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { fansSheet } from "../fans/host";
+import { fansCalc } from "@pe/fans-host/host";
 import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.test-support";
-import { module as fans } from "../fans/route";
+import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
@@ -77,7 +77,7 @@ async function journey() {
   const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
   const mount = mountTypedRoute(fans, input, fingerprint, {
     work,
-    sources: { "fans.sheet": source },
+    sources: { "fans.calc": source },
   });
   const stop = mount.subscribe(() => {});
   const ready = () =>
@@ -146,7 +146,7 @@ test("J1 open Fans, choose a subject, carry pose through Back/Forward and share 
       fans,
       { ...j.input, memory: () => ({ contextRadiusFt: 99 }) },
       j.fingerprint,
-      { work: j.work, sources: { "fans.sheet": j.source } },
+      { work: j.work, sources: { "fans.calc": j.source } },
     );
     try {
       expect(shared.page.read(), "B01: a shared URL overrides remembered pose").toEqual(
@@ -174,13 +174,13 @@ test("JM B01 move a typed Page while URL custody waits for the router, then shar
       j.input.address.write(next, intent); current = false;
     } };
     const mount = mountTypedRoute(fans, { ...j.input, address, custody: { current: () => current } }, j.fingerprint,
-      { work: j.work, sources: { "fans.sheet": j.source } });
+      { work: j.work, sources: { "fans.calc": j.source } });
     try {
       mount.subscribe(() => {});
       mount.page.subject(j.fan("MUAS-1"));
       expect(mount.page.read().fan, "B01: its own URL write cannot suppress the visible move").toEqual(j.fan("MUAS-1"));
       current = true;
-      const restored = mountTypedRoute(fans, j.input, j.fingerprint, { work: j.work, sources: { "fans.sheet": j.source } });
+      const restored = mountTypedRoute(fans, j.input, j.fingerprint, { work: j.work, sources: { "fans.calc": j.source } });
       try { expect(restored.page.read().fan).toEqual(mount.page.read().fan); } finally { restored.dispose(); }
     } finally { mount.dispose(); }
   } finally { await j.close(); }
@@ -198,7 +198,7 @@ test("JM H18 open core and roster together, switch fan and retain both host publ
     expect(valueOf(j.mount.value(roster)).rows.length).toBeGreaterThan(1);
     expect(valueOf(j.mount.value()).opened.length, "H18: core retains its own selected scope").toBe(1);
     const point = historyPointSchema.parse(await j.host.history("", { kind: "captured", document: path }));
-    expect(point.history.publications.filter(p => p.read === "fans.sheet").length,
+    expect(point.history.publications.filter(p => p.read === "fans.calc").length,
       "H18: shared operation records both distinct argument publications").toBeGreaterThanOrEqual(2);
   } finally { await j.close(); }
 }, 60_000);
@@ -293,26 +293,26 @@ test("J4 refresh Fans while the document changes and inspect the retained answer
 }, 60_000);
 
 test("J5 open a document read then attempt host and malformed targets without widening access", async () => {
-  const unregister = registeredReads.reads.has(fansSheet.name) ? () => {} : registeredReads.register({ sheet: fansSheet });
+  const unregister = registeredReads.reads.has(fansCalc.name) ? () => {} : registeredReads.register({ sheet: fansCalc });
   const j = await journey();
   try {
     await j.ready();
     const calls = j.host.nativeCalls;
     for (const target of [{ kind: "host" }, { kind: "document", ref: { session: ref.session } }]) {
       const response = await j.host.probe({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "bad-target",
         generation: 1,
-        args: { target, fan: [], sheetPath: "" },
+        args: { target, fan: [], calcPath: "" },
       });
       expect(response.ok, "H17: invalid document lifetime refuses at HTTP").toBe(false);
       expect(j.host.nativeCalls, "H17: refusal occurs before native dispatch").toBe(calls);
     }
     const response = await j.host.probe({
-      read: "fans.sheet",
+      read: "fans.calc",
       subscription: "valid-target",
       generation: 1,
-      args: { target: ref, fan: [], sheetPath: "" },
+      args: { target: ref, fan: [], calcPath: "" },
     });
     expect(response.status, `H17: the selected document remains readable: ${await response.clone().text()}`).toBe(200);
     expect(await response.json()).toMatchObject({ state: "current" });

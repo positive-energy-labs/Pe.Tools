@@ -1,3 +1,4 @@
+import { type Author } from "./author.ts";
 import { z } from "zod";
 import {
   isRecord,
@@ -17,7 +18,7 @@ export interface RouteEnvelope<D> {
   doc: D;
 }
 
-export type WorkAuthor = "pea" | "human";
+export type WorkAuthor = Author;
 
 export type RouteRefusal = {
   ok: false;
@@ -46,6 +47,8 @@ export function applyPatches<S extends z.ZodType>(
 ): RouteLanded<z.infer<S>> | RouteRefusal {
   const stale = checkRevision(envelope, expectedRevision);
   if (stale) return stale;
+  if (!restore && patches.some(patch => patch.path.at(-1) === "invalid" || suppliedInvalid(patch.value)))
+    return refuse("refused", "Caller edits cannot supply invalid markers", "Replace the cell with a valid edit.");
   const observed = new Set(["basis", "reading", "snapshot", "takenAt", "readback", "consent"]);
   if (!trusted && patches.some((patch) => observed.has(String(patch.path[0]))))
     return refuse(
@@ -53,6 +56,12 @@ export function applyPatches<S extends z.ZodType>(
       "Host observations cannot be changed by an edit",
       "Use the route's read or capture command.",
     );
+
+  if (!trusted && !restore && patches.some(patch =>
+    (patch.path.at(-1) === "by" && patch.path.at(-2) === "edit") ||
+    (patch.path.at(-1) === "edit" && isRecord(patch.value) && Object.hasOwn(patch.value, "by")) ||
+    suppliedStamp(patch.value)))
+    return refuse("refused", "Caller edits cannot supply by", "The host stamps the accepted edit's author.");
 
   let draft = structuredClone(envelope.doc) as Record<string, unknown>;
   try {
@@ -63,19 +72,20 @@ export function applyPatches<S extends z.ZodType>(
   } catch (error) {
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
-  return commitDoc(
-    spec,
-    envelope,
-    restore
-      ? draft
-      : stampChanges(
-          spec.reconcileEdit?.(draft, patches) ?? draft,
-          envelope.doc,
-          by,
-          expectedRevision,
-        ),
-  );
+  const stamped = restore ? draft : stampChanges(draft, envelope.doc, by, expectedRevision);
+  const checked = commitDoc(spec, envelope, stamped);
+  if (!checked.ok || restore || !spec.reconcileEdit) return checked;
+  return commitDoc(spec, envelope, spec.reconcileEdit(checked.envelope.doc, patches) ?? checked.envelope.doc);
 }
+
+const suppliedStamp = (value: unknown): boolean => Array.isArray(value)
+  ? value.some(suppliedStamp)
+  : isRecord(value) && Object.entries(value).some(([key, child]) =>
+      key === "edit" && isRecord(child) && Object.hasOwn(child, "by") || suppliedStamp(child));
+
+const suppliedInvalid = (value: unknown): boolean => Array.isArray(value)
+  ? value.some(suppliedInvalid)
+  : isRecord(value) && (Object.hasOwn(value, "invalid") || Object.values(value).some(suppliedInvalid));
 
 /** Replace a container when its keys change, so inverse replay preserves key order as well. */
 export function routeDocDelta(
@@ -181,7 +191,7 @@ function formatZodError(error: z.ZodError): string {
       )
       .join("; ") +
     (error.issues.some((issue) => issue.path.includes("edit"))
-      ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":{"cfm":1050}}. For another cell, read its value schema; do not put cfm directly under edit.'
+      ? ' Cell edits wrap the typed value: patch path ["equipmentFlows","<id>","edit"] with value {"value":1050}. For another cell, read its value schema.'
       : "")
   );
 }

@@ -1,0 +1,42 @@
+{
+  "name": "@pe/fans-domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./calc/accessory-writes": "./src/calc/accessory-writes.ts",
+    "./calc/assumed-flow": "./src/calc/assumed-flow.ts",
+    "./calc/beyond": "./src/calc/beyond.ts",
+    "./calc/build": "./src/calc/build.ts",
+    "./calc/calc-breakdown": "./src/calc/calc-breakdown.ts",
+    "./calc/encounters": "./src/calc/encounters.ts",
+    "./calc/fixtures/muas-local-20261102.json": "./src/calc/fixtures/muas-local-20261102.json",
+    "./calc/fixtures/muas-real.json": "./src/calc/fixtures/muas-real.json",
+    "./calc/flow": "./src/calc/flow.ts",
+    "./calc/heal": "./src/calc/heal.ts",
+    "./calc/index": "./src/calc/index.ts",
+    "./calc/network-calcs": "./src/calc/network-calcs.ts",
+    "./calc/state": "./src/calc/state.ts",
+    "./calc/tiers": "./src/calc/tiers.ts",
+    "./calc/types": "./src/calc/types.ts",
+    "./calc/walk": "./src/calc/walk.ts",
+    "./calc/write-request": "./src/calc/write-request.ts"
+  },
+  "scripts": {
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/host-contracts": "workspace:*"
+  }
+}

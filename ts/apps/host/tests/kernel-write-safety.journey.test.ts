@@ -1,7 +1,7 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import capturedWalk from "./native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
+import capturedWalk from "@pe/ducts-host/tests/native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts
 import { testRegistry } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { nativeFixture } from "./fans-native.fixture.ts";
+import { nativeFixture } from "@pe/fans-host/tests/fans-native.fixture";
 import { pagesRoute } from "../src/pages-route.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";
@@ -25,7 +25,7 @@ async function fixture(withPage = false) {
   const recordings = ["sdk-revit.detail.parameter-links", "sdk-revit.apply.parameter-links"];
   let native = await fixtureNative(join(dir, "native"), ...recordings);
   let socket = await native.connect();
-  const makeWorkspace = () => new RouteWorkspace({ registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: tools.rooms.work }], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
+  const makeWorkspace = () => new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: tools.rooms.work }], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
   let workspace = makeWorkspace();
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "parameter-links" };
   const body = nativeRecordings("sdk-revit.detail.parameter-links").responses["revit.detail.parameter-links"] as any;
@@ -180,8 +180,8 @@ test("R5 a real native rehearsal receipt cannot substitute for the declared Plan
   const f = await nativeFixture("test");
   try {
     f.select("fresh-ducts.heal.preview", "fresh-ducts.heal");
-    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: { cfm: 250 } } }], 0)).toMatchObject({ ok: true });
-    const staged = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0);
+    expect(await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [{ path: ["flows", terminalSubject, "edit"], value: { value: 250 } }], 0)).toMatchObject({ ok: true });
+    const staged = await f.saved.apply(f.key, "duct-systems", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
     const input = { work: { key: f.key, revision: staged.revision } };
     for (const [id, key] of [["rehearsal", "ducts.rehearse-heal"], ["apply", "ducts.apply-heal"]]) {

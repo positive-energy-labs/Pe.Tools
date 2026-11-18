@@ -1,3 +1,4 @@
+import { authorSchema } from "./author.ts";
 import { z } from "zod";
 import type { CatalogAxes } from "./catalog.ts";
 import type { Immutable, RouteGraphJson } from "./route-kernel-data.ts";
@@ -21,7 +22,7 @@ import type { JournalSubmission, Observation, WorkWriteOutcome } from "./work-jo
 /**
  * One consumed value a write changes (ADR 0030 rules 6 and 8). `before` is what the model holds
  * now, null when no source names it (drawn as unknown, never guessed); `after` is the sealed plan's
- * value; `author` is the Work cell's stamped author, "unknown" when Work does not carry the value.
+ * value; `author` is the Work cell's host-stamped caller identity.
  */
 export const presentCellSchema = z.strictObject({
   key: z.string(),
@@ -29,7 +30,8 @@ export const presentCellSchema = z.strictObject({
   label: z.string(),
   before: z.string().nullable(),
   after: z.string(),
-  author: z.enum(["pea", "human", "unknown"]),
+  /** Null when the row has no Work cell (a store, slot or derived row): nobody is named, and a reader says "no author". */
+  author: authorSchema.nullable(),
 });
 export type PresentCell = z.output<typeof presentCellSchema>;
 export const presentationSchema = z.union([
@@ -151,16 +153,16 @@ type BareSchema<S> = S extends {
   ? BareSchema<I>
   : S;
 type EntryPatch<K extends string, Key extends string, V extends z.core.SomeType> =
-  | { readonly path: readonly [K, Key]; readonly value: z.output<V>; readonly op?: never }
+  | { readonly path: readonly [K, Key]; readonly value: import("./draft.ts").CallerWorkValue<z.output<V>>; readonly op?: never }
   | { readonly path: readonly [K, Key]; readonly op: "delete"; readonly value?: never }
   | (BareSchema<V> extends z.ZodObject<infer Shape>
       ? {
-          [L in keyof Shape & string]: {
+          [L in Exclude<keyof Shape & string, "invalid">]: {
             readonly path: readonly [K, Key, L];
-            readonly value: z.output<Shape[L]>;
+            readonly value: import("./draft.ts").CallerWorkValue<{ [P in L]: z.output<Shape[L]> }>[L];
             readonly op?: never;
           };
-        }[keyof Shape & string]
+        }[Exclude<keyof Shape & string, "invalid">]
       : never);
 /** Eligibility comes from ZodRecord, never the structurally identical object output.
  * Paths stay bounded to a root, record entry, or object field within that entry. */
@@ -168,7 +170,7 @@ export type WorkPatch<S extends z.ZodType> =
   BareSchema<S> extends z.ZodObject<infer Shape>
     ? {
         [K in keyof Shape & string]:
-          | { readonly path: readonly [K]; readonly value: z.output<Shape[K]>; readonly op?: never }
+          | { readonly path: readonly [K]; readonly value: import("./draft.ts").CallerWorkValue<z.output<Shape[K]>>; readonly op?: never }
           | (BareSchema<Shape[K]> extends z.ZodRecord<infer Key, infer Value>
               ? EntryPatch<K, Extract<z.output<Key>, string>, Value>
               : never);

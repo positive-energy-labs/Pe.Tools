@@ -4,10 +4,12 @@
  * emitted file carries one static import per host read module, per closure and per Work, so
  * rolldown pack and jiti dev both link it. Paths in a row are relative to `apps/web/src/`.
  */
+import { posix } from "node:path";
+
 export interface RouteRegistryInput {
   readonly key: string;
   readonly schemas?: Readonly<Record<string, unknown>>;
-  /** The route directory under `apps/web/src/`. */
+  /** The route directory relative to `apps/web/src/`; a product's climbs out to `ts/products/<product>/web`. */
   readonly folder: string;
   /** The host read module `route.ts` names, relative to the declaration (`./host.ts`); absent when the route has none. */
   readonly host?: string;
@@ -36,14 +38,15 @@ export function renderRouteRegistry(rows: readonly RouteRegistryInput[]): string
   const entries = rows.map((row, index) => {
     if (keys.has(row.key)) throw Error(`Duplicate route key ${row.key}`);
     keys.add(row.key);
-    const web = `../../web/src/${row.folder}`;
+    const web = posix.join("../../web/src", row.folder);
     imports.push(
       `import c${index} from "${web}/source-closure.generated.json" with { type: "json" };`,
     );
     if (row.host) {
-      if (!row.host.startsWith("./"))
-        throw Error(`${row.key}: a host read lives in its route directory, not ${row.host}`);
-      imports.push(`import * as h${index} from "${web}/${row.host.slice(2)}";`);
+      if (!row.host.startsWith("./") && !row.host.startsWith("@pe/"))
+        throw Error(`${row.key}: declare a route-relative host module or an exported host package`);
+      const host = row.host.startsWith("./") ? `${web}/${row.host.slice(2)}` : row.host;
+      imports.push(`import * as h${index} from "${host}";`);
     }
     if (row.work) {
       const lines = row.work.definition.trimEnd().split("\n");

@@ -26,7 +26,7 @@ public sealed class DuctStoreOverlayReadbackTests {
                     ["keep:1"] = new DuctVerdictRecord("ignore", now), ["drop:2"] = new DuctVerdictRecord("ignore", now)
                 },
                 Roles = new() { [105] = new DuctRoleRecord("fan", now) },
-                Slots = new DuctParameterSlotOverrides(FanStatic: "Stored Static"),
+                Slots = new DuctParameterSlotOverrides(RequiredEsp: "Stored Static"),
                 WorkRevision = 3,
                 Unknown = new Dictionary<string, JToken> { ["future"] = "kept" }
             };
@@ -62,7 +62,7 @@ public sealed class DuctStoreOverlayReadbackTests {
                 Assert.That(next.EquipmentFlows.Keys, Is.EquivalentTo(new[] { 104L }));
                 Assert.That(next.Verdicts.Keys, Is.EquivalentTo(new[] { "keep:1" }));
                 Assert.That(next.Roles.Keys, Is.EquivalentTo(new[] { 105L, 106L }));
-                Assert.That(next.Slots?.FanStatic, Is.EqualTo("Stored Static"), "stored slot names survive an omitted slot");
+                Assert.That(next.Slots?.RequiredEsp, Is.EqualTo("Stored Static"), "stored slot names survive an omitted slot");
                 Assert.That(next.Unknown["future"].ToString(), Is.EqualTo("kept"));
                 Assert.That(next.WorkRevision, Is.EqualTo(4));
             });

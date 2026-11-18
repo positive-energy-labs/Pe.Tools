@@ -1,8 +1,8 @@
-// E2E-SNOW (plan P4) · the shipped snowdon-ducts Page drives a real Snowdon Towers sample copy end to end.
+// E2E-SNOW (plan P4) · the shipped sample Page drives a real Snowdon Towers sample copy end to end.
 // Real controls only, assertions on rendered DOM. Needs a controlled dev session holding the open COPY and a
 // host with the Pod imported through the normal import. Never run against the owner's session.
 //
-// E2E_PAGE_URL  the Page's open URL as the host projects it (copy it from the catalog row for page:@snowdon-ducts/pages/tour)
+// E2E_PAGE_URL  the Page's open URL as the host projects it (copy it from the catalog row for the sample tour)
 // E2E_MUTATE=1  also press the guarded experiment (the open document's title must contain "copy")
 // Preconditions missing => BLOCKED (the page is unbound, no duct systems, no URL), never FAIL.
 // Red break: rename KEYS.census in pages/tour/index.html => the census assertion fails.

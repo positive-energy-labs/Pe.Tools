@@ -5,17 +5,22 @@ import type { TypedRoute } from "./typed-route";
 
 /**
  * The web's builtin routes, discovered (ADR 0035 rule 4): Vite expands both globs at build and test
- * time, so a route directory joins by holding a `route.ts`. The host's registry is the generated
+ * time, so a route directory joins by holding a `route.ts`, here or as a product's `web` folder
+ * (`ts/products/<product>/web`, ADR 0046). The host's registry is the generated
  * `apps/host/src/routes.generated.ts`; this file never reaches a `host.ts`.
  */
+// Literal globs mirror routeFolderCandidates in @pe/host-contracts/route-startup.
 const declarations = import.meta.glob<{
   module: TypedRoute;
   router?: { dock?: boolean };
-}>("../*/route.ts", { eager: true });
-const closures = import.meta.glob<unknown>("../*/source-closure.generated.json", {
-  eager: true,
-  import: "default",
-});
+}>(["../*/route.ts", "../../../../products/*/web/route.ts"], { eager: true });
+const closures = import.meta.glob<unknown>(
+  ["../*/source-closure.generated.json", "../../../../products/*/web/source-closure.generated.json"],
+  {
+    eager: true,
+    import: "default",
+  },
+);
 
 export interface WebRoute {
   readonly key: string;
@@ -28,8 +33,7 @@ export interface WebRoute {
 
 export const routeRegistry: Readonly<Record<string, WebRoute>> = Object.fromEntries(
   Object.entries(declarations).map(([path, { module, router }]) => {
-    const folder = path.split("/")[1]!;
-    const closure = closures[`../${folder}/source-closure.generated.json`];
+    const closure = closures[path.replace(/route\.ts$/, "source-closure.generated.json")];
     if (!closure) throw Error(`${module.data.key} has no builtin closure: run codegen:routes`);
     const key = module.data.key;
     return [key, { key, module, dock: router?.dock === true,

@@ -4,9 +4,8 @@ import { timelineReceipts } from "../../../host/src/reads/work-timeline";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
-import { snapshot as workSnapshot } from "../ducts/test-fixture";
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { subjectCode } from "@pe/agent-contracts";
 import { surfaceReadiness } from "./readiness.test.fixture";
 import { useState, useSyncExternalStore } from "react";
@@ -18,8 +17,8 @@ import { StandaloneBand } from "../shell/band.test-support";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { route, scrollBody, type TypedRoute } from "./typed-route";
-import { module as fans } from "../fans/route";
-import { module as ducts } from "../ducts/route";
+import { module as fans } from "@pe/fans-web/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
 import { planned } from "../shell/typed-mount";
@@ -252,23 +251,23 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
       </section>
     </>;
   }
-  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/ducts"] }) });
+  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/duct-systems"] }) });
   const user = userEvent.setup();
   render(<RouterProvider router={router} />);
   const friction = await screen.findByRole("textbox", { name: "Velocity limit supply" });
-  const before = structuredClone(f.saved.get("ducts"));
+  const before = structuredClone(f.saved.get("duct-systems"));
   const revision = ducts.work()!.revision;
   await user.click(friction);
   await user.keyboard("{Control>}a{/Control}-0.1{Enter}");
   await waitFor(() => expect(friction.closest(".dl-cell")?.getAttribute("aria-busy")).not.toBe("true"));
-  expect.soft(f.saved.get("ducts")).toEqual(before);
+  expect.soft(f.saved.get("duct-systems")).toEqual(before);
   expect.soft(ducts.work()!.revision).toBe(revision);
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
   await user.click(screen.getByRole("textbox", { name: "Velocity limit supply" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
   await waitFor(() => expect(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit).toBeDefined());
   expect.soft(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
-  expect.soft((f.saved.get("ducts") as { doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } } }).doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
+  expect.soft((f.saved.get("duct-systems") as { doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } } }).doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
   await user.click(occupants.getByRole("textbox"));
   await user.keyboard("{Control>}a{/Control}2.7{Enter}");
@@ -582,12 +581,16 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
+  const { closedFan, recordedTables } = await import("@pe/fans-host/tests/closed-fan.fixture");
   const { observeResources } = await import("@pe/runtime");
   const { TimelineButtons } = await import("../shell/situation-band");
   const { withInvocationContext } = await import("@pe/runtime/context");
   const { peRouteUrl } = await import("@pe/agent-contracts/pe-api");
-  const f = await nativeFixture();
+  // The write is minted only from a complete claim, so the journey's fan is the closed fixture fan (unit 100, terminal 3).
+  const closed = closedFan(100), tables = recordedTables();
+  const f = await nativeFixture("real", (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }), null,
+    { native: key => (key === "ducts.tables" ? tables : undefined) });
   const human = { kind: "human" as const, via: "local" as const };
   const stage = async (route: string, patches: unknown[], label: string) => {
     const response = await withInvocationContext({ caller: human }, () => f.api.fetch(new Request(
@@ -618,38 +621,37 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
     target: f.target, fixture: null, work: { address: null, open: f.target.ref },
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => true }, memory: () => ({}),
-  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
-    const packet = fans.spec.core?.source.provide?.("scene", ctx.args);
+  }, routeRegistry.fans!.fingerprint, { work, timeline: fixtureTimeline(f.saved, () => timelineReceipts(f.journal), changed => f.journal.subscribe({ kinds: ["action"] }, changed)), sources: { "fans.calc": { kind: "use", async open(ctx, deliver) {
+    const packet = await fans.spec.core?.source.provide?.("scene", ctx.args);
     if (!packet) throw Error("Missing current Fans fixture");
     deliver({ kind: "complete", revision: 1, value: packet });
     return () => {};
   } } } });
   const view = render(<TimelineButtons owner={mount} />);
   try {
-    const staged = await stage("ducts", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
-    ], "Choose fan walk");
-    await stage("fans", [
-      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 250 } } },
+    const staged = await stage("fans", [
+      { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
+      { path: ["flows", elementSubject(closed.nodes.find(node => node.id === 3)!), "edit"], value: { value: 250 } },
       { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], "Edit fan airflow");
     await screen.findByRole("button", { name: "Undo Edit fan airflow" });
     const command = async (id: string, commandKey: string) => {
       const response = await f.post("/actions", { id, key: commandKey, target: f.target,
-        input: { work: { key: f.key, revision: staged.revision } } });
+        input: { work: { key: { ...f.key, route: "fans" }, revision: staged.revision } } });
       expect(response.ok, await response.clone().text()).toBe(true);
-      expect(await f.journal.wait(id)).toMatchObject({ state: "succeeded" });
+      const receipt = await f.journal.wait(id);
+      expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
     };
     await command("undo-plan", "sheet.plan");
     await command("undo-apply", "sheet.apply");
-    expect(f.native.get(4)).toBe(250);
+    expect(f.native.get(3)).toBe(250);
     await waitFor(() => expect(screen.getByRole("button", { name: "Undo" }).getAttribute("aria-disabled")).toBe("true"));
     const undo = screen.getByRole("button", { name: "Undo" });
     fireEvent(window, Object.assign(new Event("pointermove"), { movementX: 1 }));
     await userEvent.setup().hover(undo);
     await screen.findByText(/Cannot undo.*undo-apply.*already consumed/);
     fireEvent.click(undo);
-    expect(f.native.get(4)).toBe(250);
+    expect(f.native.get(3)).toBe(250);
     expect(screen.getByRole("button", { name: "Redo" }).getAttribute("aria-disabled")).toBe("true");
   } finally { view.unmount(); mount.dispose(); await f.close(); }
 }, 30_000);
@@ -795,7 +797,7 @@ test("D G07 Family renders named picker, member roster, Work and stage words wit
     types: { Standard: {}, Wide: { Width: "36in" } },
     connectors: { c1: { domain: "Duct", shape: "Round", diameter: "6in", on: "Front" } },
   });
-  const original = familyDraftRouteState.schema.parse({ reading, cells: { "/types/Wide/Width": { edit: { value: "40in" } } } });
+  const original = familyDraftRouteState.schema.parse({ reading, cells: { "/types/Wide/Width": { edit: { value: "40in", by: "human" } } } }); // amendment 2 item 1: a stored cell carries its host-stamped `by`
   const door = createFixtureWorkDoor(familyDraftRouteState, original);
   const ready = Promise.withResolvers<void>();
   let accepted: { key: any; revision: number; doc: unknown };
@@ -991,14 +993,17 @@ test("JZ B02 undo follows focus between typed routes, portal and hidden pane; te
 
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { inputsFor } from "@pe/ducts-domain/sheet/test-inputs";
+import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import { SheetPane } from "./slots/sheet/pane.tsx";
-import { fansSheet } from "../fans/sheet.ts";
+import { fansCalc } from "@pe/fans-web/calc";
 
 // Plan reviews seal model inputs, never browser pane visibility or Page pose.
 import { useEffect, useReducer } from "react";
-import realMuas from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
-import { createWitness } from "../fans/cutover.test-support";
+import rawMuas from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
+// The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
+const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
+import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "../shell/source-contract";
@@ -1064,16 +1069,16 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
       },
     }); });
     const f = await createWitness(closes, new Map(), {
-      "ducts.sheet-snapshot": { kind: "use", open(_ctx, deliver) {
+      "fans.calc-detail-snapshot": { kind: "use", open(_ctx, deliver) {
         deliver({ kind: "complete", value: capture, revision: 1 });
       } },
     });
     await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
     await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-      { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 1000, source: "Work" } } },
+      { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: 1000 } },
     ], f.fans.work()!.revision);
-    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value.cfm).toBe(1000));
+    await vi.waitFor(() => expect(f.fans.work()!.value.equipmentFlows[elementSubject(realMuas.nodes.find(node => node.id === 14577391)!)]?.edit?.value).toBe(1000));
     f.fans.refresh("value");
     for (const id of ["value"])
       await vi.waitFor(() => expect(f.fans.readingStatus(id).snapshot).toMatchObject({ state: "ready" }));
@@ -1126,7 +1131,7 @@ test.each([false, true])(
     const receiptSubscribers=new Set<(state:ReceiptFeedState)=>void>();
     const receipts:WorkJournalDoor["receipts"]=()=>({subscribe(deliver){receiptSubscribers.add(deliver);return ()=>{receiptSubscribers.delete(deliver);};}});
     const f = await createWitness(closes, new Map(), {
-      "ducts.sheet-snapshot": {
+      "fans.calc-detail-snapshot": {
         kind: "use",
         open(_ctx, deliver) {
           snapshots.push(deliver);
@@ -1147,7 +1152,7 @@ test.each([false, true])(
         },
         {
           path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"],
-          value: { value: { cfm: 925, source: "test" } },
+          value: { value: 925, ref: "test" },
         },
       ],
       f.fans.work()!.revision,
@@ -1188,7 +1193,7 @@ test.each([false, true])(
     expect(document.body.textContent).not.toContain(refusedText);
     const stagedRevision = f.fans.work()!.revision;
     const beforeSwitch = f.typed.value().publication!.evaluation;
-    const beforeReads = f.calls.get("fans:fans.sheet");
+    const beforeReads = f.calls.get("fans:fans.calc");
     // The shell releases the retained typed mount while another pane is expanded.
     await act(async () => {
       f.typed.release();
@@ -1196,7 +1201,7 @@ test.each([false, true])(
       f.typed.page.pose({ layers: [] });
     });
     expect(f.fans.work()!.revision).toBe(stagedRevision);
-    expect(f.calls.get("fans:fans.sheet")).toBeGreaterThan(beforeReads!);
+    expect(f.calls.get("fans:fans.calc")).toBeGreaterThan(beforeReads!);
     await waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
     expect(f.typed.value().publication!.evaluation).toBe(beforeSwitch);
     await act(async () =>
@@ -1237,7 +1242,8 @@ test.each([false, true])(
     );
     expect(f.fans.review("losses")).toMatchObject({
       stale: false,
-      cells: [{ before: "880 cfm", author: "human" }],
+      // Amendment 2 item 1: the review author is the Work cell's host-stamped `by`, and Pea staged this cell.
+      cells: [{ before: "880 cfm", author: "pea" }],
     });
     expect(f.fans.review("losses")!.rows[0]).toContain("MUAS-1");
     expect(planned(f.typed.verb("losses")).read()?.preview).toBeTruthy();
@@ -1710,14 +1716,14 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   const damper = capture.nodes.find(node => node.id === 14607308)!;
   Object.assign(damper, { partType: "Damper" });
   capture.nodes.push({ ...structuredClone(damper), id: 99999991, uniqueId: "fixture-other-damper", levelId: 30, connectors: [] });
-  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+  const f = await createWitness(closes, new Map(), { "fans.calc-detail-snapshot": {
     kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: capture, revision: 1 }); },
   } });
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
   const key = f.fans.workBasis()!.token.scope.identity.work!;
   await f.ws.apply(key, "fans", "human", [
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
+    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: 925, ref: "test" } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value");
   await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
@@ -1756,14 +1762,14 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
   cleanup();
   // The recorded adapter has no unit rows; prepare the native input model before rendering.
   const nativeInputs = inputsFor(capture);
-  const slot = { ...fansSheet, bindings: { equipmentFlows: fansSheet.bindings.equipmentFlows } };
+  const slot = { ...fansCalc, bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } };
   function MissingFlow({ ctx }: { ctx: any }) {
     const data = ctx.value.value;
     if (!data.open) throw Error("The native Fan must be open");
-    const value = { ...ctx.value, value: { ...data, sheetView: { ...data.sheetView, inputs: nativeInputs } } };
+    const value = { ...ctx.value, value: { ...data, calcView: { ...data.calcView, inputs: nativeInputs } } };
     return <SheetPane ctx={{ draw: { ...ctx, value }, slot }} />;
   }
-  render(f.typed.draw("sheet-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
+  render(f.typed.draw("calc-inputs", ctx => <MissingFlow ctx={ctx} />) as React.ReactElement);
   expect(document.querySelector('[data-body="locked"]'), "The missing native parameter locks the actual typed cell before Plan").not.toBeNull();
   expect(document.body.innerHTML).toContain("PE_M_Fan_AirFlowDesign");
 
@@ -1773,7 +1779,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
 test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppresses the header chooser across panes", async name => {
   const { useAdmittedSubject } = await import("../shell/subject");
   const read = fans.spec.core!;
-  const declared = name === "Fans" ? fans.spec.panes["sheet-roster"] : ducts.spec.panes["e-systems"];
+  const declared = name === "Fans" ? fans.spec.panes["calc-roster"] : ducts.spec.panes["e-systems"];
   function Roster({ ctx }: { ctx: any }) {
     const subject = useAdmittedSubject()!;
     const first = fans.spec.subject!.options(ctx.value.value)[0]!;
@@ -1829,7 +1835,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     target: { kind: "document", ref }, fixture: null, work: { address: documentPath, open: ref },
     memory: () => ({ fan: { kind: "ids", ids: [unknown] } }), custody: { current: () => true },
     address: { read: () => new URLSearchParams(search), write(next) { search = next; moves++; }, subscribe: () => () => {} },
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "fans.sheet": source } });
+  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: { "fans.calc": source } });
   const router = createRouter({ routeTree: createRootRoute({ component: () => <TypedChrome mount={mount} document={<span>Recorded subjects</span>} /> }), history: createMemoryHistory({ initialEntries: ["/"] }) });
   let view: ReturnType<typeof render> | undefined;
   try {
@@ -1951,20 +1957,22 @@ test("JZ audit Schedules keyed edits preserve a sibling stale mark and narrow in
     await waitFor(() => expect(mount.timeline()?.undo?.label).toBe("Delete first cell"));
     expect(await mount.stepTimeline("undo")).toBeNull();
     await waitFor(() => expect(mount.owner()!.doc).toEqual(reviewed));
-    expect(await cells().patch([{ path: ["cells"], value: reviewed.cells }], { label: "Replace collection deliberately" })).toBeNull();
+    // Amendment 1 item 1: a caller never supplies `by`; the host stamps it, so the replayed cells drop the stamp.
+    const unstamped = Object.fromEntries(Object.entries(reviewed.cells as Record<string, { edit: { by?: unknown } }>).map(([key, { edit: { by: _by, ...edit } }]) => [key, { edit }]));
+    expect(await cells().patch([{ path: ["cells"], value: unstamped }], { label: "Replace collection deliberately" })).toBeNull();
     expect(mount.owner()!.doc.basis.stale ?? []).toEqual([]);
   } finally { mount.pendingEdits().forEach(intent => mount.discardIntent(intent.id)); mount.dispose(); }
 }, 60_000);
 
 
 test("JZ Plan refusal marker holds a valid sealed ancillary-only review at the typed action", async () => {
-  const f = await createWitness(closes, new Map(), { "ducts.sheet-snapshot": {
+  const f = await createWitness(closes, new Map(), { "fans.calc-detail-snapshot": {
     kind: "use", open(_ctx, deliver) { deliver({ kind: "complete", value: structuredClone(realMuas), revision: 1 }); },
   } });
   await vi.waitFor(() => expect(f.fans.work()).not.toBeNull());
   await f.ws.apply(f.fans.workBasis()!.token.scope.identity.work!, "fans", "human", [
     { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 14577391, portIndex: 2 } } } } },
-    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: { cfm: 925, source: "test" } } },
+    { path: ["equipmentFlows", elementSubject(realMuas.nodes.find(node => node.id === 14577391)!), "edit"], value: { value: 925, ref: "test" } },
   ], f.fans.work()!.revision);
   f.fans.refresh("value"); await vi.waitFor(() => expect(f.typed.value().state === "ready").toBe(true));
   const reason = "MUAS-1: required airflow parameter is missing; add the missing parameter";

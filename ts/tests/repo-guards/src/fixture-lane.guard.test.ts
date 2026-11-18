@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { expect, test } from "vite-plus/test";
+import { productWebDirectories, routeModules } from "./product-source-roots.ts";
 import { ROOT, productionFiles } from "./import-census.js";
 
 test("S1: fixture transports never branch on operation keys or seed routes", () => {
   const paths = [
     ...productionFiles("apps/web/src").filter((path) => /fixture[^/]*\.[jt]sx?$/.test(path)),
+    ...productWebDirectories().flatMap(dir => productionFiles(relative(ROOT, join(dir, "src")).replaceAll("\\", "/")))
+      .filter(path => /fixture[^/]*\.[jt]sx?$/.test(path)),
     "apps/host/src/demo-owner.ts",
     "packages/host-contracts/src/fixture-host.ts",
   ];
@@ -53,14 +56,10 @@ test("S1: fixture transports never branch on operation keys or seed routes", () 
   expect(violations).toEqual([]);
 });
 
-// Frozen: the one route module that still imports a fixture payload eagerly. Slice 6 (one read
-// constructor) removes `hostRead(reads.sheet, sheetValueFixtures)`; this list only shrinks.
-const D2_FROZEN = ["apps/web/src/fans/route.ts: ../ducts/sheet/value-fixtures.ts"];
-
 // Retargeted from `*/graph.ts` (none since 6ecbc716) to the route modules route-graphs.ts loads.
 test("D2: route modules never eagerly import fixture payloads", () => {
   const violations: string[] = [];
-  const modules = productionFiles("apps/web/src").filter((path) => /^apps\/web\/src\/[^/]+\/route\.ts$/.test(path));
+  const modules = routeModules();
   expect(modules.length, "the guard reads route modules; none found").toBeGreaterThanOrEqual(15);
   for (const path of modules) {
     const ast = ts.createSourceFile(
@@ -76,6 +75,5 @@ test("D2: route modules never eagerly import fixture payloads", () => {
         violations.push(`${path}: ${specifier.text}`);
     }
   }
-  expect(violations.filter((v) => !D2_FROZEN.includes(v)), "a new eager fixture import").toEqual([]);
-  expect(D2_FROZEN.filter((v) => !violations.includes(v)), "fixed: delete it from D2_FROZEN").toEqual([]);
+  expect(violations, "an eager fixture import").toEqual([]);
 });

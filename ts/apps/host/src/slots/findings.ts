@@ -35,7 +35,7 @@ function author(caller: Caller): Stamp["by"] {
     case "pea":
       return "pea";
     case "human":
-      return "person";
+      return "human";
     case "external-mcp":
     case "page":
     case "service":
@@ -70,9 +70,7 @@ async function write(
   label: string,
   patch: RouteStatePatch,
 ): Promise<{ readonly revision: number }> {
-  // A finding's `person` is the journal's `human`. The press is minted per write: a rule or a retract
-  // of the same finding is its own step.
-  const result = await workspace.write(handle.key, FINDINGS_OWNER, by === "pea" ? "pea" : "human", {
+  const result = await workspace.write(handle.key, FINDINGS_OWNER, by, {
     kind: "apply",
     press: `finding:${ids.mint()}`,
     label,
@@ -87,7 +85,7 @@ async function write(
  * The findings Work is always the admitted document's: the key comes from the target, one exact open
  * document, never from the caller (purge-2: a handle keyed to another document wrote that document).
  * A caller's handle gives only a revision, and only a findings handle has one to give: it is the
- * compare-and-set. With a route's own handle (a person's row verb on /fans or /families) or none
+ * compare-and-set. With a route's own handle (a person's row verb on its page) or none
  * (gate-ef940d36, Pea's first call) the write lands on the current revision.
  */
 async function bound<I extends { work?: z.output<typeof workHandleSchema> }>(

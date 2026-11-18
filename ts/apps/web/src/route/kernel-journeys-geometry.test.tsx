@@ -3,7 +3,7 @@ import "./slots/picture/pane.tsx";
 import { valueOf } from "./typed-route";
 // @vitest-environment jsdom
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { SceneMeshes } from "../scene/types";
@@ -14,8 +14,8 @@ import { mountTypedRoute } from "../shell/typed-mount";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { hostEventSource } from "../host/event-source.test-support";
 import { route } from "./typed-route";
-import { module as fans } from "../fans/route";
-import { RosterBody } from "../fans/mount";
+import { module as fans } from "@pe/fans-web/route";
+import { RosterBody } from "@pe/fans-web/mount";
 import { kernelPane } from "../shell/typed-shell";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
 import { workFingerprintSchema } from "@pe/agent-contracts";
@@ -107,17 +107,17 @@ function pictureJourney() {
       work: { address: null, open: null },
       address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
       custody: { current: () => true }, memory: () => ({ viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] } }),
-    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.sheet": { kind: "use", open(ctx, deliver) {
-      const packet = structuredClone(fans.spec.core!.source.provide!("layout", ctx.args));
+    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.calc": { kind: "use", async open(ctx, deliver) {
+      const packet = structuredClone(await fans.spec.core!.source.provide!("layout", ctx.args));
       const data = packet.value!.data as any;
-      data.sheetSnapshot.sourceVersion = `h04-${openId}`;
-      if (empty) { data.sheetSnapshot.nodes = []; data.sheetSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
+      data.calcSnapshot.sourceVersion = `h04-${openId}`;
+      if (empty) { data.calcSnapshot.nodes = []; data.calcSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
       deliver({ kind: "complete", value: packet, revision: 1 });
     } } } });
     mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })] });
     return mount;
   };
-  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("sheet-picture", ctx => kernelPane(mount, "sheet-picture", ctx)) as React.ReactNode}</TestAttention>;
+  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("calc-picture", ctx => kernelPane(mount, "calc-picture", ctx)) as React.ReactNode}</TestAttention>;
   const resize = () => act(() => { for (const [target, callback] of observers) callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], {} as ResizeObserver); });
   return { open, tree, resize, mounts, registry };
 }
@@ -142,7 +142,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     act(() => orbit.end(gesture));
     expect(a.page.read().viewport, "B18: gesture release commits the same pose into Page").toEqual(pose);
     const roster = render(<TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(a)}>
-      {a.draw("sheet-roster", ctx => <RosterBody ctx={ctx as any} />) as React.ReactNode}
+      {a.draw("calc-roster", ctx => <RosterBody ctx={ctx as any} />) as React.ReactNode}
     </SubjectDoor></TestAttention>);
     expect(roster.getByRole("combobox", { name: "Search fans" }), "B03: Fans keeps its own named roster").toBeTruthy();
     expect(roster.queryByRole("button", { name: "Choose fan" }), "B03: a route roster has no duplicate picker").toBeNull();
@@ -170,11 +170,12 @@ import { HostNativeRead } from "../../../../packages/host-internal/src/native-re
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
-import walkCapture from "../../../../packages/ducts-domain/src/sheet/fixtures/muas-local-20261102.json";
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
+import walkCapture from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
 import { hostOwnership } from "../../../host/src/host-ownership";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { HostSessionInventory } from "../../../host/src/session-inventory";
-import { DuctFiles } from "../../../host/src/ducts-files";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
 import { ReadOwner } from "../../../host/src/builtin-inputs";
@@ -183,7 +184,7 @@ import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { bootHost } from "../../../host/tests/real-server";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture";
 import { admittedReceiptStamps } from "../../../host/src/receipt-export";
-import "../fans/mount";
+import "@pe/fans-web/mount";
 import { routeRegistry } from "../route/registry";
 import { bindActionReadings } from "../host/resource-stream";
 
@@ -197,14 +198,14 @@ const ambient = <S,I>(tag:Context.Key<S,I>)=>Layer.effect(tag,Effect.serviceOpti
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-test("JZ Fans Revert removes A from Plan before staging B",async()=>{
+test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused with the claim's reason",async()=>{
  trace.results=[];
  trace.submit.mockClear();
  const originalFetch=globalThis.fetch;
  const requests:any[]=[];
  let bridge:any;
- const roster=nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
- const walk=nativeResponseSchema("ducts.snapshot.walk").parse(walkCapture);
+ const roster=nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
+ const walk=nativeResponseSchema("ducts.snapshot.walk").parse({ ...walkCapture, vocabulary: VOCABULARY, walk: { ...walkCapture.walk, unreadPeers: [] } });
  const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
  const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
    bridge=yield* connectTestBridge(); trace.target=bridge.target;
@@ -241,7 +242,7 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
  const {fansReadResponse,address:workAddress}=await import("@pe/agent-contracts");
  const source: import("../shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
    const subscription=crypto.randomUUID(),current=++generation;
-   const body={read:"fans.sheet",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
+   const body={read:"fans.calc",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
    void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(async response=>{
      const wire=await response.json();if(!response.ok)throw Error(JSON.stringify(wire));const value=fansReadResponse.parse(wire);
      if(!ctx.signal.aborted)deliver({kind:"complete",value,revision:value.version});
@@ -256,11 +257,11 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    target:{kind:"document",ref:trace.target},fixture:null,work:{address:workAddress("C:/model.rvt"),open:trace.target},
    address:{read:()=>new URLSearchParams(search),write:next=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
    custody:{current:()=>true},memory:()=>({}),
- },routeRegistry.fans!.fingerprint,{sources:{"fans.sheet":source}});
+ },routeRegistry.fans!.fingerprint,{sources:{"fans.calc":source}});
  const React=await import("react");
  const {SheetPane}=await import("./slots/sheet/pane.tsx");
  const registry=makeAtomRegistry();
- function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("sheet-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
+ function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("calc-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
  const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
  const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
  try{
@@ -322,13 +323,12 @@ test("JZ Fans Revert removes A from Plan before staging B",async()=>{
    phase("before Plan");
    fireEvent.click(await screen.findByRole("button",{name:"plan Write to Revit"}));
    await vi.waitFor(()=>expect(trace.results).toHaveLength(1),{timeout:20000});
-   expect(trace.results[0].state,trace.results[0].error ?? mount.reviewProblem("losses")).toBe("succeeded");
-   await vi.waitFor(()=>expect(mount.review("losses")?.cells?.length).toBeGreaterThan(0),{timeout:20000});
-   const plan=requests.findLast(row=>row.key==="ducts.apply.plan");
-   expect(plan.input.components).toEqual([expect.objectContaining({id:13493812,inWg:0.01})]);
-   expect(JSON.stringify(plan.input)).not.toContain("14577394");
-   expect(mount.reviewProblem("losses")).toBeNull();
-   expect((await screen.findByRole("button",{name:"Write to Revit"})).hasAttribute("disabled")).toBe(false);
+   // The recorded MUAS-1 walk holds an unruled inferred join, so its calc is incomplete: the plan is refused with the
+   // claim's reason and no native plan is read (invariant 1). The group write once planned B without A here; that
+   // the fan scope is a projection of current edits is witnessed in ducts-domain staged.test.ts.
+   expect(trace.results[0].state).toBe("failed");
+   expect(String(trace.results[0].error ?? mount.reviewProblem("losses"))).toMatch(/Nothing is written from a incomplete fan calc .*inferred-join:14122436:1/);
+   expect(requests.some(row=>row.key==="ducts.apply.plan")).toBe(false);
    expect(document.body.textContent).not.toContain("no staged edit");
  } finally {
    phase("finally");

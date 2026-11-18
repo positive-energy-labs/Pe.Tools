@@ -1,0 +1,21 @@
+import { elementSubject } from "@pe/ducts-domain/work-subject";
+import { expect, test } from "vite-plus/test";
+import { fansDocumentSchema, type FansRouteDocument } from "@pe/agent-contracts";
+import type { WorkOf } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
+import type { WorkPatches } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
+import { module } from "../route.ts";
+const fansData = { ...module.data, work: { schema: "work" as const, route: "fans", version: 1, } };
+const schemas = { work: module.spec.edits!.work.schema };
+const unit = elementSubject({ uniqueId: "02d3886c-b439-49e2-9967-e703036c2c90-00000007" });
+const patch: WorkPatches<typeof fansData, typeof schemas> = [{ path: ["equipmentFlows", unit], value: { edit: { value: 200 } } }];
+const invalid: WorkPatches<typeof fansData, typeof schemas> = [
+  // @ts-expect-error Q2: fan writers cannot author ducts rules.
+  { path: ["rules"], value: {} },
+];
+function workTypes(value: WorkOf<typeof fansData, typeof schemas>): FansRouteDocument { return value; }
+test("fans retains its own keyed paths and callback Work types", () => {
+  expect(patch[0]?.path).toEqual(["equipmentFlows", unit]);
+  expect(fansDocumentSchema.safeParse({ rules: {} }).success).toBe(false);
+  expect(workTypes(fansDocumentSchema.parse({})).equipmentFlows).toEqual({});
+  void invalid;
+});

@@ -5,31 +5,37 @@
 //   2. no shared web folder (no `route.ts`, including files at the src root) imports a route folder;
 //   3. no route folder reaches the host directly: it neither imports nor calls `peClient`, `callOp`,
 //      `callCompose`, `callHostRpc`, `hostFetch`, nor calls `fetch(`.
-// A route folder is a top-level directory under apps/web/src that holds `route.ts`.
+// A route folder is a top-level directory under apps/web/src that holds `route.ts`, or a product's
+// `ts/products/<product>/web` that does (ADR 0046). A web file keeps its src-relative key; a product
+// file is keyed from `ts`, as `products/<product>/web/...`.
 // The edges that stood at f38543da are a frozen list (route-closure.baseline.json) that only shrinks.
 // `node src/route-closure-census.ts` prints the census; `--tighten` rewrites the baseline, refusing growth.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, posix, resolve } from "node:path";
+import { join, posix, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-const WEB = resolve(import.meta.dirname, "../../../apps/web/src");
+const TS = resolve(import.meta.dirname, "../../..");
+const WEB_KEY = "apps/web/src/";
+const WEB = join(TS, WEB_KEY);
+import { routeFolderCandidates } from "@pe/host-contracts/route-startup";
 const EXEMPT = "design-system";
 const HOST_DOORS = new Set(["peClient", "callOp", "callCompose", "callHostRpc", "hostFetch"]);
 export const isProduction = (path: string) =>
   /\.tsx?$/.test(path) && !/\.d\.ts$|\.test\.|\.test-support\.|\.fixture\./.test(path);
 
-/** Top-level folder of a src-relative path; "." for a file at the src root. */
-const folderOf = (path: string) => (path.includes("/") ? path.split("/")[0]! : ".");
+/** Folder of a key: top-level for a web file ("." at the src root), `products/<product>/web` for a product's. */
+const folderOf = (path: string) =>
+  path.startsWith("products/") ? path.split("/", 3).join("/") : path.includes("/") ? path.split("/")[0]! : ".";
 
-/** src-relative target of a specifier, or null when it leaves apps/web/src. */
+/** Key of a specifier's target, or null when it leaves both apps/web/src and ts/products. */
 function target(from: string, spec: string): string | null {
-  const joined = /^[#@]\//.test(spec)
-    ? spec.slice(2)
-    : spec.startsWith(".")
-      ? posix.join(posix.dirname(from), spec)
-      : null;
-  return joined === null || joined.startsWith("..") ? null : joined.replace(/\.[cm]?[jt]sx?$/, "");
+  if (/^[#@]\//.test(spec)) return spec.slice(2).replace(/\.[cm]?[jt]sx?$/, "");
+  if (!spec.startsWith(".")) return null;
+  // Resolved from `ts`, so a web file can reach a product folder and the reverse.
+  const full = posix.join(posix.dirname(from.startsWith("products/") ? from : WEB_KEY + from), spec);
+  const key = full.startsWith(WEB_KEY) ? full.slice(WEB_KEY.length) : full.startsWith("products/") ? full : null;
+  return key?.replace(/\.[cm]?[jt]sx?$/, "") ?? null;
 }
 
 /**
@@ -72,18 +78,33 @@ export function closureCensus(sources: Record<string, string>, routes: ReadonlyS
   return [...found].sort();
 }
 
+const productWebs = () =>
+  routeFolderCandidates(resolve(TS, "..")).map((path) => relative(TS, path).replaceAll("\\", "/")).filter((key) => key.startsWith("products/"));
+
 export const routeFolders = (): Set<string> =>
-  new Set(
-    readdirSync(WEB, { withFileTypes: true })
+  new Set([
+    ...readdirSync(WEB, { withFileTypes: true })
       .filter((e) => e.isDirectory() && e.name !== EXEMPT && existsSync(join(WEB, e.name, "route.ts")))
       .map((e) => e.name),
-  );
+    ...productWebs().filter((key) => existsSync(join(TS, key, "route.ts"))),
+  ]);
+
+/** Prune installed dependencies before descending, including workspace links on Windows. */
+export function webSourceFiles(root: string, prefix = ""): string[] {
+  return readdirSync(join(root, prefix), { withFileTypes: true }).flatMap(entry => {
+    if (entry.name === "node_modules" || entry.name === ".git") return [];
+    const path = posix.join(prefix, entry.name);
+    return entry.isDirectory() ? webSourceFiles(root, path) : isProduction(path) ? [path] : [];
+  });
+}
 
 export function webSources(): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const rel of readdirSync(WEB, { recursive: true, encoding: "utf8" })) {
-    const path = rel.replaceAll("\\", "/");
-    if (isProduction(path) && !path.includes("node_modules/")) out[path] = readFileSync(join(WEB, path), "utf8");
+  for (const [root, prefix] of [[WEB, ""], ...productWebs().map((key) => [join(TS, key), `${key}/`])] as [string, string][]) {
+    if (!existsSync(root)) continue;
+    for (const path of webSourceFiles(root)) {
+      out[prefix + path] = readFileSync(join(root, path), "utf8");
+    }
   }
   return out;
 }

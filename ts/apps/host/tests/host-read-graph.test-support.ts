@@ -1,3 +1,4 @@
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
@@ -26,14 +27,14 @@ import fanCapture from "../../../packages/host-contracts/src/fixtures/k2-four-fa
 import { makeReadOwner } from "../src/builtin-inputs.ts";
 import { createPeRoutes, peCoreRoutes } from "../src/pe-routes.ts";
 import { historyRoutes } from "../src/reads/history-routes.ts";
-import { fansReadResponse } from "../../../packages/agent-contracts/src/fans-read.ts";
+import { fansReadResponse } from "@pe/fans-contract/fans-read";
 import { HostInputContext } from "../src/input-context.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
-import { DuctFiles } from "../src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
@@ -53,8 +54,10 @@ export const gate = () => ({
 });
 export const identity = { build: "host-read-spike", catalog: nativeCatalogIdentity() };
 export const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
-export const roster = nativeResponseSchema("ducts.snapshot.walk").parse(rosterCapture);
-export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(fanCapture);
+// The captures predate the native vocabulary; it is the generated one, added whole.
+const vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
+export const roster = nativeResponseSchema("ducts.snapshot.walk").parse({ ...rosterCapture, vocabulary });
+export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...fanCapture, vocabulary });
 export async function fixture(
   capture = false,
   recorded: {
@@ -234,7 +237,7 @@ export async function fixture(
                 "x-pe-history-point": at,
                 "x-pe-history-page": encodeURIComponent(
                   JSON.stringify({
-                    instance: "fans.sheet",
+                    instance: "fans.calc",
                     route: "fans",
                     page: {},
                     href: "/fans",
@@ -243,11 +246,11 @@ export async function fixture(
               }
             : {},
           body: JSON.stringify({
-            read: "fans.sheet",
+            read: "fans.calc",
             subscription,
             generation,
             release,
-            args: { target: ref, fan, sheetPath: "" },
+            args: { target: ref, fan, calcPath: "" },
           }),
         }),
         Context.make(RequestIdentity, admitted),

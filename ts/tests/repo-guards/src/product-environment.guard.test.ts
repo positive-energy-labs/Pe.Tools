@@ -175,6 +175,12 @@ const allowed: Record<string, { line: string; reason: string }[]> = {
         "Windows Sandbox MSI acceptance locates the real installed binary, not an override home.",
     },
   ],
+  "tools/release-sandbox/VcRuntime.ps1": [
+    {
+      line: "$path = Join-Path $env:USERPROFILE 'WindowsSandbox\\InstallerTests\\Input\\VcRuntime\\vc_redist.x64.exe'",
+      reason: "Reads the release gate's host-staged pinned VC++ installer, not product storage.",
+    },
+  ],
   "tools/release-sandbox/ReadInstalledMcp.ps1": [
     {
       line: "if ($env:USERNAME -ne 'WDAGUtilityAccount' -or $Output -notlike 'C:\\GateEvidence\\*' -or $InstallRoot -ne (Join-Path $env:LOCALAPPDATA 'Positive Energy\\Pe.Tools')) { throw 'Canonical owned Sandbox install and evidence only.' }",

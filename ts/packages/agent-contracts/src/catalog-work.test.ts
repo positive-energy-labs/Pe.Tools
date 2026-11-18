@@ -28,9 +28,9 @@ describe("data-tables keyed semantics", () => {
   const derive = (doc: object) => work.derive(work.schema.parse({ name: cell("T"), ...doc }), base);
 
   it("deletes the last slot of a kind, and refuses a delete that would remap a later column", () => {
-    expect(derive({ columns: { "text:1": { edit: { delete: true } } } }).request.table.columns.map((c) => c.heading)).toEqual(["A", "N"]);
-    expect(() => derive({ columns: { "text:0": { edit: { delete: true } } } })).toThrow(CatalogWorkRefused);
-    expect(() => derive({ columns: { "text:5": { edit: { delete: true } } } })).toThrow(CatalogWorkRefused);
+    expect(derive({ columns: { "text:1": { edit: { delete: true, by: "pea" } } } }).request.table.columns.map((c) => c.heading)).toEqual(["A", "N"]);
+    expect(() => derive({ columns: { "text:0": { edit: { delete: true, by: "pea" } } } })).toThrow(CatalogWorkRefused);
+    expect(() => derive({ columns: { "text:5": { edit: { delete: true, by: "pea" } } } })).toThrow(CatalogWorkRefused);
   });
 
   it("projects the native read by slot, and a missing table is a new one", () => {
@@ -82,9 +82,9 @@ describe("parameter-links derive", () => {
   });
 
   it("an explicit delete removes only the named id; deleting an absent id refuses", () => {
-    expect(ids({ definitions: { D2: { edit: { delete: true } } } })).toEqual(["D1"]);
-    expect(merge({ definitions: { D2: { edit: { delete: true } } } }).touched[0]).toMatchObject({ before: stored.definitions[1], after: null });
-    expect(() => merge({ definitions: { D9: { edit: { delete: true } } } })).toThrow(CatalogWorkRefused);
+    expect(ids({ definitions: { D2: { edit: { delete: true, by: "pea" } } } })).toEqual(["D1"]);
+    expect(merge({ definitions: { D2: { edit: { delete: true, by: "pea" } } } }).touched[0]).toMatchObject({ before: stored.definitions[1], after: null });
+    expect(() => merge({ definitions: { D9: { edit: { delete: true, by: "pea" } } } })).toThrow(CatalogWorkRefused);
   });
 
   it("refuses an empty Work and the old whole-profile shape; an unstaged cell keeps the stored id", () => {

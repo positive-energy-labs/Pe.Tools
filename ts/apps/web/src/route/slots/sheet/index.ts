@@ -9,7 +9,7 @@ export interface SheetInput<W = unknown> {
   readonly model: readonly ModelValue[];
   readonly read?: unknown;
 }
-export interface SheetCell extends StateCell {
+export interface CalcCell extends StateCell {
   readonly domain: Domain;
   readonly label: string;
   readonly unit?: string;
@@ -30,7 +30,7 @@ export const bindingPath = (binding: string, row?: string): [string, ...string[]
   const [first = binding, ...rest] = binding.split(".");
   return [first, ...rest, ...(row === undefined ? [] : [row])];
 };
-export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<SheetCell, "unit" | "numeric" | "field" | "choices"> {
+export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<CalcCell, "unit" | "numeric" | "field" | "choices"> {
   if (domain.kind === "number") return { unit: domain.unit, numeric: { min: domain.min ?? domain.exclusiveMin, max: domain.max, digits: domain.digits } };
   if (domain.kind === "enum") {
     const choices = typeof domain.choices === "function" ? domain.choices(read, row) : domain.choices;
@@ -47,7 +47,7 @@ export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<Sh
   }
   return {};
 }
-export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCell[] {
+export function sheetCells(slot: SheetSlot, input: SheetInput): readonly CalcCell[] {
   const read = input.read;
   return Object.entries(slot.bindings).flatMap(([binding, b]) =>
     (b.per === "subject" ? (read !== undefined && b.rows?.(read)) || input.rows : [undefined]).map(row => {
@@ -63,7 +63,7 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCe
       const value = staged ?? model ?? b.default ?? null;
       return {
         binding, ...(row === undefined ? {} : { row }), home, domain: b.domain,
-        value, model, pending: edit && staged !== undefined ? { by: edit.by === "pea" ? "pea" as const : "person" as const, value: staged, at: edit.at ?? "" } : null,
+        value, model, pending: edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
         drift: home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model),
         freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
         source: staged !== undefined ? "work" : layer && layer.value != null ? ("source" in layer && layer.source) || "model" : b.default !== undefined ? "default" : "model",
@@ -77,10 +77,10 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly SheetCe
           const at = tiers?.find(candidate => candidate.tier === tier);
           return { tier, home: at?.home ?? null, sha256: at?.sha256 ?? null, ...(at?.home ? {} : { notFound: at?.notFound ?? `No ${tier} home was read` }) };
         }) } } : {}),
-      } satisfies SheetCell;
+      } satisfies CalcCell;
     }));
 }
-export const typedCells = (cells: readonly SheetCell[]) => cells.filter(c => c.source === "work");
+export const typedCells = (cells: readonly CalcCell[]) => cells.filter(c => c.source === "work");
 
 /** Settings use the same structural kit handle; the mount owns custody and command transport. */
 export function homeHandle(path: readonly string[], read: unknown, send: (request: {

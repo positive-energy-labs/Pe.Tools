@@ -1,0 +1,64 @@
+/**
+ * The fan sheet's own snapshot: an `ids` read of what the open fan touches (its walk, the unit,
+ * blocker and candidate elements), never the shell's whole-document read, which outgrew the
+ * bridge's 16 MiB frame on cloud Chadds (2026-10-29). An `ids` read is raw (no groups, flows or
+ * issues), so every element joins one `sheet` group: the picture and namer draw by group.
+ */
+import type { DuctSnapshot } from "../types.ts";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
+
+/** The native fan vocabulary as a snapshot carries it; a snapshot built in TS states the generated lists. */
+export const VOCABULARY: DuctSnapshot["vocabulary"] = {
+  unitKinds: [...DUCT_UNIT_KINDS],
+  blockerKinds: [...FAN_BLOCKER_KINDS],
+};
+
+export const CALC_GROUP = "calc";
+
+/** Empty geometry for legacy unbound network views, never a native sheet reading. */
+export const EMPTY_SNAPSHOT: DuctSnapshot = {
+  document: { title: "", readAt: "", elapsedMs: 0, networkBasedCalculations: false },
+  coordinateEncoding: "native-double",
+  vocabulary: VOCABULARY,
+  levels: [],
+  groups: [],
+  nodes: [],
+  segments: [],
+  flows: [],
+  issues: [],
+  layers: [],
+  systems: [],
+  slots: {
+    requiredEsp: "",
+    fanFlow: "",
+    componentDrop: "",
+    terminalDrop: "",
+    fittingCoefficient: "",
+    terminalFlow: "",
+  },
+};
+
+export function calcSnapshot(raw: DuctSnapshot): DuctSnapshot {
+  return {
+    ...raw,
+    groups: [
+      {
+        id: CALC_GROUP,
+        rootIds: [],
+        classifications: [],
+        systemNames: [],
+        terminalCount: raw.nodes.filter((n) => n.kind === "terminal").length,
+        elementCount: raw.nodes.length + raw.segments.length,
+        loops: 0,
+        issueIds: [],
+      },
+    ],
+    nodes: raw.nodes.map((node) => ({ ...node, groupId: CALC_GROUP })),
+    segments: raw.segments.map((segment) => ({ ...segment, groupId: CALC_GROUP })),
+  };
+}
+
+/** Bounded ids reads have no roster identity; display labels cannot scope an owner link. */
+export function calcSystems(snapshot: DuctSnapshot): string[] {
+  return snapshot.systems.map((system) => system.name);
+}

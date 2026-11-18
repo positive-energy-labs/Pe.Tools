@@ -41,7 +41,7 @@ export const nativeArgs = z.object({
   request: z.unknown(),
   target: executionTargetSchema,
   version: z.string().optional(),
-  // Retained ducts bodies name their role; every other read leaves it out.
+  // Retained native bodies name their role; every other read leaves it out.
   role: role.optional(),
 });
 export type NativeArgs<K extends HostOperationKey> = {

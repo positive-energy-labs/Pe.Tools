@@ -1,5 +1,5 @@
 import { readFamilyCapture } from "./family-read-client.ts";
-import { z } from "zod";
+import { productAdmissionPreflights } from "../pea/guides.generated.ts";
 import { isReadEffect } from "@pe/host-contracts/contracts";
 /** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
@@ -11,9 +11,6 @@ import {
   instancesReading,
   workKeySchema,
   workHandleSchema,
-  workKey,
-  ductsDocumentSchema,
-  fansDocumentSchema,
   type WorkHandle,
   type ActionControlKey,
   type ScheduleReadKey,
@@ -186,16 +183,9 @@ export async function runCapability(
       ? host.callOperation(key, input)
       : host.call(key as never, (Object.keys(input).length ? input : undefined) as never);
   }
-  // Prerequisites are checked before submission, so an unscoped probe is not a journal attempt. Mirrors the
-  // host derive (ducts-actions.ts): the ducts and fans Work at one document, either one asking, the other from
-  // readWorks or the same key; a fan walk in fans Work or writeIntent.groups in ducts Work.
-  // The sheet pair serves every route (slice 7); only /ducts and /fans carry this losses preflight. Either may ask.
+  // Product prerequisites run before submission, so a refused probe is not a journal attempt.
   const asked = key === "sheet.plan" ? workHandleSchema.safeParse(input.work) : null;
-  if (asked?.success && (asked.data.key.route === "ducts" || asked.data.key.route === "fans")) {
-    const siblings = z.object({ ducts: workHandleSchema.optional(), fans: workHandleSchema.optional() }).optional().parse(input.readWorks);
-    const handle = asked.data.key.route === "ducts" ? asked.data : siblings?.ducts;
-    const fansHandle = asked.data.key.route === "fans" ? asked.data : siblings?.fans;
-    const ductsKey = handle?.key ?? { ...asked.data.key, route: "ducts" };
+  if (asked?.success) {
     const read = async (key: WorkHandle["key"]) => {
       const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
         params: { route: key.route },
@@ -210,14 +200,8 @@ export async function runCapability(
       const view = await response.json() as { doc: unknown; handle: unknown };
       return { doc: view.doc, handle: workHandleSchema.parse(view.handle) };
     };
-    // Fans Work at the same document is a sibling key; its handle comes back from the read.
-    const [ducts, fans] = await Promise.all([read(ductsKey), read(fansHandle?.key ?? { ...ductsKey, route: "fans" })]);
-    const same = (a: WorkHandle, b: WorkHandle) => workKey(a.key) === workKey(b.key) && a.revision === b.revision;
-    if (handle && !same(ducts.handle, handle)) throw Error("Ducts Work changed; read its current revision before preview");
-    if (fansHandle && !same(fans.handle, fansHandle)) throw Error("Fans Work changed; read its current revision before preview");
-    const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
-    if (!walk && !ductsDocumentSchema.parse(ducts.doc).writeIntent.edit?.value?.groups?.length)
-      throw Error('Preview needs a fan walk. Read route:reads.value (read fans.roster), then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.');
+    for (const preflight of productAdmissionPreflights)
+      if (preflight.routes.includes(asked.data.key.route)) await preflight.run(input, asked.data, read);
   }
   const id = context.actionId ?? crypto.randomUUID();
   await context.beforeAdmission?.(id);

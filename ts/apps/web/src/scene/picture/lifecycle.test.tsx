@@ -9,7 +9,7 @@ import { makeAtomRegistry } from "#/shell/owner";
 import { SceneMeshes } from "../types";
 import { Picture, renderPicturePane, type PictureContent } from "./picture";
 import type { Scene3DProps } from "../scene3d";
-import { ductsData as ductsGraph } from "#/ducts/route";
+import { ductsData as ductsGraph } from "@pe/duct-systems-web/route";
 import { reduceLayout } from "../../../../../packages/kit/src/components/lang/layout-graph";
 import type { LayoutNode } from "@pe/agent-contracts";
 

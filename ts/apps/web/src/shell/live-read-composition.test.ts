@@ -1,3 +1,4 @@
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
 import { expect, test, vi } from "vite-plus/test";
@@ -11,7 +12,7 @@ import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-r
 import { hostOwnership } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
-import { DuctFiles } from "../../../host/src/ducts-files.ts";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { Publications } from "../../../host/src/reads/publications.ts";
 import { RevitBridge } from "../../../host/src/bridge.ts";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
@@ -25,8 +26,8 @@ import { tmpdir } from "node:os";
 import { HostInputContext } from "../../../host/src/input-context.ts";
 import { openRecordingWriter } from "../../../host/src/native-recording.ts";
 import { dirname, join } from "node:path";
-import { FIRM_SEED } from "../../../host/src/ducts-inputs.ts";
-import { firmRootPath } from "../../../host/src/ducts-files.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
+import { firmRootPath } from "@pe/ducts-host/ducts-files";
 
 // Forward the services already owned by makeHttpLive; optional lookup keeps these test layers closed.
 const ambient = <S, I>(tag: Context.Key<S, I>) =>
@@ -46,7 +47,7 @@ async function liveHost(
   await writeFile(join(firmHome, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firmHome);
   const inputRoot = dirname(firmRootPath()!);
-  const roster = nativeResponseSchema("ducts.snapshot.roster").parse(rosterCapture);
+  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
   const inputs =
     isolated ??
     (record
@@ -125,10 +126,10 @@ test("source startup records a cold Fans publication through real host inputs", 
       method: "POST",
       headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "cold-fans",
         generation: 0,
-        args: { target, fan: [], sheetPath: "" },
+        args: { target, fan: [], calcPath: "" },
       }),
     });
     const publication = await response.json();
@@ -186,10 +187,10 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "metadata",
         generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
     const result = await response.json();
@@ -207,16 +208,16 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
 
 test("release fences its own attempt without consuming the next generation's changed args", async () => {
   const host = await liveHost();
-  const send = async (generation: number, sheetPath: string, release = false) => {
+  const send = async (generation: number, calcPath: string, release = false) => {
     const response = await fetch(`${host.base}/pe/reads/value`, {
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "changing-args",
         generation,
         release,
-        args: { target: host.target, fan: [], sheetPath },
+        args: { target: host.target, fan: [], calcPath },
       }),
     });
     expect(response.status).toBe(200);
@@ -240,10 +241,10 @@ test("a captured Fans publication reopens through real host history", async () =
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "capturing",
         generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
     const publication = await response.json();
@@ -262,14 +263,14 @@ test("a captured Fans publication reopens through real host history", async () =
         ...host.headers,
         "x-pe-history-point": point.id,
         "x-pe-history-page": encodeURIComponent(
-          JSON.stringify({ instance: "fans.sheet", route: "fans", page: {}, href: "/fans" }),
+          JSON.stringify({ instance: "fans.calc", route: "fans", page: {}, href: "/fans" }),
         ),
       },
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "recorded",
         generation: 1,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
     const recorded = await replay.json();
@@ -304,10 +305,10 @@ test("a stopped recording preserves live Fans but cannot hide a late closed targ
       method: "POST",
       headers: host.headers,
       body: JSON.stringify({
-        read: "fans.sheet",
+        read: "fans.calc",
         subscription: "capture-stop",
         generation: 0,
-        args: { target: host.target, fan: [], sheetPath: "" },
+        args: { target: host.target, fan: [], calcPath: "" },
       }),
     });
   try {

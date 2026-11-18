@@ -9,8 +9,8 @@ test("typed and already encoded list searches cross the router once and restore 
     "airType",
     "SupplyAir",
   );
-  const contract = routeAddress("ducts");
-  const url = routeUrlPage("ducts");
+  const contract = routeAddress("duct-systems");
+  const url = routeUrlPage("duct-systems");
   const middleware = url.middlewares[0]!;
   for (const value of [search, contract.write({ systemSearch: search }).systemSearch]) {
     const encoded = middleware({ search: { systemSearch: value }, next: (value) => value });

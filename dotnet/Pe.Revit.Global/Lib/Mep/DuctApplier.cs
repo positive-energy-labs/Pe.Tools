@@ -110,7 +110,7 @@ public static class DuctApplier {
             items.Add(Duplicate("component", w.Id) ?? Plan("component", w.Id, () => Lossy(doc, w.Id, "component", BuiltInCategory.OST_DuctAccessory, SpecificLoss, schemas,
                 [(PressureLossField, Finite(w.InWg) ? UnitUtils.ConvertToInternalUnits(w.InWg, InWg).ToString("R", CultureInfo.InvariantCulture) : "")], w.InWg, $"specific-loss {w.InWg:0.####} in-wg")));
         foreach (var w in request.Terminals ?? []) items.Add(Duplicate("terminal", w.Id) ?? Plan("terminal", w.Id, () => Terminal(doc, w, slots)));
-        foreach (var w in request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
+        foreach (var w in slots.RequiredEsp is null ? [] : request.Equipment ?? []) items.Add(Duplicate("equipment", w.Id) ?? Plan("equipment", w.Id, () => Equipment(doc, w, slots)));
         foreach (var w in request.TerminalFlows ?? []) items.Add(Duplicate("terminal-flow", w.Id) ?? Plan("terminal-flow", w.Id, () => TerminalFlow(doc, w)));
         foreach (var w in request.EquipmentFlows ?? []) items.Add(Duplicate("equipment-flow", w.Id) ?? Plan("equipment-flow", w.Id, () => EquipmentFlow(doc, w, slots)));
         var unscoped = SharedTypes(doc, items, "equipment", (request.Equipment ?? []).Select(w => (w.Id, w.ExternalStaticInWg)), "fan statics")
@@ -193,7 +193,8 @@ public static class DuctApplier {
         var had = stored?.Slots?.Resolve();
         var will = next.Slots!.Resolve();
         var names = new[] {
-            ("fanStatic", had?.FanStatic, will.FanStatic),
+            ("requiredEsp", had?.RequiredEsp, will.RequiredEsp),
+            ("ratedEsp", had?.RatedEsp, will.RatedEsp),
             ("fanFlow", had?.FanFlow, will.FanFlow),
             ("componentDrop", had?.ComponentDrop, will.ComponentDrop),
             ("terminalDrop", had?.TerminalDrop, will.TerminalDrop),
@@ -488,8 +489,8 @@ public static class DuctApplier {
                 var unnamed = members.Where(m => !value.ContainsKey(m.Id.Value())).ToList();
                 if (unnamed.Count > 0)
                     reason = $"type '{type.FamilyName}: {type.Name}' holds this parameter for {members.Count} units; the request names {set.Count()} and would also move {string.Join(", ", unnamed.Select(Unit))}. Stage every unit of the type with one value, or give the family an instance parameter";
-                else if (set.Select(i => value[i.Id!.Value]).Distinct().Count() > 1)
-                    reason = $"units of one type ({type.Name}) ask for different {what} ({string.Join(", ", set.Select(i => $"{i.Id} asks {value[i.Id!.Value]:0.####}"))}); a type holds one value, so give the family an instance parameter or stage one value";
+                else if (members.Select(m => value[m.Id.Value()]).Distinct().Count() > 1)
+                    reason = $"units of one type ({type.Name}) ask for different {what} ({string.Join(", ", members.Select(m => $"{m.Id.Value()} asks {value[m.Id.Value()]:0.####}"))}); a type holds one value, so give the family an instance parameter or stage one value";
             }
             if (reason is null) continue;
             refused = true;
@@ -501,8 +502,29 @@ public static class DuctApplier {
     private static string Unit(Element e) =>
         e.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() is { Length: > 0 } mark ? $"{mark} ({e.Id.Value()})" : $"{e.Id.Value()}";
 
+    /// <summary>The same instance-first native ownership as apply, with every document instance of a type.</summary>
+    public static DuctFanParameterCohort? ParameterCohort(Document doc, long elementId, string name, string basis) {
+        var e = doc.GetElement(elementId.ToElementId());
+        if (e is null) return null;
+        var p = ResolveFanParameter(e, name);
+        if (p is null) return null;
+        var owner = p.Element;
+        var instance = owner.Id == e.Id;
+        var members = instance ? new List<Element> { e }
+            : owner is FamilySymbol type
+                ? new FilteredElementCollector(doc).WherePasses(new FamilyInstanceFilter(doc, type.Id)).ToElements().ToList()
+                : new List<Element>();
+        return new DuctFanParameterCohort(p.Definition.Name,
+            new DuctParameterOwner(instance ? DuctParameterOwnerKind.Instance : DuctParameterOwnerKind.Type, owner.Id.Value()),
+            members.OrderBy(m => m.Id.Value()).Select(m => new DuctParameterMember(m.Id.Value(), m.UniqueId)).ToList(),
+            basis, members.Count > 0 && members.Any(m => m.Id == e.Id));
+    }
+
     private static Item Equipment(Document doc, DuctEquipmentWrite w, DuctParameterSlots slots) =>
-        FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.FanStatic, nameof(DuctParameterSlots.FanStatic), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
+        FanParameter(doc, "equipment", w.Id, w.ExternalStaticInWg, slots.RequiredEsp!, nameof(DuctParameterSlots.RequiredEsp), SpecTypeId.HvacPressure, InWg, "in-wg", "static");
+
+    private static Parameter? ResolveFanParameter(Element e, string name) =>
+        e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
 
     /// <summary>The unit's design flow, written to the FanFlow slot: instance first, then type, the rules of the fan static.</summary>
     private static Item EquipmentFlow(Document doc, DuctFlowWrite w, DuctParameterSlots slots) =>
@@ -511,7 +533,7 @@ public static class DuctApplier {
     private static Item FanParameter(Document doc, string kind, long id, double value, string name, string slot, ForgeTypeId spec, ForgeTypeId unit, string unitText, string noun) {
         var e = doc.GetElement(id.ToElementId());
         if (e is null) return new Item(id, kind, null).Refuse($"element {id} is not in the document");
-        var p = e.LookupParameter(name) ?? (e as FamilyInstance)?.Symbol?.LookupParameter(name);
+        var p = ResolveFanParameter(e, name);
         // The owner is the parameter's element, never the wrapper it was looked up through.
         var where = p is null || p.Element.Id == e.Id ? "instance" : "type";
         var item = new Item(id, kind, p is { HasValue: true, StorageType: StorageType.Double } ? $"{Shown(p, unit):0.####} {unitText}" : p is null ? null : "unset") { Element = e, Owner = p?.Element.Id, Parameter = p?.Definition.Name ?? name, Scope = where };
@@ -598,7 +620,7 @@ public static class DuctApplier {
             Version = DuctLossStore.CurrentVersion, Rules = rules, Instances = instances, Terminals = drops, TerminalFlows = terminalFlows, EquipmentFlows = equipmentFlows,
             Verdicts = DuctLossStore.Overlay(stored?.Verdicts, asked.Verdicts, deletes.Verdicts, StringComparer.Ordinal),
             Roles = DuctLossStore.Overlay(stored?.Roles, asked.Roles, deletes.Roles),
-            Slots = new DuctParameterSlotOverrides(slots.FanStatic, slots.FanFlow, slots.ComponentDrop,
+            Slots = new DuctParameterSlotOverrides(slots.RequiredEsp ?? "", slots.RatedEsp, slots.FanFlow, slots.ComponentDrop,
                 slots.TerminalDrop, slots.FittingCoefficient, slots.TerminalFlow), WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }

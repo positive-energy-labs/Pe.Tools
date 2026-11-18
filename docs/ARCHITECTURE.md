@@ -39,6 +39,16 @@ Current caveats matter. `Pe.App` still directly wires more feature and runtime d
 
 ## Authority flow
 
+### Product homes
+
+TypeScript product meaning lives in `ts/products/<product>/{domain,web,host,contract}`, with a workspace package per runtime (ADR 0046). `ducts` is the shared base without a route; `duct-systems` owns network health and repair; `fans` owns fan calcs and complete-claim writes. Domain owns pure rules. Web and host are adapters, and contract owns published schemas and product-supplied Pea guide text.
+
+Dependencies point down: web or host to domain to contract. Products consume declared shared-base exports at the same or a lower layer. Peers meet only through contract; any layer may import any contract. The base imports no peer domain, web or host, and domain never imports web or host. Product-layer and product-name guards enforce these target boundaries. The name guard freezes existing per-file counts and requires the baseline to shrink with removals; [shared-base name cleanup](features/ducts/LEDGER.md#owed) tracks that debt to zero, including the generic preflight and write-selection seams owned by P4-fix-seams.
+
+Route generation discovers product web declarations and their host closure. Product host package metadata supplies executor composition, emitted as `ts/apps/host/src/product-executors.generated.ts`; the generic registry composes it and rejects duplicate keys. Product guide exports feed `ts/packages/mcps/src/pea/guides.generated.ts`, so Pea's generic instructions do not author product rules.
+
+Products declare retired route and Page vocabulary explicitly (`retired` in host route admission and `retiredPage` on the typed route). Old Work is set aside with one notice instead of acquiring aliases or a migration reader. Generated route tables project declarations rather than creating a second writable registry.
+
 The durable direction is library authority first, adapter surfaces second:
 
 ```text

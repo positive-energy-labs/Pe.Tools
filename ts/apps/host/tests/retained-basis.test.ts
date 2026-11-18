@@ -17,12 +17,12 @@ import { admittedRequestIdentity, RequestIdentity } from "../src/request-service
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { hostNativeReadFor, inputBindingKey, nativeInputIdentity, nativeCatalogIdentity,
   openRecordingWriter, openRecordingReader, type HostInputLane, type Taking } from "../src/native-recording.ts";
-import { createDuctsBodyBasis, ductBodySubject } from "../src/ducts-body-basis.ts";
-import { DuctsReadings } from "../src/ducts-readings.ts";
+import { createDuctsBodyBasis, ductBodySubject } from "@pe/ducts-host/ducts-body-basis";
+import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { retainedDuctsRead } from "../src/call-route.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
-import { snapshot } from "../../web/src/ducts/test-fixture.ts";
+import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 const run = Effect.runPromise;
 const dirs: string[] = [];
@@ -377,7 +377,7 @@ test("retained calls in their own child contexts link the original native taking
   const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), counts,
     (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
   const sets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })))), HostInputReadSets);
-  const recipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: canonicalJson(ref) };
+  const recipe = { key: "fans.calc-detail", input: { fan: "F-1" }, scope: canonicalJson(ref) };
   const retained = (role: string) => ({ key: "ducts.retained", input: { key: input.key, role }, scope: canonicalJson(scope) });
   const root = await run(sets.open(recipe, null));
   const child = (role: string) => { const made = root.child(retained(role)); if (Result.isFailure(made)) throw made.failure; return made.success; };
@@ -420,7 +420,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   const web = router({ kind: "live", captureStore: writer }, new DuctsReadings(), { reads: 0 },
     (taking) => Effect.sync(() => { takes.push(taking); }), consumer);
   const sets = Context.get(await run(Effect.scoped(Layer.build(HostInputReadSets.layer({ kind: "live", captureStore: writer })))), HostInputReadSets);
-  const recipe = { key: "ducts.sheet", input: { fan: "F-1" }, scope: canonicalJson(ref) };
+  const recipe = { key: "fans.calc-detail", input: { fan: "F-1" }, scope: canonicalJson(ref) };
   const retained = (role: string) => ({ key: "ducts.retained", input: { key: input.key, role }, scope: canonicalJson(scope) });
   const root = await run(sets.open(recipe, null));
   const child = (consumption: InputConsumption, role: string) => {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
 import { Effect } from "effect";
-import { osUserProductRoot } from "@pe/host-contracts/service-identity";
+import { osUserProductRoot } from "../../host-contracts/src/service-identity.ts";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";

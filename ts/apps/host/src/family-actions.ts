@@ -1,3 +1,4 @@
+import { authorSchema } from "@pe/agent-contracts";
 import { targetHomes } from "./call-route.ts";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
@@ -123,7 +124,7 @@ export type PodDependencies = {
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
     marks?: DocumentMarks;
-    files?: import("./ducts-files.ts").DuctFiles["Service"];
+    files?: import("@pe/ducts-host/ducts-files").DuctFiles["Service"];
     pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];
     families?: Pick<FamiliesReader["Service"], "read" | "cancel">;
     /** The demo owner keeps native reads inside its own root; a build has no output path to place. */
@@ -346,7 +347,7 @@ const planLeafSchema = z.object({
   process: nativeProcessSchema,
   planned: z.strictObject({
     scope: appliedScopeSchema.nullable(),
-    excluded: z.record(z.string(), z.strictObject({ by: z.enum(["human", "pea", "unknown"]) })),
+    excluded: z.record(z.string(), z.strictObject({ by: authorSchema })),
     familyNames: z.array(z.string()).optional(),
     written: z.array(z.string()),
   }),

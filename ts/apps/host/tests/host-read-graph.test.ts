@@ -22,7 +22,7 @@ import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
 import { Publications } from "../src/reads/publications.ts";
-import { FIRM_SEED } from "../src/ducts-inputs.ts";
+import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
 import {
@@ -262,7 +262,7 @@ test("History keeps its own recorded references after HTTP-only slots are reclai
   const f = await fixture(true);
   const publish = async (subscription: string, fan: string[] = []) => {
     const response = await f.request(new Request("http://host/pe/reads/value", {
-      method: "POST", body: JSON.stringify({ read: "fans.sheet", args: { target: ref, fan, sheetPath: "" }, subscription, generation: 0 }),
+      method: "POST", body: JSON.stringify({ read: "fans.calc", args: { target: ref, fan, calcPath: "" }, subscription, generation: 0 }),
     }));
     expect(response.status, await response.clone().text()).toBe(200);
     return response.json();
@@ -281,8 +281,8 @@ test("History keeps its own recorded references after HTTP-only slots are reclai
     const reader = await settle(openRecordingReader(join(f.dir, "recording"), identity, bounds));
     const cold = new History(reader, settle);
     const calls = f.nativeCalls;
-    expect(await cold.publication(point.id, "fans.sheet", "fans.sheet")).toEqual(first);
-    expect(await cold.publication(later.id, "fans.sheet", "fans.sheet")).toEqual(next);
+    expect(await cold.publication(point.id, "fans.calc", "fans.calc")).toEqual(first);
+    expect(await cold.publication(later.id, "fans.calc", "fans.calc")).toEqual(next);
     expect(f.nativeCalls).toBe(calls);
   } finally { await f.close(); }
 });
@@ -312,11 +312,11 @@ test("History reopens the host's exact publication after newer Values, with no l
     expect(stored.work.length).toBeGreaterThan(0);
     const reader = await settle(openRecordingReader(join(f.dir, "recording"), identity, bounds));
     const cold = new History(reader, settle);
-    expect(await cold.publication(point.id, "fans.sheet", "fans.sheet")).toEqual(first);
-    await expect(cold.publication(point.id, "never-published", "fans.sheet")).rejects.toThrow(
+    expect(await cold.publication(point.id, "fans.calc", "fans.calc")).toEqual(first);
+    await expect(cold.publication(point.id, "never-published", "fans.calc")).rejects.toThrow(
       "never published",
     );
-    await expect(cold.publication(point.id, "fans.sheet", "fans.sheet", next.key)).rejects.toThrow(
+    await expect(cold.publication(point.id, "fans.calc", "fans.calc", next.key)).rejects.toThrow(
       "never published",
     );
     expect(() => cold.capture(path)).toThrow();
@@ -325,7 +325,7 @@ test("History reopens the host's exact publication after newer Values, with no l
       await f.history("", { kind: "captured", document: path }),
     );
     expect(stale.history.publications[0]!.state).toBe("refresh-needed");
-    expect((await cold.publication(point.id, "fans.sheet", "fans.sheet")) as object).toEqual(first);
+    expect((await cold.publication(point.id, "fans.calc", "fans.calc")) as object).toEqual(first);
     const publications = new Publications();
     publications.observe("slot", () => {});
     let revision = 0,
@@ -428,7 +428,7 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
           key("fans"),
           "fans",
           "human",
-          [{ path: ["flows", elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!), "edit"], value: { value: { cfm: 321 } } }],
+          [{ path: ["flows", elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!), "edit"], value: { value: 321 } }],
           0,
         );
         expect(staged.ok).toBe(true);

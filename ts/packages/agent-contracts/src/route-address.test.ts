@@ -20,7 +20,7 @@ test("an admitted Place retains its owner's JSON query bytes through thread cont
 
 describe("a layers field", () => {
   test("opens on its declared set, and the address stays bare there", () => {
-    const ducts = routeAddress("ducts");
+    const ducts = routeAddress("duct-systems");
     // The kernel pose's `default` is the picture's own default set (ADR 0035 rule 1).
     expect(ducts.defaults.layers).toBe("default");
     expect(ducts.write({ layers: ducts.defaults.layers })).toEqual({
@@ -30,8 +30,8 @@ describe("a layers field", () => {
   });
 
   test("every layer off is none, and reads back as none", () => {
-    expect(routeAddress("ducts").link({ layers: [] })).toBe("/ducts?layers=%5B%5D");
-    expect(routeAddress("ducts").read({ layers: "[]" }).page.layers).toEqual([]);
+    expect(routeAddress("duct-systems").link({ layers: [] })).toBe("/duct-systems?layers=%5B%5D");
+    expect(routeAddress("duct-systems").read({ layers: "[]" }).page.layers).toEqual([]);
     expect(routeAddress("rooms").read({ layers: JSON.stringify(["faces", "rails"]) }).page.layers).toEqual([
       "faces",
       "rails",
@@ -39,13 +39,13 @@ describe("a layers field", () => {
   });
 
   test("an unknown layer name falls to the default", () => {
-    expect(routeAddress("ducts").read({ layers: "none" }).page.layers).toBe("default");
+    expect(routeAddress("duct-systems").read({ layers: "none" }).page.layers).toBe("default");
   });
   test("ducts carries each colour and stub-label toggle, and how context draws, in its address", () => {
-    const ducts = routeAddress("ducts");
+    const ducts = routeAddress("duct-systems");
     for (const layer of ["system-colours", "stub-labels"] as const) {
       const url = ducts.link({ layers: [layer] });
-      expect(url).toBe(`/ducts?${new URLSearchParams({layers:JSON.stringify([layer])})}`);
+      expect(url).toBe(`/duct-systems?${new URLSearchParams({layers:JSON.stringify([layer])})}`);
       expect(ducts.read({ layers: JSON.stringify([layer]) }).page.layers).toEqual([layer]);
     }
     // One `context` key; no layer aliases it.
@@ -57,7 +57,7 @@ describe("a layers field", () => {
 describe("the route address", () => {
 
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
-    for (const key of ["chat", "ducts"] as const) {
+    for (const key of ["chat", "duct-systems"] as const) {
       const at = routeAddress(key);
       const query = pickListPill(
         { ...emptyListSearch(), keywords: '"supply air"' },
@@ -76,7 +76,7 @@ describe("the route address", () => {
       );
       expect(at.read({ threadSort: "invalid" }).page.threadSort).toBe("");
     }
-    const ducts = routeAddress("ducts");
+    const ducts = routeAddress("duct-systems");
     expect(
       ducts.agent.patch.safeParse({
         threadSearch: JSON.stringify(pickListPill(emptyListSearch(), "scope", "archived")),
@@ -89,13 +89,13 @@ describe("the route address", () => {
 
   test("is one object per route, found by key or path", () => {
     expect(routeAddress("chat")).toBe(routeAddress("chat"));
-    expect(routeOf("ducts")).toBe("ducts");
+    expect(routeOf("duct-systems")).toBe("duct-systems");
     expect(routeOf("nowhere")).toBeNull();
     expect(routeAt("/duct-loss")).toBe("duct-loss");
   });
 
   test("a route known only as a key is any route's address, still typed", () => {
-    const key = routeOf("ducts")!;
+    const key = routeOf("duct-systems")!;
     const at = routeAddress(key);
     const subject = {kind:"ids",ids:["system-name:SA"]};
     const { page } = at.read({ system: JSON.stringify(subject) });
@@ -104,9 +104,9 @@ describe("the route address", () => {
     expect("system" in old.page ? old.page.system : null).toEqual({kind:"ids",ids:[]});
     // The union of every route's page narrows by its keys; a page of no route is refused.
     expect("system" in page ? page.system : null).toEqual(subject);
-    expect(at.link(page)).toBe(`/ducts?${new URLSearchParams({system:JSON.stringify(subject)})}`);
+    expect(at.link(page)).toBe(`/duct-systems?${new URLSearchParams({system:JSON.stringify(subject)})}`);
     // @ts-expect-error no route links a `bogus` key
-    expect(() => at.link({ bogus: true })).toThrow("ducts links carry no 'bogus'");
+    expect(() => at.link({ bogus: true })).toThrow("duct-systems links carry no 'bogus'");
     // A union that mixes leasing and non-leasing routes may hold no lease.
     // @ts-expect-error possibly undefined
     expect(at.agent.keys).toContain("system");
@@ -127,7 +127,7 @@ describe("the route address", () => {
       link: "/space?mode=top&target=x",
     });
     expect(space.tab("/space?mode=side").ok).toBe(false);
-    expect(space.tab("/ducts").ok).toBe(false);
+    expect(space.tab("/duct-systems").ok).toBe(false);
     // The mode's rule between fields: an orbit viewport is no pose for an axis.
     expect(space.tab("/space?mode=top&viewport=orbit:1,2,3@0,0,0").ok).toBe(false);
   });
@@ -166,7 +166,7 @@ describe("the route address", () => {
 
 describe("the thin routes adopt the contract", () => {
   test("ducts list queries and sorts round-trip through links and the agent lease", () => {
-    const ducts = routeAddress("ducts");
+    const ducts = routeAddress("duct-systems");
     const patch = {
       systemSearch: pickListPill({ ...emptyListSearch(), keywords: "" }, "status", "priced"),
       systemSort: "loss" as const,
@@ -191,8 +191,8 @@ describe("the thin routes adopt the contract", () => {
       threadSort: "",
     });
     const home = routeAddress("home");
-    expect(home.link({ query: "duct", folded: ["/ducts"], sort: "name" })).toBe(
-      "/?query=%22duct%22&folded=%5B%22%2Fducts%22%5D&sort=%22name%22",
+    expect(home.link({ query: "duct", folded: ["/duct-systems"], sort: "name" })).toBe(
+      "/?query=%22duct%22&folded=%5B%22%2Fduct-systems%22%5D&sort=%22name%22",
     );
     expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=%22none%22");
   });
@@ -219,7 +219,7 @@ describe("the thin routes adopt the contract", () => {
 });
 
 test("typed list search retains refused filter content and retires grammar URL keys", () => {
-  const at = routeAddress("ducts");
+  const at = routeAddress("duct-systems");
   for (const raw of [
     JSON.stringify({ ...emptyListSearch(), v: 9 }),
     JSON.stringify(pickListPill(emptyListSearch(), "missing", "x")),

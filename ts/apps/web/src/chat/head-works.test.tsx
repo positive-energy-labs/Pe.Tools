@@ -33,7 +33,7 @@ test("the chat head reads executable graph Work and cell families for addressed 
   reads.route = "rooms";
   const key = roomEditKey("room-a", "name");
   reads.doc = roomsRouteState.schema.parse({
-    edits: { [key]: { edit: { value: "Pantry" } } },
+    edits: { [key]: { edit: { value: "Pantry", by: "human" } } },
   });
   const doc = { session: "session-one", openId: "unsaved-one" };
   const exits = { open: vi.fn(), planIn: vi.fn() };

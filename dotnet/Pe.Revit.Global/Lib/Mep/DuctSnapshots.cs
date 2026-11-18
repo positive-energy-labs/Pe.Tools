@@ -47,7 +47,13 @@ public static class DuctSnapshots {
         string? LabelParameter,
         IReadOnlyDictionary<long, string> PhaseNames);
 
-    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlotOverrides? overrides = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) {
+    public static DuctSnapshotData Snapshot(Document doc, DuctParameterSlotOverrides? overrides = null, string? labelParameter = null, DuctSnapshotSelector? selector = null, bool metadataOnly = false) =>
+        SnapshotCore(doc, overrides, labelParameter, selector, metadataOnly, Peers);
+
+    internal static DuctSnapshotData SnapshotWithPeers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) =>
+        SnapshotCore(doc, null, null, selector, false, peers, beforeSeedRead);
+
+    private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve(store?.Slots);
@@ -84,7 +90,7 @@ public static class DuctSnapshots {
             DuctWalk? walk = null;
             List<DuctSystem> rawSystems = [];
             if (selector.Kind == DuctSelectorKind.From) {
-                (rawNodes, rawSegments, walk) = Walk(reader, selector);
+                (rawNodes, rawSegments, walk) = Walk(reader, selector, peers);
                 // A damper dropped inside a walked duct touches nothing, so the connector walk never reaches it; it is on
                 // the path all the same (its drop is priced in series), so it joins the read as walked.
                 rawNodes.AddRange(InlineParts(reader, rawNodes, rawSegments, DuctWalkReason.Walked));
@@ -122,17 +128,20 @@ public static class DuctSnapshots {
                 AirflowCandidates(RawOf(DuctNodeKind.Terminal), ungrouped),
                 AirflowCandidates(RawOf(DuctNodeKind.Equipment), ungrouped),
                 Walk: walk,
-                Tolerances: tolerances);
+                Tolerances: tolerances,
+                ParameterCohorts: Cohorts(doc, RawOf(DuctNodeKind.Equipment), slots, readAt));
         }
 
         List<DuctSegment> segments;
         var nodes = new List<DuctNode>();
         List<Element> terminalElements, equipment;
         List<DuctSystem> systems;
+        DuctReach? reach = null;
         if (selector is { Kind: DuctSelectorKind.Systems }) {
             // The same elements the document read would give these systems' groups, so the analysis below answers them
             // the same; a group no named system touches is never read.
-            var (named, members) = SystemMembers(doc, selector);
+            var (named, members, completeness) = SystemMembers(doc, selector, peers, beforeSeedRead);
+            reach = completeness;
             segments = [];
             foreach (var e in members) Build(reader, e, null, nodes, segments);
             // As in the document read, an inline part in a member duct is in the read (its own group until the route splices it).
@@ -179,7 +188,9 @@ public static class DuctSnapshots {
             new DuctPhases(phases.Select(ph => ph.Name).ToList(), PhaseViews(doc, phaseNames)),
             AirflowCandidates(terminalElements, groupsOf),
             AirflowCandidates(equipment, rootedBy),
-            Tolerances: tolerances);
+            Tolerances: tolerances,
+            Reach: reach,
+            ParameterCohorts: Cohorts(doc, equipment, slots, readAt));
     }
 
     /// <summary>
@@ -253,7 +264,7 @@ public static class DuctSnapshots {
     ///     terminals and stops at equipment (reached, never expanded): DuctNetwork.Analyze cuts equipment out, so the
     ///     result holds every group the systems touch whole, with its roots, exactly as the document read holds it.
     /// </summary>
-    private static (List<MechanicalSystem> Systems, List<Element> Members) SystemMembers(Document doc, DuctSnapshotSelector selector) {
+    private static (List<MechanicalSystem> Systems, List<Element> Members, DuctReach Reach) SystemMembers(Document doc, DuctSnapshotSelector selector, Func<Connector, IEnumerable<Connector>> readPeers, Action<MechanicalSystem, string>? beforeSeedRead) {
         var ids = selector.SystemIds ?? throw new ArgumentException("selector.systemIds is required for kind systems");
         if (ids.Count == 0) throw new ArgumentException("selector.systemIds names no system.");
         var systems = ids.Distinct().Select(id =>
@@ -262,6 +273,7 @@ public static class DuctSnapshots {
             .OrderBy(m => m.Name, StringComparer.Ordinal).ToList();
         var members = new Dictionary<long, Element>();
         var queue = new Queue<Element>();
+        var unreadPeers = new List<DuctRef>();
         void Reach(Element? e) {
             // Equipment with no HVAC port is not in the document read either.
             if (e is null || !Walkable(e) || members.ContainsKey(e.Id.Value())) return;
@@ -270,17 +282,37 @@ public static class DuctSnapshots {
             members[e.Id.Value()] = e;
             if (!equipment) queue.Enqueue(e);
         }
-        foreach (var m in systems) {
-            foreach (Element e in Try(() => m.DuctNetwork) ?? new ElementSet()) Reach(e);
-            foreach (Element e in Try(() => m.Elements) ?? new ElementSet()) Reach(e);
-            Reach(Try(() => m.BaseEquipment));
+        void Seed(MechanicalSystem system, string member, Action read) {
+            try { beforeSeedRead?.Invoke(system, member); read(); }
+            catch (Exception ex) when (IsRevitFailure(ex)) {
+                // A seed has no port: connector -1 identifies lost system-level coverage, never an open end.
+                unreadPeers.Add(new DuctRef(system.Id.Value(), -1));
+            }
         }
-        while (queue.Count > 0)
-            foreach (var port in HvacConnectors(queue.Dequeue()))
-            foreach (var peer in Try(() => Peers(port).ToList()) ?? [])
-                Reach(peer.Owner);
-        return (systems, members.Values.OrderBy(e => e.Id.Value()).ToList());
+        foreach (var m in systems) {
+            Seed(m, nameof(m.DuctNetwork), () => { foreach (Element e in m.DuctNetwork ?? new ElementSet()) Reach(e); });
+            Seed(m, nameof(m.Elements), () => { foreach (Element e in m.Elements ?? new ElementSet()) Reach(e); });
+            Seed(m, nameof(m.BaseEquipment), () => Reach(m.BaseEquipment));
+        }
+        while (queue.Count > 0) {
+            var element = queue.Dequeue();
+            foreach (var port in HvacConnectors(element)) {
+                List<Connector> connected;
+                try { connected = readPeers(port).ToList(); }
+                catch (Exception ex) when (IsRevitFailure(ex)) {
+                    unreadPeers.Add(new DuctRef(element.Id.Value(), port.Id));
+                    continue;
+                }
+                foreach (var peer in connected) Reach(peer.Owner);
+            }
+        }
+        return (systems, members.Values.OrderBy(e => e.Id.Value()).ToList(), new DuctReach(unreadPeers));
     }
+
+    private static IReadOnlyList<DuctFanParameterCohort> Cohorts(Document doc, IEnumerable<Element> equipment, DuctParameterSlots slots, DateTimeOffset readAt) =>
+        equipment.SelectMany(e => new[] { slots.RequiredEsp, slots.FanFlow }.OfType<string>().Distinct()
+            .Select(name => DuctApplier.ParameterCohort(doc, e.Id.Value(), name, readAt.ToString("O"))))
+            .OfType<DuctFanParameterCohort>().GroupBy(c => (c.Parameter, c.Owner)).Select(g => g.First()).ToList();
 
     /// <summary>The `ids` selector: exactly the named walkable elements, in id order, raw.</summary>
     private static (List<DuctNode> Nodes, List<DuctSegment> Segments) Selected(Reader r, DuctSnapshotSelector selector) {
@@ -301,7 +333,7 @@ public static class DuctSnapshots {
     ///     CandidateBoxIn around its origin is counted and, under the cap, listed, the unreached hits joining the output as
     ///     `open-end-candidate`. MaxHops caps depth and sets Truncated. Nothing here reads Connector.Flow.
     /// </summary>
-    private static (List<DuctNode> Nodes, List<DuctSegment> Segments, DuctWalk Walk) Walk(Reader r, DuctSnapshotSelector s) {
+    private static (List<DuctNode> Nodes, List<DuctSegment> Segments, DuctWalk Walk) Walk(Reader r, DuctSnapshotSelector s, Func<Connector, IEnumerable<Connector>> readPeers) {
         var clock = Stopwatch.StartNew();
         var startId = s.UnitId ?? throw new ArgumentException("selector.unitId is required for kind from");
         var start = r.Doc.GetElement(startId.ToElementId()) ?? throw new ArgumentException($"Element {startId} does not exist in this document.");
@@ -314,6 +346,7 @@ public static class DuctSnapshots {
         var reached = new Dictionary<long, Element> { [startId] = start };
         var candidates = new Dictionary<long, Element>();
         var openEnds = new List<DuctOpenEnd>();
+        var unreadPeers = new List<DuctRef>();
         var queue = new Queue<(Element Element, IReadOnlyList<Connector> Ports, int Hop)>();
         queue.Enqueue((start, startPorts, 0));
         var hops = 0;
@@ -322,7 +355,12 @@ public static class DuctSnapshots {
             var (e, ports, hop) = queue.Dequeue();
             hops = Math.Max(hops, hop);
             foreach (var port in ports) {
-                var peers = Try(() => Peers(port).ToList()) ?? [];
+                var peers = Try(() => readPeers(port).ToList());
+                if (peers is null) {
+                    truncated = true;
+                    unreadPeers.Add(new DuctRef(e.Id.Value(), port.Id));
+                    continue;
+                }
                 if (peers.Count == 0) {
                     openEnds.Add(OpenEnd(r, port, boxFt, reached, candidates, ref truncated));
                     continue;
@@ -352,7 +390,7 @@ public static class DuctSnapshots {
         var segments = new List<DuctSegment>();
         foreach (var e in reached.Values) Build(r, e, DuctWalkReason.Walked, nodes, segments);
         foreach (var e in candidates.Values.Where(c => !reached.ContainsKey(c.Id.Value()))) Build(r, e, DuctWalkReason.OpenEndCandidate, nodes, segments);
-        return (nodes, segments, new DuctWalk(startId, hops, reached.Count, openEnds.Count, openEnds, truncated, clock.ElapsedMilliseconds));
+        return (nodes, segments, new DuctWalk(startId, hops, reached.Count, openEnds.Count, openEnds, truncated, clock.ElapsedMilliseconds, unreadPeers));
     }
 
     /// <summary>The physical connectors this one touches on other elements (never the system's logical connector).</summary>
@@ -633,7 +671,8 @@ public static class DuctSnapshots {
                 facts.Add(Fact(DuctNetwork.PressureDrop, Converted(Named(e, slots.ComponentDrop), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 break;
             case DuctNodeKind.Equipment:
-                facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.FanStatic), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                if (slots.RequiredEsp != null) facts.Add(Fact(DuctNetwork.ExternalStatic, Converted(Named(e, slots.RequiredEsp), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
+                if (slots.RatedEsp != null) facts.Add(Fact("ratedStatic", Converted(Named(e, slots.RatedEsp), UnitTypeId.InchesOfWater60DegreesFahrenheit), "in-wg", DuctProvenance.DesignerStated));
                 var (fanCfm, fanFrom) = SlotFlow(e, slots.FanFlow);
                 flowParameter = fanFrom;
                 facts.Add(Fact("fanFlow", fanCfm, "cfm", DuctProvenance.DesignerStated));
@@ -720,7 +759,7 @@ public static class DuctSnapshots {
                 "DuctNetwork.PassOne: terminal design flow summed up the tree from the one equipment port of each loop-free group",
                 new(a.Flows.Count, segs.Count), DuctProvenance.Derived),
             new("fan-static", "Fan external static",
-                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.FanStatic}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol; GetParameters(\"{slots.FanFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
+                $"OST_MechanicalEquipment with HVAC connectors: LookupParameter(\"{slots.RequiredEsp}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol; GetParameters(\"{slots.FanFlow}\") of the AirFlow spec, the first nonzero (CubicFeetPerMinute), else on its FamilySymbol",
                 new(equipment.Count(e => DuctNetwork.Fact(e, DuctNetwork.ExternalStatic) > 0), equipment.Count), DuctProvenance.DesignerStated),
             new("component-drop", "Component pressure drop",
                 $"OST_DuctAccessory instances: LookupParameter(\"{slots.ComponentDrop}\") (InchesOfWater60DegreesFahrenheit) on the instance, else on its FamilySymbol",

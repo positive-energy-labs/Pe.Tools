@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { fansDocumentSchema } from "@pe/agent-contracts";
 import { peaWorkValue } from "../src/pea/capability-tools.ts";
-import { renderDuctsSkill } from "../src/pea/ducts-skill.ts";
+import { renderDuctsSkill } from "@pe/fans-contract/pea/ducts-skill";
 
 /** Driver C13: the /fans read carried its transport JSON Schema beside a tiny doc. */
 const fansRead = () => ({
@@ -28,11 +28,12 @@ test("Pea's Work read is the doc, revision and provenance, not the transport sch
   expect(peaWorkValue(refusal)).toBe(refusal);
 });
 
-test("Driver C14: Pea stages the fan walk and passes the primary Ducts handle before planning losses", () => {
+test("Driver C14: Pea stages the fan walk and passes the fan Work handle before planning losses", () => {
   const text = renderDuctsSkill();
   expect(text).toContain("writeIntent.walk");
-  expect(text).toContain("work: { key, revision }, the route:ducts Work handle");
-  expect(text).toContain("Fan write cells are derived");
+  expect(text).toContain("Send only target and work: { key, revision }");
+  expect(text).toContain("Write targets derive from that walk and current fan Work, never from the open Page");
   expect(text).not.toContain("key, expectedRevision");
-  expect(text).toContain("The open Page never supplies the walk");
+  expect(text).toContain("Required ESP is a computed result, never staged");
+  expect(text).toContain("Stage rated ESP and other fan inputs through route:fans at expectedRevision");
 });

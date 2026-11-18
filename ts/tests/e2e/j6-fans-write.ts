@@ -18,6 +18,7 @@ import {
   sendChat,
   setPea,
 } from "./cdp.ts";
+import { fansPanes } from "../../products/fans/web/src/panes.ts";
 import type { Page } from "./cdp.ts";
 import { marks, settled } from "./marks.ts";
 import { pickFansWriteScope } from "./fans-write-scope.ts";
@@ -28,7 +29,7 @@ const PORT = Number(process.env.E2E_PORT ?? "2");
 if (!Number.isInteger(PORT) || PORT < 0) throw new Error("PRECONDITION: E2E_PORT must be a nonnegative integer");
 const ESP = process.env.E2E_VALUE || "1.25";
 const CHAOS = new Set((process.env.E2E_CHAOS ?? "").split(",").filter(Boolean));
-const ROSTER = '[data-pane-id="sheet-roster"]';
+const ROSTER = `[data-pane-id="${fansPanes.roster}"]`;
 const POPOVER = "[data-write-popover]";
 const PLAN_WRITE = /^plan Write to Revit$/;
 const fanRow = fanRosterRow(FAN, PORT);

@@ -35,7 +35,17 @@
     "effect": "4.0.2",
     "parse5": "^8.0.1",
     "posthog-node": "5.55.2",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/duct-systems-host": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "jiti": "^2.7.0",
+    "@pe/web": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
+    "@pe/fans-web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -58,8 +68,20 @@
     "./builtin-read-handles": "./src/builtin-read-handles.ts",
     "./ducts-files": "./src/ducts-files.ts",
     "./ducts-inputs": "./src/ducts-inputs.ts",
-    "./ducts-walk": "./src/ducts-walk.ts",
     "./local-inputs": "./src/local-inputs.ts",
-    "./reads/inputs": "./src/reads/inputs.ts"
+    "./reads/inputs": "./src/reads/inputs.ts",
+    "./bridge": "./src/bridge.ts",
+    "./command-executor": "./src/command-executor.ts",
+    "./vite.config": "./vite.config.ts",
+    "./command-read-identity": "./src/command-read-identity.ts",
+    "./request-services": "./src/request-services.ts",
+    "./action-journal": "./src/action-journal.ts",
+    "./document-lifetime": "./src/document-lifetime.ts",
+    "./tiered-settings": "./src/tiered-settings.ts",
+    "./host-ownership": "./src/host-ownership.ts",
+    "./input-occurrence": "./src/input-occurrence.ts",
+    "./native-reads": "./src/native-reads.ts",
+    "./native-recording": "./src/native-recording.ts",
+    "./call-route": "./src/call-route.ts"
   }
 }

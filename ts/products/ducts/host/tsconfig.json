@@ -1,0 +1,10 @@
+{
+  "extends": "../../../apps/host/tsconfig.json",
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

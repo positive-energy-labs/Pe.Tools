@@ -7,7 +7,6 @@ import { prepareSourceClosures } from "./src/source-closures.ts";
 import {
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -17,40 +16,36 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
   currentRouteStartupProjection,
+  routeFolderCandidates,
   routeStartupOwner,
   routeStartupSourceHash,
   type RouteStartupProjection,
 } from "@pe/host-contracts/route-startup";
 
 const checkout = fileURLToPath(new URL("../../../", import.meta.url));
-const webSource = fileURLToPath(new URL("../web/src/", import.meta.url));
 const stampPath = join(import.meta.dirname, "node_modules", ".cache", "source-closures.json");
 const diskClosures = () =>
   Object.fromEntries(
-    readdirSync(webSource, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .flatMap((d) => {
-        const path = join(webSource, d.name, "source-closure.generated.json");
-        try {
-          return [[path, readFileSync(path, "utf8")] as const];
-        } catch {
-          return [];
-        }
-      }),
+    routeFolderCandidates(checkout).flatMap((folder) => {
+      const path = join(folder, "source-closure.generated.json");
+      try {
+        return [[path, readFileSync(path, "utf8")] as const];
+      } catch {
+        return [];
+      }
+    }),
   );
 /** The freshness check hashes what git lists, and the producer finds routes by reading the folder. A route
  * folder git ignores is therefore invisible to the check, so the cache is off while one exists.
  * `git check-ignore` exits 1 when none of the paths is ignored. */
-const noIgnoredRouteFolder = (source: string) =>
+const noIgnoredRouteFolder = () =>
   spawnSync(
     "git",
     [
       "check-ignore",
-      ...readdirSync(source, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && existsSync(join(source, d.name, "route.ts")))
-        .map((d) => join(source, d.name)),
+      ...routeFolderCandidates(checkout).filter((folder) => existsSync(join(folder, "route.ts"))),
     ],
-    { cwd: source },
+    { cwd: checkout },
   ).status === 1;
 /** Test lane only (Vitest sets VITEST before it loads this file). The closure producer
  * (route-graphs.ts --builtin-closure-only) took ~45 s of every host test run before Vitest started.
@@ -59,7 +54,7 @@ const noIgnoredRouteFolder = (source: string) =>
  * otherwise produce and stamp. Pack and source startup always produce. */
 async function prepareTestSourceClosures() {
   // Neither read nor written while git ignores a route folder: a stamp made then would outlive the folder.
-  if (!noIgnoredRouteFolder(webSource)) return prepareSourceClosures();
+  if (!noIgnoredRouteFolder()) return prepareSourceClosures();
   try {
     const stamp = JSON.parse(readFileSync(stampPath, "utf8")) as RouteStartupProjection;
     const disk = diskClosures();

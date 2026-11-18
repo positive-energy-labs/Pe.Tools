@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { DUCT_PARAMETER_KEYS, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "./ducts-sheet.ts";
-import { criterionLabel } from "./criterion-words.neutral.ts";
+import { DUCT_PARAMETER_KEYS, ductParameterNameSchema, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "@pe/ducts-contract/duct-inputs";
+import { criterionLabel } from "@pe/ducts-contract/criterion-words.neutral";
 import { setting, schemaOf, type Domain, type Home, type SheetBinding } from "./slots/sheet.ts";
 import type { SettingTier } from "./tiered-setting.ts";
 
@@ -21,7 +21,7 @@ export const ductsSettings: Readonly<Record<string, SheetBinding>> = {
       label: side ? `${criterionLabel(key)} ${side}` : criterionLabel(key), default: side && typeof base === "object" ? base[side] : base,
     })];
   })),
-  ...Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [`setting.ducts.parameters.${key}`, setting("ducts", ["parameters", key], parameterName, ["project", "firm"], { label: `${key} slot` })])),
+  ...Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => [`setting.ducts.parameters.${key}`, setting("ducts", ["parameters", key], { ...parameterName, shape: ductParameterNameSchema(key) }, ["project", "firm"], { label: key === "requiredEsp" ? "requiredEsp slot (empty writes nowhere)" : `${key} slot` })])),
   "setting.ducts.designFriction": setting("ducts", ["designFriction"], { kind: "number", exclusiveMin: 0, unit: "in-wg/100 ft", digits: 3 }, ["project", "firm"], { label: "Design friction", default: 0.08 }),
 };
 export type SettingDeclaration = { name: string; label: string; default: unknown; domain: Domain; home: Extract<Home, { at: "setting" }> };

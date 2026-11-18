@@ -1,0 +1,9 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "include": ["products/**/*.ts", "products/**/*.tsx", "../../apps/web/src/router.tsx"],
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "tsBuildInfoFile": "node_modules/.cache/composition.tsbuildinfo"
+  }
+}

@@ -1,14 +1,15 @@
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import "../styles.css";
 import { createRoot } from "react-dom/client";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { KeyScopeHost } from "@pe/kit/keys";
-import { systemList } from "@pe/ducts-domain/system-list";
+import { systemList } from "@pe/duct-systems-domain/system-list";
 import recorded from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
 import recordedNetwork from "../../../../packages/host-contracts/src/fixtures/k2-system-walk.json";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { module as ducts, roster, network } from "../ducts/route";
-import { SystemsPane } from "../ducts/proto/e/screen";
+import { module as ducts, roster, network } from "@pe/duct-systems-web/route";
+import { SystemsPane } from "@pe/duct-systems-web/screen/screen";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { makeAtomRegistry } from "../shell/owner";
 import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
@@ -19,9 +20,9 @@ import type { ReadingDelivery } from "../shell/source-contract";
 
 // Native boundary: replay the committed Chadds roster, holding network completion
 // until the instrument has measured the usable chooser during Reading.
-const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(recorded);
+const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...recorded, vocabulary: VOCABULARY });
 const value = { ...snapshot, rows: systemList(snapshot, null), sourceVersion: "layout-recording" };
-const networkValue = nativeResponseSchema("ducts.snapshot.walk").parse(recordedNetwork);
+const networkValue = nativeResponseSchema("ducts.snapshot.walk").parse({ ...recordedNetwork, vocabulary: VOCABULARY });
 const publication = (data: unknown) => ({ key: "layout", generation: 1, version: 1, state: "current", value: {
   data, evaluation: "layout", inputs: "recorded", coverage: { requested: [], covered: [], unknown: [], refused: [] },
   origin: { kind: "fixture" }, works: [], trace: [], freshness: "current",

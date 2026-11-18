@@ -1,8 +1,9 @@
+import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { refusalOf, valueOf } from "./typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { stableFanKey } from "../ducts/sheet/model";
-import { systemCode } from "../ducts/identity";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
+import { systemCode } from "@pe/ducts-web/identity";
 import { expect, test, vi } from "vite-plus/test";
 import { fileURLToPath } from "node:url";
 import retiredReads from "../../../../tests/repo-guards/src/retired-read-aliases.forbidden.json";
@@ -58,7 +59,7 @@ import { z } from "zod";
 import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
 import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/host-read-graph.test-support";
-import { module as fans } from "../fans/route";
+import { module as fans } from "@pe/fans-web/route";
 import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
@@ -67,9 +68,9 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { ductsPricingData, ductsNetworkData, ductsRosterData, valueReadResponse } from "@pe/agent-contracts";
 import { InvalidRead } from "../../../host/src/native-reads";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { ductsPricing, ductsNetwork, ductsRoster } from "../ducts/host";
-import { fansSheet } from "../fans/host";
-import { module as ducts } from "../ducts/route";
+import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/host";
+import { fansCalc } from "@pe/fans-host/host";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as families } from "../families/route";
 import type { TypedRoute } from "./typed-route";
 import { handle } from "@pe/agent-contracts/handle";
@@ -77,7 +78,7 @@ import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
-import savedNetwork from "../ducts/fixtures/synthetic-snapshot.json";
+import savedNetwork from "@pe/ducts-contract/fixtures/synthetic-snapshot.json";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -129,7 +130,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
       (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
     const row = valueOf(j.mount.value(fans.spec.reads!.roster)).rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
-    for (const route of ["fans", "ducts"])
+    for (const route of ["fans", "duct-systems"])
       expect((await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok).toBe(true);
     const work = createWorkFeedClient(
       { subscribe: observeResources(j.host.workspace, { observe: () => () => {} }), dirty() {} },
@@ -145,7 +146,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
               counts: { planned: 1, written: 0, refused: 0, unchanged: 0 } } } }) });
     const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "fans")!.closure.fingerprint}`);
     mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) }, fingerprint,
-      { work, sources: { "fans.sheet": source } });
+      { work, sources: { "fans.calc": source } });
     mounted.subscribe(() => {});
     await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
     // One stream for the tab, carrying each read's invalidation as a key.
@@ -162,7 +163,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     const key = mounted.work()!.handle.key;
     const staged = await j.host.workspace.apply(key, "fans", "human", [
       { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 925, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 925, ref: "test" } },
     ], mounted.work()!.revision);
     expect(staged.ok).toBe(true);
     mounted.refresh();
@@ -194,7 +195,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
       },
     })]));
     const ductMount = mountTypedRoute(ducts, { ...j.input, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} } },
-      workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "ducts")!.closure.fingerprint}`), { work, sources });
+      workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "duct-systems")!.closure.fingerprint}`), { work, sources });
     try {
       await ductMount.whenReady();
       const system = valueOf(ductMount.value(ducts.spec.reads!.roster)).systems[0]!.name;
@@ -210,7 +211,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     const changed = await j.host.workspace.apply(key, "fans", "human", [
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: { cfm: 950, source: "test" } } },
+      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 950, ref: "test" } }, // amendment 1 item 4: airflow is a plain number, evidence rides on `ref`
     ], mounted.work()!.revision);
     expect(changed.ok).toBe(true);
     mounted.refresh();
@@ -293,7 +294,7 @@ async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
   const mount = mountTypedRoute(fans, input, fingerprint, {
     work,
     timeline: fixtureTimeline(host.workspace),
-    sources: { "fans.sheet": source },
+    sources: { "fans.calc": source },
   });
   const stop = mount.subscribe(() => {});
   const ready = () => mount.whenReady();
@@ -353,8 +354,7 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
         "H23: published pressure belongs to that fan's overview",
       ).toMatchObject({
         requiredEspInWg: open.overview.totals?.requiredEspInWg ?? null,
-        complete:
-          !!open.overview.totals?.supply.complete && !!open.overview.totals?.return.complete,
+        complete: open.overview.claim?.kind === "complete",
       });
       expect(open.overview.basis, "H23: engineering answer retains its provenance").toBeTruthy();
     }
@@ -452,14 +452,14 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     const calls = j.host.nativeCalls;
     const mounted = mountTypedRoute(fans, { ...j.input, fixture: "layout" }, j.fingerprint, {
       work: j.work,
-      sources: { "fans.sheet": j.source },
+      sources: { "fans.calc": j.source },
     });
     try {
       mounted.page.subject({ kind: "all" });
-      expect(
+      await vi.waitFor(() => expect(
         mounted.value().publication?.origin,
         "H09: fixture publication discloses its origin",
-      ).toMatchObject({ kind: "fixture", name: "layout" });
+      ).toMatchObject({ kind: "fixture", name: "layout" }));
       expect(
         mounted.verb("losses").refusal,
         "H09: fixture discloses native action refusal",
@@ -469,6 +469,8 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
         "H09: even direct invocation cannot write native",
       ).rejects.toThrow(/Fixture/);
       mounted.page.subject({ kind: "ids", ids: [] });
+      await vi.waitFor(() => expect(mounted.value().publication, "H09: changed scope retains fixture provenance")
+        .toMatchObject({ origin: { kind: "fixture", name: "layout" }, coverage: { requested: [] } }));
       expect(
         j.host.nativeCalls,
         "H09: fixture selection and attempted write never call native",
@@ -476,14 +478,14 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     } finally {
       mounted.dispose();
     }
-    expect(
-      () =>
-        mountTypedRoute(fans, { ...j.input, fixture: "not-a-fixture" }, j.fingerprint, {
-          work: j.work,
-          sources: { "fans.sheet": j.source },
-        }),
-      "H09: missing fixture refuses before mounting instead of using live inputs",
-    ).toThrow("No fixture 'not-a-fixture'");
+    const missing = mountTypedRoute(fans, { ...j.input, fixture: "not-a-fixture" }, j.fingerprint, {
+      work: j.work,
+      sources: { "fans.calc": j.source },
+    });
+    try {
+      await vi.waitFor(() => expect(missing.value(), "H09: missing fixture refuses instead of using live inputs")
+        .toMatchObject({ state: "refused", reason: expect.stringContaining("No fixture 'not-a-fixture'") }));
+    } finally { missing.dispose(); }
     expect(j.host.nativeCalls, "H09: missing fixture never dispatches native").toBe(calls);
   } finally {
     await j.close();
@@ -492,9 +494,13 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
 
 async function compareSystemAnswers() {
   // Existing native-shaped purpose capture, with the same shared-fan variant as system-list.test.ts.
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse(savedNetwork);
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...savedNetwork, vocabulary: VOCABULARY });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
     element.uniqueId ||= `jx-native-${element.id}`;
+  // The saved capture's unit connector reads `bidirectional`, so the roster finds no fan port and both
+  // systems read "Rule a fan to price this system". H23 is about a fan two systems share: give it one.
+  for (const node of snapshot.nodes)
+    if (node.kind === "equipment") for (const port of node.connectors) port.direction = "out";
   snapshot.groups[0]!.systemNames.push("SA 2");
   snapshot.systems.push({ ...snapshot.systems[0]!, id: 501, name: "SA 2" });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
@@ -567,10 +573,17 @@ async function compareSystemAnswers() {
       { route: "fans", binding: "address", target: path },
       "fans",
       "human",
-      [30, 31].map((id, i) => ({
-        path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
-        value: { value: { inWg: i ? 0.35 : 0.05 } },
-      })),
+      [
+        ...[30, 31].map((id, i) => ({
+          path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
+          value: { value: { inWg: i ? 0.35 : 0.05 } },
+        })),
+        // Stated drops price refused fitting losses; P-107 (A) preserves any rule-priced Cs.
+        ...[21, 22].map((id) => ({
+          path: ["componentDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
+          value: { value: { inWg: 0.01 } },
+        })),
+      ],
       0,
     );
     expect(staged.ok).toBe(true);
@@ -586,20 +599,28 @@ async function compareSystemAnswers() {
     const result = ductsPricingData.parse(valueOf(mount.value()));
     const first = result.analysis.systems.find((row) => row.name === "SA 1")!;
     const second = result.analysis.systems.find((row) => row.name === "SA 2")!;
+    expect(result.calcs.map((calc) => calc.fan.unitId), "H23: the shared fan has one calc").toEqual([1]);
+    expect(second.total, "H23: the second system reads its own worst run on the fan's calc").toBeGreaterThan(0.35);
+    // RULES.md P-107 (A): 822ca517 added the typed Cs fallback; eeb8ea21 restricted it to
+    // refused legs and disclosed it. The refused straight Cs at 22 takes the typed drop,
+    // with disclosure. SA 1 prices its own run through that tap, including its own terminal.
+    expect(first.total, "H23: SA 1 prices its own run").toBeCloseTo(0.0778, 4);
+    expect(first.total, "H23: sharing a fan does not copy the other system's pressure").toBeLessThan(second.total!);
     expect(
-      first.total,
-      "H23: sharing a fan does not copy the other system's pressure",
-    ).toBeLessThan(second.total!);
+      result.calcs[0]!.legs["10:1>2"]!.lossSource.ref,
+      "H23: SA 1 discloses the typed substitution for the refused straight leg at 22",
+    ).toContain("typed drop from 22 (Cs refused: SD5-9 Cs is not loaded); Work:0");
+    expect([first.fanless, second.fanless], "H23: both systems are reached by the fan's calc").toEqual([false, false]);
     expect(
-      first.split!.rows.some((row) => row.id === 30),
-      "H23: first system retains its own terminal",
+      second.split!.rows.some((row) => row.id === 31),
+      "H23: second system retains its own terminal",
     ).toBe(true);
     expect(
-      first.split!.rows.some((row) => row.id === 31),
-      "H23: first system excludes the second terminal",
+      second.split!.rows.some((row) => row.id === 30),
+      "H23: second system excludes the first terminal",
     ).toBe(false);
     expect(
-      result.priced.flows["30"]?.source,
+      result.survey.flows["30"]?.source,
       "H23: terminal flow retains its provenance",
     ).toBeTruthy();
     expect(
@@ -641,14 +662,14 @@ async function closeDocumentLifetime() {
           ),
   });
   const unregister = registeredReads.register(
-    registeredReads.reads.has(fansSheet.name) ? {} : { fansSheet },
+    registeredReads.reads.has(fansCalc.name) ? {} : { fansCalc },
   );
   const read = (target: unknown) =>
     host.probe({
-      read: "fans.sheet",
+      read: "fans.calc",
       subscription: "jx-lifetime",
       generation: 1,
-      args: { target, fan: [], sheetPath: "" },
+      args: { target, fan: [], calcPath: "" },
     });
   try {
     expect((await read(ref)).status, "H17: the resolved document lifetime is readable").toBe(200);
@@ -679,6 +700,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
   const target = { session: "session-a", openId: "open-a" };
   const key = bindWork("families", path, undefined, target);
   const workspace = new RouteWorkspace({
+    publicationAuthor: () => "human",
     registrations: [],
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });
@@ -988,7 +1010,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 }, 60_000);
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
-  const { nativeFixture } = await import("../../../host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-native.fixture");
   const { BridgeError } = await import("../../../host/src/bridge");
   const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");
@@ -1027,7 +1049,7 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
         expect(attempts).toBe(1);
       } finally { await server.close(); await queueJournal.close(); }
       const work = { key: f.key, revision: 0 };
-      const changed = await f.saved.apply(f.key, "ducts", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
+      const changed = await f.saved.apply(f.key, "duct-systems", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
       expect(changed.ok).toBe(true);
       const response = await f.post("/actions", { id: "jz-conflict", key: "sheet.apply", target: f.target, input: { work } });
       expect(response.ok).toBe(true);
@@ -1055,9 +1077,9 @@ test("JZ registry publishes fan roster and sheet through the shared read door on
     const roster = await read("fans.roster", { target: ref });
     const fan = roster.value.data.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
     expect(fan).toBeTruthy();
-    const sheet = await read("ducts.sheet", { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex });
+    const sheet = await read("fans.calc-detail", { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex });
     expect(sheet.value.data).toHaveProperty("basis");
-    const fans = await read("fans.sheet", { target: ref, fan: [], sheetPath: "" });
+    const fans = await read("fans.calc", { target: ref, fan: [], calcPath: "" });
     expect(fans.value.data.rows.length).toBeGreaterThan(0);
     for (const path of retiredReads.paths) {
       const response = await f.request(new Request(`http://host${path}`, { method: "POST", body: "{}" }));

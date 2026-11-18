@@ -403,7 +403,7 @@ export function RouteHelpButton({ docs, name, utilities = false }: HelpProps) {
   const owner = useContext(TeachPage);
   const target = useContext(TeachTarget);
   const page = owner ?? target ?? appPage;
-  // The trigger's own reference teaches its page while nothing is measured (Pea docked on /ducts).
+  // The trigger's own reference teaches its page while nothing is measured.
   const reference = useContext(TeachReference);
   useEffect(() => {
     const help = { docs, name, utilities, reference };

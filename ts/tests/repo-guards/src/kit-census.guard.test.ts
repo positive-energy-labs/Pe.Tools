@@ -30,7 +30,7 @@ type Rule = {
   cannotSee: string;
 };
 const allow = (entries: Record<string, string>): Allow[] =>
-  Object.entries(entries).map(([glob, reason]) => ({ glob: W + glob, reason }));
+  Object.entries(entries).map(([glob, reason]) => ({ glob: glob.startsWith("products/") ? glob : W + glob, reason }));
 
 // prettier-ignore
 const RULES: Rule[] = [
@@ -77,7 +77,7 @@ const RULES: Rule[] = [
     cannotSee: "Reads through helpers the frame callbacks call; pane-resize.test counts layout reads per drag frame and the browser trace counts forced layouts." },
   { id: "projection-sources-no-layout", doctrine: "N6",
     pattern: /(?<!function )\buse(?:Dom)?Projection\((?:(?!\n\s*\);)[\s\S])*?\b(?:getBoundingClientRect|getComputedStyle|domSpans|(?:client|offset)(?:Top|Left|Height|Width))\b/g,
-    roots: [K + "**/*.tsx", W + "**/*.tsx"], allow: [],
+    roots: [K + "**/*.tsx", "products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [],
     cannotSee: "Reads behind a named helper a source calls; scroll.test counts getBoundingClientRect inside frames on a filter change." },
   { id: "scroll-frame-callbacks", doctrine: "N6", pattern: /requestAnimationFrame\((?!draw\)|follow\))/g,
     roots: [K + "components/lang/scroll.tsx"], allow: [],
@@ -94,10 +94,10 @@ const RULES: Rule[] = [
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Computed pixel widths or clipped controls; browser CH2/SS1 remains required." },
 
   { id: "claim-title-not-sentence", doctrine: "I6", pattern: /title:\s*(?:\w+\.)*claim\.text\b|\bclaimLine\(/g,
-    roots: [W + "ducts/**/*.{ts,tsx}"], allow: [],
+    roots: ["products/*/web/{src/**/*,route}.{ts,tsx}"], allow: [],
     cannotSee: "Aliased text fields, computed titles or sentence-like authored titles; D18 mounted proof covers the claim schema and row hint." },
   { id: "help-table-owner", doctrine: "P1", pattern: /grid-cols-\[|<(?:table|thead|tbody|tr|th|td)\b/g,
-    roots: [W + "ducts/{compare-table,docs}.tsx"], allow: [],
+    roots: ["products/ducts/web/src/{compare-table,docs}.tsx"], allow: [],
     cannotSee: "Aliased tables or computed grids; mounted Help tests cover kit cell labels, browser TU3 measures overflow." },
   { id: "table-narrow-default", doctrine: "L3", pattern: /^(?![\s\S]*@container pe-table \(max-width: 36rem\))[\s\S]/g,
     roots: [K + "components/lang/lang.css"], allow: [],
@@ -109,9 +109,9 @@ const RULES: Rule[] = [
     pattern: /^(?![\s\S]*\[data-list-bar\]\s*\{[^}]*position:\s*sticky;)[\s\S]/g,
     roots: [K + "components/lang/lang.css"], allow: [], cannotSee: "Rendered scroll bounds, stacking or height; mounted tests cover measured search headroom." },
   { id: "list-search-no-sticky-switch", doctrine: "P1", pattern: /\bsticky\??\s*[:=]|<(?:ListView|PlainList|ListBar|TableFrame)\b[^>]*\bsticky\b/g,
-    roots: [K + "components/lang/list-{view,search}.tsx", W + "**/*.tsx"], allow: [], cannotSee: "Aliased or spread props; no sticky switch exists in the list contract." },
+    roots: [K + "components/lang/list-{view,search}.tsx", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [], cannotSee: "Aliased or spread props; no sticky switch exists in the list contract." },
   { id: "list-sticky-css-owner", doctrine: "P1", pattern: /\[data-list-(?:bar|search|section-head)\][^{}]*\{[^}]*position:\s*sticky/g,
-    roots: [W + "**/*.css"], allow: [], cannotSee: "Utility classes, computed selectors or declarations through aliases." },
+    roots: ["{apps/web/src,products/*/web/src}/**/*.css"], allow: [], cannotSee: "Utility classes, computed selectors or declarations through aliases." },
   { id: "pane-and-picture-stillness", doctrine: "N6",
     pattern: /settle\(next\);\s*if \(commit|onResize=\{state\.resizeTo\}|export function PictureStage\(/g,
     roots: [K + "components/lang/pane-resize.tsx", W + "scene/stage-controller.ts"], allow: [],
@@ -133,7 +133,7 @@ const RULES: Rule[] = [
     ],
     cannotSee: "Computed overflow, web call sites (phase 2) or a Tailwind alias; scroll.test.tsx throws for a list under a foreign scroller." },
   { id: "scrollbar-owner", doctrine: "N8", pattern: /scrollbar-width|::-webkit-scrollbar|scrollbar-color/g,
-    roots: [W + "**/*.css", K + "**/*.css"], allow: [
+    roots: ["{apps/web/src,products/*/web/src}/**/*.css", K + "**/*.css"], allow: [
       { glob: K + "components/lang/lang.css", reason: "`[data-scroll]` hides its native bar; the hover ink rule is the backstop for phase-2 scrollers." },
       { glob: K + "base.css", reason: "Thin transparent default for third-party DOM." },
       { glob: K + "design-lang.css", reason: "`no-scrollbar` utility for inline-axis strips; phase 2 retires it." },
@@ -142,7 +142,7 @@ const RULES: Rule[] = [
     cannotSee: "Inline styles or computed scrollbar geometry; `Scroll` logs a resurrected native gutter in development." },
   { id: "scrollbar-no-item-dom", doctrine: "I2",
     pattern: /data-minimap-host|data-minimap="rows"|MinimapMark|MINIMAP_FROM|reportRange/g,
-    roots: ["{apps,packages}/*/src/**/*.{ts,tsx,css}"], allow: [],
+    roots: ["{apps/*,packages/*,products/*/*}/src/**/*.{ts,tsx,css}"], allow: [],
     cannotSee: "Marks drawn through another name; scroll.test.tsx counts the strip's DOM." },
   { id: "scrollbar-canvas-only", doctrine: "I2", pattern: /\.map\(|createPortal|\.prepend\(/g,
     roots: [K + "components/lang/scroll.tsx"], allow: [],
@@ -204,11 +204,11 @@ const RULES: Rule[] = [
     cannotSee: "Other fallback spellings or layout; integration tests cover withdrawal without rehoming." },
   { id: "selection-never-jumps", doctrine: "N1",
     pattern: /const select = useCallback\([\s\S]*?jump\.current[\s\S]*?\);|if \(into === page\.system && jump\.current\)/g,
-    roots: [W + "ducts/proto/e/screen.tsx"], allow: [],
+    roots: ["products/duct-systems/web/src/screen/screen.tsx"], allow: [],
     cannotSee: "Aliased callbacks or renderer gestures; the route test checks the selected address and committed pose." },
   { id: "ruling-selects-row", doctrine: "N4",
     pattern: /pick:\s*\(\)\s*=>\s*onSelect\(item\.ids\[0\]/g,
-    roots: [W + "ducts/proto/e/inbox.tsx"], allow: [],
+    roots: ["products/duct-systems/web/src/screen/inbox.tsx"], allow: [],
     cannotSee: "Other first-subject spellings or visual selection; the route test checks both subjects through the picture." },
   { id: "picture-retention-document-custody", doctrine: "N6",
     pattern: /const pictureKey = native\b|lastPicture|cloneElement\(holding\.view/g,
@@ -231,14 +231,14 @@ const RULES: Rule[] = [
     cannotSee: "Correct counts, native geometry coverage, distance ordering or advisory visibility; hook tests cover count forwarding." },
   { id: "tutorial-facts-from-primitives", doctrine: "P1",
     pattern: /\b\w+_(?:KEYS|MODES|VIEWS)\s*(?::[^=;]+)?=\s*\[|\{(?:SPACE_LAYERS|ENCODINGS)\.map\(/g,
-    roots: [W + "**/*docs*.tsx", W + "**/manifest.tsx"], allow: [],
+    roots: ["{apps/web/src,products/*/web/src}/**/*docs*.tsx", "{apps/web/src,products/*/web/src}/**/manifest.tsx"], allow: [],
     cannotSee: "Aliased or computed lists, prose that repeats a control, hidden DOM and rendered geometry; mounted registry tests cover lifecycle." },
   { id: "subject-kind-id", doctrine: "I1", pattern: /\$\{[^}\n]*\bkind\} \$\{[\w.]+\.id\}/g,
-    roots: [W + "ducts/**/*.{ts,tsx}", "packages/ducts-domain/src/**/*.ts"], allow: [],
+    roots: ["products/*/web/{src/**/*,route}.{ts,tsx}", "products/*/domain/src/**/*.ts"], allow: [],
     cannotSee: "Concatenated ids, runtime names and prose received from Revit." },
   { id: "work-outside-floaters", doctrine: "N6",
     pattern: /<(?:PaneOverlay|Floater)\b(?:(?!<\/(?:PaneOverlay|Floater)>)[\s\S])*?\brole=["']status["']/g,
-    roots: [W + "**/*.tsx"], allow: [],
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [],
     cannotSee: "Status components hidden behind imports, aliases, and DOM placement after portals." },
   { id: "composer-control-local-outcome", doctrine: "L3",
     pattern: /data-composer-(?:refusal|tools)|<Textarea\b[\s\S]*?\/>\s*(?:\{(?:refusal|tools)\b|<(?!\/)[A-Za-z])/g,
@@ -250,26 +250,26 @@ const RULES: Rule[] = [
     allow: [{ glob: W + "scene/grounds.ts", reason: "One owner for subject/context materials, marker alpha and mask channel values." }],
     cannotSee: "Computed literals, GLSL expressions, token values or rendered contrast/occlusion." },
   { id: "label-placement-owner", doctrine: "L3", pattern: /while\s*\(|taken\.some|clear\(box\)/g,
-    roots: [W + "ducts/{annotations,subject-labels}.tsx"], allow: [],
+    roots: ["products/ducts/web/src/{annotations,subject-labels}.tsx"], allow: [],
     cannotSee: "Computed placement or visual overlaps; only the former local collision loops are scanned." },
   { id: "css-damage-owner", doctrine: "I2", pattern: /pe-damage-beat|\[data-damage\]/g,
-    roots: [W + "**/*.css", K + "**/*.css"],
+    roots: ["{apps/web/src,products/*/web/src}/**/*.css", K + "**/*.css"],
     allow: [{ glob: K + "components/lang/lang.css", reason: "One shared critical-damage mark owns the pulse and selectors." }],
     cannotSee: "Computed appearance and animation." },
   { id: "subject-fallback-ids", doctrine: "I1", pattern: /(?:element|region) \$\{/g,
-    roots: [W + "**/*.tsx"], allow: [], select: "subject-fallbacks",
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [], select: "subject-fallbacks",
     cannotSee: "Fallback helpers, direct names and computed labels; checks literal logical/ternary fallbacks only." },
   { id: "picture-furniture-floater", doctrine: "L2",
     pattern: /^(?![\s\S]*\binset-[xy]-)(?=[\s\S]*\babsolute\b)(?=[\s\S]*(?:^|\s)(?:left|right|top|bottom)-\d)[\s\S]+$/g,
-    roots: [W + "**/*.tsx"], select: "classes",
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], select: "classes",
     allow: [
-      { glob: W + "ducts/annotations.tsx", selector: ".absolute.left-0.top-0", reason: "SVG marks stay registered to the picture origin." },
+      { glob: "products/ducts/web/src/annotations.tsx", selector: ".absolute.left-0.top-0", reason: "SVG marks stay registered to the picture origin." },
       { glob: W + "rooms/sketch.tsx", selector: ".absolute.left-0.top-0", reason: "SVG sketch shares the picture origin." },
       { glob: W + "grounded-doc/view/block-markdown.tsx", selector: ".absolute.left-2.top-1/2", reason: "Link glyph marks its own text block." },
       { glob: W + "grounded-doc/view/page-pane.tsx", selector: ".absolute.left-0.5.top-0.5", reason: "Block-kind glyph marks its document rectangle." },
     ], cannotSee: "Computed classes or browser geometry." },
   { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,
-    roots: [W + "**/*.tsx"], allow: allow({
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: allow({
       "components/lang/conversation.tsx": "MessageBubble owns the theme-aware user-message plane; document is light-only paper.",
       "revit/element-menu.tsx": "Native action portal has no pane ancestor from which to infer its plane.",
       "machine/notice.tsx": "Detached notification portal has no pane ancestor.",
@@ -279,11 +279,11 @@ const RULES: Rule[] = [
     pattern: /(?:^|;)\s*(?:(?:min-|max-)?(?:width|height)|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?|border(?:-[\w-]+)?-width)\s*:/g,
     roots: [K + "**/*.css"], select: "hover-css", allow: [], cannotSee: "Nested CSS, inherited dimensions and media-query interactions." },
   { id: "web-hover-handler", doctrine: "N7", pattern: /onMouseEnter|onPointerEnter|onMouseOver/g,
-    roots: [W + "**/*.tsx"], allow: [
-      { glob: W + "{ducts/schematic,family/anatomy-model-views,rooms/plan,takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [
+      { glob: "{products/ducts/web/src/schematic,apps/web/src/family/anatomy-model-views,apps/web/src/rooms/plan,apps/web/src/takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
       ...allow({
         "scene/footnotes.tsx": "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
-        "ducts/proto/e/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
+        "products/duct-systems/web/src/screen/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
         "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
         "family/doc-pane.tsx": "Evidence engine owns document hover.",
         "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
@@ -295,7 +295,7 @@ const RULES: Rule[] = [
     ], cannotSee: "Event aliases, hit-test correctness and computed paint." },
   { id: "focus-ring-owner", doctrine: "L3",
     pattern: /(?:^|;)\s*(?:outline(?:-[\w-]+)?|box-shadow|--dl-cell-ring)\s*:(?!\s*(?:none|var\(--shadow-))/g,
-    roots: [K + "**/*.css", W + "**/*.css"], select: "focus-css", allow: [
+    roots: [K + "**/*.css", "{apps/web/src,products/*/web/src}/**/*.css"], select: "focus-css", allow: [
       { glob: K + "base.css", reason: "The one focus ring owner." },
       { glob: K + "components/lang/pane.css", reason: "The active-pane halo marks scope, not a focused control." },
     ], cannotSee: "Nested CSS, inline styles and outline set from script." },
@@ -304,13 +304,13 @@ const RULES: Rule[] = [
   // `animation` (landing) or a rule that yields to focus may use outline.
   { id: "state-outline-yields-to-focus", doctrine: "L3",
     pattern: /(?:^|;)\s*outline(?:-[\w-]+)?\s*:(?!\s*none)/g,
-    roots: [K + "**/*.css", W + "**/*.css"], select: "state-css", allow: [
+    roots: [K + "**/*.css", "{apps/web/src,products/*/web/src}/**/*.css"], select: "state-css", allow: [
       { glob: K + "base.css", reason: "The one focus ring owner." },
     ],
     cannotSee: "Outline set from script or by utilities; the browser walk of a damaged cursor row pins the paint." },
   { id: "focus-ring-classes", doctrine: "L3",
     pattern: /(?:^|\s)(?:group-|peer-)?focus(?:-visible|-within)?:(?:outline(?!-none)|ring|shadow|border)\S*/g,
-    roots: [K + "**/*.tsx", W + "**/*.tsx"], allow: [],
+    roots: [K + "**/*.tsx", "products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [],
     cannotSee: "Class strings assembled at runtime; the CSS row sees stylesheets only." },
   { id: "focus-ring-stops", doctrine: "L3", pattern: /outline-none|group-focus-visible:bg|data-face="bar"\]:focus|:not\(\[data-face="bar"\]\)/g,
     roots: [K + "components/lang/pane-resize.tsx", K + "base.css", K + "components/lang/lang.css"], allow: [],
@@ -320,7 +320,7 @@ const RULES: Rule[] = [
   { id: "kit-reach-block", doctrine: "N7", pattern: /:hover/g,
     roots: [K + "**/*.css"], select: "reach", allow: [], cannotSee: "Cascade precedence and runtime reach transitions." },
   { id: "t-prose-ratchet", doctrine: "I6", pattern: /\bt-prose\b/g,
-    roots: [W + "**/*.{ts,tsx}"], asOf: "2026-10-23",
+    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}"], asOf: "2026-10-23",
     exclude: [W + "{doc,docs,guide,tutorial,help,chat}/**"],
     allow: allow({
       "duct-loss/route.tsx": "Input labels, measured values, headings and equations name the calculation.",
@@ -347,46 +347,44 @@ const RULES: Rule[] = [
       [W + "workbench/question-form.tsx"]: 3,
     }, cannotSee: "Unclassed prose and whether a sentence belongs in Tutorial." },
   { id: "nav-list-kit", doctrine: "N3", pattern: /<ul\b|<li\b|role=["']list["']/g,
-    roots: [W + "**/*.tsx"], allow: allow({
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: allow({
       "components/lang/leg-strip.tsx": "Fixed receipt-stage chips have no picks or navigation.",
-      "ducts/docs.tsx": "Tutorial prose has no row navigation.",
-      "ducts/introduction.tsx": "Shared public tutorial prose has no row navigation.",
       "lib/schema-to-field-render/field-metadata.tsx": "Static validation messages have no picks.",
     }), cannotSee: "Rows built by helpers; ListReading is the wave-4 kit reading name." },
   { id: "list-column-width-owner", doctrine: "L3",
     pattern: /const\s+\w*(?:COL|COLUMNS)\w*\s*=\s*\{[^;]*?\bw-\d|<[^>]*data-list-column[^>]*className=["'][^"']*\bw-\d/g,
-    roots: [W + "**/*.tsx"], allow: [],
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [],
     cannotSee: "Aliased cell recipes, computed classes and rendered container-query layout." },
   { id: "list-owner", doctrine: "N4",
     pattern: /(?:setAttribute|removeAttribute)\(\s*["']data-landed["']|onChange:\s*\(search:\s*ListSearch/g,
-    roots: [W + "**/*.{ts,tsx}"], allow: [], cannotSee: "Computed attributes; kit lang/land.ts owns arrival." },
+    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}"], allow: [], cannotSee: "Computed attributes; kit lang/land.ts owns arrival." },
   { id: "slash-owner", doctrine: "N3", pattern: /hotkey:\s*["']\/["']|bindings:\s*\[\s*["']\/["']\s*\]/g,
-    roots: ["{apps,packages}/*/src/**/*.{ts,tsx}"], allow: [
+    roots: ["{apps/*,packages/*,products/*/*}/src/**/*.{ts,tsx}"], allow: [
       { glob: K + "components/lang/list-search.tsx", reason: "The list/search arbiter owns slash." },
       { glob: W + "chat/composer.tsx", reason: "Slash edits text and starts a skill menu inside the composer." },
     ], cannotSee: "Computed bindings and key aliases; lang/go-to.tsx uses the list arbiter." },
   { id: "native-title-hint", doctrine: "I5", pattern: /<title\b/g,
-    roots: [W + "**/*.tsx"], allow: [], cannotSee: "SVG generated by helpers or inside kit." },
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [], cannotSee: "SVG generated by helpers or inside kit." },
   { id: "crumb-handbuilt", doctrine: "I4", pattern: /data-e-crumb|^(?=[\s\S]*<ChevronRight\b)(?=[\s\S]*\b(?:crumb|breadcrumb)\b)/g,
-    roots: [W + "**/*.{ts,tsx}"], allow: [], cannotSee: "Other glyphs and computed breadcrumbs." },
+    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}"], allow: [], cannotSee: "Other glyphs and computed breadcrumbs." },
   { id: "picture-crumb-derived", doctrine: "I4", pattern: /<PaneCrumb\b[^>]*\bsegments\s*=/gs,
-    roots: [W + "**/*.tsx"], allow: [], cannotSee: "Spread props and aliases. Picture panes derive their scope, subject and selection in kit." },
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [], cannotSee: "Spread props and aliases. Picture panes derive their scope, subject and selection in kit." },
   { id: "picture-subject-box", doctrine: "I5", pattern: /<SubjectBox\b/g,
-    roots: [W + "**/*.tsx"], allow: [], cannotSee: "Aliases and spread-built providers; the picture pane supplies geometry through its reach channel." },
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [], cannotSee: "Aliases and spread-built providers; the picture pane supplies geometry through its reach channel." },
   { id: "scene-keys", doctrine: "N2",
     pattern: /hotkey:\s*["']F["']|how === "gesture" \? "replace" : "push"|navigateNativeHistory|hotkey:\s*["']Alt\+Arrow/g,
-    roots: [W + "**/*.{ts,tsx}"], exclude: [W + "scene/**", W + "navigation/**"], allow: [],
+    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}"], exclude: [W + "scene/**", W + "navigation/**"], allow: [],
     cannotSee: "Key aliases, callback-hidden navigation and actual camera/history behavior." },
   { id: "reading-list-adapter", doctrine: "N6", pattern: /.+/g,
-    roots: [W + "**/*.{ts,tsx}"], select: "reading-rows", allow: [],
+    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}"], select: "reading-rows", allow: [],
     cannotSee: "Cross-component props and imported projections; follows local aliases only." },
   { id: "row-revit-inferred", doctrine: "N4",
     pattern: /revit=\{\(\w+\)\s*=>\s*(?:\(?\w+(?:\.\w+)*\.(?:elementId|targetElementId)\s*==\s*null\s*\?\s*\[\]\s*:\s*)?(?:\[(?:\w+\.)+(?:elementId|targetElementId)\]|\w+\.ids)\)?\}/g,
-    roots: [W + "**/*.tsx"], allow: [],
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [],
     cannotSee: "Named callbacks, composite projections and aliased identity fields." },
   { id: "revit-target-attr", doctrine: "N4",
     pattern: /\bdata-revit-ids\s*=|<[^>]*className="contents"[^>]*\{\.\.\.revit|<[^>]*\{\.\.\.revit[^>]*className="contents"/gs,
-    roots: ["{apps,packages}/*/src/**/*.{ts,tsx}"], exclude: [K + "**"],
+    roots: ["{apps/*,packages/*,products/*/*}/src/**/*.{ts,tsx}"], exclude: [K + "**"],
     allow: [], cannotSee: "Spread-built props and scope correctness; kit lang/revit-target.tsx owns declarations." },
 ];
 
@@ -413,6 +411,10 @@ const sources = ["apps", "packages"]
       !/\/(?:prototypes|lab|design-system)\//.test(path) &&
       !path.startsWith(W + "routes/design-system"),
   );
+for (const product of readdirSync(join(ROOT, "products"))) {
+  const web = `products/${product}/web`;
+  sources.push(...walk(join(ROOT, web), web));
+}
 for (const path of RULES.flatMap((rule) => rule.roots))
   if (!sources.includes(path) && existsSync(join(ROOT, path))) sources.push(path);
 const bytes = new Map(sources.map((path) => [path, readFileSync(join(ROOT, path), "latin1")]));

@@ -15,7 +15,7 @@ describe("familiesRouteState", () => {
     const doc = familiesRouteState.schema.parse(
       JSON.parse(
         JSON.stringify({
-          cells: { [key]: { edit: { value: { value: "3", storageType: "String" } } } },
+          cells: { [key]: { edit: { by: "human", value: { value: "3", storageType: "String" } } } },
         }),
       ),
     );
@@ -23,7 +23,7 @@ describe("familiesRouteState", () => {
     expect(patch.patch.types.T.Text).toBe("3");
     expect(
       familiesRouteState.schema.safeParse({
-        cells: { [key]: { edit: { value: { value: "3" } } } },
+        cells: { [key]: { edit: { by: "human", value: { value: "3" } } } },
       }).success,
     ).toBe(false);
   });
@@ -77,7 +77,7 @@ describe("familyStagedPatch", () => {
   it("stages a measured cell as { value, unit } and the patch carries the object", () => {
     const key = familyCellKey({ familyName: "AHU", typeName: "A", parameter: "Airflow" });
     const cell = familyCellStateSchema.parse({
-      edit: { value: { value: "300", unit: "CFM", storageType: "Double" } },
+      edit: { by: "human", value: { value: "300", unit: "CFM", storageType: "Double" } },
     });
     expect(cell.edit?.value).toEqual({ value: "300", unit: "CFM", storageType: "Double" });
     expect(familyStagedPatch({ [key]: cell }, "AHU")?.spec.patch.types).toEqual({

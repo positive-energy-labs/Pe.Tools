@@ -25,7 +25,7 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
     expect(readHostRequest("POST", "/call", { key: "ducts.tables", request: {} })).toBe(true);
     for (const [method, path, body] of [
       ["POST", "/call", { key: "ducts.apply" }],
-      ["POST", "/pe/route-state/ducts/apply", {}],
+      ["POST", "/pe/route-state/duct-systems/apply", {}],
       ["POST", "/host/shutdown", {}],
       ["GET", "/api/bridge", undefined],
     ] as const)
@@ -162,7 +162,7 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
         },
       });
     }
-    for (const path of ["/admin/shutdown", "/pe/route-state/ducts/apply", "/api/bridge"])
+    for (const path of ["/admin/shutdown", "/pe/route-state/duct-systems/apply", "/api/bridge"])
       expect((await fetch(`${origin}${path}`, { method: "POST", headers })).status).toBe(403);
     expect(forwarded).toHaveLength(1);
     const body = JSON.stringify({ add: [{ kind: "inventory" }], remove: [] });

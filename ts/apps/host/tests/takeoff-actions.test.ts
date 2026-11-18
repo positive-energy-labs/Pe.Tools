@@ -18,7 +18,7 @@ test.each(["initialize", "adopt", "partition"])("Takeoffs %s preview accepts rea
   const native = await fixtureNative(join(directory, "native"), "fresh-takeoffs.initialize-carrier", `fresh-${leaf}`);
   const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.takeoffs.work }], store: {
     getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
   } });
   const key = { binding: "address" as const, route: "takeoffs", target: address("C:/model.rvt") };
@@ -62,7 +62,7 @@ test.each(["selected", "unrelated", "none"] as const)(
     const regions = nativeRecordingRequest("fresh-rooms.write").regions as { guid: string; name: string }[];
     const a = roomEditKey(regions[0]!.guid, "name"), b = roomEditKey(regions[1]!.guid, "name");
     let state: unknown;
-    const work = new RouteWorkspace({ registrations: [{ spec: tools.rooms.work }], store: {
+    const work = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.rooms.work }], store: {
       getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
     } });
     const runs = testRegistry();
@@ -106,7 +106,7 @@ test("invalid derived room GUID refuses before the carrier can mutate the model"
   const native = await fixtureNative(join(directory, "native"), "fresh-takeoffs.initialize-carrier", "fresh-rooms.write");
   const socket = await native.connect();
   let state: unknown;
-  const work = new RouteWorkspace({ registrations: [{ spec: tools.rooms.work }], store: {
+  const work = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.rooms.work }], store: {
     getState: async () => state, setState: async ({ value }) => { state = value; },
   } });
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
@@ -123,7 +123,7 @@ test("foreign Rooms Work is refused by real action admission before native prepa
   const directory = await mkdtemp(join(tmpdir(), "pe-rooms-foreign-"));
   const native = await fixtureNative(join(directory, "native")); const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.rooms.work }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.rooms.work }], store: {
     getState: async () => state, setState: async ({ value }) => { state = value; },
   } });
   const key = { binding: "address" as const, route: "rooms", target: address("C:/another.rvt") };

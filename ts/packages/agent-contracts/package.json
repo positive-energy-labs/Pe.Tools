@@ -24,10 +24,6 @@
       "types": "./src/pe-api.ts",
       "import": "./src/pe-api.ts"
     },
-    "./product-map": {
-      "types": "./src/product-map.ts",
-      "import": "./src/product-map.ts"
-    },
     "./route-kernel-codecs": {
       "types": "./src/route-kernel-codecs.ts",
       "import": "./src/route-kernel-codecs.ts"
@@ -51,10 +47,6 @@
     },
     "./work-value": "./src/work-value.ts",
     "./space-view": "./src/space-view.ts",
-    "./ducts-guide": {
-      "types": "./src/ducts-guide.ts",
-      "import": "./src/ducts-guide.ts"
-    },
     "./value": "./src/value.ts",
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
     "./takeoff-read": "./src/takeoff-read.ts",
@@ -63,7 +55,12 @@
     "./tiered-setting": "./src/tiered-setting.ts",
     "./native-output-read": "./src/native-output-read.ts",
     "./setting-owners": "./src/setting-owners.ts",
-    "./criterion-words": "./src/criterion-words.neutral.ts"
+    "./criterion-words": "./src/criterion-words.neutral.ts",
+    "./draft": "./src/draft.ts",
+    "./slots/sheet": "./src/slots/sheet.ts",
+    "./route-kernel-data": "./src/route-kernel-data.ts",
+    "./route-kernel-bodies": "./src/route-kernel-bodies.ts",
+    "./route-kernel-page": "./src/route-kernel-page.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -80,7 +77,10 @@
   "dependencies": {
     "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6",
-    "effect": "4.0.2"
+    "effect": "4.0.2",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

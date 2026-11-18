@@ -18,6 +18,7 @@ import { PopupFrame } from "@pe/kit/lang/list-popup";
 import { useAtomValue } from "@effect/atom-react";
 
 import { Button } from "@pe/kit/lang/button";
+import { Tag } from "@pe/kit/lang/chip";
 import { previousOf } from "#/host/resource-state";
 import { Ladder } from "#/route/ladder";
 import { useDocumentLadder } from "#/route/situation-ladder";
@@ -175,8 +176,10 @@ export function useChatSituation(handle: ChatHandle) {
   const threadLabel = missingThread
     ? ""
     : title || threads.find((item) => item.id === currentThreadId)?.title || currentThreadId;
+  const origin = handle.value.publication?.origin;
   return {
     head,
+    demo: typeof origin === "object" && origin !== null && "kind" in origin && origin.kind === "fixture",
     inventory,
     bound,
     ladder,
@@ -238,7 +241,9 @@ export function ComposerPickers({
   // A closed target names itself in the first empty slot, in the caution tone, and the picker
   // lists only the live inventory.
   const unbound = ladder.levels.findIndex((level) => level.label === null);
-  const levels = ladder.levels.map((level, index) =>
+  const levels = ladder.levels.map((level) => ({ ...level,
+    ...(situation.demo ? { provenance: <Tag>Demo</Tag> } : {}),
+  })).map((level, index) =>
     index === 0
       ? {
           ...level,

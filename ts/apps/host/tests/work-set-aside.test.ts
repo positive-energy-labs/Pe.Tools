@@ -130,3 +130,33 @@ test("Work that cannot be read is kept: it still exists, one notice posted, and 
     expect(await readFile(join(path, "inside.txt"), "utf8")).toBe("kept");
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+test("set-aside fans Work names every staged row in its one notice, and the bytes are kept", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")), spec = fansRouteState;
+  const store = fileRouteDocumentStore(stateFixture(dir));
+  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  try {
+    await store.setState({ targetKey, route: spec.route, value: { version: 1, schemaVersion: spec.schemaVersion - 1, revision: 2, history: [],
+      doc: { esp: { unitA: { edit: { value: { inWg: 0.5 } } } }, terminalDrops: { grille: { edit: { value: { inWg: 0.03, source: "firm table 4" }, by: "human" } } } } } });
+    const path = join(dir, (await readdir(dir))[0]!), prior = await readFile(path);
+    expect(await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(key, spec.route)).toBeNull();
+    expect(await readFile(blobOf(prior, path))).toEqual(prior);
+    expect(posted(path)).toHaveLength(1);
+    expect(posted(path)[0]!.reason).toContain("Set aside 2 staged rows of fans: esp/unitA by nobody; terminalDrops/grille by human source firm table 4.");
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test("a stored legacy { cfm, source } airflow is set aside at the current schema and listed once, not decoded", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")), spec = fansRouteState;
+  const store = fileRouteDocumentStore(stateFixture(dir));
+  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  try {
+    await store.setState({ targetKey, route: spec.route, value: { version: 1, schemaVersion: spec.schemaVersion, revision: 2, history: [],
+      doc: { ...spec.schema.parse({}), equipmentFlows: { unitA: { edit: { value: { cfm: 900, source: "balancing report" } } } } } } });
+    const path = join(dir, (await readdir(dir))[0]!), prior = await readFile(path);
+    expect(await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(key, spec.route)).toBeNull();
+    expect(await readFile(blobOf(prior, path))).toEqual(prior);
+    expect(posted(path)).toHaveLength(1);
+    expect(posted(path)[0]!.reason.split("equipmentFlows/unitA by nobody source balancing report.")).toHaveLength(2);
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});

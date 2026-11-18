@@ -69,10 +69,10 @@ import {
   admitAnonymousCall,
 } from "./control.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
-import { ductBodySubject, type DuctsBodyBasisSource } from "./ducts-body-basis.ts";
-import { DuctFiles } from "./ducts-files.ts";
-import type { DuctsReadings } from "./ducts-readings.ts";
-import { ductsReadings, isRetainedReadFailure } from "./ducts-readings.ts";
+import { ductBodySubject, type DuctsBodyBasisSource } from "@pe/ducts-host/ducts-body-basis";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import type { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { ductsReadings, isRetainedReadFailure } from "@pe/ducts-host/ducts-readings";
 
 import type { FamiliesReader } from "./families-reader.ts";
 import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";

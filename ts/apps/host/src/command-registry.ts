@@ -15,7 +15,7 @@ import { familyExecutors, type FamilyActionDependencies } from "./family-actions
 import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
-import { ductsExecutors } from "./ducts-actions.ts";
+import { productExecutors } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
@@ -31,11 +31,12 @@ import { catalogWorkSpecs, commands, type WriteBoundaryBinding } from "@pe/agent
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
+type CommandDependencies = FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] },
+  deps: CommandDependencies,
   local: GatewayLocal,
   origin?: () => string,
 ): CommandRegistry {
@@ -55,18 +56,18 @@ export function commandRegistry(
       deps.pictures!,
     ),
   };
-  // The ducts losses half of the sheet pair answers through the sheet dispatcher, not as its own entry.
-  const ducts = ductsExecutors(bridge, deps) as Record<string, CommandExecutor>;
-  const ductsWithoutSheet = Object.fromEntries(
-    Object.entries(ducts).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
+  // Product-owned sheet writes answer through the generic sheet dispatcher.
+  const products = productExecutors(bridge, deps);
+  const productsWithoutSheet = Object.fromEntries(
+    Object.entries(products.executors).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
   );
   for (const group of [
     familyExecutors(captures, bridge, deps),
     scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
-    ductsWithoutSheet,
-    sheetExecutors(bridge, deps, ducts),
+    productsWithoutSheet,
+    sheetExecutors(bridge, deps, products.executors, products.sheetRoutes),
     catalogWorkExecutors(bridge, deps),
     findingsExecutors(deps.workspace, bridge),
   ]) {

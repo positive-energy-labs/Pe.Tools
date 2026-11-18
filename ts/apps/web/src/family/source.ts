@@ -192,7 +192,7 @@ export function familySource(
     const suggestion = field.edit;
     const shared = {
       id: pointer,
-      by: field.edit.by ?? "unknown",
+      by: field.edit.by,
       current: heldAt(reading, parts),
       proposed:
         typeof suggestion.value === "string"

@@ -10,5 +10,5 @@
     "strict": true,
     "noEmit": true
   },
-  "include": ["src/schema-names.guard.test.ts"]
+  "include": ["src/schema-names.guard.test.ts", "src/route-closure*.ts", "src/product-names.guard.test.ts", "src/product-layers*.ts"]
 }

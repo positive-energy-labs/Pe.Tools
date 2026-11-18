@@ -14,7 +14,7 @@ test.each(["current", "moved"] as const)("recorded parameter-links %s base runs 
   const native = await fixtureNative(join(dir, "native"), "sdk-revit.detail.parameter-links", "sdk-revit.apply.parameter-links");
   const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: catalogWorkSpecs["parameter-links"] }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: catalogWorkSpecs["parameter-links"] }], store: {
     getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
   } });
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "parameter-links" };
@@ -51,7 +51,7 @@ test("data-table governor refuses the real plan before any native request", asyn
   const dir = await mkdtemp(join(tmpdir(), "pe-data-table-refused-"));
   const native = await fixtureNative(join(dir, "native")); const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: catalogWorkSpecs["data-tables"] }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: catalogWorkSpecs["data-tables"] }], store: {
     getState: async () => state, setState: async ({ value }) => { state = value; },
   } });
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "data-tables" };

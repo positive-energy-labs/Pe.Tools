@@ -16,7 +16,7 @@ import {
 import { z } from "zod";
 import { leaf, read, assetFile } from "./reads/evaluator.ts";
 import { readingRequestSchema, chatValue, openData, opsData, bindData } from "@pe/agent-contracts";
-import { catalogReading } from "./ducts-files.ts";
+import { catalogReading } from "@pe/ducts-host/ducts-files";
 import { resourceContent } from "./resource-content.ts";
 const resource = <O extends z.ZodType>(output: O) => ({
   ...leaf("resource", readingRequestSchema, output),

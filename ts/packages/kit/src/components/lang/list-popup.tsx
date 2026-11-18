@@ -68,6 +68,8 @@ type ListProps<T> = Omit<CollectionOptions<T>, "target"> & {
   maxHeight?: string;
   /** A control above the crumbs and rows (the composer's target/open switch). */
   header?: ReactNode;
+  /** Optional mark beside a breadcrumb's bound word. */
+  crumbMark?: (depth: number) => ReactNode;
   /** Verbs under the rows that are not rows (the head picker's "Clear target"); a ladder's
    * footer may differ per rung. */
   footer?: ReactNode | ((level: number) => ReactNode);
@@ -239,6 +241,7 @@ export function List<T>(props: ListProps<T>) {
                   onClick={() => collection.backTo(depth)}
                 >
                   {word}
+                  {props.crumbMark?.(depth)}
                 </button>
               </span>
             );

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { stableFanKey } from "../ducts/sheet/model";
+import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { subjectRefCodeSchema } from "@pe/agent-contracts";
 import { test, expect, afterEach } from "vite-plus/test";
 import { waitFor } from "@testing-library/react";
@@ -7,9 +7,9 @@ import { createMemoryHistory } from "@tanstack/react-router";
 import { z } from "zod";
 import { subjectState } from "./subject";
 import { tabTitle } from "../workbench/route-tabs";
-import { admit } from "../fans/admission.fixture";
+import { admit } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import { mountTypedRoute } from "../shell/typed-mount";
-import { nativeTestAdapter } from "../fans/native.test-support";
+import { nativeTestAdapter } from "@pe/ducts-web/native.test-support";
 import { createWorkFeedClient } from "./work-feed-client";
 import { admittedRouterAddress } from "./typed-place-boundary";
 import { placeInput } from "./typed-place.test-support";

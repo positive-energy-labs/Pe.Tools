@@ -650,7 +650,7 @@ export const CHAT_SEED_THREAD_WORK = {
       threadId: "demo-review",
       documents: [{ id: "doc-ops", name: "Operations Demo.rvt", availability: "open" }],
       works: [
-        { id: "w-1", documentId: "doc-ops", route: "ducts", intent: "duct resize", unfinished: 2 },
+        { id: "w-1", documentId: "doc-ops", route: "duct-systems", intent: "duct resize", unfinished: 2 },
         {
           id: "w-2",
           documentId: "doc-ops",
@@ -668,14 +668,14 @@ export const CHAT_SEED_THREAD_WORK = {
         { id: "doc-plant", name: "Plant Room.rvt", availability: "closed" },
       ],
       works: [
-        { id: "w-3", documentId: "doc-l2", route: "ducts", intent: "supply path", unfinished: 0 },
+        { id: "w-3", documentId: "doc-l2", route: "duct-systems", intent: "supply path", unfinished: 0 },
       ],
     },
     {
       threadId: "fixture-ended",
       documents: [{ id: "doc-l1", name: "Level 1.rvt", availability: "closed" }],
       works: [
-        { id: "w-4", documentId: "doc-l1", route: "ducts", intent: "duct resize", unfinished: 4 },
+        { id: "w-4", documentId: "doc-l1", route: "duct-systems", intent: "duct resize", unfinished: 4 },
       ],
     },
   ],

@@ -109,14 +109,15 @@ test("versioned replay selects real facts, keeps overrides per circuit and inval
     },
     { v: SCHEMA_VERSION, type: "select", id: 91 },
     { v: 99, type: "set", key: "amps", value: "999" },
-    { v: SCHEMA_VERSION, type: "override", key: "size", value: "10" },
+    { v: SCHEMA_VERSION, type: "override", id: 92, key: "size", value: "10" },
   ];
   const state = events.reduce(circuitReduce, initialCircuitState);
   assert.equal(state.selectedId, 91);
-  assert.equal(state.overrides[91].size, "10");
+  assert.equal(state.overrides[92].size, "10");
+  assert.equal(state.overrides[91], undefined);
   assert.equal(state.reading.document.openId, "o");
   assert.equal(
-    circuitReduce({ ...state, proposal: {} }, { v: 1, type: "override", key: "size", value: "8" })
+    circuitReduce({ ...state, proposal: {} }, { v: 1, type: "override", id: 91, key: "size", value: "8" })
       .proposal,
     null,
   );

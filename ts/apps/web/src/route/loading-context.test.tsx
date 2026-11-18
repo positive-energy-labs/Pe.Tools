@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { module as ducts } from "../ducts/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as family } from "../family/route";
 import { publicRoutes } from "./route-discovery";
 for (const typed of [ducts, family])
@@ -15,7 +15,7 @@ import { peReadings } from "#/host/resource-stream";
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
 import { HelpWorld } from "./help";
 import { STARTUP_TEACHING, referenceTeaching } from "./teaching";
-const DUCTS_TEACHING = referenceTeaching("/ducts");
+const DUCTS_TEACHING = referenceTeaching("/duct-systems");
 import { useLocalDevice, RemoteDeviceGate, RecordedSourceChip } from "#/machine/devices";
 
 const host = vi.hoisted(() => ({ call: vi.fn(), fetch: vi.fn() }));
@@ -93,7 +93,7 @@ test.each([
 });
 
 test("route declarations replace rather than merge and unsupported routes never use Ducts", () => {
-  const view = render(<HelpWorld facts={referenceTeaching("/ducts")} />);
+  const view = render(<HelpWorld facts={referenceTeaching("/duct-systems")} />);
   expect(screen.getByRole("group", { name: "Page regions" })).toBeTruthy();
   expect(view.container.textContent).toContain("Design");
   view.rerender(<HelpWorld facts={referenceTeaching("/family")} />);

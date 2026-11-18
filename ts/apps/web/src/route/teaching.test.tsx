@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { module as ducts } from "../ducts/route";
+import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as family } from "../family/route";
 import { publicRoutes } from "./route-discovery";
 for (const typed of [ducts, family])
@@ -18,7 +18,7 @@ import {
 } from "@pe/kit/lang/teach";
 import { TeachPage, TeachReference, TeachTarget, useTeaching } from "@pe/kit/lang/use-teach";
 import { referenceTeaching } from "./teaching";
-const DUCTS_TEACHING = referenceTeaching("/ducts");
+const DUCTS_TEACHING = referenceTeaching("/duct-systems");
 test("route teaching names the declared design pane and never the retired e-inputs pane", () => {
   expect(DUCTS_TEACHING.some(fact => fact.kind === "region" && fact.id === "design")).toBe(true);
   expect(DUCTS_TEACHING.some(fact => fact.id === "e-inputs")).toBe(false);
@@ -201,7 +201,7 @@ test("measured shell panes cannot replace a route's still-loading declaration", 
     rect: { left: 0, top: 0, width: 400, height: 600 },
   });
   const view = render(
-    <TeachTarget value="/ducts">
+    <TeachTarget value="/duct-systems">
       <TeachReference value={DUCTS_TEACHING}>
         <Tutorial />
       </TeachReference>
@@ -217,12 +217,12 @@ test("empty measurements keep the reference; route changes exclude another retai
     kind: "region",
     id: "live",
     label: "Measured ducts",
-    page: "/ducts",
+    page: "/duct-systems",
     rect: { left: 0, top: 0, width: 500, height: 300 },
   };
   const withdraw = registerTeaching(a);
   const view = render(
-    <TeachPage value="/ducts">
+    <TeachPage value="/duct-systems">
       <TeachReference value={DUCTS_TEACHING}>
         <Tutorial />
       </TeachReference>
@@ -240,7 +240,7 @@ test("empty measurements keep the reference; route changes exclude another retai
   expect(view.container.textContent).toContain("Workspace");
   act(withdraw);
   view.rerender(
-    <TeachPage value="/ducts">
+    <TeachPage value="/duct-systems">
       <TeachReference value={DUCTS_TEACHING}>
         <Tutorial />
       </TeachReference>
@@ -256,7 +256,7 @@ test("a local chat tutorial owns its measured facts while tool chrome keeps the 
       kind: "region",
       id: "tool",
       label: "Measured ducts",
-      page: "/ducts",
+      page: "/duct-systems",
       rect: { left: 0, top: 0, width: 500, height: 300 },
     }),
     registerTeaching({
@@ -268,7 +268,7 @@ test("a local chat tutorial owns its measured facts while tool chrome keeps the 
     }),
   ];
   const view = render(
-    <TeachTarget value="/ducts">
+    <TeachTarget value="/duct-systems">
       <TeachReference value={DUCTS_TEACHING}>
         <div data-reader="tool">
           <Tutorial />

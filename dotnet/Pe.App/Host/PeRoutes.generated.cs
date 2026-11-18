@@ -76,9 +76,9 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Ducts: <c>/ducts</c>.</summary>
-    internal static class Ducts {
-        public const string Path = "/ducts";
+    /// <summary>Ducts: <c>/duct-systems</c>.</summary>
+    internal static class DuctSystems {
+        public const string Path = "/duct-systems";
         /// <summary>The URL keys a link may carry.</summary>
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
@@ -90,6 +90,7 @@ internal static class PeRoutes {
             public const string Layers = "layers";
             public const string Encoding = "encoding";
             public const string Picture = "picture";
+            public const string Fan = "fan";
             public const string System = "system";
             public const string Stage = "stage";
             public const string SystemSearch = "systemSearch";
@@ -157,7 +158,7 @@ internal static class PeRoutes {
             public const string InputSort = "inputSort";
             public const string RosterSearch = "rosterSearch";
             public const string RosterSort = "rosterSort";
-            public const string SheetPath = "sheetPath";
+            public const string CalcPath = "calcPath";
             public const string Selected = "selected";
         }
     }

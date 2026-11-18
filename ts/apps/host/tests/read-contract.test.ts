@@ -12,15 +12,39 @@ import {
   type InputPort,
 } from "../src/reads/evaluator.ts";
 import { Publications } from "../src/reads/publications.ts";
-import { readRegistry, registeredReads } from "../src/reads/routes.ts";
+import { readRegistry, registeredReads, graphRoute } from "../src/reads/routes.ts";
 import { hostRead } from "../../web/src/route/host-read.ts";
-import { sheet as fanSheet } from "../../web/src/fans/contract.ts";
+import * as fanContracts from "@pe/fans-contract/contract";
+import * as systemContracts from "@pe/duct-systems-contract/contract";
+import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
+import { peRoutes } from "@pe/agent-contracts/pe-api";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
-const contracts = Object.entries(
-  import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
-);
+const contracts = [
+  ...Object.entries(import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true })),
+  ["fans", fanContracts], ["duct-systems", systemContracts],
+] as const;
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
+test("every guide calc read resolves through pe-api and the registered host read", () => {
+  const apiInput = z.fromJSONSchema(peRoutes["reads.value"].catalog.discovery!.input!);
+  for (const read of Object.values(GUIDE_CALC_READS)) {
+    const args = read === GUIDE_CALC_READS.calc
+      ? { target: { session: "s", openId: "d" }, fan: [], calcPath: "" }
+      : { target: { session: "s", openId: "d" }, mode: "fan", unitId: 1, portIndex: 0 };
+    const raw = { read, args, subscription: `guide:${read}`, generation: 0 };
+    const request = peRoutes["reads.value"].body.parse(apiInput.parse(raw));
+    expect(apiInput.safeParse({ ...raw, args: {} }).success, read).toBe(false);
+    const definition = registeredReads.reads.get(read);
+    expect(definition, read).toBeDefined();
+    const bound = graphRoute("reads.value", request);
+    expect(bound.name).toBe(read);
+    expect(bound.args).toEqual(definition!.input.parse(args));
+  }
+});
+test.each(["ducts.sheet", "fans.sheet", "fans.worksheet"])("retired read %s is refused without an alias", read => {
+  expect(() => graphRoute("reads.value", { read, args: {}, subscription: "retired", generation: 0 }))
+    .toThrow(`Host read is not registered: ${read}`);
+});
 const port = (take: InputPort["take"]): InputPort => ({
   evaluation: "test",
   origin: {},
@@ -31,9 +55,9 @@ const port = (take: InputPort["take"]): InputPort => ({
 test("the browser door binds the target in the host contract's shape", () => {
   // Mutant: always forward ExecutionTarget, including to a contract that takes DocumentRef.
   const ref = { session: "s", openId: "d" };
-  const fans = hostRead(fanSheet);
-  expect(fans.input.parse({ fan: [], sheetPath: "" })).not.toHaveProperty("target");
-  expect(fans.request?.({ fan: [], sheetPath: "" }, { kind: "document", ref })).toMatchObject({ args: { target: ref } });
+  const fans = hostRead(fanContracts.calc);
+  expect(fans.input.parse({ fan: [], calcPath: "" })).not.toHaveProperty("target");
+  expect(fans.request?.({ fan: [], calcPath: "" }, { kind: "document", ref })).toMatchObject({ args: { target: ref } });
   const rooms = hostRead(roomsWorkspace);
   expect(rooms.request?.(rooms.input.parse({ view: "" }), { kind: "document", ref })).toMatchObject({ args: { target: { kind: "document", ref } } });
 });
@@ -43,7 +67,7 @@ test("each route's contract.ts declares the reads its host serves, with the host
   expect(contracts).toHaveLength(15);
   expect(handles.map((h) => h.key).sort()).toEqual([
     "bind.picker", "captures.browse", "chat.context", "duct-loss.result", "ducts.network",
-    "ducts.pricing", "ducts.roster", "families.view", "family.workspace", "fans.sheet",
+    "ducts.pricing", "ducts.roster", "families.view", "family.workspace", "fans.calc",
     "open.documents", "ops.workspace", "pods.author", "pods.roster", "rooms.workspace",
     "schedules.view", "settings.machine", "takeoffs.adoption", "takeoffs.views",
   ]);
@@ -57,8 +81,8 @@ test("each route's contract.ts declares the reads its host serves, with the host
   const axes = Object.fromEntries(handles.map((h) => [h.key, h.axes]));
   // Joined, not the one hand constant: a read that walks the model no longer says Cheap Metadata.
   expect(axes["chat.context"]).toEqual({ subject: "None", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" });
-  expect(axes["fans.sheet"]!.cost).toBe(native("ducts.snapshot.walk").axes.cost);
-  expect(axes["fans.sheet"]!.touches).toEqual(expect.arrayContaining([...native("ducts.snapshot.walk").axes.touches]));
+  expect(axes["fans.calc"]!.cost).toBe(native("ducts.snapshot.walk").axes.cost);
+  expect(axes["fans.calc"]!.touches).toEqual(expect.arrayContaining([...native("ducts.snapshot.walk").axes.touches]));
 });
 
 test("a composition whose uses cannot join throws at host registration", () => {

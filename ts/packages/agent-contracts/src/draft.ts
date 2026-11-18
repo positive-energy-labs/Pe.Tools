@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { authorSchema, type Author } from "./author.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { type RouteStatePatch } from "./route-state.ts";
 
@@ -19,16 +20,22 @@ const deletableRung = <V extends z.ZodType>(value: V) =>
 const oneWrite = (rung: { value?: unknown; delete?: true }) =>
   (rung.delete === true) !== Object.hasOwn(rung, "value");
 const ONE_WRITE = { error: "a rung sets a value or deletes the property: exactly one" };
-const CHANGE_META = {
-  by: z.enum(["human", "pea", "unknown"]).optional(),
+export { authorSchema, type Author } from "./author.ts";
+const CALLER_META = {
+  ref: z.string().min(1).refine(value => value.trim().length > 0, "cite a nonempty evidence ref").optional(),
   at: z.string().nullable().optional(),
   base: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullish(),
   confidence: z.enum(["high", "low"]).nullish(),
 };
+const CHANGE_META = { ...CALLER_META, by: authorSchema };
+/** Host-only tombstone for a cell whose original bytes were retained by the store. */
+export const invalidCellSchema = z.strictObject({ invalid: z.string().min(1) });
+export type InvalidCell = z.output<typeof invalidCellSchema>;
 const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) =>
   z
     .object({
+      invalid: z.string().min(1).optional(),
       edit: valueRung(value)
         .extend(CHANGE_META)
         .extend(extra)
@@ -36,10 +43,11 @@ const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra
         .refine(oneWrite, ONE_WRITE)
         .nullish(),
     })
-    .strict();
+    .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
 const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) =>
   z
     .object({
+      invalid: z.string().min(1).optional(),
       edit: deletableRung(value)
         .extend(CHANGE_META)
         .extend(extra)
@@ -47,7 +55,26 @@ const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, e
         .refine(oneWrite, ONE_WRITE)
         .nullish(),
     })
-    .strict();
+    .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
+
+/** Caller edit input: attribution belongs only to the stored cell, never to the request. */
+export function draftEditSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
+  value: V, options?: { deletable?: boolean; extend?: E },
+): ReturnType<typeof callerEdit<V, E>>;
+export function draftEditSchema(
+  value: z.ZodType, { deletable = false, extend = {} }: { deletable?: boolean; extend?: z.ZodRawShape } = {},
+) { return callerEdit(value, { deletable, extend }); }
+const callerEdit = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, { deletable, extend }: { deletable: boolean; extend: E }) => deletable
+  ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
+  : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
+
+/** Caller Work retains domain fields, but only the metadata admitted by draftEditSchema. */
+type CallerEdit<E> = E extends object
+  ? Omit<E, "by"> & { [K in Exclude<keyof Change, keyof z.output<ReturnType<typeof draftEditSchema>>>]?: never }
+  : E;
+export type CallerWorkValue<T> = T extends readonly unknown[]
+  ? { [K in keyof T]: CallerWorkValue<T[K]> }
+  : T extends object ? { [K in keyof T]: K extends "invalid" ? never : K extends "edit" ? CallerEdit<T[K]> : CallerWorkValue<T[K]> } : T;
 
 /** One staged edit; domain metadata (`extend`) may ride on it. */
 export function draftCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
@@ -71,9 +98,9 @@ export interface Rung {
   delete?: true;
 }
 
-export type Author = "human" | "pea" | "unknown";
 export type Change = Rung & {
   by?: Author;
+  ref?: string;
   at?: string | null;
   base?: number | null;
   note?: string | null;

@@ -3,7 +3,7 @@
  * captured live on 2026-08-17 (`seed-schedule-*.ts`); the pod, its folder, hashes, the receipt
  * and the Pea suggestion lane on the schedule member are fixture, on real pointers of those bytes.
  */
-import type { SettingsFieldState } from "@pe/agent-contracts";
+import type { CallerWorkValue, SettingsFieldState } from "@pe/agent-contracts";
 
 import { SCHEDULE_SEED_BYTES } from "./seed-schedule-content";
 import { SCHEDULE_SEED_CAPTURED_SCHEMA } from "./seed-schedule-schema";
@@ -15,7 +15,7 @@ import type { Run } from "./pods";
 export interface DemoSpec {
   content: string;
   schema: string;
-  fields?: Record<string, SettingsFieldState>;
+  fields?: Record<string, CallerWorkValue<SettingsFieldState>>;
 }
 
 const SCHEDULE_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
@@ -112,7 +112,7 @@ const SCHEDULE_SEED_RAW = SCHEDULE_SEED_BYTES;
  * One of each thing a reviewer must see on the schedule member: an open Pea suggestion (note and
  * confidence), a edit value, and a edit value long enough to trip the column-header budget.
  */
-const SCHEDULE_SEED_FIELDS: Record<string, SettingsFieldState> = {
+const SCHEDULE_SEED_FIELDS: Record<string, CallerWorkValue<SettingsFieldState>> = {
   "/ViewTemplateName": {
     edit: {
       value: "Schedule - PE Standard v2",

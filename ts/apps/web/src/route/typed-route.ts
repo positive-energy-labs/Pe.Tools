@@ -273,6 +273,8 @@ export type Specification<
   V extends Readonly<Record<string, CommandHandle>> = Readonly<Record<string, CommandHandle>>,
 > = {
   key: string;
+  /** Saved Page vocabulary that this product explicitly retired, without aliases. */
+  retiredPage?: { readonly fields?: readonly string[]; readonly values?: Readonly<Record<string, readonly string[]>> };
   address?: string;
   name: string;
   /** Person-only surfaces opt out of both builtin and admitted Page leases. */

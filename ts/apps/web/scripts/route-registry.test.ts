@@ -27,7 +27,7 @@ test("one row per builtin: static closure and host read imports, the work projec
 test("a host read outside the route directory is refused; a duplicate key is refused", () => {
   const row = { key: "fans", folder: "fans" };
   expect(() => renderRouteRegistry([{ ...row, host: "../../../host/src/reads/fans.ts" }])).toThrow(
-    "fans: a host read lives in its route directory",
+    "fans: declare a route-relative host module or an exported host package",
   );
   expect(() => renderRouteRegistry([row, row])).toThrow("Duplicate route key fans");
 });

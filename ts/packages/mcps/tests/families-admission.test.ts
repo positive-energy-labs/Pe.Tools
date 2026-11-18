@@ -57,7 +57,7 @@ async function workspace() {
       reads.push({ target, filter });
       return loaded;
     },
-    { version: 1, schemaVersion: familiesSpec.schemaVersion ?? 1, revision: 0, doc: { scope: { edit: { value: casework([]) } } } },
+    { version: 1, schemaVersion: familiesSpec.schemaVersion ?? 1, revision: 0, doc: { scope: { edit: { by: "human", value: casework([]) } } } },
   );
   return { reads, work };
 }
@@ -256,7 +256,7 @@ const catalogOf = (families: unknown[], truncated = false) =>
     key === "revit.catalog.loaded-families" ? { summary: { truncated }, families } : undefined,
   );
 const exhaustCell = propose("Price LBP15A Exhaust");
-const stagedExhaust = { scope: { edit: { value: exhaustScope } } };
+const stagedExhaust = { scope: { edit: { by: "human", value: exhaustScope } } };
 
 test("item 3: every door refusal names its code and its structured parts, and keeps the prose for Pea", async () => {
   const cases: [string, () => Promise<unknown>, Record<string, unknown>][] = [
@@ -297,7 +297,7 @@ test("item 3: every door refusal names its code and its structured parts, and ke
         const { work, at } = await seededWork(
           {
             scope: {
-              edit: { value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
+              edit: { by: "human", value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
             },
           },
           catalogOf([]),

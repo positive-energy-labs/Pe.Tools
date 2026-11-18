@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { z } from "zod";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { bindWork, draftCellSchema, workFingerprintSchema, workTimelineSchema } from "@pe/agent-contracts";
-import { module as reference } from "../fans/route";
+import { module as reference } from "@pe/fans-web/route";
 import { route } from "../route/typed-route";
 import { scrollBody } from "../route/body";
 import { BandOutlet, RouteControlsProvider } from "../navigation/route-controls";
@@ -67,16 +67,19 @@ test.each(["applied", "undone"])("consumed %s edits retain their state, and only
   expect(screen.getByText(new RegExp(`notes / Pea / ${state} / not written / rejected / r2`))).toBeTruthy();
 });
 
-async function chrome(refreshing = false) {
+async function chrome(refreshing = false, roundTrip = false) {
   const schema = z.object({ note: draftCellSchema(z.string()).default({}) });
   const work = { route: "timeline-proof", title: "Notes", description: "Timeline refusal", schema };
   const module = route({ key: work.route, name: "Notes", needs: "host", directory: reference.data.directory, fields: {},
     edits: { work, key: () => "one", owners: {}, input: z.never(), patches: () => [],
       history: z.object({ label: z.string() }), describe: (detail: { label: string }) => detail },
-    panes: { main: { title: "Notes", purpose: "Restore refusal", body: "scroll", draw: () => scrollBody(<button>Focus route</button>) } },
+    panes: { main: { title: "Notes", purpose: "Restore refusal", body: "scroll", draw: ctx => scrollBody(<><button>Focus route</button>{roundTrip && <input aria-label="Scalar note" defaultValue="prior"
+      onChange={event => void ctx.cells.at(["note"]).stage(event.currentTarget.value, { label: "Edit note" })} />}</>) } },
     layout: { kind: "pane", id: "main" },
   });
-  const door = createFixtureWorkDoor(work, schema.parse({}));
+  const prior = { value: "prior", by: "pea" as const, at: "2026-11-16T12:00:00Z", base: 0, ref: "evidence:prior" };
+  const door = createFixtureWorkDoor(work, schema.parse(roundTrip ? { note: { edit: prior } } : {}));
+  const submit = vi.spyOn(door, "submitWork");
   const response = vi.fn(async () => Response.json({ ok: false, error: "Restore unavailable" }, { status: 503 }));
   let allowed = !refreshing, latest = () => {}, timelineReads = 0;
   const mount = mountTypedRoute(module, {
@@ -91,14 +94,14 @@ async function chrome(refreshing = false) {
           else { latest = () => deliver(value, reason); deliver(null, "Refreshing Timeline"); }
         });
       },
-      step: createTimelineClient({ response }).step,
+      step: roundTrip ? door.timeline.step : createTimelineClient({ response }).step,
     },
   });
   const root = createRootRoute({ component: () => <RouteControlsProvider><BandOutlet /><TypedChrome mount={mount} document={null} /></RouteControlsProvider> });
   const router = createRouter({ routeTree: root, history: createMemoryHistory({ initialEntries: [module.data.address] }) });
   await router.load();
   const view = render(<RouterProvider router={router} />);
-  return { mount, response, view, timelineReads: () => timelineReads, refreshTimeline() { allowed = true; latest(); } };
+  return { mount, response, view, prior, submit, timelineReads: () => timelineReads, refreshTimeline() { allowed = true; latest(); } };
 }
 
 test("Ctrl+Z reports a failed HTTP restore in the Undo button's result display", async () => {
@@ -145,5 +148,23 @@ test.each([
     await screen.findByRole("button", { name: "Undo Edit note" });
     expect({ undo: mount.reviewProblem("work.undo"), redo: mount.reviewProblem("work.redo") }).toEqual({ undo: null, redo: null });
     expect(screen.queryByRole("alert")).toBeNull();
+  } finally { view.unmount(); mount.dispose(); }
+});
+
+
+test("a browser scalar-cell edit round-trips its value and host stamp through Undo and Redo", async () => {
+  const { mount, view, prior, submit } = await chrome(false, true);
+  try {
+    await waitFor(() => expect(mount.owner()?.ready).toBe(true));
+    expect(mount.work()?.value).toEqual({ note: { edit: prior } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Scalar note" }), { target: { value: "new" } });
+    await waitFor(() => expect(mount.work()?.value).toMatchObject({ note: { edit: { value: "new", by: "human" } } }));
+    expect(submit.mock.calls[0]?.[1]).toMatchObject({ patches: [{ path: ["note", "edit"], value: { value: "new" } }] });
+    expect(submit.mock.calls[0]?.[1].patches[0]?.value).not.toHaveProperty("by");
+    const edited = structuredClone(mount.work()!.value);
+    fireEvent.click(await screen.findByRole("button", { name: "Undo Edit note" }));
+    await waitFor(() => expect(mount.work()?.value).toEqual({ note: { edit: prior } }));
+    fireEvent.click(await screen.findByRole("button", { name: "Redo Edit note" }));
+    await waitFor(() => expect(mount.work()?.value).toEqual(edited));
   } finally { view.unmount(); mount.dispose(); }
 });

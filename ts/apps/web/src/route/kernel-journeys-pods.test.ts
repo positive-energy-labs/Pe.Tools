@@ -1,6 +1,6 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { mkdtemp,stateFixture } from "../../../../tests/isolated-home/storage.ts";
-import { snapshot as workSnapshot } from "../ducts/test-fixture";
+import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
 // @vitest-environment jsdom
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { observeResources } from "@pe/runtime";
@@ -193,23 +193,31 @@ async function openRecordedGuidanceAfterRefusal() {
     expect(attempt, "B08: recording admission never asks a live device door").toBe(2);
   } finally { view.unmount(); vi.unstubAllGlobals(); }
 }
+async function sheetFixture() {
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
+  return nativeFixture("real", (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }), null, {
+    native: key => key === "ducts.tables" ? recordedTables() : undefined,
+  });
+}
+const sheetScope = { walk: { unitId: 100, portIndex: 0 } };
+
 // H29 exercises the surviving sealed-Plan authority through the real HTTP action handler.
 test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { pea } = await import("../../../host/tests/callers");
-  const f = await nativeFixture();
+  const f = await sheetFixture();
   try {
     for (const caller of [pea("review-owner"), { kind: "external-mcp" as const, label: "foreign", context: "jz-external" }]) {
       const response = await f.post("/call", { key: "rhvac.launch", request: { path: "review.r10" } }, caller);
       expect(response.status, "H29: RPC refuses non-human binding").toBe(403);
       expect(await response.json()).toMatchObject({ notDispatched: true });
     }
-    const staged = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
+    const key = { ...f.key, route: "fans" };
+    const staged = await f.saved.apply(key, "fans", "human", [
+      { path: ["writeIntent", "edit"], value: { value: sheetScope } },
     ], 0);
     expect(staged.ok).toBe(true);
     if (!staged.ok) throw Error("Stage refused");
-    const work = { key: f.key, revision: staged.revision };
+    const work = { key, revision: staged.revision };
     const plan = await f.post("/actions", { id: "jz-plan", key: "sheet.plan", target: f.target, input: { work } });
     expect(plan.ok).toBe(true);
     const preview = await f.journal.wait("jz-plan");
@@ -225,8 +233,8 @@ test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", 
     const forged = await f.post("/actions", { id: "jz-forged", key: "sheet.apply", target: f.target,
       input: { work, seal: { forged: true }, reviewTicket: "invented" } }, pea("forger"));
     expect(forged.status, "H29: strict admission rejects invented seal and ticket fields").toBe(409);
-    const changed = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g2"] } } },
+    const changed = await f.saved.apply(key, "fans", "human", [
+      { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 101, portIndex: 0 } } } },
     ], staged.revision);
     expect(changed.ok).toBe(true);
     const stale = await f.post("/actions", { id: "jz-stale", key: "sheet.apply", target: f.target, input: { work } });
@@ -323,21 +331,21 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
 
 
 test("JZ route-neutral Plan refusal preserves the reason and holds Apply through HTTP", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
-  const f = await nativeFixture();
+  const f = await sheetFixture();
   try {
     const reason = "Shared type cannot scope this authored flow";
     f.planRefusal.reason = reason;
     const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
-      { path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!), "edit"], value: { value: { cfm: 321 } } },
+      { path: ["flows", elementSubject(closedFan(100).nodes.find(node => node.id === 3)!), "edit"], value: { value: 321 } },
       { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));
-    const staged = await f.saved.apply(f.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
-    ], 0);
+    const key = { ...f.key, route: "fans" };
+    const staged = await f.saved.apply(key, "fans", "human", [
+      { path: ["writeIntent", "edit"], value: { value: sheetScope } },
+    ], fans.revision);
     if (!staged.ok) throw Error(JSON.stringify(staged));
-    const input = { work: { key: f.key, revision: staged.revision } };
+    const input = { work: { key, revision: staged.revision } };
     expect((await f.post("/actions", { id: "jz-refusal-plan", key: "sheet.plan", target: f.target, input })).ok).toBe(true);
     const plan = await f.journal.wait("jz-refusal-plan");
     expect(plan.state, JSON.stringify(plan)).toBe("succeeded");
@@ -354,7 +362,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
 
 
 test("JZ upload retains BlobRef before command admission and rejects inline intent", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
   const { bindWork } = await import("@pe/agent-contracts");
   const f = await nativeFixture();
   try {
@@ -384,21 +392,21 @@ test("JZ upload retains BlobRef before command admission and rejects inline inte
 
 
 test("JZ cold HTTP action inspection discards old journal rows without conversion", async () => {
-  const { nativeFixture } = await import("../../../host/tests/fans-work-fixture");
   const { readFile, writeFile } = await import("node:fs/promises");
   const { join } = await import("node:path");
-  const first = await nativeFixture();
+  const first = await sheetFixture();
   let bytes: string;
   try {
-    const staged = await first.saved.apply(first.key, "ducts", "human", [
-      { path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } },
+    const key = { ...first.key, route: "fans" };
+    const staged = await first.saved.apply(key, "fans", "human", [
+      { path: ["writeIntent", "edit"], value: { value: sheetScope } },
     ], 0);
     if (!staged.ok) throw Error(JSON.stringify(staged));
-    await first.post("/actions", { id: "jz-old-row", key: "sheet.plan", target: first.target, input: { work: { key: first.key, revision: staged.revision } } });
+    await first.post("/actions", { id: "jz-old-row", key: "sheet.plan", target: first.target, input: { work: { key, revision: staged.revision } } });
     expect((await first.journal.wait("jz-old-row")).state).toBe("succeeded");
     bytes = (await readFile(join(first.dir, "actions.jsonl"), "utf8")).replace(/^.*?\n/, '{"version":7}\n');
   } finally { await first.close(); }
-  const cold = await nativeFixture();
+  const cold = await sheetFixture();
   try {
     await writeFile(join(cold.dir, "actions.jsonl"), bytes, "utf8");
     const response = await cold.request(new Request("http://fixture/actions?id=jz-old-row"));

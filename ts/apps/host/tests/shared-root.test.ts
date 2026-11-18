@@ -19,7 +19,7 @@ import { capturePackage, listPackages, readPackage } from "../src/packages.ts";
 import { productPagesRoots, scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
 import { commitPagePublication, pageVersion } from "../src/page-publication.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
-import { readDuctCatalogs } from "../src/duct-catalogs.ts";
+import { readDuctCatalogs } from "@pe/ducts-host/duct-catalogs";
 import { listPods, listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
 import { sourceRunDirectory } from "../src/family-actions.ts";
 import { writeZip } from "../src/pod-transfer.ts";

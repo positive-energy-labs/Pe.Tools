@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
+import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "./generated/host-ops.generated.ts";
 import {
   generatedJsonSchema,
   nativeResponseSchema,
@@ -26,6 +27,8 @@ test.each(["roster", "system-walk", "four-fan-walk"])(
     const payload = JSON.parse(
       readFileSync(new URL(`./fixtures/k2-${name}.json`, import.meta.url), "utf8"),
     );
+    // These native captures predate the generated vocabulary; add contract data, never model evidence.
+    payload.vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
     const schema = nativeResponseSchema(
       name === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
     );
@@ -45,6 +48,18 @@ test("generated native decoders reject invalid payloads", () => {
       "FamilySnapshotRecord",
     ).safeParse(null).success,
   ).toBe(false);
+});
+
+test("a native ratedStatic fact keeps the separately named RatedEsp value and units", () => {
+  const payload = JSON.parse(readFileSync(new URL("./fixtures/k2-roster.json", import.meta.url), "utf8"));
+  payload.vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
+  payload.slots.ratedEsp = "Rated ESP";
+  const fan = payload.nodes.find((n: { kind: string }) => n.kind === "equipment");
+  fan.facts.push({ key: "ratedStatic", value: 0.65, text: null, unit: "in-wg", provenance: "designer-stated" });
+  const decoded = nativeResponseSchema("ducts.snapshot.roster").parse(payload);
+  expect(decoded.slots.ratedEsp).toBe("Rated ESP");
+  expect(decoded.nodes.find(n => n.id === fan.id)?.facts.find(f => f.key === "ratedStatic"))
+    .toMatchObject({ value: 0.65, unit: "in-wg", provenance: "designer-stated" });
 });
 
 test("Effect decode failures stay inside Zod safeParse during render", () => {

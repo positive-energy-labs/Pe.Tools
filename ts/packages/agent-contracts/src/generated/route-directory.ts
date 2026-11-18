@@ -151,7 +151,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "ducts",
+    "key": "duct-systems",
     "directory": {
       "label": "Pressure drop",
       "icon": "Wind",
@@ -171,7 +171,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
       "listed": true,
       "satellites": [],
       "resume": "document",
-      "path": "/ducts",
+      "path": "/duct-systems",
       "title": "Ducts",
       "category": "Calculate loads & airflow",
       "blurb": "Review duct systems, stage inputs and rulings, and plan writes to Revit"

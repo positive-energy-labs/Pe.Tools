@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { decode, subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
+import { decode, subjectCode, uniqueIdSchema } from "../src/subject-ref.ts";
 
 // A Pod bundles only what it imports; the barrel drags effect in, so the codec has its own door.
 test("the SubjectRef codec has a zod-only subpath door a Pod can bundle", () => {

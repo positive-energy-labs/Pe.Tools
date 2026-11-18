@@ -1,8 +1,9 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
+import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { join } from "node:path";
-import { catalogsFor } from "./ducts-files.ts";
+import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
@@ -70,9 +71,9 @@ import { admittedBuiltinsLayer, constructorWorkRegistrations } from "./admitted-
 import { RevitBridge } from "./bridge.ts";
 import { nativeCallRouteFor, nativeReadResolveRoute, retainedDuctsRead } from "./call-route.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
-import { createDuctsBodyBasis } from "./ducts-body-basis.ts";
-import { ductCatalogsRoute, DuctFiles } from "./ducts-files.ts";
-import { DuctsReadings, ductsReadings } from "./ducts-readings.ts";
+import { createDuctsBodyBasis } from "@pe/ducts-host/ducts-body-basis";
+import { ductCatalogsRoute, DuctFiles } from "@pe/ducts-host/ducts-files";
+import { DuctsReadings, ductsReadings } from "@pe/ducts-host/ducts-readings";
 import { runPods } from "./family-actions.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { InvalidRead } from "./native-reads.ts";
@@ -181,6 +182,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   const run = <A, E>(effect: Effect.Effect<A, E>) => runPods({}, Effect.provide(effect, provided));
   const registrations = options.registrations ?? createRouteRegistrations();
   const workspace = new RouteWorkspace({
+    publicationAuthor: () => workAuthorOf(currentCaller()),
     registrations: constructorWorkRegistrations(registrations),
     ...(recorded
       ? { recorded: recordedWorkSource(lane.recordingStore) }
@@ -193,6 +195,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       if (refusal) throw refusal;
     },
   });
+  yield* Effect.promise(() => workspace.ready);
   yield* Layer.build(admittedBuiltinsLayer(workspace, undefined, registrations));
   if (!recorded && options.initialize) yield* Effect.promise(() => options.initialize!(workspace));
   const owner = recorded ? new DuctsReadings() : live!.owner;
@@ -375,7 +378,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const url = new URL(web.url),
       declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };
-    if (![...graphRouteIds, "work.get", "ducts.analysis", "resources.stream"].includes(declared.id)) return {};
+    if (![...graphRouteIds, "work.get", "resources.stream"].includes(declared.id)) return {};
     const stream = declared.id === "resources.stream";
     const input = declared.route.input.parse({
       params: declared.params,
@@ -564,7 +567,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               : name === "capture"
                 ? scoped(current)(asset(String(args), true)).then(() => String(args))
                 : takeFile(name, args, current),
-        workKey: async (ref) => bindWork("ducts", (await document(ref)).address, undefined, ref),
+        workKey: async (ref) => bindWork("duct-systems", (await document(ref)).address, undefined, ref),
         inputs: {
           consumption: current,
           run: scoped(current),

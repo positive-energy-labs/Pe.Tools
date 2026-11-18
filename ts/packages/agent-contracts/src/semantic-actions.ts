@@ -1,4 +1,4 @@
-import { fansRouteState } from "./fans.ts";
+import { fansRouteState } from "@pe/fans-contract/fans";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { ANY_ROUTE, workIntent, workWriteCommands } from "./write-intent.ts";
 import { SHEET_COMMANDS } from "./slots/sheet.ts";
@@ -212,7 +212,7 @@ import { familiesRouteState } from "./families.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
-import { ductsRouteState } from "./ducts.ts";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { catalogWorkCommands } from "./catalog-work.ts";
 import { findingsCommands, findingsWork } from "./slots/findings.ts";
 /** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
@@ -334,11 +334,11 @@ export const tools = {
     name: "fans", says: fansRouteState.description,
     work: { ...fansRouteState, editable: [
       ["writeIntent"], ["calculation", "*"], ["terminalDrops", "*"], ["componentDrops", "*"],
-      ["esp", "*"], ["equipmentFlows", "*"], ["roles", "*"], ["flows", "*"],
+      ["esp", "*"], ["ratedEsp", "*"], ["equipmentFlows", "*"], ["roles", "*"], ["flows", "*"],
     ] }, commands: {},
   },
   ducts: {
-    name: "ducts",
+    name: "duct-systems",
     says: ductsRouteState.description,
     work: {
       ...ductsRouteState,
@@ -358,15 +358,15 @@ export const tools = {
     },
     commands: {
       "ducts.refresh": ductsActions["ducts.refresh"],
-      ...workWriteCommands("ducts", "ducts.apply-heal", ductsActions["ducts.apply-heal"], {
+      ...workWriteCommands("duct-systems", "ducts.apply-heal", ductsActions["ducts.apply-heal"], {
         derive: ductsDerive,
         preview: { key: "ducts.plan-heal", definition: ductsActions["ducts.plan-heal"] },
       }),
       // A rehearsal derives the same request from Work but is no plan: it carries no seal and cannot arm apply.
-      ...workIntent("ducts", "ducts.rehearse-heal", ductsActions["ducts.rehearse-heal"], { derive: ductsDerive }),
-      ...workIntent("ducts", "ducts.rehearse-assign-fan", ductsActions["ducts.rehearse-assign-fan"], { derive: ductsDerive }),
+      ...workIntent("duct-systems", "ducts.rehearse-heal", ductsActions["ducts.rehearse-heal"], { derive: ductsDerive }),
+      ...workIntent("duct-systems", "ducts.rehearse-assign-fan", ductsActions["ducts.rehearse-assign-fan"], { derive: ductsDerive }),
       ...workWriteCommands(
-        "ducts",
+        "duct-systems",
         "ducts.apply-assign-fan",
         ductsActions["ducts.apply-assign-fan"],
         {

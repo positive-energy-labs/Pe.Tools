@@ -165,12 +165,10 @@ export type PeApiSchemas = Record<
   | "fansReadResponse"
   | "ductsReadRequest"
   | "ductsReadResponse"
-  | "ductsSheetRequestSchema"
-  | "ductsSheetResponseSchema"
+  | "ductsCalcRequestSchema"
+  | "ductsCalcResponseSchema"
   | "ductsRosterRequestSchema"
   | "ductsRosterResponseSchema"
-  | "ductsAnalysisRequestSchema"
-  | "ductsAnalysisResponseSchema"
   | "routeViewSchema"
   | "routeViewOpenSchema"
   | "routeViewSetSchema"
@@ -811,25 +809,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "human-or-pea",
     ),
       "reads.value": route("POST", "/pe/reads/value", schemas.valueReadRequest as S["valueReadRequest"], schemas.valueReadResponse as S["valueReadResponse"], "read", "pe", "read"),
-    "ducts.analysis": route(
-      "POST",
-      "/pe/ducts/analysis",
-      schemas.ductsAnalysisRequestSchema as S["ductsAnalysisRequestSchema"],
-      schemas.ductsAnalysisResponseSchema as S["ductsAnalysisResponseSchema"],
-      "read",
-      "pe",
-      "read",
-    ),
-    "ducts.analysis-artifact": route(
-      "GET",
-      "/pe/ducts/analyses/:id/artifact",
-      none,
-      z.unknown(),
-      "read",
-      "pe",
-      "read",
-      "asset",
-    ),
     "space.scene-artifact": route(
       "GET",
       "/pe/space/scenes/:id/artifact",

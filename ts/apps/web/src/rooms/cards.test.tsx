@@ -61,7 +61,7 @@ test("a rerun rechurns every guid; a card still finds its regions by the anchor'
     ],
   };
   const work = roomsRouteState.schema.parse({
-    marks: { m1: { edit: { value: mark("reject", square(30, 0, 10), ["c"]) } } },
+    marks: { m1: { edit: { value: mark("reject", square(30, 0, 10), ["c"]), by: "human" } } },
   });
   expect(inboxCards(work, snapshot, VIEW)[0]!.guids).toEqual(["c"]);
   expect(inboxCards(work, rerun, VIEW)[0]!.guids).toEqual(["c2"]);

@@ -7,7 +7,7 @@
  *   await pe.do("revit.context.show-elements", { elementIds: [1234] });   // run a mutation as this page; waits until it settles
  *   await pe.script("./checks/census.csx", { input: { level: "L2" } });   // run the Pod's declared script; the answer is its Result(...)
  *   // Bare paths and leading / resolve from the Pod root; ./ and ../ resolve beside the Page's index.html.
- *   await pe.do("script:@snowdon-ducts/src/Census.cs");  // the same call by key, the key Pea runs too
+ *   await pe.do("script:@sample-pod/src/Census.cs");  // the same call by key, the key Pea runs too
  *   const k = await pe.state({ reduce, base, render, describe }); // one shared event log
  *   // Declare agent events in HTML: <script type="application/json" id="pe-agent">{"verdict":"passed and explanation"}</script>
  *   await pe.picture([1234]);                            // lens then view-image: { url, sha, at, viewId, viewName, registration }
@@ -360,7 +360,7 @@
    * Run any op. A read answers at once on the bound document; a mutation runs as this page through
    * `/pages/<slug>/act`, under the binding (a document a human added to the bound thread, or Pea's own document for a pin), and this
    * waits until its receipt settles. The answer is the op's response either way. A script key
-   * (`script:@snowdon-ducts/src/Census.cs`) is `pe.script(key, input)`: the same call, the same answer.
+   * (`script:@sample-pod/src/Census.cs`) is `pe.script(key, input)`: the same call, the same answer.
    */
   pe.do = async (key, input = {}) => {
     if (key.startsWith("script:")) return pe.script(key, input);
@@ -395,7 +395,7 @@
 
   /**
    * Run C# in Revit, one door for every script. `keyOrPath` is a Pod's declared entrypoint, as its key
-   * (`script:@snowdon-ducts/src/Census.cs`) or, on that Pod's own Page, as a `.cs`/`.csx` path (`./checks/census.csx`
+   * (`script:@sample-pod/src/Census.cs`) or, on that Pod's own Page, as a `.cs`/`.csx` path (`./checks/census.csx`
    * beside index.html, `src/Census.cs` or `/src/Census.cs` from the Pod root). The Pod declares it in pod.json `entrypoints`; a path it
    * does not declare is refused. A string with a newline is C# source and runs inline (Execute-body statements with
    * `doc`, `uidoc`, `app`, `selection` in scope), for a scratch Page or a probe; nobody else can run that by name.

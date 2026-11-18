@@ -1,3 +1,5 @@
+import { renderProductExecutors } from "./product-executors.ts";
+import { renderProductGuides } from "./product-guides.ts";
 import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import { icons } from "lucide-react";
@@ -20,10 +22,11 @@ registerHooks({
 });
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
-import { readdir, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
-import { routeStartupSourceHash, writeRouteStartupReceipt } from "@pe/host-contracts/route-startup";
+import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "@pe/host-contracts/route-startup";
 import { buildBuiltinClosures, writeBuiltinClosurePin } from "../route-source-hash.ts";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
@@ -122,17 +125,22 @@ async function emit(destination: URL, text: string) {
 }
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
-const discovered = await readdir(new URL("../src/", import.meta.url), { withFileTypes: true });
+// `folder` is the route directory relative to `apps/web/src/`: one segment for a web route, and
+// `../../../products/<product>/web` for a product's (ADR 0046).
+const webSource = fileURLToPath(new URL("../src/", import.meta.url));
+const discovered = routeFolderCandidates(checkout).map((path) =>
+  relative(webSource, path).replaceAll("\\", "/"),
+);
 const declarations = new Map<string, { folder: string; module: { data: { key: string } } }>();
-for (const dir of discovered.filter((d) => d.isDirectory())) {
-  const file = new URL(`../src/${dir.name}/route.ts`, import.meta.url);
+for (const folder of discovered) {
+  const file = new URL(`../src/${folder}/route.ts`, import.meta.url);
   const text = await readFile(file, "utf8").catch(() => "");
   if (/export\s+(?:const|let)\s+module\b/.test(text)) {
     const { module } = await jiti.import<{ module: { data: { key: string } } }>(
       fileURLToPath(file),
     );
     if (declarations.has(module.data.key)) throw Error(`Duplicate route module ${module.data.key}`);
-    declarations.set(module.data.key, { folder: dir.name, module });
+    declarations.set(module.data.key, { folder, module });
   }
 }
 const keys = [...declarations.keys()].sort();
@@ -239,6 +247,8 @@ await emit(
   renderAddressTable([...addressRows.values()]),
 );
 await emit(registryFile, renderRouteRegistry(registryRows));
+await emit(new URL("../../host/src/product-executors.generated.ts", import.meta.url), renderProductExecutors(checkout));
+await emit(new URL("../../../packages/mcps/src/pea/guides.generated.ts", import.meta.url), renderProductGuides(checkout));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {

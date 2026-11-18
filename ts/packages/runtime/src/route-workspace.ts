@@ -17,6 +17,8 @@ import {
 } from "@pe/agent-contracts";
 import {
   applyPatches,
+  stampChanges,
+  draftEditSchema,
   routeDocDelta,
   canonicalRouteInput,
   refuse,
@@ -66,6 +68,8 @@ export type RouteWorkspaceEvent = {
 );
 
 export interface RouteDocumentStore {
+  /** Visit retired addresses without decoding their value; unreadable files stay in place. */
+  retireRoutes?(routes: ReadonlySet<string>): Promise<void>;
   getState(input: { targetKey: string; route: string }): Promise<unknown>;
   /**
    * `value: null` sets the stored Work aside with its bytes kept and one notice. With a `reason`
@@ -152,6 +156,8 @@ export type RouteWorkspaceOptions = {
   registrations: readonly RouteWorkspaceRegistration[];
   /** Root-fixed source policy, checked before reads or writes at a mutation boundary. */
   authorizeMutation?: (verb: "edit" | "undo" | "redo" | "publish" | "retire") => void;
+  /** Required for trusted publication; the host resolves the admitted caller at invocation time. */
+  publicationAuthor?: () => WorkAuthor;
   workHistoryLimits?: { readonly maxCount: number; readonly maxBytes: number };
 } & (
   | { store: RouteDocumentStore; capture?: WorkReadCapture; recorded?: never }
@@ -222,6 +228,18 @@ export class RouteWorkspace {
     for (const registration of options.registrations) {
       this.register(registration);
     }
+    this.ready = this.#retireRoutes();
+  }
+
+  /** Startup retirement uses only indexed identities, never the retired Work's schema. */
+  readonly ready: Promise<void>;
+  async #retireRoutes(specs = this.options.registrations.map(({ spec }) => spec)): Promise<void> {
+    if (!this.options.store) return;
+    const retired = new Set(specs.flatMap(spec => spec.retired ?? []));
+    if (!retired.size) return;
+    for (const route of retired)
+      if (this.#registry.has(route)) throw Error(`Retired Work route is still registered: ${route}`);
+    await this.options.store.retireRoutes?.(retired);
   }
 
   /** A trusted plugin's lifetime owns registration, never its saved Work bytes. */
@@ -286,7 +304,7 @@ export class RouteWorkspace {
       receipt.deactivate();
       throw error;
     }
-    const ready: Promise<WorkFeedFailure | null> = Promise.resolve(null);
+    const ready: Promise<WorkFeedFailure | null> = this.ready.then(() => this.#retireRoutes([spec])).then(() => null);
     const record = {
       fingerprint: route.workFingerprint,
       workRoute: work.route,
@@ -391,6 +409,10 @@ export class RouteWorkspace {
     return failure;
   }
 
+  settingsOwners(works: readonly WorkKey[]): readonly string[] {
+    return [...new Set(works.flatMap(({ route }) => this.#registry.get(route)?.spec.settingsOwners ?? []))];
+  }
+
   list() {
     return [...this.#registry.values()].map(({ spec }) => ({
       route: spec.route,
@@ -402,6 +424,7 @@ export class RouteWorkspace {
   /** Persisted instances, not the registration catalogue. Never calls read/view or carry-over. */
   async instances() {
     return this.#serialized(async () => {
+      await this.ready;
       if (this.options.recorded || !this.#store.listState)
         return { works: [], unindexed: 0, unreadable: 0, truncated: false, available: false };
       const census = await this.#store.listState();
@@ -857,18 +880,38 @@ export class RouteWorkspace {
       : refuse("refused", result.ok ? "Nothing restored" : result.message, "Re-read the Timeline.");
   }
 
-  /** Observations and conditional retirement are host facts, never raw client edits. */
+  /** Caller cells have no author; route-specific values and metadata are checked after stamping. */
   validateSeed(scope: WorkKey, seed: unknown): unknown {
     const registration=this.#registry.get(scope.route);
     if(!registration) throw Error(`Unknown Work route ${scope.route}`);
-    return registration.spec.schema.parse(seed);
+    const edit = draftEditSchema(z.unknown(), { deletable: true }).loose();
+    const validate = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(validate);
+      if (!node || typeof node !== "object") return;
+      if (Object.hasOwn(node, "invalid")) throw Error("Caller seeds cannot supply invalid markers");
+      for (const [key, value] of Object.entries(node)) {
+        if (key === "edit") {
+          if (value && typeof value === "object" && Object.hasOwn(value, "by"))
+            z.never().parse(Reflect.get(value, "by"));
+          if (value != null) edit.parse(value);
+        }
+        validate(value);
+      }
+    };
+    validate(seed);
+    // A stand-in author is only for complete preflight validation; these stamped bytes are never persisted.
+    registration.spec.schema.parse(stampChanges(seed, undefined, "human", 0));
+    return seed;
   }
 
   /** The journal calls this only after consent. The write tail makes absence a compare-and-set. */
   async start(scope:WorkKey,seed:unknown,by:WorkAuthor,receiptId?:string):Promise<RouteStateWriteResult> {
     this.#authorize("publish");
-    const doc=this.validateSeed(scope,seed);
-    const spec=this.#registry.get(scope.route)!.spec;
+    const input=this.validateSeed(scope,seed);
+    const registration = this.#registry.get(scope.route);
+    if (!registration) throw Error(`Unknown Work route ${scope.route}`);
+    const spec = registration.spec;
+    const doc=spec.schema.parse(stampChanges(input,undefined,by,0));
     return this.#serialized(async()=>{
       if(await this.#store.getState({targetKey:workKey(scope),route:scope.route}) != null)
         return refuse("refused","Work already exists","Open the existing Work.");
@@ -891,7 +934,9 @@ export class RouteWorkspace {
     receiptId?: string,
   ) {
     this.#authorize("publish");
-    return this.apply(scope, route, "human", patches, expectedRevision, true, {
+    if (!this.options.publicationAuthor) throw Error("Trusted publication requires an admitted caller");
+    const by = this.options.publicationAuthor();
+    return this.apply(scope, route, by, patches, expectedRevision, true, {
       kind: "apply",
       press: null,
       receiptId,
@@ -1185,14 +1230,28 @@ export class RouteWorkspace {
     }
   }
 
-  /** Decode, or set aside: stored Work that is not this spec's is never migrated (MAP invariant). */
+  /** Keep valid cells; invalid cells block fallback, with the original bytes kept by set-aside. */
   async #decodeStored(targetKey: string, spec: RouteStateSpec<z.ZodType>, raw: unknown) {
     if (raw == null) return null;
     try {
-      return { raw, envelope: parseEnvelope(raw, spec) };
+      const envelope = parseEnvelope(raw, spec);
+      // A staged value with no host stamp has no caller. It is set aside, never read as someone's edit.
+      const unstamped = stagedRows(spec.route, raw).filter(row => row.by == null).length;
+      if (unstamped) throw Error(`${unstamped} staged row${unstamped === 1 ? " carries" : "s carry"} no caller stamp.`);
+      return { raw, envelope };
     } catch (error) {
+      const recovered = recoverCells(raw, spec);
+      if (recovered) {
+        await this.#store.setState({ targetKey, route: spec.route, value: null,
+          reason: setAsideRows(spec.route, { doc: recovered.failed }) });
+        await this.#store.setState({ targetKey, route: spec.route, value: recovered.raw });
+        return recovered;
+      }
+      // One notice for the whole record: every staged row it held, then why it was refused.
       await this.#store.setState({ targetKey, route: spec.route, value: null,
-        reason: error instanceof Error ? error.message : String(error) });
+        reason: [setAsideRows(spec.route, raw), error instanceof z.ZodError
+          ? `${error.issues[0]?.path.join("/")}: ${error.issues[0]?.message}` : error instanceof Error ? error.message : String(error)]
+          .filter(Boolean).join(" ") });
       return null;
     }
   }
@@ -1207,6 +1266,7 @@ export class RouteWorkspace {
     spec: RouteStateSpec<z.ZodType>,
     create = true,
   ): Promise<RouteEnvelope<unknown> | null> {
+    await this.ready;
     const decoded = await this.#decodeStored(workKey(scope), spec, await this.#carryOver(scope, spec.route));
     if (!decoded) {
       this.#inverses.delete(workKey(scope));
@@ -1384,10 +1444,94 @@ function emptyEnvelope(spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> 
   };
 }
 
+/**
+ * The staged rows of a stored record, read by structure alone (any object holding an `edit` rung
+ * with a value), so a record no schema decodes is still listed. `source` and `ref` are whatever
+ * text the rung or its value states, `by` the host's stamp; an unstamped row reports none, never an invented one.
+ */
+export function stagedRows(route: string, raw: unknown) {
+  const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
+  const text = (edit: Record<string, unknown>, key: string) =>
+    [edit[key], record(edit.value) ? edit.value[key] : undefined].find((v): v is string => typeof v === "string" && v !== "") ?? null;
+  const walk = (node: unknown, path: string[]): { work: string; segment: string; row: string; by: string | null; source: string | null; ref: string | null }[] => {
+    if (!record(node)) return [];
+    const edit = node.edit;
+    const [segment, ...rest] = path;
+    if (segment !== undefined && record(edit) && (Object.hasOwn(edit, "value") || edit.delete === true))
+      return [{ work: route, segment, row: rest.join("/") || segment, by: typeof edit.by === "string" ? edit.by : null, source: text(edit, "source"), ref: text(edit, "ref") }];
+    return Object.entries(node).flatMap(([key, value]) => walk(value, [...path, key]));
+  };
+  return walk(record(raw) && record(raw.doc) ? raw.doc : raw, []);
+}
+
+/**
+ * The rows of a refused record as one line of the notice. The store keeps a notice short, so the
+ * list stops at a budget and says how many rows it left to the kept bytes, rather than be cut mid-row.
+ */
+// ponytail: fixed 300-character budget for the list; raise it with the store's own notice limit if rows are lost in practice.
+function setAsideRows(route: string, raw: unknown): string {
+  const rows = stagedRows(route, raw).map(row =>
+    `${row.segment}${row.row === row.segment ? "" : `/${row.row}`} by ${row.by ?? "nobody"}${row.source ? ` source ${row.source}` : ""}${row.ref ? ` ref ${row.ref}` : ""}`);
+  if (!rows.length) return "";
+  const shown: string[] = [];
+  for (const row of rows) {
+    if (shown.join("; ").length + row.length > 300) break;
+    shown.push(row);
+  }
+  const rest = rows.length - shown.length;
+  return `Set aside ${rows.length} staged row${rows.length === 1 ? "" : "s"} of ${route}: ${shown.join("; ")}${rest ? `; and ${rest} more in the kept bytes` : ""}.`;
+}
+
 function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnvelope<unknown> {
   const envelope = envelopeSchema.extend({ schemaVersion: z.literal(spec.schemaVersion ?? 1) }).parse(raw);
   const schema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
   return { ...envelope, doc: schema.parse(envelope.doc) };
+}
+
+/** Only cell failures are recoverable. Envelope/schema-version and non-cell failures stay whole-record refusals. */
+function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
+  const header = envelopeSchema.extend({ schemaVersion: z.literal(spec.schemaVersion ?? 1) }).safeParse(raw);
+  if (!header.success) return null;
+  const result = spec.schema.safeParse(header.data.doc);
+  if (result.success) return null;
+  const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object";
+  const doc = structuredClone(header.data.doc), failed: Record<string, unknown> = {};
+  if (!object(doc) || !object(raw)) return null;
+  const paths: string[][] = [];
+  const walk = (node: unknown, path: string[]) => {
+    if (!node || typeof node !== "object") return;
+    if (Object.hasOwn(node, "edit")) { paths.push(path); return; }
+    for (const [key, value] of Object.entries(node)) walk(value, [...path, key]);
+  };
+  walk(doc, []);
+  const bad = new Map<string[], string>();
+  for (const issue of result.error.issues) {
+    const path = paths.find(path => path.length && path.every((key, i) => String(issue.path[i]) === key));
+    if (!path) return null;
+    bad.set(path, issue.message);
+  }
+  const put = (root: Record<string, unknown>, path: string[], value: unknown) => {
+    let node = root;
+    for (const key of path.slice(0, -1)) {
+      const child = node[key] ??= {};
+      if (!object(child)) throw Error("Stored cell path crosses a scalar");
+      node = child;
+    }
+    const last = path.at(-1);
+    if (last !== undefined) node[last] = value;
+  };
+  for (const [path, reason] of bad) {
+    let original: unknown = header.data.doc;
+    for (const key of path) {
+      if (!object(original)) return null;
+      original = original[key];
+    }
+    put(failed, path, original);
+    put(doc, path, { invalid: reason });
+  }
+  const projected = { ...raw, doc };
+  try { return { raw: projected, envelope: parseEnvelope(projected, spec), failed }; }
+  catch { return null; }
 }
 
 function toJsonSchema(schema: z.ZodType): unknown {

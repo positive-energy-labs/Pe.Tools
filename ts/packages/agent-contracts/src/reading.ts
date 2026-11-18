@@ -14,9 +14,9 @@ import { appliedScopeSchema } from "./families.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 import { workKey, workKeySchema } from "./route-state.ts";
 import { addressSchema, documentRefSchema, executionTargetSchema, sameAddress } from "./target.ts";
-import { DUCT_PARAMETER_KEYS } from "./ducts.ts";
+import { DUCT_PARAMETER_KEYS } from "@pe/duct-systems-contract/ducts";
 
-/** Which elements `ducts.snapshot` reads (ducts MAP 2026-10-27, "Where the data comes from" row 1). */
+/** Selectors bound acquisition by document, system, element ids or connector walk. */
 export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
   /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. Health without open-end neighbourhoods (as `ids`). */
   z.strictObject({ kind: z.literal("roster") }),
@@ -39,7 +39,7 @@ export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
 ]);
 export type DuctsSnapshotSelector = z.infer<typeof ductsSnapshotSelectorSchema>;
 
-/** Acquisition inputs, independent of a Ducts route's local selection and staged calculations. */
+/** Acquisition inputs, independent of a route's local selection and staged calculations. */
 export const ductsSnapshotReadingSchema = z.strictObject({
   kind: z.literal("ducts-snapshot"),
   target: documentRefSchema,

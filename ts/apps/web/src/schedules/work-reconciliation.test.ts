@@ -25,7 +25,7 @@ test("schedule Work retains persisted cells and domain edit reconciliation", asy
           { key: "1::2", was: "untouched" },
         ],
       },
-      cells: { "1::1": { edit: { value: "persisted" } } },
+      cells: { "1::1": { edit: { value: "persisted", by: "human" } } },
     }),
     history: [],
   };
@@ -53,7 +53,7 @@ test("schedule Work retains persisted cells and domain edit reconciliation", asy
           kind: "snapshot",
           value: expect.objectContaining({
             revision: 7,
-            doc: expect.objectContaining({ cells: { "1::1": { edit: { value: "persisted" } } } }),
+            doc: expect.objectContaining({ cells: { "1::1": { edit: { value: "persisted", by: "human" } } } }),
           }),
         }),
       ),

@@ -46,11 +46,12 @@ function fixture() {
     doc: familyDraftRouteState.schema.parse({
       reading: "Before",
       cells: {
-        "/parameters/Model": { edit: { value: "Staged" } },
+        "/parameters/Model": { edit: { value: "Staged", by: "human" } },
       },
     }),
   };
   const workspace = new RouteWorkspace({
+    publicationAuthor: () => "human",
     registrations: [{ spec: familyDraftRouteState }],
     store: {
       getState: async () => stored,

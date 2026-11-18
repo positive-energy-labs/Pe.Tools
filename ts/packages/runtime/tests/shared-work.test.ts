@@ -16,6 +16,7 @@ test("connected workspace shares edits, stamps either writer and preserves a rev
   };
   const rows = new Map<string, unknown>();
   const workspace = new RouteWorkspace({
+    publicationAuthor: () => "human",
     registrations: [{ spec }],
     store: {
       getState: async ({ targetKey }) => rows.get(targetKey),
@@ -39,7 +40,8 @@ test("connected workspace shares edits, stamps either writer and preserves a rev
       key,
       "shared",
       "pea",
-      [{ path: ["cells", "width", "edit"], value: { value: 250, by: "human", base: 0 } }],
+      // RULES: callers never supply by; the admitted writer is stamped by the host.
+      [{ path: ["cells", "width", "edit"], value: { value: 250, base: 0 } }],
       1,
     ),
   ).toMatchObject({ ok: true, revision: 2 });

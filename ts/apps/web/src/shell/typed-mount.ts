@@ -30,7 +30,6 @@ import {
   type WorkHandle,
   type WorkWrite,
   type RouteStatePatch,
-  bare,
   focusSelectionSchema,
   type WorkJournalDoor,
   type WorkScope,
@@ -100,6 +99,13 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   const decodePage = (remembered = true) => {
     const search = input.address.read();
     const memory = remembered ? z.record(z.string(),z.unknown()).parse(input.memory() ?? {}) : {};
+    for (const key of spec.retiredPage?.fields ?? [])
+      if (search.has(key) || key in memory) throw Error(`Saved Page field ${key} is retired. Open a new Place.`);
+    for (const [key, values] of Object.entries(spec.retiredPage?.values ?? {})) {
+      const raw = search.get(key) ?? memory[key];
+      if (values.some(value => raw === value || raw === JSON.stringify(value)))
+        throw Error(`Saved Page value ${key} is retired. Open a new Place.`);
+    }
     return freezePage({ ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => {
       const raw = search.get(key);
       return [key, decodeField(field, raw === null ? memory[key] ?? field.initial : raw)];
@@ -220,14 +226,24 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   gate.enter({ target: input.target, work: key }, page);
   let workAttempt = gate.capture("work");
   let door = input.history ? recordedWorkDoor(input.history) : ports.work ?? createWorkFeedClient();
+  let fixtureReady = true;
   if (edits && key && spec.core && !input.history && input.fixture !== null) {
     const packet = spec.core.source.provide?.(input.fixture, spec.core.args(page as never));
+    const initialize = (packet: import("@pe/agent-contracts/value").Publication | undefined) => {
     if (!packet?.value) throw Error(`Missing fixture ${input.fixture}`);
     const data = packet.value.data as Record<string,unknown>;
     door = createFixtureWorkDoor(edits!.work, data[edits!.owners[own]!.value!],
       Object.fromEntries(Object.entries(edits!.owners).map(([id,c]) => [id,c.state.schema])),
       Object.fromEntries(Object.entries(edits!.owners).map(([id,c]) => [id,data[c.value!]])),
       Object.fromEntries(Object.keys(edits!.owners).map(id => [id,id])));
+    };
+    if (packet instanceof Promise) {
+      fixtureReady = false;
+      void packet.then(value => {
+        if (disposed) return;
+        initialize(value); fixtureReady = true; syncWork(); notify();
+      }).catch(error => { if (!disposed) { problems.set("fixture", String(error)); notify(); } });
+    } else initialize(packet);
   }
   const accept = (record: typeof owners extends Map<string, infer R> ? R : never, handle: WorkHandle, doc: unknown) => {
     if (disposed || owners.get(record.scope.key.route) !== record) return;
@@ -242,6 +258,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
   };
   let ownerKey: string | undefined;
   const syncWork = () => {
+    if (!fixtureReady) return;
     const next = selectedKey(), signature=canonicalRouteInput(next);
     if(ownerKey === signature) return;
     ownerKey=signature;
@@ -313,16 +330,26 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           try {
             const packet = read.output.parse(frame.value);
             const publication = freezePage(packet.value);
+            const coverage = packet.value?.coverage;
+            const coverageReason = coverage && (coverage.unknown.length || coverage.refused.length)
+              ? input.fixture !== null ? "not covered by this fixture"
+                : coverage.refused.map(entry => entry.reason).join("; ") || packet.reason || `Coverage unknown for ${coverage.unknown.join(", ")}`
+              : undefined;
             const current = frame.kind === "complete" && frame.fresh !== false && packet.state === "current" &&
               !!packet.value && !packet.value.coverage.unknown.length && !packet.value.coverage.refused.length;
             record.snapshot = current ? { state: "ready", value: publication!.data, publication, hash: packet.value!.evaluation }
-              : unavailable(valueRefusal(frame.reason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
+              : unavailable(valueRefusal(frame.reason ?? coverageReason ?? packet.reason ?? "Incomplete Value", read.key), publication?.data??valueOf(record.snapshot), publication??record.snapshot.publication);
           } catch (error) { record.snapshot = unavailable(valueRefusal(error, read.key), valueOf(record.snapshot), record.snapshot.publication); }
         } else if (frame.kind !== "log") record.snapshot = frame.kind === "failure"?unavailable(valueRefusal(frame.error, read.key),valueOf(record.snapshot),record.snapshot.publication):reading(valueOf(record.snapshot),record.snapshot.publication);
         connectTimeline(); notify();
       };
       if (input.fixture !== null) {
-        try { deliver({ kind: "complete", value: read.source.provide!(input.fixture, args), revision: 1 }); }
+        try {
+          const packet = read.source.provide!(input.fixture, args);
+          if (packet instanceof Promise) void packet.then(value => deliver({ kind: "complete", value, revision: 1 }))
+            .catch(error => deliver({ kind: "failure", error }));
+          else deliver({ kind: "complete", value: packet, revision: 1 });
+        }
         catch (error) { deliver({ kind: "failure", error }); }
       } else {
         const ctx: ReadingContext = { target: input.target!, workKey: key, workRevision: null,
@@ -770,13 +797,11 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           for (const p of patches) { const id=ownerOf(p.path.map(String),preferred); groups.set(id,[...(groups.get(id)??[]),p]); }
           await Promise.all([...groups].map(async ([id, patches]) => {
             const record=drawnOwners.get(id)!, handle=handles.get(id)!;
-            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision,false,true);
+            const applied=applyPatches(record.config.state,{version:1,revision:handle.revision,doc:docs.get(id)},"human",patches,handle.revision);
             if (!applied.ok) throw Error(applied.error);
-            // Scalar cells travel whole; record cells keep their narrow keys (host inverse authority).
-            const normalized=[...new Set(patches.map(p=>String(p.path[0])))].flatMap(key => bare(record.config.state.schema.shape[key]!) instanceof z.ZodRecord
-              ? patches.filter(p=>String(p.path[0])===key) : [{path:[key],value:(applied.envelope.doc as any)[key]}]);
+            // Validate a stamped projection, but send only the original caller patches to the host.
             const label=id===own ? detail.label : `${detail.label} · from /${id}`;
-            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:normalized,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
+            const write:WorkWrite={kind:"apply",expectedRevision:handle.revision,press:crypto.randomUUID(),patches:patches,...z.object({label:z.string(),meta:z.json().optional()}).parse(edits!.describe({...detail,label}))};
             const admission=record.lease.entry, intent=admission.retain(write,label);
             notify();
             try {

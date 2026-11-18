@@ -15,7 +15,7 @@ export async function familiesRecorded() {
   const captures = captureStore(join(dir, "captures"));
   const reader = await familiesReader();
   let state: unknown;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.families.work }], store: {
+  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.families.work }], store: {
     getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
   } });
   const key = bindWork("families", address("C:/model.rvt"));

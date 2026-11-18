@@ -4,6 +4,12 @@
 // Drift gate: pnpm --filter @pe/host-contracts codegen:check  (offline, deterministic)
 // Live parity: pnpm --filter @pe/host-contracts codegen:verify-live -- --session <id>
 
+export const DUCT_UNIT_KINDS = ["fan-coil","air-handler","erv","muas","dehumidifier","other"] as const;
+export type DuctUnitKind = (typeof DUCT_UNIT_KINDS)[number];
+
+export const FAN_BLOCKER_KINDS = ["open-end","inferred-join","unknown-drop","no-flow","flow-mismatch","shared-leg","class-change","not-priced","implausible-loss","equipment-pairing","backflow","direction-mismatch"] as const;
+export type FanBlockerKind = (typeof FAN_BLOCKER_KINDS)[number];
+
 /** Upsert a synthetic data table in one host-owned transaction: a key schedule whose rows are freely user-editable and whose cells are shared parameters on stable row elements — ideal for arbitrary agent-authored tables like design conditions or install notes. Can also place the table on a sheet. Authored element schedules apply through schedule.apply. */
 export namespace DataTableApply {
   export namespace Req {
@@ -173,7 +179,7 @@ export namespace DocumentTemporaryStatus {
   }
 }
 
-/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the fanStatic slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.plan plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
+/** Write duct losses into Revit so they travel with the model. Each fitting names a method: pe-server points it at the Pe loss server, which charges the family's own coefficient parameter live (the fittingCoefficient slot, default Pe_C) when the family carries one and otherwise prices each leg live from the write's ASHRAE table and the connectors' flows (taps, transitions, unstamped elbows); specific-coefficient freezes a number (export only). Revit's own ASHRAE-table route is never written. Also Specific Loss (in-wg) on duct accessories, terminal connector drops where the family connector is Specific Loss, fan external static on equipment through the requiredEsp slot, and Pe's provenance store in the hidden _PE_DuctLosses Project Information parameter. ducts.apply.plan plans every write and refusal without a transaction. A real apply commits Not Defined on every targeted fitting, then the losses, in one undo step; a failed stage rolls everything back and is named. Returns per-target outcomes and the touched systems' critical path after. */
 export namespace DuctsApply {
   export namespace Req {
     /**
@@ -196,14 +202,15 @@ export namespace DuctsApply {
       storeDeletes?: null | DuctStoreDeletes;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -473,14 +480,15 @@ export namespace DuctsApplyPlan {
       storeDeletes?: null | DuctStoreDeletes;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1205,14 +1213,15 @@ export namespace DuctsSnapshotRoster {
       selector?: null | DuctSnapshotSelector;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1284,6 +1293,21 @@ export namespace DuctsSnapshotRoster {
       | "no-component-drop"
       | "no-terminal-flow"
       | "high-velocity";
+    export type DuctParameterOwnerKind = "instance" | "type";
+    export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
+    export type FanBlockerKind =
+      | "open-end"
+      | "inferred-join"
+      | "unknown-drop"
+      | "no-flow"
+      | "flow-mismatch"
+      | "shared-leg"
+      | "class-change"
+      | "not-priced"
+      | "implausible-loss"
+      | "equipment-pairing"
+      | "backflow"
+      | "direction-mismatch";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -1311,6 +1335,9 @@ export namespace DuctsSnapshotRoster {
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
       walk?: null | DuctWalk;
       tolerances?: null | DuctHealthTolerances;
+      reach?: null | DuctReach;
+      parameterCohorts?: DuctFanParameterCohort[] | null;
+      vocabulary: DuctFanVocabulary;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -1630,7 +1657,8 @@ export namespace DuctsSnapshotRoster {
      * Complete parameter names after override, store and engine-default resolution.
      */
     export interface DuctParameterSlots {
-      fanStatic: string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow: string;
       componentDrop: string;
       terminalDrop: string;
@@ -1725,14 +1753,15 @@ export namespace DuctsSnapshotRoster {
       ruledAt: string;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1781,7 +1810,8 @@ export namespace DuctsSnapshotRoster {
     /**
      * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
      * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
-     * box held more than the candidate cap and was counted, not listed.
+     * box held more than the candidate cap and was counted, not listed, or a peer read failed.
+     * UnreadPeers names the element and connector whose physical peers could not be read, never an open end.
      *
      */
     export interface DuctWalk {
@@ -1792,6 +1822,7 @@ export namespace DuctsSnapshotRoster {
       candidates: DuctOpenEnd[];
       truncated: boolean;
       elapsedMs: number;
+      unreadPeers: DuctRef[];
     }
     /**
      * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
@@ -1813,6 +1844,38 @@ export namespace DuctsSnapshotRoster {
     export interface DuctHealthTolerances {
       candidateBoxIn: number;
       autoJoinGapIn: number;
+    }
+    /**
+     * Completeness of physical growth for a systems selector; failed peer reads are not open ends.
+     */
+    export interface DuctReach {
+      unreadPeers: DuctRef[];
+      complete: boolean;
+    }
+    /**
+     * Document-wide membership, including off-walk instances. Basis is the snapshot Document.ReadAt in round-trip format.
+     */
+    export interface DuctFanParameterCohort {
+      parameter: string;
+      owner: DuctParameterOwner;
+      members: DuctParameterMember[];
+      basis: string;
+      complete: boolean;
+    }
+    export interface DuctParameterOwner {
+      kind: DuctParameterOwnerKind;
+      id: number;
+    }
+    export interface DuctParameterMember {
+      elementId: number;
+      uniqueId: string;
+    }
+    /**
+     * Native words published in the snapshot catalog, projected by host-typegen.
+     */
+    export interface DuctFanVocabulary {
+      unitKinds: DuctUnitKind[];
+      blockerKinds: FanBlockerKind[];
     }
   }
 }
@@ -1834,14 +1897,15 @@ export namespace DuctsSnapshotWalk {
       selector?: null | DuctSnapshotSelector;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -1913,6 +1977,21 @@ export namespace DuctsSnapshotWalk {
       | "no-component-drop"
       | "no-terminal-flow"
       | "high-velocity";
+    export type DuctParameterOwnerKind = "instance" | "type";
+    export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
+    export type FanBlockerKind =
+      | "open-end"
+      | "inferred-join"
+      | "unknown-drop"
+      | "no-flow"
+      | "flow-mismatch"
+      | "shared-leg"
+      | "class-change"
+      | "not-priced"
+      | "implausible-loss"
+      | "equipment-pairing"
+      | "backflow"
+      | "direction-mismatch";
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
@@ -1940,6 +2019,9 @@ export namespace DuctsSnapshotWalk {
       fanFlowCandidates?: DuctAirflowCandidate[] | null;
       walk?: null | DuctWalk;
       tolerances?: null | DuctHealthTolerances;
+      reach?: null | DuctReach;
+      parameterCohorts?: DuctFanParameterCohort[] | null;
+      vocabulary: DuctFanVocabulary;
     }
     /**
      * The document read, when, and how long the read took. NetworkBasedCalculations is DuctSettings' engine switch:
@@ -2259,7 +2341,8 @@ export namespace DuctsSnapshotWalk {
      * Complete parameter names after override, store and engine-default resolution.
      */
     export interface DuctParameterSlots {
-      fanStatic: string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow: string;
       componentDrop: string;
       terminalDrop: string;
@@ -2354,14 +2437,15 @@ export namespace DuctsSnapshotWalk {
       ruledAt: string;
     }
     /**
-     * Parameter names the census reads, instance first and then type. FanStatic (in-wg) and FanFlow (CFM) on HVAC
+     * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
      * equipment, ComponentDrop (in-wg) on accessories, TerminalDrop (in-wg) and TerminalFlow (CFM) on terminals,
      * FittingCoefficient (a number) on fittings: the family's own loss coefficient, which the Pe loss server reads
      * live (the configurable door, kaitpw 2026-10-08).
      *
      */
     export interface DuctParameterSlotOverrides {
-      fanStatic?: null | string;
+      requiredEsp?: null | string;
+      ratedEsp?: null | string;
       fanFlow?: null | string;
       componentDrop?: null | string;
       terminalDrop?: null | string;
@@ -2410,7 +2494,8 @@ export namespace DuctsSnapshotWalk {
     /**
      * The `from` walk's summary. Hops is the deepest element depth reached from the start; ElementsReached counts walked
      * elements (the start included, candidates excluded); Truncated is true when MaxHops cut the walk or an open end's
-     * box held more than the candidate cap and was counted, not listed.
+     * box held more than the candidate cap and was counted, not listed, or a peer read failed.
+     * UnreadPeers names the element and connector whose physical peers could not be read, never an open end.
      *
      */
     export interface DuctWalk {
@@ -2421,6 +2506,7 @@ export namespace DuctsSnapshotWalk {
       candidates: DuctOpenEnd[];
       truncated: boolean;
       elapsedMs: number;
+      unreadPeers: DuctRef[];
     }
     /**
      * One open end the walk stopped at and what the candidate box around it held (CandidateCount first, cheap; CandidateIds only under the cap).
@@ -2442,6 +2528,38 @@ export namespace DuctsSnapshotWalk {
     export interface DuctHealthTolerances {
       candidateBoxIn: number;
       autoJoinGapIn: number;
+    }
+    /**
+     * Completeness of physical growth for a systems selector; failed peer reads are not open ends.
+     */
+    export interface DuctReach {
+      unreadPeers: DuctRef[];
+      complete: boolean;
+    }
+    /**
+     * Document-wide membership, including off-walk instances. Basis is the snapshot Document.ReadAt in round-trip format.
+     */
+    export interface DuctFanParameterCohort {
+      parameter: string;
+      owner: DuctParameterOwner;
+      members: DuctParameterMember[];
+      basis: string;
+      complete: boolean;
+    }
+    export interface DuctParameterOwner {
+      kind: DuctParameterOwnerKind;
+      id: number;
+    }
+    export interface DuctParameterMember {
+      elementId: number;
+      uniqueId: string;
+    }
+    /**
+     * Native words published in the snapshot catalog, projected by host-typegen.
+     */
+    export interface DuctFanVocabulary {
+      unitKinds: DuctUnitKind[];
+      blockerKinds: FanBlockerKind[];
     }
   }
 }

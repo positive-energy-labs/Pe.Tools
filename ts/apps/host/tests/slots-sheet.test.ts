@@ -3,6 +3,7 @@ import { z } from "zod";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts";
 import { evaluate, read, type InputPort } from "../src/reads/evaluator.ts";
 import { sheetExecutors, sheetWrites } from "../src/slots/sheet.ts";
+import { productExecutors } from "../src/product-executors.generated.ts";
 
 // Slice 7, the host half of the sheet slot: what sheet.plan derives from a route's Work, and the Pod's document Work door.
 test("sheetWrites derives one parameter write per staged row, by UniqueId, and none for a local binding", () => {
@@ -63,7 +64,28 @@ test.each([
   const losses = { "sheet.plan": { bind }, "sheet.apply": { bind } };
   const sheet = { draft: true, bindings: { criterion: { home: { at: "store", store: "_PE_DuctLosses" }, domain, per: "route" } } };
   const executors = sheetExecutors({} as never, { workspace: { sheet: () => sheet } } as never, losses as never);
-  await expect(executors["sheet.plan"]!.bind({ admission: { input: { work: { key: { route: "ducts" } }, doc: { criterion: { edit: { value } } } } } } as never))
+  await expect(executors["sheet.plan"]!.bind({ admission: { input: { work: { key: { route: "duct-systems" } }, doc: { criterion: { edit: { value } } } } } } as never))
     .rejects.toThrow(/criterion/);
   expect(bind).not.toHaveBeenCalled();
+});
+
+test("registered sheet routes select their product executor; unregistered routes use parameters", async () => {
+  const { sheetRoutes } = productExecutors({} as never);
+  const bind = vi.fn(async () => ({ prepare: async () => "product" }));
+  const executors = sheetExecutors({} as never, { workspace: { sheet: () => ({ bindings: {} }) } } as never,
+    { "sheet.plan": { bind } } as never, sheetRoutes);
+  const context = (route: string) => ({ admission: { target: { kind: "document", ref: { session: "s", openId: "o" } }, input: { work: { key: { route } }, doc: {} } } }) as never;
+  const specialized = await executors["sheet.plan"]!.bind(context("fans"));
+  expect(await specialized.prepare!()).toEqual({ via: "losses", value: "product" });
+  for (const route of ["pod.other", "toString"]) {
+    const generic = await executors["sheet.plan"]!.bind(context(route));
+    await expect(generic.prepare!()).rejects.toThrow("Nothing to write: stage a parameter cell first");
+  }
+  expect(bind).toHaveBeenCalledTimes(1);
+});
+
+test.each(["unknown", "toString"])("P-097: unknown sheet executor via %s refuses by name", async name => {
+  const executors = sheetExecutors({} as never, { workspace: { sheet: () => ({ bindings: {} }) } } as never, {}, { custom: name });
+  await expect(executors["sheet.plan"]!.bind({ admission: { input: { work: { key: { route: "custom" } }, doc: {} } } } as never))
+    .rejects.toMatchObject({ refusal: { code: "sheet.executor-unknown", message: `Unknown sheet executor via: ${name}` } });
 });

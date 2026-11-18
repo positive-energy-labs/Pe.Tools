@@ -110,7 +110,7 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     expect(storedNotices(stateMachine(storedParent(hostState().notices))).filter(notice => notice.path === path)).toMatchObject([
       { class: "keep", sha256: sha256Hex(bytes), reason: expect.stringContaining(sha256Hex(prior)) },
     ]);
-    const works = [bindWork("ducts", null, documentRef ? undefined : "tier-proof", documentRef)];
+    const works = [bindWork("duct-systems", null, documentRef ? undefined : "tier-proof", documentRef)];
     const timeline = async () => {
       const response = await fetch(`${host.base}/pe/reads/value`, { method: "POST", headers,
         body: JSON.stringify({ read: "work.timeline", args: { works }, subscription: randomUUID(), generation: 0 }) });
@@ -119,7 +119,7 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
       return workTimelineSchema.parse(wire.value.data);
     };
     const query = documentRef ? `open=${encodeURIComponent(`${documentRef.session}/${documentRef.openId}`)}` : "work=tier-proof";
-    const undo = async (expected: unknown) => (await fetch(`${host.base}/pe/route-state/ducts/history?${query}`, {
+    const undo = async (expected: unknown) => (await fetch(`${host.base}/pe/route-state/duct-systems/history?${query}`, {
       method: "POST", headers, body: JSON.stringify({ direction: "undo", works, expected }),
     })).json();
     // Mutant ST7a-no-restore: acknowledge the undo without restoring prior bytes.
