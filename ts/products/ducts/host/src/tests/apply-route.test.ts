@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import type { WorkPath } from "@pe/agent-contracts";
-import { fansExecutors } from "@pe/fans-host/actions";
 import { ductActionExecutors } from "../action-runtime.ts";
 
 /*
@@ -34,11 +33,6 @@ const both = (bridge: never) => ductActionExecutors({
     retires: () => [["assumptions", "open-end:101:1"], ["roles", role]] },
   bindings: [["ducts.apply-heal", "heal", "apply"]],
 }, bridge)["ducts.apply-heal"] as never;
-
-test("the real /fans apply asks to retire its own role only, and retires it under /fans", async () => {
-  const { key, calls } = await apply(fansExecutors({} as never)["sheet.apply"] as never, "fans");
-  expect(calls).toEqual([[key, "fans", [["roles", role]]]]);
-});
 
 test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
   const { key, calls } = await apply(both({} as never), "fans");

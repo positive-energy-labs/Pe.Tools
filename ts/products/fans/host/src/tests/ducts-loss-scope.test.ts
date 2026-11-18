@@ -2,7 +2,9 @@ import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "../../../../../packages/host
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { claimRefusal, fanRulings, fanWriteRequest, lossSnapshot, unwrittenCells, unwrittenReason } from "@pe/fans-host/actions";
+import { claimRefusal, fanRulings, fanWriteRequest, fansExecutors, lossSnapshot, unwrittenCells, unwrittenReason } from "@pe/fans-host/actions";
+import { Effect } from "effect";
+import type { WorkPath } from "@pe/agent-contracts";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { mergeFar } from "@pe/ducts-domain/calc/joins";
 import { buildCalc, type BuildCalcInput, type FanWriteContext, type CalcSnapshot } from "@pe/fans-domain/calc/index";
@@ -16,6 +18,24 @@ import { ductsDesign, fanClaimSchema, fansDocumentSchema, stagedValues } from ".
 
 // The saved captures predate the native vocabulary; it is the generated one, added whole.
 const walkCapture = { parse: (raw: object) => nativeResponseSchema("ducts.snapshot.walk").parse({ ...raw, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }) };
+
+// D9: the real executor retires its own role under /fans; the shared runtime's filter is tested in ducts-host.
+test("the real /fans apply asks to retire its own role only, and retires it under /fans", async () => {
+  const role = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000005";
+  const answer = { previewOnly: false, writes: [
+    { kind: "verdict", key: "open-end:101:1", outcome: "written" },
+    { kind: "fitting", id: 7, outcome: "written" },
+    { kind: "role", id: 5, outcome: "written" },
+  ] };
+  const input = { terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [], fittings: [{ id: 7, ruleKey: "elbow" }] };
+  const key = { binding: "open", route: "fans", target: null, open: { session: "A", openId: "doc" } };
+  const retireWork = vi.fn((_key: unknown, _route: string, paths: readonly WorkPath[]) => Effect.succeed({ retired: [...paths], revision: 2 }));
+  const ctx = { admission: { target: { kind: "document", ref: { session: "A", openId: "doc" } }, input: { work: { key, revision: 1 } } } };
+  const execution = { prepared: { process: {}, input, dependencies: null, subjects: { [role]: "5" }, cells: [["roles", role]] },
+    step: () => Effect.succeed(answer), retireWork };
+  await Effect.runPromise(fansExecutors({} as never)["sheet.apply"]!.run(ctx as never, execution as never) as Effect.Effect<unknown>);
+  expect(retireWork.mock.calls).toEqual([[key, "fans", [["roles", role]]]]);
+});
 
 test("fan preview survives identical re-pricing but rejects changed model inputs", () => {
   const snapshot = walkCapture.parse(
