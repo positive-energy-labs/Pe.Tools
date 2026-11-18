@@ -123,11 +123,12 @@ public sealed class DuctLossStoreTests {
         Assert.Throws<ArgumentException>(() => new DuctParameterSlotOverrides(RequiredEsp: required, RatedEsp: rated).Resolve());
 
     [Test]
-    public void Staged_slots_win_over_the_store_and_the_store_over_the_defaults() {
+    public void Stored_slot_receipts_do_not_supply_resolution_defaults() {
         var staged = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlotOverrides>("""{"componentDrop":"Damper Drop"}""")!;
-        var stored = new DuctParameterSlotOverrides(TerminalDrop: "Catalog Drop", ComponentDrop: "Old Drop");
+        var stored = Read(new DuctLossStore { Slots = new(TerminalDrop: "Catalog Drop", ComponentDrop: "Old Drop") }.ToJson()).Value!;
 
-        Assert.That(staged.Resolve(stored),
-            Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop", TerminalDrop: "Catalog Drop").Resolve()));
+        Assert.That(stored.Slots!.TerminalDrop, Is.EqualTo("Catalog Drop"), "the receipt survives independently of resolution");
+        Assert.That(staged.Resolve(),
+            Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop").Resolve()));
     }
 }

@@ -47,7 +47,8 @@ public sealed class DuctStoreOverlayReadbackTests {
                     Assert.That(result.Writes.Where(w => w.Kind is "verdict" or "role" or "slot" || w.Kind.StartsWith("store-")).Select(w => (w.Kind, w.Key ?? w.Id.ToString(), w.Before, w.After)),
                         Is.EquivalentTo(new[] {
                             ("verdict", "drop:2", "ignore", "none"), ("role", "106", "none", "passive"),
-                            ("store-instance", "101", "SR5-1 c=0.5", "none")
+                            ("store-instance", "101", "SR5-1 c=0.5", "none"),
+                            ("slot", "requiredEsp", "Stored Static", "PE_M_Fan_ExternalStaticPressure")
                         }),
                         "every changed store key in every map, with its concrete stored before; no phantom removals");
                     Assert.That(result.Writes.Single(w => w.Kind == "store").After, Is.EqualTo("revision 4"));
@@ -62,7 +63,8 @@ public sealed class DuctStoreOverlayReadbackTests {
                 Assert.That(next.EquipmentFlows.Keys, Is.EquivalentTo(new[] { 104L }));
                 Assert.That(next.Verdicts.Keys, Is.EquivalentTo(new[] { "keep:1" }));
                 Assert.That(next.Roles.Keys, Is.EquivalentTo(new[] { 105L, 106L }));
-                Assert.That(next.Slots?.RequiredEsp, Is.EqualTo("Stored Static"), "stored slot names survive an omitted slot");
+                Assert.That(next.Slots?.RequiredEsp, Is.EqualTo(new DuctParameterSlotOverrides().Resolve().RequiredEsp),
+                    "the receipt records the C# default used by this request");
                 Assert.That(next.Unknown["future"].ToString(), Is.EqualTo("kept"));
                 Assert.That(next.WorkRevision, Is.EqualTo(4));
             });

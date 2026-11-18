@@ -187,16 +187,16 @@ public sealed class BridgeOpRequestDeserializationTests {
 
     [Op("test.duct-slot-defaults", OpSubject.None, OpTouches.Metadata, Does = "Resolve dispatched duct slot overrides.")]
     private static DuctParameterSlots ResolveSlots(DuctParameterSlotOverrides request) =>
-        request.Resolve(new DuctParameterSlotOverrides(FanFlow: "PE_M_Fan_AirFlow", TerminalFlow: "revit:Flow"));
+        request.Resolve();
 
     [TestCase("{}", "Pressure Drop")]
     [TestCase("""{"componentDrop":"Damper Drop"}""", "Damper Drop")]
     [TestCase("""{"fanFlow":null,"terminalFlow":null}""", "Pressure Drop")]
-    public async Task Dispatched_slot_overrides_preserve_stored_names_before_engine_defaults(string json, string expectedDrop) {
+    public async Task Dispatched_slot_overrides_resolve_over_CSharp_defaults(string json, string expectedDrop) {
         var resolved = (DuctParameterSlots)(await Probe("test.duct-slot-defaults").ExecuteAsync(json, null, null, CancellationToken.None))!;
         Assert.Multiple(() => {
-            Assert.That(resolved.FanFlow, Is.EqualTo("PE_M_Fan_AirFlow"));
-            Assert.That(resolved.TerminalFlow, Is.EqualTo("revit:Flow"));
+            Assert.That(resolved.FanFlow, Is.EqualTo("PE_M_Fan_AirFlowDesign"));
+            Assert.That(resolved.TerminalFlow, Is.EqualTo("PE_M_Grd_AirFlow"));
             Assert.That(resolved.ComponentDrop, Is.EqualTo(expectedDrop));
         });
     }
