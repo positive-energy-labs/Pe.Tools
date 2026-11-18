@@ -6,11 +6,11 @@ import { fansCalc } from "@pe/fans-web/calc";
 import { settingsSheet } from "../../../settings/route.ts";
 import { sheetCells } from "./index.ts";
 import { readFileSync } from "node:fs";
-import { ductsNetworkData, ductSlotSources } from "@pe/agent-contracts";
+import { ductsNetworkData, ductParameterSlots, ductSlotSources } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 
 const settings = { ducts: [{ tier: "firm" as const, home: "firm", name: "Firm", path: "Settings/ducts.json", sha256: "hash", json: { criteria: { autoJoinGapIn: 5 } } }] };
-const criteria = resolveCriteria({ criteria: { autoJoinGapIn: 9 }, criteriaMeta: { autoJoinGapIn: { by: "human", ref: "work:criterion" } } }, null, { version: "test", criteria: { ...DUCTS_DEFAULT_CRITERIA, autoJoinGapIn: 5 } });
+const criteria = resolveCriteria({ criteria: { autoJoinGapIn: 9 }, criteriaMeta: { autoJoinGapIn: { by: "human", ref: "work:criterion" } } }, { version: "test", criteria: { ...DUCTS_DEFAULT_CRITERIA, autoJoinGapIn: 5 } });
 const cells = (slot: Parameters<typeof sheetCells>[0], read: unknown) => sheetCells(slot, { rows: [], work: {}, model: [], read });
 const fanSettings = { bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([name]) => name.startsWith("setting."))) };
 
@@ -43,14 +43,25 @@ test("V3: Settings resolves its own tiers and an unnamed slot reads default", ()
   expect(rows.find(row => row.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: null, source: "default" });
 });
 
-test("P14: a request-selected slot carries its own source instead of the settings tier", () => {
-  const name = "Request_Flow";
+test("P23: host requests name only served slots and rows retain the serving tier", () => {
+  const name = "Firm_Flow";
   const tiers = { ducts: [{ ...settings.ducts[0], json: { parameters: { fanFlow: "Firm_Flow" } } }] };
+  expect(ductParameterSlots(tiers.ducts)).toEqual({ fanFlow: name });
+  expect(ductParameterSlots()).toEqual({});
+  for (const [file, pattern, count] of [
+    ["duct-systems/host/src/host.ts", /slots: ductParameterSlots\(saved.settings\)/g, 2],
+    ["fans/host/src/host.ts", /slots: ductParameterSlots\(settings\)/g, 1],
+    ["fans/host/src/fan-calc.ts", /const slots = ductParameterSlots\(saved.settings\)/g, 2],
+    ["ducts/host/src/action-runtime.ts", /slots: ductParameterSlots\(settings\)/g, 1],
+  ] as const) {
+    const source = readFileSync(new URL(`../../../../../../products/${file}`, import.meta.url), "utf8");
+    expect([...source.matchAll(pattern)], file).toHaveLength(count);
+  }
   const snapshot = { slots: { fanFlow: name }, slotSources: ductSlotSources({ fanFlow: name }, tiers.ducts), nodes: [], segments: [] };
   for (const [slot, read] of [
     [designCalc, { settings: tiers, criteria, network: snapshot }],
     [fanSettings, { settings: tiers, calcView: { inputs: { criteria } }, calcSnapshot: snapshot }],
-  ] as const) expect(cells(slot, read).find(row => row.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: name, source: "model", ref: "Request override" });
+  ] as const) expect(cells(slot, read).find(row => row.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: name, source: "firm" });
 });
 
 test("P15: duct-systems slot rows use the decoded recorded walk shape", () => {

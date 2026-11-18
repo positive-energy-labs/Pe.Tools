@@ -465,9 +465,9 @@ export const ductParameterSlots = (settings?: readonly SettingTierRead[]): Parti
   }));
 
 export const ductSlotSourcesSchema = z.record(z.string(), z.object({ source: z.enum(["user", "project", "firm", "default", "model"]), ref: z.string().optional(), note: z.string().optional() }));
-/** A native name differing from the served setting belongs to the request, not that home. */
-export const ductSlotSources = (slots: Partial<Record<DuctParameterKey, string | null>>, settings?: readonly SettingTierRead[]) =>
+/** Host requests carry only served names; native fallbacks belong to the default tier. */
+export const ductSlotSources = (_slots: Partial<Record<DuctParameterKey, string | null>>, settings?: readonly SettingTierRead[]) =>
   Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => {
     const served = serveSetting(settings, ["project", "firm"], ["parameters", key], ductParameterNameSchema(key));
-    return [key, served.value != null && served.value !== slots[key] ? { source: "model" as const, ref: "Request override" } : { source: served.tier, ref: served.ref, note: served.note }];
+    return [key, { source: served.tier, ref: served.ref, note: served.note }];
   }));

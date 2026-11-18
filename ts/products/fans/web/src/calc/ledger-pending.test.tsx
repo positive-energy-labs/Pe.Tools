@@ -125,7 +125,7 @@ test.each([false, true])("the Ledger summary qualifies the worst subtotal when s
   const side = (name: string) =>
     [...view.container.querySelectorAll(`[data-sheet-esp] [data-side='${name}'] > span`)].map((c) => c.textContent);
   // side, count, worst, allowance (the resolved criterion, not a row total).
-  expect(side("supply").slice(0, 3)).toEqual(["supply", "1 of 2 branches known", complete ? "0.0500" : "0.0500 partial"]);
+  expect(side("supply").slice(0, 3)).toEqual(["supply", "1 of 2 branches known", complete ? "0.0500 computed" : "0.0500 partial"]);
   const worst = view.container.querySelector('[data-sheet-esp] [data-side="supply"] > span:nth-child(3)')!;
   expect(worst.querySelector('[data-tone="caution"]')?.textContent ?? null).toBe(complete ? null : " partial");
   expect(side("return").slice(0, 3)).toEqual(["return", "0 of 1 branches known", "—"]);
