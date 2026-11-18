@@ -27,7 +27,7 @@
   ],
   "nodes": [
     {
-      "id": 1, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001",
+      "id": 1,
       "kind": "equipment",
       "category": "Equipment",
       "family": "Air Handler",
@@ -66,10 +66,11 @@
           "unit": "cfm",
           "provenance": "designer-stated"
         }
-      ]
+      ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000001"
     },
     {
-      "id": 21, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000015",
+      "id": 21,
       "kind": "fitting",
       "category": "Fitting",
       "family": "Round Elbow",
@@ -138,6 +139,7 @@
           "provenance": "derived"
         }
       ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000015",
       "loss": {
         "method": "ashrae-table",
         "serverId": "8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19",
@@ -148,7 +150,7 @@
       }
     },
     {
-      "id": 22, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000016",
+      "id": 22,
       "kind": "fitting",
       "category": "Fitting",
       "family": "Round Takeoff",
@@ -229,6 +231,7 @@
           "provenance": "geometry"
         }
       ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-00000016",
       "loss": {
         "method": "not-defined",
         "serverId": "76eff5da-2e71-45f7-b940-cc5716328ba0",
@@ -236,7 +239,7 @@
       }
     },
     {
-      "id": 30, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000001e",
+      "id": 30,
       "kind": "terminal",
       "category": "Terminal",
       "family": "Supply Grille",
@@ -271,6 +274,7 @@
           "provenance": "designer-stated"
         }
       ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000001e",
       "terminalDrop": {
         "assignedPressureDropInWg": 0.0,
         "connectorLossMethod": "NotDefined",
@@ -278,7 +282,7 @@
       }
     },
     {
-      "id": 31, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000001f",
+      "id": 31,
       "kind": "terminal",
       "category": "Terminal",
       "family": "Supply Grille",
@@ -313,6 +317,7 @@
           "provenance": "designer-stated"
         }
       ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000001f",
       "terminalDrop": {
         "assignedPressureDropInWg": 0.05,
         "connectorLossMethod": "SpecificLoss",
@@ -322,7 +327,7 @@
   ],
   "segments": [
     {
-      "id": 10, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000000a",
+      "id": 10,
       "kind": "duct",
       "curveKind": "line",
       "type": "Round Duct",
@@ -389,10 +394,11 @@
           },
           "areaFt2": 0.19635
         }
-      ]
+      ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000000a"
     },
     {
-      "id": 11, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000000b",
+      "id": 11,
       "kind": "duct",
       "curveKind": "line",
       "type": "Round Duct",
@@ -444,10 +450,11 @@
           },
           "areaFt2": 0.7854
         }
-      ]
+      ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000000b"
     },
     {
-      "id": 12, "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000000c",
+      "id": 12,
       "kind": "duct",
       "curveKind": "line",
       "type": "Round Duct",
@@ -499,7 +506,8 @@
           },
           "areaFt2": 0.19635
         }
-      ]
+      ],
+      "uniqueId": "6d52156a-3876-4d76-b641-341454252f26-0000000c"
     }
   ],
   "flows": [
@@ -560,5 +568,22 @@
     "terminalDrop": "PE_M_Grd_ExternalStaticPressure",
     "fittingCoefficient": "Pe_C",
     "terminalFlow": "PE_M_Grd_AirFlow"
+  },
+  "vocabulary": {
+    "unitKinds": ["fan-coil", "air-handler", "erv", "muas", "dehumidifier", "other"],
+    "blockerKinds": [
+      "open-end",
+      "inferred-join",
+      "unknown-drop",
+      "no-flow",
+      "flow-mismatch",
+      "shared-leg",
+      "class-change",
+      "not-priced",
+      "implausible-loss",
+      "equipment-pairing",
+      "backflow",
+      "direction-mismatch"
+    ]
   }
 }
