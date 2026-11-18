@@ -14,7 +14,7 @@
   "packages/agent-contracts/src/route-kernel.fixtures.ts": 1,
   "packages/agent-contracts/src/routes/index.ts": 2,
   "packages/agent-contracts/src/routes/picture.ts": 1,
-  "packages/agent-contracts/src/semantic-actions.ts": 83,
+  "packages/agent-contracts/src/semantic-actions.ts": 82,
   "packages/agent-contracts/src/setting-owners.ts": 22,
   "packages/mcps/src/pea/capability-projections.ts": 1,
   "packages/mcps/src/pea/capability-tools.ts": 5,
