@@ -42,6 +42,7 @@ test.each(["duct-systems", "fans"] as const)("Pea resolves %s subject names thro
     read: "ducts.roster", args: { target: ref }, subscription: "casing-roster", generation: 1,
   })).json();
   let rosterData: any = structuredClone(packet.value!.data);
+  let deliverRoster = true;
   if (key === "duct-systems") rosterData.systems = [{ ...rosterData.systems[0], name: "SA 19" }];
   else rosterData.rows = [{ ...rosterData.rows[0], mark: "MUAS-1" }];
   const fanIdentity = key === "fans" ? stableFanKey(rosterData.rows[0]) : "";
@@ -51,6 +52,7 @@ test.each(["duct-systems", "fans"] as const)("Pea resolves %s subject names thro
     address: { read: () => search, write: next => { search = next; }, subscribe: () => () => {} },
   }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), {
     sources: { [roster.key]: { kind: "use", open(_ctx, deliver) {
+      if (!deliverRoster) return;
       deliver({ kind: "complete", revision: 1, value: { ...packet, value: { ...packet.value, data: rosterData } } });
     } } },
   });
@@ -103,6 +105,14 @@ test.each(["duct-systems", "fans"] as const)("Pea resolves %s subject names thro
     expect(mount.page.read()[field]).toEqual({ kind: "ids", ids: [identity] });
     // A fan identity carries a port sub, so it is not a plain name: the ids equality above proves it.
     if (key === "duct-systems") expect(namesOf(mount.page.read()[field])).toEqual(["SA 19"]);
+    // Encoded identities must resolve too: schema-valid does not mean present in this read.
+    const beforeUnknown = mount.page.read();
+    const missing = "UniqueId:f2f7a0d6-placeholder";
+    expect(await call(JSON.stringify({ kind: "ids", ids: [missing] }))).toMatchObject({
+      ok: false, result: { outcome: "refused", refusal: { message: expect.stringContaining(missing) } },
+    });
+    expect(mount.page.read()).toBe(beforeUnknown);
+    expect(await call(JSON.stringify({ kind: "ids", ids: [identity] }))).toMatchObject({ ok: true, result: { outcome: "rendered" } });
     // Add a differently-cased twin: exact spelling wins; a third casing must refuse the whole move.
     rosterData = key === "duct-systems" ? { ...rosterData, systems: [rosterData.systems[0], { ...rosterData.systems[0], id: 999999, name: exact.toLowerCase() }] } : {
       ...rosterData, rows: [rosterData.rows[0], { ...rosterData.rows[0], mark: "muas-1", uniqueId: "other-fan" }],
@@ -112,5 +122,10 @@ test.each(["duct-systems", "fans"] as const)("Pea resolves %s subject names thro
     const before = mount.page.read();
     expect(await call(key === "duct-systems" ? "Sa 19" : `Muas-1 / port ${fanPort}`)).toMatchObject({ ok: false, result: { outcome: "refused", refusal: { message: expect.stringContaining("Ambiguous") } } });
     expect(mount.page.read()).toBe(before);
+    deliverRoster = false;
+    await act(async () => mount.refresh(roster));
+    expect(await call(JSON.stringify({ kind: "ids", ids: [identity] }))).toMatchObject({
+      ok: false, result: { outcome: "refused", refusal: { message: expect.stringContaining("roster") } },
+    });
   } finally { cleanup(); mount.dispose(); await host.close(); }
 });

@@ -712,10 +712,16 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if (subject?.field !== key) throw cause;
           value = text;
         }
-        if (subject?.field === key && !field.schema.safeParse(value).success) {
+        if (subject?.field === key) {
           const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
-          if (roster?.state !== "ready") throw Error("Read the subject roster before choosing a name");
+          if (roster?.state !== "ready") throw Error("Read the subject roster before choosing a subject");
           const options = subject.options(roster.value);
+          if (field.schema.safeParse(value).success) {
+            const choice = value as { kind: string; ids?: string[] };
+            const missing = choice.ids?.filter(id => !options.some(option => option.id === id)) ?? [];
+            if (missing.length) throw Error(`Unknown ${subject.noun}: ${missing.join(", ")}; choose an exact roster identity`);
+            return [key, field.schema.parse(value)];
+          }
           const resolve = (name: unknown) => {
             if (typeof name !== "string") throw Error("A subject name must be text");
             const exact = options.filter(option => option.id === name || option.label === name);
