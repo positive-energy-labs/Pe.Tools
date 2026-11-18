@@ -121,8 +121,6 @@ export const ductsFanCalcSchema = z.object({
 export type DuctsFanCalc = z.infer<typeof ductsFanCalcSchema>;
 export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
-  espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
-  espOptionsError:z.string().nullable(),
   fanRows: fansCalcData.shape.rows,
   design: fansDocumentSchema.extend(ductsDocumentSchema.shape),
   effectiveDesign: fansDocumentSchema.extend(ductsDocumentSchema.shape),

@@ -9,6 +9,7 @@ import { fansDocumentSchema } from "./fans.ts";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 
 it("airflow is a plain number with caller-cited cell evidence, and legacy objects are refused", () => {
+  expect(fansDocumentSchema.safeParse({ calculation: {} }).success).toBe(false);
   const key = subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse("fixture:1") });
   for (const segment of ["flows", "equipmentFlows"]) {
     const doc = { [segment]: { [key]: { edit: { value: 250, ref: "submittal:page-2", by: "pea" } } } };
@@ -78,8 +79,8 @@ it("the Fans document's element segments are exactly the table's Fans-owned cell
   const { fansDocumentSchema } = await import("./fans.ts");
   const { FAN_CELLS, fanBindingRows } = await import("./fans-inputs.ts");
   const own = fanBindingRows().filter(row => row.owner === "fans").map(row => row.segment);
-  // `writeIntent` is the route's scope and `calculation` its evidence; neither is an input row.
-  const segments = Object.keys(fansDocumentSchema.shape).filter(key => key !== "writeIntent" && key !== "calculation");
+  // `writeIntent` is the route's scope; it is not an input row.
+  const segments = Object.keys(fansDocumentSchema.shape).filter(key => key !== "writeIntent");
   expect(segments.toSorted()).toEqual(own.toSorted());
   expect(Object.keys(FAN_CELLS).toSorted()).toEqual(own.toSorted());
   // A value the row's domain refuses is refused by the document, and the reverse.

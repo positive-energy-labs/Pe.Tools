@@ -17,7 +17,7 @@ const fansRead = () => ({
 
 test("Pea's Work read is the doc, revision and provenance, not the transport schema", () => {
   const raw = fansRead();
-  expect(JSON.stringify(raw.schema).length).toBeGreaterThan(20_000);
+  expect(raw.schema).toHaveProperty("properties.flows");
   const value = peaWorkValue(raw);
   expect(value).not.toHaveProperty("schema");
   expect(value).toMatchObject({ route: "fans", revision: 3, schemaVersion: 1, doc: raw.doc });

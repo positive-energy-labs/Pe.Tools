@@ -19,7 +19,7 @@ import { catalogs } from "@pe/host/builtin-read-handles";
 import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/duct-systems-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { fanRoster, espOptions, networkCalcs } from "@pe/fans-contract/fans-host-reads";
+import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";
 import { fanSystems } from "@pe/ducts-contract/fan-scope.neutral";
 
 export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
@@ -124,10 +124,6 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
     )
       throw Error("Pricing requires every requested system batch; read the network coverage");
     const fans = await ctx.read(fanRoster, { target: args.target });
-    const options = await ctx.read(espOptions, {
-      target: args.target,
-      units: fans.rows.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
-    });
     const { sourceVersion: _version, systemReads: _coverage, ...acquired } = network;
     const calcs = await ctx.read(networkCalcs, { snapshot: acquired, tables: tables.body, catalogs: catalog.tables,
       design: ductsDesign(layers.ducts, layers.fans), firm: firmLayer(layers.firm, layers.settings), revision: layers.revision });
@@ -148,7 +144,6 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
         );
         const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
         return {
-          ...options,
           ...result,
           analysis: {
             ...result.analysis,

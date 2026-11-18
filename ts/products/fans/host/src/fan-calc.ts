@@ -44,29 +44,6 @@ import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
 // Wire reads carry FanClaim, never the domain write capability (contract 3a).
 type Calc = Omit<DomainCalc, "claim"> & { claim: import("@pe/agent-contracts").FanClaim };
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
-export const espOptions = body(acquisition.espOptions, async function(ctx, { target, units }) {
-    if (!units.length)
-      return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
-    try {
-      const response = await ctx.read(native("revit.catalog.field-options"), {
-        target: { kind: "document", ref: target },
-        request: {
-          key: "parameter-identities",
-          context: {
-            ElementUniqueIds: [...new Set(units)].sort().join(","),
-            ParameterScope: "instanceThenType",
-            StorageType: "Double",
-          },
-        },
-      });
-      return { espOptions: response.body, espOptionsError: null };
-    } catch (error) {
-      return {
-        espOptions: null,
-        espOptionsError: error instanceof Error ? error.message : String(error),
-      };
-    }
-});
 const details = ductsCalcResponseSchema.options;
 const enginePath = z.object({
   side: z.enum(["supply", "return"]),

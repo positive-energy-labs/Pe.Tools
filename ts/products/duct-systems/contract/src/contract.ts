@@ -1,4 +1,4 @@
-import { fanRoster, espOptions, networkCalcs } from "@pe/fans-contract/fans-host-reads";
+import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";
 import {
   ductsNetworkArgs,
   ductsNetworkData,
@@ -34,6 +34,5 @@ export const network = contract("ducts.network", {
 export const pricing = contract("ducts.pricing", {
   input: scopedNetworkArgs,
   data: ductsPricingData,
-  // The fan roster and its ESP options are host-only recipes with no contract; this names their natives.
-  uses: [network, roster, fanRoster, espOptions, networkCalcs, "ducts.tables"],
+  uses: [network, roster, fanRoster, networkCalcs, "ducts.tables"],
 });
