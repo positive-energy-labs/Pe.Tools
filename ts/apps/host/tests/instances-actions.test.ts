@@ -347,7 +347,7 @@ async function setup(
     key: string,
     input: Record<string, unknown>,
     actor: "human" | "agent" = "human",
-    resume?: string,
+    original?: string,
     id?: string,
   ) => {
     if (!bound) {
@@ -363,22 +363,21 @@ async function setup(
     const selection = instancesSessionSelection(input);
     return owner.invoke(
       {
-        id: resume ?? id ?? `${key}-${++serial}`,
+        id: original ?? id ?? `${key}-${++serial}`,
         key,
         target: selection ? { kind: "sdk-session", selection } : { kind: "host" },
         input,
       },
       crossingOf(actor),
-      resume !== undefined,
     );
   };
   const admit = async (
     key: string,
     input: Record<string, unknown>,
-    resume?: string,
+    original?: string,
     actor: "human" | "agent" = "human",
     id?: string,
-  ) => owner.wait((await invoke(key, input, actor, resume, id)).id);
+  ) => owner.wait((await invoke(key, input, actor, original, id)).id);
   /** A file a launch can name, written under the test directory. */
   const file = async (name: string, text: string) => {
     const path = join(dir, name);
@@ -994,12 +993,13 @@ test("cleanup names only its own acquisition: a foreign id refuses, a user docum
   const stopped = await f.admit(
     "instances.cleanup",
     { acquisition: acquired.id, unsaved: "discard" },
-    kept.id,
+    undefined,
     "agent",
   );
+  // A new action: the first cleanup already closed the work copy, so this one only stops.
   expect(stopped, JSON.stringify(stopped)).toMatchObject({
     state: "succeeded",
-    result: { closed: openId },
+    result: { closed: null },
   });
   expect(f.calls.filter((argv) => argv[1] === "close")).toHaveLength(1);
   expect(f.calls.at(-1)!.slice(0, 2)).toEqual(["session", "stop"]);
@@ -1110,96 +1110,6 @@ async function crashWorld() {
   const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
   return { f, world, rows, row, die, input: { source, into: newRevit({ owner: "pea" }) } };
 }
-const stepStates = (receipt: {
-  steps: readonly {
-    key: string;
-    state: string;
-  }[];
-}) => receipt.steps.map((step) => `${step.key}:${step.state}`);
-test("W2 20 (a): a start whose pe-revit died with no session is not done; resume starts afresh", async () => {
-  const { f, world, input } = await crashWorld();
-  world.crash = "start";
-  const lost = await f.admit("instances.open", input);
-  expect(lost.state).toBe("unknown");
-  const start = lost.steps.at(-1)!;
-  world.ops[start.id] = abandonedOp(start.id, "session.start", { pid: 37744 });
-  const recovered = await f.owner.recover(lost.id);
-  expect(stepStates(recovered)).toEqual([
-    "acquisition.baseline:succeeded",
-    "acquisition.work:succeeded",
-    "instances.open.start:failed",
-  ]);
-  // It ran: a dead start is not done, never "nothing was dispatched".
-  expect(recovered.steps.at(-1)).not.toHaveProperty("notDispatched");
-  const resumed = await f.admit("instances.open", input, lost.id);
-  expect(resumed.state, JSON.stringify(resumed)).toBe("succeeded");
-  expect(world.starts).toHaveLength(2);
-  expect(flag(world.starts[1]!, "--expect-session")).toBe("absent");
-  expect(flag(world.starts[1]!, "--request-id")).not.toBe(start.id);
-  expect(foldAcquisitions(await f.owner.list())[0]).toMatchObject({
-    state: "held",
-    process: { pid: 101 },
-    document: { sdkOpenId: openId },
-  });
-});
-test("W2 20 (a'): a start whose pe-revit died after its Revit came up is done from the session list", async () => {
-  const { f, world, rows, input } = await crashWorld();
-  world.crash = "start";
-  const lost = await f.admit("instances.open", input);
-  const start = lost.steps.at(-1)!;
-  world.ops[start.id] = abandonedOp(start.id, "session.start", { pid: 37744 });
-  const id = acquisitionSessionId(lost.id);
-  const process = { ...originalProcess, pid: 77 };
-  rows.push(
-    controlledRow({
-      id,
-      process,
-      receipt: { receiptPath: "C:/r/77.json" },
-      shape: shape("background"),
-    }),
-  );
-  const recovered = await f.owner.recover(lost.id);
-  expect(recovered.steps.at(-1)).toMatchObject({
-    state: "succeeded",
-    result: { id, session: { process: { pid: 77 } } },
-  });
-  const resumed = await f.admit("instances.open", input, lost.id);
-  expect(resumed.state, JSON.stringify(resumed)).toBe("succeeded");
-  expect(world.starts).toHaveLength(1);
-  expect(flag(world.opens[0]!, "--expect-session")).toBe("C:/r/77.json");
-});
-test("W2 20 (b): resume redoes a start whose Revit died, never reusing it", async () => {
-  const { f, world, row, die, input } = await crashWorld();
-  world.crash = "open";
-  const lost = await f.admit("instances.open", input);
-  expect(lost.state).toBe("unknown");
-  const first = row(acquisitionSessionId(lost.id))!;
-  die();
-  // The open's pe-revit died before the SDK admitted it: recovery proves it never ran.
-  const recovered = await f.owner.recover(lost.id);
-  expect(recovered.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
-  const resumed = await f.admit("instances.open", input, lost.id);
-  expect(resumed.state, JSON.stringify(resumed)).toBe("succeeded");
-  expect(stepStates(resumed)).toEqual([
-    "acquisition.baseline:succeeded",
-    "acquisition.work:succeeded",
-    "instances.open.start:failed",
-    "instances.open:failed",
-    "instances.open.start:succeeded",
-    "instances.open:succeeded",
-  ]);
-  // The dead start keeps what it once returned; the redo replaces exactly its gone row.
-  expect(resumed.steps[2]).toMatchObject({
-    error: expect.stringContaining("gone"),
-    evidence: { result: { session: { process: { pid: first.process.pid } } } },
-  });
-  expect(flag(world.starts[1]!, "--expect-session")).toBe(first.receipt.receiptPath);
-  expect(world.opens).toHaveLength(2);
-  expect(foldAcquisitions(await f.owner.list())[0]).toMatchObject({
-    state: "held",
-    process: { pid: first.process.pid + 1 },
-  });
-});
 test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what is left", async () => {
   const { f, world, row, die, input } = await crashWorld();
   world.crash = "open";
@@ -1230,95 +1140,6 @@ test("W2 20 (c): an open whose Revit died is not done, and cleanup releases what
   });
   // Nothing to close or stop: the dead Revit took its lifetime with it.
   expect(f.calls.slice(before).filter((argv) => argv[1] !== "list")).toEqual([]);
-  expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
-});
-/**
- * Acceptance R4d (beta.207): our host died during the open, Pea's Revit SURVIVED with the work copy
- * open, recovery read the SDK's answer and resume completed. Cleanup then ran only
- * `acquisition.remove` and failed EBUSY on the open work copy: it must close and stop what the SDK
- * still reports alive. The recovered op response is `{requestId,key,verdict,result:<document>}`.
- */
-test("R4d: after recovery over HTTP, cleanup closes and stops the Revit that survived our host", async () => {
-  const { f, world, row, input } = await crashWorld();
-  world.crash = "open";
-  const server = await serveRoutes(
-    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
-    sdkOnlyBridge,
-  );
-  cleanup.push(() => server.close());
-  const human = contextHeaders();
-  const post = async (path: string, body: unknown) => {
-    const response = await fetch(`${server.base}${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...human },
-      body: JSON.stringify(body),
-    });
-    const text = await response.text();
-    expect(response.status, text).toBeLessThan(300);
-    return JSON.parse(text) as {
-      id: string;
-      state: string;
-      steps: {
-        key: string;
-        state: string;
-      }[];
-    };
-  };
-  const admitted = await post("/actions", {
-    id: "r4d-open",
-    key: "instances.open",
-    target: { kind: "host" },
-    input,
-  });
-  const lost = await f.owner.wait(admitted.id);
-  expect(lost.state).toBe("unknown");
-  const open = lost.steps.at(-1)!;
-  const revit = row(acquisitionSessionId(lost.id))!;
-  f.census.process = revit.process;
-  const work = world.opens[0]![2]!;
-  world.ops[open.id] = {
-    result: {
-      state: "ok",
-      requestId: open.id,
-      receipt: { requestId: open.id, key: "doc.open", verdict: "ok" },
-      response: {
-        requestId: open.id,
-        key: "doc.open",
-        verdict: "ok",
-        result: { openId, title: "Tower", path: work, isModified: false },
-      },
-    },
-  };
-  expect(stepStates(await post("/actions/recover", { id: lost.id })).at(-1)).toBe(
-    "instances.open:succeeded",
-  );
-  await post("/actions/resume", { id: lost.id });
-  expect((await f.owner.wait(lost.id)).state).toBe("succeeded");
-  expect(foldAcquisitions(await f.owner.list())[0]).toMatchObject({
-    state: "held",
-    document: { sdkOpenId: openId },
-  });
-  const cleaning = await post("/actions", {
-    id: "r4d-cleanup",
-    key: "instances.cleanup",
-    target: { kind: "host" },
-    input: {
-      acquisition: lost.id,
-      unsaved: "discard",
-    },
-  });
-  const cleaned = await f.owner.wait(cleaning.id);
-  expect(cleaned.state, JSON.stringify(cleaned)).toBe("succeeded");
-  expect(cleaned.steps.map((step) => step.key)).toEqual([
-    "instances.cleanup.close",
-    "acquisition.remove",
-    "acquisition.remove",
-    "instances.cleanup.stop",
-  ]);
-  expect(cleaned).toMatchObject({
-    result: { closed: openId, stopped: { pid: revit.process.pid } },
-  });
-  expect(row(acquisitionSessionId(lost.id))!.case).toBe("gone-receipt");
   expect(foldAcquisitions(await f.owner.list())[0]!.state).toBe("released");
 });
 test.each(["running", "missing-response", "wrong-request", "wrong-key", "conflicting-state"])(

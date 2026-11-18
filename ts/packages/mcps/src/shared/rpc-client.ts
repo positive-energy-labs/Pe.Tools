@@ -3,7 +3,7 @@ import { contextFetch as fetch } from "@pe/runtime/context";
 import type { ReadEntry } from "@pe/agent-contracts";
 
 const actionControlInput = z.object({
-  key: z.enum(["action.read", "action.recover", "action.resume", "action.cancel"]),
+  key: z.enum(["action.read", "action.cancel"]),
   id: z.string().min(1),
   base: z.string().default(""),
 });

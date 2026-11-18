@@ -53,7 +53,7 @@ test("an unavailable Pod query has one typed refusal before dispatch", async () 
     reason: "Pod query has no admitted route: pod.fixture.unavailable" } });
 });
 test("action controls cannot borrow a human receipt across caller threads", async () => {
-  for (const verb of ["resume", "cancel", "recover"]) {
+  for (const verb of ["cancel"]) {
     const response = await post(`/actions/${verb}`, { id: "human-action" }, pea());
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ notDispatched: true, refusal: { code: "context.foreign-thread",

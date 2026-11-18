@@ -15,7 +15,7 @@ export const loaded = read(
   hostRead(contracts.workspace),
   (page: { actionId: string }) => ({ actionId: page.actionId }),
 );
-export const receiptControls = ["action.read", "action.recover", "action.resume", "action.cancel"] as const;
+export const receiptControls = ["action.read", "action.cancel"] as const;
 export type OpsContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never, Verbs<"run" | (typeof receiptControls)[number]>>;
 export const module = route({
   key: "ops",
@@ -55,15 +55,13 @@ export const module = route({
       purpose: "Inspect requests, read results and control original receipts",
       body: "scroll",
       draw: draw("scroll", () => import("./mount"), "OpsBody"),
-      verbs: ["run", "action.read", "action.recover", "action.resume", "action.cancel"],
+      verbs: ["run", "action.read", "action.cancel"],
     },
   },
   verbs: {
     // Every verb takes what only the pane holds: the request form, or the receipt in view.
     run: { handle: handle("ops.read"), label: "Run read" },
     "action.read": { handle: handle("action.read"), label: "Read receipt" },
-    "action.recover": { handle: handle("action.recover"), label: "Recover action" },
-    "action.resume": { handle: handle("action.resume"), label: "Resume action" },
     "action.cancel": { handle: handle("action.cancel"), label: "Cancel action" },
   },
   layout: paneLayout("main"),

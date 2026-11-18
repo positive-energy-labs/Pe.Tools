@@ -50,11 +50,6 @@ async function fixture(withPage = false) {
   const apply = (id = "apply", actor: Caller = caller) => submit(id, "parameter-links.apply", actor);
   return { get native() { return native; }, get workspace() { return workspace; }, get target() { return socket.target; }, key, definition, patch, admit, submit, apply,
     send: (body: unknown, actor: Caller = caller) => post(body, actor),
-    async control(verb: string, id: string) {
-      const response = await post.request(new Request(`http://host/actions/${verb}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }), caller);
-      expect(response.status, await response.clone().text()).toBeLessThan(400);
-      return response.json();
-    },
     async bindPage() {
       const response = await post.request(new Request("http://host/pe/pages/probe/binding", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "thread", thread: "safety-page" }) }));
       expect(response.status, await response.clone().text()).toBe(200);
@@ -239,7 +234,7 @@ test("E3 late native refusal cannot erase a delivered write, and the terminal wr
   } finally { await f.close(); }
 });
 
-test("E7 recovery reads the original native UUID and resume never dispatches a second write", async () => {
+test("E7 recovery reads the original native UUID and never dispatches a second write", async () => {
   const f = await fixture();
   try {
     expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
@@ -253,13 +248,12 @@ test("E7 recovery reads the original native UUID and resume never dispatches a s
     f.native.makeLostReplyRecoverable();
     const connection = await f.native.connect();
     await f.native.deliverLostReply(connection);
-    await f.control("recover", original.id);
+    await f.native.journal.recover(original.id);
     // The fake pid is already dead, so its late socket reply may be unknown to the mailbox.
     // The exact op receipt must still replace that host-created uncertainty, without a new write.
     expect(await f.native.journal.wait(original.id)).toMatchObject({ steps: expect.arrayContaining([
       expect.objectContaining({ key: "revit.apply.parameter-links", state: "succeeded", transport: "bridge", bridgeReply: "touched", touched }),
     ]) });
-    await f.control("resume", original.id);
     expect(await f.native.journal.wait(original.id)).toMatchObject({ state: "succeeded" });
     expect(f.native.calls.filter(c => c.key === "revit.apply.parameter-links")).toHaveLength(1);
   } finally { await f.close(); }
