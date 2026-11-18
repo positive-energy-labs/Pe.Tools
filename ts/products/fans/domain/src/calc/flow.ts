@@ -25,7 +25,7 @@ export interface FlowOptions {
   /** A terminal's resolved design flow (`inputs.terminals`); null is a `no-flow` blocker. */
   terminalCfm: (elementId: number) => number | null;
   /**
-   * A unit's resolved design flow (`inputs.units[].cfm`, from Work or its live Revit parameter),
+   * A unit's resolved design flow (`inputs.units[].cfm`, from run, Work or its live Revit parameter),
    * with its provenance. At the unit's own port it is the share this fan delivers there
    * (ducts LEDGER 2026-10-29, receiving units' design flows weight the split); at a merge into the
    * unit's stream it is that stream's whole flow, never this fan's share.
