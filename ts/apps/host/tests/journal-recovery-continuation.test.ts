@@ -13,7 +13,7 @@ import { memberWork, settingsRouteState, type Caller, type WorkKey } from "@pe/a
 import { type ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { bindControl } from "../src/control.ts";
+import { bindControl, currentCaller, workAuthorOf } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { captureStore, settle, testRegistry, journalAt } from "./effect-test.ts";
 
@@ -129,7 +129,9 @@ test.each([
         await writeFile(path, crashBytes!);
         for (const [name, bytes] of workBytes) await writeFile(join(workDir, name), bytes);
       }
-      const restoredWork = new RouteWorkspace({ publicationAuthor: () => "human",
+      // The production author, as pe-routes builds it: the retirement must carry a real caller,
+      // because boot's reconcile runs outside any request.
+      const restoredWork = new RouteWorkspace({ publicationAuthor: () => workAuthorOf(currentCaller()),
         registrations: [{ spec: settingsRouteState }],
         store: fileRouteDocumentStore(stateFixture(workDir)),
       });

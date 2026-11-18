@@ -37,6 +37,7 @@ const COMPACT_BYTES = 1 << 20;
 import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
+import { withInvocationContext } from "@pe/runtime/context";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
 import type { HttpClient } from "effect/http";
 import type { FileSystem, Path } from "effect";
@@ -1320,7 +1321,12 @@ export class ActionJournal implements ReceiptReader {
         ? Promise.resolve()
         : this.gate(current, moment, postcondition);
     // Keep only this action's in-memory authority across the HTTP request's retirement.
-    // Receipt callers remain portable data; every continuation still checks live trust.
+    // Receipt callers remain portable data. Exception to "a continuation checks live trust": a
+    // retirementOnly re-entry skips live() and the footprint check at admit, authorize, prepared and
+    // postcondition gates, and authors work.retire as the row's stored caller. The write already
+    // landed and the retirement only records it. What holds: its patches derive from the row's
+    // frozen `consumes`, any unrecorded step but work.retire is refused, and its invocation context
+    // carries the caller alone.
     crossing = { ...crossing, caller: retainActionCaller(crossing.caller) };
     const activePrior = prior ? executableActionReceiptSchema.parse(prior) : undefined;
     const context = this.context(admission, crossing, activePrior?.consumes ?? []);
@@ -1979,7 +1985,16 @@ export class ActionJournal implements ReceiptReader {
     return { receipt: (await this.list(undefined, id))[0] ?? row, signalled };
   }
 
-  async recover(id: string): Promise<ActionReceipt> {
+  /** One SDK read per row at a time: a second caller (boot beside a connect) awaits the first. */
+  private readonly recovering = new Map<string, Promise<ActionReceipt>>();
+  recover(id: string): Promise<ActionReceipt> {
+    const held = this.recovering.get(id);
+    if (held) return held;
+    const run = this.recoverOnce(id).finally(() => this.recovering.delete(id));
+    this.recovering.set(id, run);
+    return run;
+  }
+  private async recoverOnce(id: string): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
     if (!original) throw Error(`Action '${id}' has no admitted receipt`);
     if (original.refusal?.kind === "domain" && original.refusal.code === "historical-schema")
@@ -2046,9 +2061,8 @@ export class ActionJournal implements ReceiptReader {
       // A read that changed no step proves nothing new and writes no revision.
       const changed = updates.some(({ step }) =>
         canonicalRouteInput(step) !== canonicalRouteInput(original.steps.find((held) => held.id === step.id)));
-      if (!changed || canonicalRouteInput(current) !== canonicalRouteInput(original))
+      if (canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
-      answered = true;
       let nextRow: ActionReceipt = {
         ...current,
         steps: current.steps.map(
@@ -2065,7 +2079,16 @@ export class ActionJournal implements ReceiptReader {
           })),
         ],
       };
-      const settled = settle(true, nextRow.steps, { kind: "recovered" });
+      // Every step answered but the executor never finished: known effects, not an unknown outcome
+      // (b3b3c878). A re-entry, where it can still run, upgrades it.
+      // Only an answer read now (or this boot's interruption) settles it: a row the live path left
+      // unknown for unproven native reads keeps that verdict.
+      const finished = (changed || interrupted) && nextRow.state === "unknown" && nextRow.steps.length > 0 && !nextRow.steps.some(unanswered);
+      if (!changed && !finished) return structuredClone(current);
+      answered = changed;
+      const settled = settle(true, nextRow.steps, { kind: "recovered" }) ?? (finished
+        ? { state: "incomplete" as const, error: "Revit answered every step, so the model's state is known; the host restarted before this action's follow-up (such as retiring its Work) ran", status: 503, result: null }
+        : null);
       if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);
       const native = updates.flatMap((update) => {
@@ -2105,11 +2128,14 @@ export class ActionJournal implements ReceiptReader {
     ) {
       const executable = executableActionReceiptSchema.safeParse(recovered);
       if (!executable.success) return recovered;
-      await this.invoke(
+      // Boot and connect run outside any request, so Work would read an anonymous author. The
+      // re-entry carries the row's own caller, as the live request did (drive 3 case 1).
+      // effect-edge: als-crossing
+      await withInvocationContext({ caller: recovered.caller }, () => this.invoke(
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
         { caller: recovered.caller, basis: executable.data.basis },
         true,
-      ).catch((error) => {
+      )).catch((error) => {
         // Refused before it ran (no attachment yet, a claim, a stopping host): try again later.
         this.interrupted.add(id);
         throw error;
