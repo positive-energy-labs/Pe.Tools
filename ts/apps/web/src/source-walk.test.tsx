@@ -4,12 +4,12 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { ductsRosterResponseSchema, openFanCalcSchema } from "@pe/agent-contracts";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { designCalc } from "@pe/duct-systems-web/design-calc";
-import { SheetPane } from "../../../../apps/web/src/route/slots/sheet/pane.tsx";
-import { Ledger, Roster } from "./calc/view.tsx";
-import type { LedgerProps } from "./calc/types.ts";
+import { SheetPane } from "./route/slots/sheet/pane.tsx";
+import { Ledger, Roster } from "@pe/fans-web/calc/view";
+import type { LedgerProps } from "@pe/fans-web/calc/types";
 
-vi.mock("../../../../apps/web/src/route/activity.tsx", () => ({ useRouteSearchSlice: () => ({}) }));
-vi.mock("../../../../apps/web/src/host/resource-state.ts", () => ({
+vi.mock("./route/activity.tsx", () => ({ useRouteSearchSlice: () => ({}) }));
+vi.mock("./host/resource-state.ts", () => ({
   useFieldOptionsReading: () => ({ state: "pending" }),
   previousOf: () => null,
 }));
