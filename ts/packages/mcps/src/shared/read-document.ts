@@ -5,18 +5,15 @@ import { PNG } from "pngjs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import z from "zod";
-import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { contextFetch, invocationContext } from "@pe/runtime/context";
 import { derivedKey, writeDerivedIn } from "@pe/host-contracts/kinds";
 import {
   llamaParser,
   parsedPagesSchema,
   parseStore,
   readDerivedJson,
-  sha256Of,
   type ParsedPages,
-} from "./held-parse.ts";
-import { resolveHostBaseUrl } from "./host-config.ts";
+} from "./derived-parse.ts";
+import { noteLlamaSend, requireLlamaCloudKey, runtimeMachine } from "./llama-key.ts";
 import { LLAMA_TIER, parseWithLlamaCloud } from "./llama-parse.ts";
 import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
@@ -57,7 +54,7 @@ const inputSchema = z.object({
     .enum(["liteparse", "llamaparse"])
     .default("liteparse")
     .describe(
-      "Text reader. 'liteparse' (default) reads locally and free. 'llamaparse' is LlamaCloud's read of the same pages (costs credits). You never send the file: the first call returns Held at once and posts one notice; after the person confirms, call again with the same path and pages to get the kept result. image still renders locally.",
+      "Text reader. 'liteparse' (default) reads locally and free. 'llamaparse' is LlamaCloud's read of the same pages (costs credits). The file is sent to LlamaCloud without asking and a notice records the send. The result is kept for later reads. image still renders locally.",
     ),
 });
 
@@ -113,40 +110,6 @@ function cropPng(
   return PNG.sync.write(out);
 }
 
-/**
- * Guard 3 (ADR 0038): this tool never uploads. The one upload function answers "held" for Pea, the
- * host records the send and posts its one notice, and this returns at once. The person's Confirm
- * sends these exact bytes; the next read of the same file and pages finds the kept result.
- */
-async function holdParse(
-  file: string,
-  bytes: Buffer,
-  sha256: string,
-  pages: string,
-): Promise<ReadDocumentResult> {
-  const answer = await parseWithLlamaCloud({
-    sender: "pea",
-    file: new File([new Uint8Array(bytes)], path.basename(file)),
-    targetPages: pages,
-    expand: ["markdown"],
-  });
-  if (!("kind" in answer)) throw new Error("read_document: an outward send was not held");
-  let notice: string;
-  try {
-    const host = (invocationContext()?.hostBaseUrl ?? resolveHostBaseUrl()).replace(/\/$/, "");
-    await createPeClient(host, contextFetch).call("outward.hold", {
-      body: { service: "llamaparse", path: file, sha256, pages },
-    });
-    notice = "The person has one notice to confirm it.";
-  } catch (error) {
-    notice = `The host could not post its notice (${error instanceof Error ? error.message : String(error)}); tell the person yourself.`;
-  }
-  return {
-    text: `${answer.message} ${notice} Until then read it locally: parser liteparse (the default), with image: true for strikes and revision clouds.`,
-    images: [],
-  };
-}
-
 export async function runReadDocument(raw: ReadDocumentInput): Promise<ReadDocumentResult> {
   const input = inputSchema.parse(raw);
   const file = path.resolve(input.path);
@@ -196,20 +159,33 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
   );
   let kept: ParsedPages | null = readDerivedJson(store, key, parsedPagesSchema);
   if (!kept) {
-    if (hosted) return holdParse(file, bytes, sha256Of(bytes), input.pages);
-    // LiteParse's own failures (LibreOffice missing, file not a document, bad page range) already name the fix.
-    const parsed = await (await makeParser()).parse(file).catch((error: unknown) => {
-      throw new Error(`read_document: ${error instanceof Error ? error.message : String(error)}`);
-    });
-    kept = {
-      totalPages: parsed.totalPages,
-      pages: parsed.pages.map((page) => ({ pageNum: page.pageNum, text: page.text })),
-    };
+    if (hosted) {
+      const result = await parseWithLlamaCloud({
+        apiKey: requireLlamaCloudKey(), sent: noteLlamaSend(runtimeMachine()),
+        file: new File([new Uint8Array(bytes)], path.basename(file)),
+        targetPages: input.pages, expand: ["markdown"],
+      });
+      kept = {
+        totalPages: null,
+        pages: (result.markdown?.pages ?? []).map(page => ({
+          pageNum: page.page_number, text: "markdown" in page ? page.markdown : "",
+        })),
+      };
+    } else {
+      // LiteParse's own failures (LibreOffice missing, file not a document, bad page range) already name the fix.
+      const parsed = await (await makeParser()).parse(file).catch((error: unknown) => {
+        throw new Error(`read_document: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      kept = {
+        totalPages: parsed.totalPages,
+        pages: parsed.pages.map((page) => ({ pageNum: page.pageNum, text: page.text })),
+      };
+    }
     writeDerivedIn(store, key, JSON.stringify(kept));
   }
   const pageTexts = kept.pages;
   const counted = hosted
-    ? `parsed by LlamaParse (${LLAMA_TIER}, markdown), sent on the person's confirm, read`
+    ? `parsed by LlamaParse (${LLAMA_TIER}, markdown), sent to LlamaCloud, read`
     : `${kept.totalPages} page(s) in the document, read`;
 
   const warnings: NonNullable<ReadDocumentResult["warnings"]> = [];
@@ -218,7 +194,7 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
       if (page.text.trim()) continue;
       warnings.push({ code: "no-text-layer", page: page.pageNum });
       page.text =
-        "No text layer was extracted from this page or selected crop. Local OCR is disabled to prevent network downloads. Use image: true to view it, or parser: llamaparse to request a hosted read held for the person's confirmation.";
+        "No text layer was extracted from this page or selected crop. Local OCR is disabled to prevent network downloads. Use image: true to view it, or parser: llamaparse to send it to the hosted reader.";
     }
   }
   const pages = pageTexts.map((page) => page.pageNum);
@@ -264,7 +240,7 @@ export const readDocument = createTool({
   description: [
     "Read a project document on disk (PDF spec sheet, schedule, submittal, drawing set; .xlsx and .docx directly, including docx review comments). Local text extraction makes no network requests and does not run OCR. Pages without extracted text are reported; use image: true to view scans. Read-only; the file is never modified and renders go to a product scratch folder named in the result.",
     "Method: take the text first to LOCATE the value (spatial text keeps table columns aligned), then pass image: true with the same pages, and crop when you only need one schedule or chart, to READ it. The text layer loses red strike-throughs, revision clouds, symbols and chart lines, so a number read from text alone is not verified until you have seen the page.",
-    "parser: llamaparse is LlamaCloud's read of the same pages. Sending a file outward is the person's act, so the first call returns Held (not an error, and nobody refused) and posts one notice; once they confirm, the same call returns the kept result. Use it for a page the local text garbled, not by default, and keep working locally while it is held.",
+    "parser: llamaparse is LlamaCloud's read of the same pages. The call sends the file without asking, posts a notice, and keeps the result. Use it for a page the local text garbled, not by default.",
     "Not for Revit model facts; use pe_find for those.",
   ].join("\n"),
   inputSchema,

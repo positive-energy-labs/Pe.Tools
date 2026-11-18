@@ -11,9 +11,9 @@ export type HomeWrite =
   | { ok: true; sha256: string; priorSha256: string | null; priorBlob: string | null }
   | { ok: false; kind: "conflict"; actualSha256: string | null };
 
-/** One durable line per stored file that did not decode; the host's notice feed draws them. */
+/** Durable file findings and outward sends; the host's notice feed draws them. */
 export const storedNoticeSchema = z.strictObject({
-  class: z.enum(["keep", "discard"]),
+  class: z.enum(["keep", "discard", "sent"]),
   /** The Place, in words a person knows: "Work for /ducts", "Scheduled tasks". */
   place: z.string(),
   path: z.string(),

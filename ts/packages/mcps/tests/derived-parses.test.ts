@@ -4,7 +4,7 @@
  *
  * Mutant that turns the first test red: in `src/shared/read-document.ts` replace
  * `readDerivedJson(store, key, parsedPagesSchema)` with `null` (person B then parses again, and a
- * hosted read holds again). Mutant for the second: in `host-contracts/src/store.ts` `readDerived`,
+ * hosted read sends again). Mutant for the second: in `host-contracts/src/store.ts` `readDerived`,
  * replace `name === derivedName(key, bytes)` with `true` (the forged file is then served).
  */
 import { createHash } from "node:crypto";
@@ -17,7 +17,6 @@ import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { withInvocationContext } from "@pe/runtime/context";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
-import { sendHeldParse, sha256Of } from "../src/shared/held-parse.ts";
 import { runReadDocument } from "../src/shared/read-document.ts";
 
 const parses = vi.hoisted(() => ({ count: 0 }));
@@ -99,12 +98,6 @@ test("person A parses a document once; person B, same project home, parses nothi
       const url = new URL(request ? request.url : String(input));
       const method = init?.method ?? request?.method ?? "GET";
       calls.push(`${method} ${url.pathname}`);
-      if (url.pathname === "/pe/outward/held") {
-        const body = JSON.parse(String(init?.body ?? (await request?.text())));
-        return Response.json({ held: { ...body, id: "h1", at: "2026-11-12T00:00:00.000Z", thread: "t1" },
-          message: "Held",
-        });
-      }
       if (method === "POST") return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
       return Response.json({
         job: { id: "job-1", project_id: "p", status: "COMPLETED" },
@@ -113,7 +106,6 @@ test("person A parses a document once; person B, same project home, parses nothi
     }),
   );
   vi.stubEnv("LLAMA_CLOUD_API_KEY", "llx-test");
-  const holds = () => calls.filter((call) => call === "POST /pe/outward/held").length;
   const uploads = () => calls.filter((call) => call.startsWith("POST /api/")).length;
 
   become("a");
@@ -124,11 +116,8 @@ test("person A parses a document once; person B, same project home, parses nothi
   // Re-parsing per call is gone for the same person too.
   await read({ path: file, pages: "1" });
   expect(parses.count).toBe(1);
-  // A's hosted read is held; A's Confirm uploads once.
-  expect((await read({ path: file, pages: "1", parser: "llamaparse" })).text).toMatch(/^Held, not done/);
-  const sha256 = sha256Of(readFileSync(file));
-  await sendHeldParse({ path: file, sha256, pages: "1" });
-  expect([holds(), uploads()]).toEqual([1, 1]);
+  expect((await read({ path: file, pages: "1", parser: "llamaparse" })).text).not.toMatch(/^Held/);
+  expect(uploads()).toBe(1);
 
   become("b");
   expect(runtimeRoot()).not.toBe(rootA);
@@ -137,9 +126,7 @@ test("person A parses a document once; person B, same project home, parses nothi
   expect(parses.count).toBe(1);
   const hosted = await read({ path: file, pages: "1", parser: "llamaparse" });
   expect(hosted.text).toContain("--- page 1 ---\nHOSTED 1.25 IN WG");
-  // The held-send door is never reached on a hit, and a stale Confirm of the same bytes sends nothing.
-  await sendHeldParse({ path: file, sha256, pages: "1" });
-  expect([holds(), uploads()]).toEqual([1, 1]);
+  expect(uploads()).toBe(1);
 
   // Both parses sit in the project home, each named by its key and its own bytes; no person's root holds one.
   expect(readdirSync(derived)).toHaveLength(2);

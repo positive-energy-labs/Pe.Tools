@@ -223,13 +223,12 @@ const oneLine = (why: string) => why.replace(/\s+/g, " ").slice(0, 500);
 /**
  * Post one durable notice, de-duplicated by path and hash: the same bytes at the same path never
  * post twice. It never throws, because a notice that cannot be written must not stop its caller.
- * `readStored` posts through this; call it directly for a refusal that is not one decoded file
- * (a recording bundle that will not open).
+ * `readStored` posts through this; callers also record file findings and outward sends here.
  */
 function noteStored(file: string, notice: Omit<StoredNotice, "at">): void {
   try {
-    const path = resolve(notice.path);
-    // ponytail: a scan of an append-only file per refusal, and no pruning. A refusal is rare;
+    const path = notice.class === "sent" ? notice.path : resolve(notice.path);
+    // ponytail: a scan of an append-only file per notice, and no pruning;
     // prune by age when the file is measured large.
     const posted = readStoredNotices(file).some(
       (row) => row.path === path && row.sha256 === notice.sha256,

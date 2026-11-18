@@ -8,7 +8,7 @@ The goal, in the owner's words: "get us closer to pea being actually usable", wi
 
 ## Nouns and invariants
 
-- **Home**: a folder that holds authored content. A project or firm home proves itself with a marker file `pe-home.json`, whose one field is `tier` (`project` or `firm`). The user home is found by its location (`Documents\Pe.Tools`), carries no marker, and the product never writes one there. The driver proved that on the installed lane at 7739d09f. The folder name is the display name. The word is reserved for content homes.
+- **Home**: a folder that holds authored content. A project home proves itself with a marker file `pe-home.json`, whose one field is `tier`. The firm home is the folder Settings names, else one literal default, and carries no marker (kaitpw, 2026-11-17). The user home is found by its location (`Documents\Pe.Tools`), carries no marker, and the product never writes one there. The driver proved that on the installed lane at 7739d09f. The folder name is the display name. The word is reserved for content homes.
 - **Layout**: every home holds `Pods/`, `Pages/`, `Catalogs/` and `Settings/<owner>.json`. The firm home adds `keys.json`. A project home adds `Derived/` (slice 9). `Firm/` is renamed `Settings/` before anyone writes on G:.
 - **Home list**: `[user, project home of the open model, firm]`. It takes the target document, so it is no longer a nullary path resolver.
 - **Project pointer**: the model names its project home. The pointer is one owner blob in the in-model carrier. It stores a path with no drive letter, relative to the shared drive root that the firm home was found on. Pe's files sit in one child folder named `Pe.Tools` inside the folder the humans use.
@@ -17,7 +17,7 @@ The goal, in the owner's words: "get us closer to pea being actually usable", wi
 - **Value tiers**, most specific first: `run`, staged `Work`, saved in model, `project`, `firm`, `default`.
 - **Setting**: a fourth sheet binding kind, `setting(owner, path, schema, tiers)`.
 - **Class**: two failure policies, `keep` and `discard`, carried as one argument of one decode helper.
-- **Guard**: one of exactly three acts on a project document that Pea does not do without the person.
+- **Guard**: one of exactly two acts on a project document that Pea does not do without the person (ADR 0052 removed the third, send outward).
 - Invariants:
   - An address has no home qualifier. A pod id is unique across homes. The same id in two homes is a conflict, and both are refused with a notice.
   - A shared home holds authored files and write-once derived files named by content hash. It never holds Work, a journal, SQLite, run output, Page state or anything machine-derived.
@@ -40,7 +40,7 @@ These are settled before a coworker depends on the product, because a later chan
 8. The machine state root, its survival across an upgrade, and the T3 home's place under it.
 9. The two failure policies.
 10. Secret role names (`openai.api-key`, `anthropic.api-key`, `llamaparse.api-key`) and the resolver order (the person's own key, then the firm `keys.json`).
-11. The written promise: what survives an update, the three guards, and the honest limit.
+11. The written promise: what survives an update, the two guards, and the honest limit.
 
 ## Ordered deletable slices
 
@@ -95,7 +95,7 @@ Each line is the stored bytes a coworker will come to hold. A writer codes again
 
 1. Marker: `pe-home.json` holds `{"tier":"user"|"project"|"firm"}` and nothing else.
 2. Layout of every home: `Pods/`, `Pages/`, `Catalogs/`, `Settings/<owner>.json`. The user home adds `Skills/`. The firm home adds `keys.json`. A project home adds `Derived/`, a flat folder of write-once files named `<key>.<sha256 of the file's bytes>`, where `<key>` is the SHA-256 of the source's SHA-256, a newline and the producer's identity (slice 9, `derivedKey` in `ts/packages/host-contracts/src/store.ts`). `preferences.json` at a home root folds into `Settings/preferences.json`. No home root holds `AGENTS.md`, `README.md` or `output/`.
-3. Firm home: on each drive letter, `<L>:\Shared drives\*\04 PE Software Files\Pe.Tools` and `<L>:\04 PE Software Files\Pe.Tools`, accepted only when the marker reads `firm`. On kaitpw's machine it is `G:\Shared drives\PE Team Folder\04 PE Software Files\Pe.Tools`. The shared drive root is the folder that holds `04 PE Software Files`. `PE_TOOLS_SHARED_ROOT` stays as a dev override only. It names the firm home itself and skips the probe. With or without it, the shared drive root is the firm home's grandparent. Two firm markers found by the probe are a conflict: both are refused with one notice that names both paths, as for a duplicate pod id.
+3. Firm home: `homes.json` `firm`, else the literal `G:\Shared drives\PE Team Folder\04 PE Software Files\Pe.Tools` when that folder exists. No marker and no drive probe (kaitpw, 2026-11-17). The shared drive root is the folder that holds `04 PE Software Files`. `PE_TOOLS_SHARED_ROOT` stays as a dev override only. It names the firm home itself and skips the probe. With or without it, the shared drive root is the firm home's grandparent. Two firm markers found by the probe are a conflict: both are refused with one notice that names both paths, as for a duplicate pod id.
 4. Project pointer: one in-model owner blob `{"owner":"project-home","version":1,"data":{"path":"<folder>/<folder>"}}`, a forward-slash path relative to the shared drive root, with no drive letter. Pe's files sit in `<path>/Pe.Tools`, which carries a `project` marker.
 5. In-model envelope: `{"owner":"<owner>","version":<int>,"data":{…}}` in one hidden text parameter per owner. An unknown version is refused, and its bytes are never overwritten.
 6. `$schema`: `/schemas/settings/<module>/<root>.json`, the existing `SettingsSchemaUrl.Path` form, with no origin. The host resolves it. Editor completion is not required.
@@ -233,7 +233,7 @@ The owner: "we need to be relient if these assumptions dont hold, but I think th
 - 2026-11-12, implementor defaults from landing gate 2 (Sandbox, installed lane), re-openable by kaitpw:
   - The user home carries no marker and is found by its location. The Home noun above now says so, and no writer is owed.
   - Work that an earlier version left in `<user home>\Work` is noticed, never moved or deleted. One stored notice on start names the folder and says it is no longer read (R11). Deleting it is irreversible and touches synced files the person owns, so it waits for the person.
-  - On the installed host, the doc lab's parse route (`/api/pdf-audit/parse`) answers 404, while the `/pdf-audit` page itself ships. Main is the same, because the route is a web dev-server route, so this is not a homes regression and does not block the landing. Whether to delete the doc lab upload is Q14 in the owner queue.
+  - On the installed host, the doc lab's parse route (`/api/pdf-audit/parse`) answers 404, while the `/pdf-audit` page itself ships. Main is the same, because the route is a web dev-server route, so this is not a homes regression and does not block the landing. Resolved 2026-11-18: the route and the upload surface are deleted (family ledger, Decided 2026-11-18).
 - 2026-11-12, writer H defaults on slice 6b (homes/h-6b-settings), each re-openable by kaitpw:
   - The save-at control is one typed value and one button per declared tier on the setting's row (`SettingCell` in `ts/apps/web/src/route/slots/sheet/pane.tsx`). An empty value clears the tier. A tier whose home was not found is a refused button that says where the host looked. No UI ruling existed.
   - The ducts criteria declare the tiers `project` and `firm` only, because they decide a computed result (ADR 0026 line 29). No binding declares `user` yet.

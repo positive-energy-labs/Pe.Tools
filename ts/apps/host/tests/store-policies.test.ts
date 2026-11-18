@@ -250,7 +250,7 @@ describe("keep: a person's file is listed \"can't read, kept\", its bytes never 
       expect(notices).toMatchObject([{ class: "keep", place: name }]);
       // The feed lists it, once, in those words.
       const rows = noticeRows(
-        { threads: [], receipts: [], works: [], machine: null, held: [], stored: notices },
+        { threads: [], receipts: [], works: [], machine: null, stored: notices },
         Date.now(),
       );
       expect(rows).toMatchObject([{ group: "failed", verb: "kept", what: name, detail: path }]);
@@ -339,7 +339,7 @@ test("a discard is a feed row for a week, and its card can raise only once", () 
   };
   const rows = (now: string) =>
     noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, held: [], stored: [notice] },
+      { threads: [], receipts: [], works: [], machine: null, stored: [notice] },
       Date.parse(now),
     );
   expect(rows("2026-11-12T00:00:00Z")).toMatchObject([

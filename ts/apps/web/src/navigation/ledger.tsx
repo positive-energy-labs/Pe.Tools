@@ -1,6 +1,6 @@
 /** One Activity model and row anatomy for Home, tray and the anchored search palette. */
 import { useState, type ReactNode } from "react";
-import { Copy, RotateCcw, Send } from "lucide-react";
+import { Copy, RotateCcw } from "lucide-react";
 import { useCopy } from "@pe/kit/lib/use-copy";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -8,7 +8,6 @@ import { Scroll } from "@pe/kit/lang/scroll";
 import { Button } from "@pe/kit/lang/button";
 import { NOTICE_GROUPS, type NoticeRow } from "@pe/agent-contracts";
 import { peClient } from "#/host/pe-client";
-import { followAction } from "#/shell/work-feed-client";
 import { relativeThreadAge } from "#/workbench/thread-navigation";
 import { previousOf } from "#/host/resource-state";
 import {
@@ -116,32 +115,6 @@ export function useLedgerList(
       .catch((cause: unknown) => setRefusal(String(cause)))
       .finally(() => setResuming(null));
   };
-  /** The person's Confirm on a held outward send (ADR 0038 guard 3): the host sends and keeps the result. */
-  const confirm = (id: string) => {
-    setRefusal(null);
-    setResuming(id);
-    peClient
-      .call("outward.confirm", { params: { id } })
-      .then(({ id }) => {
-        if (typeof id !== "string" || !id) throw Error("The host returned no send receipt.");
-        return followAction(id);
-      })
-      .then((receipt) => {
-        if (receipt.state === "succeeded") return;
-        const reason = "error" in receipt ? receipt.error : "the host gave no outcome";
-        // Only notDispatched proves nothing left. A failed send's own reason says which side of the
-        // upload it failed on (held-parse.ts); an interrupted or cancelled one may have arrived.
-        setRefusal(
-          "notDispatched" in receipt && receipt.notDispatched
-            ? `Not sent: ${reason}. Ask Pea to send it again.`
-            : receipt.state === "failed"
-              ? `Send failed: ${reason}. Ask Pea to send it again if it is still needed.`
-              : `The send may have arrived: ${reason}. Check the destination before asking Pea to send it again.`,
-        );
-      })
-      .catch((cause: unknown) => setRefusal(String(cause)))
-      .finally(() => setResuming(null));
-  };
   /** One row shape for ledger rows, destinations and notes: verb column, what, where, fact. */
   const row = (item: Item) => {
     const act = item.kind === "row" && item.row.act?.kind === "resume" ? item.row.act : null;
@@ -198,13 +171,6 @@ export function useLedgerList(
             icon={RotateCcw}
             busy={resuming === item.row.act.threadId}
             onClick={() => resume(item.row, act!.threadId)}
-          />
-        ) : item.kind === "row" && item.row.act?.kind === "confirm-send" ? (
-          <Button
-            label={`Confirm: send ${item.row.what} to ${item.row.act.to}, ${item.row.act.detail}`}
-            icon={Send}
-            busy={resuming === item.row.act.id}
-            onClick={() => confirm((item.row.act as { id: string }).id)}
           />
         ) : item.kind === "row" && item.row.detail ? (
           <Button

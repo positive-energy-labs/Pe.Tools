@@ -110,8 +110,8 @@ const config = defineConfig(({ mode, command }) => {
           semicolons: true,
         },
         // Installed lane serves dist/client statically from the host (no node SSR
-        // process), so the build must emit an index.html shell. Server-function
-        // routes (pdf-audit labs) are dev-lane only by consequence.
+        // process), so the build must emit an index.html shell. A server-function
+        // route would be dev-lane only by consequence; none exists.
         spa: {
           enabled: true,
           prerender: {

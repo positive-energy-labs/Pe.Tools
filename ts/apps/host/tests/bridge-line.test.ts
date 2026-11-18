@@ -525,7 +525,7 @@ effectTest(`a dispatched bridge request preserves its evidence: ${mode}`, () =>
       yield* deliver(JSON.stringify(reply));
     }
     const action = yield* Effect.promise(() => journal.wait("bridge-unknown"));
-    const rows = noticeRows({ threads: [], receipts: [{ revision: 1, action }], works: [], machine: null, stored: [], held: [] }, 0);
+    const rows = noticeRows({ threads: [], receipts: [{ revision: 1, action }], works: [], machine: null, stored: [], }, 0);
     if (mode === "missing-touched") {
       expect(action.steps[0]).not.toHaveProperty("touched");
       expect(rows).toMatchObject([{ verb: "missing-touched", says: expect.stringContaining("answered without a touched value") }]);
@@ -580,7 +580,7 @@ effectTest("socket killed during focused capture recovers restoreFailed and one 
       input: {}, steps: [recovered.step], prepared: { state: "ready", value: null },
       recovery: [], startedAt: "2026-11-12T00:00:00Z",
     });
-    expect(noticeRows({ threads: [], works: [], machine: null, stored: [], held: [],
+    expect(noticeRows({ threads: [], works: [], machine: null, stored: [],
       receipts: [{ revision: 1, action }] }, 0))
       .toMatchObject([{ key: `native:${request.requestId}`, verb: "restoreFailed" }]);
   }),

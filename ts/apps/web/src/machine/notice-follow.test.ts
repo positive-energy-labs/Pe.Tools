@@ -87,21 +87,20 @@ test("a malformed feed moves nothing", () => {
   h.stop();
 });
 
-test("a held send becomes a plain card the native contract accepts: Confirm is its Activity row's", () => {
+test("a sent file becomes a plain card the native contract accepts", () => {
   const card = cardOf(
-    row("held:h1", 4, {
-      group: "waits",
-      verb: "held",
+    row("stored:send", 4, {
+      group: "unread",
+      verb: "sent",
       what: "spec.pdf",
-      says: "Held, not done",
+      says: "Sent to LlamaCloud",
       url: null,
-      act: { kind: "confirm-send", id: "h1", to: "LlamaCloud", detail: "pages 1-5" },
     }),
   );
   expect(machineNoticeSchema.parse(card)).toEqual({
-    id: "held:h1",
+    id: "stored:send",
     revision: 4,
-    title: "spec.pdf · held",
-    body: "Held, not done",
+    title: "spec.pdf · sent",
+    body: "Sent to LlamaCloud",
   });
 });

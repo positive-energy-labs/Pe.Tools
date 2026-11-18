@@ -1,4 +1,6 @@
 import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed } from "@pe/agent-contracts";
+import { lookup } from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
 import { put, get } from "./action-blobs.ts";
 import { createHash } from "node:crypto";
 import { open, readFile } from "node:fs/promises";
@@ -8,15 +10,14 @@ import { Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
-import { guardSend } from "./guards.ts";
 import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
 import { podFolder, podMemberKind } from "./settings.ts";
 import { reconcilePackageChanges } from "./package-lifecycle.ts";
 import { writeHome } from "@pe/host-contracts/kinds";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
-import { readDerivedJson } from "@pe/mcps/held-parse";
+import { readDerivedJson } from "@pe/mcps/derived-parse";
 import { LLAMA_TIER } from "@pe/mcps/llama-parse";
-import { requireLlamaCloudKey } from "@pe/mcps/llama-key";
+import { noteLlamaSend, requireLlamaCloudKey } from "@pe/mcps/llama-key";
 import { derivedFor } from "@pe/host-contracts/service-identity";
 import { derivedKey,
   readDerivedIn,
@@ -101,17 +102,60 @@ async function readPdfPath(path: string): Promise<Uint8Array> {
     await file.close();
   }
 }
-/** A PDF fetched once: http(s) only, no redirect followed, timed, and cut off at the cap. */
-async function readPdfUrl(url: string): Promise<Uint8Array> {
-  if (!["http:", "https:"].includes(new URL(url).protocol))
+/** Loopback, private, link-local, carrier-NAT and unspecified ranges: this machine and its network. */
+const LOCAL_NETWORKS = new BlockList();
+for (const [net, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4]] as const)
+  LOCAL_NETWORKS.addSubnet(net, prefix, "ipv4");
+// `::/96` is loopback, unspecified and the IPv4-compatible form; `64:ff9b::/96` and `2002::/16` carry an IPv4 address inside.
+for (const [net, prefix] of [["::", 96], ["64:ff9b::", 96], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]] as const)
+  LOCAL_NETWORKS.addSubnet(net, prefix, "ipv6");
+/**
+ * Refuse a URL whose host is, or resolves to, this machine or its network: a page-supplied URL must
+ * not turn the host into a reader of local services.
+ * ponytail: the name is resolved here and again by fetch, so a DNS answer that changes between the
+ * two gets through; pin the resolved address into the request if that is ever a real threat.
+ */
+/** A URL as a message or a record shows it: scheme, host and path. Never its user info, query or fragment. */
+const shownUrl = (url: string) => {
+  const { protocol, host, pathname } = new URL(url);
+  return `${protocol}//${host}${pathname}`;
+};
+async function refuseLocalUrl(url: string): Promise<void> {
+  const shown = shownUrl(url);
+  const parsed = new URL(url);
+  if (!["http:", "https:"].includes(parsed.protocol))
     throw sourceRefused(
-      `Only http and https URLs are fetched, not '${url}'. For a file on this machine give { path }.`,
+      `Only http and https URLs are fetched, not '${shown}'. For a file on this machine give { path }.`,
     );
+  if (parsed.username || parsed.password)
+    throw sourceRefused(
+      `A URL that carries a user name or password is not fetched: ${shown}. Give the PDF's plain URL, or download it and attach by { path }.`,
+    );
+  const host = parsed.hostname.replace(/^\[|\]$/g, "");
+  const addresses = isIP(host)
+    ? [{ address: host, family: isIP(host) }]
+    : await lookup(host, { all: true }).catch(() => {
+        throw sourceRefused(
+          `Cannot resolve ${shown}, and only a verified public address is fetched. Check the address, or download the PDF and attach by { path }.`,
+        );
+      });
+  // An IPv4 rule also matches the IPv4-mapped IPv6 form (`::ffff:127.0.0.1`).
+  if (!addresses.length || addresses.some(({ address, family }) => LOCAL_NETWORKS.check(address, family === 6 ? "ipv6" : "ipv4")))
+    throw sourceRefused(
+      `${shown} is on this machine or its network, and only a public address is fetched here. Download the PDF and attach by { path }, or upload the file.`,
+    );
+}
+/**
+ * A PDF fetched once, after `refuseLocalUrl` passed it: no redirect followed, timed, and cut off at
+ * the cap. Messages name the URL by `shownUrl`, because a signed URL keeps its signature in the query.
+ */
+async function readPdfUrl(url: string): Promise<Uint8Array> {
+  const shown = shownUrl(url);
   const failed = (error: Error) =>
     sourceRefused(
       error.name === "TimeoutError"
-        ? `PDF download did not finish within ${SPEC_SOURCE_TIMEOUT_MS / 1000} s for ${url}. Download it and attach by { path }.`
-        : `PDF download failed for ${url}: ${(error.cause as Error | undefined)?.message ?? error.message}. A redirect is not followed: give the PDF's final URL, or download it and attach by { path }.`,
+        ? `PDF download did not finish within ${SPEC_SOURCE_TIMEOUT_MS / 1000} s for ${shown}. Download it and attach by { path }.`
+        : `PDF download failed for ${shown}. A redirect is not followed: give the PDF's final URL, or download it and attach by { path }.`,
     );
   const response = await fetch(url, {
     redirect: "error",
@@ -120,13 +164,13 @@ async function readPdfUrl(url: string): Promise<Uint8Array> {
     throw failed(error);
   });
   if (!response.ok || !response.body)
-    throw sourceRefused(`PDF download failed (${response.status}) for ${url}`);
+    throw sourceRefused(`PDF download failed (${response.status}) for ${shown}`);
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     for await (const chunk of response.body) {
       size += chunk.length;
-      if (size > SPEC_SOURCE_MAX_BYTES) throw overCap(url);
+      if (size > SPEC_SOURCE_MAX_BYTES) throw overCap(shown);
       chunks.push(chunk);
     }
   } catch (error) {
@@ -161,6 +205,70 @@ function keptFamilyParse(store: DerivedDir, pdf: Uint8Array): KeptFamilyParse | 
   return { doc, assets };
 }
 
+type SpecSource = z.infer<typeof blobRefSchema> | { path: string } | { url: string };
+/**
+ * A source read once into a PDF file named by its basename (a URL's pathname, never its query). A
+ * vendor file is fetched once per derived store (JOURNEYS target 13), keyed by its URL.
+ * ponytail: write-once, so a sheet the vendor revises at the same URL is not seen again; attach the
+ * new one by { path } or upload. Add a refresh verb if that bites.
+ */
+async function readSpecSource(source: SpecSource, store: DerivedDir): Promise<{ file: File; bytes: ArrayBuffer }> {
+  if ("url" in source) await refuseLocalUrl(source.url);
+  const fetched =
+    "digest" in source
+      ? { bytes: await get(source), name: source.fileName }
+      : "path" in source
+        ? { bytes: await readPdfPath(source.path), name: source.path }
+        : {
+            bytes:
+              readDerivedIn(store, derivedKey(source.url, "fetch/1"))?.bytes ??
+              (await readPdfUrl(source.url)),
+            name: new URL(source.url).pathname || "document.pdf",
+          };
+  if (fetched.bytes.byteLength > SPEC_SOURCE_MAX_BYTES) throw overCap("PDF source");
+  const file = new File([new Uint8Array(fetched.bytes)], basename(fetched.name) || "document.pdf", {
+    type: "application/pdf",
+  });
+  const bytes = await file.arrayBuffer();
+  if (Buffer.from(bytes).subarray(0, 5).toString() !== "%PDF-")
+    throw sourceRefused(
+      "Source is not a PDF: its bytes do not begin with %PDF-. Export or print it to PDF and attach that.",
+    );
+  if ("url" in source) writeDerivedIn(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
+  return { file, bytes };
+}
+
+type ParsePdf = NonNullable<PodDependencies["parsePdf"]>;
+/**
+ * The parse of `pdf`: the kept one, else one send to the hosted parser (it leaves the send notice,
+ * ADR 0052) whose view and renders are then kept, so the same bytes are never sent twice.
+ */
+async function familyParse(store: DerivedDir, pdf: Buffer, file: File, parsePdf: ParsePdf): Promise<KeptFamilyParse> {
+  const kept = keptFamilyParse(store, pdf);
+  if (kept) return kept;
+  const doc = parsedDocViewSchema.parse(
+    await parsePdf({ file, apiKey: requireLlamaCloudKey(), sent: noteLlamaSend(hostState()) }),
+  );
+  const assets = new Map<string, Buffer>();
+  const download = async (url: string, name: string) => {
+    const response = await fetch(url);
+    if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
+    const asset = Buffer.from(await response.arrayBuffer());
+    assets.set(name, asset);
+    writeDerivedIn(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`), asset);
+    return name;
+  };
+  for (const page of doc.pages) {
+    if (!page.screenshotUrl) throw Error(`Parser returned no render for page ${page.page}`);
+    page.screenshotUrl = await download(page.screenshotUrl, `page-${page.page}`);
+  }
+  for (const [index, image] of doc.images.entries())
+    image.url = await download(image.url, `image-${index}`);
+  // Last, so a kept view always has its renders.
+  writeDerivedIn(store, derivedKey(pdf, FAMILY_PARSER), JSON.stringify(doc));
+  return { doc, assets };
+}
+
 const assetSchema = z.strictObject({ path: z.string(), blob: blobRefSchema });
 const preparedSpecSchema = z.strictObject({
   member: z.strictObject({ pod: z.string(), path: z.string() }),
@@ -174,17 +282,6 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
       const { member, source, work: handle } = ctx.admission.input;
-      // Guard 3 (ADR 0038): the parse below uploads this PDF to LlamaCloud. A person's attach runs;
-      // anyone else's is held before a byte is read or sent.
-      guardSend(
-        ctx.caller,
-        {
-          service: "llamaparse",
-          path: "path" in source ? source.path : "url" in source ? source.url : basename(source.fileName),
-          target: `${member.pod}: ${member.path}`,
-        },
-        "LlamaCloud, the hosted PDF parser",
-      );
       if (!handle) throw refused("Reviewed Family Work is required");
       await ctx.selectWork(tools.family.work, handle, () => ({
         cells: [],
@@ -213,29 +310,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         );
       // A path or URL is read once, here; its bytes are retained by digest and the read is a
       // consumed fact, so resume and recovery see the same PDF the admission saw (cdb265c9).
-      const read = async (): Promise<{ bytes: Uint8Array; name: string }> => {
-        if ("digest" in source) return { bytes: await get(source), name: source.fileName };
-        if ("path" in source) return { bytes: await readPdfPath(source.path), name: source.path };
-        // A vendor file is fetched once per project (JOURNEYS target 13), keyed by its URL.
-        // ponytail: write-once, so a sheet the vendor revises at the same URL is not seen again;
-        // attach the new one by { path } or upload. Add a refresh verb if that bites.
-        return {
-          bytes:
-            readDerivedIn(store, derivedKey(source.url, "fetch/1"))?.bytes ??
-            (await readPdfUrl(source.url)),
-          name: new URL(source.url).pathname || "document.pdf",
-        };
-      };
-      const fetched = await read();
-      const file = new File([new Uint8Array(fetched.bytes)], basename(fetched.name) || "document.pdf", {
-        type: "application/pdf",
-      });
-      const bytes = await file.arrayBuffer();
-      if (Buffer.from(bytes).subarray(0, 5).toString() !== "%PDF-")
-        throw sourceRefused(
-          "Source is not a PDF: its bytes do not begin with %PDF-. Export or print it to PDF and attach that.",
-        );
-      if ("url" in source) writeDerivedIn(store, derivedKey(source.url, "fetch/1"), Buffer.from(bytes));
+      const { file, bytes } = await readSpecSource(source, store);
       const sha256 = createHash("sha256").update(Buffer.from(bytes)).digest("hex");
       const sourceFact: Consumed[] =
         "path" in source
@@ -254,7 +329,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
                   expected: sha256,
                   probe: {
                     blob: await put(Buffer.from(bytes), file.name),
-                    origin: { kind: "url", url: source.url },
+                    origin: { kind: "url", url: shownUrl(source.url) },
                     capturedAt: new Date().toISOString(),
                   },
                 },
@@ -272,30 +347,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         effects: [{ kind: "directory", path: dirname(safePath(root, member.path)) }],
         prepare: async () => {
           const pdf = Buffer.from(bytes);
-          const fresh = async (): Promise<KeptFamilyParse> => {
-            const doc = parsedDocViewSchema.parse(
-              await parsePdf({ sender: "person", file, apiKey: requireLlamaCloudKey() }),
-            );
-            const assets = new Map<string, Buffer>();
-            const download = async (url: string, name: string) => {
-              const response = await fetch(url);
-              if (!response.ok) throw Error(`Spec asset download failed (${response.status})`);
-              const asset = Buffer.from(await response.arrayBuffer());
-              assets.set(name, asset);
-              writeDerivedIn(store, derivedKey(pdf, `${FAMILY_PARSER}/${name}`), asset);
-              return name;
-            };
-            for (const page of doc.pages) {
-              if (!page.screenshotUrl) throw Error(`Parser returned no render for page ${page.page}`);
-              page.screenshotUrl = await download(page.screenshotUrl, `page-${page.page}`);
-            }
-            for (const [index, image] of doc.images.entries())
-              image.url = await download(image.url, `image-${index}`);
-            // Last, so a kept view always has its renders.
-            writeDerivedIn(store, derivedKey(pdf, FAMILY_PARSER), JSON.stringify(doc));
-            return { doc, assets };
-          };
-          const { doc, assets: renders } = keptFamilyParse(store, pdf) ?? (await fresh());
+          const { doc, assets: renders } = await familyParse(store, pdf, file, parsePdf);
           doc.fileName = file.name;
           const dir = dirname(member.path).replaceAll("\\", "/");
           const name = basename(file.name, extname(file.name)).replace(/[^a-zA-Z0-9_-]/g, "-");

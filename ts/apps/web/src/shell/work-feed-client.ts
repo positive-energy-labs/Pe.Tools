@@ -19,7 +19,7 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { peReadings, type Readings } from "../host/resource-stream";
 import { writeRouteWork } from "../route/host";
-import { submitAction, waitForAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { submitAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import type {
   AcceptedResult,
   WorkWriteOutcome,
@@ -172,8 +172,6 @@ export const browserWorkPorts = { write: writeRouteWork, submit: (admission: Act
   if (!isCommandKey(admission.key)) throw Error(`Unknown command: ${admission.key}`);
   return sendCommand(handle(admission.key), admission);
 } };
-/** Kernel door (ADR 0026) for a surface that must follow one receipt to its end, e.g. a confirmed outward send. */
-export const followAction = (id: string) => waitForAction(id);
 
 /** Complete Work and native journal client over the existing host doors. */
 export function createWorkFeedClient(

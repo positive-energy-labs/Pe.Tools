@@ -1,6 +1,6 @@
 # 0052: No guard on sending outward
 
-Date: 2026-11-17. Status: accepted, not built. Source: kaitpw's ruling after field use on a coworker's 0.7.33 machine. Supersedes [ADR 0038](0038-consent-is-a-notice-three-guards-on-project-documents.md) rule 2.3 (send outward) and rule 6 (pre-allow an outward service). The other rules of ADR 0038 stand.
+Date: 2026-11-17. Status: built. Source: kaitpw's ruling after field use on a coworker's 0.7.33 machine. Supersedes [ADR 0038](0038-consent-is-a-notice-three-guards-on-project-documents.md) rule 2.3 (send outward) and rule 6 (pre-allow an outward service). The other rules of ADR 0038 stand.
 
 ## Context
 

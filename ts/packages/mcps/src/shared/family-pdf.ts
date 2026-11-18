@@ -8,11 +8,11 @@ import type {
 import { parseWithLlamaCloud, type LlamaParseRequest } from "./llama-parse.ts";
 
 export type FamilyPdfRequest = Pick<
-  Extract<LlamaParseRequest, { sender: "person" }>,
-  "sender" | "file" | "apiKey"
+  LlamaParseRequest,
+  "file" | "apiKey" | "sent"
 >;
 
-/** Called only after the host or web route has established the person's outward send. */
+/** Parse directly; `sent` is the caller's send notice (ADR 0052). */
 export async function parseFamilyPdf(request: FamilyPdfRequest): Promise<ParsedDocView> {
   const { file } = request;
   const result = await parseWithLlamaCloud({

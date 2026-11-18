@@ -5,7 +5,7 @@ Canonical language for content homes, tiered values, guards and secrets ([ADR 00
 ## Places
 
 **Home**:
-A folder that holds authored content and carries the marker file `pe-home.json`. The folder name is its display name.
+A folder that holds authored content. A project home carries the marker file `pe-home.json`; the firm and user homes carry none. The folder name is its display name.
 _Avoid_: root, drawer, place, shared root; "home" for the T3 home, the product home override or the agent's working directory
 
 **Tier**:
@@ -79,7 +79,7 @@ The failure policy of a stored kind: `keep` (refuse and keep the bytes) or `disc
 _Avoid_: type, category, a class table in code
 
 **Guard**:
-One of exactly three acts on a project document that Pea leaves to the person: synchronize with central; overwrite or discard a person's model state; send outward.
+One of exactly two acts on a project document that Pea leaves to the person: synchronize with central; overwrite or discard a person's model state. Sending outward is not one: it goes at once with a notice (ADR 0052).
 _Avoid_: gate, permission, approval, guardrail
 
 **Held**:

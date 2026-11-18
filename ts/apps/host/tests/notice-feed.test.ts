@@ -38,7 +38,7 @@ test("start census notices earlier Work once per folder without changing files",
     const text = `Work saved by an earlier version is at ${work}. This version no longer reads it. Nothing was changed or deleted. You may delete the folder.`;
     expect(stored[0]!.reason).toBe(text);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
+      { threads: [], receipts: [], works: [], machine: null, stored, },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);
@@ -100,7 +100,7 @@ test("red (slice 6 seam c): the notices Reading serves one grouped feed snapshot
 });
 
 // Mutant, run red once (2026-11-11): `noteNoFirmHome` returns before its `noteStored` call.
-test("no firm home posts one notice that names where the host looked, and it draws as one row", async () => {
+test("no firm home posts one Settings notice, and it draws as one row", async () => {
   const { mkdtempSync } = await import("../../../tests/isolated-home/storage.ts");
   const { rmSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
@@ -121,18 +121,12 @@ test("no firm home posts one notice that names where the host looked, and it dra
     const stored = storedNotices(stateMachine(storedParent(notices)));
     expect(stored).toHaveLength(1);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
+      { threads: [], receipts: [], works: [], machine: null, stored, },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ group: "failed", verb: "not found", what: "Firm home", revision: 0 });
-    for (const place of looked) expect(rows[0]!.says).toContain(place);
-    // Two markers are a different finding: it posts once more and names both.
-    const refused = [join("P:", firm), join("G:", firm)];
-    noteNoFirmHome({ root: null, looked, refused }, stateMachine(notices));
-    const both = storedNotices(stateMachine(storedParent(notices)));
-    expect(both).toHaveLength(2);
-    for (const place of refused) expect(both[1]!.reason).toContain(place);
+    expect(rows[0]!.says).toBe("Set your firm home in Settings");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -162,7 +156,7 @@ test("outbox and host writers post to the notice feed's contract path", async ()
     expect(notices.filter(notice => notice.path === file)).toMatchObject([
       { class: "keep", place: "Pending action" },
     ]);
-    expect(notices.some(notice => notice.reason.includes(slot))).toBe(true);
+    expect(notices.some(notice => notice.reason === "Set your firm home in Settings")).toBe(true);
   } finally {
     rmSync(file, { force: true });
   }

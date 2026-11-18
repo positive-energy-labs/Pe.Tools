@@ -89,13 +89,13 @@ const foundWords: Record<HomesStatus["homes"][number]["found"], string> = {
   override: "environment override",
   config: "chosen here",
   pointer: "model pointer",
-  probe: "drive probe",
+  default: "default folder",
 };
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
  * The firm and user homes (ADR 0037), chosen here and kept in this machine's `state\homes.json`.
- * A blank field returns that home to its default: the drive probe for firm, Documents for user.
+ * A blank field returns that home to its default: the default folder for firm, Documents for user.
  */
 export function HomesSettings({ refusal }: { refusal: string | null }) {
   const [status, setStatus] = useState<HomesStatus | null>(null);
@@ -140,7 +140,7 @@ export function HomesSettings({ refusal }: { refusal: string | null }) {
         <Input
           face="mono"
           value={firm}
-          placeholder="Found on the shared drive"
+          placeholder="The firm default on G:"
           onChange={(event) => setFirm(event.target.value)}
         />
       </Label>
@@ -154,8 +154,7 @@ export function HomesSettings({ refusal }: { refusal: string | null }) {
         />
       </Label>
       <p className="text-ink-2">
-        Absolute folders. Blank uses the default. The firm folder must hold a pe-home.json of tier
-        firm.
+        Absolute folders that exist. Blank uses the default.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button

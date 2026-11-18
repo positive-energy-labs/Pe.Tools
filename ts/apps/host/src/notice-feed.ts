@@ -21,7 +21,6 @@ import {
   type ActionReceipt,
   type HarnessEvent,
   type HarnessThreadSummary,
-  type HeldSend,
   type Machine,
   type NavigationWork,
   type NoticeAct,
@@ -71,13 +70,10 @@ function noteEarlierWorkFinding(path: string, machine: StateRoot) {
 }
 
 /**
- * Tell a person once where the host looked for the firm home (ADR 0037 rule 2). The notice file
- * de-duplicates by path and hash: the same finding never posts twice, and a changed one (another
- * drive, a second marker) posts again. Silent when a firm home is bound and when nothing was
- * probed, as in a test run: a notice that names no place tells a person nothing.
+ * Tell a person once to set their firm home in Settings. Repeated starts de-duplicate the notice.
  */
 export function noteNoFirmHome(firm: FirmHome, machine: StateRoot = hostState()): void {
-  const places = firm.refused ?? firm.looked;
+  const places = firm.looked;
   if (firm.root || !places.length) return;
   const reason = noFirmHomeText(firm);
   note(machine, {
@@ -105,8 +101,6 @@ export interface NoticeSources {
   readonly stored: readonly StoredNotice[];
   /** False clears the live warning after the roots owner recovers; the durable audit remains. */
   readonly firmHomeUnavailable?: boolean;
-  /** Outward sends held for the person (ADR 0038 guard 3); a held door act is its receipt. */
-  readonly held: readonly HeldSend[];
 }
 
 /** A host-restart death leaves the feed after this long; Pea's thread list still holds it. */
@@ -199,6 +193,11 @@ function storedRow(notice: StoredNotice, now: number, firmHomeUnavailable?: bool
   if (firmHomeUnavailable === false && notice.place === FIRM_HOME_PLACE && notice.reason.startsWith("Firm home unavailable at ")) return null;
   // ponytail: a fixed window and no dismiss door; add a dismiss act when a person asks for one.
   if (now - Date.parse(notice.at) > STORED_FOR_MS) return null;
+  if (notice.class === "sent") return {
+    key: `stored:${notice.path}:${notice.sha256}`, group: "unread", revision: 0,
+    verb: "sent", what: notice.path, where: notice.place, says: notice.reason,
+    at: notice.at, url: null,
+  };
   const kept = notice.class === "keep";
   if (notice.place === EARLIER_WORK_PLACE)
     return {
@@ -291,7 +290,7 @@ function receiptRow(
     typeof receipt.result.held === "string" ? receipt.result.held : null;
   const heldRefusal = receipt.refusal?.kind === "held" ? receipt.refusal : null;
   if (heldRefusal || resultHeld)
-    return heldRefusal?.act === "send-outward" || now - Date.parse(receipt.startedAt) > HELD_FOR_MS
+    return now - Date.parse(receipt.startedAt) > HELD_FOR_MS
       ? null
       : {
           key: `action:${receipt.id}`,
@@ -393,26 +392,6 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       return [...(parent ? [parent] : []), ...nativeTouchedRows(receipt.action)];
     }),
     ...sources.stored.flatMap((notice) => storedRow(notice, now, sources.firmHomeUnavailable) ?? []),
-    ...sources.held.map((send) => ({
-      key: `held:${send.id}`,
-      group: "waits" as const,
-      revision: 0,
-      verb: "held",
-      what: send.path,
-      where: send.target ?? "Pea",
-      says: send.target
-        ? `Pea wants to attach this source to ${send.target}, which sends it to LlamaCloud to read. Nothing was sent. Confirm to send it and attach the result.`
-        : `Pea wants to send pages ${send.pages} of this source to LlamaCloud to read it. Nothing was sent. Confirm to send it and keep the result for Pea.`,
-      at: send.at,
-      url: send.thread ? routeAddress("chat").link({}, { thread: send.thread }) : null,
-      ...(send.thread ? {} : { refusal: "No thread asked for this" }),
-      act: {
-        kind: "confirm-send" as const,
-        id: send.id,
-        to: "LlamaCloud",
-        detail: send.target ? `for ${send.target}` : `pages ${send.pages}`,
-      },
-    })),
     // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works
       .filter((work) => work.staged > 0)

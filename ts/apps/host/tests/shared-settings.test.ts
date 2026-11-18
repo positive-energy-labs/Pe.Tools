@@ -1,13 +1,12 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync, renameSync, rmSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PostHog } from "posthog-node";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { analyticsConfig } from "@pe/runtime";
-import { firmSettingsDir, machineFacts } from "@pe/host-contracts/product-paths";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { Effect } from "effect";
 import { ductsFirmSchema } from "@pe/agent-contracts";
@@ -18,10 +17,9 @@ import { createReceiptExport } from "../src/receipt-export.ts";
 import { journalAt } from "./effect-test.ts";
 
 afterEach(() => vi.unstubAllEnvs());
-/** A firm home a test names with the dev override: a folder proven by its marker. */
+/** A firm home a test names with the dev override: an existing folder. */
 const firmHome = () => {
   const shared = mkdtempSync(join(tmpdir(), "pe-firm-"));
-  writeFileSync(join(shared, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   return shared;
 };
@@ -108,91 +106,6 @@ test("the dev PostHog key is the firm's alone: the user home's preferences.json 
   expect(analyticsConfig("dev")).toBeNull();
 });
 
-// Mutant H5-pinned-home: keep the construction-time firm root and ignore its marker.
-test("a marker-only loss invalidates the firm leaf and restoring it reacquires the unchanged file", async () => {
-  const shared = firmHome();
-  mkdirSync(join(shared, "Settings"));
-  const path = join(shared, "Settings", "ducts.json");
-  const bytes = JSON.stringify({ version: "marker-test", criteria: { terminalDropInWg: 0.05 } });
-  writeFileSync(path, bytes);
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
-  const changes: string[] = [];
-  const stop = files.subscribe!(name => changes.push(name));
-  try {
-    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ path, json: { version: "marker-test" } });
-    renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
-    await expect.poll(() => changes.length).toBe(1);
-    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
-    renameSync(join(shared, "marker-away.json"), join(shared, "pe-home.json"));
-    await expect.poll(() => changes.length).toBe(2);
-    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ path, json: { version: "marker-test" } });
-    expect(readFileSync(path, "utf8")).toBe(bytes);
-  } finally {
-    stop();
-    rmSync(shared, { recursive: true, force: true });
-  }
-});
-
-// K2: files alone stay [] across marker loss; the watcher key must include the root.
-test.each(["override", "probe"] as const)("marker loss with no Settings file fires exactly one change (%s)", async (source) => {
-  const drive = mkdtempSync(join(tmpdir(), "pe-firm-drive-"));
-  const shared = source === "override" ? drive : join(drive, "04 PE Software Files", "Pe.Tools");
-  mkdirSync(shared, { recursive: true });
-  writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm"}');
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", source === "override" ? shared : "");
-  const facts = machineFacts([drive]);
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({
-    firm: source === "override" ? firmRootPath : () => firmSettingsDir(facts),
-    catalogs: [],
-  }))));
-  const changes: string[] = [];
-  const stop = files.subscribe!(name => changes.push(name));
-  try {
-    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ path: join(shared, "Settings", "ducts.json") });
-    renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
-    await expect.poll(() => changes).toEqual(["firm"]);
-    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
-    // A later filesystem hint drains after the first change and must stay quiet.
-    writeFileSync(join(shared, "unrelated.txt"), "hint");
-    await new Promise(resolve => setTimeout(resolve, 150));
-    expect(changes).toEqual(["firm"]);
-  } finally {
-    stop();
-    rmSync(drive, { recursive: true, force: true });
-  }
-});
-
-// Mutant W3-firm: drop the missing-home probe; the mounted drive never invalidates the input.
-test("a firm drive mounted after subscription is discovered and then watched", async () => {
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
-  const drive = mkdtempSync(join(tmpdir(), "pe-late-firm-"));
-  const shared = join(drive, "04 PE Software Files", "Pe.Tools");
-  const facts = machineFacts([drive]);
-  vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({
-    firm: () => firmSettingsDir(facts), catalogs: [],
-  }))));
-  const changes: string[] = [];
-  const stop = files.subscribe!(name => changes.push(name));
-  try {
-    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ refused: "no-shared-root" });
-    mkdirSync(join(shared, "Settings"), { recursive: true });
-    writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm"}');
-    const path = join(shared, "Settings", "ducts.json");
-    writeFileSync(path, JSON.stringify({ version: "firm" }));
-    await vi.advanceTimersByTimeAsync(30_001);
-    await expect.poll(() => changes).toEqual(["firm"]);
-    expect(await Effect.runPromise(files.firm("ducts"))).toEqual({ path, json: { version: "firm" } });
-    writeFileSync(path, JSON.stringify({ version: "updated" }));
-    await expect.poll(() => changes).toEqual(["firm", "firm"]);
-    expect(await Effect.runPromise(files.firm("ducts"))).toMatchObject({ json: { version: "updated" } });
-  } finally {
-    stop();
-    vi.useRealTimers();
-    rmSync(drive, { recursive: true, force: true });
-  }
-});
-
 test("W3e outside rewrite of the user tier fires exactly one change", async () => {
   const { watchSettingTiers } = await import("../src/tiered-settings.ts");
   const home = mkdtempSync(join(tmpdir(), "pe-user-watch-"));
@@ -213,6 +126,7 @@ test("W3e outside rewrite of the user tier fires exactly one change", async () =
 
 test("a failed firm refresh keeps its value and the next refresh still notifies", async () => {
   const shared = firmHome();
+  mkdirSync(join(shared, "Settings"));
   let fail = 0;
   let attempts = 0;
   const root = () => {
@@ -227,9 +141,8 @@ test("a failed firm refresh keeps its value and the next refresh still notifies"
     await new Promise(resolve => setTimeout(resolve, 100));
     const before = attempts;
     fail = 2;
-    writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm","name":"changed"}');
+    writeFileSync(join(shared, "Settings", "ducts.json"), '{"version":"first"}');
     await expect.poll(() => attempts).toBeGreaterThan(before);
-    mkdirSync(join(shared, "Settings"));
     writeFileSync(join(shared, "Settings", "ducts.json"), '{"version":"later"}');
     await expect.poll(() => changes).toEqual(["firm"]);
   } finally { stop(); rmSync(shared, { recursive: true, force: true }); }

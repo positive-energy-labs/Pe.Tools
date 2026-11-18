@@ -1674,12 +1674,12 @@ test("a quarantined launch refused through /actions reads refused in the feed an
   const [receipt] = await (await fetch(`${server.base}/actions?id=quarantine-refused&wait=10000`, { headers })).json();
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "incomplete" });
   expect(receipt.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
-  const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
+  const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
   // Its local copies were made before the refused launch, so the row still waits on cleanup.
   expect(rows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/quarantine[\s\S]*clean up/) }]);
   // The cleanup line rides on the refused tail itself, not on the receipt carrying an error.
   const { error: _error, ...bare } = receipt;
-  const bareRows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: bare }] }, Date.now());
+  const bareRows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: bare }] }, Date.now());
   expect(bareRows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/clean up/) }]);
 });
 
@@ -1731,7 +1731,7 @@ test.each([false, true])("cleanup through /actions removes empty instance folder
     expect(await readFile(extra, "utf8")).toBe("keep me");
     expect(result.kept).toContain(extra);
     for (const step of receipt.steps) expect(step).not.toHaveProperty("touched");
-    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
+    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
     expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
   }
 });

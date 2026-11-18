@@ -7,7 +7,9 @@ import http from "node:http";
 import https from "node:https";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { withInvocationContext } from "@pe/runtime/context";
-import { sendHeldParse, sha256Of } from "../src/shared/held-parse.ts";
+import { notices } from "@pe/host-contracts/kinds";
+import { stateTree } from "@pe/host-contracts/service-identity";
+import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { runReadDocument } from "../src/shared/read-document.ts";
 
 const liteParseOptions = vi.hoisted(() => [] as Array<{ ocrEnabled?: boolean }>);
@@ -223,63 +225,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-test("a failed Confirm uploads once and surfaces the error; a later Confirm can retry", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "held-upload-failure-"));
-  try {
-    const path = join(dir, "schedule.pdf");
-    const bytes = schedulePdf();
-    writeFileSync(path, bytes);
-    vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
-    let uploads = 0;
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: Request | string | URL) => {
-        const url = new URL(input instanceof Request ? input.url : String(input));
-        if (url.pathname !== "/api/v2/parse/upload")
-          throw Error("Unexpected polling after failed upload");
-        uploads++;
-        return Response.json({ detail: "Upload failed" }, { status: 500 });
-      }),
-    );
-    const request = { path, sha256: sha256Of(bytes), pages: "1" };
-    // The upload began, so the reason must not let the row say nothing left.
-    await expect(sendHeldParse(request)).rejects.toThrow(/^The file may have reached LlamaCloud: .*500/);
-    expect(uploads).toBe(1);
-    await expect(sendHeldParse(request)).rejects.toThrow(/500/);
-    expect(uploads).toBe(2);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test("a Confirm without a LlamaCloud key says nothing was sent and uploads nothing", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "held-no-key-"));
-  try {
-    const path = join(dir, "schedule.pdf");
-    const bytes = schedulePdf();
-    writeFileSync(path, bytes);
-    const upload = vi.fn(async () => Response.json({}, { status: 500 }));
-    vi.stubGlobal("fetch", upload);
-    await expect(
-      sendHeldParse({ path, sha256: sha256Of(bytes), pages: "1" }, {}),
-    ).rejects.toThrow(/so nothing was sent\.$/);
-    expect(upload).not.toHaveBeenCalled();
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-// Guard 3 (ADR 0038; homes MAP R2/R3): Pea's read never sends a file outward. Mutant that turns
-// this red: in `src/shared/llama-parse.ts` replace `request.sender !== "person"` with `false`
-// (the upload POST then appears on Pea's own call).
-test("parser llamaparse is held at once for Pea and sends nothing; the person's confirm sends, and the next read finds the kept result", async () => {
+test("parser llamaparse sends directly, posts one notice and reuses the kept result", async () => {
   const dir = mkdtempSync(join(tmpdir(), "read-document-llama-"));
   try {
     const file = join(dir, "schedule.pdf");
     writeFileSync(file, schedulePdf());
     const secret = "llx-test-key-never-printed";
     const calls: string[] = [];
-    const heldPosts: unknown[] = [];
     let sentKey = false;
     let polls = 0;
     // Only the network is mocked: the host's hold door, and LlamaCloud's upload and poll routes.
@@ -290,14 +242,6 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
         const url = new URL(request ? request.url : String(input));
         const method = init?.method ?? request?.method ?? "GET";
         calls.push(`${method} ${url.pathname}${url.search}`);
-        if (url.pathname === "/pe/outward/held") {
-          const body = JSON.parse(String(init?.body ?? (await request?.text())));
-          heldPosts.push(body);
-          return Response.json({
-            held: { ...body, id: "h1", at: "2026-11-11T00:00:00.000Z", thread: "t1" },
-            message: "Held",
-          });
-        }
         if (method === "POST") {
           sentKey = new Headers(init?.headers).get("authorization") === `Bearer ${secret}`;
           return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
@@ -322,25 +266,10 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
       read({ path: file, pages: "1", parser: "llamaparse", crop: { top: 0.5 } }),
     ).rejects.toThrow(/crop is not available/);
 
-    // Pea's call: held in the tool result, one notice posted to the host, no byte sent, key unread.
-    const heldRead = await read({ path: file, pages: "1", parser: "llamaparse" });
-    expect(heldRead.text).toMatch(/^Held, not done/);
-    expect(heldRead.text).not.toMatch(/refus|reject|declin|denied/i);
-    expect(heldRead.text).not.toContain(secret);
-    expect(heldRead.images).toEqual([]);
-    const sha256 = sha256Of(schedulePdf());
-    expect(heldPosts).toEqual([{ service: "llamaparse", path: file, sha256, pages: "1" }]);
-    expect(uploads()).toEqual([]);
-    expect(sentKey).toBe(false);
-
-    // A file that changed since Pea asked is not sent on a stale confirm.
-    await expect(sendHeldParse({ path: file, sha256: "0".repeat(64), pages: "1" })).rejects.toThrow(
-      /changed since/,
-    );
-    expect(uploads()).toEqual([]);
-
-    // The person's Confirm (the host runs this) sends the held bytes through the one upload path.
-    await sendHeldParse({ path: file, sha256, pages: "1" });
+    const direct = await read({ path: file, pages: "1", parser: "llamaparse" });
+    expect(direct.text).not.toContain("Held");
+    expect(notices(stateTree(runtimeRoot()))).toMatchObject([{ class: "sent", path: "schedule.pdf", place: "LlamaCloud" }]);
+    expect(JSON.stringify(notices(stateTree(runtimeRoot())))).not.toContain(secret);
     expect(uploads().some((call) => call.startsWith("POST /api/v2/parse/upload"))).toBe(true);
     expect(calls.some((call) => call.includes("expand=markdown"))).toBe(true);
     expect(sentKey).toBe(true);
@@ -358,11 +287,6 @@ test("parser llamaparse is held at once for Pea and sends nothing; the person's 
     expect(llama.text).toContain("parsed by LlamaParse (agentic_plus, markdown)");
     expect(llama.text).not.toContain(secret);
     expect(llama.images).toEqual([]);
-    // Other pages of the same file were never confirmed: held again.
-    expect((await read({ path: file, pages: "2", parser: "llamaparse" })).text).toMatch(
-      /^Held, not done/,
-    );
-    expect(uploads()).toHaveLength(sent);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

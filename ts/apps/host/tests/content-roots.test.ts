@@ -110,7 +110,7 @@ test("Pod export and its user-root door refuse a missing identity without a sync
   } finally { owner.close(); await answer; }
 });
 
-test("the first completed probe posts where it looked, once, after settling", async () => {
+test("the first completed resolution posts the Settings notice once after settling", async () => {
   const { root, firm } = await rootsFixture();
   const release = Promise.withResolvers<Map<string, paths.Home[]>>();
   vi.spyOn(paths, "resolveHomes").mockImplementation((_pointers, options) => {
@@ -119,13 +119,13 @@ test("the first completed probe posts where it looked, once, after settling", as
   });
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   const owner = acquireContentRoots();
-  const findings = () => notices(hostState()).filter(n => n.path === firm && n.reason.startsWith("No firm home:"));
+  const findings = () => notices(hostState()).filter(n => n.path === firm && n.reason === "Set your firm home in Settings");
   try {
     expect(findings()).toHaveLength(0);
     release.resolve(snapshot(root));
     await owner.ready;
     expect(findings()).toHaveLength(1);
-    expect(findings()[0]?.reason).toContain(firm);
+    expect(findings()[0]?.reason).toBe("Set your firm home in Settings");
     await vi.advanceTimersByTimeAsync(contentRootsRefreshMs);
     expect(findings()).toHaveLength(1);
   } finally { release.resolve(snapshot(root)); owner.close(); }
@@ -159,7 +159,7 @@ test("a firm home arriving late clears its unavailable warning and notifies the 
   vi.spyOn(paths, "resolveHomes").mockReturnValue(release.promise);
   vi.useFakeTimers();
   const owner = acquireContentRoots(), changed = vi.fn(), stop = observeContentRoots(changed);
-  const rows = () => noticeRows({ threads: [], receipts: [], works: [], held: [], machine: null,
+  const rows = () => noticeRows({ threads: [], receipts: [], works: [], machine: null,
     stored: notices(hostState()).filter(n => n.path === firm), firmHomeUnavailable: contentRootsUnavailable(),
   }, Date.now());
   try {
@@ -256,7 +256,6 @@ test("a timed-out refresh is retired for one working replacement and cannot late
     await owner.ready;
     await vi.advanceTimersByTimeAsync(contentRootsRefreshMs + contentRootsResolveTimeoutMs);
     expect(resolve).toHaveBeenCalledTimes(2);
-    expect(resolve.mock.calls[1]?.[1]?.knownFirm).toBe(firm);
     expect(resolve.mock.calls[1]?.[1]?.signal?.aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(contentRootsRefreshMs - contentRootsResolveTimeoutMs);
     expect(resolve).toHaveBeenCalledTimes(3);
@@ -268,17 +267,17 @@ test("a timed-out refresh is retired for one working replacement and cannot late
   } finally { hung.resolve(snapshot(root)); owner.close(); }
 });
 
-test("a known firm refresh checks only its marker, without probing drives or directories", async () => {
+test("a known firm refresh checks its folder without reading markers or listing directories", async () => {
   const { root, firm } = await rootsFixture();
   await mkdir(firm);
   await writeFile(join(firm, "pe-home.json"), '{"tier":"firm"}');
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
   const access = vi.spyOn(asyncFilesystem, "access"), list = vi.spyOn(asyncFilesystem, "readdir");
   const read = vi.spyOn(asyncFilesystem, "readFile");
-  expect((await paths.resolveHomes([], { knownFirm: firm })).get("")).toEqual(snapshot(root, firm).get(""));
+  expect((await paths.resolveHomes([])).get("")).toEqual(snapshot(root, firm).get(""));
   expect(access).not.toHaveBeenCalled();
   expect(list).not.toHaveBeenCalled();
-  expect(read.mock.calls.filter(([path]) => String(path) === join(firm, "pe-home.json"))).toHaveLength(1);
+  expect(read.mock.calls.filter(([path]) => String(path) === join(firm, "pe-home.json"))).toHaveLength(0);
 });
 
 test("Page, lifecycle and omitted-roots requests use one async snapshot and never call the sync resolver", async () => {

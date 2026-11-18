@@ -265,7 +265,6 @@ const RULES: Rule[] = [
     allow: [
       { glob: "products/ducts/web/src/annotations.tsx", selector: ".absolute.left-0.top-0", reason: "SVG marks stay registered to the picture origin." },
       { glob: W + "rooms/sketch.tsx", selector: ".absolute.left-0.top-0", reason: "SVG sketch shares the picture origin." },
-      { glob: W + "grounded-doc/view/block-markdown.tsx", selector: ".absolute.left-2.top-1/2", reason: "Link glyph marks its own text block." },
       { glob: W + "grounded-doc/view/page-pane.tsx", selector: ".absolute.left-0.5.top-0.5", reason: "Block-kind glyph marks its document rectangle." },
     ], cannotSee: "Computed classes or browser geometry." },
   { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,
@@ -287,7 +286,6 @@ const RULES: Rule[] = [
         "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
         "family/doc-pane.tsx": "Evidence engine owns document hover.",
         "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
-        "grounded-doc/view/images-pane.tsx": "Markdown images synchronize evidence blocks.",
         "machine/notice.tsx": "Reading a notice pauses expiry.",
         "machine/bay.tsx": "Pointer chooses the file preview.",
         "workbench/lens/peek.tsx": "Travel funnel and linger timing keep the popover reachable.",

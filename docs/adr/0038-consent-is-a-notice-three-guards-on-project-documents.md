@@ -1,6 +1,6 @@
 # 0038: Consent is a notice; three guards on project documents
 
-Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's rulings in the homes muse; the guard shapes come from the journeys thread and the kernel purger and driver forks. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`R4-permissions.md`, `POSITION-v2.md` to `POSITION-v4.md`, `round3/`). Amends [ADR 0027](0027-one-route-one-subject-one-consent.md) rule 11. ADR 0027 rule 12 stands. Builds on ADR 0036 (harness tools are ungated), which exists only on the unmerged branch `t3/pea-muas-retest`. Frontier: [homes MAP](../features/homes/MAP.md) slices 3 and 8.
+Date: 2026-11-11. Status: accepted, not built; rules 2.3 and 6 superseded by [ADR 0052](0052-no-guard-on-sending-outward.md). Source: kaitpw's rulings in the homes muse; the guard shapes come from the journeys thread and the kernel purger and driver forks. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`R4-permissions.md`, `POSITION-v2.md` to `POSITION-v4.md`, `round3/`). Amends [ADR 0027](0027-one-route-one-subject-one-consent.md) rule 11. ADR 0027 rule 12 stands. Builds on ADR 0036 (harness tools are ungated), which exists only on the unmerged branch `t3/pea-muas-retest`. Frontier: [homes MAP](../features/homes/MAP.md) slices 3 and 8.
 
 ## Context
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { findAmbiguousBlockIds } from "#/grounded-doc/ambiguous";
 import type { DocImage, GroundedBlock, ParsedDocView } from "#/grounded-doc/types";
@@ -12,8 +12,6 @@ interface BlockFocus {
 
 type GroundedDocStatus =
   | { phase: "empty" }
-  | { phase: "parsing"; fileName: string }
-  | { phase: "error"; message: string }
   | { phase: "ready" };
 
 export interface GroundedDocEngine {
@@ -22,8 +20,6 @@ export interface GroundedDocEngine {
   focus: BlockFocus | null;
   pinned: BlockFocus | null;
 
-  load: (file: File) => Promise<void>;
-  loadUrl: (url: string) => Promise<void>;
   setDoc: (doc: ParsedDocView) => void;
   clear: () => void;
 
@@ -44,18 +40,13 @@ export interface GroundedDocEngine {
 const EMPTY_BLOCKS: GroundedBlock[] = [];
 const EMPTY_IMAGES: DocImage[] = [];
 
-export function useGroundedDoc(options?: {
-  parseUrl?: string;
-  initialDoc?: ParsedDocView;
-}): GroundedDocEngine {
-  const parseUrl = options?.parseUrl ?? "/api/pdf-audit/parse";
+export function useGroundedDoc(options?: { initialDoc?: ParsedDocView }): GroundedDocEngine {
   const [doc, setDocState] = useState<ParsedDocView | null>(options?.initialDoc ?? null);
   const [status, setStatus] = useState<GroundedDocStatus>(
     options?.initialDoc ? { phase: "ready" } : { phase: "empty" },
   );
   const [hover, setHover] = useState<BlockFocus | null>(null);
   const [pinned, setPinned] = useState<BlockFocus | null>(null);
-  const loadSeq = useRef(0);
 
   const blockIndex = useMemo(
     () => new Map((doc?.blocks ?? []).map((block) => [block.id, block])),
@@ -88,7 +79,6 @@ export function useGroundedDoc(options?: {
   const ambiguousBlockIds = useMemo(() => findAmbiguousBlockIds(doc?.blocks ?? []), [doc]);
 
   const setDoc = useCallback((next: ParsedDocView) => {
-    loadSeq.current += 1;
     setDocState(next);
     setStatus({ phase: "ready" });
     setHover(null);
@@ -96,57 +86,11 @@ export function useGroundedDoc(options?: {
   }, []);
 
   const clear = useCallback(() => {
-    loadSeq.current += 1;
     setDocState(null);
     setStatus({ phase: "empty" });
     setHover(null);
     setPinned(null);
   }, []);
-
-  const runParse = useCallback(
-    async (form: FormData, displayName: string) => {
-      const seq = ++loadSeq.current;
-      setStatus({ phase: "parsing", fileName: displayName });
-      setDocState(null);
-      setHover(null);
-      setPinned(null);
-      try {
-        const response = await fetch(parseUrl, { method: "POST", body: form });
-        const payload = (await response.json()) as ParsedDocView & { error?: string };
-        if (!response.ok || payload.error) {
-          throw new Error(payload.error ?? `parse failed (${response.status})`);
-        }
-        if (seq !== loadSeq.current) return;
-        setDocState(payload);
-        setStatus({ phase: "ready" });
-      } catch (error) {
-        if (seq !== loadSeq.current) return;
-        setStatus({
-          phase: "error",
-          message: error instanceof Error ? error.message : String(error),
-        });
-      }
-    },
-    [parseUrl],
-  );
-
-  const load = useCallback(
-    (file: File) => {
-      const form = new FormData();
-      form.append("file", file);
-      return runParse(form, file.name);
-    },
-    [runParse],
-  );
-
-  const loadUrl = useCallback(
-    (url: string) => {
-      const form = new FormData();
-      form.append("url", url);
-      return runParse(form, decodeURIComponent(url.split("/").pop() || url));
-    },
-    [runParse],
-  );
 
   const hoverBlock = useCallback((blockId: string | null, origin: FocusOrigin) => {
     setHover(blockId ? { blockId, origin } : null);
@@ -191,8 +135,6 @@ export function useGroundedDoc(options?: {
       status,
       focus,
       pinned,
-      load,
-      loadUrl,
       setDoc,
       clear,
       hoverBlock,
@@ -211,8 +153,6 @@ export function useGroundedDoc(options?: {
       focus,
       focusedPage,
       pinned,
-      load,
-      loadUrl,
       setDoc,
       clear,
       hoverBlock,

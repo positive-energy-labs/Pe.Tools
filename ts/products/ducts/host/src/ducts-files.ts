@@ -134,7 +134,6 @@ export class DuctFiles extends Context.Service<
                 const child = changedPath === null ? "" : relative(resolve(path), changedPath);
                 const ancestor = changedPath === null ? "" : relative(changedPath, resolve(path));
                 if (
-                  (name === "firm" && changedPath === resolve(base, "pe-home.json")) ||
                   changedPath === null ||
                   child === "" ||
                   (!child.startsWith(`..${sep}`) && child !== "..") ||
