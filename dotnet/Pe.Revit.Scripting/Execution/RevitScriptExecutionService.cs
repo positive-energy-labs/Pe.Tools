@@ -1050,27 +1050,38 @@ public sealed class RevitScriptExecutionService(
         // A save a library makes on the grouped document is refused by Revit; ExecuteContainer says why.
         if (group is not null)
             run.TargetHold = "so that its transactions are one undo entry; a script whose own source calls Save runs ungrouped, and this call was made from a library";
+        var threw = true;
         try {
             run.Execute(container);
+            threw = false;
         } finally {
             if (group is not null) {
                 using (group)
-                    run.Undo = CloseUndoGroup(group, undoName);
+                    run.Undo = CloseUndoGroup(group, undoName, threw && SpikeRollBackOnThrow);
             }
         }
     }
+
+    // SPIKE (notransaction-rollback-vs-assimilate), not a landing: the second closing of the run's group, and
+    // what the close answered, for ScriptGroupCloseSpikeTests. Off, the code is the code as it was.
+    internal static bool SpikeRollBackOnThrow;
+    internal static string? SpikeLastClose;
 
     /// <summary>
     ///     A script that returns with a transaction still open leaves a group Revit will not merge: Assimilate
     ///     answers Error, and what the script had committed stays (fresh Revit 2025, 2026-11-14).
     /// </summary>
-    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName) {
+    private static ScriptUndo CloseUndoGroup(TransactionGroup group, string undoName, bool rollBack = false) {
         try {
-            var status = group.Assimilate();
+            var status = rollBack ? group.RollBack() : group.Assimilate();
+            SpikeLastClose = $"{(rollBack ? "RollBack" : "Assimilate")} -> {status}";
+            if (rollBack)
+                return new ScriptUndo(Ungrouped: $"SPIKE: the script threw and the run's group was rolled back ({status}).");
             return status == TransactionStatus.Committed
                 ? new ScriptUndo(undoName)
                 : new ScriptUndo(Ungrouped: $"Revit did not merge the run's transactions ({status}); a script that returns with a transaction still open causes this.");
         } catch (Exception ex) {
+            SpikeLastClose = $"{(rollBack ? "RollBack" : "Assimilate")} threw {ex.GetType().FullName}: {ex.Message}";
             return new ScriptUndo(Ungrouped: $"the run's undo group could not be closed: {ex.Message}");
         }
     }
