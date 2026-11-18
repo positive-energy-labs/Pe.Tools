@@ -130,7 +130,7 @@ export function SheetPane({ ctx: { draw: ctx, slot, field } }: { ctx: { draw: Ct
   const search = useRouteSearchSlice((s) => s);
   // A sheet over Work alone names no read: its pane has no value.
   const read = ctx.value?.value ?? undefined;
-  const cells = sheetCells(slot, { rows: rowsOf(slot, ctx, field), work: ctx.cells?.doc ?? null, model: [], read });
+  const cells = sheetCells(slot, { rows: rowsOf(slot, ctx, field), work: ctx.cells?.doc ?? null, read });
   const shown = typedOnly ? typedCells(cells) : cells;
   const from = read !== undefined ? slot.from?.(read, search) : null;
   const empty = slot.empty?.(read ?? null);

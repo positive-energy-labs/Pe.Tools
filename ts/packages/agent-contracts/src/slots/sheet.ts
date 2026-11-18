@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { SETTING_TIERS, type SettingTier } from "../tiered-setting.ts";
+import { SETTING_TIERS, serveSetting, type SettingTier, type SettingTierRead } from "../tiered-setting.ts";
+import type { ValueSource } from "../work-value.ts";
 import type { native } from "../handle.ts";
 import type { OpRequestOf } from "@pe/host-contracts/operation-types";
 type OptionsRequest = OpRequestOf<"revit.catalog.field-options">;
@@ -78,7 +79,7 @@ export interface BindingDraw<R = any> {
 
 export type SheetBinding = BindingDraw & { readonly domain: Domain } & (
   | { readonly home: Extract<Home, { at: "parameter" }>; readonly per: "subject" }
-  | { readonly home: Extract<Home, { at: "setting" }>; readonly per: "route" }
+  | { readonly home: Extract<Home, { at: "setting" }>; readonly per: "route"; readonly model: NonNullable<BindingDraw["model"]> }
   | { readonly home: Extract<Home, { at: "store" | "local" }>; readonly per: BindingPer }
 );
 export const parameter = (parameter: string, domain: Domain, draw?: BindingDraw): SheetBinding =>
@@ -88,7 +89,10 @@ export const store = (store: string, domain: Domain, per: BindingPer = "subject"
 export const local = (domain: Domain, per: BindingPer = "route", draw?: BindingDraw): SheetBinding =>
   ({ ...draw, domain, home: { at: "local" }, per });
 export const setting = (owner: string, path: readonly string[], domain: Domain, tiers: readonly SettingTier[], draw?: BindingDraw): SheetBinding =>
-  ({ ...draw, domain, home: { at: "setting", owner, path, tiers }, per: "route" });
+  ({ ...draw, domain, home: { at: "setting", owner, path, tiers }, per: "route", model: draw?.model ?? (read => {
+    const served = serveSetting((read as { settings?: Record<string, readonly SettingTierRead[]> })?.settings?.[owner], tiers, path, schemaOf(domain), draw?.default);
+    return { value: served.value, source: served.tier, ref: served.ref, note: served.note };
+  }) });
 
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>> {
@@ -122,6 +126,7 @@ export interface CellAddress {
  * found is never a source.
  */
 export type CellSource = "work" | "model-store" | SettingTier | "default" | "model";
+export const cellSource = (source: ValueSource): CellSource => source === "Work" || source === "run" ? "work" : source;
 
 /** Every value Pea can touch (ADR 0030 rule 8): current, model (struck), pending author, drift, freshness, source. */
 export interface StateCell<V = unknown> extends CellAddress {
@@ -133,12 +138,6 @@ export interface StateCell<V = unknown> extends CellAddress {
   readonly drift: boolean;
   readonly freshness: "fresh" | "stale" | "unverified" | "never";
   readonly source: CellSource;
-}
-
-/** One model-side value the kernel reads for a binding's row before drawing. */
-export interface ModelValue<V = unknown> extends CellAddress {
-  readonly value: V | null;
-  readonly freshness: StateCell["freshness"];
 }
 
 /**
