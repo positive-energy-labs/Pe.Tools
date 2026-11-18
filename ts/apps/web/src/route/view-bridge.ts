@@ -24,6 +24,8 @@ import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
 import { useRouteCurrent, useRouteSearchSlice } from "./activity";
 
+type ReadyViewCodec = ViewCodec & { whenReady?: (patch: Record<string, string>) => Promise<void> };
+
 /**
  * Whether the host leases this typed route's view (`RouteViewStore.leasesView`), decided the host's
  * way: a route at a builtin's path is that builtin and leases only if its address declares `agent`
@@ -65,7 +67,7 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
     /** What the shown Page derives; Pea reads it, never sets it. */
     facts?: Record<string, unknown>;
     /** Writes the leased page and reads Pea's patch; omitted, the legacy address's `agent` lease. */
-    codec?: ViewCodec;
+    codec?: ReadyViewCodec;
   } = {},
 ) {
   const url = shown.url ?? true;
@@ -93,9 +95,9 @@ export function useRouteViewBridge({
   facts,
   codec,
 }: (
-  | { route: RouteViewRoute; codec?: ViewCodec }
+  | { route: RouteViewRoute; codec?: ReadyViewCodec }
   /** A registered route leases with its owner codec; the host checks it is registered and opted in. */
-  | { route: string; codec: ViewCodec }
+  | { route: string; codec: ReadyViewCodec }
 ) & {
   thread?: string;
   surface: "chat" | "route";
@@ -121,6 +123,7 @@ export function useRouteViewBridge({
   const lifetime = useRef<object | null>(null);
   const [intent, setIntent] = useState<{
     event: Intent;
+    patch: object;
     receipt: Extract<PageIntent, { ok: true }>["receipt"];
     context: string;
   } | null>(null);
@@ -134,7 +137,7 @@ export function useRouteViewBridge({
     return () => document.removeEventListener("visibilitychange", changed);
   }, []);
   // No codec means the builtin branch: only a `RouteViewRoute` may omit one.
-  const lease: ViewCodec = codec ?? routeAddress(route as RouteViewRoute).agent;
+  const lease: ReadyViewCodec = codec ?? routeAddress(route as RouteViewRoute).agent;
   // The explicit Pea open this rendered Place answers (page-local history, set by the Places'
   // route-view-open listener); MCP waits for its own id, so an older lease never satisfies it.
   // Read at render: the navigation that sets it re-renders this route; a chat pane has no router.
@@ -231,14 +234,15 @@ export function useRouteViewBridge({
     );
   }, [view, publish]);
   const applyIntent = useCallback(
-    (event: Intent) => {
+    async (event: Intent) => {
       const value = current.current;
+      const visible = () => document.visibilityState !== "hidden";
       if (
         event.type !== "route-view-intent" ||
         !value ||
         !routeCurrent() ||
         event.route !== value.route ||
-        document.visibilityState === "hidden" ||
+        !visible() ||
         event.thread !== value.thread ||
         event.instance !== value.instance ||
         event.revision !== revision.current ||
@@ -269,6 +273,12 @@ export function useRouteViewBridge({
           );
       let patch: object;
       try {
+        const owner = lifetime.current;
+        await lease.whenReady?.(event.patch);
+        if (lifetime.current !== owner || !routeCurrent() || !visible() ||
+          JSON.stringify(current.current?.page) !== JSON.stringify(value.page) ||
+          JSON.stringify(current.current?.context) !== JSON.stringify(value.context))
+          return refused(refuse("conflict", "The Page changed while reading the subject roster"));
         // `value` is the view this hook published, so its codec is this lease's.
         patch = lease.read(event.patch);
       } catch (cause) {
@@ -281,7 +291,7 @@ export function useRouteViewBridge({
       const wanted = lease.write(patch);
       if (!result.moved && Object.keys(event.patch).some((key) => value.page[key] !== wanted[key]))
         return refused(refuse("conflict", "The Page made no move for this patch"));
-      setIntent({ event, receipt: result.receipt, context: JSON.stringify(value.context) });
+      setIntent({ event, patch, receipt: result.receipt, context: JSON.stringify(value.context) });
     },
     [routeCurrent, lease],
   );
@@ -309,7 +319,7 @@ export function useRouteViewBridge({
       JSON.stringify(view.context) === intent.context;
     if (!eligible()) return;
     // The rendered page holds the patch once each key writes back as its codec writes the decoded value.
-    const wanted = lease.write(lease.read(event.patch));
+    const wanted = lease.write(intent.patch);
     if (Object.keys(event.patch).some((key) => view.page[key] !== wanted[key])) return;
     let canceled = false;
     void publish(view)

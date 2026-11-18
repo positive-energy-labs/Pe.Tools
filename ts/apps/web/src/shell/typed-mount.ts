@@ -702,6 +702,25 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     findings: () => { watchFindings(); return findings; },
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
+      // Stay below the host's 8 s ack deadline; only the subject's reading gates attention.
+      whenReady: async (patch: Record<string, string>) => {
+        const subject = spec.subject;
+        if (!subject || !Object.hasOwn(patch, subject.field)) return;
+        await new Promise<void>((resolve, reject) => {
+          const finish = (reason?: string) => {
+            clearTimeout(timer); listeners.delete(inspect);
+            if (reason) reject(Error(reason)); else resolve();
+          };
+          const inspect = () => {
+            if (disposed || released || !input.custody.current()) return finish("Place is inactive or retired");
+            const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
+            if (roster?.state === "ready") finish();
+            else if (roster && !inFlight(roster)) finish(`Subject roster unavailable: ${reasonOf(roster)}`);
+          };
+          const timer = setTimeout(() => finish("Subject roster did not become ready within 4000 ms"), 4_000);
+          listeners.add(inspect); inspect();
+        });
+      },
       write: (page:object) => Object.fromEntries(Object.keys(spec.fields).map(key=>[key,JSON.stringify((page as Record<string,unknown>)[key])])),
       read: (patch: Record<string, string>) => Object.fromEntries(Object.entries(patch).map(([key, text]) => {
         const field = spec.fields[key];
@@ -717,8 +736,9 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           if (roster?.state !== "ready") throw Error("Read the subject roster before choosing a subject");
           const options = subject.options(roster.value);
           if (field.schema.safeParse(value).success) {
-            const choice = value as { kind: string; ids?: string[] };
-            const missing = choice.ids?.filter(id => !options.some(option => option.id === id)) ?? [];
+            const choice = value as { kind: string; ids?: string[]; active?: string };
+            const missing = [...(choice.ids ?? []), ...(choice.active === undefined ? [] : [choice.active])]
+              .filter(id => !options.some(option => option.id === id));
             if (missing.length) throw Error(`Unknown ${subject.noun}: ${missing.join(", ")}; choose an exact roster identity`);
             return [key, field.schema.parse(value)];
           }
