@@ -23,7 +23,7 @@ const inputs = join(dir, "pricing.json");
 await writeFile(inputs, JSON.stringify(evidence, null, 2));
 if (process.argv.includes("--witness")) {
   const priced = read.criteria.autoJoinGapIn;
-  const drawn = sheetCells(designCalc, { rows: [], work, model: [], read })
+  const drawn = sheetCells(designCalc, { rows: [], work, read })
     .filter(c => c.binding.endsWith(".autoJoinGapIn"))
     .map(c => ({ binding: c.binding, value: c.value, source: c.source }));
   const ok = drawn.length === 1 && drawn[0].value === priced.value && drawn[0].source.toLowerCase() === priced.source.toLowerCase();
