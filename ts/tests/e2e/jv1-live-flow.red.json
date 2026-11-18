@@ -1,0 +1,29 @@
+{
+  "base": "272c0120a351497638ec921f672dd59a192c8d14",
+  "lane": "fixture-host linkage, not Revit",
+  "when": "2026-11-18T02:26:09-06:00",
+  "cwd": "ts",
+  "command": "vp test --config tests/e2e/jv1-live-flow.config.ts",
+  "exitCode": 1,
+  "witness": {
+    "live": 400,
+    "receipt": 200,
+    "resolved": {
+      "units": "cfm",
+      "source": "model-store",
+      "version": null,
+      "ref": "model-store:3/_PE_DuctLosses",
+      "author": null,
+      "status": "valid",
+      "value": 200
+    }
+  },
+  "failure": "AssertionError: J-V1 stale store flow: live 400 cfm must beat receipt 200 cfm: expected 200 to be 400 // Object.is equality",
+  "fullLog": ".artifacts/jv1-base-red.log",
+  "fullLogSha256": "53acb264d3557152abedd0113290e1b66e847e3a4639da93bcd314ce511e1914",
+  "limitations": [
+    "Synthetic receipt and native state; real host admission, resolver and calculator.",
+    "Drift and apply/readback assertions follow the red assertion and have not executed.",
+    "Real-Revit target is operator-assisted and has not been driven."
+  ]
+}
