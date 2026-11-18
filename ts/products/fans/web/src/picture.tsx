@@ -5,6 +5,7 @@
  * mounts no picture: the kernel pane owns capture, pose, selection, marks and findings.
  */
 import { systemScope } from "@pe/ducts-domain/system-scope";
+import { espWord } from "./calc/view.tsx";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { useRef } from "react";
@@ -28,7 +29,7 @@ export function espWarnings({ rated, required }: Immutable<FanEspValues>): strin
   const need = required.requiredEspInWg;
   return [
     ...(rated.status === "invalid" ? [`Rated ESP is unreadable (${rated.source} ${rated.ref})`] : []),
-    ...(rated.status === "valid" && rated.value < need ? [`Rated ESP ${inWg(rated.value)} (${rated.source} ${rated.ref}) is below the required ${inWg(need)} (computed)`] : []),
+    ...(rated.status === "valid" && rated.value < need ? [`Rated ESP ${inWg(rated.value)} (${rated.source} ${rated.ref}) is below the required ${inWg(need)} (${espWord(true)})`] : []),
   ];
 }
 

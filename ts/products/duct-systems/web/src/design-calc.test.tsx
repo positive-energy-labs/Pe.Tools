@@ -32,12 +32,12 @@ test("/ducts with no shared root: a firm criterion is the engine default, and th
   // /ducts' sheet stages its criteria (a row per cell) and the design friction rate, in /ducts Work.
   expect(staged(designCalc).map(name => name.split(".")[0]).every(name => name === "criteria")).toBe(true);
   for (const binding of staged(designCalc)) expect(ductsKeys).toContain(binding.split(".")[0]);
-  const rows = sheetCells(designCalc, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, model: [], read: null });
+  const rows = sheetCells(designCalc, { rows: [], work: { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }, read: null });
   expect(rows.find((c) => c.binding === "criteria.velocitySupplyFpm")).toMatchObject({ value: 850, source: "work", label: "Velocity limit supply" });
   expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.08, source: "default", unit: "in-wg/100 ft" });
   const firmCell = { value: 900, source: "firm", units: "fpm" };
   const read = { criteria: { velocityLimitFpm: { supply: firmCell, return: firmCell } }, firm: refused };
-  const cell = sheetCells(designCalc, { rows: [], work: {}, model: [], read }).find((c) => c.binding === "criteria.velocitySupplyFpm");
+  const cell = sheetCells(designCalc, { rows: [], work: {}, read }).find((c) => c.binding === "criteria.velocitySupplyFpm");
   expect(cell).toMatchObject({ value: 900, source: "default", ref: ENGINE_DEFAULT_NO_SHARED_ROOT });
   const pane = paneOf(designCalc, read).container;
   expect(pane.querySelector('[data-sheet-address="criteria.velocitySupplyFpm"]')!.textContent).toContain(ENGINE_DEFAULT_NO_SHARED_ROOT);
