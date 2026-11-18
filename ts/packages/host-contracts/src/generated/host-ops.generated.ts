@@ -1654,7 +1654,7 @@ export namespace DuctsSnapshotRoster {
       elementIds: number[];
     }
     /**
-     * Complete parameter names after override, store and engine-default resolution.
+     * Complete parameter names after request override and C# default resolution.
      */
     export interface DuctParameterSlots {
       requiredEsp?: null | string;
@@ -2338,7 +2338,7 @@ export namespace DuctsSnapshotWalk {
       elementIds: number[];
     }
     /**
-     * Complete parameter names after override, store and engine-default resolution.
+     * Complete parameter names after request override and C# default resolution.
      */
     export interface DuctParameterSlots {
       requiredEsp?: null | string;
