@@ -2,8 +2,8 @@
 import { createRoot } from "react-dom/client";
 import { RegistryContext } from "@effect/atom-react";
 import { designCalc } from "@pe/duct-systems-web/design-calc";
-import { makeAtomRegistry } from "../../apps/web/src/shell/owner.ts";
-import { SheetPane } from "../../apps/web/src/route/slots/sheet/pane.tsx";
+import { makeAtomRegistry } from "../../../apps/web/src/shell/owner.ts";
+import { SheetPane } from "../../../apps/web/src/route/slots/sheet/pane.tsx";
 
 const { read, work } = await (await fetch("/jv3-inputs")).json();
 // Read-only fixture handles: this journey neither stages nor applies anything.

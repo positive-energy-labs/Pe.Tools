@@ -3,7 +3,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { openBrowser } from "@pe/browser";
-import { seedConversationWork, CONVERSATION_THREADS } from "./conversation-work.fixture.ts";
+import { seedConversationWork, CONVERSATION_THREADS } from "../../../tests/e2e/conversation-work.fixture.ts";
 
 const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const dir = join(root, ".artifacts", "jv7", String(Date.now()));
@@ -85,7 +85,7 @@ try {
   const tab = await browser.page();
   const target = tab.targetId;
   await tab.release();
-  const child = spawn(process.execPath, ["--import", "jiti/register", "tests/e2e/jv7-fans.ts"], {
+  const child = spawn(process.execPath, ["--import", "jiti/register", "products/fans/journeys/jv7-fans.ts"], {
     cwd: join(root, "ts"),
     windowsHide: true,
     stdio: "inherit",

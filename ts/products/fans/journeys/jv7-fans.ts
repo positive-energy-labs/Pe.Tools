@@ -1,13 +1,13 @@
-// Fixture: node --import jiti/register tests/e2e/jv7-launch.ts
+// Fixture: node --import jiti/register products/fans/journeys/jv7-launch.ts
 // Real: E2E_WEB=<bound fans URL with thread and target>, JV7_HOST=<host origin>,
-// JV7_TOKEN=<service token>, CDP_PORT/CDP_TARGET=<owned tab>; node --import jiti/register tests/e2e/jv7-fans.ts
+// JV7_TOKEN=<service token>, CDP_PORT/CDP_TARGET=<owned tab>; node --import jiti/register products/fans/journeys/jv7-fans.ts
 // The real target requires the driver’s own controlled session; this journey never discovers or starts Revit.
-import { assertPageBinding } from "./page-binding.ts";
+import { assertPageBinding } from "../../../tests/e2e/page-binding.ts";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { journey, WEB } from "./cdp.ts";
-import { marks, settled } from "./marks.ts";
-import { fanRosterLabel } from "./fan-roster.ts";
+import { journey, WEB } from "../../../tests/e2e/cdp.ts";
+import { marks, settled } from "../../../tests/e2e/marks.ts";
+import { fanRosterLabel } from "../../../tests/e2e/fan-roster.ts";
 
 const missing = "UniqueId:f2f7a0d6-placeholder";
 await journey("J-V7", async (page, step, dir) => {
