@@ -67,8 +67,8 @@ export function requireScriptSuccess(value: unknown): void {
   if (status === "Succeeded") return;
   // The first Error diagnostic's first line is what failed (a runtime one is the exception's type and
   // message; its stack starts on the next line). Nothing else of the result goes into the error text.
-  const diagnostics = value && typeof value === "object" && "diagnostics" in value && Array.isArray(value.diagnostics)
-    ? (value.diagnostics as unknown[]) : [];
+  const diagnostics: readonly unknown[] = value && typeof value === "object" && "diagnostics" in value && Array.isArray(value.diagnostics)
+    ? value.diagnostics : [];
   const first = diagnostics.find((entry): entry is { message: string } =>
     !!entry && typeof entry === "object" && "severity" in entry && entry.severity === "Error" &&
     "message" in entry && typeof entry.message === "string");
