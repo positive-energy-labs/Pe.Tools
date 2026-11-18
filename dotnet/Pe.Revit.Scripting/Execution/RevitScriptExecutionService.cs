@@ -347,7 +347,10 @@ public sealed class RevitScriptExecutionService(
                 } catch (OperationCanceledException) {
                     throw;
                 } catch (Exception ex) {
-                    AppendDiagnostic(diagnostics, ScriptDiagnosticFactory.Error(
+                    // First among the errors: the run's own words (a leaked transaction, a fence) were added while
+                    // this exception was on its way out, and the action's error text is the first Error.
+                    var firstError = diagnostics.FindIndex(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error);
+                    diagnostics.Insert(firstError < 0 ? diagnostics.Count : firstError, ScriptDiagnosticFactory.Error(
                         "runtime",
                         ex.ToString(),
                         containerTypeName
@@ -881,14 +884,17 @@ public sealed class RevitScriptExecutionService(
         application.FailuresProcessing += run.OnFailuresProcessing;
         string? unfenced = null;
         var threw = true;
-        // The one dialog lane (RevitDialogs, in Pe.Revit, which this package already references): a dialog the
-        // script raises is answered and recorded here, in every mode, and never waits for whoever is at the keyboard.
+        // The one dialog lane (RevitDialogs, in Pe.Revit, which this package already references), for an agent's
+        // run only: no person is there to answer, so a Revit dialog or TaskDialog is answered and recorded. A
+        // person's run (the palette, a human caller) shows its dialogs: a Pod may ask Yes or No and act on it.
+        // DialogBoxShowing does not cover a window the script builds itself (WPF, WinForms).
         var dialogs = new List<(bool IsError, string Message)>();
+        void Work() => fence.Run(() => this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run));
         try {
-            _ = RevitDialogs.NoModal(dialogs, () => {
-                fence.Run(() => this.ExecuteWithTransactionPolicy(container, context, plan, diagnostics, run));
-                return true;
-            });
+            if (ScriptRunScope.IsAgentRun)
+                _ = RevitDialogs.NoModal(dialogs, () => { Work(); return true; });
+            else
+                Work();
             threw = false;
         } catch (Exception ex) when (ex.Message.Contains("open transaction phase", StringComparison.Ordinal)
                                      && ScriptChangeLedger.SaveRefusedWords(run.TargetHold, fence.Titles) is not null) {
@@ -907,7 +913,8 @@ public sealed class RevitScriptExecutionService(
                 var commits = run.Commits();
                 var fenced = run.Fenced();
                 var raised = ScriptChangeLedger.Failures(mode, run.Committed(), run.Raised);
-                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, raised, run.Undo, window.Overlapped, fenced, failed: threw);
+                outputSink.Changes = ScriptChangeLedger.Changes(mode, commits, raised, run.Undo, window.Overlapped, fenced, failed: threw,
+                    target: context.Document?.Title, elsewhere: context.Document is null ? [] : run.Elsewhere());
                 // A rolled-back run committed nothing, whatever became of each failure's own transaction.
                 if (run.Undo.RolledBack)
                     raised = raised.Select(failure => failure with { Outcome = ScriptFailureOutcome.RolledBack }).ToList();
@@ -1159,6 +1166,15 @@ public sealed class RevitScriptExecutionService(
         /// </summary>
         public IReadOnlyList<ScriptFencedCommit> Fenced() => (this._guarded ?? window.Changes)
             .Where(change => change.Discarded && !DocumentSandbox.IsSandboxTransaction(change.Transactions))
+            .Select(change => new ScriptFencedCommit(change.DocumentTitle, change.Transactions, change.Added + change.Modified + change.Deleted))
+            .ToList();
+
+        /// <summary>
+        ///     What the run committed in a document that is neither its own nor a fenced sibling: one the script
+        ///     opened itself. No group of the run covers it, so nothing rolls it back.
+        /// </summary>
+        public IReadOnlyList<ScriptFencedCommit> Elsewhere() => (this._guarded ?? window.Changes)
+            .Where(change => change.Ids is null && !change.Contained)
             .Select(change => new ScriptFencedCommit(change.DocumentTitle, change.Transactions, change.Added + change.Modified + change.Deleted))
             .ToList();
 

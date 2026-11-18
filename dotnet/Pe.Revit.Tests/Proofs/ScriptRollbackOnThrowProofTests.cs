@@ -99,9 +99,61 @@ public sealed partial class ScriptRunProofTests {
                 Assert.That(result.Changes!.Kept, Is.False);
                 Assert.That(result.Changes.Undo, Is.Null);
                 Assert.That(result.Changes.Ungrouped, Is.Null);
-                Assert.That(result.Changes.Summary, Does.Contain("rolled back").And.Contain("nothing changed"));
+                Assert.That(result.Changes.Summary, Does.Contain("rolled back").And.Contain($"nothing changed in '{document.Title}'"));
+                // The summary speaks for the target alone: the family document's commit is named as not rolled back.
+                if (arm == "family-round-trip")
+                    Assert.That(result.Changes.Summary, Does.Contain("The run also committed 1 transaction in").And.Contain("That was not rolled back"));
+                else
+                    Assert.That(result.Changes.Summary, Does.Not.Contain("The run also committed"));
                 if (arm == "timeout")
                     Assert.That(Said(result, "cancel", ScriptDiagnosticSeverity.Error).Single(), Does.Contain("rolled back"));
+            });
+        } finally {
+            _ = document.Close(false);
+        }
+    }
+
+    /// <summary>
+    ///     A WriteTransaction script that throws never commits the host's one transaction: the document reads as
+    ///     before and the result says nothing was kept.
+    /// </summary>
+    [Test]
+    public void B_host_owned_write_that_throws_changes_nothing_and_keeps_nothing() {
+        var (document, seedDelete, seedKeep) = Seeded();
+        try {
+            var before = Snapshot.Of(document, seedDelete, seedKeep);
+            var (ran, result) = Run(document, "doc!.ProjectInformation.Name = \"__proof_modified__\";" + Throw, "host-owned-throw", mode: ScriptPermissionMode.WriteTransaction);
+            var after = Snapshot.Of(document, seedDelete, seedKeep);
+            Row("host-owned-throw", new { read = after.Versus(before), touched = ran.Touched, status = result.Status.ToString(), changes = result.Changes });
+            Assert.Multiple(() => {
+                Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.RuntimeFailed));
+                Assert.That(after.Facts, Is.EqualTo(before.Facts));
+                Assert.That(result.Changes!.Kept, Is.False);
+                Assert.That(result.Changes.Summary, Is.EqualTo($"The script did not finish. No element changed in '{document.Title}'."));
+            });
+        } finally {
+            _ = document.Close(false);
+        }
+    }
+
+    /// <summary>
+    ///     A script that leaks a transaction and throws: the script's own exception is the first Error, so it is
+    ///     what the action's error text carries, and the leak's words follow it.
+    /// </summary>
+    [Test]
+    public void B_leak_and_throw_puts_the_scripts_own_exception_first() {
+        var (document, _, _) = Seeded();
+        try {
+            AppDomain.CurrentDomain.SetData(OpenTransactionKey, null);
+            var (_, result) = Run(document, Walls + LeftOpen + Throw, "leak-order");
+            var open = (Transaction)AppDomain.CurrentDomain.GetData(OpenTransactionKey)!;
+            _ = open.RollBack();
+            open.Dispose();
+            var errors = result.Diagnostics.Where(diagnostic => diagnostic.Severity == ScriptDiagnosticSeverity.Error).ToList();
+            Assert.Multiple(() => {
+                Assert.That(errors[0].Stage, Is.EqualTo("runtime"));
+                Assert.That(errors[0].Message, Does.StartWith("System.InvalidOperationException: PROOF-THROW"));
+                Assert.That(errors[1].Message, Does.Contain("still open on"));
             });
         } finally {
             _ = document.Close(false);
@@ -123,7 +175,7 @@ public sealed partial class ScriptRunProofTests {
                 Assert.That(after.ProjectName, Is.EqualTo("__proof_modified__"));
                 Assert.That(ran.Touched, Is.InstanceOf<Touched.Wrote>());
                 Assert.That(result.Changes!.Kept, Is.True);
-                Assert.That(result.Changes.Summary, Does.StartWith("The script did not finish, and what it had committed is still in the model: 5 elements (2 added, 2 modified, 1 deleted) in 2 transactions."));
+                Assert.That(result.Changes.Summary, Does.StartWith($"The script did not finish, and what it had committed is still in '{document.Title}': 5 elements (2 added, 2 modified, 1 deleted) in 2 transactions."));
                 Assert.That(result.Changes.Summary, Does.Contain("2 undo entries, not one"));
                 Assert.That(Said(result, "transaction", ScriptDiagnosticSeverity.Warning), Has.Some.EqualTo(result.Changes.Summary));
             });
@@ -147,7 +199,7 @@ public sealed partial class ScriptRunProofTests {
                 Assert.That(new FilteredElementCollector(document).OfClass(typeof(Wall)).GetElementCount(), Is.EqualTo(4), "two seed walls and the two committed");
                 Assert.That(ran.Touched, Is.InstanceOf<Touched.Wrote>());
                 Assert.That(result.Changes!.Kept, Is.True);
-                Assert.That(result.Changes.Summary, Does.StartWith("The script did not finish, and what it had committed is still in the model: 3 elements (2 added, 1 modified, 0 deleted) in 1 transaction."));
+                Assert.That(result.Changes.Summary, Does.StartWith($"The script did not finish, and what it had committed is still in '{document.Title}': 3 elements (2 added, 1 modified, 0 deleted) in 1 transaction."));
             });
         } finally {
             _ = document.Close(false);

@@ -50,10 +50,11 @@ public sealed partial class ScriptRunProofTests {
     private static ExecuteRevitScriptData ProofScript(ExecuteRevitScriptRequest request, RevitDocument target, ModelWrite scope, CancellationToken cancellationToken) =>
         _scripting.ExecuteOnApiThread(request, target, cancellationToken);
 
-    private static (OpRun Ran, ExecuteRevitScriptData Result) Run(Document document, string script, string name, int timeoutSeconds = 0) {
+    private static (OpRun Ran, ExecuteRevitScriptData Result) Run(Document document, string script, string name, int timeoutSeconds = 0,
+        ScriptPermissionMode mode = ScriptPermissionMode.NoTransaction, ScriptCaller caller = ScriptCaller.Agent) {
         Assert.That(OpRegistry.TryGet("test.proof.script", out var op), Is.True);
         var ran = OpRunner.RunAsync(op,
-            JsonConvert.SerializeObject(new ExecuteRevitScriptRequest(script, SourceName: name, PermissionMode: ScriptPermissionMode.NoTransaction, TimeoutSeconds: timeoutSeconds), SdkOperations.Json),
+            JsonConvert.SerializeObject(new ExecuteRevitScriptRequest(script, SourceName: name, PermissionMode: mode, TimeoutSeconds: timeoutSeconds, Caller: caller), SdkOperations.Json),
             SdkOperations.Wrap(op.Definition.Needs, document), CancellationToken.None).GetAwaiter().GetResult();
         Assert.That(ran.Response, Is.InstanceOf<ExecuteRevitScriptData>(), ran.Error?.ToString());
         return (ran, (ExecuteRevitScriptData)ran.Response!);
@@ -162,6 +163,38 @@ public sealed partial class ScriptRunProofTests {
                 Assert.That(said.Count(message => message.Contains("'PeProofDialog'") && message.Contains("with Cancel")), Is.EqualTo(1), string.Join(" | ", said));
             });
         } finally {
+            _ = document.Close(false);
+        }
+    }
+
+    /// <summary>
+    ///     A person's run is not wrapped in the dialog lane: the dialog is the person's to answer. No person is at
+    ///     this Revit, so the test answers No in their place through the same event; were the lane entered, it
+    ///     would answer Cancel after the test and say so in a `dialog` warning.
+    /// </summary>
+    [Test]
+    public void A_dialog_in_a_persons_run_is_not_answered_by_the_dialog_lane() {
+        var (document, _, _) = Seeded();
+        void AsThePerson(object? sender, Autodesk.Revit.UI.Events.DialogBoxShowingEventArgs args) {
+            if (args.DialogId == "PeProofPersonDialog") _ = args.OverrideResult((int)TaskDialogResult.No);
+        }
+        _ui.DialogBoxShowing += AsThePerson;
+        try {
+            var (_, result) = Run(document, """
+                var dialog = new Autodesk.Revit.UI.TaskDialog("Pe proof") {
+                    Id = "PeProofPersonDialog", MainInstruction = "Delete it?",
+                    CommonButtons = Autodesk.Revit.UI.TaskDialogCommonButtons.Yes | Autodesk.Revit.UI.TaskDialogCommonButtons.No
+                };
+                WriteLine("answer: " + dialog.Show());
+                """, "person-dialog", caller: ScriptCaller.Person);
+            Row("person-dialog", new { status = result.Status.ToString(), result.Output, said = Said(result, "dialog", ScriptDiagnosticSeverity.Warning) });
+            Assert.Multiple(() => {
+                Assert.That(result.Status, Is.EqualTo(ScriptExecutionStatus.Succeeded));
+                Assert.That(result.Output, Does.Contain("answer: No"));
+                Assert.That(Said(result, "dialog", ScriptDiagnosticSeverity.Warning), Is.Empty);
+            });
+        } finally {
+            _ui.DialogBoxShowing -= AsThePerson;
             _ = document.Close(false);
         }
     }
