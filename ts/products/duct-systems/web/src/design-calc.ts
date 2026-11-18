@@ -1,4 +1,4 @@
-import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell, type DuctsInputs } from "@pe/agent-contracts";
+import { DUCTS_CRITERIA_CELLS, slotLayer, type DuctsCriteriaCell, type DuctsInputs } from "@pe/agent-contracts";
 import { store, type CellLayer, type SheetSlot } from "@pe/agent-contracts/slots";
 import { ductsSettings, settingLayer, criterionDomain, criterionCellLabel as cellLabel, NO_SHARED_ROOT, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
@@ -7,16 +7,14 @@ type DesignRead = {
   readonly criteria?: DuctsInputs["criteria"];
   readonly firm?: import("@pe/ducts-contract/duct-inputs").DuctFirmLine;
   readonly settings?: Record<string, readonly SettingTierRead[]>;
-  readonly network?: { readonly slots: Readonly<Record<string, string | null>>; readonly slotSources?: Readonly<Record<string, { readonly source: CellLayer["source"]; readonly ref?: string; readonly note?: string }>> };
+  readonly network?: Parameters<typeof slotLayer>[0];
 } | null;
 /** One Work row per criterion; settings retain the slot and friction save targets. */
 export const designCalc = {
   draft: true,
   from: (read: DesignRead) => (read?.firm && "refused" in read.firm ? { says: NO_SHARED_ROOT } : null),
   bindings: {
-    ...Object.fromEntries(Object.entries(ductsSettings).filter(([, b]) => b.home.at === "setting" && b.home.path[0] !== "criteria").map(([key, b]) => [key, { ...b, model: (read: DesignRead) => ({
-      value: null, ...(b.home.at === "setting" && b.home.path[0] === "parameters" ? { source: "default", ...read?.network?.slotSources?.[b.home.path[1] ?? ""], value: read?.network?.slots[b.home.path[1] ?? ""] ?? null } : settingLayer(b, read?.settings?.ducts)),
-    }) }])),
+    ...Object.fromEntries(Object.entries(ductsSettings).filter(([, b]) => b.home.at === "setting" && b.home.path[0] !== "criteria").map(([key, b]) => [key, { ...b, model: (read: DesignRead) => b.home.at === "setting" && b.home.path[0] === "parameters" ? slotLayer(read?.network, b.home.path[1] ?? "") : settingLayer(b, read?.settings?.ducts) }])),
     ...Object.fromEntries((Object.keys(DUCTS_CRITERIA_CELLS) as DuctsCriteriaCell[]).map(cell => [`criteria.${cell}`, store("_PE_DuctLosses", criterionDomain(cell), "route", {
       label: cellLabel(cell),
       model: (read: DesignRead): CellLayer | null => {

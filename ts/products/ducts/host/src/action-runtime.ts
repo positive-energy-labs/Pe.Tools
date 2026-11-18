@@ -7,7 +7,7 @@ import { commands, tools, canonicalRouteInput, workKey } from "@pe/agent-contrac
 
 
 
-import { ductsDesign, ductsFirmSchema, ductParameterSlots, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, ductSlotRequest, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -169,7 +169,7 @@ export function ductActionExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: Object.fromEntries(Object.entries(ductParameterSlots(settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
+              slots: ductSlotRequest(settings),
             });
         const snapshot = await action.snapshot(intent, read);
         const derived = await action.derive({ intent, read, readNative, snapshot, design, doc, fans,
