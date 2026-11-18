@@ -76,7 +76,13 @@ export const retainedBasisSchema = z.discriminatedUnion("kind", [
   empty,
 ]);
 const [work, member, file, mark, process, ...otherConsumed] = consumedSchema.options;
-export const retainedConsumedSchema = z.discriminatedUnion("kind", [
+/** Lines written before K2 carry inline bytes no reader uses; storage drops them before the strict parse. */
+const withoutRetiredBytes = (value: unknown) => {
+  if (typeof value !== "object" || value === null || !("kind" in value)) return value;
+  const retired = value.kind === "member" ? ["bytesBase64", "blob"] : value.kind === "file" ? ["bytesBase64"] : [];
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !retired.includes(key)));
+};
+export const retainedConsumedSchema = z.preprocess(withoutRetiredBytes, z.discriminatedUnion("kind", [
   work.extend({ probe: work.shape.probe.extend({ handle }) }),
   member,
   file,
@@ -94,7 +100,7 @@ export const retainedConsumedSchema = z.discriminatedUnion("kind", [
   }),
   process.extend({ probe: process.shape.probe.extend({ target: retainedOriginalTargetSchema }) }),
   ...otherConsumed,
-]);
+]));
 const [invalid, revision, stale, ...otherRefusals] = commandRefusalSchema.options;
 export const retainedRefusalSchema = z.discriminatedUnion("kind", [
   invalid,

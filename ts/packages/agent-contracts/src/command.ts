@@ -67,16 +67,10 @@ export const consumedSchema = z.discriminatedUnion("kind", [
     { handle: workHandleSchema, paths: pathsSchema, edits: pathsSchema.optional() },
     jsonValue,
   ),
-  observed("member", { pod: z.string(), path: z.string() }, sha.nullable()).extend({
-    // Decode only (K2): the gate compares `expected`, and no reader needs a member's bytes, so no
-    // producer writes them now. Journals written before that still carry them and must load.
-    bytesBase64: z.string().optional(),
-    blob: blobRefSchema.optional(),
-  }),
-  observed("file", { path: z.string() }, sha.nullable()).extend({
-    bytesBase64: z.string().optional(),
-    blob: blobRefSchema.optional(),
-  }),
+  // A member fact carries its sha alone: the gate compares `expected`, and no reader needs the bytes
+  // (K2). A file keeps the `blob` its admission retained (cdb265c9).
+  observed("member", { pod: z.string(), path: z.string() }, sha.nullable()),
+  observed("file", { path: z.string() }, sha.nullable()).extend({ blob: blobRefSchema.optional() }),
   // A read names when it was taken; a sealed write names the mark its plan sealed (ADR 0030 rule 4),
   // so the journal's dispatch probe and the seal share one authority, never a second wall clock.
   z.strictObject({

@@ -11,6 +11,7 @@ import { markDispatched } from "../src/action-dispatch.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { freezeScript, scriptMemberFacts } from "../src/operation-script.ts";
 import { settle } from "./effect-test.ts";
+import { executableActionReceiptSchema } from "@pe/agent-contracts";
 
 // A compaction that dies before its rename: the journal's own write throws, as a crash would.
 const crash = vi.hoisted(() => ({ compaction: false, hit: 0 }));
@@ -267,3 +268,27 @@ test("a byte-triggered compaction that dies leaves the appended journal, every r
     await rm(dir, { recursive: true, force: true });
   }
 }, 120_000);
+
+test("a journal line from before K2 with inline member bytes loads, and its row re-parses without them", async () => {
+  const m = await measure("pod-real", 1);
+  try {
+    await m.close();
+    const member = /("kind":"member","probe":\{[^}]*\},"expected":"[0-9a-f]{64}")/g;
+    const old = (await readFile(m.path, "utf8")).replace(member, '$1,"bytesBase64":"QUJD"');
+    expect(old).toContain('"bytesBase64":"QUJD"');
+    await writeFile(m.path, old);
+    const reopened = await open(m.dir);
+    try {
+      const [row] = await reopened.journal.list();
+      expect(row!.consumes.filter((fact) => fact.kind === "member")).toHaveLength(podFiles.length);
+      expect(JSON.stringify(row!.consumes)).not.toContain("bytesBase64");
+      // The gate's strict live parse (`action-journal.ts` gate) accepts the recovered row.
+      expect(executableActionReceiptSchema.safeParse(row).success).toBe(true);
+      expect(await run(reopened.journal, "after-old", { scriptContent: "return 1;" })).toMatchObject({ state: "succeeded" });
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(m.dir, { recursive: true, force: true });
+  }
+}, 60_000);

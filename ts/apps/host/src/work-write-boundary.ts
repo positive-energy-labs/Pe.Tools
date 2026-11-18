@@ -70,6 +70,9 @@ export function writeSeal({ caller, request, input, work, incarnation, documentM
     work: { handle: work, consumed: dependencies.filter((item) => item.kind === "work") },
     documentMark,
     incarnation,
+    // K2 dropped member bytes from consumed facts, so this hash changed for every bind that consumes a
+    // saved member (family.apply, families.apply, family.build, schedule.apply). A plan sealed before
+    // that is refused, but it already was: the seal carries the host's boot clock, and an upgrade restarts.
     dependencies: hash({ input, dependencies, evidence }),
   };
 }
