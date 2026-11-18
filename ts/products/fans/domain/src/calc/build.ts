@@ -172,7 +172,7 @@ function lossSourceOf(src: NonNullable<PricedLeg["source"]>, note = ""): Leg["lo
           kind: "rule",
           ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}${src.notes.length ? `; ${src.notes.join("; ")}` : ""}`,
         }
-      : { kind: src.source.startsWith("firm default") ? "default" : "drop", ref: src.source };
+      : { kind: src.resolvedSource === "default" || src.resolvedSource === "firm" || src.resolvedSource === "project" ? "default" : "drop", ref: src.source };
 }
 
 type ProposedPath = NonNullable<FittingPricing["proposed"]>;
@@ -465,23 +465,23 @@ class Pricer {
     const { grids } = this.input;
     const st = w.states[s]!;
     const e = st.el;
-    const drop = (inWg: number | null, source: string) => {
-      const p = priceLeg({ kind: "drop", element: e as Node, cfm, inWg, source }, grids);
+    const drop = (inWg: number | null, source: string, resolvedSource: Resolved<unknown>["source"] | null) => {
+      const p = priceLeg({ kind: "drop", element: e as Node, cfm, inWg, source, resolvedSource }, grids);
       return { p, ids: this.take(p, e.id).ids };
     };
     const stated = this.input.inputs.components[String(e.id)]?.drop;
-    if (stated && stated.value != null) return drop(stated.value, provenance(stated));
+    if (stated && stated.value != null) return drop(stated.value, provenance(stated), stated.source);
     // A refused drop (invalid) withholds the leg with its ref unless it is a model placeholder a loss rule prices.
     // An invalid winning layer blocks fallback (work-value.ts), so a person's or Pea's unreadable drop never falls to a rule (P-054).
     if (stated?.status === "invalid" && stated.source !== "model")
-      return drop(null, `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`);
+      return drop(null, `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`, stated.source);
     if (isSegment(e)) return this.duct(w, flows, side, s, out, cfm);
     const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
     if (e.kind === "terminal") {
       const t = this.input.inputs.terminals[String(e.id)];
-      return t ? drop(t.drop.value, provenance(t.drop)) : drop(null, "terminal not in inputs");
+      return t ? drop(t.drop.value, provenance(t.drop), t.drop.source) : drop(null, "terminal not in inputs", null);
     }
-    if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop");
+    if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop", null);
     // What is left is the model's refused family placeholder (Chadds' 302 dampers at 1.0).
     const placeholder = stated && stated.value == null ? stated.ref : undefined;
     if (isTap(e)) return this.tap(w, flows, side, s, cfm);
@@ -503,7 +503,7 @@ class Pricer {
     const facts = fittingFacts({ fitting: e, inlet, outlet, converging });
     if (e.partType === "Tee" && !tee) delete facts.junction;
     if (placeholder && !LOSS_RULES.some((r) => r.when(facts, ruleFlows(legFlows))))
-      return drop(null, `${placeholder}; type the real drop`);
+      return drop(null, `${placeholder}; type the real drop`, stated?.source ?? null);
     const p = this.fit({ kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" });
     return { p, ids: this.take(p, e.id).ids };
   }
@@ -539,6 +539,7 @@ class Pricer {
       return priceLeg({
         kind: "drop", element: input.fitting,
         cfm: input.flows.through, inWg: stated.value,
+        resolvedSource: stated.source,
         source: `typed drop from ${input.fitting.id} (Cs refused: ${p.unpriced}); ${stated.value == null
           ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
           : provenance(stated)}`,
@@ -773,6 +774,7 @@ class Pricer {
             source: {
               kind: "drop",
               source: "merge boundary; branch loss unavailable without receiving-stream flow",
+              resolvedSource: null,
             },
             unpriced: null,
           },

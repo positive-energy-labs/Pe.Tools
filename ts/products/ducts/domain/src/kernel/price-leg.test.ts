@@ -221,7 +221,7 @@ it("prices the synthetic network leg by leg to the independently computed totals
       },
       grids,
     ),
-    priceLeg({ kind: "drop", element: grille, cfm: 200, inWg: 0.05, source: "parameter" }, grids),
+    priceLeg({ kind: "drop", element: grille, cfm: 200, inWg: 0.05, source: "parameter", resolvedSource: "model" }, grids),
   ];
   expect(t6.every((l) => l.unpriced == null)).toBe(true);
   expect(t6[3]!.lossInWg).toBeCloseTo(0.0027961, 6);
@@ -240,7 +240,7 @@ it("prices the synthetic network leg by leg to the independently computed totals
       grids,
     ),
     priceLeg({ kind: "duct", segment: duct7, lengthFt: 3, cfm: 100 }, grids),
-    priceLeg({ kind: "drop", element: terminal8, cfm: 100, inWg: 0.08, source: "typed" }, grids),
+    priceLeg({ kind: "drop", element: terminal8, cfm: 100, inWg: 0.08, source: "typed", resolvedSource: "Work" }, grids),
   ];
   expect(t8[3]!.source).toMatchObject({
     kind: "rule",
@@ -335,7 +335,7 @@ it("names why a leg is unpriced: a table not loaded, a tap with no branch flow, 
     ),
   ).toMatchObject({ lossInWg: 0.02, source: { kind: "drop", source: "typed" } });
   expect(
-    priceLeg({ kind: "drop", element: grille, cfm: 200, inWg: null, source: "firm default" }, grids)
+    priceLeg({ kind: "drop", element: grille, cfm: 200, inWg: null, source: "firm default", resolvedSource: "firm" }, grids)
       .unpriced,
   ).toMatch(/no drop/);
 });
