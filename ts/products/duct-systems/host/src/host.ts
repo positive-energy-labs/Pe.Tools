@@ -12,7 +12,7 @@ import { DUCTS_SYSTEM_MAX,
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
-import { firmLayer } from "@pe/ducts-host/ducts-inputs";
+import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { catalogs } from "@pe/host/builtin-read-handles";
@@ -162,8 +162,8 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
           ductSystemsWork: layers.ducts,
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
-          // Under Work: the home that serves each criterion, so a staged one draws beside what it replaces. The model store states none (ADR 0053).
-          criteria: resolveCriteria(null, firmLayer(layers.firm, layers.settings)),
+          // The criteria as pricing resolved them (MAP invariant 5): the Work layer and revision `networkCalcs` prices on, over the home that serves each. The model store states none (ADR 0053).
+          criteria: resolveCriteria(workLayer(design), firmLayer(layers.firm, layers.settings), null, { Work: layers.revision }),
           firm: "refused" in layers.firm ? layers.firm
             : { version: firmLayer(layers.firm, layers.settings).version, path: layers.firm.path, present: layers.firm.present },
           settings: { ducts: layers.settings } as Readonly<Record<string, typeof layers.settings>>,

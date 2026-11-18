@@ -1,0 +1,56 @@
+{
+  "from": "DRIVER-C2-JV3-CRITERION, run field-20261118: acceptance field-20261118-c2-hostfirst-45, ev/read-pricing.json, recorded on a copied model at 45c670d4. The request is whole. Of response.body.value.data, only the fields on the path to criteria.autoJoinGapIn: the staged Work criteria, the firm tier's Settings/ducts.json (the one tier that held a file), and the criterion as the read resolved it.",
+  "request": {
+    "read": "ducts.pricing",
+    "subscription": "driver-c2-pricing",
+    "generation": 0,
+    "args": {
+      "target": {
+        "session": "session-cf84f8615dbec8f2",
+        "openId": "ed3708ab5a8e45ae9b82ec7acf05d2bd"
+      },
+      "system": [],
+      "fan": null
+    }
+  },
+  "data": {
+    "ductSystemsWork": {
+      "criteria": {
+        "autoJoinGapIn": {
+          "edit": {
+            "value": 9,
+            "at": "2026-11-18T16:05:17.320Z",
+            "base": 1,
+            "by": "human"
+          }
+        }
+      }
+    },
+    "settings": {
+      "ducts": [
+        {
+          "tier": "firm",
+          "json": {
+            "criteria": {
+              "autoJoinGapIn": 5
+            },
+            "parameters": {
+              "terminalFlow": "revit:Flow"
+            }
+          }
+        }
+      ]
+    },
+    "criteria": {
+      "autoJoinGapIn": {
+        "status": "valid",
+        "value": 5,
+        "source": "firm",
+        "author": null,
+        "ref": "firm:autoJoinGapIn",
+        "version": "firm",
+        "units": "in"
+      }
+    }
+  }
+}
