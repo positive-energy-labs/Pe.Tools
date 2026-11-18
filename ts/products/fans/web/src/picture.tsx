@@ -28,7 +28,7 @@ export function espWarnings({ rated, required }: Immutable<FanEspValues>): strin
   const need = required.requiredEspInWg;
   return [
     ...(rated.status === "invalid" ? [`Rated ESP is unreadable (${rated.source} ${rated.ref})`] : []),
-    ...(rated.status === "valid" && rated.value < need ? [`Rated ESP ${inWg(rated.value)} is below the required ${inWg(need)}`] : []),
+    ...(rated.status === "valid" && rated.value < need ? [`Rated ESP ${inWg(rated.value)} (${rated.source} ${rated.ref}) is below the required ${inWg(need)} (computed)`] : []),
   ];
 }
 
