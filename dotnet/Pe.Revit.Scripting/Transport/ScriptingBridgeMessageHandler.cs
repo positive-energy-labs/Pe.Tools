@@ -91,7 +91,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         cancellationToken
     );
 
-    [Op("scripting.execute", OpSubject.None, OpTouches.Metadata, Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a captured src file in a valid pod workspace — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; the manifest id names the pod, and relative references resolve from the folder the host holds it in. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction).", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
+    [Op("scripting.execute", OpSubject.None, OpTouches.Metadata, Does = "Execute trusted in-process C# in connected Revit: scriptContent for an inline snippet (Execute-body statements or a full PeScriptContainer class), or sourcePath for a captured src file in a valid pod workspace — exactly one of the two. sourceBundle may supply captured Pod manifest, project presence and source bytes with sourcePath; the manifest id names the pod, and relative references resolve from the folder the host holds it in. The supplied document is the script target; UI document and selection are available only when it is active. permissionMode defaults to ReadOnly, which discards supplied-document changes via a rollback guard; pass WriteTransaction for one host-owned transaction, or NoTransaction when the script or called library must own transaction boundaries (including APIs such as Document.SaveAs that reject an open transaction). A write run that does not finish (it throws, times out or is cancelled) is rolled back whole and answers changes.kept false; a NoTransaction script keeps partial work only by catching its own errors and returning. When an agent is the caller, a Revit dialog the script raises is answered for it, an unknown one with Cancel.", Title = "Execute Revit Script", Finds = ["script", "execute", "csharp", "revit", "pod"], Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert)]
     public Task<ExecuteRevitScriptData> ExecuteAsync(
         ExecuteRevitScriptRequest request,
         RevitDocument target,
@@ -99,7 +99,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         CancellationToken cancellationToken
     ) => this.EnqueueAsync(
         "execute script",
-        () => this.ExecuteOnApiThread(request, target, cancellationToken),
+        () => this.ExecuteOnApiThread(request, target, cancellationToken, scope),
         cancellationToken
     );
 
@@ -111,7 +111,8 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     public ExecuteRevitScriptData ExecuteOnApiThread(
         ExecuteRevitScriptRequest request,
         RevitDocument target,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        OperationScope? within = null
     ) {
         var executionId = Guid.NewGuid().ToString("N");
         var timeoutSeconds = NormalizeTimeoutSeconds(request.TimeoutSeconds);
@@ -135,7 +136,8 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
                 target.Value,
                 request with { WorkspaceKey = NormalizeWorkspaceKey(request.WorkspaceKey) },
                 executionId,
-                cancellation
+                cancellation,
+                within
             );
             if (result.Status == ScriptExecutionStatus.Succeeded && stopwatch.Elapsed.TotalSeconds > timeoutSeconds)
                 result.Diagnostics.Add(ScriptDiagnosticFactory.Warning(

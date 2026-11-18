@@ -222,4 +222,85 @@ public sealed class ScriptChangeLedgerTests {
             ScriptFailureOutcome.RolledBack, ScriptFailureOutcome.Committed
         }));
     }
+
+    [Test]
+    public void A_leaked_transaction_is_named_from_the_source_minus_what_committed() {
+        var sources = new ScriptSourceSet([new ScriptSourceFile("Leak.cs", """
+            using (var one = new Transaction(doc, "one")) { one.Start(); one.Commit(); }
+            var two = new Autodesk.Revit.DB.Transaction(doc, "two");
+            var sub = new SubTransaction(doc);
+            var other = new Thing(doc, "not a transaction");
+            """)], "Leak.cs");
+
+        var candidates = ScriptChangeLedger.StartedNotCommitted(sources, ["one"]);
+
+        Assert.Multiple(() => {
+            Assert.That(candidates, Is.EqualTo(new[] { "two" }));
+            Assert.That(ScriptChangeLedger.LeakedWords("Tower.rvt", candidates), Does.StartWith("The script ended with a transaction still open on 'Tower.rvt'")
+                .And.Contain("the script's source starts 'two', which did not commit."));
+            Assert.That(ScriptChangeLedger.LeakedWords("Tower.rvt", []), Does.Contain("Revit does not name the open transaction."));
+        });
+    }
+
+    [Test]
+    public void A_run_that_was_rolled_back_keeps_nothing_and_says_what_it_had_committed() {
+        ScriptCommit[] commits = [Commit("one", added: [1, 2]), Commit("two", modified: [10], deleted: [20])];
+        var changes = ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo(RolledBack: true), failed: true, target: "Tower.rvt");
+
+        Assert.Multiple(() => {
+            Assert.That(changes.Kept, Is.False);
+            Assert.That(changes.Undo, Is.Null);
+            Assert.That(changes.Ungrouped, Is.Null);
+            // Like a ReadOnly run, the lists are what the run had committed.
+            Assert.That(changes.Added.Ids, Is.EqualTo(new long[] { 1, 2 }));
+            Assert.That(changes.Summary, Is.EqualTo("The script did not finish, so the run was rolled back and nothing changed in 'Tower.rvt': it had committed 4 elements (2 added, 1 modified, 1 deleted) in 2 transactions there, and none of that is in it."));
+            Assert.That(ScriptChangeLedger.Changes(Write, [], [], new ScriptUndo(RolledBack: true), failed: true).Summary, Is.EqualTo("The script did not finish. No element changed in the run's document."));
+        });
+    }
+
+    [Test]
+    public void A_failed_run_revit_could_not_roll_back_says_its_changes_are_still_in_the_model() {
+        ScriptCommit[] commits = [Commit("one", added: [1, 2]), Commit("two", modified: [10], deleted: [20])];
+        var ungrouped = ScriptChangeLedger.Changes(Write, commits, [], new ScriptUndo(Ungrouped: "the script calls Save, which Revit refuses inside a transaction group."), failed: true);
+        var single = ScriptChangeLedger.Changes(Write, [commits[0]], [], new ScriptUndo(Ungrouped: "Revit did not roll back the run's transactions (Error)."), failed: true);
+
+        Assert.Multiple(() => {
+            Assert.That(ungrouped.Kept, Is.True);
+            Assert.That(ungrouped.Summary, Is.EqualTo("The script did not finish, and what it had committed is still in the run's document: 4 elements (2 added, 1 modified, 1 deleted) in 2 transactions. 2 undo entries, not one: the script calls Save, which Revit refuses inside a transaction group."));
+            Assert.That(single.Summary, Is.EqualTo("The script did not finish, and what it had committed is still in the run's document: 2 elements (2 added, 0 modified, 0 deleted) in 1 transaction. One undo entry: 'one'."));
+            // A failed run that committed nothing has nothing to warn about.
+            Assert.That(ScriptChangeLedger.Changes(Write, [], [], new ScriptUndo(), failed: true).Summary, Is.EqualTo("The script did not finish. No element changed in the run's document."));
+        });
+    }
+
+    [Test]
+    public void A_rolled_back_run_speaks_for_its_own_document_and_names_what_it_committed_in_one_it_opened() {
+        ScriptFencedCommit[] elsewhere = [new("Fan.rfa", ["Edit fan"], 3), new("Fan.rfa", ["Edit fan again"], 1)];
+        var rolledBack = ScriptChangeLedger.Changes(Write, [Commit("one", added: [1])], [], new ScriptUndo(RolledBack: true), failed: true, target: "Tower.rvt", elsewhere: elsewhere);
+        var nothingInTarget = ScriptChangeLedger.Changes(Write, [], [], new ScriptUndo(RolledBack: true), failed: true, target: "Tower.rvt", elsewhere: [elsewhere[0]]);
+        var returned = ScriptChangeLedger.Changes(Write, [Commit("one", added: [1])], [], new ScriptUndo("heal"), target: "Tower.rvt", elsewhere: elsewhere);
+        const string also = " The run also committed 2 transactions in 'Fan.rfa', which the script opened itself. That was not rolled back, and a save the script made of such a document stands.";
+
+        Assert.Multiple(() => {
+            Assert.That(rolledBack.Summary, Is.EqualTo(
+                "The script did not finish, so the run was rolled back and nothing changed in 'Tower.rvt': it had committed 1 element (1 added, 0 modified, 0 deleted) in 1 transaction there, and none of that is in it." + also));
+            Assert.That(nothingInTarget.Summary, Is.EqualTo(
+                "The script did not finish. No element changed in 'Tower.rvt'. The run also committed 1 transaction in 'Fan.rfa', which the script opened itself. That was not rolled back, and a save the script made of such a document stands."));
+            // A run that returned rolled nothing back, so there is nothing to set apart.
+            Assert.That(returned.Summary, Is.EqualTo("Changed 1 element (1 added, 0 modified, 0 deleted) in 1 transaction. One undo entry: 'heal'."));
+        });
+    }
+
+    [Test]
+    public void A_host_owned_write_that_did_not_finish_keeps_nothing() {
+        const ScriptPermissionMode hostOwned = ScriptPermissionMode.WriteTransaction;
+        var thrown = ScriptChangeLedger.Changes(hostOwned, [], [], new ScriptUndo("heal"), failed: true, target: "Tower.rvt");
+
+        Assert.Multiple(() => {
+            Assert.That(thrown.Kept, Is.False);
+            Assert.That(thrown.Undo, Is.Null);
+            Assert.That(thrown.Summary, Is.EqualTo("The script did not finish. No element changed in 'Tower.rvt'."));
+            Assert.That(ScriptChangeLedger.Changes(hostOwned, [Commit("heal", added: [1])], [], new ScriptUndo("heal")).Kept, Is.True);
+        });
+    }
 }

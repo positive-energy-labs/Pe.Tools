@@ -95,6 +95,17 @@ public sealed class OpTouchedTests {
             Is.EqualTo(new Touched.Unknown(TouchedUnknownReason.PostedCommand)));
     }
 
+    [Test]
+    public void A_write_whose_commits_a_group_rolled_back_is_rolled_back_and_a_commit_left_over_is_still_a_write() {
+        var rolledBack = Commit("Script commit", contained: true) with { RolledBack = true };
+        Assert.That(OpRunner.Touch(OpEffect.ModelWrite, ScopeFacts.None, [rolledBack, rolledBack], false), Is.InstanceOf<Touched.RolledBack>());
+        // A commit in a document the script opened itself is outside the run's group: it stays, and it is stated.
+        Assert.That(OpRunner.Touch(OpEffect.ModelWrite, ScopeFacts.None, [rolledBack, Commit("Other document")], false),
+            Is.EqualTo(new Touched.Wrote(["Other document"], 1, 2, 0)).Using<Touched>(Same));
+        // Sandbox churn alone is no rollback of a write.
+        Assert.That(OpRunner.Touch(OpEffect.ModelWrite, ScopeFacts.None, [Commit("PeSandbox::regen", contained: true)], false), Is.InstanceOf<Touched.None>());
+    }
+
     // Records compare their List members by reference, so compare what crosses the wire.
     private static bool Same(Touched left, Touched right) =>
         Newtonsoft.Json.JsonConvert.SerializeObject(left) == Newtonsoft.Json.JsonConvert.SerializeObject(right);
