@@ -31,16 +31,15 @@ import { fansCalc } from "@pe/fans-web/calc";
 
 const pointer = "Projects/2026-014 Chadds Ford";
 let user: string, drive: string, firm: string, project: string;
-const home = (root: string, tier: string) => {
-  mkdirSync(root, { recursive: true });
-  writeFileSync(join(root, "pe-home.json"), JSON.stringify({ tier }));
-  return root;
-};
 beforeEach(() => {
   user = mkdtempSync(join(tmpdir(), "pe-user-"));
   drive = mkdtempSync(join(tmpdir(), "pe-drive-"));
-  firm = home(join(drive, "04 PE Software Files", "Pe.Tools"), "firm");
-  project = home(join(drive, ...pointer.split("/"), "Pe.Tools"), "project");
+  firm = join(drive, "04 PE Software Files", "Pe.Tools");
+  project = join(drive, ...pointer.split("/"), "Pe.Tools");
+  // The firm home needs only its folder; only the project home proves itself with a marker.
+  mkdirSync(firm, { recursive: true });
+  mkdirSync(project, { recursive: true });
+  writeFileSync(join(project, "pe-home.json"), JSON.stringify({ tier: "project" }));
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", user);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firm);
 });
@@ -146,8 +145,10 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(notices.at(-1)!.reason).toContain(`B set 850 at ducts criteria.velocityLimitFpm.supply in the project home`);
   expect(notices.at(-1)!.reason).toContain(`sha256 ${second.ok && second.priorSha256}`);
 
-  // Step 7: the firm home is unmounted. Nothing is "firm"; the sheet says the home was not found.
-  rmSync(join(firm, "pe-home.json"));
+  // Step 7: the named firm folder is absent, so neither it nor the relative project home is served.
+  rmSync(firm, { recursive: true });
+  expect(existsSync(firm)).toBe(false);
+  expect(existsSync(join(project, "pe-home.json"))).toBe(true);
   at = await sheet();
   const labels = JSON.stringify([at.cell("terminalDropInWg"), at.cell("velocitySupplyFpm"), at.criteria, at.terminalDrop].map((value) => JSON.parse(JSON.stringify(value, (key, inner) => (key === "setting" || key === "home" || key === "domain" || key === "ref" ? undefined : inner)))));
   expect(labels).not.toContain('"firm"');
@@ -230,8 +231,8 @@ test("the pricing caption calls an absent firm file defaults, never firm seed", 
 });
 
 // Mutant H5-empty-default: omit the binding fallback while the engine still prices it.
-test("all eight criteria display the engine defaults when the firm marker is gone", async () => {
-  rmSync(join(firm, "pe-home.json"));
+test("all eight criteria display the engine defaults when the firm folder is gone", async () => {
+  rmSync(firm, { recursive: true });
   const at = await sheet();
   const expected = { velocitySupplyFpm: 900, velocityReturnFpm: 700, terminalDropInWg: 0.03, autoJoinGapIn: 3, healBoxIn: 36, splitPolicy: "even", allowanceSupplyInWg: 0, allowanceReturnInWg: 0 };
   for (const cell of ductsDocumentSchema.shape.criteria.unwrap().keyof().options)
@@ -240,7 +241,8 @@ test("all eight criteria display the engine defaults when the firm marker is gon
 
 // Mutant H5-marker-blame: skip the shared-drive-root absence branch.
 test("a present project marker is not blamed when the firm home cannot anchor its relative pointer", () => {
-  rmSync(join(firm, "pe-home.json"));
+  rmSync(firm, { recursive: true });
+  expect(existsSync(firm)).toBe(false);
   expect(existsSync(join(project, "pe-home.json"))).toBe(true);
   const reason = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!.notFound!;
   expect(reason).toContain(pointer);
