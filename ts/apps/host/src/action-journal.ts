@@ -11,6 +11,7 @@ import { validateNativeInput } from "./native-input.ts";
 import type { ReadOwner } from "./reads/read-ownership.ts";
 import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { stateDirectory } from "@pe/host-contracts/service-identity";
 import { stateKind, read as readStoredFile, setAside, writeState, type StoredFile } from "@pe/host-contracts/kinds";
 export const journalKind = stateKind({ schema: z.unknown(), place: (_name: string) => "Action journal", segments: (name: string) => [name] });
@@ -18,6 +19,20 @@ const outputKind = stateKind({
   schema: z.unknown(), place: (_id: string, ..._parts: string[]) => "Action outputs",
   segments: (id: string, ...parts: string[]) => ["action-outputs", createHash("sha256").update(id).digest("hex"), ...parts],
 });
+/**
+ * K2: a captured `sourceBundle` is stored once, as `bundles/<sha256>.json` in the action's output
+ * store. Journal lines and exports carry `{ sha256 }` in its place, and a load swaps the bytes back.
+ */
+const swapBundles = (value: unknown, swap: (bundle: Record<string, unknown>) => unknown): unknown =>
+  Array.isArray(value) ? value.map((item) => swapBundles(item, swap))
+  : value !== null && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
+        key === "sourceBundle" && item !== null && typeof item === "object" && !Array.isArray(item)
+          ? swap(item as Record<string, unknown>) : swapBundles(item, swap)]))
+    : value;
+const bundleHash = (bundle: unknown) => createHash("sha256").update(canonicalRouteInput(bundle)).digest("hex");
+/** Compaction runs once the file holds twice what its last compaction wrote, and at least this. */
+const COMPACT_BYTES = 1 << 20;
 import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -513,7 +528,8 @@ const RETAIN_RECEIPTS = 10_000;
  * journal at this path was discarded), then one `{receipt}` per committed
  * revision and one `{mapping}` per minted opaque id; the last revision of an id wins. A commit
  * appends only what it changed, and compaction rewrites the newest {@link RETAIN_RECEIPTS} telemetry
- * facts plus every command once the file holds twice what is live.
+ * facts plus every command once the file holds twice what is live, counted in lines or, past
+ * {@link COMPACT_BYTES}, in bytes against what the last compaction wrote.
  */
 export class ActionJournal implements ReceiptReader {
   private readonly rows = new Map<string, ActionReceipt>();
@@ -528,6 +544,9 @@ export class ActionJournal implements ReceiptReader {
   private fresh: string[] = [];
   private minted = new Set<string>();
   private lines = 0;
+  /** The file's size, and what the last compaction wrote (0 until one runs in this process). */
+  private bytes = 0;
+  private compacted = 0;
   private factCount = 0;
   private header = false;
   private torn = false;
@@ -834,7 +853,8 @@ export class ActionJournal implements ReceiptReader {
   }
   /**
    * Exported inputs of one action, keyed by its original ID. Structured request evidence the host
-   * serialized before dispatch; never original authored bytes and never a settled outcome.
+   * serialized before dispatch, never a settled outcome. `bundles/` is not derived: it holds the
+   * only copy of each captured source bundle its receipts name by hash.
    */
   async outputs(id: string): Promise<{ id: string; home: string; files: Record<string, unknown> }> {
     const home = this.home(id);
@@ -848,7 +868,8 @@ export class ActionJournal implements ReceiptReader {
     for (const entry of names)
       if (entry.isFile() && entry.name.endsWith(".json")) {
         const path = join(entry.parentPath, entry.name);
-        // Derived (ADR 0039): an export that does not decode is discarded with a notice and left out.
+        // A file that does not decode is discarded with a notice and left out (ADR 0039 `discard`);
+        // a discarded bundle leaves its receipts holding the bare hash, which the script door refuses.
         const read = readStoredFile(outputKind.in(this.storage, id, ...path.slice(home.length + 1).split(/[\\\\/]/)));
         if (read.kind === "ok") files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
       }
@@ -863,7 +884,31 @@ export class ActionJournal implements ReceiptReader {
     );
   }
   private async export(id: string, name: string, value: unknown) {
-    writeState(outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)), JSON.stringify(value, null, 2));
+    writeState(outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)), JSON.stringify(this.seal(id, value), null, 2));
+  }
+  private seal(id: string, value: unknown) {
+    return swapBundles(value, (bundle) => {
+      if (!Array.isArray(bundle.files)) return bundle;
+      const sha256 = bundleHash(bundle);
+      const file = outputKind.in(this.storage, id, "bundles", `${sha256}.json`);
+      // Written before any line names it: a crash leaves bytes no line names, never the reverse.
+      if (!existsSync(file.path)) writeState(file, JSON.stringify(bundle));
+      return { sha256 };
+    });
+  }
+  private unseal(id: string, value: unknown) {
+    return swapBundles(value, (bundle) => {
+      // Only a hash this journal could have written is looked up. Anything else is the caller's own
+      // data and stays as given, because a throw here would discard the whole journal at load.
+      if (Array.isArray(bundle.files) || typeof bundle.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(bundle.sha256)) return bundle;
+      const read = readStoredFile(outputKind.in(this.storage, id, "bundles", `${bundle.sha256}.json`));
+      // Missing or altered bytes keep the bare hash, so the script's own decode refuses it loudly.
+      return read.kind === "ok" && bundleHash(read.value) === bundle.sha256 ? read.value : bundle;
+    });
+  }
+  private line(receipt: Receipt) {
+    const stored = persistReceipt(receipt);
+    return { receipt: stored.body.kind === "action" ? this.seal(stored.body.value.id, stored) : stored };
   }
   private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
@@ -1687,7 +1732,9 @@ export class ActionJournal implements ReceiptReader {
             const attempt = yield* Effect.exit(
               Effect.gen(function* () {
                 yield* io(async () => {
-                  await journal.export(row.id, `steps/${step.id}.json`, step).catch((error) => {
+                  // The step's input only: its state would be stale the moment the step moves.
+                  const { state: _state, ...input } = step;
+                  await journal.export(row.id, `steps/${step.id}.json`, input).catch((error) => {
                     throw refused(`Step input export failed: ${String(error)}`, "step.export");
                   });
                   row = executableActionReceiptSchema.parse(journal.rows.get(row.id) ?? row);
@@ -2131,6 +2178,7 @@ export class ActionJournal implements ReceiptReader {
       this.fresh = [];
       this.minted = new Set();
       this.lines = 0;
+      this.bytes = 0;
       this.factCount = 0;
       this.header = false;
       this.torn = false;
@@ -2161,6 +2209,7 @@ export class ActionJournal implements ReceiptReader {
     const { receipts, mappings } = snapshot;
     this.torn = snapshot.torn;
     this.lines = snapshot.lines;
+    this.bytes = originalBytes.length;
     this.header = true;
     this.discarded = snapshot.discarded;
     for (const [key, id] of mappings) this.mappings.set(key, id);
@@ -2172,6 +2221,8 @@ export class ActionJournal implements ReceiptReader {
         throw Error("Duplicate receipt id in action journal");
       this.keep(r);
     }
+    for (const [id, r] of this.receipts)
+      if (r.body.kind === "action") this.receipts.set(id, this.unseal(r.body.value.id, r) as Receipt);
     const current = [...this.receipts.values()].flatMap((r) =>
       r.body.kind === "action" ? [r.body.value] : [],
     );
@@ -2265,7 +2316,7 @@ export class ActionJournal implements ReceiptReader {
     receipts.push(...facts);
     const lines = [
       ...this.fresh.map((key) => ({ mapping: [key, this.mappings.get(key)] })),
-      ...receipts.map((receipt) => ({ receipt:persistReceipt(receipt) })),
+      ...receipts.map((receipt) => this.line(receipt)),
     ];
     if (lines.length) {
       if (!this.header) await mkdir(dirname(this.path), { recursive: true });
@@ -2281,6 +2332,7 @@ export class ActionJournal implements ReceiptReader {
       this.header = true;
       this.torn = false;
       this.lines += lines.length;
+      this.bytes += Buffer.byteLength(text);
     }
     this.fresh = [];
     for (const row of rows) this.index(row);
@@ -2288,6 +2340,7 @@ export class ActionJournal implements ReceiptReader {
     this.committed.push(...receipts);
     if (
       this.lines > 2 * Math.max(this.receipts.size, 1000) ||
+      this.bytes > Math.max(2 * this.compacted, COMPACT_BYTES) ||
       this.factCount > this.retain + Math.max(this.retain / 10, 1)
     )
       await this.compact();
@@ -2320,12 +2373,11 @@ export class ActionJournal implements ReceiptReader {
       if (!named.has(id) && !this.minted.has(key)) this.mappings.delete(key);
     const lines = [
       ...[...this.mappings].map((mapping) => ({ mapping })),
-      ...[...this.receipts.values()].map((receipt) => ({ receipt:persistReceipt(receipt) })),
+      ...[...this.receipts.values()].map((receipt) => this.line(receipt)),
     ];
-    writeState(
-      this.file,
-      `${this.headerLine()}${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`,
-    );
+    const text = `${this.headerLine()}${lines.map((line) => `${JSON.stringify(line)}\n`).join("")}`;
+    writeState(this.file, text);
+    this.bytes = this.compacted = Buffer.byteLength(text);
     this.header = true;
     this.torn = false;
     this.fresh = [];
