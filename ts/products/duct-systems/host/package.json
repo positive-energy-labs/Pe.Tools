@@ -33,6 +33,7 @@
     "executors": {
       "module": "./actions",
       "factory": "ductSystemsExecutors",
+      "sheet": { "routes": ["duct-systems"], "via": "losses" },
       "arguments": [
         "bridge",
         "deps"

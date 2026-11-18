@@ -30,6 +30,8 @@ import { readSettingTiers } from "@pe/host/tiered-settings";
 import { resolveFirm } from "@pe/host/reads/evaluator";
 
 import type { DuctsApply } from "@pe/host-contracts/generated";
+import { rulingsRequest } from "@pe/ducts-domain/rulings";
+import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 
 export type DuctActionDependencies = import("@pe/host/family-actions").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] };
@@ -71,6 +73,22 @@ type Kind = "losses" | "heal" | "assign-fan";
 type Phase = "plan" | "rehearse" | "apply";
 const ductsRoute = tools.ducts.work.route, fansRoute = tools.fans.work.route;
 
+/**
+ * The /duct-systems door (D9, P19): the sheet pair asked from /duct-systems stores that route's staged rule
+ * tables and verdicts, removes the verdicts Work takes back, and writes no element. It lives in the shared
+ * runtime because the sheet dispatch holds one product executor for the pair, whichever route asks.
+ */
+const rulingsDoor: Pick<DuctAction, "snapshot" | "derive" | "entry"> = {
+  snapshot: (_intent, read) => read({ kind: "roster" }),
+  derive: async ({ design, snapshot, appliedAt }) => ({ ...rulingsRequest(design, snapshot, appliedAt ?? ""), dependencies: ductWriteEvidence(snapshot) }),
+  entry: { key: "ducts.apply", native: "ducts.apply.plan",
+    refusePlan: (value) => ((value as DuctsApply.Res.Response).writes.some((w) => w.outcome === "refused") ? "refused" : null),
+    // The rulings land with the store write, so its outcome retires every cell sent.
+    retires: (_input, value, _subjects, cells) => {
+      const { previewOnly, writes } = value as DuctsApply.Res.Response;
+      return !previewOnly && writes.some((w) => w.kind === "store" && (w.outcome === "written" || w.outcome === "unchanged")) ? cells : [];
+    } },
+};
 /** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
 const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "ducts.plan-assign-fan" } as const;
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
@@ -80,6 +98,8 @@ export function ductActionExecutors(
   deps: import("@pe/host/family-actions").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] ;
   } = {},
 ) {
+  const actionOf = (ctx: CommandContext, kind: Kind) =>
+    kind === "losses" && (ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle).key.route === ductsRoute ? rulingsDoor : action;
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
     // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
@@ -171,14 +191,14 @@ export function ductActionExecutors(
               } : selector,
               slots: Object.fromEntries(Object.entries(ductParameterSlots(settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
             });
-        const snapshot = await action.snapshot(intent, read);
-        const derived = await action.derive({ intent, read, readNative, snapshot, design, doc, fans,
+        const snapshot = await actionOf(ctx, kind).snapshot(intent, read);
+        const derived = await actionOf(ctx, kind).derive({ intent, read, readNative, snapshot, design, doc, fans,
           firm, pointer, deps, bridge, appliedAt });
         return { process, ...derived };
       },
     };
   };
-  const run = (ctx: CommandContext, execution: ActionExecution, phase: Phase) => Effect.gen(function* () {
+  const run = (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) => Effect.gen(function* () {
     const p = prepared.parse(execution.prepared),
       target = targetOf(ctx);
     // Default slot initialization is bookkeeping, never an authored model change.
@@ -188,7 +208,7 @@ export function ductActionExecutors(
         }, derivedRequest: p.input ,
       };
     }
-    const entry = action.entry;
+    const entry = actionOf(ctx, kind).entry;
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
     // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
     const key = phase === "apply" ? entry.key : entry.native;
@@ -239,7 +259,7 @@ export function ductActionExecutors(
           command(commands[key], prepared, {
             seal: (p) => ({ request: p.input, evidence: p.dependencies }),
             bind: (ctx) => bind(ctx, kind, phase),
-            run: (ctx, execution) => run(ctx, execution, phase),
+            run: (ctx, execution) => run(ctx, execution, kind, phase),
           }),
         ];
       }),

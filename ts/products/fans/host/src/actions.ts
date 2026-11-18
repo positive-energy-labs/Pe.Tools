@@ -108,7 +108,8 @@ export function unwrittenReason(staged: ReturnType<typeof stagedValues>, [segmen
 
 /**
  * What a fans apply sends of the store's rulings: its own roles only (D9, field map invariant 8). A
- * /duct-systems verdict is priced while staged and lands only from /duct-systems, so none is sent or deleted here.
+ * /duct-systems verdict is priced while staged and lands only from the /duct-systems door (`rulingsDoor`,
+ * `@pe/ducts-host/action-runtime`), so none is sent or deleted here.
  */
 export function fanRulings(design: DuctActionPreparation["design"], snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store">, appliedAt: string) {
   const { roles } = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt, snapshot);

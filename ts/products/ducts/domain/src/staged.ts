@@ -30,7 +30,7 @@ export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnaps
 /**
  * The staged segments the /duct-systems pending count names. A /fans apply writes the Fans Work segments and a
  * scoped rule's fitting coefficients to elements, and roles to the store; `rules` tables and `assumptions`
- * verdicts stay staged in /duct-systems Work (D9).
+ * verdicts stay staged in /duct-systems Work until that route's own apply stores them (D9, `rulingsRequest`).
  */
 export const WRITTEN = [
   "rules",
