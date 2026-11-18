@@ -18,8 +18,8 @@ afterEach(async () => { for (const close of closes.splice(0).reverse()) await cl
 test("dot-prefixed catalog directories are ignored without a missing-file finding", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-hidden-catalog-"));
   closes.push(() => rm(root, { recursive: true, force: true }));
-  await mkdir(join(root, ".draft"));
-  const result = await readDuctCatalogs(root);
+  await mkdir(join(root, "Catalogs", ".draft"), { recursive: true });
+  const result = await readDuctCatalogs([{ tier: "user", root }]);
   expect(Object.keys(result.tables)).toEqual([]);
   expect(result.findings).toEqual([]);
 });
@@ -73,4 +73,7 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
   const headers = { [HOST_RPC_BRIDGE_SESSION_HEADER]: f.target.ref.session, [HOST_RPC_DOCUMENT_HEADER]: f.target.ref.openId };
   const catalogs = await (await f.request(new Request("http://fixture/pe/ducts/catalogs", { headers }))).json();
   expect(catalogs.tables["project-table"].cells.values[0][0]).toBe(0.73);
+  // D8: each table carries the tier of the home it was read from, as the home list gave it.
+  expect(catalogs.tables["project-table"].home).toEqual({ tier: "project", file: join(project, "Catalogs", "project-table", "catalog.json") });
+  expect(catalogs.tables["host-table"].home.tier).toBe("user");
 });

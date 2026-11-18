@@ -46,7 +46,7 @@ it("with no TerminalDrop slot named the model rung reads the connector's assigne
     .toMatchObject({ value: 0.07, source: "model", ref: "model:1/AssignedPressureDrop" });
 });
 
-const axis = { quantity: "flow", unit: "cfm", values: [0, 1000], input: { field: "flowCfm" } };
+const axis = { quantity: "flow", unit: "cfm", values: [0, 1000], input: { field: "flowCfm", scale: 1 } };
 const table = (tier: string) => ({
   id: "t", title: "t", home: { tier, file: `${tier}/Catalogs/t/catalog.json` },
   source: { file: "f.pdf", title: "F", edition: "1", url: "https://example.com", page: 1, pdfPage: 1 },
@@ -58,7 +58,8 @@ it("V5/D2: the catalog's rung is its home's tier, above the parameter until Pe h
   const snapshot = snapshotOf(node);
   for (const tier of ["user", "project", "firm"]) {
     const catalogs = { t: table(tier) } as unknown as Catalogs;
-    expect(catalogLoss(node as never, 200, catalogs)).toMatchObject({ dp: 0.3, tier });
+    const loss = catalogLoss(node as never, 200, catalogs);
+    expect(loss, JSON.stringify(loss)).toMatchObject({ dp: 0.3, tier });
     expect(resolveInputs({ snapshot, firm: TEST_FIRM, catalogs }).terminals["1"]!.drop)
       .toMatchObject({ value: 0.3, source: tier, ref: `${tier}:1/t` });
     // A parameter Pe has written outranks the lookup, agreeing or not.

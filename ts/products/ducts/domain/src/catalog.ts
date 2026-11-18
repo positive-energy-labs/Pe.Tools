@@ -32,7 +32,8 @@ export type CatalogLoss = {
   source?: CatalogTable["source"];
   notes: string[];
 } & (
-  | { dp: number; staticInWg: number | null; pv: number; fpm: number }
+  // A priced lookup names the tier of the home its table was read from (D8); the reader stamps it, never this module.
+  | { dp: number; tier: NonNullable<CatalogTable["home"]>["tier"]; staticInWg: number | null; pv: number; fpm: number }
   | { dp: null; finding: CatalogFinding; error: string }
 );
 
@@ -142,5 +143,6 @@ export function catalogLoss(
       : staticInWg + pv;
   if (!Number.isFinite(dp))
     return bad("catalog-input", "Catalog conversion or velocity pressure is not finite");
-  return { ...base, staticInWg, pv, fpm, dp };
+  if (!t.home) throw new Error(`Catalog table ${table} carries no home tier`);
+  return { ...base, tier: t.home.tier, staticInWg, pv, fpm, dp };
 }

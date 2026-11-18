@@ -75,7 +75,7 @@ const sheet = async () => {
   return {
     tiers,
     cell: (name: DuctsCriteriaCell) => cells.find((cell) => cell.binding === `setting.ducts.${name}`)!,
-    criteria: resolveCriteria(null, null, base),
+    criteria: resolveCriteria(null, base),
     terminalDrop: resolveInputs({ snapshot: terminal, firm: base }).terminals["1"]!.drop,
   };
 };

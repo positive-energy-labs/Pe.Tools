@@ -49,7 +49,7 @@ const snapshot = Schema.decodeUnknownSync(Schema.Json)(snapshotRaw.result ?? sna
 
 async function setup(mode = "normal") {
   const dir = await mkdtemp(join(tmpdir(), "pe-capture-continuity-"));
-  await mkdir(join(dir, "catalogs"));
+  await mkdir(join(dir, "Catalogs"));
   await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
   const writer = await settle(
     openRecordingWriter(stateFixture(join(dir, "bundle")), identity, {
@@ -110,7 +110,7 @@ async function setup(mode = "normal") {
   const live = {
     owner: new DuctsReadings(),
     native,
-    files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: join(dir, "catalogs") }),
+    files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
     marks: Layer.succeed(
       HostDocumentMarks,
       hostMarks({ observedSince: 1, changedAt: () => 2, subscribe: () => () => {} }),

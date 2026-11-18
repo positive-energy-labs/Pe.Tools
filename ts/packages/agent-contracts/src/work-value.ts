@@ -1,13 +1,13 @@
 /**
- * ADR 0028 and ADR 0030 rule 9: the shared value precedence. `run`, then the authored tier: staged
- * `Work`, then `model-store`, the authored value a receipt retired from Work into the model's own store
- * (the document's persisted store). Then observed `model`, the `project` home, the `firm` home, `default` (ADR 0037 rule 8). Null/undefined mean absent;
- * invalid wins and blocks fallback, so a bad stored value never demotes under the raw model or firm.
+ * ADR 0028 and ADR 0053: the shared value precedence. `run`, then staged `Work`, then `model-store`, which holds
+ * rulings only (a role, a verdict, a rule table a receipt retired from Work). A design value never resolves from the store:
+ * it is read live as observed `model`, beside its receipt. Then the `user`, `project` and `firm` homes, and `default` (ADR 0037 rule 8). Null/undefined mean absent;
+ * invalid wins and blocks fallback, so a bad stored ruling never demotes under the raw model or firm.
  */
 import type { Author } from "./draft.ts";
 import { authorSchema } from "./draft.ts";
 import { z } from "zod";
-export const VALUE_SOURCES = ["run", "Work", "model-store", "model", "project", "firm", "default"] as const;
+export const VALUE_SOURCES = ["run", "Work", "model-store", "model", "user", "project", "firm", "default"] as const;
 export type ValueSource = (typeof VALUE_SOURCES)[number];
 export interface ValueCell<T> {
   value: T | null | undefined;
