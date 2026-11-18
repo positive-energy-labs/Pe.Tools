@@ -164,9 +164,6 @@ export const NEAR_MISS_GAP_IN = 1;
 export const NEAR_MISS_CENTRED_IN = 0.5;
 export const NEAR_MISS_OPPOSED_COS = 0.9;
 export const THROUGH_IN = 1;
-const RANK: Record<DuctInferenceGrade, number> = { "near-miss": 0, stretched: 1, anomalous: 2 };
-/** The worse of two grades. */
-export const worse = (a: DuctInferenceGrade, b: DuctInferenceGrade) => (RANK[b] > RANK[a] ? b : a);
 
 /**
  * A cross-section on an axis `u`, ft, from a segment's or a connector's size. A rectangle whose
@@ -498,16 +495,6 @@ export const topologyRulingsKey = (work: DuctsDesign | null) =>
   );
 
 const inferences = new WeakMap<DuctSnapshot, { key: string; value: Inference }>();
-
-/** One immutable inference per snapshot, tolerance and edit verdict set; flow edits cannot move it. */
-export function rememberInference(
-  snapshot: DuctSnapshot,
-  tolIn: number,
-  work: DuctsDesign | null,
-  value: Inference,
-) {
-  inferences.set(snapshot, { key: `${tolIn}:${topologyRulingsKey(work)}`, value });
-}
 
 export function inferJoints(
   snapshot: DuctSnapshot,

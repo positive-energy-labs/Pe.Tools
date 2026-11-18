@@ -101,7 +101,6 @@ export const fansCalc = {
     const snapshot = snapshotOf(read);
     const systems = snapshot ? calcSystems(snapshot) : [];
     return {
-      // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductSystemsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
         : !firm.present ? " over defaults where no home states a value"
@@ -112,7 +111,6 @@ export const fansCalc = {
     };
   },
   bindings: {
-    // The design criteria this fan prices under, each with the home tier that served it; "save at" writes that home.
     // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
     ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction").map(([key, b]) => [key, { ...b, model: (read: Read) => {
       if (b.home.at !== "setting") return null;

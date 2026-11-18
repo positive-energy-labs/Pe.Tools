@@ -18,7 +18,6 @@ export const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refi
 
 /** Resolved engine inputs expose the winning Work layer and its revision (ADR 0028). */
 export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
-export type DuctInputSource = (typeof DUCT_INPUT_SOURCES)[number];
 /**
  * A resolved input is the kernel resolution itself (`ValueResolution`, work-value.ts): the wire schema
  * is the kernel's schema, so neither can admit a shape the other refuses (P-041).
@@ -57,7 +56,7 @@ export const DUCTS_DEFAULT_CRITERIA: DuctsCriteriaValues = {
   };
 
 /**
- * The project layer over the firm file (Work `criteria`, the model's store): every criterion, and
+ * Work `criteria` over the served home tiers: every criterion, and
  * each side of a sided one, optional on its own, so typing return never restates supply. The firm
  * file stays `ductsCriteriaValuesSchema`: it states both sides.
  */
@@ -73,7 +72,7 @@ export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
 /**
  * Each criterion's Work cell (ADR 0030 rule 8: one staged value per cell; ruling 2026-11-10, the /ducts
  * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
- * cell's value sits in the criteria layer the engine resolves over the store and the firm file.
+ * cell's value sits in the criteria layer the engine resolves over the served home tiers.
  */
 const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
   ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
@@ -127,7 +126,6 @@ export const ductsCriteriaEditsSchema = z.strictObject({
   splitPolicy: splitPolicy.nullable().optional(),
   allowanceInWg: sided(nonneg.nullable().optional()).optional(),
 });
-export type DuctsCriteriaEdits = z.infer<typeof ductsCriteriaEditsSchema>;
 export const DUCT_UNIT_ROLES = ["fan", "passive"] as const;
 const unitRole = z.enum(DUCT_UNIT_ROLES);
 export const joinRulingSchema = z.strictObject({
@@ -196,7 +194,7 @@ export const ductsFirmSchema = z.strictObject({
 });
 export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;
 /**
- * The base layer the engine resolves under Work and the model store: every criterion, with the
+ * The base layer the engine resolves under Work: every criterion, with the
  * tier that served each cell. A cell absent from `served` came from the firm file.
  */
 export const ductsBaseSchema = z.strictObject({

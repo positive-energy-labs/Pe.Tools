@@ -78,7 +78,6 @@ export function fanWriteRequest(input: BuildCalcInput, context: FanWriteContext)
   }
 }
 
-/** The requested cells whose segment writes only through request rows but derived none (rules also write the store). */
 export function unwrittenCells(
   request: Pick<DuctsApplyInput, "terminals" | "components" | "equipment" | "terminalFlows" | "equipmentFlows">,
   cells: readonly (readonly [string, string])[],
