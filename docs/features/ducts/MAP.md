@@ -56,7 +56,7 @@ Not in this run:
 
 ## Deletion criteria
 
-- The model-store value rung, and every reader of a stored value or a stored slot name for resolution, has no importer left.
+- No rung returns a number from the model store as a value, and no stored slot name is read for resolution. A receipt is still read for three jobs that the invariants themselves need: to rank a parameter Pe wrote above the catalog (invariant 2), to call a value missing when its parameter no longer reads (invariant 3), and to write the drift note (invariant 1). No other reader of a stored value is left.
 - The sheet's own ladder over project and firm is deleted, with the false claim beside it in `ts/packages/agent-contracts/src/tiered-setting.ts`.
 - The duplicate criterion rows in /duct-systems are one row.
 - The run's net production lines are negative. A slice at twice its line estimate, or growing against its sign, stops and is planned again.
@@ -77,3 +77,4 @@ Amendments owed with the build, written by the implementor as a new ADR that sup
 - 2026-11-18, kaitpw: D1 to D9 as recorded in `docs/features/ducts/LEDGER.md` (Decided, 2026-11-18). D5's deletion waits on project-home creation ("2 yes").
 - 2026-11-18, kaitpw: the map is a spec and the implementor phases its own work. This differs from the root charter, which has the root group the waves and run a plan check with readers before writers launch.
 - 2026-11-18, kaitpw, on scope: "i never meant for it to become a kernel crusade". No kernel file is in this run.
+- 2026-11-18 05:45, root: the first deletion criterion is reworded. As first written it forbade every reader of a stored value, which invariant 2 cannot satisfy: that a parameter was written by Pe is known only from its receipt. The purger found at the V1 tip `0743976d` that no rung returns a stored number (two mutants red) and no stored slot name is read for resolution, with 6 receipt readers in 3 files against 5 at the base. This changes no ruling; it is listed in the owner queue.
