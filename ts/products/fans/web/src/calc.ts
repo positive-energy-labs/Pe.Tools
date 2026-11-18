@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DUCTS_CRITERIA_CELLS } from "@pe/agent-contracts";
+import { DUCTS_CRITERIA_CELLS, slotLayer } from "@pe/agent-contracts";
 import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansCalcData, type Immutable } from "@pe/agent-contracts";
 import { cellSource, local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import type { ValueSource } from "@pe/agent-contracts/work-value";
@@ -115,8 +115,7 @@ export const fansCalc = {
     ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction").map(([key, b]) => [key, { ...b, model: (read: Read) => {
       if (b.home.at !== "setting") return null;
       const [, name] = b.home.path;
-      const snapshot = snapshotOf(read), wire = read?.calcSnapshot;
-      if (b.home.path[0] === "parameters") return { source: "default", ...(wire && !("kind" in wire) ? wire.slotSources?.[name ?? ""] : {}), value: Object.entries(snapshot?.slots ?? {}).find(([key]) => key === name)?.[1] ?? null };
+      if (b.home.path[0] === "parameters") return slotLayer(read?.calcSnapshot && !("kind" in read.calcSnapshot) ? read.calcSnapshot : null, name ?? "");
       const declared = Object.entries(DUCTS_CRITERIA_CELLS).find(([cell]) => key === `setting.ducts.${cell}`)?.[1];
       const criteria = inputsOf(read)?.criteria;
       const resolved = declared && criteria?.[declared.layer[0]], side = declared?.layer[1];

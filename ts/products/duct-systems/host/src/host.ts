@@ -8,7 +8,7 @@ import { DUCTS_SYSTEM_MAX,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots, } from "@pe/agent-contracts";
+  ductParameterSlots, ductSlotRequest, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
@@ -30,7 +30,7 @@ export const ductsRoster = body(contracts.roster, async function(ctx, { target }
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
+        slots: ductSlotRequest(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "roster" },
       },
@@ -50,7 +50,7 @@ const systems = read("ducts.systems", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
+        slots: ductSlotRequest(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },

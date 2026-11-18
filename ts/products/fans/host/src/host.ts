@@ -8,7 +8,7 @@ import {
   fansCalcData,
   openFanCalcSchema,
   stagedDucts,
-  ductParameterSlots,
+  ductParameterSlots, ductSlotRequest,
   subjectCode,
   subjectOf,
 
@@ -150,7 +150,7 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
       ? await ctx.read(native("ducts.snapshot.walk"), {
           role: "acquire",
           request: {
-            slots: Object.fromEntries(Object.entries(ductParameterSlots(settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
+            slots: ductSlotRequest(settings),
             labelParameter: staged.labelParameter ?? undefined,
             selector: { kind: "ids", ids },
           },

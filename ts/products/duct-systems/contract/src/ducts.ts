@@ -455,7 +455,8 @@ export const ductsRouteState = {
 export const ductParameterSlots = (settings?: readonly SettingTierRead[]) =>
   Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => {
     const served = serveSetting(settings, ["project", "firm"], ["parameters", key], ductParameterNameSchema(key));
-    return [key, { name: served.value, source: served.tier, ref: served.ref, note: served.note }];
+    return [key, { name: served.value, source: ductSlotSourcesSchema.valueType.shape.source.parse(served.tier), ref: served.ref, note: served.note }];
   }));
-
-export const ductSlotSourcesSchema = z.record(z.string(), z.object({ source: z.enum(["user", "project", "firm", "default", "model"]), ref: z.string().optional(), note: z.string().optional() }));
+export const ductSlotSourcesSchema = z.record(z.string(), z.object({ name: z.string().nullable(), source: z.enum(["project", "firm", "default"]), ref: z.string().optional(), note: z.string().optional() }));
+export const ductSlotRequest = (settings?: readonly SettingTierRead[]) => Object.fromEntries(Object.entries(ductParameterSlots(settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]]));
+export const slotLayer = (snapshot: { readonly slots: Readonly<Record<string, string | null>>; readonly slotSources?: Readonly<z.output<typeof ductSlotSourcesSchema>> } | null | undefined, key: string) => ({ source: "default" as const, ...snapshot?.slotSources?.[key], value: snapshot?.slots[key] ?? null });
