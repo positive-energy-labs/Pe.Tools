@@ -5,10 +5,10 @@ import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "vite-plus";
 import { openBrowser } from "@pe/browser";
 import { ductsDocumentSchema, ductsDesign, fansDocumentSchema } from "@pe/agent-contracts";
-import { firmLayer, workLayer } from "../../ducts/host/src/ducts-inputs.ts";
-import { resolveCriteria } from "../../ducts/domain/src/calc/inputs.ts";
+import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
+import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { designCalc } from "@pe/duct-systems-web/design-calc";
-import { sheetCells } from "../../../apps/web/src/route/slots/sheet/index.ts";
+import { sheetCells } from "../../apps/web/src/route/slots/sheet/index.ts";
 
 const dir = resolve("../.artifacts/runs/field-20261118/J-V3", String(Date.now()));
 await mkdir(dir, { recursive: true });
@@ -42,7 +42,7 @@ const server = await createServer({ configFile: false, root: resolve("."),
       if (req.url === "/jv3-inputs") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ read, work })); return; }
       if (req.url?.startsWith("/duct-systems")) {
         res.setHeader("Content-Type", "text/html");
-        res.end(await s.transformIndexHtml("/duct-systems", '<html><body><div id="root"></div><script type="module" src="/products/duct-systems/journeys/jv3-field-fixture.tsx"></script></body></html>')); return;
+        res.end(await s.transformIndexHtml("/duct-systems", '<html><body><div id="root"></div><script type="module" src="/products/duct-systems/web/journeys/jv3-field-fixture.tsx"></script></body></html>')); return;
       }
       next();
     });
@@ -56,10 +56,10 @@ try {
   await page.release();
   await writeFile(join(dir, "custody.json"), JSON.stringify({ head: evidence.head, web,
     browser: browser.info.id, target, native: false, simulated: true,
-    command: "node --import jiti/register products/duct-systems/journeys/jv3-field-host.ts" }, null, 2));
+    command: "node --import jiti/register tests/journey-fixtures/jv3-field-host.ts" }, null, 2));
   const env = { ...process.env, E2E_LINKAGE_MODE: "fixture-linkage", E2E_TARGET: "", E2E_SESSION: "", E2E_WEB: web, CDP_PORT: new URL(browser.info.endpoint).port,
     CDP_TARGET: target, JV3_PRICING_FILE: inputs, E2E_LABEL: `base-${Date.now()}` };
-  const child = spawn(process.execPath, ["--import", "jiti/register", "products/duct-systems/journeys/jv3-field.ts", "--seed", "20261118"], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, timeout: 150_000 });
+  const child = spawn(process.execPath, ["--import", "jiti/register", "products/duct-systems/web/journeys/jv3-field.ts", "--seed", "20261118"], { env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, timeout: 150_000 });
   let output = "";
   for (const stream of [child.stdout!, child.stderr!]) stream.on("data", b => { output += b; process.stdout.write(b); });
   process.exitCode = await new Promise<number>((done, reject) => { child.once("error", reject); child.once("exit", c => done(c ?? 1)); });

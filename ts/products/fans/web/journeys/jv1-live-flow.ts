@@ -1,5 +1,5 @@
 // Real-Revit target (operator-assisted, never launches Revit):
-// node --import jiti/register products/fans/journeys/jv1-live-flow.ts
+// node --import jiti/register products/fans/web/journeys/jv1-live-flow.ts
 // E2E_WEB, CDP_PORT, CDP_TARGET, E2E_TARGET, E2E_SESSION, E2E_FAN, E2E_PORT,
 // E2E_TERMINAL (UniqueId SubjectRef). Use a disposable controlled Chadds copy.
 // Before starting, write terminal 200 cfm through /fans and retain its receipt.
@@ -10,11 +10,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import assert from "node:assert/strict";
-import { journey, revit, requireRevit } from "../../../tests/e2e/cdp.ts";
-import { assertPageBinding, documentTarget } from "../../../tests/e2e/page-binding.ts";
-import { fanRosterRow } from "../../../tests/e2e/fan-roster.ts";
-import { pickFansWriteScope } from "../../../tests/e2e/fans-write-scope.ts";
-import { marks, settled } from "../../../tests/e2e/marks.ts";
+import { journey, revit, requireRevit } from "../../../../tests/e2e/cdp.ts";
+import { assertPageBinding, documentTarget } from "../../../../tests/e2e/page-binding.ts";
+import { fanRosterRow } from "../../../../tests/e2e/fan-roster.ts";
+import { pickFansWriteScope } from "../../../../tests/e2e/fans-write-scope.ts";
+import { marks, settled } from "../../../../tests/e2e/marks.ts";
 
 const terminal = process.env.E2E_TERMINAL;
 const fan = process.env.E2E_FAN;
@@ -65,10 +65,10 @@ try {
     await page.reload();
     await page.until(async () => settled(await marks(page)), "settled next read");
     await page.dump(dir, "first-read-after-hand-edit");
-    const flow = await page.evaluate((selector: string) => (document.querySelector(`${selector} input`) as HTMLInputElement | null)?.value, row);
+    const flow = await page.evaluate((selector: string) => (document.querySelector(`${selector} input`) as HTMLInputElement | null)?.value ?? null, row);
     assert.equal(Number(flow), 400, "J-V1 stale store flow: live 400 cfm must beat receipt 200 cfm");
-    assert.notEqual(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-source"), row), "model-store");
-    assert.equal(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-drift"), row), "true", "terminal must show drift");
+    assert.notEqual(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-source") ?? null, row), "model-store");
+    assert.equal(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-drift") ?? null, row), "true", "terminal must show drift");
     const expectedEsp = parseFloat(await required());
     assert.ok(expectedEsp > baselineEsp, "computed ESP must rise with the edited flow");
     await assertPageBinding(page);
