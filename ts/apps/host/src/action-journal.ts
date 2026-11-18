@@ -888,9 +888,15 @@ export class ActionJournal implements ReceiptReader {
   }
 
   private claimsOf(row: ActionReceipt): Claim[] {
-    if (!holdsClaims(row)) return [];
+    // Exception to K1a: a `receipt` claim is a plan's single-use token, not an exclusion. Every row
+    // that may have dispatched keeps it, because a document mark that did not move is the only other
+    // refusal of a second apply of that plan. It blocks one plan id, never a later plan.
+    const spent = !(
+      (row.state === "failed" || row.state === "cancelled") && row.notDispatched === true && undispatched(row.steps)
+    );
     return row.claims.filter(
       (claim) =>
+        (claim.kind === "receipt" ? spent : holdsClaims(row)) &&
         ![...this.rows.values()].some((other) =>
           other.steps.some(
             (step) =>
