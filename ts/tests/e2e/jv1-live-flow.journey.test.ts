@@ -53,7 +53,7 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
       return body;
     };
     const calculate = (snapshot: typeof model) => {
-      const inputs = resolveInputs({ snapshot, store: snapshot.store, firm: TEST_FIRM });
+      const inputs = resolveInputs({ snapshot, firm: TEST_FIRM });
       const roster = suggestRoster(snapshot);
       const input = { snapshot, inputs, grids: toGrids(recordedTables()),
         fan: { unitId: 100, portIndex: 0 }, roster: [...roster.fans, ...roster.suggestions] };
@@ -75,16 +75,16 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
     expect(after.sheet.claim.kind).toBe("complete");
     if (before.sheet.claim.kind !== "complete" || after.sheet.claim.kind !== "complete") throw Error("incomplete claim");
     expect(after.sheet.claim.requiredEspInWg).toBeGreaterThan(before.sheet.claim.requiredEspInWg);
-    // Match pane.tsx: model is empty, and receipt evidence travels in calcSnapshot.store.
+    // Match pane.tsx: receipt evidence travels in calcSnapshot.store.
     // Do not fabricate a model override to hide the product's missing drift handling.
-    const cells = sheetCells(fansCalc, { rows: [subject], work: {}, model: [], read: {
+    const cells = sheetCells(fansCalc, { rows: [subject], work: {}, read: {
       calcSnapshot: live, calcView: { inputs: after.input.inputs },
       fansWork: fansDocumentSchema.parse({}), settings: {},
     } });
     expect(cells.find(cell => cell.binding === "flows" && cell.row === subject)?.note,
       "terminal cell must expose receipt drift").toBe("Changed in Revit since Pe wrote 200 cfm");
-    const request = mintWriteRequest(after.sheet.claim, after.sheet, after.input, {
-      appliedAt: CLOSED_AT, slots: live.slots, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [], verdicts: [] },
+    const { request } = mintWriteRequest(after.sheet.claim, after.sheet, after.input, {
+      appliedAt: CLOSED_AT, slots: live.slots, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [] },
     });
     expect(request.terminalFlows, "apply must not reassert the old flow").toEqual([]);
     const key = { ...f.key, route: "fans" };
