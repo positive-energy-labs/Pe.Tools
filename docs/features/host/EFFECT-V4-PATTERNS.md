@@ -214,7 +214,7 @@ A reusable effectful function is `Effect.fn("Owner.step")(function* (...) { ... 
 
 Fork every fiber (a consent window, a poll, a probe, a dispatch worker) into a service's scope with `Effect.forkScoped`, or with `Effect.forkIn(scope)` after `const scope = yield* Effect.scope`. A detached `runFork` is a finding. The host has one `Effect.forkDetach`, in `host-lifecycle.ts:415`: it trips the shutdown latch after the response flushes. Do not copy it.
 
-Durable work captures causal identity and its durable owner's authority explicitly. It never inherits the request's cancellation lifetime (rule 2, rule 14). ADR 0050 transfers that owner from the journal to workflow at admission; observer fibers do not own the command.
+Durable work captures causal identity and its durable owner's authority explicitly. It never inherits the request's cancellation lifetime (rule 2, rule 14). The journal is that owner (ADR 0050, which proposed workflow, is rejected); observer fibers do not own the command.
 
 ### 2g. Settle inside the Exit (COMMON 11)
 
@@ -240,7 +240,7 @@ Inside a marked Promise island, use the island's own idiom: `try { persist() } f
 
 - Every route declares one of three lifetimes:
   - **Request-owned read:** the work lives on the request fiber.
-  - **Durable command:** the admitted workflow owns the work from submission (ADR 0050 target; journal until cutover).
+  - **Durable command:** the journal owns the admitted action from submission.
   - **Subscription:** the route observes, and losing the observer never stops the work.
 - A native read is a `NativeReads.join(prepared, session)`. It shares one dispatch per canonical descriptor and refcounts its joiners. When the last joiner is interrupted it sends one `op.cancel`, and it forgets the entry only on terminal settlement. The join runs under `Effect.uninterruptibleMask((restore) => …)`, so a join never leaks a refcount.
 - The serial slot is one worker per Revit process incarnation. It is fed by a bounded FIFO `Queue` and forked into the bridge scope (`dispatch.ts`). Cancel bypasses the worker. A timer never releases the slot.
@@ -272,8 +272,8 @@ Unit tests are not something to preserve. A deterministic test stays only when i
 
 - `ducts-domain` is pure values in and values out, so leave it plain.
 - React render code stays React plus atoms; `Effect.gen` in a component is a finding.
-- ADR 0050 adopts `workflow`, `cluster` and Effect `sql` over SQLite as the replacement durable command owner, not a second owner beside the journal. `eventlog`, `KeyValueStore` and `TxRef` remain unadopted as parallel owners.
-- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). Target restart recovery belongs to workflow Activities and owner evidence. In-flight Activities may re-run, changed payloads can silently join an engine key, and `Workflow.interrupt` is insufficient for Stop during an Activity. ADR 0050 therefore requires create-only admission, effect-owner identity and a durable Stop signal plus native cancellation. Product lifecycle proof remains UNPROVEN.
+- `workflow`, `cluster` and Effect `sql` are not the durable command owner: ADR 0050 is rejected and the journal stays. `eventlog`, `KeyValueStore` and `TxRef` remain unadopted as parallel owners.
+- `Schedule` owns in-process backoff only (`machine.ts:649`, `Effect.repeat(Schedule.spaced(...))`). Restart recovery belongs to the journal and the SDK's recorded attempt response. Product lifecycle proof remains UNPROVEN.
 - Use `Path` where a scope is needed, not for every `join`.
 
 ---
