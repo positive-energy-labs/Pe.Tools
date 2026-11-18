@@ -91,6 +91,8 @@ try {
     stdio: "inherit",
     env: {
       ...env,
+      E2E_LINKAGE_MODE: "fixture-linkage",
+      E2E_TARGET: "", E2E_SESSION: "",
       E2E_WEB: url,
       E2E_LABEL: `base-${Date.now()}`,
       JV7_HOST: `http://127.0.0.1:${service.port}`,

@@ -1,7 +1,8 @@
 // Fixture: node --import jiti/register tests/e2e/jv7-launch.ts
 // Real: E2E_WEB=<bound fans URL with thread and target>, JV7_HOST=<host origin>,
 // JV7_TOKEN=<service token>, CDP_PORT/CDP_TARGET=<owned tab>; node --import jiti/register tests/e2e/jv7-fans.ts
-// The real target borrows an already controlled session; this journey never discovers or starts Revit.
+// The real target requires the driver’s own controlled session; this journey never discovers or starts Revit.
+import { assertPageBinding } from "./page-binding.ts";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { journey, WEB } from "./cdp.ts";
@@ -50,13 +51,21 @@ await journey("J-V7", async (page, step, dir) => {
     revision: lease.revision,
     patch: { fan: JSON.stringify({ kind: "ids", ids: [missing] }) },
   };
+  await assertPageBinding(page);
   const reply = await call("/set", request);
   writeFileSync(join(dir, "set-view.json"), JSON.stringify({ request, reply }, null, 2));
   step(`set-view acknowledgement: ${JSON.stringify(reply)}`);
-  // Preserve the first false fact before recovery. Still exercise usability on a red acknowledgement.
   await page.dump(dir, "ack");
-  const rowText = (await labels())[0]!;
+  const ack = reply.body;
+  if (ack.outcome !== "refused" || !JSON.stringify(ack.refusal).includes(missing))
+    throw Error(`ASSERT missing fan refused by name (${missing}); saw ${JSON.stringify(reply)}`);
+  const selection = () => page.evaluate(() => [...document.querySelectorAll(
+    '[role="listbox"][aria-label="fans"] [aria-selected="true"]')].map(e => e.textContent).sort());
+  const before = await selection();
+  const rowText = (await labels()).find(label => !before.some(text => text?.trim() === label));
+  if (!rowText) throw Error("PRECONDITION: an unselected fan row is required to prove selection changes");
   const row = /^(.*? \/ port \d+)/.exec(rowText)?.[1] ?? rowText;
+  await assertPageBinding(page);
   const pressed = await page.gestures.click({
     role: "option",
     name: fanRosterLabel(row),
@@ -67,18 +76,9 @@ await journey("J-V7", async (page, step, dir) => {
   await page.until(
     async () =>
       settled(await marks(page)) &&
-      (await page.evaluate(() =>
-        [
-          ...document.querySelectorAll(
-            '[role="listbox"][aria-label="fans"] [aria-selected="true"]',
-          ),
-        ].some((e) => e.getClientRects().length > 0),
-      )),
+      JSON.stringify(await selection()) !== JSON.stringify(before),
     "roster responds after refusal",
     120_000,
   );
   step("route remains usable: roster selection responds");
-  const ack = reply.body;
-  if (ack.outcome !== "refused" || !JSON.stringify(ack.refusal).includes(missing))
-    throw Error(`ASSERT missing fan refused by name (${missing}); saw ${JSON.stringify(reply)}`);
 });

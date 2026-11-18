@@ -4,13 +4,14 @@
 // E2E_TERMINAL (UniqueId SubjectRef). Use a disposable controlled Chadds copy.
 // Before starting, write terminal 200 cfm through /fans and retain its receipt.
 // Each prompt takes a path to an independent native read JSON, never a route receipt:
-// {session, openId, terminal, flowCfm, receiptCfm, requiredEspInWg, readAt}.
+// {session, openId, terminal, fan, port, parameter, flowCfm, receiptCfm, requiredEspInWg, readAt}.
 // The driver performs the hand edit and native reads outside this script.
 import { readFileSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { journey, revit, requireRevit } from "./cdp.ts";
+import { assertPageBinding, documentTarget } from "./page-binding.ts";
 import { fanRosterRow } from "./fan-roster.ts";
 import { pickFansWriteScope } from "./fans-write-scope.ts";
 import { marks, settled } from "./marks.ts";
@@ -20,6 +21,8 @@ const fan = process.env.E2E_FAN;
 const port = Number(process.env.E2E_PORT);
 if (!terminal || !fan || !Number.isInteger(port) || !process.env.E2E_SESSION || !revit.target)
   throw Error("PRECONDITION: explicit disposable document, session, fan, port and terminal required");
+const target = documentTarget(revit.target, process.env.E2E_SESSION);
+if (!process.env.E2E_ESP_PARAMETER) throw Error("PRECONDITION: E2E_ESP_PARAMETER required");
 const row = `[data-sheet-address=${JSON.stringify(`flows:${terminal}`)}]`;
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 try {
@@ -29,8 +32,11 @@ try {
       const value = JSON.parse(readFileSync(file.trim(), "utf8"));
       assert.equal(value.session, process.env.E2E_SESSION);
       assert.equal(value.terminal, terminal);
-      const target = JSON.parse(revit.target);
-      assert.equal(value.openId, target.ref?.openId ?? target.openId);
+      assert.equal(value.openId, target.openId);
+      assert.equal(value.fan, fan);
+      assert.equal(value.port, port);
+      assert.equal(value.parameter, process.env.E2E_ESP_PARAMETER);
+      assert.ok(Number.isFinite(value.requiredEspInWg));
       assert.ok(Date.parse(value.readAt) >= since, "native read must follow this phase");
       writeFileSync(join(dir, `${phase}.json`), JSON.stringify(value, null, 2));
       return value;
@@ -43,7 +49,7 @@ try {
     if (!(await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) =>
       [...document.querySelectorAll(`${scope} [aria-selected="true"]`)].some(e => new RegExp(pattern).test((e as HTMLElement).innerText)),
       { scope: roster, pattern: label.source })))
-      await page.click(label, roster);
+      { await assertPageBinding(page); await page.click(label, roster); }
     await page.until(async () => settled(await marks(page)), "settled receipt baseline");
     const before = await native("baseline-after-200-cfm-receipt", 0);
     assert.equal(before.flowCfm, 200);
@@ -65,20 +71,27 @@ try {
     assert.equal(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-drift"), row), "true", "terminal must show drift");
     const expectedEsp = parseFloat(await required());
     assert.ok(expectedEsp > baselineEsp, "computed ESP must rise with the edited flow");
-    await pickFansWriteScope(fan, (scope, pattern) => page.click(new RegExp(pattern), scope),
+    await assertPageBinding(page);
+    await pickFansWriteScope(fan, async (scope, pattern) => {
+      await assertPageBinding(page);
+      await page.click(new RegExp(pattern), scope);
+    },
       (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "write scope"));
     await page.until(async () => settled(await marks(page)), "settled write scope");
+    await assertPageBinding(page);
     await page.click(/^plan Write to Revit$/);
     const popover = "[data-write-popover]";
     await page.until(() => page.has("Write to Revit", popover), "reviewable plan");
     await page.dump(dir, "reviewed-plan");
     const writeAt = Date.now();
+    await assertPageBinding(page);
     await page.click("Write to Revit", popover);
     await page.until(async () => settled(await marks(page)) && !(await page.has("Write to Revit", popover)), "write receipt");
     const after = await native("independent-read-after-apply", writeAt);
     assert.equal(after.flowCfm, 400, "apply must preserve the hand edit");
     assert.ok(Math.abs(after.requiredEspInWg - expectedEsp) <= 0.0001, "native ESP must equal the newly computed displayed ESP");
     step(`native ESP ${after.requiredEspInWg}, displayed ${expectedEsp}, baseline ${baselineEsp}`);
+    await assertPageBinding(page);
     await page.click(/^plan Write to Revit$/);
     await page.until(() => page.has(/nothing to write|no staged edit/i, popover), "consumed work refuses re-plan");
   });
