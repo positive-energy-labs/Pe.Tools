@@ -257,6 +257,8 @@ test("cancel sends op.cancel with the step id and never interrupts the dispatche
       { key: CANCEL_OPERATION_KEY, requestId: stepId },
     ]);
     expect(f.seen.interrupted).toBe(false);
+    // Revit's clean cancel reports what its runner touched; a reply without it would read as maybe-wrote (K3).
+    await recordNativeTerminal(stepId, { kind: "none" });
     f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
     expect(await f.journal.wait("cancelled")).toMatchObject({ state: "cancelled" });
     expect(f.seen.interrupted).toBe(false);
@@ -273,6 +275,7 @@ test("two concurrent Stops on one running step both settle; one op.cancel is sen
     expect(stops.map((stop) => stop.status)).toEqual(["fulfilled", "fulfilled"]);
     expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([{ key: CANCEL_OPERATION_KEY, requestId: stepId }]);
     expect(f.seen.interrupted).toBe(false);
+    await recordNativeTerminal(stepId, { kind: "none" });
     f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
     expect(await f.journal.wait("stopped-twice")).toMatchObject({ state: "cancelled" });
   } finally {

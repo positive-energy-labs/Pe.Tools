@@ -430,6 +430,7 @@ function settle(
     return { ...detail, state: "unknown" };
   }
   if (thrown?.state === "cancelled") {
+    if (steps.some(effected)) return { state: "incomplete", error: thrown.error, status: thrown.status, result: null };
     const { notDispatched: _notDispatched, ...cancelled } = thrown;
     return {
       ...cancelled,
@@ -448,7 +449,7 @@ function settle(
   const cancelled =
     cause.kind !== "threw" ? steps.find((step) => step.state === "cancelled") : undefined;
   if (cancelled?.state === "cancelled")
-    return { state: "cancelled", error: cancelled.error, status: cancelled.status };
+    return { state: steps.some(effected) ? "incomplete" : "cancelled", error: cancelled.error, status: cancelled.status };
   const failedStep = [...steps].reverse().find((step) => step.state === "failed");
   const why = reason ?? (failedStep?.state === "failed" ? failedStep : undefined);
   if (steps.some(effected)) {
@@ -1068,7 +1069,8 @@ export class ActionJournal implements ReceiptReader {
     const row = executableActionReceiptSchema.parse(retained);
     const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
     if (inputRefusal) throw inputRefusal;
-    if (row.cancellationRequested)
+    // A Stop does not undo a landed write: the host-owned retirement of what it wrote still runs.
+    if (row.cancellationRequested && !postcondition)
       throw new StepFailure("Command cancelled before dispatch", 499, "refused");
     // Every Pea command belongs to a run (ADR 0038): it starts in an open one, and a Stop, a failed
     // turn or a host restart ends it. Whether it has effects decides nothing here.

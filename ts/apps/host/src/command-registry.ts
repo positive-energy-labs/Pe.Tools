@@ -85,13 +85,8 @@ export function commandRegistry(
     if (!step.process) throw Error("No exact native process was captured for this step");
     return readNativeReceipt(step, step.process, deps.sdk);
   };
-  const cancel = (requestId: string) =>
-    Effect.flatMap(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => {
-      const result = value as { cancelled?: boolean; message?: string } | null;
-      return result?.cancelled === false
-        ? Effect.fail(Error(result.message ?? "Native request is not running"))
-        : Effect.succeed(result);
-    });
+  // "Not in flight" (`cancelled: false`) means Revit already answered: the saved Stop stands, nothing failed.
+  const cancel = (requestId: string) => Effect.map(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => value);
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
     const definition = entry.definition;
     return {
