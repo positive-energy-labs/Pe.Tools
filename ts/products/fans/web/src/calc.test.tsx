@@ -64,6 +64,10 @@ test("ADR 0053: a receipt that disagrees with the live parameter is the cell's d
   // An agreeing receipt, and an element Pe never wrote, draw no note.
   expect(model("terminalDrops", store)).not.toHaveProperty("note");
   expect(model("flows", {})).not.toHaveProperty("note");
+  // P26: one drift signal. The retired value equals the model, so the kernel's compare is silent; the receipt's drift is the cell's.
+  const cells = (store: object) => sheetCells({ ...fansCalc, bindings: { flows: fansCalc.bindings.flows } }, { rows: [], work: fansDocumentSchema.parse({}), model: [], read: read(store) });
+  expect(cells(store)[0]).toMatchObject({ value: 200, model: 200, drift: true, note: "Changed in Revit since Pe wrote 150 cfm" });
+  expect(cells({})[0]).toMatchObject({ value: 200, drift: false });
 });
 
 test("slot names use project and firm settings and never stage Work", () => {
