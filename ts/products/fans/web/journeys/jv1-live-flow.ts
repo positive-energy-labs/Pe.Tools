@@ -48,7 +48,7 @@ try {
     const roster = '[role="listbox"][aria-label="fans"]';
     await page.until(() => page.has(label, roster), "the named fan");
     if (!(await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) =>
-      [...document.querySelectorAll(`${scope} [aria-selected="true"]`)].some(e => new RegExp(pattern).test((e as HTMLElement).innerText)),
+      [...document.querySelectorAll<HTMLElement>(`${scope} [aria-selected="true"]`)].some(e => new RegExp(pattern).test(e.innerText)),
       { scope: roster, pattern: label.source })))
       { await assertPageBinding(page); await page.click(label, roster); }
     await page.until(async () => settled(await marks(page)), "settled receipt baseline");
@@ -66,10 +66,10 @@ try {
     await page.reload();
     await page.until(async () => settled(await marks(page)), "settled next read");
     await page.dump(dir, "first-read-after-hand-edit");
-    const flow = await page.evaluate((selector: string) => (document.querySelector(`${selector} input`) as HTMLInputElement | null)?.value ?? null, row);
+    const flow = await page.evaluate((selector: string) => document.querySelector<HTMLInputElement>(`${selector} input`)?.value ?? null, row);
     assert.equal(Number(flow), 400, "J-V1 stale store flow: live 400 cfm must beat receipt 200 cfm");
     assert.notEqual(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-source") ?? null, row), "model-store");
-    assert.equal(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-drift") ?? null, row), "true", "terminal must show drift");
+    assert.ok(await page.has("Changed in Revit since Pe wrote 200 cfm", row), "terminal must show receipt drift note");
     const expectedEsp = parseFloat(await required());
     assert.ok(expectedEsp > baselineEsp, "computed ESP must rise with the edited flow");
     await assertPageBinding(page);

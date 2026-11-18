@@ -15,10 +15,11 @@ await journey("J-V7", async (page, step, dir) => {
   const thread = url.searchParams.get("thread");
   if (!thread || !process.env.JV7_HOST || !process.env.JV7_TOKEN)
     throw Error("PRECONDITION: bound E2E_WEB thread, JV7_HOST and JV7_TOKEN required");
+  const token = process.env.JV7_TOKEN;
   const call = async (path: string, body?: unknown) => {
     const response = await fetch(`${process.env.JV7_HOST}/pe/route-view/fans${path}`, {
       method: body ? "POST" : "GET",
-      headers: { "content-type": "application/json", "x-pe-service-token": process.env.JV7_TOKEN! },
+      headers: { "content-type": "application/json", "x-pe-service-token": token },
       ...(body ? { body: JSON.stringify(body) } : {}),
       signal: AbortSignal.timeout(30_000),
     });
