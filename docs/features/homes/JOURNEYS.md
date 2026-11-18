@@ -124,12 +124,12 @@ The driver starts at the kernel crusade's end gate. Until then this file is a pl
 - **Fixture:** the local central made from the detached clone, and the cloud throwaway clone for the cloud case.
 - **Runnable today:** no.
 
-### H7c. Guard: send outward
+### H7c. Send outward: a notice, no guard (ADR 0052)
 
-- **Steps:** have Pea read a copy of one Chadds cut sheet with the hosted parser; leave it held; confirm; set the pre-allow setting for the project and repeat.
-- **Pass witness:** while held, the stand-in server receives 0 requests. On confirm it receives 1. With the pre-allow setting it receives 1 with a notice and no hold. The local parser path is never held. The driver records a shell `curl` upload honestly.
+- **Steps:** have Pea read a copy of one Chadds cut sheet with the hosted parser; read the same pages again.
+- **Pass witness:** the stand-in server receives 1 request at once, nothing is held, and the notice feed shows one row naming the file and LlamaCloud. The second read finds the kept result and sends nothing. The local parser path sends nothing. The driver records a shell `curl` upload honestly.
 - **Lane:** dev session plus the stand-in server.
-- **Runnable today:** no. `read_document` exists only on `t3/pea-muas-retest`.
+- **Runnable today:** no stand-in server lane exists; the deterministic witness is `ts/packages/mcps/tests/read-document.test.ts`.
 
 ### FS. A Fans value across tiers
 

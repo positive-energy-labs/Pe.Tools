@@ -13,7 +13,7 @@ import {
   readDerivedJson,
   type ParsedPages,
 } from "./derived-parse.ts";
-import { requireLlamaCloudKey } from "./llama-key.ts";
+import { noteLlamaSend, requireLlamaCloudKey } from "./llama-key.ts";
 import { LLAMA_TIER, parseWithLlamaCloud } from "./llama-parse.ts";
 import { officeExtensions, readOfficeText } from "./read-office.ts";
 import { createTool } from "./tool.ts";
@@ -161,7 +161,7 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
   if (!kept) {
     if (hosted) {
       const result = await parseWithLlamaCloud({
-        sender: "pea", apiKey: requireLlamaCloudKey(),
+        apiKey: requireLlamaCloudKey(), sent: noteLlamaSend,
         file: new File([new Uint8Array(bytes)], path.basename(file)),
         targetPages: input.pages, expand: ["markdown"],
       });

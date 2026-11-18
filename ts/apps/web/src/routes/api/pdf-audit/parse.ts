@@ -46,7 +46,9 @@ export const Route = createFileRoute("/api/pdf-audit/parse")({
 
         let view;
         try {
-          view = await parseFamilyPdf({ sender: "person", file: uploadFile, apiKey });
+          // The web build cannot reach the notice store (host-build-boundary guard), so this
+          // dev-server route leaves no notice. The host endpoint that replaces it does.
+          view = await parseFamilyPdf({ file: uploadFile, apiKey, sent: () => {} });
         } catch (error) {
           return Response.json({ error: error instanceof Error ? error.message : "Parse job failed" }, { status: 502 });
         }
@@ -90,6 +92,7 @@ async function fetchPdf(url: string): Promise<{ file: File } | { error: string }
         "That URL didn't return a PDF (the site likely served a bot-check page). Download the PDF and upload the file instead.",
     };
   }
-  const name = decodeURIComponent(url.split("/").pop() || "document.pdf");
+  // The pathname only: a signed URL's query string never becomes a file name.
+  const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "document.pdf");
   return { file: new File([buffer], name, { type: "application/pdf" }) };
 }

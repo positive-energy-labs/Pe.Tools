@@ -17,7 +17,7 @@ The goal, in the owner's words: "get us closer to pea being actually usable", wi
 - **Value tiers**, most specific first: `run`, staged `Work`, saved in model, `project`, `firm`, `default`.
 - **Setting**: a fourth sheet binding kind, `setting(owner, path, schema, tiers)`.
 - **Class**: two failure policies, `keep` and `discard`, carried as one argument of one decode helper.
-- **Guard**: one of exactly three acts on a project document that Pea does not do without the person.
+- **Guard**: one of exactly two acts on a project document that Pea does not do without the person (ADR 0052 removed the third, send outward).
 - Invariants:
   - An address has no home qualifier. A pod id is unique across homes. The same id in two homes is a conflict, and both are refused with a notice.
   - A shared home holds authored files and write-once derived files named by content hash. It never holds Work, a journal, SQLite, run output, Page state or anything machine-derived.
@@ -40,7 +40,7 @@ These are settled before a coworker depends on the product, because a later chan
 8. The machine state root, its survival across an upgrade, and the T3 home's place under it.
 9. The two failure policies.
 10. Secret role names (`openai.api-key`, `anthropic.api-key`, `llamaparse.api-key`) and the resolver order (the person's own key, then the firm `keys.json`).
-11. The written promise: what survives an update, the three guards, and the honest limit.
+11. The written promise: what survives an update, the two guards, and the honest limit.
 
 ## Ordered deletable slices
 

@@ -17,14 +17,36 @@ interface LlamaParseWork {
   /** Extracted images to keep, e.g. ["screenshot", "embedded", "layout"]. */
   imagesToSave?: Array<"screenshot" | "embedded" | "layout">;
 }
-/** Credentials stay inside the parser call. */
-export type LlamaParseRequest = LlamaParseWork & { sender: "person" | "pea"; apiKey: string };
+/** What one upload sent: the notice a caller writes names these and nothing else (ADR 0052). */
+export interface LlamaSend {
+  jobId: string;
+  fileName: string;
+  pages: string;
+}
+/**
+ * Credentials stay inside the parser call. `sent` runs once the upload is accepted; a node caller
+ * passes `noteLlamaSend` (`llama-key.ts`). The notice is not written here because the web build
+ * reaches this module and may not reach the notice store (host-build-boundary guard).
+ */
+export type LlamaParseRequest = LlamaParseWork & { apiKey: string; sent: (send: LlamaSend) => void };
 
 type LlamaCloudClient = InstanceType<(typeof import("@llamaindex/llama-cloud"))["default"]>;
 export type LlamaParseResult = Awaited<ReturnType<LlamaCloudClient["parsing"]["parse"]>>;
 
-/** Upload and return the finished job. The key is never logged or put in a message. */
+/**
+ * Upload and return the finished job. The key is never logged, and a failure that quotes it (a
+ * service that echoes the credential it refused) has it cut out before the message leaves here.
+ */
 export async function parseWithLlamaCloud(request: LlamaParseRequest): Promise<LlamaParseResult> {
+  try {
+    return await upload(request);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(message.replaceAll(request.apiKey, "[key]"));
+  }
+}
+
+async function upload(request: LlamaParseRequest): Promise<LlamaParseResult> {
   // Dynamic import keeps the SDK out of the client bundle and out of hosts that never parse.
   const { default: LlamaCloud } = await import("@llamaindex/llama-cloud");
   // No automatic upload retry: the bytes may already have arrived.
@@ -39,12 +61,8 @@ export async function parseWithLlamaCloud(request: LlamaParseRequest): Promise<L
     },
     { maxRetries: 0 },
   );
-  const { note, sha256Hex } = await import("@pe/host-contracts/kinds");
-  const { stateTree } = await import("@pe/host-contracts/service-identity");
-  const { runtimeRoot } = await import("@pe/runtime/runtime-owner");
-  // The upload succeeded even when polling later fails; notice the send at this crossing.
-  note(stateTree(runtimeRoot()), { class: "sent", place: "LlamaCloud", path: request.file.name,
-    sha256: sha256Hex(job.id), reason: `Sent ${request.file.name} to LlamaCloud (${request.targetPages ?? "all pages"}).` });
+  // The upload succeeded even when polling later fails; the send is noticed at this crossing.
+  request.sent({ jobId: job.id, fileName: request.file.name, pages: request.targetPages ?? "all pages" });
   const result = await client.parsing.waitForCompletion(
     job.id,
     { expand: request.expand },

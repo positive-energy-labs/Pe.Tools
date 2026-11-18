@@ -55,7 +55,7 @@ const receipt = (id: string, state: "failed" | "unknown" | "succeeded", revision
     ...(state === "succeeded" ? { result: null } : { error: error ?? "Outcome unknown", status: 503 }),
   }),
 });
-const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [], };
+const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [] };
 
 test.each(["running", "succeeded", "failed"] as const)("a person's pinned Page %s receipt names the Page and pinner in its notice", (state) => {
   const lifetime = { session: "S1", openId: "A" };
@@ -213,7 +213,6 @@ test("an answered ask is no longer one: the waiting thread asks in its own messa
   expect(row?.act).toBeUndefined();
 });
 
-
 test("a held model act is one row that waits on the person, in held words", () => {
   const refusal = held("overwrite-or-discard", "project document 'Office'", "The person presses Save in Revit.");
   const door = (id: string, startedAt: string) => ({
@@ -235,6 +234,8 @@ test("a held model act is one row that waits on the person, in held words", () =
   const rows = noticeRows({ ...none, receipts: [door("h1", at), door("old", "2026-11-09T11:00:00.000Z")] }, NOW);
   expect(rows.map(row => [row.key, row.group, row.verb])).toEqual([["action:h1", "waits", "held"]]);
   expect(rows[0]!.says).toMatch(/^Held, not done/);
+  // Held is never worded as the person saying no.
+  for (const row of rows) expect(row.says).not.toMatch(/refus|reject|declin|denied/i);
   expect(rows[0]!.act).toBeUndefined();
   noticeFeedSchema.parse({ id: 0, tray: false, rows });
 });

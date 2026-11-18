@@ -47,7 +47,7 @@ test("R2: exactly two acts hold, and every guard answers with one of them", () =
         ),
       ),
   );
-  expect(named.length).toBeGreaterThanOrEqual(3);
+  expect(named).toHaveLength(3);
   expect([...new Set(named)].sort()).toEqual([...GUARDED_ACTS].sort());
 });
 

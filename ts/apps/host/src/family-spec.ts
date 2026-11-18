@@ -15,7 +15,7 @@ import { writeHome } from "@pe/host-contracts/kinds";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
 import { readDerivedJson } from "@pe/mcps/derived-parse";
 import { LLAMA_TIER } from "@pe/mcps/llama-parse";
-import { requireLlamaCloudKey } from "@pe/mcps/llama-key";
+import { noteLlamaSend, requireLlamaCloudKey } from "@pe/mcps/llama-key";
 import { derivedFor } from "@pe/host-contracts/service-identity";
 import { derivedKey,
   readDerivedIn,
@@ -262,7 +262,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
           const pdf = Buffer.from(bytes);
           const fresh = async (): Promise<KeptFamilyParse> => {
             const doc = parsedDocViewSchema.parse(
-              await parsePdf({ sender: "person", file, apiKey: requireLlamaCloudKey() }),
+              await parsePdf({ file, apiKey: requireLlamaCloudKey(), sent: noteLlamaSend }),
             );
             const assets = new Map<string, Buffer>();
             const download = async (url: string, name: string) => {

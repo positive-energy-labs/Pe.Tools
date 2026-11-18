@@ -79,7 +79,7 @@ The failure policy of a stored kind: `keep` (refuse and keep the bytes) or `disc
 _Avoid_: type, category, a class table in code
 
 **Guard**:
-One of exactly three acts on a project document that Pea leaves to the person: synchronize with central; overwrite or discard a person's model state; send outward.
+One of exactly two acts on a project document that Pea leaves to the person: synchronize with central; overwrite or discard a person's model state. Sending outward is not one: it goes at once with a notice (ADR 0052).
 _Avoid_: gate, permission, approval, guardrail
 
 **Held**:

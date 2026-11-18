@@ -9,10 +9,10 @@ import { parseWithLlamaCloud, type LlamaParseRequest } from "./llama-parse.ts";
 
 export type FamilyPdfRequest = Pick<
   LlamaParseRequest,
-  "sender" | "file" | "apiKey"
+  "file" | "apiKey" | "sent"
 >;
 
-/** Parse directly; the shared upload path records the send notice (ADR 0052). */
+/** Parse directly; `sent` is the caller's send notice (ADR 0052). */
 export async function parseFamilyPdf(request: FamilyPdfRequest): Promise<ParsedDocView> {
   const { file } = request;
   const result = await parseWithLlamaCloud({

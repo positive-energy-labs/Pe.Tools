@@ -9,11 +9,19 @@ test("a failed upload surfaces after one attempt per person send", async () => {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.endsWith("/api/v2/parse/upload")) throw Error("Unexpected polling after failed upload");
     uploads.push(url);
-    return Response.json({ detail: "Upload failed" }, { status: 500 });
+    // A service that quotes the credential it refused.
+    return Response.json({ detail: "Upload failed for key fixture-key" }, { status: 500 });
   }));
-  await expect(parseFamilyPdf({ sender: "person", file: new File(["%PDF-fixture"], "sheet.pdf"), apiKey: "fixture-key" }))
-    .rejects.toThrow(/500/);
+  const sent = vi.fn();
+  const failure = await parseFamilyPdf({ file: new File(["%PDF-fixture"], "sheet.pdf"), apiKey: "fixture-key", sent })
+    .catch((error: Error) => error.message);
+  expect(failure).toMatch(/500/);
+  // Mutant: drop the `replaceAll` in `parseWithLlamaCloud`; the key then reaches Pea's tool result.
+  expect(failure).not.toContain("fixture-key");
+  expect(failure).toContain("[key]");
   expect(uploads).toHaveLength(1);
+  // Nothing was accepted, so nothing is noticed as sent.
+  expect(sent).not.toHaveBeenCalled();
 });
 
 // Mutant: restore the old adapter's no-webUrl refusal. Only the remote HTTP boundary is substituted.
@@ -33,7 +41,9 @@ test("parseFamilyPdf uses the explicit key in-process without a webUrl or enviro
       images_content_metadata: { images: [] },
     });
   }));
-  const result = await parseFamilyPdf({ sender: "person", file: new File(["%PDF-fixture"], "sheet.pdf"), apiKey: "fixture-key" });
+  const sent = vi.fn();
+  const result = await parseFamilyPdf({ file: new File(["%PDF-fixture"], "sheet.pdf"), apiKey: "fixture-key", sent });
+  expect(sent.mock.calls).toEqual([[{ jobId: "fixture", fileName: "sheet.pdf", pages: "all pages" }]]);
   expect(result).toMatchObject({ jobId: "fixture", fileName: "sheet.pdf",
     pages: [{ page: 1, width: 100, height: 200, markdown: "Airflow 1200 CFM" }],
     blocks: [{ id: "p1-i0", md: "Airflow 1200 CFM" }], images: [] });

@@ -263,7 +263,7 @@ export const peFind = createTool({
         source: peSourceTree(),
         diagnostics: catalog.diagnostics,
         map: capabilityMap(offered),
-        hint: "Query pe_find for rows. pe_read runs queries; pe_do runs commands and queries. Thread targets are defaults, never write authority. Pass an exact open target for document-owned Work or commands. Nothing asks before a command runs. Three acts on a project document come back held for the person at once (synchronize with central, save over or discard its state, send a file outward): report the hold and carry on. Draft edits and receipts remain immediate. External MCP and Page callers retain their separate trust boundaries. Unknown effects refuse. Scripts can reach sibling documents and must declare their complete footprint.",
+        hint: "Query pe_find for rows. pe_read runs queries; pe_do runs commands and queries. Thread targets are defaults, never write authority. Pass an exact open target for document-owned Work or commands. Nothing asks before a command runs. Two acts on a project document come back held for the person at once (synchronize with central, save over or discard its state): report the hold and carry on. A file sent outward is not held; it goes at once with a notice. Draft edits and receipts remain immediate. External MCP and Page callers retain their separate trust boundaries. Unknown effects refuse. Scripts can reach sibling documents and must declare their complete footprint.",
       };
     const rows = findCapabilities(offered, input);
     return {
@@ -361,7 +361,7 @@ export const peRead = createTool({
 export const peDo = createTool({
   id: "pe_do",
   description:
-    "Publish a Page with {kind: 'page', slug, title, html, width?}, or run a capability from pe_find. Human and Pea share editable Work and semantic commands. Commands run without asking the user. A result that says held means the act is the person's (synchronize with central, save over or discard a project document's state, send a file outward): nothing was done and nobody declined, so say what is waiting on them and continue. Stop ends this thread's remaining unstarted commands. Work edits and internal receipts stay immediate. Target overrides select any exact open document; thread targets supply defaults only. External devices and Pages retain separate admission. For retries retain the original actionId and read its receipt; never mint a replacement for an uncertain native outcome.",
+    "Publish a Page with {kind: 'page', slug, title, html, width?}, or run a capability from pe_find. Human and Pea share editable Work and semantic commands. Commands run without asking the user. A result that says held means the act is the person's (synchronize with central, or save over or discard a project document's state): nothing was done and nobody declined, so say what is waiting on them and continue. Stop ends this thread's remaining unstarted commands. Work edits and internal receipts stay immediate. Target overrides select any exact open document; thread targets supply defaults only. External devices and Pages retain separate admission. For retries retain the original actionId and read its receipt; never mint a replacement for an uncertain native outcome.",
   inputSchema: peDoInputSchema,
   toModelOutput: (output) => {
     const parsed = pagePublicationResultSchema.safeParse(output);

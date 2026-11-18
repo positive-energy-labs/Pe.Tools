@@ -18,6 +18,9 @@ import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-
 import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
 import { actAs } from "./callers.ts";
 import { familySpecAsset } from "../src/family-spec.ts";
+import { hostState } from "../src/host-ownership.ts";
+import { notices } from "@pe/host-contracts/kinds";
+import type { FamilyPdfRequest } from "@pe/mcps/family-pdf";
 
 const pdf = fileURLToPath(new URL("../../web/public/acme-fcu400-submittal.pdf", import.meta.url));
 const aBox = JSON.parse(
@@ -42,7 +45,8 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-async function lab(beforeParse?: (file: File) => Promise<void>) {
+/** `realParser` leaves the in-process LlamaCloud parser in place; its test substitutes the network. */
+async function lab(beforeParse?: (file: File) => Promise<void>, realParser = false) {
   vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key");
   const pods = await mkdtemp(join(tmpdir(), "pe-doc-lab-"));
   closes.push(() => rm(pods, { recursive: true, force: true }));
@@ -78,15 +82,14 @@ async function lab(beforeParse?: (file: File) => Promise<void>) {
     },
     deps: {
       podsRoot: pods,
-      parsePdf: async ({ sender, file, apiKey }) => {
-        expect(sender).toBe("person");
+      ...(realParser ? {} : { parsePdf: async ({ file, apiKey }: FamilyPdfRequest) => {
         expect(apiKey).toBe("fixture-key");
         await beforeParse?.(file);
         const bytes = Buffer.from(await file.arrayBuffer());
         if (bytes.subarray(0, 5).toString() !== "%PDF-") throw Error("The parser was not handed a PDF");
         parsed.push({ name: file.name, bytes: bytes.length });
         return { jobId: "acme", fileName: file.name, pages: [{ page: 1, width: 1, height: 1, screenshotUrl, markdown: "sheet" }], blocks: [block], images: [] };
-      },
+      } }),
     },
     native: (key) =>
       key === "family.capture"
@@ -142,7 +145,7 @@ async function lab(beforeParse?: (file: File) => Promise<void>) {
       result: { member: { pod: string; path: string; sha256: string } };
     };
   };
-  return { f, pods, pea, parsed, png, renderFetches: () => renderFetches, handle, doc, act, stage, save };
+  return { f, pods, pea, parsed, png, screenshotUrl, renderFetches: () => renderFetches, handle, doc, act, stage, save };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -316,8 +319,8 @@ test("the chain: Pea captures and saves a family, attaches its sheet by path, an
 }, 60_000);
 
 /** A member where attach looks, so each narrowing test is red for its source alone. */
-async function boxed(beforeParse?: (file: File) => Promise<void>) {
-  const l = await lab(beforeParse);
+async function boxed(beforeParse?: (file: File) => Promise<void>, realParser = false) {
+  const l = await lab(beforeParse, realParser);
   const member = { pod: "lab", path: "settings/family/box.json" };
   await mkdir(join(l.pods, "lab", "settings/family"), { recursive: true });
   await writeFile(join(l.pods, "lab", member.path), JSON.stringify(aBox));
@@ -392,6 +395,37 @@ test("narrow 2: a URL source is http(s), unredirected, timed and capped", async 
   }
   expect(parsed).toEqual([]);
 }, 120_000);
+
+// ADR 0052 at the host's attach door, through the real parser: only LlamaCloud's HTTP is substituted.
+// Mutant: in family-spec.ts pass `sent: () => {}` to the parser; the send then leaves no notice.
+test("an attach that sends the sheet leaves one notice naming the file and the service, and no key", async () => {
+  const { attach, serve, screenshotUrl } = await boxed(undefined, true);
+  const real = globalThis.fetch;
+  const uploads: string[] = [];
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (!url.host.endsWith("llamaindex.ai")) return real(input, init);
+    if (url.pathname.endsWith("/parse/upload")) uploads.push(url.pathname);
+    return Response.json({ id: "job-attach-notice", status: "COMPLETED",
+      job: { id: "job-attach-notice", status: "COMPLETED" },
+      items: { pages: [{ success: true, page_number: 1, page_width: 1, page_height: 1, items: [{ type: "text", md: "sheet", bbox: [] }] }] },
+      markdown: { pages: [{ success: true, page_number: 1, markdown: "sheet" }] },
+      images_content_metadata: { images: [{ category: "screenshot", filename: "page_1.jpg", presigned_url: screenshotUrl }] },
+    });
+  });
+  closes.push(async () => vi.unstubAllGlobals());
+  const origin = await serve((_request, response) => {
+    response.writeHead(200, { "content-type": "application/pdf" });
+    response.end(readFileSync(pdf));
+  });
+  // The query string stands in for a signed URL's signature: it never becomes the notice's file name.
+  expect(await attach({ url: `${origin}/sheets/signed-sheet.pdf?X-Amz-Signature=secret-signature` })).toMatch(/"state":"succeeded"/);
+  expect(uploads).toHaveLength(1);
+  // Read from the root the host reads (`hostState`), written by the parser's own `runtimeRoot`.
+  const sent = notices(hostState()).filter((row) => row.class === "sent" && row.path === "signed-sheet.pdf");
+  expect(sent).toMatchObject([{ place: "LlamaCloud", reason: "Sent signed-sheet.pdf to LlamaCloud (all pages)." }]);
+  expect(JSON.stringify(notices(hostState()))).not.toMatch(/fixture-key|secret-signature|X-Amz/);
+}, 60_000);
 
 // Mutant: family-spec re-reads source.path when retaining source.pdf instead of using admitted bytes.
 test("narrow 5: a PDF edited after admission attaches the bytes the admission retained", async () => {

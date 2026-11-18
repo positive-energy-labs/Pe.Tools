@@ -189,6 +189,10 @@ schemaZoom({ type: "company", path: "contacts[].person.profile", depth: 2 })
 
 The exact format matters less than the posture: summarize first, preserve relationships, make zoom explicit, and keep the output small enough that the agent can reason over it.
 
+## The Written Promise
+
+Pea’s guards cover its own doors only: they catch mistakes, not adversaries; shell commands and file copies can bypass them. Inference sends what Pea reads to the model provider. Pea also sends a document to the hosted parser without asking, and the notice feed names what was sent and where (ADR 0038 rule 7; ADR 0052).
+
 ## Resources and Inspiration
 
 - [Prompting Tech Debt](https://www.promptick.ai/blog/prompt-debt-managing-legacy-ai-logic): skills, mcps, commands, AGENTS.md's, etc. are all prompts, whether they were written by you or not.
@@ -196,5 +200,3 @@ The exact format matters less than the posture: summarize first, preserve relati
 - [Software Fundamentals Matter More Than Ever — Matt Pocock](https://www.youtube.com/watch?v=v4F1gFy-hqg): AI agents amplify normal software-design failure modes. Shared design concepts, shared language, deep modules, testable seams, and feedback loops matter more because the model can otherwise create entropy faster than a human.
 - [How I Turned Pi Into the Ultimate Coding Agent — Ben Davis](https://www.youtube.com/watch?v=6xXjHM3V1zM): useful evidence for a minimal-agent core. A small prompt, a few robust primitives, and explicit extensions can outperform a large always-on tool universe; add MCP/tooling only when a workflow proves it needs it.
 - [I Replaced the Project I Spent Months on With a Markdown File — Ben Davis](https://www.youtube.com/watch?v=n6nF6jhsal4): useful framing for skills as executable workflow programs, not generic context blobs. Markdown skills should supply process and parameters; deterministic orchestration belongs in commands, extensions, or the harness.
-
-Pea’s guards cover its own doors only: they catch mistakes, not adversaries; shell commands and file copies can bypass them. Inference sends what Pea reads to the model provider. Pea also sends a document to the hosted parser without asking, and the notice feed names what was sent and where (ADR 0038 rule 7; ADR 0052).
