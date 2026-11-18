@@ -32,7 +32,7 @@ public sealed class ProductPreferences {
     public static string FirmId(Func<ProductPreferences, string> pick, string name, ProductHomes? homes = null) {
         homes ??= ProductPathing.Homes();
         var firmPath = homes.FirmPreferencesPath
-            ?? throw new InvalidOperationException("Set your firm home in Settings");
+            ?? throw new InvalidOperationException($"No {name}: Set your firm home in Settings");
         var value = File.Exists(firmPath)
             ? JsonConvert.DeserializeObject<ProductPreferences>(File.ReadAllText(firmPath)) is { } firm ? pick(firm) : null
             : null;

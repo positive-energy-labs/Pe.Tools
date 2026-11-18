@@ -307,7 +307,8 @@ export async function resolveHomes(pointers: readonly string[] = [], options: Re
   options.onUser?.(user);
   const root = toldHome("firm")?.path ?? defaultFirmHome;
   const present = process.env[testHomeRootVariable] && root === defaultFirmHome ? false :
-    await optional(track(root, () => stat(root).then(info => info.isDirectory())), false);
+    // Any stat failure is "no firm home", as in the sync resolver and the C# twin: a drive that errors is not a firm home.
+    await track(root, () => stat(root).then(info => info.isDirectory(), () => false));
   const firm = present ? await check(root) : null;
   const firmReport: FirmHome = { root: firm, looked: [root] };
   options.onFirm?.(firmReport);

@@ -85,3 +85,23 @@ test("firm resolution uses Settings, else the literal default folder, with no ma
     expect(marker).not.toHaveBeenCalled();
   } finally { useHomesConfig(prior); }
 });
+
+// Restored after the marker deletion: these two rules never depended on the marker.
+test("homes.json names the user home; a homes.json that does not validate is reported and the defaults answer", async () => {
+  const { defaultFirmHome, readHomesConfig, useHomesConfig, homesConfigPath } = await import("../src/product-paths.ts");
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
+  vi.stubEnv("PE_TEST_HOME_ROOT", "");
+  vi.stubEnv(homeVariable, undefined);
+  const file = join(mkdtempSync(join(tmpdir(), "pe-homes-file-")), "homes.json");
+  const chosenUser = mkdtempSync(join(tmpdir(), "pe-chosen-user-"));
+  const prior = homesConfigPath();
+  const facts = { exists: (path: string) => path === defaultFirmHome, marker: () => null };
+  try {
+    useHomesConfig(file);
+    writeFileSync(file, JSON.stringify({ user: chosenUser }));
+    expect(userRoot()).toBe(chosenUser);
+    writeFileSync(file, JSON.stringify({ firm: "relative/path" }));
+    expect(readHomesConfig().error).toContain("absolute path");
+    expect(firmHome(facts).root).toBe(defaultFirmHome);
+  } finally { useHomesConfig(prior); }
+});
