@@ -16,6 +16,7 @@ const elementSubjectMessage = "keys are UniqueId SubjectRefs (UniqueId:<uid>); a
 export const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
   const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
 }, { message: elementSubjectMessage });
+export const elementSubjectRecord = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value, { error: issue => issue.code === "invalid_key" ? elementSubjectMessage : undefined });
 
 /** Resolved engine inputs expose the winning Work layer and its revision (ADR 0028). */
 export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
@@ -210,13 +211,13 @@ export type DuctsFirm = z.infer<typeof ductsBaseSchema>;
  * What a cell or Pea writes: Work's own keys, one record per key, `null` deleting the pending edit.
  * The host applies them to document Work and recomputes; nothing here reaches Revit until apply.
  */
-const edits = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value.nullable(), { error: issue => issue.code === "invalid_key" ? elementSubjectMessage : undefined });
+const edits = <T extends z.ZodType>(value: T) => elementSubjectRecord(value.nullable());
 export const calcEditsSchema = z.strictObject({
   /**
    * The evidence a caller cites for a value in this same edit, by segment and key; it lands on the
    * cell's `ref` (`CHANGE_META.ref`). The host still stamps who wrote it.
    */
-  refs: z.record(z.string(), z.record(elementSubjectSchema, z.string().trim().min(1), { error: issue => issue.code === "invalid_key" ? elementSubjectMessage : undefined })).optional(),
+  refs: z.record(z.string(), elementSubjectRecord(z.string().trim().min(1))).optional(),
   flows: edits(nonneg).optional(),
   terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
   componentDrops: edits(z.strictObject({ inWg: nonneg })).optional(),

@@ -5,7 +5,7 @@ import { draftCellSchema } from "@pe/agent-contracts/draft";
 import type { RouteStateSpec } from "@pe/agent-contracts/route-state";
 import { FAN_CELLS } from "./fans-inputs.ts";
 import { schemaOf, type Domain } from "@pe/agent-contracts/slots/sheet";
-import { elementSubjectSchema } from "@pe/ducts-contract/duct-inputs";
+import { elementSubjectRecord } from "@pe/ducts-contract/duct-inputs";
 export { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 
 const dropSchema = z.strictObject({
@@ -17,7 +17,7 @@ export type DuctDrop = z.infer<typeof dropSchema>;
 /** Whether an air mover moves air (`fan`) or only sits in the path with a loss (`passive`). */
 export type DuctUnitRole = z.infer<ReturnType<typeof schemaOf<typeof FAN_CELLS.roles.domain>>>;
 /** One Work segment of a table row: a staged cell per element, decoded by the row's own domain. */
-const cells = <const D extends Domain>(row: { readonly domain: D }) => z.record(elementSubjectSchema, draftCellSchema(schemaOf(row.domain))).default({});
+const cells = <const D extends Domain>(row: { readonly domain: D }) => elementSubjectRecord(draftCellSchema(schemaOf(row.domain))).default({});
 /** Stated airflow in CFM; the cell's ref cites its evidence. */
 export type { DuctFlow } from "@pe/ducts-contract/duct-inputs";
 
@@ -28,8 +28,8 @@ export const fansDocumentSchema = z.strictObject({
       walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
     }),
   ).default({}),
-  terminalDrops: z.record(elementSubjectSchema, draftCellSchema(dropSchema)).default({}),
-  componentDrops: z.record(elementSubjectSchema, draftCellSchema(dropSchema)).default({}),
+  terminalDrops: elementSubjectRecord(draftCellSchema(dropSchema)).default({}),
+  componentDrops: elementSubjectRecord(draftCellSchema(dropSchema)).default({}),
   /** The ESP a fan is rated for, stated by a person or Pea; stays in Work, never written to Revit. */
   ratedEsp: cells(FAN_CELLS.ratedEsp),
   /** A unit's design flow (air mover id), written to the FanFlow slot; beats Revit's fanFlow fact. */
