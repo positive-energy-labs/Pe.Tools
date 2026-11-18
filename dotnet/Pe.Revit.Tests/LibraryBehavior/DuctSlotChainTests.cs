@@ -9,6 +9,33 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class DuctSlotChainTests {
     [Test]
+    public void Null_snapshot_overrides_use_defaults_instead_of_stored_slot_receipts(UIApplication uiApplication) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            Assert.That(document.IsWorkshared, Is.False);
+            using var group = new TransactionGroup(document, "Snapshot stored slot receipt and revert");
+            group.Start();
+            var slots = new DuctParameterSlotOverrides { FanFlow = "Stored Fan Flow" };
+            var request = new DuctApplyRequest(slots, [], [], [], [], [], [],
+                new DuctLossStore { Version = DuctLossStore.CurrentVersion });
+            var applied = DuctApplier.Apply(document, request, false);
+            Assert.That(applied.Writes.Any(w => w.Kind == "store" && w.Outcome == "written"), Is.True);
+            Assert.That(DuctApplier.ReadStore(document).Store!.Slots!.FanFlow, Is.EqualTo("Stored Fan Flow"));
+
+            var snapshot = DuctSnapshots.Snapshot(document, overrides: null,
+                selector: new DuctSnapshotSelector(Kind: DuctSelectorKind.Roster), metadataOnly: true);
+            Assert.Multiple(() => {
+                Assert.That(snapshot.Slots.FanFlow, Is.EqualTo(new DuctParameterSlotOverrides().Resolve().FanFlow));
+                Assert.That(snapshot.Store!.Slots!.FanFlow, Is.EqualTo("Stored Fan Flow"));
+            });
+            group.RollBack();
+            Assert.That(DuctApplier.ReadStore(document).Store, Is.Null);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
+    [Test]
     public void Applied_slot_receipts_do_not_override_next_request_defaults(UIApplication uiApplication) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
