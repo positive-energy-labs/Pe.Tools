@@ -32,9 +32,7 @@ public sealed record ProductRuntimeLayout(ProductLane Lane, string OwnerRoot, st
 
     /// <summary>Resolve the told owner against this machine's content homes and installed namespace.</summary>
     public static ProductRuntimeLayout For(ProductLane lane, string ownerRoot, string? productHome) {
-        // ponytail: the fence is the dev override only. A firm home found by the drive probe is not fenced,
-        // because probing every drive at each shell's startup can block on a dead mapped drive. Fence the
-        // probed home too if a checkout or install ever lands on the shared drive.
+        // The state fence covers the explicit dev override; configured content is validated by Settings.
         var root = ProductPathing.StateRoot(lane, ownerRoot, productHome,
             Environment.GetEnvironmentVariable(ProductPathNames.SharedRootVariable), ProductPathing.DocumentsUserRoot);
         // Only an override can aim dev state at the installed namespace; refuse it where the override is read.

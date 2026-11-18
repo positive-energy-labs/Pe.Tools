@@ -70,13 +70,10 @@ function noteEarlierWorkFinding(path: string, machine: StateRoot) {
 }
 
 /**
- * Tell a person once where the host looked for the firm home (ADR 0037 rule 2). The notice file
- * de-duplicates by path and hash: the same finding never posts twice, and a changed one (another
- * drive, a second marker) posts again. Silent when a firm home is bound and when nothing was
- * probed, as in a test run: a notice that names no place tells a person nothing.
+ * Tell a person once to set their firm home in Settings. Repeated starts de-duplicate the notice.
  */
 export function noteNoFirmHome(firm: FirmHome, machine: StateRoot = hostState()): void {
-  const places = firm.refused ?? firm.looked;
+  const places = firm.looked;
   if (firm.root || !places.length) return;
   const reason = noFirmHomeText(firm);
   note(machine, {

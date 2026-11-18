@@ -18,7 +18,7 @@ const absolutePath = z
   );
 
 export const homesConfigSchema = z.strictObject({
-  /** The firm home itself (the folder holding `pe-home.json` of tier firm). Still needs its marker. */
+  /** The firm content folder. No marker is required. */
   firm: absolutePath.optional(),
   /** The user home. Needs no marker: the user home always exists. */
   user: absolutePath.optional(),
@@ -26,7 +26,7 @@ export const homesConfigSchema = z.strictObject({
 export type HomesConfig = z.infer<typeof homesConfigSchema>;
 
 /** How a home was found: env override (dev/test isolation), this machine's homes.json, or the default. */
-export const homeFoundValues = ["documents", "override", "config", "pointer", "probe"] as const;
+export const homeFoundValues = ["documents", "override", "config", "pointer", "default"] as const;
 
 /** What Settings reads and what a write answers: the file, and the homes as resolved after it. */
 export const homesStatusSchema = z.strictObject({

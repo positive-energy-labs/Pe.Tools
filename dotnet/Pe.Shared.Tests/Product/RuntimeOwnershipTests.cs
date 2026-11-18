@@ -65,7 +65,7 @@ namespace Pe.Revit.Tests {
         }
 
         private static IEnumerable<TestCaseData> MarkerRows() => Rows("markers", 10);
-        private static IEnumerable<TestCaseData> HomeRows() => Rows("homes", 22);
+        private static IEnumerable<TestCaseData> HomeRows() => Rows("homes", 5);
         private static IEnumerable<TestCaseData> StateTreeRows() => Rows("stateTree", 3);
 
         // Mutant, run red once: accept any tier text (`(user|project|firm)` to `(\w+)`) fails "an unknown tier proves nothing".
@@ -78,8 +78,7 @@ namespace Pe.Revit.Tests {
         }
 
         // The same table TS codes to. Every disk fact is injected, so no row reads this machine's drives.
-        // Mutant, run red once: take the first firm marker instead of refusing two (`firms.Count != 1` to
-        // `firms.Count == 0`) fails all four conflict rows.
+        // Firm folders need no marker; project folders still do.
         [TestCaseSource(nameof(HomeRows))]
         public void Homes_match_the_shared_fixture(JsonElement row) {
             var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
@@ -87,13 +86,12 @@ namespace Pe.Revit.Tests {
             string[] Texts(JsonElement list) => list.EnumerateArray().Select(item => item.GetString()!.Replace("%DOCUMENTS%", documents)).ToArray();
             Dictionary<string, T> Map<T>(string name, Func<JsonElement, T> value) => row.GetProperty(name).EnumerateObject()
                 .ToDictionary(entry => entry.Name, entry => value(entry.Value), StringComparer.OrdinalIgnoreCase);
-            var folders = Map("folders", Texts);
+            var existing = Texts(row.GetProperty("existing"));
             var markers = Map("markerFiles", text => text.GetString());
 
             var homes = ProductPathing.Homes(
                 row.GetProperty("productHome").GetString(), row.GetProperty("sharedRoot").GetString(),
-                Texts(row.GetProperty("drives")),
-                directory => folders.TryGetValue(directory, out var children) ? children : [],
+                directory => existing.Contains(directory),
                 home => markers.TryGetValue(home, out var text) ? text : null,
                 row.GetProperty("pointer").GetString());
 
@@ -103,7 +101,6 @@ namespace Pe.Revit.Tests {
                 Assert.That(homes.Firm, Is.EqualTo(Text("firm")), "firm");
                 Assert.That(homes.SharedDriveRoot, Is.EqualTo(Text("sharedDriveRoot")), "sharedDriveRoot");
                 Assert.That(homes.List, Is.EqualTo(Texts(row.GetProperty("homes"))), "homes");
-                Assert.That(homes.FirmConflict, Is.EqualTo(Texts(row.GetProperty("firmConflict"))), "firmConflict");
                 Assert.That(homes.FirmSettingsDir, Is.EqualTo(Text("firmSettings")), "firmSettings");
                 Assert.That(homes.FirmPreferencesPath, Is.EqualTo(Text("firmPreferences")), "firmPreferences");
                 Assert.That(homes.FirmKeysPath, Is.EqualTo(Text("firmKeys")), "firmKeys");

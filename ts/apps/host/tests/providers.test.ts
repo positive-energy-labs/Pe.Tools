@@ -389,7 +389,7 @@ test("the user's own key overrides the shared one", async () => {
 test("no firm home and no user key refuses with the typed reason, before any request", async () => {
   const { seen, provider } = await sharedKeyProbe("", null);
   expect(seen).toEqual([]);
-  expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("No firm home") });
+  expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("Set your firm home in Settings") });
 });
 
 test("witness: a thread event and meta echoing a shared key are written redacted", async () => {
