@@ -949,6 +949,9 @@ importers:
       '@types/three':
         specifier: 'catalog:'
         version: 0.186.0
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.7(react@19.2.7)
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
