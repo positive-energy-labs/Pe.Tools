@@ -23,11 +23,11 @@ export async function assertPageBinding(page: Pick<Page, "evaluate">, mode = pro
     return {
       chooser: [...document.querySelectorAll('[data-list-trigger]')].some(e =>
         visible(e) && /Choose a document/.test(`${e.getAttribute("aria-label") ?? ""} ${e.textContent ?? ""}`)),
-      openIds: [...document.querySelectorAll('[data-bound-document]')]
+      bindings: [...document.querySelectorAll('[data-bound-document]')]
         .filter(e => [...e.querySelectorAll('[data-list-trigger]')].some(visible))
-        .map(e => e.getAttribute('data-bound-document')),
+        .map(e => ({ session: e.getAttribute('data-bound-session'), openId: e.getAttribute('data-bound-document') })),
     };
   });
   assert.ok(!state.chooser, "PRECONDITION: document chooser is visible");
-  assert.deepEqual(state.openIds, [target.openId], "PRECONDITION: rendered document binding must match target openId");
+  assert.deepEqual(state.bindings, [target], "PRECONDITION: rendered document binding must match target session and openId");
 }

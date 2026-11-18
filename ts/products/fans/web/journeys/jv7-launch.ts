@@ -1,3 +1,4 @@
+import { wait as waitFor, exited, stopOwned } from "../../../../tests/e2e/owned-runtime.ts";
 // One no-Revit fixture-host command; reuse the canonical seed, navigation demo and journey helper.
 import { spawn, execFileSync } from "node:child_process";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -44,17 +45,11 @@ host.stdout!.on("data", (b) => {
 host.stderr!.on("data", (b) => {
   log += b;
 });
-const wait = async <T>(read: () => Promise<T | undefined>, name: string): Promise<T> => {
-  const until = Date.now() + 120_000;
-  while (Date.now() < until) {
-    if (host.exitCode !== null)
-      throw Error(`PRECONDITION: host exited ${host.exitCode}: ${log.slice(-2000)}`);
-    const value = await read();
-    if (value !== undefined) return value;
-    await new Promise((r) => setTimeout(r, 200));
-  }
-  throw Error(`PRECONDITION: timeout ${name}`);
-};
+const wait = <T>(read: () => Promise<T | undefined>, name: string) => waitFor(async () => {
+  if (host.exitCode !== null || host.signalCode !== null)
+    throw Error(`PRECONDITION: host exited ${host.exitCode}: ${log.slice(-2000)}`);
+  return read();
+}, name, 120_000);
 let browser: Awaited<ReturnType<typeof openBrowser>> | undefined;
 let service: any;
 const receipt: any = {
@@ -101,20 +96,11 @@ try {
       CDP_TARGET: target,
     },
   });
-  receipt.code = await new Promise<number>((done, reject) => {
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(Error("Journey deadline exceeded"));
-    }, 300_000);
-    child.once("exit", (c) => {
-      clearTimeout(timer);
-      done(c ?? 1);
-    });
-    child.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
+  await exited(child, 300_000).catch(async (error) => {
+    await stopOwned(child);
+    throw error;
   });
+  receipt.code = child.exitCode ?? 1;
   process.exitCode = receipt.code;
 } catch (error) {
   receipt.error = String(error);
@@ -131,17 +117,11 @@ try {
       headers: { "x-pe-service-token": service.token },
       signal: AbortSignal.timeout(10_000),
     }).catch(() => {});
-  if (host.exitCode === null) {
-    await Promise.race([
-      new Promise((r) => host.once("exit", r)),
-      new Promise((r) => setTimeout(r, 15_000)),
-    ]);
-    if (host.exitCode === null && host.connected) host.disconnect();
-    if (host.exitCode === null) {
-      host.kill();
-      receipt.cleanup.push("owned host terminated");
-    }
-  }
+  await exited(host, 15_000).catch(async () => {
+    if (host.connected) host.disconnect();
+    await exited(host, 5000).catch(() => stopOwned(host));
+    receipt.cleanup.push("owned host terminated");
+  });
   receipt.cleanup.push(`host exit=${host.exitCode}`);
   await writeFile(join(dir, "host.log"), log);
   await writeFile(join(dir, "receipt.json"), JSON.stringify(receipt, null, 2));

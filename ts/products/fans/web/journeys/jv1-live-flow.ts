@@ -1,3 +1,4 @@
+import { plan } from "../../../../tests/e2e/fans-plan.ts";
 // Real-Revit target (operator-assisted, never launches Revit):
 // node --import jiti/register products/fans/web/journeys/jv1-live-flow.ts
 // E2E_WEB, CDP_PORT, CDP_TARGET, E2E_TARGET, E2E_SESSION, E2E_FAN, E2E_PORT,
@@ -79,7 +80,7 @@ try {
       (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "write scope"));
     await page.until(async () => settled(await marks(page)), "settled write scope");
     await assertPageBinding(page);
-    await page.click(/^plan Write to Revit$/);
+    await plan(page);
     const popover = "[data-write-popover]";
     await page.until(() => page.has("Write to Revit", popover), "reviewable plan");
     await page.dump(dir, "reviewed-plan");
@@ -92,7 +93,7 @@ try {
     assert.ok(Math.abs(after.requiredEspInWg - expectedEsp) <= 0.0001, "native ESP must equal the newly computed displayed ESP");
     step(`native ESP ${after.requiredEspInWg}, displayed ${expectedEsp}, baseline ${baselineEsp}`);
     await assertPageBinding(page);
-    await page.click(/^plan Write to Revit$/);
+    await plan(page);
     await page.until(() => page.has(/nothing to write|no staged edit/i, popover), "consumed work refuses re-plan");
   });
 } finally { rl.close(); }
