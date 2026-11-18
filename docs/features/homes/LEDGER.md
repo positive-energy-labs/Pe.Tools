@@ -34,6 +34,7 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 
 - 2026-11-12, slice 6b: a value's tier label is the home whose file states it; a home that was not found, or holds no file, is never the label. The driver's dfaed397 finding (0.03 labelled "firm" with the firm read refused) was `firmLayer` handing the engine default to the resolver as the firm layer. Falsifier: `ts/apps/web/src/settings/tiers.test.ts`.
 - 2026-11-17, kaitpw: the firm home is `homes.json` `firm`, else the literal default `G:\Shared drives\PE Team Folder\04 PE Software Files\Pe.Tools` when that folder exists. No `pe-home.json` marker and no drive probe. A coworker whose drive is not `G:` sets the path in Settings ("yeah this is fine, just let them set manual"). The default is a build constant while every user is in the firm; it is easy to remove later.
+- 2026-11-18, kaitpw: the project marker `pe-home.json` stays for now ("sure"). The 2026-11-17 ruling removed the firm marker only; the project marker is decided in the project-home UX round.
 - 2026-11-17, kaitpw: the user home stays configurable through `homes.json` `user`. The install folder is not a home and is not made configurable.
 
 ## Tried & rejected
