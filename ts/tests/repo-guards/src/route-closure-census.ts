@@ -21,8 +21,10 @@ const WEB = join(TS, WEB_KEY);
 import { routeFolderCandidates } from "@pe/host-contracts/route-startup";
 const EXEMPT = "design-system";
 const HOST_DOORS = new Set(["peClient", "callOp", "callCompose", "callHostRpc", "hostFetch"]);
+// Exemption (closure rules): a product's `journeys/` is driver-run journey tooling like `.test.`/`.fixture.`,
+// not route code; the boundary that holds is that no route source imports a journey (route-closure.guard.test.ts).
 export const isProduction = (path: string) =>
-  /\.tsx?$/.test(path) && !/\.d\.ts$|\.test\.|\.test-support\.|\.fixture\./.test(path);
+  /\.tsx?$/.test(path) && !/\.d\.ts$|\.test\.|\.test-support\.|\.fixture\.|\/journeys\//.test(path);
 
 /** Folder of a key: top-level for a web file ("." at the src root), `products/<product>/web` for a product's. */
 const folderOf = (path: string) =>
