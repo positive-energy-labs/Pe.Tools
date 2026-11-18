@@ -104,9 +104,10 @@ async function readPdfPath(path: string): Promise<Uint8Array> {
 }
 /** Loopback, private, link-local, carrier-NAT and unspecified ranges: this machine and its network. */
 const LOCAL_NETWORKS = new BlockList();
-for (const [net, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.168.0.0", 16]] as const)
+for (const [net, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4]] as const)
   LOCAL_NETWORKS.addSubnet(net, prefix, "ipv4");
-for (const [net, prefix] of [["::", 127], ["fc00::", 7], ["fe80::", 10]] as const)
+// `::/96` is loopback, unspecified and the IPv4-compatible form; `64:ff9b::/96` and `2002::/16` carry an IPv4 address inside.
+for (const [net, prefix] of [["::", 96], ["64:ff9b::", 96], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]] as const)
   LOCAL_NETWORKS.addSubnet(net, prefix, "ipv6");
 /**
  * Refuse a URL whose host is, or resolves to, this machine or its network: a page-supplied URL must
@@ -114,31 +115,42 @@ for (const [net, prefix] of [["::", 127], ["fc00::", 7], ["fe80::", 10]] as cons
  * ponytail: the name is resolved here and again by fetch, so a DNS answer that changes between the
  * two gets through; pin the resolved address into the request if that is ever a real threat.
  */
-async function refuseLocalUrl(url: string, shown: string): Promise<void> {
-  if (!["http:", "https:"].includes(new URL(url).protocol))
-    throw sourceRefused(`Only http and https URLs are fetched, not '${shown}'.`);
-  const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
+/** A URL as a message or a record shows it: scheme, host and path. Never its user info, query or fragment. */
+const shownUrl = (url: string) => {
+  const { protocol, host, pathname } = new URL(url);
+  return `${protocol}//${host}${pathname}`;
+};
+async function refuseLocalUrl(url: string): Promise<void> {
+  const shown = shownUrl(url);
+  const parsed = new URL(url);
+  if (!["http:", "https:"].includes(parsed.protocol))
+    throw sourceRefused(
+      `Only http and https URLs are fetched, not '${shown}'. For a file on this machine give { path }.`,
+    );
+  if (parsed.username || parsed.password)
+    throw sourceRefused(
+      `A URL that carries a user name or password is not fetched: ${shown}. Give the PDF's plain URL, or download it and attach by { path }.`,
+    );
+  const host = parsed.hostname.replace(/^\[|\]$/g, "");
   const addresses = isIP(host)
     ? [{ address: host, family: isIP(host) }]
     : await lookup(host, { all: true }).catch(() => {
-        throw sourceRefused(`Cannot resolve ${shown}; only a verified public address is fetched.`);
+        throw sourceRefused(
+          `Cannot resolve ${shown}, and only a verified public address is fetched. Check the address, or download the PDF and attach by { path }.`,
+        );
       });
   // An IPv4 rule also matches the IPv4-mapped IPv6 form (`::ffff:127.0.0.1`).
   if (!addresses.length || addresses.some(({ address, family }) => LOCAL_NETWORKS.check(address, family === 6 ? "ipv6" : "ipv4")))
     throw sourceRefused(
-      `${shown} is on this machine or its network, and only a public address is fetched here. Download the PDF and upload the file.`,
+      `${shown} is on this machine or its network, and only a public address is fetched here. Download the PDF and attach by { path }, or upload the file.`,
     );
 }
 /**
- * A PDF fetched once: http(s) only, no redirect followed, timed, and cut off at the cap. Messages
- * name the URL without its query or fragment, where a signed URL keeps its signature.
+ * A PDF fetched once, after `refuseLocalUrl` passed it: no redirect followed, timed, and cut off at
+ * the cap. Messages name the URL by `shownUrl`, because a signed URL keeps its signature in the query.
  */
 async function readPdfUrl(url: string): Promise<Uint8Array> {
-  const shown = url.replace(/[?#].*$/s, "");
-  if (!["http:", "https:"].includes(new URL(url).protocol))
-    throw sourceRefused(
-      `Only http and https URLs are fetched, not '${shown}'. For a file on this machine give { path }.`,
-    );
+  const shown = shownUrl(url);
   const failed = (error: Error) =>
     sourceRefused(
       error.name === "TimeoutError"
@@ -201,7 +213,7 @@ type SpecSource = z.infer<typeof blobRefSchema> | { path: string } | { url: stri
  * new one by { path } or upload. Add a refresh verb if that bites.
  */
 async function readSpecSource(source: SpecSource, store: DerivedDir): Promise<{ file: File; bytes: ArrayBuffer }> {
-  if ("url" in source) await refuseLocalUrl(source.url, source.url.replace(/[?#].*$/s, ""));
+  if ("url" in source) await refuseLocalUrl(source.url);
   const fetched =
     "digest" in source
       ? { bytes: await get(source), name: source.fileName }
@@ -317,7 +329,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
                   expected: sha256,
                   probe: {
                     blob: await put(Buffer.from(bytes), file.name),
-                    origin: { kind: "url", url: source.url.replace(/[?#].*$/s, "") },
+                    origin: { kind: "url", url: shownUrl(source.url) },
                     capturedAt: new Date().toISOString(),
                   },
                 },

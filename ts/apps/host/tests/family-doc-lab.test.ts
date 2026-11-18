@@ -51,7 +51,7 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-test.each(["http://127.0.0.1/a.pdf", "http://0.0.0.0/a.pdf", "http://100.64.0.1/a.pdf", "http://[::ffff:127.0.0.1]/a.pdf", "http://[fc00::1]/a.pdf", "http://[fe80::1]/a.pdf", "https://missing.example/a.pdf"])("attach refuses non-public source %s before fetch", async (url) => {
+test.each(["http://127.0.0.1/a.pdf", "http://10.0.0.1/a.pdf", "http://172.16.0.1/a.pdf", "http://192.168.1.1/a.pdf", "http://169.254.169.254/a.pdf", "http://[::1]/a.pdf", "http://[64:ff9b::7f00:1]/a.pdf", "http://0.0.0.0/a.pdf", "http://100.64.0.1/a.pdf", "http://[::ffff:127.0.0.1]/a.pdf", "http://[fc00::1]/a.pdf", "http://[fe80::1]/a.pdf", "https://missing.example/a.pdf"])("attach refuses non-public source %s before fetch", async (url) => {
   const { save, act, handle } = await lab();
   const { member: saved } = (await save("human")).result;
   const member = { pod: saved.pod, path: saved.path };
@@ -61,6 +61,21 @@ test.each(["http://127.0.0.1/a.pdf", "http://0.0.0.0/a.pdf", "http://100.64.0.1/
   const receipt = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
   expect(fetcher).not.toHaveBeenCalled();
   expect(receipt.error).toMatch(/public address/);
+}, 60_000);
+
+test("attach refuses a name that resolves to a private address among public ones, and a URL with a password", async () => {
+  const { save, act, handle } = await lab();
+  const { member: saved } = (await save("human")).result;
+  const member = { pod: saved.pod, path: saved.path };
+  vi.mocked(dns.lookup).mockResolvedValue([{ address: "8.8.8.8", family: 4 }, { address: "10.0.0.5", family: 4 }] as never);
+  const fetcher = vi.fn().mockRejectedValue(Error("fetch must not run"));
+  vi.stubGlobal("fetch", fetcher);
+  const mixed = await act("family.attach-spec", host, { member, source: { url: "https://vendor.example/a.pdf" }, work: await handle() });
+  expect(mixed.error).toMatch(/public address/);
+  const withPassword = await act("family.attach-spec", host, { member, source: { url: "https://user:hunter2@8.8.8.8/a.pdf" }, work: await handle() });
+  expect(withPassword.error).toMatch(/user name or password/);
+  expect(withPassword.error).not.toContain("hunter2");
+  expect(fetcher).not.toHaveBeenCalled();
 }, 60_000);
 
 test("attach keeps the sheet's origin without its signed query or fragment", async () => {
@@ -410,7 +425,7 @@ test("narrow 1: a path source is an absolute local regular PDF under the cap", a
 
 test("narrow 2: a URL source is http(s), unredirected, timed and capped", async () => {
   const { attach, serve, parsed } = await boxed();
-  expect(await attach({ url: "file:///C:/Windows/win.ini" })).toMatch(/Only http and https/);
+  expect(await attach({ url: "file:///C:/Windows/win.ini" })).toMatch(/Only http and https.*give \{ path \}/);
   const origin = await serve((request, response) => {
     if (request.url === "/hop") return void response.writeHead(302, { location: "/sheet.pdf" }).end();
     if (request.url === "/slow") return;
@@ -467,7 +482,7 @@ test("an attach that sends the sheet leaves one notice naming the file and the s
   // The query string stands in for a signed URL's signature: it never becomes the notice's file name.
   expect(await attach({ url: `${origin}/sheets/signed-sheet.pdf?X-Amz-Signature=secret-signature` })).toMatch(/"state":"succeeded"/);
   expect(uploads).toHaveLength(1);
-  // Read from the root the host reads (`hostState`), written by the parser's own `runtimeRoot`.
+  // Read from the root the host reads (`hostState`), which is where attach writes it.
   const sent = notices(hostState()).filter((row) => row.class === "sent" && row.path === "signed-sheet.pdf");
   expect(sent).toMatchObject([{ place: "LlamaCloud", reason: "Sent signed-sheet.pdf to LlamaCloud (all pages)." }]);
   expect(JSON.stringify(notices(hostState()))).not.toMatch(/fixture-key|secret-signature|X-Amz/);
