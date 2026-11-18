@@ -3,6 +3,8 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { useSyncExternalStore } from "react";
 import { module as systems } from "../../../../products/duct-systems/web/route.ts";
+// Compile the real drawing chunk before testing the mount's loading boundary.
+import "@pe/duct-systems-web/screen/screen";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { mountTypedRoute } from "./typed-mount";
 import { TypedChrome } from "./typed-shell";
