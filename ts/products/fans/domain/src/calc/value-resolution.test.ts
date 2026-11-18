@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { factOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
+import { factOf, nodeOf, snapshotOf, storeOf } from "@pe/ducts-domain/test-snapshot";
 import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { encounterRulings, resolveInputs, resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { cell, stamped, TEST_FIRM, TEST_SLOTS } from "@pe/ducts-domain/test-inputs";
@@ -13,7 +13,7 @@ const snapshot = {
   nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [{ key: "flow", value: 200 }], connectors: [] }],
   segments: [],
 } as unknown as CalcSnapshot;
-const bare = { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, facts: [] }] } as unknown as CalcSnapshot;
+const bare = { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, facts: [] }] };
 it("P-048: a stored invalid marker crosses stagedDucts and blocks model fallback", () => {
   const work = stagedDucts(null, fansDocumentSchema.parse({
     flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { invalid: "unstamped stored cell" } },
@@ -60,24 +60,24 @@ it("a value retired into the model store reads live from its parameter; the rece
     segments: [],
     slots: { ...TEST_SLOTS, terminalDrop: "PE_Drop" },
   } as unknown as CalcSnapshot;
-  const drop = (work: object | undefined, store: object | undefined) =>
-    resolveInputs({ snapshot: { ...native, store } as CalcSnapshot, firm: TEST_FIRM, work }).terminals["1"]!.drop;
+  const drop = (work: object | undefined, store: Partial<NonNullable<CalcSnapshot["store"]>> | undefined) =>
+    resolveInputs({ snapshot: { ...native, store: store && storeOf(store) }, firm: TEST_FIRM, work }).terminals["1"]!.drop;
   expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.2) } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
   // The receipt retires the staged cell: Work is cleared, and a hand edit in Revit since (0.5) is the value.
-  const retired = drop(undefined, { terminals: { "1": { inWg: 0.2 } } });
+  const retired = drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } });
   expect(retired).toMatchObject({ value: 0.5, source: "model", ref: "model:1/PE_Drop", author: null, units: "in-wg" });
   expect(retired.version).toBeNull();
   // A pending Work edit wins over the older stored value.
-  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
+  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } }, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({
     value: 0.3,
     source: "Work",
   });
   // A receipt never prices, whatever it holds: the live parameter answers.
-  expect(drop(undefined, { terminals: { "1": { inWg: -1 } } })).toMatchObject({ value: 0.5, source: "model", status: "valid" });
+  expect(drop(undefined, { terminals: { "1": { inWg: -1, appliedAt: "t" } } })).toMatchObject({ value: 0.5, source: "model", status: "valid" });
   expect(drop(undefined, undefined)).toMatchObject({ value: 0.5, source: "model" });
   // D3: the written parameter no longer reads, so the value is missing, never the receipt or the firm default.
   native.nodes[0]!.terminalDrop = {} as never;
-  expect(drop(undefined, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({ value: null, status: "missing" });
+  expect(drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({ value: null, status: "missing" });
   expect(drop(undefined, undefined)).toMatchObject({ source: "firm" });
 });
 it("unknown inflow creates a missing leg and cannot certify worksheet totals", () => {

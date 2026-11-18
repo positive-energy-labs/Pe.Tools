@@ -14,7 +14,7 @@ import { mintWriteRequest } from "./write-request.ts";
 import { lookupGrid } from "@pe/ducts-domain/loss-grid";
 import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
 import { suggestRoster, type FanPort } from "@pe/ducts-domain/roster";
-import { uniqueIdOf, type Connector as Conn, type Node, type Segment } from "@pe/ducts-domain/test-snapshot";
+import { storeOf, uniqueIdOf, type Connector as Conn, type Node, type Segment } from "@pe/ducts-domain/test-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { withHealth } from "@pe/ducts-domain/health.fixture";
 import { buildChain, buildCalc, type CalcSnapshot } from "./index.ts";
@@ -840,13 +840,13 @@ it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053:
   expect(shares(staged, inputsFor(staged, { drops: { 2: 0 }, endCfm: { 200: 0 } }))).toEqual([0, 300]);
   // After the apply and retirement: the parameter reads 0 and the store holds the receipt. Nothing was edited.
   const retired = build(fact(0));
-  const units = resolveInputs({ snapshot: { ...retired, store: { equipmentFlows: { "200": { cfm: 0 } } } as unknown as typeof retired.store }, firm: TEST_FIRM }).units;
+  const units = resolveInputs({ snapshot: { ...retired, store: storeOf({ equipmentFlows: { "200": { cfm: 0, appliedAt: "t" } } }) }, firm: TEST_FIRM }).units;
   expect(units["200"]!.cfm).toMatchObject({ value: 0, source: "model" });
   expect(shares(retired, { ...inputsFor(retired, { drops: { 2: 0 } }), units })).toEqual([0, 300]);
   // P29: the priced fan's own written 0 is its side-stream budget, not the ends' sum.
   const zero = build([]);
   zero.nodes.find((n) => n.id === 100)!.facts = fact(0);
-  zero.store = { equipmentFlows: { "100": { cfm: 0 } } } as unknown as typeof zero.store;
+  zero.store = storeOf({ equipmentFlows: { "100": { cfm: 0, appliedAt: "t" } } });
   const own = inputsFor(zero, { roles: { 100: "fan" }, drops: { 2: 0 } });
   expect(own.units["100"]!.cfm).toMatchObject({ value: 0, source: "model" });
   const priced = buildCalc({ snapshot: zero, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)], grids, inputs: own });

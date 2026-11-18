@@ -85,7 +85,7 @@ it("V5/D2: the catalog's rung is its home's tier, above the parameter until Pe h
   const node = { ...terminal(), facts: [{ key: "flow", value: 200 }, { key: "Pe_Catalog", text: "t" }], connectors: [{ kind: "end", shape: "round", diameterIn: 8 }] };
   const snapshot = snapshotOf(node);
   for (const tier of ["user", "project", "firm"]) {
-    const catalogs = { t: table(tier) } as unknown as Catalogs;
+    const catalogs: Catalogs = { t: catalogTableSchema.parse(table(tier)) };
     const loss = catalogLoss(node as never, 200, catalogs);
     expect(loss, JSON.stringify(loss)).toMatchObject({ dp: 0.3, tier });
     expect(resolveInputs({ snapshot, firm: TEST_FIRM, catalogs }).terminals["1"]!.drop)
@@ -99,7 +99,8 @@ it("V5/D2: the catalog's rung is its home's tier, above the parameter until Pe h
 it("P25: a written terminal next to a homeless table prices the parameter and does not look the table up", () => {
   const node = { ...terminal(), facts: [{ key: "flow", value: 200 }, { key: "Pe_Catalog", text: "t" }], connectors: [{ kind: "end", shape: "round", diameterIn: 8 }] };
   const { home: _home, ...homeless } = table("firm");
-  const priced = resolveInputs({ snapshot: snapshotOf(node, undefined, store), firm: TEST_FIRM, catalogs: { t: homeless } as unknown as Catalogs });
+  // @ts-expect-error a homeless table is no Catalogs entry
+  const priced = resolveInputs({ snapshot: snapshotOf(node, undefined, store), firm: TEST_FIRM, catalogs: { t: homeless } });
   expect(priced.terminals["1"]!.drop).toMatchObject({ value: 0.5, source: "model" });
   // The table shape pricing consumes requires its home: a recorded table from before V5 no longer decodes.
   expect(catalogTableSchema.safeParse(homeless).success).toBe(false);
