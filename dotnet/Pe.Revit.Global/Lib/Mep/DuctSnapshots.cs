@@ -54,7 +54,7 @@ public static class DuctSnapshots {
         SnapshotCore(doc, null, null, selector, false, peers, beforeSeedRead);
 
     private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) {
-        // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
+        // Request slot overrides win over C# defaults; stored slots are write receipts only.
         var (store, storeError) = DuctApplier.ReadStore(doc);
         var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve();
         var clock = Stopwatch.StartNew();

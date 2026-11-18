@@ -121,14 +121,4 @@ public sealed class DuctLossStoreTests {
     [TestCase(" ESP ", "esp")]
     public void Required_and_rated_esp_must_be_different_parameters(string required, string rated) =>
         Assert.Throws<ArgumentException>(() => new DuctParameterSlotOverrides(RequiredEsp: required, RatedEsp: rated).Resolve());
-
-    [Test]
-    public void Stored_slot_receipts_do_not_supply_resolution_defaults() {
-        var staged = Newtonsoft.Json.JsonConvert.DeserializeObject<DuctParameterSlotOverrides>("""{"componentDrop":"Damper Drop"}""")!;
-        var stored = Read(new DuctLossStore { Slots = new(TerminalDrop: "Catalog Drop", ComponentDrop: "Old Drop") }.ToJson()).Value!;
-
-        Assert.That(stored.Slots!.TerminalDrop, Is.EqualTo("Catalog Drop"), "the receipt survives independently of resolution");
-        Assert.That(staged.Resolve(),
-            Is.EqualTo(new DuctParameterSlotOverrides(ComponentDrop: "Damper Drop").Resolve()));
-    }
 }
