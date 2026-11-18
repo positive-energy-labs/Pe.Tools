@@ -213,7 +213,8 @@ async function readTarget(
 ): Promise<Target | null> {
   const args = sessionListArgv(selection ?? {});
   const envelope = await sdkEnvelope<SessionListResult>(args, read);
-  const rows = (envelope.result as SessionListResult).sessions.filter(
+  // A refused list (`session.no-match` for a gone name) answers `result: {}`, with no sessions.
+  const rows = (envelope.diagnostics.length ? [] : envelope.result.sessions).filter(
     (row): row is RunningRow =>
       (row.case === "controlled-active" || row.case === "observed-active") &&
       (!expected ||
@@ -270,24 +271,6 @@ const preparedInstancesSchema = z.strictObject({
   acquisition: acquisitionIntentSchema.nullable(),
   artifactOf: z.string().optional(),
 });
-
-const launchClaimsFor = (
-  ctx: CommandContext,
-  process: Pick<NativeProcess, "pid" | "processStartUtc">,
-) =>
-  ctx.read
-    .receipts()
-    .flatMap((row) =>
-      row.effects.some(
-        (effect) =>
-          effect.kind === "session" &&
-          effect.session === `${process.pid}:${process.processStartUtc}`,
-      )
-        ? row.claims.flatMap((claim) =>
-            claim.kind === "session-slot" ? [{ action: row.id, claim }] : [],
-          )
-        : [],
-    );
 
 const controlledPreparedSchema = preparedInstancesSchema.extend({
   target: lifecycleTargetSchema,
@@ -486,7 +469,6 @@ function controlRun(
   execution: ActionExecution,
   read: SdkReceiptReader,
   argv: (session: Effect.Success<ReturnType<typeof controlledRequest>>) => readonly string[],
-  releases?: () => { action: string; claim: import("@pe/agent-contracts").Claim }[],
 ) {
   return Effect.gen(function* () {
   const { target } = execution.prepared as z.infer<typeof controlledPreparedSchema>;
@@ -496,7 +478,7 @@ function controlRun(
     ctx.admission.key,
     { expectSession: session.expectSession, argv: argv(session) },
     read,
-    { process: target.process, releases },
+    { process: target.process },
   );
   yield* physicalEffects(execution, result);
   return result;
@@ -760,7 +742,6 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
               unsaved: ctx.admission.input.unsaved,
               force: ctx.admission.input.force,
             }),
-          () => launchClaimsFor(ctx, execution.prepared.target.process),
         ),
     }),
     "instances.close": command(commands["instances.close"], controlledPreparedSchema, {
@@ -1195,7 +1176,6 @@ function cleanupCommand(read: SdkReceiptReader, peaWork: string) {
         };
         yield* runSdk(execution, "instances.cleanup.stop", stop, read, {
           process: target.process,
-          releases: () => launchClaimsFor(ctx, target.process),
         });
         outcome.stopped = acquired.process;
       }
