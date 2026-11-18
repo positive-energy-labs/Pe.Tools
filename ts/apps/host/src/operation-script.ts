@@ -12,6 +12,7 @@ import {
 } from "./packages.ts";
 import { CommandRejected, StepFailure, nativeStep, refused, io } from "./command-executor.ts";
 import { Effect } from "effect";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { RevitBridge } from "./bridge.ts";
 import { podModelSchema, wrongPodModel } from "./pod-model.ts";
@@ -94,6 +95,15 @@ export const scriptRunInputs = <F extends { path: string }>(files: readonly F[],
   const entrypoint = String(sourcePath).replaceAll("\\", "/").trim().toLowerCase();
   return files.filter((file) => !/\.csx$/i.test(file.path) || file.path.toLowerCase() === entrypoint);
 };
+
+/** The member facts one script run of `pod` consumes: what the journal's gate re-reads. */
+export const scriptMemberFacts = (pod: string, files: readonly { path: string; bytesBase64: string }[], sourcePath: unknown) =>
+  scriptRunInputs(files, sourcePath).map((file) => ({
+    kind: "member" as const,
+    probe: { pod, path: file.path },
+    expected: createHash("sha256").update(Buffer.from(file.bytesBase64, "base64")).digest("hex"),
+    bytesBase64: file.bytesBase64,
+  }));
 
 type FrozenScript = { sourceBundle: ScriptingExecute.Req.ScriptPodSourceBundle };
 

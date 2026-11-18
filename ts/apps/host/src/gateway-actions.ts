@@ -20,7 +20,7 @@ import { z } from "zod";
 import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
-import { freezeScript, requireScriptSuccess, runPodScript, scriptRunInputs } from "./operation-script.ts";
+import { freezeScript, requireScriptSuccess, runPodScript, scriptMemberFacts } from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { projectNativeOutput } from "./native-output.ts";
 import { isViewImage } from "@pe/agent-contracts/native-output-read";
@@ -195,16 +195,7 @@ export function gatewayExecutor(
                 ) as { id?: string })
               : null;
             if (!pod?.id) throw refused("The captured script has no exact Pod identity");
-            consumes.push(
-              ...scriptRunInputs(script.sourceBundle.files, admission.input.sourcePath).map((file) => ({
-                kind: "member" as const,
-                probe: { pod: pod.id!, path: file.path },
-                expected: createHash("sha256")
-                  .update(Buffer.from(file.bytesBase64, "base64"))
-                  .digest("hex"),
-                bytesBase64: file.bytesBase64,
-              })),
-            );
+            consumes.push(...scriptMemberFacts(pod.id, script.sourceBundle.files, admission.input.sourcePath));
           }
           if (!target) throw refused("Scripts require an exact document target");
           // The run is fenced natively to its target, so its footprint is that document alone.

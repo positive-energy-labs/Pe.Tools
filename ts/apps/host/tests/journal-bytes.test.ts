@@ -9,7 +9,7 @@ import { z } from "zod";
 import { command } from "../src/command-executor.ts";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
-import { freezeScript } from "../src/operation-script.ts";
+import { freezeScript, scriptMemberFacts } from "../src/operation-script.ts";
 import { settle } from "./effect-test.ts";
 
 // A compaction that dies before its rename: the journal's own write throws, as a crash would.
@@ -37,6 +37,13 @@ const bundle = () => ({
     { path: "src/Run.cs", bytesBase64: randomBytes(173_000).toString("base64") }, // ~231 KB
   ],
 });
+// The drive5 Pod row (document-profiler, row ea0fab98): 11 members, ~82 KB of base64, run by
+// workspace and source path, so the bundle rides `prepared` and the members ride `consumes`.
+const podFiles = [
+  { path: "pod.json", bytesBase64: Buffer.from('{"schemaVersion":2,"id":"document-profiler"}').toString("base64") },
+  ...["PeScripts.csproj", "src/ClosureReceipts.cs", "src/MechanicalPlanCensus.cs", "src/A.cs", "src/B.cs", "src/C.cs",
+    "src/D.cs", "src/E.cs", "src/F.cs", "src/G.cs"].map((path) => ({ path, bytesBase64: randomBytes(5_500).toString("base64") })),
+];
 const diagnostics = Array.from({ length: 60 }, (_, i) => ({ code: `D${i}`, message: "x".repeat(150) }));
 
 async function open(dir: string) {
@@ -46,7 +53,8 @@ async function open(dir: string) {
     ActionJournalService,
   );
   journal.bindCommands({
-    probe: async () => null,
+    // A member reads back as the sha it was admitted with: the Pod did not change.
+    probe: async (dependency) => ("expected" in dependency ? dependency.expected : null),
     resolve: () =>
       command(
         { says: "Script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
@@ -54,7 +62,11 @@ async function open(dir: string) {
         {
           bind: async ({ admission }) => ({
             effects: [],
-            prepare: async () => ({ script: { sourceBundle: admission.input.sourceBundle ?? null } }),
+            consumes: admission.input.workspaceKey
+              ? scriptMemberFacts("document-profiler", podFiles, admission.input.sourcePath) : [],
+            prepare: async () => ({
+              script: { sourceBundle: admission.input.sourceBundle ?? (admission.input.workspaceKey ? { files: podFiles } : null) },
+            }),
           }),
           run: ({ admission }, execution) =>
             execution.step("native", "scripting.execute", admission.input, (id) =>
@@ -74,7 +86,7 @@ const run = async (journal: ActionJournalService["Service"], id: string, input: 
   return journal.wait(id);
 };
 
-async function measure(kind: "plain" | "pod", runs: number) {
+async function measure(kind: "plain" | "pod" | "pod-real", runs: number) {
   const dir = await mkdtemp(join(tmpdir(), "pe-k2-bytes-"));
   const path = join(dir, "partition-operations.json");
   const { journal, close } = await open(dir);
@@ -83,7 +95,9 @@ async function measure(kind: "plain" | "pod", runs: number) {
     for (let i = 0; i < runs; i++) {
       const input = kind === "pod"
         ? { sourcePath: "src/Run.cs", sourceBundle: bundle() }
-        : { scriptContent: "var n = 1;\n".repeat(600) };
+        : kind === "pod-real"
+          ? { sourcePath: "src/MechanicalPlanCensus.cs", workspaceKey: "document-profiler" }
+          : { scriptContent: "var n = 1;\n".repeat(600) };
       expect(await run(journal, `${kind}-${i}`, input)).toMatchObject({ state: "succeeded" });
       sizes.push((await stat(path)).size);
     }
@@ -99,6 +113,7 @@ test.each([
   // run's latest revision is the only part of it the file keeps after a compaction.
   ["plain", 60, 80_000],
   ["pod", 30, 200_000],
+  ["pod-real", 30, 60_000],
 ] as const)("%s script runs add a bounded number of journal bytes per run", async (kind, runs, perRun) => {
   const m = await measure(kind, runs);
   try {
@@ -107,8 +122,10 @@ test.each([
     expect(last / runs).toBeLessThan(perRun);
     expect(Math.max(...m.sizes)).toBeLessThan(Math.max(1 << 20, 2 * perRun * runs) + perRun * 2);
     // The bundle's bytes live once, in the action's output store, never in the journal line.
-    if (kind === "pod") {
-      expect(await readFile(m.path, "utf8")).not.toContain('"bytesBase64"');
+    if (kind !== "plain") {
+      const text = await readFile(m.path, "utf8");
+      expect(text).not.toContain('"bytesBase64"');
+      for (const file of kind === "pod-real" ? podFiles : []) expect(text).not.toContain(file.bytesBase64);
       // The output store holds them once per action, and the step file carries no stale state.
       const home = join(m.dir, "action-outputs");
       const one = join(home, (await readdir(home))[0]!);
