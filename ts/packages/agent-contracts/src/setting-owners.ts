@@ -2,7 +2,8 @@ import { z } from "zod";
 import { DUCT_PARAMETER_KEYS, ductParameterNameSchema, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "@pe/ducts-contract/duct-inputs";
 import { criterionLabel } from "@pe/ducts-contract/criterion-words.neutral";
 import { setting, schemaOf, type Domain, type Home, type SheetBinding } from "./slots/sheet.ts";
-import { serveSetting, type SettingTier, type SettingTierRead } from "./tiered-setting.ts";
+import { type SettingTier } from "./tiered-setting.ts";
+export { settingLayer } from "./slots/sheet.ts";
 
 export const NO_SHARED_ROOT = "No firm home, so the firm files (Settings/<owner>.json) are not read. Set your firm home in Settings";
 export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
@@ -25,12 +26,6 @@ export const ductsSettings: Readonly<Record<string, SheetBinding>> = {
   "setting.ducts.designFriction": setting("ducts", ["designFriction"], { kind: "number", exclusiveMin: 0, unit: "in-wg/100 ft", digits: 3 }, ["project", "firm"], { label: "Design friction", default: 0.08 }),
 };
 export type SettingDeclaration = { name: string; label: string; default: unknown; domain: Domain; home: Extract<Home, { at: "setting" }> };
-/** A route without another resolved input serves its own home tiers explicitly. */
-export const settingLayer = (b: Pick<SheetBinding, "home" | "domain" | "default">, tiers?: readonly SettingTierRead[]) => {
-  if (b.home.at !== "setting") return null;
-  const served = serveSetting(tiers, b.home.tiers, b.home.path, schemaOf(b.domain), b.default);
-  return { value: served.value, source: served.tier, ref: served.ref, note: served.note };
-};
 export type SettingOwner = {
   readonly bindings: readonly SettingDeclaration[];
   at(path: readonly string[]): SettingDeclaration | null;

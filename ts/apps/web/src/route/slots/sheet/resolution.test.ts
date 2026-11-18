@@ -6,7 +6,7 @@ import { fansCalc } from "@pe/fans-web/calc";
 import { settingsSheet } from "../../../settings/route.ts";
 import { sheetCells } from "./index.ts";
 import { readFileSync } from "node:fs";
-import { ductsNetworkData, ductParameterSlots } from "@pe/agent-contracts";
+import { ductsNetworkData, ductParameterSlots, ductSlotRequest } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 
 const settings = { ducts: [{ tier: "firm" as const, home: "firm", name: "Firm", path: "Settings/ducts.json", sha256: "hash", json: { criteria: { autoJoinGapIn: 5 } } }] };
@@ -52,12 +52,14 @@ test("P23: host requests name only served slots and rows retain the serving tier
   const name = "Firm_Flow";
   const tiers = { ducts: [{ ...settings.ducts[0], json: { parameters: { fanFlow: "Firm_Flow" } } }] };
   expect(ductParameterSlots(tiers.ducts)).toMatchObject({ fanFlow: { name, source: "firm" } });
+  expect(ductSlotRequest(tiers.ducts)).toEqual({ fanFlow: name });
+  expect(ductSlotRequest()).toEqual({});
   expect(Object.values(ductParameterSlots()).every(slot => slot.name === null && slot.source === "default")).toBe(true);
   for (const [file, pattern, count] of [
-    ["duct-systems/host/src/host.ts", /slots: Object.fromEntries\(Object.entries\(ductParameterSlots\(saved.settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 2],
-    ["fans/host/src/host.ts", /slots: Object.fromEntries\(Object.entries\(ductParameterSlots\(settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 1],
-    ["fans/host/src/fan-calc.ts", /const slots = Object.fromEntries\(Object.entries\(ductParameterSlots\(saved.settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 2],
-    ["ducts/host/src/action-runtime.ts", /slots: Object.fromEntries\(Object.entries\(ductParameterSlots\(settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 1],
+    ["duct-systems/host/src/host.ts", /slots: ductSlotRequest\(saved.settings\)/g, 2],
+    ["fans/host/src/host.ts", /slots: ductSlotRequest\(settings\)/g, 1],
+    ["fans/host/src/fan-calc.ts", /const slots = ductSlotRequest\(saved.settings\)/g, 2],
+    ["ducts/host/src/action-runtime.ts", /slots: ductSlotRequest\(settings\)/g, 1],
   ] as const) {
     const source = readFileSync(new URL(`../../../../../../products/${file}`, import.meta.url), "utf8");
     expect([...source.matchAll(pattern)], file).toHaveLength(count);
