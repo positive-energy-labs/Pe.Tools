@@ -63,7 +63,7 @@ async function journalAfter(first: object) {
 }
 
 test.each(["succeeded", "unknown", "incomplete"] as const)(
-  "after an %s apply, a new action id applying the same preview with an unmoved mark is refused claimed",
+  "after an apply that ended %s, a new action id applying the same preview with an unmoved mark is refused claimed",
   async (ended) => {
     const f = await journalAfter(applies[ended]);
     try {
@@ -73,7 +73,7 @@ test.each(["succeeded", "unknown", "incomplete"] as const)(
   },
 );
 
-test.each(["succeeded", "unknown", "incomplete"] as const)("after an %s apply, a new preview on the same document is admitted", async (ended) => {
+test.each(["succeeded", "unknown", "incomplete"] as const)("after an apply that ended %s, a new preview on the same document is admitted", async (ended) => {
   const f = await journalAfter(applies[ended]);
   try {
     expect(await f.apply("new-preview", "preview-2")).toMatchObject({ state: "succeeded" });
