@@ -8,7 +8,7 @@ import { DUCTS_SYSTEM_MAX,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots, ductSlotSources, } from "@pe/agent-contracts";
+  ductParameterSlots, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
@@ -30,14 +30,14 @@ export const ductsRoster = body(contracts.roster, async function(ctx, { target }
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: ductParameterSlots(saved.settings),
+        slots: Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "roster" },
       },
     });
     if (!response.version) throw Error("Duct roster has no observation version");
     const snapshot = response.body;
-    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version, slotSources: ductSlotSources(snapshot.slots, saved.settings) };
+    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version, slotSources: ductParameterSlots(saved.settings) };
   });
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
@@ -50,7 +50,7 @@ const systems = read("ducts.systems", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: ductParameterSlots(saved.settings),
+        slots: Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },
@@ -60,7 +60,7 @@ const systems = read("ducts.systems", {
     return {
       ...snapshot,
       sourceVersion: response.version,
-      slotSources: ductSlotSources(snapshot.slots, saved.settings),
+      slotSources: ductParameterSlots(saved.settings),
       systemReads: {
         completed: systemIds,
         missing: systemIds.filter((id) => !snapshot.systems.some((system) => system.id === id)),

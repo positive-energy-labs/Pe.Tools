@@ -5,10 +5,10 @@ import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { ductsSettings } from "@pe/agent-contracts/setting-owners";
 import { schemaOf } from "@pe/agent-contracts/slots/sheet";
 
-const slots = (parameters: object) => ductParameterSlots([{
+const slots = (parameters: object) => Object.fromEntries(Object.entries(ductParameterSlots([{
   tier: "firm", home: "firm", name: "Firm", path: "Settings/ducts.json", sha256: null,
   json: ductsFirmSchema.parse({ parameters }),
-}] satisfies SettingTierRead[]);
+}] satisfies SettingTierRead[])).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]]));
 it("a firm can name RequiredEsp", () => {
   expect(slots({ requiredEsp: "My_RequiredESP" })).toEqual({ requiredEsp: "My_RequiredESP" });
 });

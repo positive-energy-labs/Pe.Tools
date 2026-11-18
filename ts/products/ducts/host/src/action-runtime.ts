@@ -169,7 +169,7 @@ export function ductActionExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: ductParameterSlots(settings),
+              slots: Object.fromEntries(Object.entries(ductParameterSlots(settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
             });
         const snapshot = await action.snapshot(intent, read);
         const derived = await action.derive({ intent, read, readNative, snapshot, design, doc, fans,

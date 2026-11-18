@@ -54,7 +54,7 @@ export function pricingValue(
           z.number().positive(),
           DEFAULT_DESIGN_FRICTION_RATE,
         ).value ?? DEFAULT_DESIGN_FRICTION_RATE,
-        parameters: ductParameterSlots(settings),
+        parameters: Object.fromEntries(Object.entries(ductParameterSlots(settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]])),
       },
     },
     analysis: {
