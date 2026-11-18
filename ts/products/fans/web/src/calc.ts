@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DUCTS_CRITERIA_CELLS } from "@pe/agent-contracts";
 import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansCalcData, type Immutable } from "@pe/agent-contracts";
 import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
@@ -7,7 +8,7 @@ import { calcSystems } from "@pe/ducts-domain/calc/scoped-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import { ductsSettings, settingLayer, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
@@ -107,11 +108,13 @@ export const fansCalc = {
     // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
     ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction").map(([key, b]) => [key, { ...b, model: (read: Read) => {
       if (b.home.at !== "setting") return null;
-      const [, name, side] = b.home.path;
-      if (b.home.path[0] === "parameters") return { ...settingLayer(b, read?.settings.ducts), value: snapshotOf(read)?.slots[name as keyof DuctSnapshot["slots"]] ?? null };
+      const [, name] = b.home.path;
+      const snapshot = snapshotOf(read), wire = read?.calcSnapshot;
+      if (b.home.path[0] === "parameters") return { source: "default", ...(wire && !("kind" in wire) ? wire.slotSources?.[name ?? ""] : {}), value: Object.entries(snapshot?.slots ?? {}).find(([key]) => key === name)?.[1] ?? null };
+      const declared = Object.entries(DUCTS_CRITERIA_CELLS).find(([cell]) => key === `setting.ducts.${cell}`)?.[1];
       const criteria = inputsOf(read)?.criteria;
-      const resolved = criteria?.[name as keyof NonNullable<typeof criteria>];
-      return layer((side ? (resolved as Record<string, Parameters<typeof layer>[0]>)?.[side] : resolved) as Parameters<typeof layer>[0], v => v, read);
+      const resolved = declared && criteria?.[declared.layer[0]], side = declared?.layer[1];
+      return layer(resolved && "supply" in resolved ? side ? resolved[side] : undefined : resolved, v => v, read);
     } }])),
     writeIntent: local({ kind: "enum", shape: z.strictObject({ walk: z.strictObject({ unitId: z.number().int().positive(), portIndex: z.number().int().nonnegative() }) }), choices: scopeChoices }, "route", { label: "Write scope" }),
     roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(role => ({ value: role, label: role === "fan" ? "Fan" : "Passive" })) } } }, "subject", {

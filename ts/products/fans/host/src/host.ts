@@ -9,6 +9,7 @@ import {
   openFanCalcSchema,
   stagedDucts,
   ductParameterSlots,
+  ductSlotSources,
   subjectCode,
   subjectOf,
 
@@ -174,6 +175,7 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
         ? {
             ...calcSnapshot(data.geometry.body as Parameters<typeof calcSnapshot>[0]),
             sourceVersion: data.geometry.version ?? undefined,
+            slotSources: ductSlotSources(data.geometry.body.slots, settings),
           }
         : { kind: "absent" },
     }));

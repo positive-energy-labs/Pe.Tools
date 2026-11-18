@@ -1,6 +1,6 @@
 import { publicationRequest, publicationSchema } from "@pe/agent-contracts/value";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsDocumentSchema } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema, ductSlotSourcesSchema } from "@pe/duct-systems-contract/ducts";
 import { fansDocumentSchema } from "./fans.ts";
 import { subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";
@@ -58,7 +58,7 @@ export const fansCalcData = fanCalcSchema.extend({
   fansWork: fansDocumentSchema,
   calcSnapshot: z.union([
     nativeResponseSchema("ducts.snapshot.walk").and(
-      z.object({ sourceVersion: z.string().optional() }),
+      z.object({ sourceVersion: z.string().optional(), slotSources: ductSlotSourcesSchema.optional() }),
     ).refine(
       snapshot => !snapshot.groups.some(group => group.id === "sheet") &&
         !snapshot.nodes.some(node => node.groupId === "sheet") &&
