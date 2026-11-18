@@ -25,7 +25,7 @@ import { buildCalc, encounterRulings, mintWriteRequest, resolveInputs, type Buil
 import { followAcceptedJoins } from "@pe/ducts-domain/calc/joins";
 import { storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { workLayer } from "@pe/ducts-host/ducts-inputs";
+import { workLayer, terminalFlowSlot } from "@pe/ducts-host/ducts-inputs";
 
 
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
@@ -107,7 +107,7 @@ export function unwrittenReason(staged: ReturnType<typeof stagedValues>, [segmen
 }
 
 async function prepareLosses(p: DuctActionPreparation) {
-  let { intent, read, readNative, snapshot, design, doc, fans, firm, pointer, deps, appliedAt } = p;
+  let { intent, read, readNative, snapshot, design, doc, fans, firm, pointer, deps, appliedAt, flow } = p;
 
             const walk = intent.walk;
             if (!walk) throw refused("Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses");
@@ -117,7 +117,7 @@ async function prepareLosses(p: DuctActionPreparation) {
             const work = workLayer(design);
             // One fan port's calc inputs, as its worksheet reads them: its walk, the far side of accepted joins, and the ruled roster.
             const inputOf = async (fan: { unitId: number; portIndex: number }, near: DuctSnapshot) => {
-              const layers = (s: DuctSnapshot) => ({ snapshot: s, firm, store: s.store ?? undefined, work, catalogs: catalogs.tables });
+              const layers = (s: DuctSnapshot) => ({ terminalFlow: flow?.terminalFlow, snapshot: s, firm, store: s.store ?? undefined, work, catalogs: catalogs.tables });
               const walked = await followAcceptedJoins(near, resolveInputs(layers(near)).rulings.joins, (unitId) => read({ kind: "from", unitId }));
               const inputs = resolveInputs(layers(walked));
               // Ruled kinds and roles alone; a unit whose kind or role did not resolve is left for the roster to suggest.
@@ -125,7 +125,7 @@ async function prepareLosses(p: DuctActionPreparation) {
                 kinds: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.kind.status === "valid" ? [[id, u.kind.value]] : []))),
                 roles: Object.fromEntries(Object.entries(inputs.units).flatMap(([id, u]) => (u.role.status === "valid" ? [[id, u.role.value]] : []))),
               });
-              return { walked, input: { snapshot: walked, fan, roster: [...roster.fans, ...roster.suggestions], grids, inputs, encounterRulings: encounterRulings({ work }) } satisfies BuildCalcInput };
+              return { walked, input: { terminalFlowNote: flow?.terminalFlowNote, snapshot: walked, fan, roster: [...roster.fans, ...roster.suggestions], grids, inputs, encounterRulings: encounterRulings({ work }) } satisfies BuildCalcInput };
             };
             const { walked, input } = await inputOf(walk, snapshot);
             snapshot = walked;
@@ -183,7 +183,7 @@ async function prepareLosses(p: DuctActionPreparation) {
 
 export function fansExecutors(bridge: RevitBridge["Service"], deps: DuctActionDependencies = {}) {
   return ductActionExecutors({
-    snapshot: lossSnapshot, derive: prepareLosses,
+    terminalFlow: terminalFlowSlot, snapshot: lossSnapshot, derive: prepareLosses,
     entry: { key: "ducts.apply", native: "ducts.apply.plan",
       refusePlan: value => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
       retires: (input, value, subjects, cells) => appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response, subjects, cells) },

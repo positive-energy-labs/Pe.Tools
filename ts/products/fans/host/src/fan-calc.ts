@@ -12,13 +12,11 @@ import {
   ductsCalcOverviewSchema,
   ductsCalcRequestSchema,
   ductsCalcResponseSchema,
-  ductParameterSlots,
   type DuctsCalcOverview,
   type DuctsCalcRequest,
   fanClaimSchema, fanCloserSchema, fanEspValuesSchema, ductsFanCalcSchema,
 } from "@pe/agent-contracts";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import { slotCoverage } from "@pe/ducts-domain/kernel/terminal-flow";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { LOSS_RULES } from "@pe/ducts-domain/loss-rules";
 import { suggestRoster } from "@pe/ducts-domain/roster";
@@ -36,7 +34,7 @@ import { calcBreakdown } from "@pe/fans-domain/calc/calc-breakdown";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { rosterInputs } from "@pe/ducts-domain/roster-inputs";
 import { z } from "zod";
-import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
+import { firmLayer, workLayer, terminalFlowSlot } from "@pe/ducts-host/ducts-inputs";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/calc/joins";
 import { designLayers } from "@pe/ducts-host/design-layers";
 import { catalogs } from "@pe/host/builtin-read-handles";
@@ -137,7 +135,9 @@ const calcModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = ductParameterSlots(saved.settings);
+    const flow = await terminalFlowSlot(saved.settings, async slots => (await ctx.read(native("ducts.snapshot.roster"), {
+      role: "acquire", target: { kind: "document", ref: request.target }, request: { slots, selector: { kind: "roster" } },
+    })).body), { slots } = flow;
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -164,6 +164,7 @@ const calcModel = read("fans.calculation", {
       throw Error("Ducts read did not return an observation version");
     const catalog = await ctx.read(catalogs, request.target);
     const layersOf = (snapshot: z.infer<typeof snapshotSchema>) => ({
+      terminalFlow: flow.terminalFlow,
       snapshot,
       work,
       versions: { Work: saved.revision },
@@ -203,6 +204,7 @@ const calcModel = read("fans.calculation", {
     const value =
       request.mode === "fan"
         ? buildCalc({
+            terminalFlowNote: flow.terminalFlowNote,
             snapshot,
             grids,
             inputs,
@@ -480,7 +482,9 @@ export const ductCalc = read(CALC_DETAIL_READ, {
 export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = ductParameterSlots(saved.settings);
+    const flow = await terminalFlowSlot(saved.settings, async slots => (await ctx.read(native("ducts.snapshot.roster"), {
+      role: "acquire", target: { kind: "document", ref: target }, request: { slots, selector: { kind: "roster" } },
+    })).body), { slots } = flow;
     const response = await ctx.read(native("ducts.snapshot.roster"), {
       role: "acquire",
       target: { kind: "document", ref: target },
@@ -489,6 +493,7 @@ export const fanRoster = body(acquisition.fanRoster, async function(ctx, { targe
     const snapshot = { ...response.body, nodes: response.body.nodes.filter(node =>
       ductsRosterResponseSchema.shape.rows.element.shape.uniqueId.safeParse(node.uniqueId).success) };
     const inputs = resolveInputs({
+      terminalFlow: flow.terminalFlow,
       snapshot,
       work: workLayer(design),
       versions: { Work: saved.revision },
@@ -497,12 +502,12 @@ export const fanRoster = body(acquisition.fanRoster, async function(ctx, { targe
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);
-    const activeSlot = slots.terminalFlow ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
+    const activeSlot = slots.terminalFlow;
     const wanted = mark?.trim().toLowerCase();
     return ductsRosterResponseSchema.parse({
       target,
       activeSlot,
-      slots: slotCoverage(snapshot.nodes, [activeSlot, snapshot.slots?.terminalFlow]),
+      slots: flow.coverage,
       rows: [...roster.fans, ...roster.suggestions].map((port) => {
         const unit = snapshot.nodes.find((node) => node.id === port.unitId);
         return {

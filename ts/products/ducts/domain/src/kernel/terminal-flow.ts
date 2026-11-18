@@ -65,7 +65,7 @@ export function slotCoverage(
   return slots
     .map((slot) => ({
       slot,
-      covered: terminals.filter((t) => slotFlowOf(t, slot).cfm != null).length,
+      covered: terminals.filter((t) => (slotFlowOf(t, slot).cfm ?? 0) > 0).length,
       total: terminals.length,
     }))
     .sort((a, b) => b.covered - a.covered);

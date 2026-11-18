@@ -105,6 +105,7 @@ export interface StoreLayer {
 }
 
 export interface InputLayers {
+  terminalFlow?: { slot: string; ref: string };
   snapshot: CalcSnapshot;
   run?: WorkLayer | null;
   work?: WorkLayer | null;
@@ -278,7 +279,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       ? staged(work.componentDrops[key])
       : staged(family ? work.assumptions?.[`component-drop:${family}`] : undefined, (a) => a.inWg);
 
-  const flowSlot = slots.terminalFlow ?? "terminalFlow";
+  const flowSlot = layers.terminalFlow?.slot ?? slots.terminalFlow ?? "terminalFlow";
   const terminals: DuctsInputs["terminals"] = {};
   const units: DuctsInputs["units"] = {};
   const components: DuctsInputs["components"] = {};
@@ -293,7 +294,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           run: staged(run.flows?.[key]),
           Work: staged(work.flows?.[key]),
           "model-store": observed("model-store", `${id}/${STORE}`, stored),
-          model: observed("model", `${id}/${flowSlot}`, positive(revit)),
+          model: observed("model", `${id}/${layers.terminalFlow?.ref ?? flowSlot}`, positive(revit)),
         },
         "cfm",
       );
