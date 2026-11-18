@@ -56,7 +56,7 @@ public static class DuctSnapshots {
     private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) {
         // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
         var (store, storeError) = DuctApplier.ReadStore(doc);
-        var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve(store?.Slots);
+        var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve();
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
         List<Element> Of(BuiltInCategory category) => new FilteredElementCollector(doc)
