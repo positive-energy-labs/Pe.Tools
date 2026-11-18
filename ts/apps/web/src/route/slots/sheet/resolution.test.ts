@@ -10,7 +10,7 @@ import { ductsNetworkData, ductSlotSources } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 
 const settings = { ducts: [{ tier: "firm" as const, home: "firm", name: "Firm", path: "Settings/ducts.json", sha256: "hash", json: { criteria: { autoJoinGapIn: 5 } } }] };
-const criteria = resolveCriteria({ criteria: { autoJoinGapIn: 9 }, criteriaMeta: { autoJoinGapIn: { by: "human", ref: "work:criterion" } } }, null, { version: "test", criteria: { ...DUCTS_DEFAULT_CRITERIA, autoJoinGapIn: 5 } });
+const criteria = resolveCriteria({ criteria: { autoJoinGapIn: 9 }, criteriaMeta: { autoJoinGapIn: { by: "human", ref: "work:criterion" } } }, { version: "test", criteria: { ...DUCTS_DEFAULT_CRITERIA, autoJoinGapIn: 5 } });
 const cells = (slot: Parameters<typeof sheetCells>[0], read: unknown) => sheetCells(slot, { rows: [], work: {}, model: [], read });
 const fanSettings = { bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([name]) => name.startsWith("setting."))) };
 
