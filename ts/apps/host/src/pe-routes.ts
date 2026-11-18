@@ -5,7 +5,6 @@ import { targetHomes } from "./call-route.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, Receipt } from "@pe/agent-contracts";
-import { held, heldSendRequestSchema } from "@pe/agent-contracts";
 import { sdkSessionSelectionSchema } from "@pe/agent-contracts";
 import {
   addressSchema,
@@ -89,7 +88,6 @@ import { PictureCaptureStore } from "./captures-route.ts";
 import {
   bindControl,
   callerThread,
-  requireHuman,
   currentCaller,
   refusalHeaders,
   workAuthorOf,
@@ -134,7 +132,6 @@ import {
   type NavigationSources,
 } from "./navigation.ts";
 import { createNoticeFeed, noticeRows, type NoticeSources } from "./notice-feed.ts";
-import { heldSend, heldSends, holdSend, confirmSend, subscribeHeldSends } from "./guards.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import { hostTimeline, timelineReceipts } from "./reads/work-timeline.ts";
 import type { TimelineReceipts } from "@pe/runtime";
@@ -579,39 +576,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
       return updateResourceSubscriptions(request, observe, invocation.resourceOwner);
     if (method === "GET" && declared.id === "resources.stream")
       return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceOwner);
-    // Guard 3 (ADR 0038): a send that is not the person's own is recorded and answered "held" at
-    // once, with one notice row. The person's Confirm on that row runs it through the one upload path.
-    if (method === "POST" && declared.id === "outward.hold") {
-      const parsed = heldSendRequestSchema.safeParse(await body());
-      if (!parsed.success) return json({ error: "invalid held send" }, 400);
-      const send = holdSend(parsed.data, callerThread(caller), new Date().toISOString());
-      return json({
-        held: send,
-        message: held("send-outward", `'${send.path}'`, "The person confirms it from its notice.").message,
-      });
-    }
-    if (method === "POST" && declared.id === "outward.confirm") {
-      const person = requireHuman(caller, url.pathname, "confirming an outward send");
-      const send = heldSend(declared.params.id!);
-      if (!send) return json({ error: "No held send with that id; it was confirmed or the host restarted." }, 404);
-      try {
-        const receipt = await confirmSend(send, person, (held, caller) => {
-          const { id, at: _at, thread: _thread, ...input } = held;
-          return (options.journal ?? telemetryOf(options).journal).invoke(
-            { id, key: "outward.send", target: { kind: "host" }, input },
-            { caller, basis: null },
-          );
-        });
-        // The route contract is `ok`; the receipt id lets the caller follow the send (homes W8).
-        return json({ ok: true, id: receipt.id }, 202);
-      } catch (error) {
-        return json({ error: message(error) }, 502);
-      }
-    }
-    if (method === "POST" && declared.id === "outward.person") {
-      requireHuman(caller, url.pathname, "sending a file outward");
-      return json({ ok: true });
-    }
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());
@@ -1381,7 +1345,6 @@ function* hostPeRoutes(
             machine,
             stored: storedNotices(hostState()),
             firmHomeUnavailable: contentRootsUnavailable(),
-            held: heldSends(),
           },
           Date.now(),
         ),
@@ -1403,7 +1366,6 @@ function* hostPeRoutes(
       const releases = [
         observeContentRoots(changed),
         journal.subscribe({ kinds: ["action"] }, receipt),
-        subscribeHeldSends(changed),
         threads.observe({ kind: "threads" }, changed) ?? (() => {}),
         routes.workspace.subscribeUncaptured(readWorks),
         bridge?.subscribe(readWorks) ?? (() => {}),

@@ -8,13 +8,12 @@ import { Effect } from "effect";
 import { commands, parsedDocViewSchema, tools, type ActionStep } from "@pe/agent-contracts";
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
-import { guardSend } from "./guards.ts";
 import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
 import { podFolder, podMemberKind } from "./settings.ts";
 import { reconcilePackageChanges } from "./package-lifecycle.ts";
 import { writeHome } from "@pe/host-contracts/kinds";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
-import { readDerivedJson } from "@pe/mcps/held-parse";
+import { readDerivedJson } from "@pe/mcps/derived-parse";
 import { LLAMA_TIER } from "@pe/mcps/llama-parse";
 import { requireLlamaCloudKey } from "@pe/mcps/llama-key";
 import { derivedFor } from "@pe/host-contracts/service-identity";
@@ -174,17 +173,6 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
       const { member, source, work: handle } = ctx.admission.input;
-      // Guard 3 (ADR 0038): the parse below uploads this PDF to LlamaCloud. A person's attach runs;
-      // anyone else's is held before a byte is read or sent.
-      guardSend(
-        ctx.caller,
-        {
-          service: "llamaparse",
-          path: "path" in source ? source.path : "url" in source ? source.url : basename(source.fileName),
-          target: `${member.pod}: ${member.path}`,
-        },
-        "LlamaCloud, the hosted PDF parser",
-      );
       if (!handle) throw refused("Reviewed Family Work is required");
       await ctx.selectWork(tools.family.work, handle, () => ({
         cells: [],

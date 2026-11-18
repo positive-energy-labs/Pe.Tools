@@ -16,14 +16,8 @@ import { fileURLToPath } from "node:url";
 import { address, bindWork, familyDraftRouteState, type Caller } from "@pe/agent-contracts";
 import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
-import { heldSends, releaseSend } from "../src/guards.ts";
-import { noticeRows } from "../src/notice-feed.ts";
-import { actAs, contextHeaders, serviceHeaders } from "./callers.ts";
-import { Effect, Layer } from "effect";
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import { requestIdentityLayer } from "../src/request-identity.ts";
+import { actAs } from "./callers.ts";
 import { familySpecAsset } from "../src/family-spec.ts";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
 
 const pdf = fileURLToPath(new URL("../../web/public/acme-fcu400-submittal.pdf", import.meta.url));
 const aBox = JSON.parse(
@@ -45,7 +39,6 @@ const pdfSize = readFileSync(pdf).length;
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
-  for (const send of heldSends()) releaseSend(send.id);
   for (const close of closes.splice(0).reverse()) await close();
 });
 
@@ -149,17 +142,7 @@ async function lab(beforeParse?: (file: File) => Promise<void>) {
       result: { member: { pod: string; path: string; sha256: string } };
     };
   };
-  const outward = (id: string, caller: Caller = { kind: "human", via: "local" }) => actAs(caller, () =>
-    f.api.fetch(new Request(`http://fixture/pe/outward/held/${id}/confirm`, { method: "POST" })));
-  const confirm = async () => {
-    const send = heldSends().find((send) => send.thread === run.thread);
-    expect(send).toBeDefined();
-    const response = await outward(send!.id);
-    expect(response.status, await response.clone().text()).toBe(202);
-    const receipt = await response.json() as { id: string };
-    return f.journal.wait(receipt.id);
-  };
-  return { f, pods, pea, parsed, png, renderFetches: () => renderFetches, handle, doc, act, stage, save, confirm, outward };
+  return { f, pods, pea, parsed, png, renderFetches: () => renderFetches, handle, doc, act, stage, save };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -214,7 +197,6 @@ test("blocker 2: the page's own save is a member attach accepts", async () => {
     work: await handle(),
   });
   expect(attached.state, JSON.stringify(attached).slice(0, 2000)).toBe("succeeded");
-  expect(heldSends()).toEqual([]);
 }, 60_000);
 
 test("blocker 1: attach takes a path and a URL as well as an upload", async () => {
@@ -300,7 +282,7 @@ test("an attach refusal names what to do, without the repo's source", async () =
 }, 60_000);
 
 test("the chain: Pea captures and saves a family, attaches its sheet by path, and stages a cited value on a cell", async () => {
-  const { f, pods, pea, save, act, stage, handle, doc, confirm } = await lab();
+  const { f, pods, pea, save, act, stage, handle, doc } = await lab();
   const { member: saved } = (await save("pea")).result;
   const member = { pod: saved.pod, path: saved.path };
   expect(JSON.parse(await readFile(join(pods, "lab", member.path), "utf8"))).toMatchObject({
@@ -312,10 +294,8 @@ test("the chain: Pea captures and saves a family, attaches its sheet by path, an
     { member, source: { path: pdf }, work: await handle() },
     pea,
   );
-  expect(attached.error).toContain("Held, not done");
-  const confirmed = await confirm();
-  expect(confirmed.state).toBe("succeeded");
-  expect("result" in confirmed && confirmed.result).toMatchObject({ member, blocks: 1 });
+  expect(attached.state).toBe("succeeded");
+  expect("result" in attached && attached.result).toMatchObject({ member, blocks: 1 });
   const cell = "/parameters/Width/value";
   await stage("pea", ["cells", cell, "edit"], {
     value: "30in",
@@ -413,76 +393,6 @@ test("narrow 2: a URL source is http(s), unredirected, timed and capped", async 
   expect(parsed).toEqual([]);
 }, 120_000);
 
-// Mutant: remove the held-command continuation in ActionJournal.invoke. The missing path and URL
-// request counter are sentinels: a bind that reads early fails before the person creates the source.
-test("narrow 3: Pea attach is held before source reads; the notice Confirm attaches once", async () => {
-  for (const kind of ["path", "url"] as const) {
-    const { f, pods, pea, attach, parsed, serve, confirm, doc, outward } = await boxed();
-    let reads = 0;
-    const source = kind === "path" ? { path: join(pods, "not-yet-created.pdf") } : {
-      url: `${await serve((_request, response) => { reads++; response.end(readFileSync(pdf)); })}/acme.pdf`,
-    };
-    expect(await attach(source, pea)).toContain("Held, not done");
-    expect(parsed).toEqual([]);
-    expect(reads).toBe(0);
-    const send = heldSends().find(row => row.thread === pea.thread)!;
-    expect(send).toBeDefined();
-    // The same attach asked again is the same hold, and the message says where it waits.
-    const again = await attach(source, pea);
-    expect(again).toContain("waits in the person's notices for their Confirm");
-    expect(again).not.toContain("themselves from the web app");
-    expect(heldSends().filter(row => row.thread === pea.thread)).toEqual([send]);
-    // Mutant: project a send-outward held receipt in receiptRow. Sentinel: the journal holds the
-    // held receipts this feed is built from, so the one row is not an empty scan.
-    const receipts = (await f.journal.list()).map(action => ({ revision: 1, action }));
-    expect(receipts.filter(({ action }) => action.refusal?.kind === "held")).toHaveLength(2);
-    const rows = noticeRows({ threads: [], receipts, works: [], machine: null, stored: [], held: heldSends() }, Date.now())
-      .filter(row => row.group === "waits");
-    expect(rows).toMatchObject([{ what: Object.values(source)[0], where: "lab: settings/family/box.json", says: expect.stringContaining("LlamaCloud"),
-      act: { kind: "confirm-send", id: send.id, to: "LlamaCloud", detail: "for lab: settings/family/box.json" } }]);
-    await expect(outward(send.id, pea)).rejects.toThrow(/human.only/);
-    expect(parsed).toEqual([]);
-    if ("path" in source) await copyFile(pdf, source.path!);
-    expect((await confirm()).state).toBe("succeeded");
-    expect(parsed).toHaveLength(1);
-    expect((await doc()).spec?.doc.blocks).toEqual([block]);
-    expect((await outward(send.id)).status).toBe(404);
-    expect(parsed).toHaveLength(1);
-  }
-}, 60_000);
-
-// A consumed hold never admits again, even after failure; retry requires a new held request.
-test("narrow 4: a failed confirmed attach is receipted, and a new hold runs as its confirming person", async () => {
-  let calls = 0;
-  const { f, pea, attach, parsed, outward } = await boxed(async () => {
-    if (++calls === 1) throw Error("LlamaCloud 503");
-  });
-  const person: Caller = { kind: "human", via: "tailnet", login: "kai@tailnet", device: "laptop" };
-  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
-  const send = heldSends().find((row) => row.thread === pea.thread)!;
-  const accepted = await outward(send.id, person);
-  expect(accepted.status).toBe(202);
-  const first = (await accepted.json()) as { id: string };
-  const failed = await f.journal.wait(first.id);
-  expect(failed.state).toBe("failed");
-  expect("error" in failed && failed.error).toContain("LlamaCloud 503");
-  expect(heldSends()).toEqual([]);
-  expect((await outward(send.id, person)).status).toBe(404);
-  expect(calls).toBe(1);
-  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
-  const retry = heldSends().find((row) => row.thread === pea.thread)!;
-  expect(retry.id).not.toBe(send.id);
-  const response = await outward(retry.id, person);
-  expect(response.status).toBe(202);
-  const next = (await response.json()) as { id: string };
-  const receipt = await f.journal.wait(next.id);
-  expect(receipt.state).toBe("succeeded");
-  expect(receipt.caller).toEqual(person);
-  expect(calls).toBe(2);
-  expect(parsed).toHaveLength(1);
-  expect(heldSends()).toEqual([]);
-}, 60_000);
-
 // Mutant: family-spec re-reads source.path when retaining source.pdf instead of using admitted bytes.
 test("narrow 5: a PDF edited after admission attaches the bytes the admission retained", async () => {
   let sheet: string;
@@ -527,129 +437,4 @@ test("an injected parser failure fails the attach without any network request", 
   } finally {
     network.mockRestore();
   }
-}, 60_000);
-
-// Mutant: await the confirmed action's settlement before answering Confirm.
-test("Confirm admits over HTTP before a two-second parse finishes, uploads once and leaves a succeeded receipt", async () => {
-  let uploads = 0;
-  let parseFinished = false;
-  let uploadUrl = "";
-  const { f, pea, attach, serve } = await boxed(async (file) => {
-    await fetch(uploadUrl, { method: "POST", body: file });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    parseFinished = true;
-  });
-  uploadUrl = await serve((request, response) => {
-    if (request.method === "POST") uploads++;
-    request.resume();
-    response.end("uploaded");
-  });
-  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
-  const send = heldSends().find((row) => row.thread === pea.thread)!;
-  let base = "";
-  const identity = requestIdentityLayer({
-    port: () => Number(new URL(base).port),
-    frontendOrigin: Effect.succeed(undefined),
-    share: {
-      read: async () => {
-        throw Error("local only");
-      },
-      observe: () => {},
-    },
-  });
-  const web = HttpRouter.toWebHandler(
-    HttpRouter.add(
-      "POST",
-      "/pe/outward/held/:id/confirm",
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        return HttpServerResponse.fromWeb(
-          yield* Effect.promise(() =>
-            f.api.fetch(new Request(new URL(request.url, base), { method: "POST" })),
-          ),
-        );
-      }),
-    ).pipe(Layer.provide(identity)),
-    { disableLogger: true },
-  );
-  closes.push(() => web.dispose());
-  base = await serve(async (request, response) => {
-    const answer = await web.handler(
-      new Request(new URL(request.url!, base), {
-        method: request.method,
-        headers: request.headers as Record<string, string>,
-      }),
-    );
-    response.writeHead(answer.status, Object.fromEntries(answer.headers));
-    response.end(Buffer.from(await answer.arrayBuffer()));
-  });
-  const confirm = (headers = contextHeaders()) =>
-    fetch(`${base}/pe/outward/held/${send.id}/confirm`, {
-      method: "POST",
-      headers: { ...serviceHeaders(), ...headers },
-    });
-  expect((await confirm(contextHeaders({ kind: "pea", thread: pea.thread }))).status).toBe(403);
-  expect(uploads).toBe(0);
-  const start = performance.now();
-  const response = await confirm();
-  const elapsed = performance.now() - start;
-  expect(elapsed, "Confirm must answer before the two-second parse").toBeLessThan(1500);
-  expect(parseFinished).toBe(false);
-  expect(response.status).toBe(202);
-  const accepted = (await response.json()) as { ok: true; id: string };
-  // The production door (`servePeRoute`) refuses a body its route output does not decode; the fixture skips it.
-  expect(peRoutes["outward.confirm"].output.safeParse(accepted).success).toBe(true);
-  expect(accepted.id).toBeTruthy();
-  expect(
-    noticeRows(
-      {
-        threads: [],
-        receipts: (await f.journal.list()).map((action) => ({ revision: 1, action })),
-        works: [],
-        machine: null,
-        stored: [],
-        held: heldSends(),
-      },
-      Date.now(),
-    ),
-  ).toContainEqual(expect.objectContaining({ key: `action:${accepted.id}`, group: "working" }));
-  expect((await confirm()).status).toBe(404);
-  const receipt = await f.journal.wait(accepted.id);
-  expect(receipt.state).toBe("succeeded");
-  expect(receipt.caller).toMatchObject({ kind: "human", via: "cli" });
-  expect(parseFinished).toBe(true);
-  expect(uploads).toBe(1);
-  expect((await confirm()).status).toBe(404);
-  expect(uploads).toBe(1);
-  expect(
-    noticeRows(
-      {
-        threads: [],
-        receipts: (await f.journal.list()).map((action) => ({ revision: 1, action })),
-        works: [],
-        machine: null,
-        stored: [],
-        held: heldSends(),
-      },
-      Date.now(),
-    ).some(
-      (row) => row.verb === "held" && row.act?.kind === "confirm-send" && row.act.id === send.id,
-    ),
-  ).toBe(false);
-}, 60_000);
-
-// ADR 0038 guard 3: Confirm is the only way a held send runs. `outward.send` is human-only
-// (`outward-send.ts` `principal`), so Pea posting it straight to /actions is refused before dispatch.
-test("Pea cannot run outward.send directly; the hold stays for the person", async () => {
-  const { f, pea, attach, parsed } = await boxed();
-  expect(await attach({ path: pdf }, pea)).toContain("Held, not done");
-  const send = heldSends().find((row) => row.thread === pea.thread)!;
-  const { id: _id, at: _at, thread: _thread, ...input } = send;
-  const response = await f.post("/actions", { id: "pea-direct-send", key: "outward.send", target: { kind: "host" }, input }, pea);
-  const receipt = response.ok ? await f.journal.wait("pea-direct-send") : null;
-  const text = receipt ? JSON.stringify(receipt) : await response.text();
-  expect(text).toContain("caller.ineligible");
-  if (receipt) expect(receipt).toMatchObject({ state: "failed", notDispatched: true });
-  expect(parsed).toEqual([]);
-  expect(heldSends().map((row) => row.id)).toContain(send.id);
 }, 60_000);

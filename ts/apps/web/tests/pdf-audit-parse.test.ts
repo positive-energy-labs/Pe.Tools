@@ -1,17 +1,9 @@
-/**
- * Guard 3 at the doc lab's parse route (ADR 0038): it uploads to LlamaCloud and can fetch a URL
- * to do it, so it runs only for the person the host proves. Mutant that turns the first test
- * red: in `src/routes/api/pdf-audit/parse.ts` delete the `isPersonRequest` check at the top of POST.
- */
-import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
+/** ADR 0052: the parser route sends directly. */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
 const parse = vi.hoisted(() => vi.fn());
-// The proof (`isPersonRequest`) is real; only the upload is a spy.
-vi.mock("@pe/mcps/llama-parse", async (actual) => ({
-  ...(await actual<typeof import("@pe/mcps/llama-parse")>()),
-  parseWithLlamaCloud: parse,
-}));
+// Only the parser is substituted.
+vi.mock("@pe/mcps/family-pdf", () => ({ parseFamilyPdf: parse }));
 
 import { Route } from "../src/routes/api/pdf-audit/parse";
 
@@ -49,53 +41,12 @@ afterEach(() => {
   parse.mockReset();
 });
 
-test("a POST with no proof of the person is held: no URL is fetched and LlamaCloud is not called", async () => {
+test("a POST sends without asking the host for permission", async () => {
   start(HOST);
   const fetched = host(403);
+  parse.mockResolvedValue({ jobId: "job-1" });
   const response = await post({ request: request() });
-  expect(response.status).toBe(409);
-  const { error } = (await response.json()) as { error: string };
-  expect(error).toMatch(/^Held, not done/);
-  expect(error).not.toMatch(/refus|reject|declin|denied/i);
-  expect(parse).not.toHaveBeenCalled();
-  expect(fetched.mock.calls.map(([url]) => String(url))).toEqual([`${HOST}/pe/outward/person`]);
-});
-
-test("no host to ask, or a host that does not answer, is not the person", async () => {
-  start("");
-  const fetched = host(200);
-  expect((await post({ request: request() })).status).toBe(409);
-  expect(fetched).not.toHaveBeenCalled();
-  vi.stubEnv("PE_TOOLS_HOST_BASE_URL", HOST);
-  vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("ECONNREFUSED"))));
-  expect((await post({ request: request() })).status).toBe(409);
-  expect(parse).not.toHaveBeenCalled();
-});
-
-test("the person's request is sent, and the host is asked with that request's identity only", async () => {
-  start(HOST);
-  const fetched = host(200);
-  parse.mockResolvedValue({ job: { id: "job-1" } });
-  const response = await post({
-    request: request({
-      cookie: "pe-browser-x=token",
-      origin: "http://127.0.0.1:3000",
-      referer: "http://127.0.0.1:3000/doc-lab",
-      [HOST_RUNTIME_SERVICE_HEADER]: "another-host",
-      [HOST_CONTEXT_HEADER]: "minted",
-      "x-forwarded-for": "10.0.0.1",
-    }),
-  });
   expect(response.status).toBe(200);
   expect(parse).toHaveBeenCalledTimes(1);
-  expect(parse.mock.calls[0]![0]).toMatchObject({ sender: "person" });
-  const [url, init] = fetched.mock.calls[0]!;
-  expect(String(url)).toBe(`${HOST}/pe/outward/person`);
-  expect(Object.fromEntries(new Headers(init?.headers))).toEqual({
-    cookie: "pe-browser-x=token",
-    origin: "http://127.0.0.1:3000",
-    referer: "http://127.0.0.1:3000/doc-lab",
-    [HOST_RUNTIME_SERVICE_HEADER]: "svc",
-    [HOST_CONTEXT_HEADER]: "minted",
-  });
+  expect(fetched.mock.calls.map(([url]) => String(url))).not.toContain(`${HOST}/pe/outward/person`);
 });

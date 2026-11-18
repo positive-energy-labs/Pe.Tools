@@ -20,7 +20,6 @@ const outputKind = stateKind({
 });
 import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { holdSendCommand, SendHeld } from "./guards.ts";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
 import type { HttpClient } from "effect/http";
@@ -1379,16 +1378,6 @@ export class ActionJournal implements ReceiptReader {
       }
       await gate(row, "admit");
     } catch (error) {
-      if (!prior && error instanceof SendHeld) {
-        // A hold is consumed on Confirm; a new held request gets a fresh action id.
-        // The digest leaves the action id out: the same ask made again is the same hold, one row.
-        const { id: _id, ...ask } = admission;
-        holdSendCommand({ ...error.send,
-          sha256: createHash("sha256").update(canonicalRouteInput(ask)).digest("hex"), pages: "all" },
-          crossing.caller.kind === "pea" ? crossing.caller.thread : null, (person) =>
-            this.invoke({ ...admission, id: `${admission.id}:confirmed:${randomUUID()}` },
-              { caller: person, basis: null }));
-      }
       observed = { error };
     }
     const admitted = await this.serial(async (): Promise<ActionReceipt | undefined> => {

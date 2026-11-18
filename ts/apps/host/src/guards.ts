@@ -1,17 +1,13 @@
 /**
- * The three guards (ADR 0038): synchronize with central, overwrite or discard a person's model
- * state, and send file bytes outward. Each is decided at the host's own door from who is calling
+ * The two guards (ADR 0038 and ADR 0052): synchronize with central, overwrite or discard a person's model
+ * state. Each is decided at the host's own door from who is calling
  * and what the document is, and answers "held" at once: nothing here waits on a person. They cover
  * Pea's own doors only; a shell command gets past them, so they catch mistakes, not adversaries.
  */
-import { randomUUID } from "node:crypto";
 import {
   held,
-  type ActionReceipt,
   type Caller,
   type GuardedAct,
-  type HeldSend,
-  type HeldSendRequest,
 } from "@pe/agent-contracts";
 import { CommandRejected } from "./command-executor.ts";
 
@@ -60,63 +56,3 @@ export function guardDiscard(caller: Caller, docs: readonly GuardedDocument[], v
       `It has unsaved changes that this ${verb} would discard or save over; the person saves or closes it in Revit, then the ${verb} can run.`,
     );
 }
-
-/** A held outward send: the command names what would leave, so its journal can hold it by subject. */
-export class SendHeld extends CommandRejected {
-  constructor(readonly send: Pick<HeldSendRequest, "service" | "path" | "target">, where: string) {
-    super(held("send-outward", `'${send.path}'`, `It would go to ${where}; it waits in the person's notices for their Confirm.`));
-  }
-}
-
-/** Pea sending a file to an outside service through a host command (guard 3). */
-export function guardSend(caller: Caller, send: SendHeld["send"], where: string): void {
-  if (guards(caller)) throw new SendHeld(send, where);
-}
-
-/* ── Held outward sends: the one guarded act the person confirms from its notice row ───── */
-
-const sends = new Map<string, HeldSend>();
-type Person = Extract<Caller, { kind: "human" }>;
-const continuations = new Map<string, (person: Person) => Promise<ActionReceipt>>();
-const listeners = new Set<() => void>();
-const sendKey = (send: HeldSendRequest) => `${send.service}:${send.sha256}:${send.pages}`;
-
-/**
- * Record a send Pea asked for and did not make. The same bytes and pages held twice are one row.
- * ponytail: in memory, so a host restart forgets held sends and Pea's next call holds again.
- */
-export function holdSend(request: HeldSendRequest, thread: string | null, at: string): HeldSend {
-  const prior = [...sends.values()].find((send) => sendKey(send) === sendKey(request));
-  if (prior) return prior;
-  const send = { ...request, id: randomUUID(), at, thread };
-  sends.set(send.id, send);
-  for (const listener of listeners) listener();
-  return send;
-}
-export const heldSends = (): HeldSend[] => [...sends.values()];
-export const heldSend = (id: string) => sends.get(id);
-/** A command held before reading a source has an intent digest, not a digest of unread bytes. */
-export function holdSendCommand(request: HeldSendRequest, thread: string | null, run: (person: Person) => Promise<ActionReceipt>) {
-  const send = holdSend(request, thread, new Date().toISOString());
-  if (!continuations.has(send.id)) continuations.set(send.id, run);
-  return send;
-}
-/** Consume before admission yields: only the authenticated person's first Confirm can start a send. */
-export function confirmSend(
-  send: HeldSend,
-  person: Person,
-  fallback: (send: HeldSend, person: Person) => Promise<ActionReceipt>,
-): Promise<ActionReceipt> {
-  const run = continuations.get(send.id);
-  releaseSend(send.id);
-  return run ? run(person) : fallback(send, person);
-}
-/** The person consumed the hold, or the row is void: either way it leaves the feed. */
-export function releaseSend(id: string) {
-  continuations.delete(id);
-  if (sends.delete(id)) for (const listener of listeners) listener();
-}
-export const subscribeHeldSends = (listener: () => void) => {
-  listeners.add(listener);
-  return () => void listeners.delete(listener);
-};

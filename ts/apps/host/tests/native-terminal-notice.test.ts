@@ -9,7 +9,7 @@ const lost = {
   input: {}, state: "unknown" as const, error: "socket killed", status: 503,
 };
 const view = { documentKey: "model", uniqueId: "view-unique", id: 42 };
-const sources = { threads: [], works: [], machine: null, stored: [], held: [] };
+const sources = { threads: [], works: [], machine: null, stored: [], };
 const touchedCases: Touched[] = [
   { kind: "restoreFailed", views: [{ view, left: ["crop", "scopeBox"] }] },
   { kind: "unauthorized", transactions: ["unexpected"], added: 0, modified: 1, deleted: 0 },

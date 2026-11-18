@@ -16,19 +16,6 @@ export type NoticeGroup = z.infer<typeof noticeGroupSchema>;
 
 /** The door a row opens, when a press answers it instead of only landing on it. */
 export const noticeActSchema = z.discriminatedUnion("kind", [
-  /**
-   * A held outward send (ADR 0038 guard 3): Confirm runs it as the person, and the result is kept
-   * where Pea's next read of the same bytes finds it. Other held acts carry no act: the person
-   * does them in Revit or the web app themselves.
-   */
-  /** `to` is the outside service the bytes go to: the Confirm button names it. */
-  z.strictObject({
-    kind: z.literal("confirm-send"),
-    id: z.string().min(1),
-    to: z.string().min(1),
-    /** Shown on the row too: tells this Confirm from another hold's on the same file. */
-    detail: z.string().min(1),
-  }),
   z.strictObject({
     kind: z.literal("question"),
     threadId: z.string().min(1),

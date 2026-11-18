@@ -159,7 +159,7 @@ test("a firm home arriving late clears its unavailable warning and notifies the 
   vi.spyOn(paths, "resolveHomes").mockReturnValue(release.promise);
   vi.useFakeTimers();
   const owner = acquireContentRoots(), changed = vi.fn(), stop = observeContentRoots(changed);
-  const rows = () => noticeRows({ threads: [], receipts: [], works: [], held: [], machine: null,
+  const rows = () => noticeRows({ threads: [], receipts: [], works: [], machine: null,
     stored: notices(hostState()).filter(n => n.path === firm), firmHomeUnavailable: contentRootsUnavailable(),
   }, Date.now());
   try {

@@ -1,4 +1,3 @@
-import { outwardSendExecutor } from "./outward-send.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { commandResources, commandReadOwnership, type NativeReadTerminals } from "./command-reads.ts";
@@ -41,7 +40,6 @@ export function commandRegistry(
   origin?: () => string,
 ): CommandRegistry {
   const implementations: Record<string, CommandExecutor> = {
-    "outward.send": outwardSendExecutor(),
     "work.start": workStartExecutor(deps.workspace),
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
     "page.publish": pagePublicationExecutor(

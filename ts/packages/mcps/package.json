@@ -28,7 +28,7 @@
     "./family-pdf": "./src/shared/family-pdf.ts",
     "./llama-parse": "./src/shared/llama-parse.ts",
     "./llama-key": "./src/shared/llama-key.ts",
-    "./held-parse": "./src/shared/held-parse.ts"
+    "./derived-parse": "./src/shared/derived-parse.ts"
   },
   "publishConfig": {
     "access": "public"

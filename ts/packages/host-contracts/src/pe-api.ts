@@ -189,9 +189,7 @@ export type PeApiSchemas = Record<
   | "captureListSchema"
   | "pageTargetReadingSchema"
   | "ductCatalogReadingSchema"
-  | "parsedDocViewSchema"
-  | "heldSendRequestSchema"
-  | "heldSendSchema",
+  | "parsedDocViewSchema",
   z.ZodType
 >;
 
@@ -736,34 +734,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "caller",
     ),
-    /**
-     * Guard 3 (ADR 0038): an outward send that is not the person's own is held here at once. The
-     * answer is the held record and its one notice row, never a wait and never the send.
-     */
-    "outward.hold": route(
-      "POST",
-      "/pe/outward/held",
-      schemas.heldSendRequestSchema as S["heldSendRequestSchema"],
-      z.object({ held: schemas.heldSendSchema as S["heldSendSchema"], message: z.string() }),
-      "caller",
-      "pe",
-      "caller",
-    ),
-    /** The person's Confirm on that notice row: Pe sends the held bytes and keeps the result. */
-    "outward.confirm": route(
-      "POST",
-      "/pe/outward/held/:id/confirm",
-      none,
-      ok,
-      "human",
-      "pe",
-      "human",
-    ),
-    /**
-     * Guard 3's proof for a server that sends for the person (the doc lab's parse route): it
-     * replays the request's identity here before a byte leaves, and only the person's answers ok.
-     */
-    "outward.person": route("POST", "/pe/outward/person", none, ok, "human", "pe", "human"),
     "diagnostics.submit": route(
       "POST",
       "/pe/diagnostics",

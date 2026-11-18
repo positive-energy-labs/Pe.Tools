@@ -1,6 +1,6 @@
 /**
  * The LlamaParse key lookup, apart from `llama-parse.ts` so the web build (which imports that module for
- * `isPersonRequest`) never reaches the node-only key resolver (host-build-boundary guard).
+ * the web parser route) never reaches the node-only key resolver (host-build-boundary guard).
  */
 import { keyRefusalText, resolveKey } from "@pe/host-contracts/shared-keys";
 import { stateTree } from "@pe/host-contracts/service-identity";

@@ -3,27 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import "@tanstack/react-start";
 
 import { putParsedDoc } from "#/grounded-doc/parse-cache";
-import { isPersonRequest } from "@pe/mcps/llama-parse";
 import { parseFamilyPdf } from "@pe/mcps/family-pdf";
-import { held } from "@pe/agent-contracts";
 
 export const Route = createFileRoute("/api/pdf-audit/parse")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        // Guard 3 (ADR 0038): this route uploads to LlamaCloud, and can fetch a URL to do it, so
-        // it runs only for the person the host proves, before the body is read.
-        if (!(await isPersonRequest(request.headers)))
-          return Response.json(
-            {
-              error: held(
-                "send-outward",
-                "the document",
-                "Pea reads a document with read_document, which holds the send for the person's Confirm.",
-              ).message,
-            },
-            { status: 409 },
-          );
         const apiKey = process.env.LLAMA_CLOUD_API_KEY;
         if (!apiKey) {
           return Response.json(

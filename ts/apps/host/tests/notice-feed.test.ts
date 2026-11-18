@@ -38,7 +38,7 @@ test("start census notices earlier Work once per folder without changing files",
     const text = `Work saved by an earlier version is at ${work}. This version no longer reads it. Nothing was changed or deleted. You may delete the folder.`;
     expect(stored[0]!.reason).toBe(text);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
+      { threads: [], receipts: [], works: [], machine: null, stored, },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);
@@ -121,7 +121,7 @@ test("no firm home posts one notice that names where the host looked, and it dra
     const stored = storedNotices(stateMachine(storedParent(notices)));
     expect(stored).toHaveLength(1);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored, held: [] },
+      { threads: [], receipts: [], works: [], machine: null, stored, },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);

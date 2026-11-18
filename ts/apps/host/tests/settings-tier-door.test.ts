@@ -97,7 +97,7 @@ test.each(["firm", "project"] as const)("settings.tiers.write crosses /actions, 
     expect(invalid).toMatchObject({ state: "failed", status: 422, notDispatched: true, refusal: { kind: "invalid" }, outcome: { state: "refused" } });
     expect(invalid.outcome.recovery).toBeUndefined();
     expect(readFileSync(path)).toEqual(beforeRefusal);
-    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], held: [], receipts: [{ revision: 1, action: refused }] }, Date.now());
+    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: refused }] }, Date.now());
     expect(rows).toMatchObject([{ group: "failed", verb: "stale", says: expect.stringContaining("changed since it was read") }]);
     expect(rows.some(row => row.group === "waits")).toBe(false);
     const bytes = readFileSync(path);
