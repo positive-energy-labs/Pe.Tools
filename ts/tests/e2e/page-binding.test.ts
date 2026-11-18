@@ -9,15 +9,18 @@ test("document mutations fail closed on rendered binding, independently of URL",
   process.env.E2E_WEB = "http://fixture/fans";
   delete process.env.E2E_LINKAGE_MODE;
   const visible = { getClientRects: () => [1] };
-  const page = (ids: string[], chooser = false) => ({ evaluate: async (fn: () => unknown) => {
+  const page = (ids: (string | null)[], chooser = false, session: string | null = "s") => ({ evaluate: async (fn: () => unknown) => {
     const prior = globalThis.document;
     globalThis.document = { querySelectorAll: (selector: string) => selector === '[data-list-trigger]'
       ? chooser ? [{ ...visible, getAttribute: () => "Choose a document" }] : []
-      : ids.map(id => ({ getAttribute: () => id, querySelectorAll: () => [visible] })) } as unknown as Document;
+      : ids.map(id => ({ getAttribute: (name: string) => name === "data-bound-session" ? session : id, querySelectorAll: () => [visible] })) } as unknown as Document;
     try { return fn(); } finally { globalThis.document = prior; }
   } }) as Parameters<typeof assertPageBinding>[0];
   try {
     await assertPageBinding(page(["copy"]));
+    await assert.rejects(assertPageBinding(page(["copy"], false, "other-session")), /rendered document/);
+    await assert.rejects(assertPageBinding(page(["copy"], false, null)), /rendered document/);
+    await assert.rejects(assertPageBinding(page([null])), /rendered document/);
     await assert.rejects(assertPageBinding(page(["other"])), /rendered document/);
     await assert.rejects(assertPageBinding(page([])), /rendered document/);
     await assert.rejects(assertPageBinding(page(["copy"], true)), /chooser/);

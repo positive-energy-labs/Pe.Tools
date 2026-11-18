@@ -1,3 +1,4 @@
+import { wait as waitFor, exited, stopOwned } from "./owned-runtime.ts";
 // One owned demo runtime, or an explicit borrowed browser/server. Never starts Revit.
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
@@ -98,49 +99,14 @@ const trayHash = async () => {
   );
   return bytes ? createHash("sha256").update(bytes).digest("hex") : null;
 };
-const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
-async function wait<T>(
-  read: () => Promise<T | undefined>,
-  label: string,
-  timeout: number,
-): Promise<T> {
-  const end = Date.now() + timeout;
-  while (!cancelled && Date.now() < end) {
-    const result = await read();
-    if (result !== undefined) return result;
-    await pause(100);
-  }
-  throw new Error(`${cancelled ? "Interrupted" : "Timed out"}: ${label}`);
-}
-async function exited(child: ChildProcess, timeout: number) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise<void>((done, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`Owned process ${child.pid} did not exit`)),
-      timeout,
-    );
-    child.once("exit", () => {
-      clearTimeout(timer);
-      done();
-    });
-  });
-}
+const wait = <T>(read: () => Promise<T | undefined>, label: string, timeout: number) =>
+  waitFor(read, label, timeout, () => cancelled);
 const interrupt = () => {
   cancelled = true;
   documentAbort?.abort(new Error("Interrupted during source document readiness"));
   if (testProcess)
     void stopOwned(testProcess).catch((error) => receipt.cleanup.push(String(error)));
 };
-async function stopOwned(child: ChildProcess) {
-  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
-  if (process.platform === "win32")
-    await exec("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-      timeout: 10_000,
-      windowsHide: true,
-    });
-  else child.kill("SIGKILL");
-  await exited(child, 5000);
-}
 process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
