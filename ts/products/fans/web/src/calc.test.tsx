@@ -47,6 +47,14 @@ test("a run airflow draws work provenance on Fans", () => {
   expect(view.container.querySelector('[data-input-source="work"]')?.textContent).toBe("work");
 });
 
+test("a none source supplies no airflow layer, even with a retained number", () => {
+  const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", connectors: [], facts: [] };
+  const read = { calcSnapshot: { ...snapshot, nodes: [unit] }, calcView: { inputs: { units: { "7": { cfm: { value: 1234, source: "none" } } } } } };
+  const cells = sheetCells({ bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } }, { rows: [], work: {}, read });
+  expect(cells[0]).toMatchObject({ value: null, model: null, pending: null });
+  expect(cells[0]?.source).not.toBe("none");
+});
+
 test("D25: a retained resolved Work airflow keeps Work provenance after its live edit is undone", () => {
   const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", family: "MUAS", type: "A", mark: "MA-1", connectors: [], facts: [] };
   const row = elementSubject(unit);

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { commands } from "@pe/agent-contracts/semantic-actions";
 import type { CatalogAxes } from "../../../../../../packages/agent-contracts/src/catalog.ts";
-import { SHEET_COMMANDS, local, parameter, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
+import { SHEET_COMMANDS, local, parameter, setting, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { sheetCells } from "./index.ts";
 
@@ -15,6 +15,14 @@ import { sheetCells } from "./index.ts";
  * the model, and one plan/apply pair in the catalog that the linker rule admits.
  */
 const uid = (text: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(text) });
+
+test("setting bindings serve their fallback through the model and prefer a stated home", () => {
+  const slot = { bindings: { gap: setting("ducts", ["gap"], { kind: "number" }, ["firm"], { default: 3 }) } };
+  const cells = (read?: unknown) => sheetCells(slot, { rows: [], work: {}, read });
+  expect(cells({})[0]).toMatchObject({ value: 3, model: 3, source: "default" });
+  expect(cells({ settings: { ducts: [{ tier: "firm", home: "Firm", name: "Firm", json: { gap: 5 } }] } })[0]).toMatchObject({ value: 5, model: 5, source: "firm" });
+  expect(cells()[0]).toMatchObject({ value: null, model: null });
+});
 
 test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite binds a plan whose effect is Read or TransactRead", () => {
   // A Pod decodes the same home and domain grammar the browser declares.
