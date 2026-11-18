@@ -4,7 +4,7 @@ import { criterionLabel } from "@pe/ducts-contract/criterion-words.neutral";
 import { setting, schemaOf, type Domain, type Home, type SheetBinding } from "./slots/sheet.ts";
 import type { SettingTier } from "./tiered-setting.ts";
 
-export const NO_SHARED_ROOT = "No firm home: no shared drive on this machine holds 04 PE Software Files\\Pe.Tools, so the firm files (Settings/<owner>.json) are not read";
+export const NO_SHARED_ROOT = "No firm home, so the firm files (Settings/<owner>.json) are not read. Set your firm home in Settings";
 export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
 export const criterionDomain = (cell: DuctsCriteriaCell): Domain => DUCTS_CRITERIA_CELLS[cell].domain;
 export const criterionCellLabel = (cell: DuctsCriteriaCell) => {

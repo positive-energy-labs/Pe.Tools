@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
@@ -10,7 +10,6 @@ import {
   firmSettingsDir,
   homes,
   markerTier,
-  machineFacts,
   sharedDriveRoot,
   type Home,
   type HomeFacts,
@@ -44,15 +43,13 @@ const fixture = JSON.parse(
     name: string;
     productHome: string | null;
     sharedRoot: string | null;
-    drives: string[];
-    folders: Record<string, string[]>;
+    existing: string[];
     markerFiles: Record<string, string>;
     pointer: string | null;
     user: string;
     project: string | null;
     firm: string | null;
     sharedDriveRoot: string | null;
-    firmConflict: string[];
     homes: string[];
     firmSettings: string | null;
     firmPreferences: string | null;
@@ -95,8 +92,7 @@ test.each(fixture.markers)("marker: $name", (row) => {
 });
 
 const factsOf = (row: (typeof fixture.homes)[number]): HomeFacts => ({
-  drives: row.drives,
-  list: (directory) => row.folders[directory] ?? [],
+  exists: (folder) => row.existing.includes(folder),
   marker: (folder) => row.markerFiles[folder] ?? null,
 });
 
@@ -113,7 +109,6 @@ test.each(fixture.homes)("homes: $name", (row) => {
   expect(of("project")).toBe(row.project);
   expect(of("firm")).toBe(row.firm);
   expect(firmHome(facts).root).toBe(row.firm);
-  expect(firmHome(facts).refused ?? []).toEqual(row.firmConflict);
   expect(sharedDriveRoot(facts)).toBe(row.sharedDriveRoot);
   expect(firmSettingsDir(facts)).toBe(row.firmSettings);
   expect(firmSettingsDir(facts) && join(firmSettingsDir(facts)!, "preferences.json")).toBe(
@@ -152,30 +147,6 @@ test.each(fixture.trayLaunches)("tray argv: $name", (row) => {
 let root: string;
 let installed: string;
 
-test("a cached firm probe rechecks its marker without rescanning the injected drive list", () => {
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
-  const shared = join(root, "04 PE Software Files", "Pe.Tools");
-  mkdirSync(shared, { recursive: true });
-  writeFileSync(join(shared, "pe-home.json"), '{"tier":"firm"}');
-  const disk = machineFacts([root]);
-  const facts = { ...disk, list: vi.fn(disk.list) };
-  expect(firmHome(facts).root).toBe(shared);
-  expect(firmHome(facts).root).toBe(shared);
-  expect(facts.list).toHaveBeenCalledTimes(1);
-  renameSync(join(shared, "pe-home.json"), join(shared, "marker-away.json"));
-  expect(firmHome(facts).root).toBeNull();
-  expect(firmSettingsDir(facts)).toBeNull();
-  expect(facts.list).toHaveBeenCalledTimes(1);
-  renameSync(join(shared, "marker-away.json"), join(shared, "pe-home.json"));
-  expect(firmHome(facts).root).toBeNull();
-  const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 30_001);
-  try {
-    expect(firmHome(facts).root).toBe(shared);
-    expect(facts.list).toHaveBeenCalledTimes(2);
-  } finally {
-    clock.mockRestore();
-  }
-});
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "pe-isofix-"));
@@ -183,7 +154,7 @@ beforeEach(() => {
   installed = join(local, "Positive Energy", "Pe.Tools");
   vi.stubEnv("LOCALAPPDATA", local);
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", undefined);
-  vi.stubEnv("PE_TOOLS_SHARED_ROOT", join(root, "no-firm")); // a told, unmarked firm replaces the probe: no real G: drive
+  vi.stubEnv("PE_TOOLS_SHARED_ROOT", join(root, "no-firm")); // isolate the firm folder from the literal default
 });
 
 afterEach(() => {

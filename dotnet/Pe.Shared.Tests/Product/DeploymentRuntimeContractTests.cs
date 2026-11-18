@@ -111,7 +111,7 @@ public sealed class DeploymentRuntimeContractTests {
             var content = ProductUserContentLayout.ForCurrentUser();
             Assert.That(content.RootPath, Is.EqualTo(documents));
             Assert.That(content.Scripting.RootPath, Is.EqualTo(Path.Combine(documents, "Pods")));
-            // The override is read from the environment and still needs its marker: none, so no firm home.
+            // The override is read from the environment and names a folder that does not exist yet, so no firm home.
             Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { documents }));
             Directory.CreateDirectory(shared);
             File.WriteAllText(Path.Combine(shared, ProductPathNames.HomeMarkerFileName), "{\"tier\":\"firm\"}");
@@ -131,7 +131,7 @@ public sealed class DeploymentRuntimeContractTests {
     }
 
     // homes.json (Settings' choice) under this assembly's configured state root: it names both homes, the
-    // environment override beats it, and a chosen firm folder with no marker is no firm home, not the probe.
+    // environment override beats it, and a chosen firm folder that does not exist is no firm home, not the default.
     // Mutant, run red once (2026-11-17): drop ToldHome's environment branch and the override assertion fails.
     [Test, NonParallelizable]
     public void Homes_json_names_the_homes_and_the_override_beats_it() {
@@ -150,7 +150,7 @@ public sealed class DeploymentRuntimeContractTests {
             File.WriteAllText(file, "{ \"firm\": \"" + Json(firm) + "\", \"user\": \"" + Json(user) + "\" }");
             Assert.That(ProductPathing.HomesConfig(File.ReadAllText(file)), Is.EqualTo(((string?)firm, (string?)user)));
             Assert.That(ProductPathing.UserRoot(), Is.EqualTo(user));
-            Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { user }), "an unmarked chosen firm folder is no firm home");
+            Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { user }), "a chosen firm folder that does not exist is no firm home");
             Directory.CreateDirectory(firm);
             File.WriteAllText(Path.Combine(firm, ProductPathNames.HomeMarkerFileName), "{\"tier\":\"firm\"}");
             Assert.That(ProductPathing.Homes().List, Is.EqualTo(new[] { user, firm }));

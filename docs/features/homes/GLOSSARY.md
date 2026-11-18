@@ -5,7 +5,7 @@ Canonical language for content homes, tiered values, guards and secrets ([ADR 00
 ## Places
 
 **Home**:
-A folder that holds authored content and carries the marker file `pe-home.json`. The folder name is its display name.
+A folder that holds authored content. A project home carries the marker file `pe-home.json`; the firm and user homes carry none. The folder name is its display name.
 _Avoid_: root, drawer, place, shared root; "home" for the T3 home, the product home override or the agent's working directory
 
 **Tier**:

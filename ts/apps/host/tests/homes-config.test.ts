@@ -24,10 +24,9 @@ test("a homes write lands in state homes.json, re-resolves before answering, and
     const unmarked = await writeHomesConfig({ firm });
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ firm });
     expect(unmarked.homes.map((home) => home.tier)).toEqual(["user"]);
-    expect(unmarked.firmNotice).toContain(firm);
+    expect(unmarked.firmNotice).toBe("Set your firm home in Settings");
 
     mkdirSync(firm, { recursive: true });
-    writeFileSync(join(firm, "pe-home.json"), `{"tier":"firm"}`);
     const marked = await writeHomesConfig({ firm });
     expect(contentHomes().find((home) => home.tier === "firm")?.root).toBe(firm);
     expect(marked.homes.find((home) => home.tier === "firm")).toEqual({

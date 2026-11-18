@@ -1,7 +1,7 @@
 # The PowerShell form of the product path rules (ADR 0035 rule 11; C# ProductPathing, TS product-paths.ts
 # and service-identity.ts); all assert ts/packages/host-contracts/tests/runtime-ownership.fixture.json.
-# Only the machine state root is resolved here. The content homes (ADR 0037: user, project, firm, each proven by
-# its pe-home.json) are resolved by C# and TS alone; no PowerShell caller needs them. Callers own directory creation.
+# Only the machine state root is resolved here. The content homes (ADR 0037: user, project, firm, only the project requires
+# pe-home.json) are resolved by C# and TS alone; no PowerShell caller needs them. Callers own directory creation.
 function Resolve-DocumentsUserRoot {
     return [IO.Path]::Combine([Environment]::GetFolderPath('MyDocuments'), 'Pe.Tools')
 }
