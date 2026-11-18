@@ -21,6 +21,7 @@ const outputKind = stateKind({
 import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
+import { withInvocationContext } from "@pe/runtime/context";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
 import type { HttpClient } from "effect/http";
 import type { FileSystem, Path } from "effect";
@@ -1914,7 +1915,16 @@ export class ActionJournal implements ReceiptReader {
     return (await this.list(undefined, id))[0] ?? row;
   }
 
-  async recover(id: string): Promise<ActionReceipt> {
+  /** One SDK read per row at a time: a second caller (boot beside a connect) awaits the first. */
+  private readonly recovering = new Map<string, Promise<ActionReceipt>>();
+  recover(id: string): Promise<ActionReceipt> {
+    const held = this.recovering.get(id);
+    if (held) return held;
+    const run = this.recoverOnce(id).finally(() => this.recovering.delete(id));
+    this.recovering.set(id, run);
+    return run;
+  }
+  private async recoverOnce(id: string): Promise<ActionReceipt> {
     const original = (await this.list(undefined, id))[0];
     if (!original) throw Error(`Action '${id}' has no admitted receipt`);
     if (original.refusal?.kind === "domain" && original.refusal.code === "historical-schema")
@@ -1929,7 +1939,7 @@ export class ActionJournal implements ReceiptReader {
     const asked = original.steps.filter(unanswered);
     // Only this boot's interruption, or an answer this call reads, re-enters; then never again.
     const interrupted = this.interrupted.delete(id);
-    if (!asked.length && !interrupted) return original;
+    if (!asked.length && !interrupted && original.state !== "unknown") return original;
     let answered = false;
     const updates: {
       step: ActionStep;
@@ -1981,9 +1991,8 @@ export class ActionJournal implements ReceiptReader {
       // A read that changed no step proves nothing new and writes no revision.
       const changed = updates.some(({ step }) =>
         canonicalRouteInput(step) !== canonicalRouteInput(original.steps.find((held) => held.id === step.id)));
-      if (!changed || canonicalRouteInput(current) !== canonicalRouteInput(original))
+      if (canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
-      answered = true;
       let nextRow: ActionReceipt = {
         ...current,
         steps: current.steps.map(
@@ -2000,7 +2009,14 @@ export class ActionJournal implements ReceiptReader {
           })),
         ],
       };
-      const settled = settle(true, nextRow.steps, { kind: "recovered" });
+      // Every step answered but the executor never finished: known effects, not an unknown outcome
+      // (b3b3c878). A re-entry, where it can still run, upgrades it.
+      const finished = nextRow.state === "unknown" && nextRow.steps.length > 0 && !nextRow.steps.some(unanswered);
+      if (!changed && !finished) return structuredClone(current);
+      answered = changed;
+      const settled = settle(true, nextRow.steps, { kind: "recovered" }) ?? (finished
+        ? { state: "incomplete" as const, error: "The host restarted before this action finished; every step it ran has an answer", status: 503, result: null }
+        : null);
       if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);
       const native = updates.flatMap((update) => {
@@ -2040,11 +2056,14 @@ export class ActionJournal implements ReceiptReader {
     ) {
       const executable = executableActionReceiptSchema.safeParse(recovered);
       if (!executable.success) return recovered;
-      await this.invoke(
+      // Boot and connect run outside any request, so Work would read an anonymous author. The
+      // re-entry carries the row's own caller, as the live request did (drive 3 case 1).
+      // effect-edge: als-crossing
+      await withInvocationContext({ caller: recovered.caller }, () => this.invoke(
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
         { caller: recovered.caller, basis: executable.data.basis },
         true,
-      ).catch((error) => {
+      )).catch((error) => {
         // Refused before it ran (no attachment yet, a claim, a stopping host): try again later.
         this.interrupted.add(id);
         throw error;

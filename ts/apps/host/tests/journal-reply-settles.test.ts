@@ -227,13 +227,42 @@ test("H: a lost-reply script answered at boot with no attachment waits, and the 
     // Boot answers the step, then its re-entry is refused for want of the attachment.
     await vi.waitFor(() => expect(failed.mock.calls.some(([message]) => String(message).includes("reconcile script failed"))).toBe(true), { timeout: 10_000 });
     const pending = (await after.journal.list(undefined, "script"))[0]!;
-    expect(pending.state).toBe("unknown");
+    // Every step answered: incomplete, never a false "succeeded" (b3b3c878); the connect upgrades it.
+    expect(pending.state).toBe("incomplete");
     expect(pending.steps.at(-1)).toMatchObject({ state: "succeeded", bridgeReply: "touched" });
     await after.connect();
     await vi.waitFor(async () => expect((await after.journal.list(undefined, "script"))[0]).toMatchObject({ state: "succeeded" }), { timeout: 10_000 });
     expect(reads).toHaveLength(1);
     expect(after.calls.filter((call) => call.key === "scripting.execute")).toEqual([]);
   } finally { failed.mockRestore(); await after.close(); await rm(dir, { recursive: true, force: true }); }
+});
+
+test("I: an unknown row whose every step answered settles incomplete at boot, once, with no read or re-run", async () => {
+  // b3b3c878: the read answered "wrote", then the session ended, so no connect can ever come.
+  const answered = row({ state: "unknown", error: "Host restarted", status: 503, target: { kind: "session", session: "S" } },
+    [step({ state: "succeeded", result: { status: "Succeeded" }, bridgeReply: "touched", touched: wrote })]);
+  let f = await journalWith(answered, succeeded);
+  const dir = f.dir;
+  try {
+    await f.journal.reconcile();
+    const settled = (await f.journal.list(undefined, "a1"))[0]!;
+    expect(settled, JSON.stringify(settled)).toMatchObject({ state: "incomplete", steps: [{ state: "succeeded", touched: wrote }] });
+    expect(f.recover).not.toHaveBeenCalled();
+    expect(f.ran).toEqual([]);
+    const once = await f.bytes();
+    await f.close();
+    f = await journalWith(answered, succeeded, { dir });
+    await f.journal.reconcile();
+    expect(await f.bytes()).toBe(once);
+  } finally { await f.dispose(); }
+});
+
+test("J: two concurrent recovers of one row make one SDK read", async () => {
+  const f = await journalWith(lost(), (asked) => ({ ...asked, state: "failed", error: "RuntimeFailed", status: 500, bridgeReply: "touched", touched: wrote }));
+  try {
+    await Promise.all([f.journal.recover("a1"), f.journal.recover("a1")]);
+    expect(f.recover).toHaveBeenCalledTimes(1);
+  } finally { await f.dispose(); }
 });
 
 test("D: the person- and agent-facing Recover and Resume doors are not routed", async () => {
