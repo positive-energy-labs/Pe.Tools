@@ -106,6 +106,16 @@ export function unwrittenReason(staged: ReturnType<typeof stagedValues>, [segmen
     : "no staged edit: its Work cell is empty (published, restored or never staged); stage it again to write it";
 }
 
+/**
+ * What a fans apply sends of the store's rulings: its own roles only (D9, field map invariant 8). A
+ * /duct-systems verdict is priced while staged and lands only from /duct-systems, so none is sent or deleted here.
+ */
+export function fanRulings(design: DuctActionPreparation["design"], snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store">, appliedAt: string) {
+  const { roles } = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt, snapshot);
+  // The native store overlays per key (K3): a role Work takes back is removed only by naming it here.
+  return { rulings: { roles }, storeDeletes: { roles: Object.keys(snapshot.store?.roles ?? {}).filter((id) => !(id in roles)).map(Number) } };
+}
+
 async function prepareLosses(p: DuctActionPreparation) {
   let { intent, read, readNative, snapshot, design, doc, fans, firm, pointer, deps, appliedAt } = p;
 
@@ -141,18 +151,10 @@ async function prepareLosses(p: DuctActionPreparation) {
             const peerClaims = new Map<number, DomainClaim>();
             for (const { elementId: unitId } of peers)
               peerClaims.set(unitId, buildCalc((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
-            const cells = [...(doc.writeIntent.edit?.value?.cells ?? []), ...fanWriteCells(fans, snapshot)];
-            const rulings = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt ?? "", snapshot);
+            // D9: the scope is Fans Work alone; /duct-systems write-scope cells (its rules) are not a fans write.
+            const cells = fanWriteCells(fans, snapshot);
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-            const { claim, request } = fanWriteRequest(
-              input,
-              { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, rulings,
-                // The native store overlays per key (K3): a ruling Work takes back is removed only by naming it here.
-                storeDeletes: {
-                  verdicts: Object.keys(snapshot.store?.verdicts ?? {}).filter((key) => !(key in rulings.verdicts)),
-                  roles: Object.keys(snapshot.store?.roles ?? {}).filter((id) => !(id in rulings.roles)).map(Number),
-                } },
-            );
+            const { claim, request } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
             const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
             const unwritten = unwrittenCells(scoped, cells, snapshot);
             if (unwritten.length)

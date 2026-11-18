@@ -52,7 +52,7 @@ export const pendingCount = (doc: DuctsDesign | null, store: DuctSnapshot["store
 
 
 
-/** Retire only cells whose transmitted native writes succeeded; held and refused cells stay edit. */
+/** Retire only Fans Work cells whose transmitted native writes succeeded; held and refused cells stay edit. No /duct-systems cell is retired here (D9). */
 export function appliedCellPaths(
   input: DuctsApplyInput,
   response: DuctsApply.Res.Response,
@@ -73,16 +73,8 @@ export function appliedCellPaths(
     [input.equipmentFlows, "equipment-flow", "equipmentFlows"],
   ] as const)
     for (const row of rows) if (has(kind, row.id)) paths.push(...cells.filter(([s, key]) => s === segment && subjects[key] === String(row.id)));
-  const rules = new Map<string, number[]>();
-  for (const fitting of input.fittings)
-    if (fitting.ruleKey)
-      rules.set(fitting.ruleKey, [...(rules.get(fitting.ruleKey) ?? []), fitting.id]);
-  for (const [key, ids] of rules)
-    if (ids.every((id) => has("fitting", id))) paths.push(["rules", key]);
-  for (const write of succeeded) {
-    if (write.kind === "verdict" && write.key) paths.push(["assumptions", write.key]);
+  for (const write of succeeded)
     if (write.kind === "role" && write.id != null) paths.push(...cells.filter(([s, key]) => s === "roles" && subjects[key] === String(write.id)));
-  }
   return paths;
 }
 
