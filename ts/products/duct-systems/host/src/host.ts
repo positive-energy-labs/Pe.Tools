@@ -135,9 +135,8 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
       design: ductsDesign(layers.ducts, layers.fans), firm: firmLayer(layers.firm, layers.settings), revision: layers.revision });
     return ctx.compute(
       ductsPricingData,
-      { roster, fans, network, layers, catalog, calcs },
-      ({ roster, fans, network, layers, catalog, calcs }) => {
-        const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
+      { roster, fans, network, snapshot: acquired, layers, catalog, calcs },
+      ({ roster, fans, network, snapshot, layers, catalog, calcs }) => {
         const design = ductsDesign(layers.ducts, layers.fans);
         const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
         const result = pricingWire(
