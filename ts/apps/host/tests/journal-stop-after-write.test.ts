@@ -24,7 +24,8 @@ const bridge = {
 };
 const registryCancel = commandRegistry(bridge as never, {} as never, {} as never, () => Effect.fail(Error("unused")))("work.start").cancel!;
 
-type Shape = { retire?: "ok" | "throws"; native?: "ok" | "cancelled"; holdFirst?: boolean };
+// sdk: an SDK-lane step, which carries neither `dispatchedAt` nor `touched` (sdk-dispatch.ts).
+type Shape = { retire?: "ok" | "throws"; native?: "ok" | "cancelled"; holdFirst?: boolean; sdk?: boolean };
 async function fixture(shape: Shape) {
   const dir = await mkdtemp(join(tmpdir(), "pe-stop-after-write-"));
   const host = Scope.makeUnsafe();
@@ -49,8 +50,8 @@ async function fixture(shape: Shape) {
           // holdFirst: the Stop lands before any step exists, so nothing reached Revit.
           if (shape.holdFirst) { waiting.push("before"); yield* Deferred.await(before); }
           yield* execution.step("native", "test.write", {}, (id) => Effect.gen(function* () {
-            yield* Effect.promise(() => markDispatched(id, "bridge"));
-            yield* Effect.promise(() => recordNativeTerminal(id, wrote));
+            if (!shape.sdk) yield* Effect.promise(() => markDispatched(id, "bridge"));
+            if (!shape.sdk) yield* Effect.promise(() => recordNativeTerminal(id, wrote));
             replied.push(id);
             yield* Deferred.await(release);
             // Revit's own cancel after the script committed: 499 with `touched: wrote` already recorded.
@@ -86,10 +87,11 @@ test("a Stop saved after Revit replied answers with the row, not 'nothing to can
   try {
     await f.journal.invoke({ id: "stop-after-reply", key: "w", target: { kind: "host" }, input: {} }, { caller: human, basis: null });
     await vi.waitFor(() => expect(f.replied).toHaveLength(1));
-    const stop = await f.journal.cancel("stop-after-reply").then((row) => ({ row }), (error: unknown) => ({ error: String(error) }));
+    const stop = await f.journal.cancel("stop-after-reply").catch((error: unknown) => ({ error: String(error) }));
     // The Stop is durable either way; the defect is that its caller is told it did nothing.
     expect((await f.journal.list(undefined, "stop-after-reply"))[0]).toMatchObject({ cancellationRequested: true });
-    expect(stop).toMatchObject({ row: { id: "stop-after-reply", cancellationRequested: true } });
+    // Saved, and nothing was signalled: Revit held no request by that id (the door answers 200).
+    expect(stop).toMatchObject({ receipt: { id: "stop-after-reply", cancellationRequested: true }, signalled: false });
   } finally { await f.dispose(); }
 });
 
@@ -105,6 +107,9 @@ test("a Stop after the write never settles the action as 'cancelled before dispa
     // The model holds the write: the receipt must not say the action was cancelled before dispatch.
     expect(settled.state, JSON.stringify(settled)).not.toBe("cancelled");
     expect("error" in settled ? settled.error : "").not.toMatch(/before dispatch/);
+    // A Stop does not undo a landed write: Work retires and the row succeeds, the Stop still recorded.
+    expect(settled).toMatchObject({ state: "succeeded", cancellationRequested: true });
+    expect(f.ran).toEqual(["work.retire"]);
   } finally { await f.dispose(); }
 });
 
@@ -143,5 +148,17 @@ test("a Stop after the write, then a retirement that fails on its own, settles i
     const settled = await f.journal.wait("stop-retire-fails");
     expect(settled, JSON.stringify(settled)).toMatchObject({ state: "incomplete", cancellationRequested: true, error: "Retirement requires a proven external outcome" });
     expect(settled.steps.map((each) => `${each.key}:${each.state}`)).toEqual(["test.write:succeeded", "work.retire:failed"]);
+  } finally { await f.dispose(); }
+});
+
+test("an SDK-lane cancel with no touched report keeps its answer: cancelled, not incomplete", async () => {
+  const f = await fixture({ native: "cancelled", sdk: true });
+  try {
+    await f.journal.invoke({ id: "sdk-cancel", key: "w", target: { kind: "host" }, input: {} }, { caller: human, basis: null });
+    await vi.waitFor(() => expect(f.replied).toHaveLength(1));
+    f.release();
+    const settled = await f.journal.wait("sdk-cancel");
+    expect(settled.steps[0]).not.toHaveProperty("touched");
+    expect(settled, JSON.stringify(settled)).toMatchObject({ state: "cancelled" });
   } finally { await f.dispose(); }
 });

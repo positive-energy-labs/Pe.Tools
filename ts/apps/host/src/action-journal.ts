@@ -125,6 +125,11 @@ const effected = (step: ActionStep) =>
     ? (!("touched" in step) || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
       !("notDispatched" in step && step.notDispatched)
     : step.state === "succeeded");
+// K3: a cancel settles incomplete only on evidence of a write. Unlike `effected`, a step with no touched
+// report (an SDK step, a 499 before a runner saw it) is not evidence; `touched` decides when present.
+const wroteBefore = (step: ActionStep) =>
+  step.kind !== "publication" &&
+  ("touched" in step && step.touched ? ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind) : step.state === "succeeded");
 // Only a running action holds a claim (K1a). Exception: a succeeded launch keeps its session-slot
 // claim until a later step `releases` it, because that Revit is still live. Every other terminal
 // state, `unknown` and `incomplete` included, ends the claim.
@@ -394,7 +399,7 @@ type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<
  * The one terminal decision for an attempt, from its preparation, its recorded steps, and what ended
  * it. Every effect is a recorded step, so:
  * - an uncertain step is never hidden: the attempt is unknown and nothing redispatches it;
- * - cancelled is a settled answer, never a rollback claim;
+ * - cancelled is a settled answer, never a rollback claim, and only with no evidence of a write (`wroteBefore`);
  * - a known succeeded effect is never erased: a later failure makes the attempt incomplete;
  * - a native terminal that proves no remaining change keeps a later refusal known;
  * - with no effect, a failure is failed, and not dispatched only when no step reached its owner.
@@ -430,7 +435,7 @@ function settle(
     return { ...detail, state: "unknown" };
   }
   if (thrown?.state === "cancelled") {
-    if (steps.some(effected)) return { state: "incomplete", error: thrown.error, status: thrown.status, result: null };
+    if (steps.some(wroteBefore)) return { state: "incomplete", error: thrown.error, status: thrown.status, result: null };
     const { notDispatched: _notDispatched, ...cancelled } = thrown;
     return {
       ...cancelled,
@@ -449,7 +454,7 @@ function settle(
   const cancelled =
     cause.kind !== "threw" ? steps.find((step) => step.state === "cancelled") : undefined;
   if (cancelled?.state === "cancelled")
-    return { state: steps.some(effected) ? "incomplete" : "cancelled", error: cancelled.error, status: cancelled.status };
+    return { state: steps.some(wroteBefore) ? "incomplete" : "cancelled", error: cancelled.error, status: cancelled.status };
   const failedStep = [...steps].reverse().find((step) => step.state === "failed");
   const why = reason ?? (failedStep?.state === "failed" ? failedStep : undefined);
   if (steps.some(effected)) {
@@ -1891,9 +1896,10 @@ export class ActionJournal implements ReceiptReader {
   /**
    * Signal the running action's in-flight bridge request. `signal` is given the step id, which IS
    * the requestId the step was dispatched under, so the host can reach it past the session gate.
-   * Returns at once with the still-running row: the op settles `cancelled` at its own checkpoint.
+   * Returns the still-running row, and whether a cancel reached a running native request
+   * (`signalled`); a Stop with nothing to signal is still saved and fences the next step.
    */
-  async cancel(id: string): Promise<ActionReceipt> {
+  async cancel(id: string): Promise<{ receipt: ActionReceipt; signalled: boolean }> {
     const row = (await this.list(undefined, id))[0];
     if (!row) throw Error(`Action '${id}' has no admitted receipt`);
     if (row.state !== "running")
@@ -1905,6 +1911,7 @@ export class ActionJournal implements ReceiptReader {
       this.notify();
     });
     const step = row.steps.find((step) => step.state === "running" && step.kind === "native");
+    let signalled = false;
     if (step) {
       const cancel = this.environment?.resolve(row.key).cancel;
       if (!cancel || !this.owners) throw Error("Native cancellation is unavailable");
@@ -1912,8 +1919,10 @@ export class ActionJournal implements ReceiptReader {
       // concurrent Stop on this step joins the send already running and sends nothing new.
       const exit = await joined(this.owners.cancels.fork(step.id, cancel(step.id)));
       if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
+      const answer: unknown = exit.value;
+      signalled = !(typeof answer === "object" && answer !== null && "cancelled" in answer && answer.cancelled === false);
     }
-    return (await this.list(undefined, id))[0] ?? row;
+    return { receipt: (await this.list(undefined, id))[0] ?? row, signalled };
   }
 
   async recover(id: string): Promise<ActionReceipt> {

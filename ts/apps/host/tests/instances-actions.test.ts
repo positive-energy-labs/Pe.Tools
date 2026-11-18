@@ -1350,6 +1350,50 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
   release();
   expect((await f.owner.wait(row.id)).state).toBe("cancelled");
 });
+test("K3: /actions/cancel answers 200 when nothing was signalled to Revit; the Stop still fences the step", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const f = await setup(async (args) => {
+    if (args[0] === "op") return { result: { state: "ok" } };
+    if (args[1] === "save") await held;
+    return { result: { state: "ok" } };
+  });
+  const server = await serveRoutes(
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    sdkOnlyBridge,
+  );
+  cleanup.push(async () => {
+    release();
+    await server.close();
+  });
+  const headers = { "content-type": "application/json", ...contextHeaders() };
+  const save = (id: string) => fetch(`${server.base}/actions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      id,
+      key: "instances.save",
+      target: { kind: "sdk-session", selection: session.selection },
+      input: { session, document: sdkDocument, to: { kind: "self" } },
+    }),
+  });
+  expect((await save("save-first")).status).toBe(202);
+  while (!f.calls.some((args) => args[1] === "save")) await new Promise((r) => setTimeout(r, 5));
+  // The second save waits for its turn behind the first: running, with no step sent anywhere.
+  const second = await save("save-second");
+  const waiting = (await f.owner.list(undefined, "save-second"))[0]!;
+  expect([second.status, waiting.state, waiting.steps.length], JSON.stringify(waiting)).toEqual([202, "running", 0]);
+  const response = await fetch(`${server.base}/actions/cancel`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ id: "save-second" }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ id: "save-second", state: "running", cancellationRequested: true });
+  expect(f.calls.some((args) => args[0] === "op" && args[1] === "cancel")).toBe(false);
+  release();
+  expect(await f.owner.wait("save-second")).toMatchObject({ state: "cancelled", notDispatched: true });
+});
 /**
  * R5 (acceptance 2026-10-13): Pea's stop succeeded, then the action client called its own receipt
  * a conflict, because the host records the parsed request (force defaulted) and the client
