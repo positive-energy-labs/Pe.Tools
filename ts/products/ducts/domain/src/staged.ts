@@ -32,7 +32,7 @@ export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnaps
  * scoped rule's fitting coefficients to elements, and roles to the store; `rules` tables and `assumptions`
  * verdicts stay staged in /duct-systems Work (D9).
  */
-export const WRITTEN = [
+const WRITTEN = [
   "rules",
   "terminalDrops",
   "componentDrops",
@@ -40,7 +40,7 @@ export const WRITTEN = [
   "equipmentFlows",
 ] as const;
 
-export const stagedCells = (doc: DuctsDesign | null) =>
+const stagedCells = (doc: DuctsDesign | null) =>
   ([...WRITTEN, "catalogs", "ruleAssignments"] as const).flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([key, cell]) =>
       cell?.edit ? [{ segment, key, cell }] : [],
@@ -83,13 +83,11 @@ export function appliedCellPaths(
 export function scopeApplyRequest(
   request: DuctsApplyInput,
   store: DuctSnapshot["store"],
-  cells: readonly (readonly [string, string])[] | undefined,
+  cells: readonly (readonly [string, string])[],
   snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
 ): DuctsApplyInput {
-  if (!cells) return request;
-  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && (s === "rules" ? k === key : workElementId(snapshot, k) === key));
-  // D9: a scoped rule's fittings are written as element values; without `ruleKey` the native store composes no rule from them.
-  const fittings = request.fittings.filter(row => row.ruleKey && has("rules", row.ruleKey)).map(({ ruleKey: _rule, ...row }) => row);
+  const has = (segment: string, key: number) => cells.some(([s, k]) => s === segment && workElementId(snapshot, k) === key);
+  const fittings = request.fittings;
   const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
   const components = request.components.filter(row => has("componentDrops", row.id));
   const equipment = request.equipment;
@@ -101,7 +99,6 @@ export function scopeApplyRequest(
   });
   return { ...request, fittings, terminals, components, equipment, terminalFlows, equipmentFlows,
     store: { ...store, version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
-      rules: store?.rules ?? {},
       instances: merge("instances", fittings.map(row => row.id)),
       terminals: merge("terminals", terminals.map(row => row.id)),
       terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),

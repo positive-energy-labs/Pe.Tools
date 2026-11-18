@@ -30,6 +30,7 @@ import { mintWriteRequest, type FanWriteContext } from "./write-request.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 import { claimOf, type DomainClaim } from "./encounters.ts";
 import { TEST_COVERAGE } from "@pe/ducts-domain/test-inputs";
+import { scopeApplyRequest } from "@pe/ducts-domain/staged";
 const at = "2026-11-16T00:00:00Z";
 const grids = toGrids(
   JSON.parse(
@@ -156,7 +157,7 @@ function prepared(snapshot = synthetic(), work: WorkLayer = {}, run: WorkLayer =
     slots: snapshot.slots,
     peerClaims: new Map(),
     rulings: {},
-    storeDeletes: { roles: [], verdicts: [] },
+    storeDeletes: { roles: [] },
   };
   function mint(c = context) {
     if (sheet.claim.kind !== "complete") throw Error(JSON.stringify(sheet.claim));
@@ -164,6 +165,24 @@ function prepared(snapshot = synthetic(), work: WorkLayer = {}, run: WorkLayer =
   }
   return { sheet, input, context, mint };
 }
+
+it("mints fitting values without duct-systems rulings", () => {
+  const p = prepared();
+  const request = p.mint();
+  expect(request.fittings.length).toBeGreaterThan(0);
+  expect(request.store).not.toHaveProperty("rules");
+  expect(request.store).not.toHaveProperty("verdicts");
+  for (const fitting of request.fittings) expect(fitting).not.toHaveProperty("ruleKey");
+  const scoped = scopeApplyRequest(request, p.input.snapshot.store, [], p.input.snapshot);
+  expect(scoped.fittings).toEqual(request.fittings);
+});
+
+// Compile-only witness: explicit cell scope is mandatory, including when empty.
+const scopeTypeWitness = (...args: Parameters<typeof scopeApplyRequest>) => {
+  // @ts-expect-error An absent cell scope must be refused.
+  scopeApplyRequest(args[0], args[1], undefined, args[3]);
+};
+void scopeTypeWitness;
 
 it("requires this sheet's branded complete claim, never a wire FanClaim", () => {
   const p = prepared(),

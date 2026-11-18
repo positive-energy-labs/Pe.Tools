@@ -4,8 +4,6 @@ import { isCompleteClaim, type CompleteClaim, type DomainClaim } from "./encount
 import type { Calc } from "./types.ts";
 import { accessoryWrites } from "./accessory-writes.ts";
 
-type FittingWrite = DuctsApplyInput["fittings"][number] & { ruleKey: string };
-
 const MINTED = Symbol("fan write request");
 /** The wire payload; only this mint supplies its hidden symbol capability, omitted by JSON. */
 export type FanWriteRequest = DuctsApplyInput & { readonly [MINTED]: true };
@@ -20,7 +18,7 @@ export interface FanWriteContext {
    * The active unit uses the claim argument; instance-owned ESP needs no peer entry. */
   peerClaims: ReadonlyMap<number, DomainClaim>;
   rulings: Pick<NonNullable<DuctsApplyInput["store"]>, "roles">;
-  storeDeletes: NonNullable<DuctsApplyInput["storeDeletes"]>;
+  storeDeletes: Pick<NonNullable<DuctsApplyInput["storeDeletes"]>, "roles">;
 }
 
 /** Date.parse alone loses 100-ns freshness: normalize the zone at whole seconds, then retain all seven fractional digits. */
@@ -63,7 +61,7 @@ export function mintWriteRequest(
         .map((l) => l.elementId),
     ),
   ];
-  const fittings: FittingWrite[] = fittingIds.flatMap((id) => {
+  const fittings: DuctsApplyInput["fittings"] = fittingIds.flatMap((id) => {
     const evidence = legs
       .filter((l) => l.elementId === id)
       .flatMap((l) => (l.evidence.kind === "coefficient" ? [l.evidence] : []));
@@ -75,7 +73,6 @@ export function mintWriteRequest(
         method: "pe-server",
         coefficient: first.coefficient,
         table: first.table,
-        ruleKey: first.rule,
         inputs: Object.entries(first.lookup)
           .map(([k, v]) => `${k}=${v}`)
           .join(", "),
@@ -201,7 +198,6 @@ export function mintWriteRequest(
       ...snapshot.store,
       appliedAt,
       slots,
-      rules: Object.fromEntries(fittings.map((f) => [f.ruleKey, { table: f.table }])),
       instances: Object.fromEntries(
         fittings.map((f) => [
           String(f.id),
