@@ -2044,7 +2044,11 @@ export class ActionJournal implements ReceiptReader {
         { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
         { caller: recovered.caller, basis: executable.data.basis },
         true,
-      );
+      ).catch((error) => {
+        // Refused before it ran (no attachment yet, a claim, a stopping host): try again later.
+        this.interrupted.add(id);
+        throw error;
+      });
       return this.wait(id);
     }
     return recovered;
@@ -2052,14 +2056,17 @@ export class ActionJournal implements ReceiptReader {
   /**
    * K1b's automatic caller of `recover`. At boot (no session) it asks about every unknown row,
    * whatever its target, and re-enters each row this load interrupted once; on a bridge connect it
-   * asks once about each unknown row on that session with an unanswered step. A row the SDK cannot
-   * settle waits for the next connect.
+   * asks once about each unknown row on that session with an unanswered step, and retries a pending
+   * re-entry. A row the SDK cannot settle waits for the next connect.
    */
   async reconcile(session?: string): Promise<void> {
-    for (const row of await this.list())
+    // This boot's interrupted rows first, so old rows the SDK cannot settle never queue ahead.
+    const rows = (await this.list()).sort((a, b) => +this.interrupted.has(b.id) - +this.interrupted.has(a.id));
+    for (const row of rows)
       if (session === undefined
         ? row.state === "unknown" || this.interrupted.has(row.id)
-        : row.state === "unknown" && targetSession(row.target) === session && row.steps.some(unanswered))
+        : targetSession(row.target) === session &&
+          (this.interrupted.has(row.id) || (row.state === "unknown" && row.steps.some(unanswered))))
         await this.recover(row.id).catch((error) => console.error(`action-journal: reconcile ${row.id} failed`, error));
   }
   /**

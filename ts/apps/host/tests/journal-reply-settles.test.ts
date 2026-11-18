@@ -11,6 +11,7 @@ import { gatewayExecutor } from "../src/gateway-actions.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { settle } from "./effect-test.ts";
 import { fixtureNative } from "./fixture-native.ts";
+import { sdkSessions } from "./native-receipt-fixture.ts";
 
 // K1b: a reply settles a step forever. Rows are synthetic, shaped like field record 0cde3cc0.
 const human = { kind: "human" as const, via: "cli" as const };
@@ -195,6 +196,44 @@ test("G: the recovery adapter applies the live script check: an ok op whose scri
     expect(reads).toHaveLength(1);
     expect(await f.bytes()).toBe(settledBytes);
   } finally { await f.dispose(); }
+});
+
+test("H: a lost-reply script answered at boot with no attachment waits, and the connect finishes it", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "pe-reply-boot-"));
+  const recordings = ["retained-script-Succeeded", "retained-host-ops-catalog"] as const;
+  const before = await fixtureNative(dir, ...recordings);
+  const socket = await before.connect();
+  before.loseNextReply("scripting.execute");
+  const response = await before.actions()({ id: "script", key: "scripting.execute", target: { kind: "document", ref: socket.target }, input: { scriptContent: "WriteLine(1);" } });
+  expect(response.status, await response.clone().text()).toBeLessThan(400);
+  expect(await before.journal.wait("script")).toMatchObject({ state: "unknown" });
+  await before.close();
+  // The host restarts; Revit lived and the script finished ok. The SDK answers with no bridge.
+  const reads: string[] = [];
+  const sdk = async (args: readonly string[]) => {
+    if (args[0] !== "op" || args[1] !== "result") return sdkSessions(args);
+    reads.push(args[2]!);
+    const step = (await after.journal.list(undefined, "script"))[0]!.steps.at(-1)!;
+    const envelope = JSON.parse(await readFile(join(import.meta.dirname, "sdk-envelopes/op-result.ok.json"), "utf8"));
+    Object.assign(envelope.result, { requestId: step.id });
+    Object.assign(envelope.result.receipt, { requestId: step.id, key: "scripting.execute", pid: step.process!.pid, processStartUtc: step.process!.processStartUtc });
+    envelope.result.response = { payload: { status: "Succeeded", output: "1" }, touched: wrote };
+    return JSON.stringify(envelope);
+  };
+  const failed = vi.spyOn(console, "error").mockImplementation(() => {});
+  const after = await fixtureNative(dir, ...recordings);
+  try {
+    after.actions({ sdk });
+    // Boot answers the step, then its re-entry is refused for want of the attachment.
+    await vi.waitFor(() => expect(failed.mock.calls.some(([message]) => String(message).includes("reconcile script failed"))).toBe(true), { timeout: 10_000 });
+    const pending = (await after.journal.list(undefined, "script"))[0]!;
+    expect(pending.state).toBe("unknown");
+    expect(pending.steps.at(-1)).toMatchObject({ state: "succeeded", bridgeReply: "touched" });
+    await after.connect();
+    await vi.waitFor(async () => expect((await after.journal.list(undefined, "script"))[0]).toMatchObject({ state: "succeeded" }), { timeout: 10_000 });
+    expect(reads).toHaveLength(1);
+    expect(after.calls.filter((call) => call.key === "scripting.execute")).toEqual([]);
+  } finally { failed.mockRestore(); await after.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
 test("D: the person- and agent-facing Recover and Resume doors are not routed", async () => {
