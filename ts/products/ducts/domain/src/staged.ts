@@ -85,9 +85,10 @@ export function scopeApplyRequest(
   store: DuctSnapshot["store"],
   cells: readonly (readonly [string, string])[],
   snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
+  fittingRules: ReadonlyMap<number, string>,
 ): DuctsApplyInput {
-  const has = (segment: string, key: number) => cells.some(([s, k]) => s === segment && workElementId(snapshot, k) === key);
-  const fittings = request.fittings;
+  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && (s === "rules" ? k === key : workElementId(snapshot, k) === key));
+  const fittings = request.fittings.filter(row => { const rule = fittingRules.get(row.id); return rule != null && has("rules", rule); });
   const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
   const components = request.components.filter(row => has("componentDrops", row.id));
   const equipment = request.equipment;
