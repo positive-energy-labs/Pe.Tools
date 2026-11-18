@@ -1242,15 +1242,15 @@ export class RouteWorkspace {
     } catch (error) {
       const recovered = recoverCells(raw, spec);
       if (recovered) {
-        await this.#store.setState({ targetKey, route: spec.route, value: null,
-          reason: setAsideRows(spec.route, { doc: recovered.failed }) });
+        if (Object.keys(recovered.failed).length) await this.#store.setState({ targetKey, route: spec.route, value: null,
+          reason: [setAsideRows(spec.route, { doc: recovered.failed }), ...recovered.unknown].filter(Boolean).join(" ") });
         await this.#store.setState({ targetKey, route: spec.route, value: recovered.raw });
         return recovered;
       }
       // One notice for the whole record: every staged row it held, then why it was refused.
       await this.#store.setState({ targetKey, route: spec.route, value: null,
         reason: [setAsideRows(spec.route, raw), error instanceof z.ZodError
-          ? `${error.issues[0]?.path.join("/")}: ${error.issues[0]?.message}` : error instanceof Error ? error.message : String(error)]
+          ? [error.issues[0]?.path.join("/"), error.issues[0]?.message].filter(Boolean).join(": ") : error instanceof Error ? error.message : String(error)]
           .filter(Boolean).join(" ") });
       return null;
     }
@@ -1488,11 +1488,12 @@ function parseEnvelope(raw: unknown, spec: RouteStateSpec<z.ZodType>): RouteEnve
   return { ...envelope, doc: schema.parse(envelope.doc) };
 }
 
-/** Only cell failures are recoverable. Envelope/schema-version and non-cell failures stay whole-record refusals. */
+/** Cell and unknown-key failures recover locally; other failures stay whole-record refusals. */
 function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
   const header = envelopeSchema.extend({ schemaVersion: z.literal(spec.schemaVersion ?? 1) }).safeParse(raw);
   if (!header.success) return null;
-  const result = spec.schema.safeParse(header.data.doc);
+  const schema = spec.schema instanceof z.ZodObject ? spec.schema.strict() : spec.schema;
+  const result = schema.safeParse(header.data.doc);
   if (result.success) return null;
   const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object";
   const doc = structuredClone(header.data.doc), failed: Record<string, unknown> = {};
@@ -1504,8 +1505,14 @@ function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
     for (const [key, value] of Object.entries(node)) walk(value, [...path, key]);
   };
   walk(doc, []);
-  const bad = new Map<string[], string>();
+  const bad = new Map<string[], string | null>(), unknown: string[] = [];
   for (const issue of result.error.issues) {
+    // "Work that no longer decodes is set aside with the one notice" (owner, 2026-11-16).
+    // An unknown key is set aside alone because the record's other cells still decode.
+    if (issue.code === "unrecognized_keys") {
+      for (const key of issue.keys) bad.set([...issue.path.map(String), key], null);
+      continue;
+    }
     const path = paths.find(path => path.length && path.every((key, i) => String(issue.path[i]) === key));
     if (!path) return null;
     bad.set(path, issue.message);
@@ -1520,17 +1527,28 @@ function recoverCells(raw: unknown, spec: RouteStateSpec<z.ZodType>) {
     const last = path.at(-1);
     if (last !== undefined) node[last] = value;
   };
-  for (const [path, reason] of bad) {
+  for (const [path, reason] of [...bad].sort(([a], [b]) => b.length - a.length)) {
     let original: unknown = header.data.doc;
     for (const key of path) {
       if (!object(original)) return null;
       original = original[key];
     }
-    put(failed, path, original);
-    put(doc, path, { invalid: reason });
+    if (reason !== null || !(original === null || (object(original) && !Object.keys(original).length))) {
+      put(failed, path, original);
+      if (reason === null) unknown.push(`Set aside unknown key: ${path.join("/")}.`);
+    }
+    if (reason === null) {
+      let parent = doc;
+      for (const key of path.slice(0, -1)) {
+        const child = parent[key];
+        if (!object(child)) return null;
+        parent = child;
+      }
+      delete parent[path.at(-1)!];
+    } else put(doc, path, { invalid: reason });
   }
   const projected = { ...raw, doc };
-  try { return { raw: projected, envelope: parseEnvelope(projected, spec), failed }; }
+  try { return { raw: projected, envelope: parseEnvelope(projected, spec), failed, unknown }; }
   catch { return null; }
 }
 
