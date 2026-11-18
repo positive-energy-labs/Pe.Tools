@@ -1029,7 +1029,7 @@ export const replayInput = <A, I>(
     const raw = yield* reader.observation(taking);
     return yield* Schema.decodeUnknownEffect(codec)(raw).pipe(
       Effect.mapError(() =>
-        refuse("mismatch", `Recorded ${input.kind} no longer satisfies its owner's contract`),
+        refuse("mismatch", `Recorded ${input.kind === "files" ? `files.${input.file}` : input.kind} no longer satisfies its owner's contract`),
       ),
     );
   });

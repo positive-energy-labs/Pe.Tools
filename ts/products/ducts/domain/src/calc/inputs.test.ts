@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import * as inputs from "./inputs.ts";
-import { catalogLoss, type Catalogs } from "../catalog.ts";
+import { catalogLoss, catalogSchema, catalogTableSchema, type Catalogs } from "../catalog.ts";
 import { TEST_FIRM } from "../test-inputs.ts";
 
 const { resolveInputs } = inputs;
@@ -93,4 +93,16 @@ it("V5/D2: the catalog's rung is its home's tier, above the parameter until Pe h
     expect(resolveInputs({ snapshot, firm: TEST_FIRM, catalogs, store: { terminals: { "1": { inWg: 0.2 } } } }).terminals["1"]!.drop)
       .toMatchObject({ value: 0.5, source: "model" });
   }
+});
+
+it("P25: a written terminal next to a homeless table prices the parameter and does not look the table up", () => {
+  const node = { ...terminal(), facts: [{ key: "flow", value: 200 }, { key: "Pe_Catalog", text: "t" }], connectors: [{ kind: "end", shape: "round", diameterIn: 8 }] };
+  const { home: _home, ...homeless } = table("firm");
+  const priced = resolveInputs({ snapshot: snapshotOf(node), firm: TEST_FIRM, catalogs: { t: homeless } as unknown as Catalogs, store: { terminals: { "1": { inWg: 0.2 } } } });
+  expect(priced.terminals["1"]!.drop).toMatchObject({ value: 0.5, source: "model" });
+  // The table shape pricing consumes requires its home: a recorded table from before V5 no longer decodes.
+  expect(catalogTableSchema.safeParse(homeless).success).toBe(false);
+  expect(catalogTableSchema.safeParse(table("firm")).success).toBe(true);
+  // A catalog file states no home; the host's reader stamps it.
+  expect(catalogSchema.safeParse({ version: 1, tables: [homeless] }).success).toBe(true);
 });

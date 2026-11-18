@@ -1,4 +1,5 @@
 import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK } from "@pe/ducts-domain/test-inputs";
+import { resolveInputs } from "@pe/ducts-domain/calc/inputs";
 /**
  * The path engine, deterministic. Synthetic: the kernel's independently computed network
  * (price-leg.test.ts, handcalc.py totals T6/T8) hung off a roster fan with a return run; a
@@ -806,6 +807,41 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
   });
   expect(closed.blockers.some((b) => b.kind === "no-flow")).toBe(false);
   expect([3, 4, 5].map((id) => closed.legs[`${id}:0>1`]!.flowCfm)).toEqual([30, 40, 50]);
+});
+
+it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053: a model 0 is a 0 Pe wrote)", () => {
+  // A 300 cfm source forks to receivers A (200) and B (300), even split, A at 0 and B unstated.
+  const fact = (cfm: number) => [{ key: "fanFlow", value: cfm, unit: "cfm", provenance: "designer-stated" }];
+  const build = (aFacts: object[]) => {
+    const f = node(100, "equipment", { connectors: [conn(0, [1, 0], round(8))], facts: fact(300) });
+    const fork = node(2, "fitting", {
+      connectors: [conn(0, [1, 1], round(8)), conn(1, [3, 0], round(8)), conn(2, [4, 0], round(8))],
+    });
+    const receivers = [200, 300].map((id, i) =>
+      node(id, "equipment", { facts: i === 0 ? aFacts : [], connectors: [conn(0, [i + 3, 1], round(8))] }),
+    );
+    const runs = [1, 3, 4].map((id, i) =>
+      duct(id, 10, round(8), [[i * 20, 0, 0], [i * 20 + 10, 0, 0]],
+        i === 0
+          ? [conn(0, [100, 0], round(8)), conn(1, [2, 0], round(8))]
+          : [conn(0, [2, i], round(8)), conn(1, [[200, 300][i - 1]!, 0], round(8))]),
+    );
+    const snap = snapshot([f, fork, ...receivers], runs);
+    snap.slots = { ...TEST_SLOTS, fanFlow: "PE_M_Fan_AirFlowDesign" };
+    return snap;
+  };
+  const shares = (snap: CalcSnapshot, inputs: ReturnType<typeof inputsFor>) => {
+    const calc = buildCalc({ snapshot: snap, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)], grids, inputs });
+    return [3, 4].map((id) => calc.legs[`${id}:0>1`]!.flowCfm);
+  };
+  // Before the apply: the 0 is Work.
+  const staged = build([]);
+  expect(shares(staged, inputsFor(staged, { drops: { 2: 0 }, endCfm: { 200: 0 } }))).toEqual([0, 300]);
+  // After the apply and retirement: the parameter reads 0 and the store holds the receipt. Nothing was edited.
+  const retired = build(fact(0));
+  const units = resolveInputs({ snapshot: retired, firm: TEST_FIRM, store: { equipmentFlows: { "200": { cfm: 0 } } } }).units;
+  expect(units["200"]!.cfm).toMatchObject({ value: 0, source: "model" });
+  expect(shares(retired, { ...inputsFor(retired, { drops: { 2: 0 } }), units })).toEqual([0, 300]);
 });
 
 it("end terminals decide direction despite reversed metadata; an outdoor louver is an inlet end", () => {

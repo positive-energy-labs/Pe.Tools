@@ -59,6 +59,8 @@ export interface CellLayer {
   readonly refusal?: string;
   /** What the read says about this row beside its value (a model/walk flow conflict). */
   readonly note?: string;
+  /** The live value is not what Pe last wrote there (a receipt disagrees): the kernel ORs it into the cell's `drift`. */
+  readonly drift?: true;
 }
 
 /**

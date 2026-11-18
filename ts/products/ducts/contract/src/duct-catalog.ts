@@ -31,11 +31,11 @@ const axisSchema = z.strictObject({
  * Inputs use snapshot US units; scale and divideBy are explicit, never executable expressions.
  * Each grid shares one page citation; split a multi-page table into separate table ids.
  */
-export const catalogTableSchema = z
+const fileTableSchema = z
   .strictObject({
     id: z.string().min(1),
     title: z.string().min(1),
-    home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }).optional(), // stamped by the host's catalog reader from the home list, over anything a file states
+    home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }).optional(), // a file's own is ignored: the host's catalog reader stamps it from the home list
     source: sourceSchema,
     rows: axisSchema,
     columns: axisSchema,
@@ -59,8 +59,9 @@ export const catalogTableSchema = z
       /** The page that says total = static + velocity pressure. */
       totalPage: z.number().int().positive().optional(),
     }),
-  })
-  .superRefine((t, ctx) => {
+  });
+type FileTable = z.infer<typeof fileTableSchema>;
+const grid = (t: FileTable, ctx: z.RefinementCtx) => {
     const increasing = (xs: number[]) => xs.every((n, i) => i === 0 || n > xs[i - 1]!);
     const valid =
       increasing(t.rows.values) &&
@@ -78,10 +79,12 @@ export const catalogTableSchema = z
         code: "custom",
         message: "Invalid grid dimensions, monotonic axes, input mappings or pressure units",
       });
-  });
+};
+/** A served table, the shape pricing consumes: its home is required, so a table recorded before homes were stamped no longer decodes. */
+export const catalogTableSchema = fileTableSchema.required({ home: true }).superRefine(grid);
 export const catalogSchema = z.strictObject({
   version: z.literal(1),
-  tables: z.array(catalogTableSchema),
+  tables: z.array(fileTableSchema.superRefine(grid)),
 });
 export type CatalogTable = z.infer<typeof catalogTableSchema>;
 export type Catalogs = Readonly<Record<string, CatalogTable>>;

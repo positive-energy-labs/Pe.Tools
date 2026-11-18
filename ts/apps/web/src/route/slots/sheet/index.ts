@@ -62,7 +62,8 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly CalcCel
       return {
         binding, ...(row === undefined ? {} : { row }), home, domain: b.domain,
         value, model, pending: edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
-        drift: home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model),
+        // One drift signal: Work that differs from the model, or a model layer whose receipt disagrees (ADR 0053).
+        drift: (home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model)) || (!!layer && "drift" in layer && layer.drift === true),
         freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
         source: staged !== undefined ? "work" : layer && "source" in layer && layer.source ? layer.source : layer?.value != null ? "model" : b.default !== undefined ? "default" : "model",
         label: (row !== undefined && read !== undefined && b.rowLabel?.(read, row)) || b.label || binding,
