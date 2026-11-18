@@ -2087,7 +2087,7 @@ export class ActionJournal implements ReceiptReader {
       if (!changed && !finished) return structuredClone(current);
       answered = changed;
       const settled = settle(true, nextRow.steps, { kind: "recovered" }) ?? (finished
-        ? { state: "incomplete" as const, error: "Revit answered every step, so the model's state is known; the host restarted before this action's follow-up (such as retiring its Work) ran", status: 503, result: null }
+        ? { state: "incomplete" as const, error: "Revit answered every step in that session, and each step's report says what it did there; the host restarted before this action's follow-up (such as retiring its Work) ran, and nothing here says whether that session's changes were saved", status: 503, result: null }
         : null);
       if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);

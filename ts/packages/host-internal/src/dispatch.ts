@@ -885,6 +885,16 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         const named = (payload as { requestId?: unknown } | null)?.requestId;
         const known = typeof named === "string" ? yield* cancelRequest(named) : null;
         if (known) return known;
+        // No session holds the id, so its reply was already read (or it never left this host). An
+        // untargeted cancel cannot use `attached` below, which needs a session id; with any session
+        // connected this is Revit's own "not in flight" answer. Only a dead bridge is NoRevitSession.
+        if (!bridgeSessionId && typeof named === "string")
+          for (const live of (yield* Ref.get(sessions)).values())
+            if (yield* Ref.get(live.connection))
+              return {
+                value: { cancelled: false, requestId: named, message: `Request '${named}' is not in flight; nothing to cancel.` },
+                target: { session: live.sessionId, document: null },
+              };
       }
       // New work targets only an attached session; a session in reconciliation takes none.
       const session = (yield* attached(bridgeSessionId))?.session;

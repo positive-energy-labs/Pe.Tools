@@ -237,6 +237,7 @@ test("H: a lost-reply script answered at boot with no attachment waits, and the 
   } finally { failed.mockRestore(); await after.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
+const answeredEveryStep = "Revit answered every step in that session, and each step's report says what it did there; the host restarted before this action's follow-up (such as retiring its Work) ran, and nothing here says whether that session's changes were saved";
 test("I: a step answered at boot whose session never returns settles incomplete, once, without a re-run", async () => {
   // b3b3c878: the boot read answered "wrote", the session then ended, so the re-entry cannot run.
   const reads = vi.fn(async (asked: ActionStep) => ({ step: actionStepSchema.parse(succeeded(asked)), evidence: {} }));
@@ -255,6 +256,8 @@ test("I: a step answered at boot whose session never returns settles incomplete,
     await f.journal.reconcile();
     const settled = (await f.journal.list(undefined, "a1"))[0]!;
     expect(settled, JSON.stringify(settled)).toMatchObject({ state: "incomplete", steps: [{ state: "succeeded", touched: wrote }] });
+    // Drive 4, defect 1: `wrote` is true of that Revit session, not of the file on disk.
+    expect("error" in settled ? settled.error : "").toBe(answeredEveryStep);
     expect(reads).toHaveBeenCalledTimes(1);
     const once = await f.bytes();
     await f.close();
