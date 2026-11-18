@@ -23,12 +23,13 @@ const outputKind = stateKind({
  * K2: a captured `sourceBundle` is stored once, as `bundles/<sha256>.json` in the action's output
  * store. Journal lines and exports carry `{ sha256 }` in its place, and a load swaps the bytes back.
  */
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
 const swapBundles = (value: unknown, swap: (bundle: Record<string, unknown>) => unknown): unknown =>
   Array.isArray(value) ? value.map((item) => swapBundles(item, swap))
   : value !== null && typeof value === "object"
     ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-        key === "sourceBundle" && item !== null && typeof item === "object" && !Array.isArray(item)
-          ? swap(item as Record<string, unknown>) : swapBundles(item, swap)]))
+        key === "sourceBundle" && isRecord(item) ? swap(item) : swapBundles(item, swap)]))
     : value;
 const bundleHash = (bundle: unknown) => createHash("sha256").update(canonicalRouteInput(bundle)).digest("hex");
 /** Compaction runs once the file holds twice what its last compaction wrote, and at least this. */
@@ -2216,7 +2217,11 @@ export class ActionJournal implements ReceiptReader {
       this.keep(r);
     }
     for (const [id, r] of this.receipts)
-      if (r.body.kind === "action") this.receipts.set(id, this.unseal(r.body.value.id, r) as Receipt);
+      if (r.body.kind === "action") {
+        // A row that does not re-parse keeps its sealed form, never a throw: the load would discard all.
+        const unsealed = receiptSchema.safeParse(this.unseal(r.body.value.id, r));
+        if (unsealed.success) this.receipts.set(id, unsealed.data);
+      }
     const current = [...this.receipts.values()].flatMap((r) =>
       r.body.kind === "action" ? [r.body.value] : [],
     );
