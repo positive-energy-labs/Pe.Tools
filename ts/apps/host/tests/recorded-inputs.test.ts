@@ -49,7 +49,7 @@ const catalogs = {
 };
 const liveFiles = Layer.succeed(DuctFiles, {
   firm: () => Effect.succeed(firm),
-  ductCatalogs: Effect.succeed(catalogs),
+  catalogsFor: () => Effect.succeed(catalogs),
 });
 
 effectTest("format 1 and 2 bundles refuse explicitly and are never migrated", () =>
@@ -75,10 +75,10 @@ effectTest(
         DuctFiles,
         DuctFiles.capturing(writer).pipe(Layer.provide(liveFiles)),
       );
-      expect(yield* files.ductCatalogs).toEqual(catalogs);
+      expect(yield* files.catalogsFor(undefined)).toEqual(catalogs);
       expect(writer.coverage()).toEqual(["files"]);
       const recorded = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
-      expect(yield* recorded.ductCatalogs).toEqual(catalogs);
+      expect(yield* recorded.catalogsFor(undefined)).toEqual(catalogs);
       expect(yield* problem(recorded.firm("ducts"))).toBe("recording.miss");
       yield* files.firm("ducts");
       const again = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
@@ -179,7 +179,7 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     });
     const broken = Layer.succeed(DuctFiles, {
       firm: () => Effect.fail(new Error("disk") as never),
-      ductCatalogs: Effect.succeed(catalogs),
+      catalogsFor: () => Effect.succeed(catalogs),
     });
     const files = yield* service(
       DuctFiles,
@@ -192,8 +192,8 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     const fullDir = yield* bundle;
     const full = yield* openRecordingWriter(stateFixture(fullDir), identity, { maxBytes: 1_000_000, maxTakings: 1 });
     const kept = yield* service(DuctFiles, DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)));
-    yield* kept.ductCatalogs;
-    expect(yield* kept.ductCatalogs).toEqual(catalogs);
+    yield* kept.catalogsFor(undefined);
+    expect(yield* kept.catalogsFor(undefined)).toEqual(catalogs);
     expect(full.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
     expect((yield* reader(fullDir)).coverage()).toEqual(["files"]);
   }),
@@ -216,7 +216,7 @@ effectTest(
       );
       yield* files.firm("ducts");
       yield* files.firm("ducts");
-      yield* files.ductCatalogs;
+      yield* files.catalogsFor(undefined);
       const [first, second, catalog] = seen;
       expect(first!.id).not.toBe(second!.id);
       const open = yield* reader(dir);

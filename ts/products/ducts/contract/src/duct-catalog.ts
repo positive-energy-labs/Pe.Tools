@@ -35,7 +35,6 @@ const fileTableSchema = z
   .strictObject({
     id: z.string().min(1),
     title: z.string().min(1),
-    home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }).optional(), // a file's own is ignored: the host's catalog reader stamps it from the home list
     source: sourceSchema,
     rows: axisSchema,
     columns: axisSchema,
@@ -81,7 +80,9 @@ const grid = (t: FileTable, ctx: z.RefinementCtx) => {
       });
 };
 /** A served table, the shape pricing consumes: its home is required, so a table recorded before homes were stamped no longer decodes. */
-export const catalogTableSchema = fileTableSchema.required({ home: true }).superRefine(grid);
+export const catalogTableSchema = fileTableSchema.extend({
+  home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }),
+}).superRefine(grid);
 export const catalogSchema = z.strictObject({
   version: z.literal(1),
   tables: z.array(fileTableSchema.superRefine(grid)),

@@ -105,4 +105,5 @@ it("P25: a written terminal next to a homeless table prices the parameter and do
   expect(catalogTableSchema.safeParse(table("firm")).success).toBe(true);
   // A catalog file states no home; the host's reader stamps it.
   expect(catalogSchema.safeParse({ version: 1, tables: [homeless] }).success).toBe(true);
+  expect(catalogSchema.safeParse({ version: 1, tables: [table("firm")] }).success).toBe(false);
 });
