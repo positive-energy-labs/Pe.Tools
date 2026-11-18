@@ -578,7 +578,7 @@ async function compareSystemAnswers() {
           path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
           value: { value: { inWg: i ? 0.35 : 0.05 } },
         })),
-        // No table is served here, so each fitting on a run needs a stated drop to be priced.
+        // Stated drops price refused fitting losses; P-107 (A) preserves any rule-priced Cs.
         ...[21, 22].map((id) => ({
           path: ["componentDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
           value: { value: { inWg: 0.01 } },
@@ -601,8 +601,15 @@ async function compareSystemAnswers() {
     const second = result.analysis.systems.find((row) => row.name === "SA 2")!;
     expect(result.calcs.map((calc) => calc.fan.unitId), "H23: the shared fan has one calc").toEqual([1]);
     expect(second.total, "H23: the second system reads its own worst run on the fan's calc").toBeGreaterThan(0.35);
-    // The first system's only run passes the second's takeoff, which no table prices here: unknown, never a copy.
-    expect(first.total, "H23: sharing a fan does not copy the other system's pressure").toBeNull();
+    // RULES.md P-107 (A): 822ca517 added the typed Cs fallback; eeb8ea21 restricted it to
+    // refused legs and disclosed it. The refused straight Cs at 22 takes the typed drop,
+    // with disclosure. SA 1 prices its own run through that tap, including its own terminal.
+    expect(first.total, "H23: SA 1 prices its own run").toBeCloseTo(0.0778, 4);
+    expect(first.total, "H23: sharing a fan does not copy the other system's pressure").toBeLessThan(second.total!);
+    expect(
+      result.calcs[0]!.legs["10:1>2"]!.lossSource.ref,
+      "H23: SA 1 discloses the typed substitution for the refused straight leg at 22",
+    ).toContain("typed drop from 22 (Cs refused: SD5-9 Cs is not loaded); Work:0");
     expect([first.fanless, second.fanless], "H23: both systems are reached by the fan's calc").toEqual([false, false]);
     expect(
       second.split!.rows.some((row) => row.id === 31),
