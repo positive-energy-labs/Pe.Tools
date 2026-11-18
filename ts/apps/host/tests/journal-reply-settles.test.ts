@@ -6,7 +6,7 @@ import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { actionStepSchema, persistedActionReceiptSchema, persistedReceiptSchema, type ActionStep } from "@pe/agent-contracts";
-import { command, type CommandExecutor } from "../src/command-executor.ts";
+import { command, refused, type CommandExecutor } from "../src/command-executor.ts";
 import { gatewayExecutor } from "../src/gateway-actions.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { settle } from "./effect-test.ts";
@@ -237,23 +237,46 @@ test("H: a lost-reply script answered at boot with no attachment waits, and the 
   } finally { failed.mockRestore(); await after.close(); await rm(dir, { recursive: true, force: true }); }
 });
 
-test("I: an unknown row whose every step answered settles incomplete at boot, once, with no read or re-run", async () => {
-  // b3b3c878: the read answered "wrote", then the session ended, so no connect can ever come.
-  const answered = row({ state: "unknown", error: "Host restarted", status: 503, target: { kind: "session", session: "S" } },
-    [step({ state: "succeeded", result: { status: "Succeeded" }, bridgeReply: "touched", touched: wrote })]);
-  let f = await journalWith(answered, succeeded);
+test("I: a step answered at boot whose session never returns settles incomplete, once, without a re-run", async () => {
+  // b3b3c878: the boot read answered "wrote", the session then ended, so the re-entry cannot run.
+  const reads = vi.fn(async (asked: ActionStep) => ({ step: actionStepSchema.parse(succeeded(asked)), evidence: {} }));
+  const executor: CommandExecutor = {
+    ...command({ says: "Write", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }, z.unknown(), {
+      bind: async () => ({ effects: [] }), recover: reads, run: () => Effect.die("never re-run"),
+    }),
+    definition: async () => { throw refused("The exact bridge attachment is no longer available"); },
+  };
+  const lostRow = row({ state: "unknown", error: "Host restarted", status: 503, target: { kind: "session", session: "S" } },
+    [step({ state: "unknown", error: "lost", status: 503 })]);
+  const failed = vi.spyOn(console, "error").mockImplementation(() => {});
+  let f = await journalWith(lostRow, succeeded, { executor });
   const dir = f.dir;
   try {
     await f.journal.reconcile();
     const settled = (await f.journal.list(undefined, "a1"))[0]!;
     expect(settled, JSON.stringify(settled)).toMatchObject({ state: "incomplete", steps: [{ state: "succeeded", touched: wrote }] });
-    expect(f.recover).not.toHaveBeenCalled();
-    expect(f.ran).toEqual([]);
+    expect(reads).toHaveBeenCalledTimes(1);
     const once = await f.bytes();
     await f.close();
-    f = await journalWith(answered, succeeded, { dir });
+    f = await journalWith(lostRow, succeeded, { dir, executor });
     await f.journal.reconcile();
+    expect(reads).toHaveBeenCalledTimes(1);
     expect(await f.bytes()).toBe(once);
+  } finally { failed.mockRestore(); await f.dispose(); }
+});
+
+test("K: a row the live path left unknown for unproven native reads keeps unknown across a boot", async () => {
+  const unproven = row({ state: "unknown", error: "Required native reads have no terminal evidence", status: 503, target: { kind: "session", session: "S" } },
+    [step({ state: "succeeded", result: { ok: true }, bridgeReply: "touched", touched: wrote })]);
+  const f = await journalWith(unproven, succeeded);
+  try {
+    const before = await f.bytes();
+    await f.journal.reconcile();
+    await f.journal.reconcile("S");
+    expect((await f.journal.list(undefined, "a1"))[0]).toMatchObject({ state: "unknown", error: "Required native reads have no terminal evidence" });
+    expect(f.recover).not.toHaveBeenCalled();
+    expect(f.ran).toEqual([]);
+    expect(await f.bytes()).toBe(before);
   } finally { await f.dispose(); }
 });
 
