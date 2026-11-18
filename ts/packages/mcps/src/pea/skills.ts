@@ -343,7 +343,7 @@ A Pod is not a compiled add-in. The ladder is: a script proves the idea, a decla
 
 ## Adapting an existing Pod
 
-Read pod.json, the entrypoints and the Pod's skill before touching anything. To change a shipped or shared Pod, copy it under a new manifest id first. Run the current entrypoint ReadOnly to see what it does today, name the change in the user's words, then change one entrypoint at a time and read back. A Pod that stopped working is diagnosed from its compiler and runtime diagnostics first, not rewritten.
+Read pod.json, the entrypoints and the Pod's skill before touching anything. Run the current entrypoint ReadOnly to see what it does today, name the change in the user's words, then change one entrypoint at a time and read back. A Pod that stopped working is diagnosed from its compiler and runtime diagnostics first, not rewritten.
 
 When more than a sentence is needed, report what the Pod does in the user's words, which palette entry runs it and under which action, what it will not do, and what remains scaffolding.
 `,
