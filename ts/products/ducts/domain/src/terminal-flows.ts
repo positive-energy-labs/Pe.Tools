@@ -25,6 +25,8 @@ export const markOf = (node: Node | null | undefined) =>
 /** A terminal's flow from the rooms route: its share of the served rooms' CFM, with where it came from. */
 export type RoomFlows = ReadonlyMap<number, { cfm: number; source: string }>;
 
+// Survey flow is a coverage census of what Revit states, not a priced value: a 0 Pe wrote
+// reads as no-flow here by design. Pricing reads the resolver (ADR 0053).
 export function terminalFlows(
   snapshot: DuctSnapshot,
   flowsStaged: Record<string, DuctFlow>,

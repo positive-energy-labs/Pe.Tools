@@ -2,13 +2,14 @@ import { expect, it } from "vite-plus/test";
 import { factOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
 import { encounterRulings, resolveInputs, resolveCriteria } from "@pe/ducts-domain/calc/inputs";
-import { cell, stamped, TEST_FIRM } from "@pe/ducts-domain/test-inputs";
+import { cell, stamped, TEST_FIRM, TEST_SLOTS } from "@pe/ducts-domain/test-inputs";
 import type { CalcSnapshot } from "./build.ts";
 import { flowsOf } from "./flow.ts";
 import type { Walk } from "./walk.ts";
 import { calcBreakdown } from "./calc-breakdown.ts";
 import type { Calc } from "./types.ts";
 const snapshot = {
+  slots: { ...TEST_SLOTS, terminalFlow: "terminalFlow" },
   nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [{ key: "flow", value: 200 }], connectors: [] }],
   segments: [],
 } as unknown as CalcSnapshot;
@@ -17,7 +18,7 @@ it("P-048: a stored invalid marker crosses stagedDucts and blocks model fallback
   const work = stagedDucts(null, fansDocumentSchema.parse({
     flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { invalid: "unstamped stored cell" } },
   }));
-  expect(resolveInputs({ snapshot, work: { flows: work.flows }, firm: TEST_FIRM, store: { terminalFlows: { "1": { cfm: 200 } } } })
+  expect(resolveInputs({ snapshot, work: { flows: work.flows }, firm: TEST_FIRM })
     .terminals["1"]?.cfm).toMatchObject({ status: "invalid", value: null, source: "Work" });
 });
 it("duct readings expose run, Work, model and firm provenance with units", () => {
@@ -26,7 +27,6 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
     firm: TEST_FIRM,
     run: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0) } },
     work: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(100) } },
-    store: { terminalFlows: { "1": { cfm: 150 } } },
     versions: { Work: 7 },
   };
   expect(resolveInputs(layers).terminals["1"]!.cfm).toMatchObject({
@@ -58,10 +58,10 @@ it("a value retired into the model store reads live from its parameter; the rece
   const native = {
     nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [], terminalDrop: { catalogDropInWg: 0.5 } }],
     segments: [],
-    slots: { terminalDrop: "PE_Drop" },
+    slots: { ...TEST_SLOTS, terminalDrop: "PE_Drop" },
   } as unknown as CalcSnapshot;
   const drop = (work: object | undefined, store: object | undefined) =>
-    resolveInputs({ snapshot: native, firm: TEST_FIRM, work, store }).terminals["1"]!.drop;
+    resolveInputs({ snapshot: { ...native, store } as CalcSnapshot, firm: TEST_FIRM, work }).terminals["1"]!.drop;
   expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.2) } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
   // The receipt retires the staged cell: Work is cleared, and a hand edit in Revit since (0.5) is the value.
   const retired = drop(undefined, { terminals: { "1": { inWg: 0.2 } } });

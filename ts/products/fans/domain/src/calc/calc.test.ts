@@ -81,6 +81,7 @@ const duct = (
 const snapshot = (nodes: Node[], segments: Segment[]): CalcSnapshot => ({
   nodes,
   segments,
+  slots: { ...TEST_SLOTS, fanFlow: "fanFlow" },
   walk: TEST_WALK,
   document: {
     title: "synthetic",
@@ -811,7 +812,7 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
 
 it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053: a model 0 is a 0 Pe wrote)", () => {
   // A 300 cfm source forks to receivers A (200) and B (300), even split, A at 0 and B unstated.
-  const fact = (cfm: number) => [{ key: "fanFlow", value: cfm, unit: "cfm", provenance: "designer-stated" }];
+  const fact = (cfm: number): Node["facts"] => [{ key: "fanFlow", value: cfm, unit: "cfm", provenance: "designer-stated" }];
   const build = (aFacts: object[]) => {
     const f = node(100, "equipment", { connectors: [conn(0, [1, 0], round(8))], facts: fact(300) });
     const fork = node(2, "fitting", {
@@ -839,9 +840,17 @@ it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053:
   expect(shares(staged, inputsFor(staged, { drops: { 2: 0 }, endCfm: { 200: 0 } }))).toEqual([0, 300]);
   // After the apply and retirement: the parameter reads 0 and the store holds the receipt. Nothing was edited.
   const retired = build(fact(0));
-  const units = resolveInputs({ snapshot: retired, firm: TEST_FIRM, store: { equipmentFlows: { "200": { cfm: 0 } } } }).units;
+  const units = resolveInputs({ snapshot: { ...retired, store: { equipmentFlows: { "200": { cfm: 0 } } } as unknown as typeof retired.store }, firm: TEST_FIRM }).units;
   expect(units["200"]!.cfm).toMatchObject({ value: 0, source: "model" });
   expect(shares(retired, { ...inputsFor(retired, { drops: { 2: 0 } }), units })).toEqual([0, 300]);
+  // P29: the priced fan's own written 0 is its side-stream budget, not the ends' sum.
+  const zero = build([]);
+  zero.nodes.find((n) => n.id === 100)!.facts = fact(0);
+  zero.store = { equipmentFlows: { "100": { cfm: 0 } } } as unknown as typeof zero.store;
+  const own = inputsFor(zero, { roles: { 100: "fan" }, drops: { 2: 0 } });
+  expect(own.units["100"]!.cfm).toMatchObject({ value: 0, source: "model" });
+  const priced = buildCalc({ snapshot: zero, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)], grids, inputs: own });
+  expect(priced.fan.flowCfm).toBe(0);
 });
 
 it("end terminals decide direction despite reversed metadata; an outdoor louver is an inlet end", () => {
