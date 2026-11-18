@@ -125,8 +125,9 @@ const effected = (step: ActionStep) =>
     ? (!("touched" in step) || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
       !("notDispatched" in step && step.notDispatched)
     : step.state === "succeeded");
-// Only a running action holds a claim (K1a, K1c): every terminal state ends it. A live Revit's year is
-// guarded by the SDK, which refuses a start beside a live session row before it dispatches.
+// Only a running action holds a claim (K1a, K1c): every terminal state ends it, except a plan's
+// `receipt` (claimsOf). A live Revit's year is guarded by the SDK, which refuses a start beside a
+// live session row before it dispatches.
 const holdsClaims = (row: ActionReceipt) => row.state === "running";
 const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
   if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
@@ -884,7 +885,14 @@ export class ActionJournal implements ReceiptReader {
   }
 
   private claimsOf(row: ActionReceipt): Claim[] {
-    return holdsClaims(row) ? row.claims : [];
+    // The one exception to holdsClaims: a `receipt` claim is a plan's single-use token, not an
+    // exclusion. Every row that may have dispatched keeps it, because a document mark that did not
+    // move is the only other refusal of a second apply of that plan. It blocks one plan id, never a
+    // later plan.
+    const spent = !(
+      (row.state === "failed" || row.state === "cancelled") && row.notDispatched === true && undispatched(row.steps)
+    );
+    return row.claims.filter((claim) => (claim.kind === "receipt" ? spent : holdsClaims(row)));
   }
   private reconciles(row: ActionReceipt, original: ActionReceipt): boolean {
     return row.claims.some((claim) => claim.kind === "reconciliation" && claim.id === original.id);

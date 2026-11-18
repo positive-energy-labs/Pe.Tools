@@ -51,7 +51,7 @@ Stamps are copied from the earlier map and not re-verified here.
 Agreed between the two roots, 2026-11-18:
 
 1. **No kernel change without a named field failure or a driven false answer.** Each row lands alone on main, is replayed against that failure, and rides the next release. Principle wins only when it deletes code or removes a failure someone hit.
-2. **Open means running.** Only a running action excludes another. `unknown` and `incomplete` are terminal for exclusion, and a claim ends at any terminal state. K1a's one departure: a succeeded action still holds its claims, because a succeeded `instances.open` keeps its `session-slot` claim while that Revit lives and a later step's `releases` ends it.
+2. **Open means running.** Only a running action excludes another. `unknown` and `incomplete` are terminal for exclusion, and a claim ends at any terminal state. K1a's one departure: a succeeded action still holds its claims, because a succeeded `instances.open` keeps its `session-slot` claim while that Revit lives and a later step's `releases` ends it. One named exception: a plan is single-use, so a `receipt` claim outlives its action and ends only for an action that failed or was cancelled with no step dispatched (`claimsOf`). It is the backstop for a document mark that did not move, and it blocks one plan id, never a later plan.
 3. **A reply settles a step forever.** Observation asks the SDK only about a step that was dispatched and has no reply about the model. A reply of `missing-touched` or `invalid-touched` says nothing about the model, so it counts as no reply and gets the one SDK read.
 4. **Size stop.** Each row carries a line estimate. A row past twice its estimate stops and is re-planned. The kernel rows together end net negative.
 
