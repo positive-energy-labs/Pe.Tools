@@ -7,7 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { BASELINE, census, closureCensus, routeFolders } from "./route-closure-census.ts";
+import { BASELINE, census, closureCensus, routeFolders, webSources } from "./route-closure-census.ts";
 
 const frozen: string[] = JSON.parse(readFileSync(BASELINE, "utf8"));
 
@@ -67,4 +67,9 @@ test("the census sees every route folder and exempts only the design-system wind
   const routes = routeFolders();
   for (const name of ["chat", "products/fans/web", "products/duct-systems/web", "open", "sessions", "settings"]) expect(routes).toContain(name);
   for (const name of ["design-system", "shell", "route", "navigation", "workbench", "routes"]) expect(routes).not.toContain(name);
+});
+
+test("no route source imports a journey file", () => {
+  const importers = Object.entries(webSources()).filter(([, text]) => /from\s+["'][^"']*\/journeys\//.test(text)).map(([file]) => file);
+  expect(importers).toEqual([]);
 });
