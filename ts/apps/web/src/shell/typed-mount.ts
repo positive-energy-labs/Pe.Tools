@@ -7,6 +7,7 @@ import { z } from "zod";
 import { readableRefusal } from "../route/readable-refusal";
 import { reportFault } from "../host/diagnostics";
 
+const missingSubjects = (options: readonly { id: string }[], ids: readonly string[]) => ids.filter(id => !options.some(option => option.id === id));
 /** Host refusals carry serialized issues; local Value decoding throws the same issues. */
 function valueRefusal(error: unknown, read: string): string {
   return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
@@ -504,7 +505,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       const core = reads.get(subjectSpec.read ?? spec.core!)?.snapshot;
       if (core?.state !== "ready") return refused(core ? reasonOf(core) : "Reading the subject roster");
       const options=subjectSpec.options(core.value), ids=subject.kind==="all"?options.map(o=>o.id):subject.ids??[];
-      if (ids.some(id=>!options.some(o=>o.id===id))) return refused(`A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`);
+      if (missingSubjects(options, ids).length) return refused(`A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`);
       if (canonicalRouteInput(subject)!==canonicalRouteInput(page[field])) return null;
       const link = input.address.read();
       link.delete("thread"); link.delete("shell");
@@ -703,7 +704,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     stopCommand: (id:string) => {requireWritable();return cancelAction(id);},
     attention: {
       // Stay below the host's 8 s ack deadline; only the subject's reading gates attention.
-      whenReady: async (patch: Record<string, string>) => {
+      subjectReady: async (patch: Record<string, string>) => {
         const subject = spec.subject;
         if (!subject || !Object.hasOwn(patch, subject.field)) return;
         await new Promise<void>((resolve, reject) => {
@@ -737,8 +738,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
           const options = subject.options(roster.value);
           if (field.schema.safeParse(value).success) {
             const choice = value as { kind: string; ids?: string[]; active?: string };
-            const missing = [...(choice.ids ?? []), ...(choice.active === undefined ? [] : [choice.active])]
-              .filter(id => !options.some(option => option.id === id));
+            const missing = missingSubjects(options, [...(choice.ids ?? []), ...(choice.active === undefined ? [] : [choice.active])]);
             if (missing.length) throw Error(`Unknown ${subject.noun}: ${missing.join(", ")}; choose an exact roster identity`);
             return [key, field.schema.parse(value)];
           }

@@ -29,7 +29,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.uns
 
 test.each([
   ["duct-systems", "names"], ["fans", "names"], ["rooms", "move"],
-  ["fans", "cold"], ["fans", "active"], ["fans", "case"],
+  ["fans", "cold"], ["fans", "active"], ["fans", "case"], ["fans", "unknown-id"],
 ] as const)("Pea resolves %s subjects: %s", async (key, scenario) => {
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
   fakeRuntimeHost("http://127.0.0.1:19999");
@@ -119,6 +119,13 @@ test.each([
     }
     const exact = key === "duct-systems" ? "SA 19" : `MUAS-1 / port ${fanPort}`;
     const identity = key === "duct-systems" ? systemCode(exact) : fanIdentity;
+    if (scenario === "unknown-id") {
+      const missing = "UniqueId:missing-roster-fan";
+      expect(await call(JSON.stringify({ kind: "ids", ids: [missing] }))).toMatchObject({
+        ok: false, result: { outcome: "refused", refusal: { message: `Unknown fan: ${missing}; choose an exact roster identity` } },
+      });
+      return;
+    }
     if (scenario === "cold") {
       const result = call(JSON.stringify({ kind: "ids", ids: [identity] }));
       await waitFor(() => expect(sets).toBe(1));

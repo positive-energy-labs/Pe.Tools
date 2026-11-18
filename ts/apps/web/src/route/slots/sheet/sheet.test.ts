@@ -3,7 +3,7 @@ import { z } from "zod";
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { commands } from "@pe/agent-contracts/semantic-actions";
 import type { CatalogAxes } from "../../../../../../packages/agent-contracts/src/catalog.ts";
-import { SHEET_COMMANDS, local, parameter, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
+import { SHEET_COMMANDS, local, parameter, setting, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { sheetCells } from "./index.ts";
 
@@ -16,9 +16,17 @@ import { sheetCells } from "./index.ts";
  */
 const uid = (text: string) => subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(text) });
 
+test("setting bindings serve their fallback through the model and prefer a stated home", () => {
+  const slot = { bindings: { gap: setting("ducts", ["gap"], { kind: "number" }, ["firm"], { default: 3 }) } };
+  const cells = (read?: unknown) => sheetCells(slot, { rows: [], work: {}, read });
+  expect(cells({})[0]).toMatchObject({ value: 3, model: 3, source: "default" });
+  expect(cells({ settings: { ducts: [{ tier: "firm", home: "Firm", name: "Firm", json: { gap: 5 } }] } })[0]).toMatchObject({ value: 5, model: 5, source: "firm" });
+  expect(cells()[0]).toMatchObject({ value: null, model: null });
+});
+
 test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite binds a plan whose effect is Read or TransactRead", () => {
   // A Pod decodes the same home and domain grammar the browser declares.
-  const slot = { bindings: { chosen: parameter("Diameter", { kind: "number" }), maxVelocity: local({ kind: "number" }) } };
+  const slot = { bindings: { chosen: parameter("Diameter", { kind: "number" }, { model: (_read, row) => ({ value: row === a ? 20 : 32, freshness: "fresh" }) }), maxVelocity: local({ kind: "number" }) } };
   expect(
     sheetSlotDataSchema.parse({
       bindings: {
@@ -33,10 +41,7 @@ test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite bin
   const cells = sheetCells(slot, {
     rows: [a, b],
     work: { chosen: { [a]: 25 }, maxVelocity: 1.5 },
-    model: [
-      { binding: "chosen", row: a, value: 20, freshness: "fresh" },
-      { binding: "chosen", row: b, value: 32, freshness: "fresh" },
-    ],
+    read: {},
   });
   expect(cells.map((c) => [c.binding, c.row ?? "route", c.value, c.model, c.drift, c.source])).toEqual([
     ["chosen", a, 25, 20, true, "work"],
@@ -59,12 +64,12 @@ test("slice 7: a draft slot draws each Work cell's staged value with its author,
   const [a, b] = [uid("a-0001"), uid("b-0002")];
   const slot = { draft: true as const, bindings: {
     localRate: local({ kind: "number" }),
-    roles: { home: { at: "store", store: "_PE_DuctLosses" }, domain: { kind: "object", fields: { role: { kind: "enum", shape: z.string(), choices: [] } } }, per: "subject" } as const,
+    roles: { home: { at: "store", store: "_PE_DuctLosses" }, domain: { kind: "object", fields: { role: { kind: "enum", shape: z.string(), choices: [] } } }, per: "subject", model: (_read: unknown, row: string | undefined) => row === b ? { value: { role: "passive" }, freshness: "fresh" as const } : null } as const,
   } };
   const cells = sheetCells(slot, {
     rows: [a, b],
     work: { localRate: { edit: { value: 0.1, by: "pea", at: "2026-11-10T00:00:00Z" } }, roles: { [a]: { edit: { value: { role: "fan" }, by: "human" } }, [b]: {} } },
-    model: [{ binding: "roles", row: b, value: { role: "passive" }, freshness: "fresh" }],
+    read: {},
   });
   expect(cells.map((c) => [c.binding, c.value, c.source, c.pending?.by ?? null])).toEqual([
     ["localRate", 0.1, "work", "pea"],

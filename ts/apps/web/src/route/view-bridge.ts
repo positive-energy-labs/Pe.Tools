@@ -24,7 +24,7 @@ import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
 import { useRouteCurrent, useRouteSearchSlice } from "./activity";
 
-type ReadyViewCodec = ViewCodec & { whenReady?: (patch: Record<string, string>) => Promise<void> };
+type ReadyViewCodec = ViewCodec & { subjectReady?: (patch: Record<string, string>) => Promise<void> };
 
 /**
  * Whether the host leases this typed route's view (`RouteViewStore.leasesView`), decided the host's
@@ -274,7 +274,7 @@ export function useRouteViewBridge({
       let patch: object;
       try {
         const owner = lifetime.current;
-        await lease.whenReady?.(event.patch);
+        await lease.subjectReady?.(event.patch);
         if (lifetime.current !== owner || !routeCurrent() || !visible() ||
           JSON.stringify(current.current?.page) !== JSON.stringify(value.page) ||
           JSON.stringify(current.current?.context) !== JSON.stringify(value.context))

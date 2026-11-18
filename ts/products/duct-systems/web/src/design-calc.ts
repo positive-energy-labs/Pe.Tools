@@ -1,5 +1,5 @@
 import { DUCTS_CRITERIA_CELLS, slotLayer, type DuctsCriteriaCell, type DuctsInputs } from "@pe/agent-contracts";
-import { store, type CellLayer, type SheetSlot } from "@pe/agent-contracts/slots";
+import { cellSource, store, type CellLayer, type SheetSlot } from "@pe/agent-contracts/slots";
 import { ductsSettings, settingLayer, criterionDomain, criterionCellLabel as cellLabel, NO_SHARED_ROOT, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 
@@ -22,7 +22,7 @@ export const designCalc = {
         const at = read?.criteria?.[key], resolved = side ? (at as DuctsInputs["criteria"]["velocityLimitFpm"] | undefined)?.[side] : at as DuctsInputs["criteria"]["autoJoinGapIn"] | undefined;
         if (!resolved || resolved.value == null) return null;
         const refused = (resolved.source === "default" || resolved.source === "firm") && read?.firm && "refused" in read.firm;
-        return { value: resolved.value, source: refused ? "default" : resolved.source === "Work" || resolved.source === "run" ? "work" : resolved.source,
+        return { value: resolved.value, source: refused ? "default" : cellSource(resolved.source),
           ref: refused ? ENGINE_DEFAULT_NO_SHARED_ROOT : resolved.ref ?? undefined, ...(resolved.units ? { unit: resolved.units } : {}) };
       },
     })])),

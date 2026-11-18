@@ -754,7 +754,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
   vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane) => lowCap(lane, { ...defaultReadSetLimits, childrenPerRoot: 3, openRoots: 4 }));
   const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
-    files: Layer.succeed(DuctFiles, { firm: () => Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
+    files: Layer.succeed(DuctFiles, { firm: () => Effect.die("unexpected files"), catalogsFor: () => Effect.die("unexpected files") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
   const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(

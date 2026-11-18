@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { DUCTS_CRITERIA_CELLS, slotLayer } from "@pe/agent-contracts";
 import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansCalcData, type Immutable } from "@pe/agent-contracts";
-import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import { cellSource, local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import type { ValueSource } from "@pe/agent-contracts/work-value";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
 import { receiptDrift } from "@pe/ducts-domain/calc/inputs";
@@ -45,10 +46,9 @@ const rowsOf = (read: Read, ids: readonly string[]) =>
  * source is the tier the host served: `project` or `firm` only when that home's file states the
  * value; a criterion no home states is `default`, and says so when the firm home was not found.
  */
-const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { Work: "work", "model-store": "model-store", user: "user", project: "project", firm: "firm", default: "default" };
-const layer = (resolved: { readonly value: unknown; readonly source: string; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
-  if (!resolved || resolved.value == null) return null;
-  const source = SOURCES[resolved.source] ?? "model";
+const layer = (resolved: { readonly value: unknown; readonly source: ValueSource | "none"; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+  if (!resolved || resolved.value == null || resolved.source === "none") return null;
+  const source = cellSource(resolved.source);
   const firm = read?.calcView.firm;
   // The evidence the resolver named rides with the value; only a refused firm home replaces it.
   return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),

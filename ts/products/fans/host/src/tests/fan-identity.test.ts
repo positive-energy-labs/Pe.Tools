@@ -18,7 +18,7 @@ test("roster composition retains UniqueId for two equipment instances with the s
   const target = { session: "fixture", openId: "doc" };
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
   const roster = (await evaluate(fanRoster, { target }, calcPort({
-    firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
+    firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
     workKey: async () => bindWork("duct-systems", null, undefined, target),
     call: async () => Response.json({ ...snapshot, nodes }),
   }, workspace))).data;
@@ -37,7 +37,7 @@ test("a numeric UniqueId row is refused without hiding the other fan rows", asyn
   ];
   const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
   const roster = (await evaluate(fanRoster, { target }, calcPort({
-    firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
+    firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
     workKey: async () => bindWork("duct-systems", null, undefined, target),
     call: async () => Response.json({ ...snapshot, nodes }),
   }, workspace))).data;
@@ -55,7 +55,7 @@ test("a lookup by mark returns only the rows carrying that mark, and no mark ret
   const read = async (args: z.input<typeof ductsRosterRequestSchema>) => {
     const workspace = new RouteWorkspace({ registrations: [], store: { getState: async () => null, setState: async () => {} } });
     return (await evaluate(fanRoster, args, calcPort({
-      firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
+      firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
       workKey: async () => bindWork("duct-systems", null, undefined, target),
       call: async () => Response.json({ ...snapshot, nodes }),
     }, workspace))).data;

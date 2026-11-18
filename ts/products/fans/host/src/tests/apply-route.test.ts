@@ -37,7 +37,7 @@ test("a /fans apply writes a scoped rule's fitting coefficient and leaves the /d
   // The element write: the elbow's coefficient. No rule key rides it, so the native store composes no rule from it.
   expect(sent[0]!.fittings).toEqual([expect.objectContaining({ id: 2, coefficient: expect.any(Number) })]);
   expect(sent[0]!.fittings[0]).not.toHaveProperty("ruleKey");
-  expect(sent[0]!.store.rules).toEqual({});
+  expect(sent[0]!.store.rules ?? {}).toEqual({});
   expect(sent[0]!.store.verdicts ?? {}).toEqual({});
   expect(sent[0]!.storeDeletes).toEqual({ roles: [] });
   // Both /duct-systems cells are still staged, and the Work was not touched by the apply.

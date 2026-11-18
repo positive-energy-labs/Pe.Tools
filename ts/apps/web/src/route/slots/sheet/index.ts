@@ -2,11 +2,10 @@ import type { HandleCellProps } from "@pe/kit/lang/cell";
 import { settingOwners } from "@pe/agent-contracts/setting-owners";
 import type { Immutable } from "@pe/agent-contracts";
 import { SETTING_TIERS, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import { type Domain, type ModelValue, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
+import { type Domain, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
 export interface SheetInput<W = unknown> {
   readonly rows: readonly string[];
   readonly work: Immutable<W> | null;
-  readonly model: readonly ModelValue[];
   readonly read?: unknown;
 }
 export interface CalcCell extends StateCell {
@@ -56,16 +55,17 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly CalcCel
       const held = bindingPath(binding, row).reduce<any>((doc, key) => doc?.[key], input.work);
       const edit = slot.draft ? held?.edit : undefined;
       const staged = home.at === "setting" ? undefined : slot.draft ? edit?.value : held;
-      const layer = input.model.find(m => m.binding === binding && m.row === row) ?? (read !== undefined ? b.model?.(read, row) : undefined);
+      const layer = read !== undefined ? b.model?.(read, row) : undefined;
       const model = layer?.value ?? null;
-      const value = staged ?? model ?? b.default ?? null;
+      const fallback = home.at === "setting" ? undefined : b.default;
+      const value = staged ?? model ?? fallback ?? null;
       return {
         binding, ...(row === undefined ? {} : { row }), home, domain: b.domain,
         value, model, pending: edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
         // One drift signal: Work that differs from the model, or a model layer whose receipt disagrees (ADR 0053).
         drift: (home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model)) || (!!layer && "drift" in layer && layer.drift === true),
         freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
-        source: staged !== undefined ? "work" : layer && "source" in layer && layer.source ? layer.source : layer?.value != null ? "model" : b.default !== undefined ? "default" : "model",
+        source: staged !== undefined ? "work" : layer?.source ?? (layer?.value != null ? "model" : fallback !== undefined ? "default" : "model"),
         label: (row !== undefined && read !== undefined && b.rowLabel?.(read, row)) || b.label || binding,
         ...domainDraw(b.domain, read, row),
         ...(layer && "unit" in layer && layer.unit ? { unit: layer.unit } : {}),
