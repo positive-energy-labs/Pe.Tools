@@ -15,7 +15,7 @@ await mkdir(dir, { recursive: true });
 const work = ductsDocumentSchema.parse({ criteria: { autoJoinGapIn: { edit: { value: 9, by: "human" } } } });
 const tiers = [{ tier: "firm", home: "fixture-firm", name: "ducts", path: "fixture-firm/Settings/ducts.json", sha256: "fixture", json: { criteria: { autoJoinGapIn: 5 } } }];
 const firm = firmLayer({ present: false } as never, tiers as never);
-const read = { criteria: resolveCriteria(workLayer(ductsDesign(work, fansDocumentSchema.parse({}))), null, firm), settings: { ducts: tiers },
+const read = { criteria: resolveCriteria(workLayer(ductsDesign(work, fansDocumentSchema.parse({}))), firm), settings: { ducts: tiers },
   firm: { present: true, version: "fixture", path: "fixture-firm/Settings/ducts.json" } };
 const evidence = { head: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   when: new Date().toISOString(), lane: "fixture linkage only; never J-V3 acceptance", read, work };
