@@ -104,12 +104,12 @@ test("unbound: with no firm home the host's resolvers all answer, on the user ho
   expect(paths.productPodsRootPath()).toBe(join(user, "Pods"));
 });
 
-test("a told firm folder with no firm marker is no firm home: its pods are not read", async () => {
+test("a told firm folder needs no marker: its pods are read", async () => {
   const unmarked = join(firm, "unmarked");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", unmarked);
   pod(unmarked, "theirs", "theirs", "unproven");
-  expect(homes()).toEqual([{ tier: "user", root: user }]);
-  expect((await listPackages()).packages).toEqual([]);
+  expect(homes()).toContainEqual({ tier: "firm", root: unmarked });
+  expect((await listPackages()).packages).toHaveLength(1);
 });
 
 test("every content path sits in the user home; Work and every machine path stay with their owner", () => {

@@ -541,7 +541,7 @@ export const hostProbeDataSchema = Schema.Struct({
       Schema.Struct({
         tier: Schema.Literals(["user", "project", "firm"]),
         path: Schema.String,
-        found: Schema.Literals(["documents", "override", "config", "pointer", "probe"]),
+        found: Schema.Literals(["documents", "override", "config", "pointer", "default"]),
       }),
     ),
   ),

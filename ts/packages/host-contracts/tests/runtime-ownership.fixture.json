@@ -216,650 +216,106 @@
   ],
   "homes": [
     {
-      "name": "no firm home on any drive: the user home alone, under Documents",
-      "productHome": null,
+      "name": "default present",
+      "productHome": "C:\\User\\Pe.Tools",
       "sharedRoot": null,
-      "drives": [
-        "C:\\"
+      "existing": [
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
       ],
-      "folders": {},
       "markerFiles": {},
       "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
+      "user": "C:\\User\\Pe.Tools",
       "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [],
+      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
+      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
       "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
+        "C:\\User\\Pe.Tools",
+        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
       ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
+      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
+      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
     },
     {
-      "name": "blank overrides configure nothing",
-      "productHome": "  ",
-      "sharedRoot": "  ",
-      "drives": [
-        "C:\\"
-      ],
-      "folders": {},
+      "name": "default absent",
+      "productHome": "C:\\User\\Pe.Tools",
+      "sharedRoot": null,
+      "existing": [],
       "markerFiles": {},
       "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
+      "user": "C:\\User\\Pe.Tools",
       "project": null,
       "firm": null,
       "sharedDriveRoot": null,
-      "firmConflict": [],
       "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
+        "C:\\User\\Pe.Tools"
       ],
       "firmSettings": null,
       "firmPreferences": null,
       "firmKeys": null
     },
     {
-      "name": "the probe finds the firm home under a Google Drive mount",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
+      "name": "chosen present",
+      "productHome": "C:\\User\\Pe.Tools",
+      "sharedRoot": "D:\\Firm\\Software\\Pe.Tools",
+      "existing": [
+        "D:\\Firm\\Software\\Pe.Tools"
       ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "the probe finds the firm home on a drive mapped at the shared drive root",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "P:\\"
-      ],
-      "folders": {},
-      "markerFiles": {
-        "P:\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "P:\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "P:\\",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "P:\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "P:\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "P:\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "P:\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a folder at the firm path with no marker is not a home",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
       "markerFiles": {},
       "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
+      "user": "C:\\User\\Pe.Tools",
+      "project": null,
+      "firm": "D:\\Firm\\Software\\Pe.Tools",
+      "sharedDriveRoot": "D:\\Firm",
+      "homes": [
+        "C:\\User\\Pe.Tools",
+        "D:\\Firm\\Software\\Pe.Tools"
+      ],
+      "firmSettings": "D:\\Firm\\Software\\Pe.Tools\\Settings",
+      "firmPreferences": "D:\\Firm\\Software\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "D:\\Firm\\Software\\Pe.Tools\\keys.json"
+    },
+    {
+      "name": "chosen absent",
+      "productHome": "C:\\User\\Pe.Tools",
+      "sharedRoot": "D:\\Firm\\Software\\Pe.Tools",
+      "existing": [],
+      "markerFiles": {},
+      "pointer": null,
+      "user": "C:\\User\\Pe.Tools",
       "project": null,
       "firm": null,
       "sharedDriveRoot": null,
-      "firmConflict": [],
       "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
+        "C:\\User\\Pe.Tools"
       ],
       "firmSettings": null,
       "firmPreferences": null,
       "firmKeys": null
     },
     {
-      "name": "a folder at the firm path whose marker reads another tier is not the firm home",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
+      "name": "project marker retained",
+      "productHome": "C:\\User\\Pe.Tools",
+      "sharedRoot": "D:\\Firm\\Software\\Pe.Tools",
+      "existing": [
+        "D:\\Firm\\Software\\Pe.Tools"
       ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
       "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"user\"}"
+        "D:\\Firm\\Projects\\One\\Pe.Tools": "{\"tier\":\"project\"}"
       },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [],
+      "pointer": "Projects/One",
+      "user": "C:\\User\\Pe.Tools",
+      "project": "D:\\Firm\\Projects\\One\\Pe.Tools",
+      "firm": "D:\\Firm\\Software\\Pe.Tools",
+      "sharedDriveRoot": "D:\\Firm",
       "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
+        "C:\\User\\Pe.Tools",
+        "D:\\Firm\\Projects\\One\\Pe.Tools",
+        "D:\\Firm\\Software\\Pe.Tools"
       ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "two shared drives hold a firm marker: a conflict, both refused, named in probe order whatever order the disk returned",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "Zeta",
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\Zeta\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-        "G:\\Shared drives\\Zeta\\04 PE Software Files\\Pe.Tools"
-      ],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
-      ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "two drives hold a firm marker: a conflict, both refused, named in the given drive order",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "H:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "H:\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [
-        "H:\\04 PE Software Files\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
-      ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "one drive holds a firm marker under Shared drives and at its own root: a conflict, the Shared drives child named first",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-        "G:\\04 PE Software Files\\Pe.Tools"
-      ],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
-      ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "a firm conflict leaves the model unbound: there is no shared drive root",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "H:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "H:\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "Projects/2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [
-        "H:\\04 PE Software Files\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
-      ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "the dev override replaces the probe",
-      "productHome": null,
-      "sharedRoot": " T:\\scratch\\04 PE Software Files\\Pe.Tools ",
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "T:\\scratch\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "T:\\scratch\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "T:\\scratch",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "T:\\scratch\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "T:\\scratch\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "T:\\scratch\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "T:\\scratch\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a dev override with no firm marker is no firm home, and the probe is not read instead",
-      "productHome": null,
-      "sharedRoot": "T:\\scratch\\firm",
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
-      ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "a dev override one folder below its drive has no shared drive root",
-      "productHome": null,
-      "sharedRoot": "S:\\Pe.Tools",
-      "drives": [
-        "C:\\"
-      ],
-      "folders": {},
-      "markerFiles": {
-        "S:\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "S:\\Pe.Tools",
-      "sharedDriveRoot": null,
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "S:\\Pe.Tools"
-      ],
-      "firmSettings": "S:\\Pe.Tools\\Settings",
-      "firmPreferences": "S:\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "S:\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "an isolated home is the user home",
-      "productHome": " D:\\isolated ",
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": null,
-      "user": "D:\\isolated",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "D:\\isolated",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "the model's pointer names the project home",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "Projects/2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools",
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a pointed-at folder with no project marker is unbound",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": "Projects/2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a pointed-at folder whose marker reads firm is unbound",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"firm\"}"
-      },
-      "pointer": "Projects/2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a pointer with no firm home has no shared drive root to resolve against",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\"
-      ],
-      "folders": {},
-      "markerFiles": {
-        "C:\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "Projects/2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": null,
-      "sharedDriveRoot": null,
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools"
-      ],
-      "firmSettings": null,
-      "firmPreferences": null,
-      "firmKeys": null
-    },
-    {
-      "name": "a pointer that climbs out of the shared drive root is unbound",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\Other drive\\Job\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "../Other drive/Job",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a pointer with a drive letter is unbound",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "C:\\Projects\\Job\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "C:/Projects/Job",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a pointer written with backslashes is unbound: the stored form is forward-slash",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "Projects\\2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
-    },
-    {
-      "name": "a rooted pointer is unbound",
-      "productHome": null,
-      "sharedRoot": null,
-      "drives": [
-        "C:\\",
-        "G:\\"
-      ],
-      "folders": {
-        "G:\\Shared drives": [
-          "PE Team Folder"
-        ]
-      },
-      "markerFiles": {
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools": "{\"tier\":\"firm\"}",
-        "G:\\Shared drives\\PE Team Folder\\Projects\\2024-012 Chadds\\Pe.Tools": "{\"tier\":\"project\"}"
-      },
-      "pointer": "/Projects/2024-012 Chadds",
-      "user": "%DOCUMENTS%\\Pe.Tools",
-      "project": null,
-      "firm": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools",
-      "sharedDriveRoot": "G:\\Shared drives\\PE Team Folder",
-      "firmConflict": [],
-      "homes": [
-        "%DOCUMENTS%\\Pe.Tools",
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
-      "firmSettings": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings",
-      "firmPreferences": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\Settings\\preferences.json",
-      "firmKeys": "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools\\keys.json"
+      "firmSettings": "D:\\Firm\\Software\\Pe.Tools\\Settings",
+      "firmPreferences": "D:\\Firm\\Software\\Pe.Tools\\Settings\\preferences.json",
+      "firmKeys": "D:\\Firm\\Software\\Pe.Tools\\keys.json"
     }
   ],
   "stateTree": [

@@ -84,7 +84,6 @@ function owner() {
     current.pending = attempt;
     let places: readonly string[] = [], firm = current.firm;
     const work = resolveHomes([...current.pointers], {
-      knownFirm: current.firm.root ?? undefined,
       signal: attempt.stop.signal,
       onPending: paths => { places = paths; },
       onUser: root => {
@@ -154,7 +153,7 @@ export function contentHomesFound(): { homes: FoundHome[]; firmNotice: string | 
   const roots = owner();
   return {
     homes: (roots.homes.get("") ?? []).map(home => ({ ...home, found: home.tier === "project" ? "pointer" :
-      toldHome(home.tier)?.found ?? (home.tier === "user" ? "documents" : "probe") })),
+      toldHome(home.tier)?.found ?? (home.tier === "user" ? "documents" : "default") })),
     firmNotice: !roots.homes.get("")?.length ? new ContentHomeUnavailable().message : roots.firm.root ? null : noFirmHomeText(roots.firm),
   };
 }
@@ -223,7 +222,7 @@ export function homesStatus(): HomesStatus {
 /**
  * Settings' write: validate, refuse a home that holds this machine's state (ADR 0037 rule 6, the
  * state-root fence), replace the file atomically, then re-resolve before answering. A chosen firm
- * folder with no firm marker is accepted and answered with the notice naming it.
+ * missing folder is accepted and answered with the Settings notice.
  */
 export async function writeHomesConfig(value: unknown): Promise<HomesStatus> {
   const parsed = homesConfigSchema.safeParse(value);

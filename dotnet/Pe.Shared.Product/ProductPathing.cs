@@ -7,10 +7,9 @@ public enum HomeTier { User, Project, Firm }
 
 /// <summary>
 ///     The resolved homes. <see cref="List" /> is the read order <c>[user, project, firm]</c>. Project is null for
-///     an unbound model and firm for a machine with no firm home; both must work. <see cref="FirmConflict" /> names
-///     every firm marker the probe found when it found more than one, and then there is no firm home.
+///     an unbound model and firm for a machine with no firm home; both must work.
 /// </summary>
-public sealed record ProductHomes(string User, string? Project, string? Firm, string? SharedDriveRoot, IReadOnlyList<string> FirmConflict) {
+public sealed record ProductHomes(string User, string? Project, string? Firm, string? SharedDriveRoot) {
     public IReadOnlyList<string> List => new[] { this.User, this.Project, this.Firm }.OfType<string>().ToList();
     public string? FirmSettingsDir => this.Firm is null ? null : Path.Combine(this.Firm, ProductPathNames.HomeSettingsDirectoryName);
     public string? FirmPreferencesPath => this.FirmSettingsDir is null ? null : Path.Combine(this.FirmSettingsDir, ProductPathNames.PreferencesFileName);
@@ -19,7 +18,7 @@ public sealed record ProductHomes(string User, string? Project, string? Firm, st
 
 /// <summary>
 ///     The product's path rules: the three content homes of ADR 0037 (user, project, firm) and the machine state
-///     root. A home proves itself with a <c>pe-home.json</c> marker; the user home always exists.
+///     root. Only a project home requires a <c>pe-home.json</c> marker; the user home always exists.
 ///     The TS twin is host-contracts product-paths.ts / service-identity.ts; all assert runtime-ownership.fixture.json.
 /// </summary>
 public static class ProductPathing {
@@ -104,37 +103,19 @@ public static class ProductPathing {
     /// <summary>This machine's homes, read from disk. <paramref name="pointer" /> is the open model's project-home path.</summary>
     public static ProductHomes Homes(string? pointer = null) => Homes(
         ToldHome(ProductPathNames.ProductHomeVariable, ChosenHomes().User),
-        // A chosen firm folder replaces the probe and still needs its marker: unmarked is no firm home, never the probe.
         ToldHome(ProductPathNames.SharedRootVariable, ChosenHomes().Firm),
-        // ponytail: every drive is probed on every call, and a mapped drive whose server is gone blocks until Windows
-        // gives up on it. Callers are rare (a firm id read). Cache per process, or probe off-thread, if that changes.
-        Environment.GetLogicalDrives(), ChildFolders, MarkerText, pointer);
+        Directory.Exists, MarkerText, pointer);
 
-    /// <summary>
-    ///     The home list of ADR 0037, pure over injected disk facts (the shared fixture's <c>homes</c> rows).
-    ///     A non-blank <paramref name="sharedRoot" /> names the firm home and skips the probe. Otherwise each drive is
-    ///     read as <c>&lt;L&gt;:\Shared drives\*\04 PE Software Files\Pe.Tools</c> (children in ordinal order) and then
-    ///     <c>&lt;L&gt;:\04 PE Software Files\Pe.Tools</c>. Only a marker that reads firm is accepted. Two are a
-    ///     conflict: neither is the firm home, and both are named for one notice. Nothing here throws on a bad
-    ///     pointer or an absent home, because unbound must work.
-    /// </summary>
-    public static ProductHomes Homes(string? productHome, string? sharedRoot, IEnumerable<string> drives,
-        Func<string, IEnumerable<string>> childFolders, Func<string, string?> markerText, string? pointer) {
+    /// <summary>Settings, else the literal default when present. Markers apply only to project homes.</summary>
+    public static ProductHomes Homes(string? productHome, string? sharedRoot,
+        Func<string, bool> exists, Func<string, string?> markerText, string? pointer) {
         var user = string.IsNullOrWhiteSpace(productHome) ? DocumentsUserRoot : Path.GetFullPath(productHome!.Trim());
-        var candidates = string.IsNullOrWhiteSpace(sharedRoot)
-            ? drives.SelectMany(drive => childFolders(Path.Combine(drive, ProductPathNames.SharedDrivesDirectoryName))
-                .OrderBy(child => child, StringComparer.Ordinal)
-                .Select(child => Path.Combine(drive, ProductPathNames.SharedDrivesDirectoryName, child))
-                .Concat(new[] { drive })
-                .Select(root => Path.Combine(root, ProductPathNames.FirmSoftwareDirectoryName, ProductIdentity.ProductName)))
-            : new[] { Path.GetFullPath(sharedRoot!.Trim()) };
-        var firms = candidates.Where(home => MarkerTier(markerText(home)) == HomeTier.Firm).ToList();
-        if (firms.Count != 1) return new ProductHomes(user, null, null, null, firms.Count > 1 ? firms : []);
-        // The shared drive root is the folder that holds "04 PE Software Files": the firm home's grandparent.
-        var sharedDriveRoot = Path.GetDirectoryName(Path.GetDirectoryName(firms[0]) ?? string.Empty);
+        var candidate = string.IsNullOrWhiteSpace(sharedRoot) ? ProductPathNames.DefaultFirmHome : Path.GetFullPath(sharedRoot!.Trim());
+        if (!exists(candidate)) return new ProductHomes(user, null, null, null);
+        var sharedDriveRoot = Path.GetDirectoryName(Path.GetDirectoryName(candidate) ?? string.Empty);
         var project = ProjectHome(sharedDriveRoot, pointer);
         return new ProductHomes(user, project is not null && MarkerTier(markerText(project)) == HomeTier.Project ? project : null,
-            firms[0], sharedDriveRoot, []);
+            candidate, sharedDriveRoot);
     }
 
     // The stored pointer is a forward-slash path relative to the shared drive root, with no drive letter (freeze shape 4).
@@ -145,11 +126,6 @@ public static class ProductPathing {
                 || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
             ? null
             : Path.Combine(new[] { sharedDriveRoot! }.Concat(segments).Concat(new[] { ProductIdentity.ProductName }).ToArray());
-    }
-
-    private static IEnumerable<string> ChildFolders(string directory) {
-        try { return Directory.Exists(directory) ? Directory.GetDirectories(directory).Select(path => Path.GetFileName(path)).ToList() : []; }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return []; }
     }
 
     private static string? MarkerText(string home) {
