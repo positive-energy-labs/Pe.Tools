@@ -73,7 +73,12 @@ try {
     const flow = await page.evaluate((selector: string) => document.querySelector<HTMLInputElement>(`${selector} input`)?.value ?? null, row);
     assert.equal(Number(flow), 400, "J-V1 stale store flow: live 400 cfm must beat receipt 200 cfm");
     assert.notEqual(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-source") ?? null, row), "model-store");
-    assert.ok(await page.has("Changed in Revit since Pe wrote 200 cfm", row), "terminal must show receipt drift note");
+    // The real page marks drift with data-drift and puts the note in the cell's aria-description (the hover
+    // tooltip repeats it), never as inline text (45c670d4 c2-jv1-drift-tooltip). The note is exact; only the
+    // source tail "model model:<element id>/revit:Flow" carries an id this script is never given.
+    assert.equal(await page.evaluate((selector: string) => document.querySelector(selector)?.getAttribute("data-drift") ?? null, row), "true", "terminal must flag receipt drift");
+    const described = await page.evaluate((selector: string) => document.querySelector(`${selector} [aria-description]`)?.getAttribute("aria-description") ?? null, row);
+    assert.match(described ?? "", /^Changed in Revit since Pe wrote 200 cfm · model model:\d+\/revit:Flow$/, "terminal must show receipt drift note");
     const expectedEsp = parseFloat(await required());
     assert.ok(expectedEsp > baselineEsp, "computed ESP must rise with the edited flow");
     await assertPageBinding(page);
