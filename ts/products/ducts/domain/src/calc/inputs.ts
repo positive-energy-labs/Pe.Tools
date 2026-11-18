@@ -296,11 +296,12 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const tables = Object.fromEntries(
         Object.entries(work.catalogs ?? {}).flatMap(([k, c]) => ("value" in c ? [[k, { table: c.value }]] : [])),
       );
+      const parameter = WRITTEN.terminalDrops(n, slots, store);
+      // D2: a written parameter outranks the lookup, so the lookup runs only where Pe has not written.
       const catalog =
-        catalogs && Object.keys(catalogs).length
+        parameter.wrote == null && catalogs && Object.keys(catalogs).length
           ? catalogLoss(n, cfm.value, catalogs, tables)
           : null;
-      const parameter = WRITTEN.terminalDrops(n, slots, store);
       const model = observed("model", `${id}/${parameter.at}`, parameter.live);
       const served = firm.served?.terminalDropInWg ?? "firm";
       // Below Work, one of three (ADR 0053). Written: the parameter Pe wrote, missing when it no longer reads (D2, D3).

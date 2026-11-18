@@ -55,11 +55,11 @@ const layer = (resolved: { readonly value: unknown; readonly source: string; rea
     ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : resolved.ref ? { ref: resolved.ref } : {}) };
 };
 
-/** A design value's model layer with its drift: what Revit holds now, and a note where that is not what Pe last wrote. */
+/** A design value's model layer with its drift: what Revit holds now, and `drift` with a note where that is not what Pe last wrote. */
 const live = (read: Read, segment: Parameters<typeof receiptDrift>[1], row: string | undefined, resolved: Parameters<typeof layer>[0], wrap: (v: unknown) => unknown): CellLayer | null => {
   const snapshot = snapshotOf(read), id = idOf(read, row), base = layer(resolved, wrap, read);
   const note = snapshot && id != null ? receiptDrift(snapshot, segment, id) : null;
-  return note ? { ...(base ?? { value: null }), note } : base;
+  return note ? { ...(base ?? { value: null }), note, drift: true } : base;
 };
 
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
