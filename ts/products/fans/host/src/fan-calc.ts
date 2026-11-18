@@ -160,7 +160,7 @@ const calcModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = ductParameterSlots(saved.settings);
+    const slots = Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]]));
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -503,7 +503,7 @@ export const ductCalc = read(CALC_DETAIL_READ, {
 export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = ductParameterSlots(saved.settings);
+    const slots = Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]]));
     const response = await ctx.read(native("ducts.snapshot.roster"), {
       role: "acquire",
       target: { kind: "document", ref: target },

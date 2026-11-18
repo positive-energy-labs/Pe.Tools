@@ -208,9 +208,9 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "fanFlow"], value: "Firm flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["parameters", "fanFlow"], value: "Project flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   const tiers = readSettingTiers("ducts", pointer);
-  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers }, calcView: { inputs: null }, calcSnapshot: { slots: ductParameterSlots(tiers) } } });
+  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers }, calcView: { inputs: null }, calcSnapshot: { slots: { fanFlow: ductParameterSlots(tiers).fanFlow!.name }, slotSources: ductParameterSlots(tiers) } } });
   expect(cells.find(cell => cell.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: "Project flow", source: "project" });
-  expect(ductParameterSlots(tiers)).toEqual({ fanFlow: "Project flow" });
+  expect(ductParameterSlots(tiers)).toMatchObject({ fanFlow: { name: "Project flow", source: "project" } });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
   expect(fansDocumentSchema.safeParse({ parameters: {} }).success).toBe(false);
 });

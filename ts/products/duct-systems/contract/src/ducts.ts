@@ -457,17 +457,11 @@ export const ductsRouteState = {
   finds: DUCTS_FINDS,
 } satisfies RouteStateSpec<typeof ductsDocumentSchema>;
 
-/** Snapshot requests keep their native shape; only the declared home tiers choose the names. */
-export const ductParameterSlots = (settings?: readonly SettingTierRead[]): Partial<Record<DuctParameterKey, string>> =>
-  Object.fromEntries(DUCT_PARAMETER_KEYS.flatMap(key => {
+/** Host requests project only served names; native fallbacks belong to the default tier. */
+export const ductParameterSlots = (settings?: readonly SettingTierRead[]) =>
+  Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => {
     const served = serveSetting(settings, ["project", "firm"], ["parameters", key], ductParameterNameSchema(key));
-    return served.value == null ? [] : [[key, served.value]];
+    return [key, { name: served.value, source: served.tier, ref: served.ref, note: served.note }];
   }));
 
 export const ductSlotSourcesSchema = z.record(z.string(), z.object({ source: z.enum(["user", "project", "firm", "default", "model"]), ref: z.string().optional(), note: z.string().optional() }));
-/** Host requests carry only served names; native fallbacks belong to the default tier. */
-export const ductSlotSources = (_slots: Partial<Record<DuctParameterKey, string | null>>, settings?: readonly SettingTierRead[]) =>
-  Object.fromEntries(DUCT_PARAMETER_KEYS.map(key => {
-    const served = serveSetting(settings, ["project", "firm"], ["parameters", key], ductParameterNameSchema(key));
-    return [key, { source: served.tier, ref: served.ref, note: served.note }];
-  }));

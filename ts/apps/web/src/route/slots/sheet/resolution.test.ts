@@ -6,13 +6,18 @@ import { fansCalc } from "@pe/fans-web/calc";
 import { settingsSheet } from "../../../settings/route.ts";
 import { sheetCells } from "./index.ts";
 import { readFileSync } from "node:fs";
-import { ductsNetworkData, ductParameterSlots, ductSlotSources } from "@pe/agent-contracts";
+import { ductsNetworkData, ductParameterSlots } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 
 const settings = { ducts: [{ tier: "firm" as const, home: "firm", name: "Firm", path: "Settings/ducts.json", sha256: "hash", json: { criteria: { autoJoinGapIn: 5 } } }] };
 const criteria = resolveCriteria({ criteria: { autoJoinGapIn: 9 }, criteriaMeta: { autoJoinGapIn: { by: "human", ref: "work:criterion" } } }, { version: "test", criteria: { ...DUCTS_DEFAULT_CRITERIA, autoJoinGapIn: 5 } });
 const cells = (slot: Parameters<typeof sheetCells>[0], read: unknown) => sheetCells(slot, { rows: [], work: {}, model: [], read });
 const fanSettings = { bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([name]) => name.startsWith("setting."))) };
+
+test("P27: a slot name and its tier come from one resolution", () => {
+  expect(ductParameterSlots(settings.ducts)).toMatchObject({ fanFlow: { name: null, source: "default" } });
+  expect(ductParameterSlots([{ ...settings.ducts[0], json: { parameters: { fanFlow: "Firm_Flow" } } }])).toMatchObject({ fanFlow: { name: "Firm_Flow", source: "firm", ref: "Firm" } });
+});
 
 test("V3: setting-home cells draw the resolution pricing used, including Work", () => {
   const row = cells(fanSettings, { settings, calcView: { inputs: { criteria } }, calcSnapshot: { kind: "absent" } }).find(c => c.binding === "setting.ducts.autoJoinGapIn");
@@ -32,8 +37,8 @@ test.each(["default", "firm"])("V3: both product slot rows draw the name in use 
   const name = source === "firm" ? "Firm_Flow" : "PE_M_Fan_AirFlow";
   const tiers = source === "firm" ? { ducts: [{ ...settings.ducts[0], json: { parameters: { fanFlow: name } } }] } : settings;
   for (const [slot, read] of [
-    [designCalc, { settings: tiers, criteria, network: { slots: { fanFlow: name }, slotSources: ductSlotSources({ fanFlow: name }, tiers.ducts) } }],
-    [fanSettings, { settings: tiers, calcView: { inputs: { criteria } }, calcSnapshot: { slots: { fanFlow: name }, slotSources: ductSlotSources({ fanFlow: name }, tiers.ducts), nodes: [], segments: [] } }],
+    [designCalc, { settings: tiers, criteria, network: { slots: { fanFlow: name }, slotSources: ductParameterSlots(tiers.ducts) } }],
+    [fanSettings, { settings: tiers, calcView: { inputs: { criteria } }, calcSnapshot: { slots: { fanFlow: name }, slotSources: ductParameterSlots(tiers.ducts), nodes: [], segments: [] } }],
   ] as const) expect(cells(slot, read).find(row => row.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: name, source });
 });
 
@@ -46,18 +51,18 @@ test("V3: Settings resolves its own tiers and an unnamed slot reads default", ()
 test("P23: host requests name only served slots and rows retain the serving tier", () => {
   const name = "Firm_Flow";
   const tiers = { ducts: [{ ...settings.ducts[0], json: { parameters: { fanFlow: "Firm_Flow" } } }] };
-  expect(ductParameterSlots(tiers.ducts)).toEqual({ fanFlow: name });
-  expect(ductParameterSlots()).toEqual({});
+  expect(ductParameterSlots(tiers.ducts)).toMatchObject({ fanFlow: { name, source: "firm" } });
+  expect(Object.values(ductParameterSlots()).every(slot => slot.name === null && slot.source === "default")).toBe(true);
   for (const [file, pattern, count] of [
-    ["duct-systems/host/src/host.ts", /slots: ductParameterSlots\(saved.settings\)/g, 2],
-    ["fans/host/src/host.ts", /slots: ductParameterSlots\(settings\)/g, 1],
-    ["fans/host/src/fan-calc.ts", /const slots = ductParameterSlots\(saved.settings\)/g, 2],
-    ["ducts/host/src/action-runtime.ts", /slots: ductParameterSlots\(settings\)/g, 1],
+    ["duct-systems/host/src/host.ts", /slots: Object.fromEntries\(Object.entries\(ductParameterSlots\(saved.settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 2],
+    ["fans/host/src/host.ts", /slots: Object.fromEntries\(Object.entries\(ductParameterSlots\(settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 1],
+    ["fans/host/src/fan-calc.ts", /const slots = Object.fromEntries\(Object.entries\(ductParameterSlots\(saved.settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 2],
+    ["ducts/host/src/action-runtime.ts", /slots: Object.fromEntries\(Object.entries\(ductParameterSlots\(settings\)\).flatMap\(\(\[key, slot\]\) => slot.name == null \? \[\] : \[\[key, slot.name\]\]\)\)/g, 1],
   ] as const) {
     const source = readFileSync(new URL(`../../../../../../products/${file}`, import.meta.url), "utf8");
     expect([...source.matchAll(pattern)], file).toHaveLength(count);
   }
-  const snapshot = { slots: { fanFlow: name }, slotSources: ductSlotSources({ fanFlow: name }, tiers.ducts), nodes: [], segments: [] };
+  const snapshot = { slots: { fanFlow: name }, slotSources: ductParameterSlots(tiers.ducts), nodes: [], segments: [] };
   for (const [slot, read] of [
     [designCalc, { settings: tiers, criteria, network: snapshot }],
     [fanSettings, { settings: tiers, calcView: { inputs: { criteria } }, calcSnapshot: snapshot }],
