@@ -8,7 +8,7 @@ import { DUCTS_SYSTEM_MAX,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots, } from "@pe/agent-contracts";
+  ductParameterSlots, ductSlotSources, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
@@ -37,7 +37,7 @@ export const ductsRoster = body(contracts.roster, async function(ctx, { target }
     });
     if (!response.version) throw Error("Duct roster has no observation version");
     const snapshot = response.body;
-    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version };
+    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version, slotSources: ductSlotSources(snapshot.slots, saved.settings) };
   });
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
@@ -60,6 +60,7 @@ const systems = read("ducts.systems", {
     return {
       ...snapshot,
       sourceVersion: response.version,
+      slotSources: ductSlotSources(snapshot.slots, saved.settings),
       systemReads: {
         completed: systemIds,
         missing: systemIds.filter((id) => !snapshot.systems.some((system) => system.id === id)),
@@ -95,6 +96,7 @@ export const ductsNetwork = body(contracts.network, async function(ctx, args) {
     });
     return {
       ...(mergeSnapshots(parts) ?? roster),
+      slotSources: parts.at(-1)?.slotSources ?? roster.slotSources,
       sourceVersion: parts.length
         ? parts.map((part) => part.sourceVersion).join("+")
         : roster.sourceVersion,
@@ -128,7 +130,7 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
       target: args.target,
       units: fans.rows.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
     });
-    const { sourceVersion: _version, systemReads: _coverage, ...acquired } = network;
+    const { sourceVersion: _version, systemReads: _coverage, slotSources: _sources, ...acquired } = network;
     const calcs = await ctx.read(networkCalcs, { snapshot: acquired, tables: tables.body, catalogs: catalog.tables,
       design: ductsDesign(layers.ducts, layers.fans), firm: firmLayer(layers.firm, layers.settings), revision: layers.revision });
     return ctx.compute(
