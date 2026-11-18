@@ -1,6 +1,5 @@
 import { mkdtemp, stateFixture } from "../../../tests/isolated-home/storage.ts";
-import { copyFile, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -188,35 +187,35 @@ test("a journal written with bundles inline loads unchanged, with no migration",
   }
 }, 60_000);
 
-// The drive's real journal (round 2, kernel run): a copy loads, and its first commit compacts it.
-const drive = "C:/Users/kaitp/source/repos/Pe.Tools/.artifacts/runs/converge-20261118-kernel/drive2/journal-final.partition-operations.json";
-test.skipIf(!existsSync(drive))("the drive's real journal loads and compacts to its live rows", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-k2-drive-"));
+// A caller's own `sourceBundle` value is data, never a path: a refused admission with a hash that
+// is not one must not discard the journal at the next start.
+test.each([
+  ["a path for a hash", { sha256: "a/b" }],
+  ["a well-formed hash that names no file", { sha256: "0".repeat(64) }],
+])("a receipt carrying %s loads, and every earlier row still lists", async (_case, sourceBundle) => {
+  const m = await measure("plain", 2);
   try {
-    const path = join(dir, "partition-operations.json");
-    await copyFile(drive, path);
-    const before = (await stat(path)).size;
-    const { journal, close } = await open(dir);
+    await m.journal
+      .invoke({ id: "odd-hash", key: "scripting.execute", target: { kind: "host" }, input: { sourcePath: "src/Run.cs", sourceBundle } }, { caller: human, basis: null })
+      .then(() => m.journal.wait("odd-hash"))
+      .catch(() => {});
+    const before = (await m.journal.list()).map((row) => row.id).sort();
+    expect(before).toContain("odd-hash");
+    expect((await m.journal.list(undefined, "odd-hash"))[0]).toMatchObject({ state: "failed" });
+    await m.close();
+    const reopened = await open(m.dir);
     try {
-      const rows = await journal.list();
-      expect(rows.length).toBeGreaterThan(0);
-      await run(journal, "after-drive", { scriptContent: "return 1;" });
-      const after = (await stat(path)).size;
-      console.log(`K2 drive journal: ${JSON.stringify({ before, after, rows: rows.length })}`);
-      expect(after).toBeLessThan(before);
-    } finally {
-      await close();
-    }
-    const reopened = await open(dir);
-    try {
-      expect((await reopened.journal.list()).length).toBeGreaterThan(0);
+      const rows = await reopened.journal.list();
+      expect(rows.map((row) => row.id).sort()).toEqual(before);
+      expect(rows.find((row) => row.id === "odd-hash")!.input.sourceBundle).toEqual(sourceBundle);
     } finally {
       await reopened.close();
     }
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await m.close().catch(() => {});
+    await rm(m.dir, { recursive: true, force: true });
   }
-}, 120_000);
+}, 60_000);
 
 test("a byte-triggered compaction that dies leaves the appended journal, every row's latest revision readable", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-k2-crash-"));

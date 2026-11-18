@@ -19,6 +19,20 @@ const outputKind = stateKind({
   schema: z.unknown(), place: (_id: string, ..._parts: string[]) => "Action outputs",
   segments: (id: string, ...parts: string[]) => ["action-outputs", createHash("sha256").update(id).digest("hex"), ...parts],
 });
+/**
+ * K2: a captured `sourceBundle` is stored once, as `bundles/<sha256>.json` in the action's output
+ * store. Journal lines and exports carry `{ sha256 }` in its place, and a load swaps the bytes back.
+ */
+const swapBundles = (value: unknown, swap: (bundle: Record<string, unknown>) => unknown): unknown =>
+  Array.isArray(value) ? value.map((item) => swapBundles(item, swap))
+  : value !== null && typeof value === "object"
+    ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
+        key === "sourceBundle" && item !== null && typeof item === "object" && !Array.isArray(item)
+          ? swap(item as Record<string, unknown>) : swapBundles(item, swap)]))
+    : value;
+const bundleHash = (bundle: unknown) => createHash("sha256").update(canonicalRouteInput(bundle)).digest("hex");
+/** Compaction runs once the file holds twice what its last compaction wrote, and at least this. */
+const COMPACT_BYTES = 1 << 20;
 import { dirname, join, relative, win32 } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
@@ -129,20 +143,6 @@ const effected = (step: ActionStep) =>
 // Only a running action holds a claim (K1a). Exception: a succeeded launch keeps its session-slot
 // claim until a later step `releases` it, because that Revit is still live. Every other terminal
 // state, `unknown` and `incomplete` included, ends the claim.
-/**
- * K2: a captured `sourceBundle` is stored once, as `bundles/<sha256>.json` in the action's output
- * store. Journal lines and exports carry `{ sha256 }` in its place, and a load swaps the bytes back.
- */
-const swapBundles = (value: unknown, swap: (bundle: Record<string, unknown>) => unknown): unknown =>
-  Array.isArray(value) ? value.map((item) => swapBundles(item, swap))
-  : value !== null && typeof value === "object"
-    ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-        key === "sourceBundle" && item !== null && typeof item === "object" && !Array.isArray(item)
-          ? swap(item as Record<string, unknown>) : swapBundles(item, swap)]))
-    : value;
-const bundleHash = (bundle: unknown) => createHash("sha256").update(canonicalRouteInput(bundle)).digest("hex");
-/** Compaction runs once the file holds twice what its last compaction wrote, and at least this. */
-const COMPACT_BYTES = 1 << 20;
 const holdsClaims = (row: ActionReceipt) => row.state === "running" || row.state === "succeeded";
 const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
   if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
@@ -853,7 +853,8 @@ export class ActionJournal implements ReceiptReader {
   }
   /**
    * Exported inputs of one action, keyed by its original ID. Structured request evidence the host
-   * serialized before dispatch; never original authored bytes and never a settled outcome.
+   * serialized before dispatch, never a settled outcome. `bundles/` is not derived: it holds the
+   * only copy of each captured source bundle its receipts name by hash.
    */
   async outputs(id: string): Promise<{ id: string; home: string; files: Record<string, unknown> }> {
     const home = this.home(id);
@@ -867,7 +868,8 @@ export class ActionJournal implements ReceiptReader {
     for (const entry of names)
       if (entry.isFile() && entry.name.endsWith(".json")) {
         const path = join(entry.parentPath, entry.name);
-        // Derived (ADR 0039): an export that does not decode is discarded with a notice and left out.
+        // A file that does not decode is discarded with a notice and left out (ADR 0039 `discard`);
+        // a discarded bundle leaves its receipts holding the bare hash, which the script door refuses.
         const read = readStoredFile(outputKind.in(this.storage, id, ...path.slice(home.length + 1).split(/[\\\\/]/)));
         if (read.kind === "ok") files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
       }
@@ -884,22 +886,21 @@ export class ActionJournal implements ReceiptReader {
   private async export(id: string, name: string, value: unknown) {
     writeState(outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)), JSON.stringify(this.seal(id, value), null, 2));
   }
-  /** Bundle files this process wrote or found. */
-  private readonly sealed = new Set<string>();
   private seal(id: string, value: unknown) {
     return swapBundles(value, (bundle) => {
       if (!Array.isArray(bundle.files)) return bundle;
       const sha256 = bundleHash(bundle);
       const file = outputKind.in(this.storage, id, "bundles", `${sha256}.json`);
       // Written before any line names it: a crash leaves bytes no line names, never the reverse.
-      if (!this.sealed.has(file.path) && !existsSync(file.path)) writeState(file, JSON.stringify(bundle));
-      this.sealed.add(file.path);
+      if (!existsSync(file.path)) writeState(file, JSON.stringify(bundle));
       return { sha256 };
     });
   }
   private unseal(id: string, value: unknown) {
     return swapBundles(value, (bundle) => {
-      if (Array.isArray(bundle.files) || typeof bundle.sha256 !== "string") return bundle;
+      // Only a hash this journal could have written is looked up. Anything else is the caller's own
+      // data and stays as given, because a throw here would discard the whole journal at load.
+      if (Array.isArray(bundle.files) || typeof bundle.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(bundle.sha256)) return bundle;
       const read = readStoredFile(outputKind.in(this.storage, id, "bundles", `${bundle.sha256}.json`));
       // Missing or altered bytes keep the bare hash, so the script's own decode refuses it loudly.
       return read.kind === "ok" && bundleHash(read.value) === bundle.sha256 ? read.value : bundle;
