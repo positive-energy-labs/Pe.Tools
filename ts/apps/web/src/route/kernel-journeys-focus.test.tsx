@@ -600,7 +600,9 @@ test("JZ Fans undo after apply: public write journey leaves an honest toolbar re
       }) },
     )));
     expect(response.status, await response.clone().text()).toBe(200);
-    return response.json();
+    const body = await response.json();
+    expect(body.ok, JSON.stringify(body)).toBe(true);
+    return body;
   };
   const read = observeResources(f.saved, undefined, f.observeHostResource);
   const connected = createWorkFeedClient({ subscribe: read, dirty() {} }, {
