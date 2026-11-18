@@ -134,10 +134,10 @@ function Sides({ props }: { props: LedgerProps }) {
           {totals.requiredEspInWg == null ? (
             <span className="text-ink-2">— needs two complete sides</span>
           ) : (
-            `${pressure(totals.requiredEspInWg)} in-wg`
+            `${pressure(totals.requiredEspInWg)} in-wg computed`
           )}
           {totals.requiredEspAssumedInWg != null &&
-            ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)}`}
+            ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)} computed`}
         </span>
         {/* The resolver includes staged Work; a Read plan cannot claim a native write. */}
         {/* Rated ESP is only ever a stated value (P-030, P-033c): unstated, the row says so and shows no number. */}
@@ -161,12 +161,13 @@ function Sides({ props }: { props: LedgerProps }) {
             </span>
             <span className="face-mono text-right">
               {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}
+              {totals[side].worstPath != null && " computed"}
               {totals[side].worstPath == null && ws?.[side].worstKnownInWg != null && (
                 <span data-tone="caution"> partial</span>
               )}
             </span>
             <span className="face-mono text-right">
-              {pressure(totals[side].allowanceInWg)}{" "}
+              {pressure(props.inputs?.criteria.allowanceInWg[side].value ?? null)}{" "}
               <TooltipHint content={props.inputs?.criteria.allowanceInWg[side].ref}>
                 <span
                   className="t-small text-ink-2"
