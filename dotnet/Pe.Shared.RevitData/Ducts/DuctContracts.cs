@@ -189,7 +189,7 @@ public sealed record DuctParameterSlotOverrides(
         "PE_M_Grd_ExternalStaticPressure", DuctParameterSlots.DefaultFittingCoefficient, "PE_M_Grd_AirFlow");
 
     /// <summary>Resolve request overrides over the C# defaults; stored slots are write receipts only.</summary>
-    // R3: RequiredEsp absent/null inherits; "" is explicit none; a nonblank name targets that parameter.
+    // R3: RequiredEsp absent/null uses the C# default; "" is explicit none; a nonblank name targets that parameter.
     public DuctParameterSlots Resolve() {
         var required = this.RequiredEsp ?? Defaults.RequiredEsp;
         required = string.IsNullOrWhiteSpace(required) ? null : required.Trim();
