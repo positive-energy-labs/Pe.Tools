@@ -18,12 +18,17 @@ import {
 import type { FirmValue } from "@pe/host/read-graph";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { slotCoverage, REVIT_FLOW_SLOT } from "@pe/ducts-domain/kernel/terminal-flow";
+export const snapshotInputs = (settings: readonly SettingTierRead[], snapshot: DuctSnapshot) => {
+  const flow = terminalFlowSlot(settings, snapshot);
+  // A derived input view; the retained native body and its parameter facts stay unchanged.
+  return { snapshot: { ...snapshot, slots: { ...snapshot.slots, ...flow.slots } }, flow };
+};
+export const acquireSnapshotInputs = async (settings: readonly SettingTierRead[], read: (slots: ReturnType<typeof ductParameterSlots>) => Promise<DuctSnapshot>) => snapshotInputs(settings, await read(ductParameterSlots(settings)));
 
 /** One project choice, measured before the fan walk; the override also beats previously stored Slots. */
-export async function terminalFlowSlot(settings: readonly SettingTierRead[], read: (slots: ReturnType<typeof ductParameterSlots>) => Promise<DuctSnapshot>) {
+export function terminalFlowSlot(settings: readonly SettingTierRead[], snapshot: DuctSnapshot) {
   const slots = ductParameterSlots(settings), named = slots.terminalFlow;
-  const snapshot = await read({ ...slots, terminalFlow: named ?? "PE_M_Grd_AirFlow" });
-  const coverage = slotCoverage(snapshot.nodes, [named ?? "PE_M_Grd_AirFlow"]);
+  const coverage = slotCoverage(snapshot.nodes, [named ?? "PE_M_Grd_AirFlow"]).filter(row => row.slot === (named ?? "PE_M_Grd_AirFlow") || row.slot === REVIT_FLOW_SLOT);
   const chosen = coverage.find(row => row.slot === (named ?? coverage[0]?.slot));
   if (!chosen) throw Error("Terminal airflow coverage returned no candidate");
   const better = coverage.find(row => row.covered > chosen.covered);

@@ -8,11 +8,12 @@ import { DUCTS_SYSTEM_MAX,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots, } from "@pe/agent-contracts";
+  } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
 import { firmLayer } from "@pe/ducts-host/ducts-inputs";
+import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { catalogs } from "@pe/host/builtin-read-handles";
@@ -23,21 +24,9 @@ import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";
 import { fanSystems } from "@pe/ducts-contract/fan-scope.neutral";
 
 export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
-    const saved = await ctx.read(designLayers, target),
-      design = ductsDesign(saved.ducts, saved.fans);
-    const staged = stagedDucts(design, design);
-    const response = await ctx.read(native("ducts.snapshot.roster"), {
-      role: "acquire",
-      target: { kind: "document", ref: target },
-      request: {
-        slots: ductParameterSlots(saved.settings),
-        labelParameter: staged.labelParameter ?? undefined,
-        selector: { kind: "roster" },
-      },
-    });
-    if (!response.version) throw Error("Duct roster has no observation version");
-    const snapshot = response.body;
-    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version };
+    const input = await ctx.read(ductsInputs, target);
+    if (!input.version) throw Error("Duct roster has no observation version");
+    return { ...input.snapshot, rows: systemList(input.snapshot, null), sourceVersion: input.version };
   });
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
@@ -50,7 +39,7 @@ const systems = read("ducts.systems", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: ductParameterSlots(saved.settings),
+        slots: (await ctx.read(ductsInputs, target)).flow.slots,
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },
@@ -72,7 +61,7 @@ export const ductsNetwork = body(contracts.network, async function(ctx, args) {
     // Roster base equipment misses unassigned fans. Walk the named port before resolving system names.
     const walk = args.fan ? await ctx.read(native("ducts.snapshot.walk"), {
       role: "acquire", target: { kind: "document", ref: args.target },
-      request: { selector: { kind: "from", unitId: args.fan.unitId, portIndex: args.fan.portIndex } },
+      request: { slots: roster.slots, selector: { kind: "from", unitId: args.fan.unitId, portIndex: args.fan.portIndex } },
     }) : null;
     const names =
       walk ? fanSystems(walk.body, roster.systems) : args.system === "all"

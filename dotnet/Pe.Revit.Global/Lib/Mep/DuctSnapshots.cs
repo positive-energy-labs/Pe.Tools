@@ -13,6 +13,7 @@ namespace Pe.Revit.Global.Lib.Mep;
 ///     <see cref="DuctNetwork" />. Read-only: opens no transaction.
 /// </summary>
 public static class DuctSnapshots {
+    private static readonly string DefaultTerminalFlow = new DuctParameterSlotOverrides().Resolve().TerminalFlow;
     // Revit's shipped DuctType/FlexDuctType roughness (galvanized steel). On flex it is wrong by ~10x.
     private const double RevitDefaultRoughnessFt = 0.0003;
 
@@ -657,6 +658,7 @@ public static class DuctSnapshots {
                 var (cfm, from) = SlotFlow(e, slots.TerminalFlow);
                 flowParameter = from;
                 facts.Add(Fact(DuctNetwork.TerminalFlow, cfm, "cfm", DuctProvenance.DesignerStated));
+                facts.Add(Fact($"slot:{DefaultTerminalFlow}", slots.TerminalFlow == DefaultTerminalFlow ? cfm : SlotFlow(e, DefaultTerminalFlow).Cfm, "cfm", DuctProvenance.DesignerStated));
                 if (fi?.Symbol.LookupParameter("Pe_Catalog")?.AsString() is { Length: > 0 } catalog)
                     facts.Add(new DuctFact("Pe_Catalog", null, catalog, "", DuctProvenance.DesignerStated));
                 if (!metadataOnly && Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));

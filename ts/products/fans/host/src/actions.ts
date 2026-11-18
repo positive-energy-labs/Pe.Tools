@@ -25,7 +25,7 @@ import { buildCalc, encounterRulings, mintWriteRequest, resolveInputs, type Buil
 import { followAcceptedJoins } from "@pe/ducts-domain/calc/joins";
 import { storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import { suggestRoster } from "@pe/ducts-domain/roster";
-import { workLayer, terminalFlowSlot } from "@pe/ducts-host/ducts-inputs";
+import { workLayer } from "@pe/ducts-host/ducts-inputs";
 
 
 import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
@@ -183,7 +183,7 @@ async function prepareLosses(p: DuctActionPreparation) {
 
 export function fansExecutors(bridge: RevitBridge["Service"], deps: DuctActionDependencies = {}) {
   return ductActionExecutors({
-    terminalFlow: terminalFlowSlot, snapshot: lossSnapshot, derive: prepareLosses,
+    snapshot: lossSnapshot, derive: prepareLosses,
     entry: { key: "ducts.apply", native: "ducts.apply.plan",
       refusePlan: value => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
       retires: (input, value, subjects, cells) => appliedCellPaths(input as unknown as DuctsApplyInput, value as DuctsApply.Res.Response, subjects, cells) },
