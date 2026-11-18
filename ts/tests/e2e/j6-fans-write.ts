@@ -43,6 +43,10 @@ await journey("J6-fans", async (page, step) => {
   await page.open(revit.url("/fans"));
   await requireRevit(page, 600_000);
   await page.until(() => page.has(fanRow, ROSTER), `${FAN} on the fans roster`, 600_000);
+  const unitId = await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) => {
+    const rows = [...document.querySelectorAll<HTMLElement>(`${scope} [role="option"]`)].filter(e => new RegExp(pattern).test(e.innerText));
+    return rows.length === 1 ? rows[0]?.getAttribute("data-revit-ids") ?? null : null;
+  }, { scope: ROSTER, pattern: fanRow.source });
   step(`pick ${FAN} port ${PORT} from the roster`);
   const selected = await page.read<boolean>(
     `[...document.querySelectorAll(${JSON.stringify(`${ROSTER} [aria-selected="true"]`)})].some((e) => ${fanRow}.test(e.innerText.trim()))`,
@@ -76,6 +80,7 @@ await journey("J6-fans", async (page, step) => {
     FAN,
     (scope, pattern) => page.click(new RegExp(pattern), scope),
     (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "the Write scope"),
+    unitId,
   );
   await page.until(async () => settled(await marks(page)), "fans settled before plan", 300_000);
   step("open the human plan");

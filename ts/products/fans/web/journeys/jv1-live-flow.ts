@@ -47,6 +47,10 @@ try {
     const label = fanRosterRow(fan, port);
     const roster = '[role="listbox"][aria-label="fans"]';
     await page.until(() => page.has(label, roster), "the named fan");
+    const unitId = await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) => {
+      const rows = [...document.querySelectorAll<HTMLElement>(`${scope} [role="option"]`)].filter(e => new RegExp(pattern).test(e.innerText));
+      return rows.length === 1 ? rows[0]?.getAttribute("data-revit-ids") ?? null : null;
+    }, { scope: roster, pattern: label.source });
     if (!(await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) =>
       [...document.querySelectorAll<HTMLElement>(`${scope} [aria-selected="true"]`)].some(e => new RegExp(pattern).test(e.innerText)),
       { scope: roster, pattern: label.source })))
@@ -77,7 +81,7 @@ try {
       await assertPageBinding(page);
       await page.click(new RegExp(pattern), scope);
     },
-      (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "write scope"));
+      (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "write scope"), unitId);
     await page.until(async () => settled(await marks(page)), "settled write scope");
     await assertPageBinding(page);
     await plan(page);
