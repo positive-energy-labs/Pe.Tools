@@ -84,9 +84,12 @@ public record ScriptChangedIds(List<long> Ids, int Total);
 
 /// <summary>
 ///     What a script run changed in the document it ran on, as Revit reported each commit. An element added and
-///     then modified is added; one added and then deleted is in no list. `Kept` is false for a ReadOnly run: the
-///     lists are what it would have changed, and Revit rolled it back. `Transactions` names each commit in order.
-///     `Summary` says the same in one sentence, and says so when Revit rolled back what the run tried to commit.
+///     then modified is added; one added and then deleted is in no list. `Kept` is false for a ReadOnly run, and for a
+///     WriteTransaction or NoTransaction run that did not finish (it threw, timed out or was cancelled) and was
+///     rolled back: the lists are then what it would have changed or had committed, and none of that is in the
+///     document. `Transactions` names each commit in order. `Summary` says the same in one sentence for that
+///     document alone, says so when Revit rolled back what the run tried to commit, and says when a failed run
+///     Revit could not roll back left its changes in the document.
 ///     `Undo` names the single entry Ctrl+Z in Revit undoes; when it is null on a run that kept changes,
 ///     `Ungrouped` says why the run's transactions are separate undo entries. `Overlapped` is true when another
 ///     call ran at the same time: the lists may then include that call's changes. A script changes only the

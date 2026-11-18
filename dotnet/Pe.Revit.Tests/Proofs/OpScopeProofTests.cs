@@ -175,4 +175,35 @@ public sealed class OpScopeProofTests {
             });
         } finally { doc.Close(false); }
     }
+
+    /// <summary>
+    ///     Overlap is another call's window, never a call's own. Needs no document, only Revit's types loaded:
+    ///     the windows bind RevitAPI, so the deterministic rung cannot load this.
+    /// </summary>
+    [Test]
+    public void A_window_inside_its_own_ops_window_is_no_overlap_and_another_ops_window_is() {
+        var op = new ModelWrite(null);
+        using (var outer = OperationMonitor.Watch(op))
+        using (var inner = OperationMonitor.Watch(within: op)) {
+            // A script run's window opens inside the window of the scripting.execute call that runs it: one call.
+            Assert.That((outer.Overlapped, inner.Overlapped), Is.EqualTo((false, false)));
+            using var other = OperationMonitor.Watch();
+            Assert.That((outer.Overlapped, inner.Overlapped, other.Overlapped), Is.EqualTo((true, true, true)));
+        }
+
+        // An op that was already overlapped hands that down: its commits may be the other call's, so may the run's.
+        using (var first = OperationMonitor.Watch())
+        using (var outer = OperationMonitor.Watch(op))
+        using (var inner = OperationMonitor.Watch(within: op))
+            Assert.That((first.Overlapped, outer.Overlapped, inner.Overlapped), Is.EqualTo((true, true, true)));
+
+        // Naming an op that has no window open claims nothing: two separate calls still overlap.
+        using (var one = OperationMonitor.Watch())
+        using (var two = OperationMonitor.Watch(within: op))
+            Assert.That((one.Overlapped, two.Overlapped), Is.EqualTo((true, true)));
+
+        // A window that has closed overlaps nothing.
+        using (var later = OperationMonitor.Watch())
+            Assert.That(later.Overlapped, Is.False);
+    }
 }

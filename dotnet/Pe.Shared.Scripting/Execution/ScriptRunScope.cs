@@ -36,7 +36,10 @@ public sealed class ScriptRunScope : IDisposable {
     ///     overwrites nothing, so neither is held. Outside a run nothing is held: that save is the person's.
     /// </summary>
     public static bool Holds(ScriptSaveKind kind, bool isFamilyDocument) =>
-        Current is { _caller: not ScriptCaller.Person } && !isFamilyDocument && kind != ScriptSaveKind.SaveAsNewPath;
+        IsAgentRun && !isFamilyDocument && kind != ScriptSaveKind.SaveAsNewPath;
+
+    /// <summary>True inside a run no person started: nobody is at the keyboard for it, so its dialogs are answered for it.</summary>
+    public static bool IsAgentRun => Current is { _caller: not ScriptCaller.Person };
 
     public void RecordHeld(ScriptSaveKind kind, string title) => this._held.Add((kind, title));
 

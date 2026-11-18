@@ -162,7 +162,7 @@ internal static class ScriptFileTemplates {
         - Each entrypoint source file must contain exactly one non-abstract `PeScriptContainer`; helper `src/**/*.cs` files compile alongside but are not runnable.
         - Inline snippets may be Execute-body statements with optional leading `using` directives, or a full `PeScriptContainer` class.
         - Inside `Execute()`, use `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, and `Notify(...)` (progress messages pushed to the caller mid-run).
-        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. Use `WriteTransaction` for one host-owned transaction, or `NoTransaction` when the script or called library must own transaction boundaries.
+        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. Use `WriteTransaction` for one host-owned transaction, or `NoTransaction` when the script or called library must own transaction boundaries. `NoTransaction` runs as one unit: a script that returns keeps what it committed, and a script that throws, times out or is cancelled is rolled back whole, so catch your own errors and return a report to keep partial work.
         - Scripts are trusted in-process C# inside Revit, not an OS/process security sandbox. `ReadOnly` controls document transaction behavior only.
         - Long-running scripts should check `ct` (or call `ThrowIfCancelled()`) inside loops so cancellation and the execution timeout can interrupt them.
         - Use `Result(...)` once per run to return structured JSON to the caller; `WriteLine(...)` for short human-readable output; `Artifacts.WriteJson/WriteCsv/WriteText(...)` for durable files.
@@ -197,7 +197,7 @@ internal static class ScriptFileTemplates {
         - Exactly one non-abstract `PeScriptContainer` per entrypoint file. Other `{{ScriptingWorkspaceLayout.SourceDirectoryName}}/**/*.cs` files compile alongside and are not runnable.
         - Inside `Execute()`: `doc`, `uidoc`, `app`, `selection`, `revitVersion`, `ct`, `Artifacts`, `Result(...)`, `WriteLine(...)`, `Notify(...)`.
         - `Result(...)` once per run for structured JSON, `WriteLine(...)` for short diagnostics, `Artifacts` for durable files.
-        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. `WriteTransaction` opens one host-owned transaction. `NoTransaction` leaves transaction boundaries to the script or the library it calls.
+        - `ReadOnly` (the default) runs inside a rollback guard: document changes are discarded and reported as a warning. `WriteTransaction` opens one host-owned transaction. `NoTransaction` leaves transaction boundaries to the script or the library it calls. `NoTransaction` runs as one unit: a script that returns keeps what it committed, and a script that throws, times out or is cancelled is rolled back whole, so catch your own errors and return a report to keep partial work.
         - Check `ct` (or call `ThrowIfCancelled()`) inside loops; a script that never checks cannot be interrupted by the timeout or by cancel.
         - Scripts are trusted in-process C# inside Revit, not an OS sandbox. `ReadOnly` is a document guarantee, not machine isolation.
         - Add references in `{{ScriptingWorkspaceLayout.ProjectFileName}}`, and re-run bootstrap after a Revit version change or a missing machine reference.

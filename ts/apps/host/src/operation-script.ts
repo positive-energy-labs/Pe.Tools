@@ -65,8 +65,16 @@ export function runPodScript(
 export function requireScriptSuccess(value: unknown): void {
   const status = value && typeof value === "object" && "status" in value ? value.status : undefined;
   if (status === "Succeeded") return;
+  // The first Error diagnostic's first line is what failed (a runtime one is the exception's type and
+  // message; its stack starts on the next line). Nothing else of the result goes into the error text.
+  const diagnostics = value && typeof value === "object" && "diagnostics" in value && Array.isArray(value.diagnostics)
+    ? (value.diagnostics as unknown[]) : [];
+  const first = diagnostics.find((entry): entry is { message: string } =>
+    !!entry && typeof entry === "object" && "severity" in entry && entry.severity === "Error" &&
+    "message" in entry && typeof entry.message === "string");
+  const cause = first?.message.split(/\r?\n/, 1)[0]?.trim().slice(0, 300);
   throw new StepFailure(
-    `Script execution ${typeof status === "string" ? status : "returned no valid status"}`,
+    `Script execution ${typeof status === "string" ? status : "returned no valid status"}${cause ? `: ${cause}` : ""}`,
     status === "Cancelled" ? 499 : 422,
     status === "Cancelled" ? "cancelled" : "failed",
     value,
