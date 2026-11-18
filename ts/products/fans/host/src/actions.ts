@@ -72,7 +72,7 @@ export function fanWriteRequest(input: BuildCalcInput, context: FanWriteContext)
     ductsPricingData.shape.calcs.element.parse(sheet);
     // P-061, P-067: a complete claim carries a runtime symbol that only buildSheet sets and the mint checks, so a decoded sheet
     // or claim cannot pass. Mint only from the buildSheet above, in this process.
-    return { claim, request: mintWriteRequest(claim, sheet, input, context) };
+    return { claim, ...mintWriteRequest(claim, sheet, input, context) };
   } catch (error) {
     throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
   }
@@ -151,12 +151,12 @@ async function prepareLosses(p: DuctActionPreparation) {
             const peerClaims = new Map<number, DomainClaim>();
             for (const { elementId: unitId } of peers)
               peerClaims.set(unitId, buildCalc((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
-            // A rule-derived fitting coefficient is a value written into the model, not a ruling: the /duct-systems
-            // write scope's rule cells select the fittings written here. The rule itself stays staged there (D9).
+            // Out-of-band rule evidence selects only fittings whose rule cells are in scope.
+            // The rule key never rides the wire, and the rule itself stays staged in /duct-systems (D9).
             const cells = [...(doc.writeIntent.edit?.value?.cells ?? []), ...fanWriteCells(fans, snapshot)];
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-            const { claim, request } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
-            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
+            const { claim, request, fittingRules } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
+            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot, fittingRules);
             const unwritten = unwrittenCells(scoped, cells, snapshot);
             if (unwritten.length)
               throw refused(

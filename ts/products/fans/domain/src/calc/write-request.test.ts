@@ -161,26 +161,50 @@ function prepared(snapshot = synthetic(), work: WorkLayer = {}, run: WorkLayer =
   };
   function mint(c = context) {
     if (sheet.claim.kind !== "complete") throw Error(JSON.stringify(sheet.claim));
-    return mintWriteRequest(sheet.claim, sheet, input, c);
+    return mintWriteRequest(sheet.claim, sheet, input, c).request;
   }
   return { sheet, input, context, mint };
 }
 
 it("mints fitting values without duct-systems rulings", () => {
-  const p = prepared();
+  const p = prepared(synthetic(), { rules: { "elbow-1d-gt10": cell("CD3-21") } });
   const request = p.mint();
+  expect(p.input.inputs.tables["elbow-1d-gt10"]).toMatchObject({ source: "Work", value: "CD3-21" });
+  expect(request.fittings).toEqual([expect.objectContaining({ id: 2, table: "CD3-21" })]);
   expect(request.fittings.length).toBeGreaterThan(0);
   expect(request.store).not.toHaveProperty("rules");
   expect(request.store).not.toHaveProperty("verdicts");
   for (const fitting of request.fittings) expect(fitting).not.toHaveProperty("ruleKey");
-  const scoped = scopeApplyRequest(request, p.input.snapshot.store, [], p.input.snapshot);
-  expect(scoped.fittings).toEqual(request.fittings);
+  if (p.sheet.claim.kind !== "complete") throw Error("complete fixture required");
+  const { fittingRules } = mintWriteRequest(p.sheet.claim, p.sheet, p.input, p.context);
+  expect([...fittingRules]).toEqual([[2, "elbow-1d-gt10"]]);
+  expect(request).not.toHaveProperty("fittingRules");
+  const scoped = scopeApplyRequest(request, p.input.snapshot.store, [], p.input.snapshot, fittingRules);
+  expect(scoped.fittings).toEqual([]);
+  expect(scoped.store?.instances).toEqual({});
+});
+
+it("writes exactly the scoped rule's mapped fittings and preserves stored rules", () => {
+  const snapshot = synthetic();
+  const storedRules = { other: { table: "CD3-21" } };
+  snapshot.store = { version: 2, workRevision: 3, rules: storedRules, instances: {}, terminals: {}, terminalFlows: {}, equipmentFlows: {}, verdicts: {}, roles: {} };
+  const p = prepared(snapshot, { rules: { "elbow-1d-gt10": cell("CD3-21") } });
+  if (p.sheet.claim.kind !== "complete") throw Error("complete fixture required");
+  const { request, fittingRules } = mintWriteRequest(p.sheet.claim, p.sheet, p.input, p.context);
+  // Other-rule and unmapped rows must not acquire permission from the selected rule.
+  request.fittings.push({ ...request.fittings[0]!, id: 6 }, { ...request.fittings[0]!, id: 7 });
+  const rules = new Map([...fittingRules, [6, "other"]]);
+  const scoped = scopeApplyRequest(request, snapshot.store, [["rules", "elbow-1d-gt10"]], snapshot, rules);
+  expect(scoped.fittings).toEqual([expect.objectContaining({ id: 2 })]);
+  expect(Object.keys(scoped.store?.instances ?? {})).toEqual(["2"]);
+  expect(scoped.store?.rules).toBe(storedRules);
+  expect(scopeApplyRequest(request, snapshot.store, [], snapshot, rules).store?.rules).toBe(storedRules);
 });
 
 // Compile-only witness: explicit cell scope is mandatory, including when empty.
 const scopeTypeWitness = (...args: Parameters<typeof scopeApplyRequest>) => {
   // @ts-expect-error An absent cell scope must be refused.
-  scopeApplyRequest(args[0], args[1], undefined, args[3]);
+  scopeApplyRequest(args[0], args[1], undefined, args[3], args[4]);
 };
 void scopeTypeWitness;
 
@@ -604,7 +628,7 @@ it("mints computed ESP and authored-only flows on the recorded Manual D fan", ()
     rulings: {},
     storeDeletes: {},
   };
-  const minted = mintWriteRequest(sheet.claim, sheet, input, context);
+  const { request: minted } = mintWriteRequest(sheet.claim, sheet, input, context);
   expect(minted.equipment).toEqual([
     { id: 14577391, externalStaticInWg: sheet.claim.requiredEspInWg },
   ]);

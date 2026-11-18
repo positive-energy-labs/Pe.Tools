@@ -43,7 +43,7 @@ export function mintWriteRequest(
   sheet: Calc,
   input: BuildCalcInput,
   context: FanWriteContext,
-): FanWriteRequest {
+): { request: FanWriteRequest; fittingRules: ReadonlyMap<number, string> } {
   if (sheet.claim !== claim || claim.kind !== "complete" || !isCompleteClaim(claim))
     throw Error("The sheet's complete claim is required");
   const { snapshot, inputs } = input;
@@ -61,12 +61,14 @@ export function mintWriteRequest(
         .map((l) => l.elementId),
     ),
   ];
+  const fittingRules = new Map<number, string>();
   const fittings: DuctsApplyInput["fittings"] = fittingIds.flatMap((id) => {
     const evidence = legs
       .filter((l) => l.elementId === id)
       .flatMap((l) => (l.evidence.kind === "coefficient" ? [l.evidence] : []));
     const first = evidence[0];
     if (!first) return [];
+    fittingRules.set(id, first.rule);
     return [
       {
         id,
@@ -217,5 +219,5 @@ export function mintWriteRequest(
     },
     storeDeletes: context.storeDeletes,
   };
-  return Object.defineProperty(request, MINTED, { enumerable: false });
+  return { request: Object.defineProperty(request, MINTED, { enumerable: false }), fittingRules };
 }
