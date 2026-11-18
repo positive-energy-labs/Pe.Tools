@@ -737,7 +737,9 @@ function callRoutes(
             throw Error("An original action ID is required");
           const controlled = (await owner().readFor(caller, undefined, body.id))[0];
           if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
-          return Response.jsonUnsafe(await owner().cancel(body.id), { status: 202 });
+          const { receipt, signalled } = await owner().cancel(body.id);
+          // 202: a cancel reached a running native request; 200: saved, nothing was signalled to Revit.
+          return Response.jsonUnsafe(receipt, { status: signalled ? 202 : 200 });
         },
         catch: (error) => error,
       })).pipe(
