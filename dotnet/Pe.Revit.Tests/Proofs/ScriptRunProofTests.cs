@@ -48,7 +48,7 @@ public sealed partial class ScriptRunProofTests {
 
     [Op("test.proof.script", OpSubject.None, OpTouches.Metadata, Does = "Run a script in place under a ModelWrite scope.", Actor = OpActor.Any, IsPublic = false, Thread = OpThread.Revit)]
     private static ExecuteRevitScriptData ProofScript(ExecuteRevitScriptRequest request, RevitDocument target, ModelWrite scope, CancellationToken cancellationToken) =>
-        _scripting.ExecuteOnApiThread(request, target, cancellationToken);
+        _scripting.ExecuteOnApiThread(request, target, cancellationToken, scope);
 
     private static (OpRun Ran, ExecuteRevitScriptData Result) Run(Document document, string script, string name, int timeoutSeconds = 0,
         ScriptPermissionMode mode = ScriptPermissionMode.NoTransaction, ScriptCaller caller = ScriptCaller.Agent) {
@@ -218,6 +218,9 @@ public sealed partial class ScriptRunProofTests {
                 Assert.That(result.Changes!.Kept, Is.True);
                 Assert.That(result.Changes.Undo, Is.EqualTo("Pe script: returns"));
                 Assert.That(result.Changes.Summary, Does.StartWith("Changed "));
+                // One run and no other call: the run's window is inside its own op's window, which is no overlap.
+                Assert.That(result.Changes.Overlapped, Is.False);
+                Assert.That(result.Changes.Summary, Does.Not.Contain("Another call ran"));
             });
         } finally {
             _ = document.Close(false);

@@ -99,7 +99,7 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
         CancellationToken cancellationToken
     ) => this.EnqueueAsync(
         "execute script",
-        () => this.ExecuteOnApiThread(request, target, cancellationToken),
+        () => this.ExecuteOnApiThread(request, target, cancellationToken, scope),
         cancellationToken
     );
 
@@ -111,7 +111,8 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
     public ExecuteRevitScriptData ExecuteOnApiThread(
         ExecuteRevitScriptRequest request,
         RevitDocument target,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        OperationScope? within = null
     ) {
         var executionId = Guid.NewGuid().ToString("N");
         var timeoutSeconds = NormalizeTimeoutSeconds(request.TimeoutSeconds);
@@ -135,7 +136,8 @@ public sealed class ScriptingBridgeMessageHandler : IExternalEventHandler, IDisp
                 target.Value,
                 request with { WorkspaceKey = NormalizeWorkspaceKey(request.WorkspaceKey) },
                 executionId,
-                cancellation
+                cancellation,
+                within
             );
             if (result.Status == ScriptExecutionStatus.Succeeded && stopwatch.Elapsed.TotalSeconds > timeoutSeconds)
                 result.Diagnostics.Add(ScriptDiagnosticFactory.Warning(

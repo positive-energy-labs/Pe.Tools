@@ -217,16 +217,23 @@ public static class OperationMonitor {
     /// <summary>
     ///     Starts collecting changes. <paramref name="scope" /> is the call's scope, null for a Read. A window given
     ///     <paramref name="idsOf" /> also keeps the element ids of every commit in that document; an op call keeps counts only.
+    ///     <paramref name="within" /> is the scope of the op this window is opened inside (a script run inside its
+    ///     scripting.execute call): that op's window is the same call, so neither marks the other as overlapped.
     /// </summary>
-    public static Window Watch(OperationScope? scope = null, Document? idsOf = null) {
+    public static Window Watch(OperationScope? scope = null, Document? idsOf = null, OperationScope? within = null) {
         var window = new Window(scope, idsOf);
         lock (Gate) {
             // ponytail: two calls open at once cannot tell their commits apart (both may target one document), so
             // both are marked and the runner calls nothing unauthorized on a marked call. Give each commit its
             // call (an ambient scope on the API thread) if a real overlap ever hides a real unauthorized write.
-            if (Open.Count != 0) {
+            foreach (var other in Open) {
+                // Its own op's window: no second call, but what that op already overlapped may be in this one too.
+                if (within is not null && ReferenceEquals(other.Scope, within)) {
+                    window.Overlapped |= other.Overlapped;
+                    continue;
+                }
                 window.Overlapped = true;
-                foreach (var other in Open) other.Overlapped = true;
+                other.Overlapped = true;
             }
             Open.Add(window);
         }

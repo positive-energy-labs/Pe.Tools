@@ -69,7 +69,9 @@ public sealed class RevitScriptExecutionService(
         Document? document,
         ExecuteRevitScriptRequest request,
         string executionId,
-        ScriptCancellationScope? cancellation = null
+        ScriptCancellationScope? cancellation = null,
+        // The scope of the op this run is inside, when an op runner is watching it: its window is this run's own call.
+        OperationScope? within = null
     ) {
         cancellation ??= ScriptCancellationScope.None;
         // ScriptSaveHold uses this caller throughout execution to hold only guarded project saves.
@@ -283,7 +285,7 @@ public sealed class RevitScriptExecutionService(
                         executionId,
                         containerTypeName
                     );
-                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan, diagnostics);
+                    this.ExecuteContainer(containerResult.Container, executionContext, outputSink, plan, diagnostics, within);
                     Log.Information(
                         "Revit scripting container execute completed: ExecutionId={ExecutionId}, ContainerType={ContainerTypeName}",
                         executionId,
@@ -867,7 +869,8 @@ public sealed class RevitScriptExecutionService(
         RevitScriptContext context,
         ScriptOutputSink outputSink,
         ScriptExecutionPlan plan,
-        List<ScriptDiagnostic> diagnostics
+        List<ScriptDiagnostic> diagnostics,
+        OperationScope? within
     ) {
         using var consoleCapture = outputSink.CreateConsoleCaptureScope();
         var mode = plan.PermissionMode;
@@ -877,7 +880,7 @@ public sealed class RevitScriptExecutionService(
         OperationMonitor.Attach(application);
         // Raised before anything is watched or run: a sibling that cannot be fenced refuses the run.
         var fence = SiblingFence.Raise(application, context.Document);
-        using var window = OperationMonitor.Watch(fence, idsOf: context.Document);
+        using var window = OperationMonitor.Watch(fence, idsOf: context.Document, within: within);
         var run = new RunLedger(window, mode);
         // Revit raises this for every transaction that finishes with failures, the script's own included. It only
         // reads: a script's commit that answers RolledBack with no exception is silent everywhere else (defect D5).
