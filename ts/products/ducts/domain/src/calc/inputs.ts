@@ -89,15 +89,13 @@ export const observed = <T>(
   ...(version == null ? {} : { version }),
 });
 
-/** Where a retired authored value lives: Pe's provenance store parameter on Project Information. */
+/** Where a retired ruling lives, and Pe's receipts: the provenance store parameter on Project Information. */
 const STORE = "_PE_DuctLosses";
 
-/** The model's store as the snapshot carries it; only the fields the resolver reads. */
+/** The model's store as the snapshot carries it. Rulings (verdicts, roles, rules) resolve from it; the three value records are receipts of what Pe last wrote to a parameter, evidence beside the live read and never a rung (ADR 0053). */
 export interface StoreLayer {
   verdicts?: Readonly<Record<string, { verdict: string }>>;
   roles?: Readonly<Record<string, { role: string }>>;
-  kinds?: Readonly<Record<string, { kind: string }>>;
-  criteria?: DuctsCriteriaLayer;
   rules?: Readonly<Record<string, { table?: string | null }>>;
   terminals?: Readonly<Record<string, { inWg: number }>>;
   terminalFlows?: Readonly<Record<string, { cfm: number }>>;
@@ -116,6 +114,30 @@ export interface InputLayers {
 
 const factOf = (n: Node, key: string) => n.facts.find((f) => f.key === key)?.value ?? null;
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
+
+type Slots = Partial<NonNullable<CalcSnapshot["slots"]>>;
+// One design value where Pe writes it: the slot parameter (`at`), what it reads now, and the receipt of what Pe last wrote there.
+// The reader says null for an absent parameter and 0 for one that reads 0. A written parameter reads as it stands; an unwritten one states a value only when positive.
+const written = (at: string, read: number | null | undefined, wrote: number | undefined, unit: string) => {
+  const live = wrote == null ? positive(read) : (read ?? null);
+  return { at, wrote, unit, live };
+};
+const WRITTEN = { // keyed by the Work segment that stages each value
+  flows: (n: Node, slots: Slots, store: StoreLayer, slot = slots.terminalFlow ?? "terminalFlow") =>
+    written(slot, slotFlowOf(n, slot).cfm, store.terminalFlows?.[n.id]?.cfm, "cfm"),
+  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) => written(slots.terminalDrop ?? "terminalDrop", n.terminalDrop?.catalogDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
+  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => written(slots.fanFlow ?? "fanFlow", factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]?.cfm, "cfm"),
+};
+
+/** Drift: the one place a receipt is compared with the live parameter. Null where Pe never wrote or the two agree; else what the cell says beside its value. Shown, never blocking, and no write re-asserts it. */
+export function receiptDrift(snapshot: Pick<CalcSnapshot, "nodes" | "slots"> & { store?: StoreLayer | null }, segment: keyof typeof WRITTEN, id: number): string | null {
+  const node = snapshot.nodes.find((n) => n.id === id);
+  const { at, live, wrote, unit } = node ? WRITTEN[segment](node, snapshot.slots ?? {}, snapshot.store ?? {}) : { at: "", live: null, wrote: undefined, unit: "" };
+  if (wrote == null) return null;
+  if (live == null) return `Pe wrote ${wrote} ${unit} to ${at}, which no longer reads`;
+  // The reader rounds a slot parameter to 4 places (`Reading` in DuctSnapshots.cs); the receipt is unrounded, so they agree within half that step.
+  return Math.abs(live - wrote) <= 0.5e-4 + 1e-9 ? null : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
+}
 
 export const JOIN_KEY = (pair: readonly [string, string]) => `join:${[...pair].sort().join("|")}`;
 const COMPONENT_DROP = "component-drop:";
@@ -181,7 +203,6 @@ const placeholderOf = (placeholders: ReturnType<typeof familyPlaceholders>, n: N
 /** The design criteria alone (no snapshot needed): what the C# read is asked to measure under. */
 export function resolveCriteria(
   work: WorkLayer | null | undefined,
-  store: StoreLayer | null | undefined,
   firm: DuctsFirm,
   run?: WorkLayer | null,
   versions?: InputLayers["versions"],
@@ -190,7 +211,6 @@ export function resolveCriteria(
   type Sided = "velocityLimitFpm" | "allowanceInWg";
   const layered = <T>(
     typed: T | undefined,
-    stored: T | undefined,
     base: T,
     units: string | null,
     immediate: T | undefined,
@@ -202,7 +222,6 @@ export function resolveCriteria(
       {
         run: authored(run, cell, immediate),
         Work: authored(work, cell, typed),
-        "model-store": observed("model-store", `criteria.${cell}/${STORE}`, stored),
         [tier]: observed(tier, cell, base, tier === "firm" ? firm.version : undefined),
       },
       units,
@@ -211,33 +230,12 @@ export function resolveCriteria(
     return { ...result, version: result.version ?? versions?.[result.source] ?? null };
   };
   const criterion = <K extends Scalar>(key: K): Stated<DuctsCriteriaValues[K]> =>
-    layered(
-      work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
-      store?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
-      firm.criteria[key],
-      key === "splitPolicy" ? null : key === "terminalDropInWg" ? "in-wg" : "in",
-      run?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
-      criteriaCellOf(key)!,
-    );
+    layered(work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined, firm.criteria[key], key === "splitPolicy" ? null : key === "terminalDropInWg" ? "in-wg" : "in",
+      run?.criteria?.[key] as DuctsCriteriaValues[K] | undefined, criteriaCellOf(key)!);
   // Each side resolves on its own: typing return keeps supply's source (ducts LEDGER, sided criteria).
-  const sided = (key: Sided) => ({
-    supply: layered(
-      work?.criteria?.[key]?.supply,
-      store?.criteria?.[key]?.supply,
-      firm.criteria[key].supply,
-      key === "velocityLimitFpm" ? "fpm" : "in-wg",
-      run?.criteria?.[key]?.supply,
-      criteriaCellOf(key, "supply")!,
-    ),
-    return: layered(
-      work?.criteria?.[key]?.return,
-      store?.criteria?.[key]?.return,
-      firm.criteria[key].return,
-      key === "velocityLimitFpm" ? "fpm" : "in-wg",
-      run?.criteria?.[key]?.return,
-      criteriaCellOf(key, "return")!,
-    ),
-  });
+  const side = (key: Sided, at: "supply" | "return") =>
+    layered(work?.criteria?.[key]?.[at], firm.criteria[key][at], key === "velocityLimitFpm" ? "fpm" : "in-wg", run?.criteria?.[key]?.[at], criteriaCellOf(key, at)!);
+  const sided = (key: Sided) => ({ supply: side(key, "supply"), return: side(key, "return") });
   return {
     velocityLimitFpm: sided("velocityLimitFpm"),
     terminalDropInWg: criterion("terminalDropInWg"),
@@ -269,16 +267,15 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       valid,
     );
   const store = layers.store ?? {};
-  const slots: Partial<NonNullable<CalcSnapshot["slots"]>> = snapshot.slots ?? {};
+  const slots: Slots = snapshot.slots ?? {};
 
-  const criteria = resolveCriteria(work, store, firm, run, layers.versions);
+  const criteria = resolveCriteria(work, firm, run, layers.versions);
   // A part's typed drop, else the drop its family was given (`component-drop:<family>`).
   const typedDropOf = (key: string, family: string | null | undefined): ValueCell<number> =>
     work.componentDrops?.[key]
       ? staged(work.componentDrops[key])
       : staged(family ? work.assumptions?.[`component-drop:${family}`] : undefined, (a) => a.inWg);
 
-  const flowSlot = slots.terminalFlow ?? "terminalFlow";
   const terminals: DuctsInputs["terminals"] = {};
   const units: DuctsInputs["units"] = {};
   const components: DuctsInputs["components"] = {};
@@ -286,18 +283,15 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   for (const n of snapshot.nodes) {
     const id = String(n.id), key = elementSubject(n);
     if (n.kind === "terminal") {
-      const stored = store.terminalFlows?.[id]?.cfm;
-      const revit = slotFlowOf(n, flowSlot).cfm;
+      const flow = WRITTEN.flows(n, slots, store);
       const cfm = pick(
         {
           run: staged(run.flows?.[key]),
           Work: staged(work.flows?.[key]),
-          "model-store": observed("model-store", `${id}/${STORE}`, stored),
-          model: observed("model", `${id}/${flowSlot}`, positive(revit)),
+          model: observed("model", `${id}/${flow.at}`, flow.live),
         },
         "cfm",
       );
-      const storedDrop = store.terminals?.[id]?.inWg;
       const dropCell = criteriaCellOf("terminalDropInWg")!;
       const tables = Object.fromEntries(
         Object.entries(work.catalogs ?? {}).flatMap(([k, c]) => ("value" in c ? [[k, { table: c.value }]] : [])),
@@ -306,7 +300,13 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         catalogs && Object.keys(catalogs).length
           ? catalogLoss(n, cfm.value, catalogs, tables)
           : null;
-      const parameter = positive(n.terminalDrop?.catalogDropInWg);
+      const parameter = WRITTEN.terminalDrops(n, slots, store);
+      const model = observed("model", `${id}/${parameter.at}`, parameter.live);
+      const served = firm.served?.terminalDropInWg ?? "firm";
+      // Below Work, one of three (ADR 0053). Written: the parameter Pe wrote, missing when it no longer reads (D2, D3).
+      // Catalog: the lookup, under its home's tier. Fallback: the parameter, over the criterion's base under the tier that served it.
+      const catalogRung = catalog?.dp != null ? { [catalog.tier]: observed(catalog.tier, `${id}/${catalog.table}`, catalog.dp) } : null;
+      const fallbackRung = { model, [served]: observed(served, dropCell, firm.criteria.terminalDropInWg, firm.version) };
       const drop = pick(
         {
           run: run.terminalDrops?.[key]
@@ -315,10 +315,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           Work: work.terminalDrops?.[key]
             ? staged(work.terminalDrops[key])
             : authored(work, dropCell, work.criteria?.terminalDropInWg),
-          "model-store": observed("model-store", `${id}/${STORE}`, storedDrop ?? store.criteria?.terminalDropInWg),
-          model: observed("model", `${id}/${catalog?.table ?? slots.terminalDrop ?? "terminalDrop"}`, catalog?.dp ?? parameter),
-          // The per-terminal fallback is the criterion's base, under the tier that served it.
-          [firm.served?.terminalDropInWg ?? "firm"]: observed(firm.served?.terminalDropInWg ?? "firm", dropCell, firm.criteria.terminalDropInWg, firm.version),
+          ...(parameter.wrote != null ? { model } : (catalogRung ?? fallbackRung)),
         },
         "in-wg",
       );
@@ -330,7 +327,6 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         {
           run: staged(run.kinds?.[kindKey]),
           Work: staged(work.kinds?.[kindKey]),
-          "model-store": observed("model-store", `${kindKey}/${STORE}`, store.kinds?.[kindKey]?.kind as DuctUnitKind),
           default: observed("default", `${id}/${suggestion.ref}`, suggestion.kind),
         },
         null,
@@ -360,14 +356,12 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         };
         continue;
       }
-      const storedCfm = store.equipmentFlows?.[id]?.cfm;
-      const revitCfm = positive(factOf(n, "fanFlow"));
+      const flow = WRITTEN.equipmentFlows(n, slots, store);
       const cfm = pick(
         {
           run: staged(run.equipmentFlows?.[key]),
           Work: staged(work.equipmentFlows?.[key]),
-          "model-store": observed("model-store", `${id}/${STORE}`, storedCfm),
-          model: observed("model", `${id}/${slots.fanFlow ?? "fanFlow"}`, revitCfm),
+          model: observed("model", `${id}/${flow.at}`, flow.live),
         },
         "cfm",
       );

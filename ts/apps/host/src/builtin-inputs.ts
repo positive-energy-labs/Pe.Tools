@@ -1349,7 +1349,7 @@ export const builtinFileLayer = () => Layer.unwrap(Effect.promise(async () => {
       const root = contentFirmHome().root;
       return root && join(root, productPathNames.homeSettingsDirectoryName);
     },
-    catalogs: contentHomes().map(home => join(home.root, productPathNames.catalogsDirectoryName)),
+    catalogs: contentHomes(),
   });
 }));
 export const builtinFileRoutes = ductCatalogsRoute;

@@ -43,7 +43,7 @@ test("stagedDucts hands the resolver { value, by, ref } cells: airflow a plain n
 test("a staged criterion resolves from Work with the caller who staged it and the ref they cited", () => {
   const ducts = ductsDocumentSchema.parse({ criteria: { terminalDropInWg: { edit: { value: 0.07, by: "pea", ref: "spec 23 37 13" } } } });
   const { criteria, criteriaMeta } = stagedDucts(ducts, fansDocumentSchema.parse({}));
-  expect(resolveCriteria({ criteria, criteriaMeta }, null, TEST_FIRM).terminalDropInWg)
+  expect(resolveCriteria({ criteria, criteriaMeta }, TEST_FIRM).terminalDropInWg)
     .toMatchObject({ status: "valid", value: 0.07, source: "Work", author: "pea", ref: "spec 23 37 13" });
   // Unstamped stored Work is refused at decoding, before it reaches the resolver.
   expect(ductsDocumentSchema.safeParse({ criteria: { terminalDropInWg: { edit: { value: 0.07 } } } }).success).toBe(false);

@@ -15,8 +15,9 @@ import { readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { catalogTableSchema, ductsFirmSchema } from "@pe/agent-contracts";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { firmSettingsDir } from "@pe/host-contracts/product-paths";
-import { readDuctCatalogs, productCatalogsRoots, type CatalogReading } from "./duct-catalogs.ts";
+import { firmSettingsDir, homes, type Home } from "@pe/host-contracts/product-paths";
+import { productPathNames } from "@pe/host-contracts/contracts";
+import { readDuctCatalogs, type CatalogReading } from "./duct-catalogs.ts";
 import { firmFileSchema, firmOwner, type FirmFile } from "@pe/host/reads/evaluator";
 import { readSettingsFile } from "@pe/host/tiered-settings";
 import {
@@ -83,20 +84,20 @@ export class DuctFiles extends Context.Service<
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
-    roots: { readonly firm: string | null | (() => string | null); readonly catalogs: string | readonly string[] } = {
+    roots: { readonly firm: string | null | (() => string | null); readonly catalogs: readonly Home[] } = {
       firm: firmRootPath,
-      catalogs: productCatalogsRoots(),
+      catalogs: homes(),
     },
   ) => {
     const firmRoot = () => typeof roots.firm === "function" ? roots.firm() : roots.firm;
     return Layer.succeed(DuctFiles, {
       firm: (owner) => Effect.sync(() => readFirmFile(firmRoot(), owner)),
       ductCatalogs: Effect.promise(() => readDuctCatalogs(roots.catalogs)),
-      catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? productCatalogsRoots(pointer) : roots.catalogs)),
+      catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? homes({ pointer }) : roots.catalogs)),
       subscribe: (changed) => {
         const stops = [
           ["firm", firmRoot()] as const,
-          ...[roots.catalogs].flat().map((path) => ["catalogs", path] as const),
+          ...roots.catalogs.map((home) => ["catalogs", join(home.root, productPathNames.catalogsDirectoryName)] as const),
         ].map(
           ([name, path]) => {
             // A filesystem hint (including an ancestor change) is not a changed input.

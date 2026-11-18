@@ -117,7 +117,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
                 }),
                 files: DuctFiles.layer({
                   firm: join(dir, "Settings"),
-                  catalogs: join(dir, "catalogs"),
+                  catalogs: [{ tier: "firm", root: dir }],
                 }),
                 marks: Layer.succeed(
                   HostDocumentMarks,

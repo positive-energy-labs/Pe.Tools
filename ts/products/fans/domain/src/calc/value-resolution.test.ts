@@ -9,9 +9,10 @@ import type { Walk } from "./walk.ts";
 import { calcBreakdown } from "./calc-breakdown.ts";
 import type { Calc } from "./types.ts";
 const snapshot = {
-  nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [] }],
+  nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [{ key: "flow", value: 200 }], connectors: [] }],
   segments: [],
 } as unknown as CalcSnapshot;
+const bare = { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, facts: [] }] } as unknown as CalcSnapshot;
 it("P-048: a stored invalid marker crosses stagedDucts and blocks model fallback", () => {
   const work = stagedDucts(null, fansDocumentSchema.parse({
     flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { invalid: "unstamped stored cell" } },
@@ -25,7 +26,7 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
     firm: TEST_FIRM,
     run: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0) } },
     work: { flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(100) } },
-    store: { terminalFlows: { "1": { cfm: 200 } } },
+    store: { terminalFlows: { "1": { cfm: 150 } } },
     versions: { Work: 7 },
   };
   expect(resolveInputs(layers).terminals["1"]!.cfm).toMatchObject({
@@ -40,43 +41,44 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
   });
   expect(
     resolveInputs({ ...layers, run: undefined, work: undefined }).terminals["1"]!.cfm,
-  ).toMatchObject({ value: 200, source: "model-store", ref: "model-store:1/_PE_DuctLosses" });
-  expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.cfm.status).toBe("missing");
-  expect(resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({
+  ).toMatchObject({ value: 200, source: "model", ref: "model:1/terminalFlow" });
+  expect(resolveInputs({ snapshot: bare, firm: TEST_FIRM }).terminals["1"]!.cfm.status).toBe("missing");
+  expect(resolveInputs({ snapshot: bare, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({
     source: "firm",
     version: "test",
     units: "in-wg",
   });
   expect(
-    resolveCriteria(stamped({ allowanceInWg: { return: 0.2 } }), null, TEST_FIRM)
+    resolveCriteria(stamped({ allowanceInWg: { return: 0.2 } }), TEST_FIRM)
       .allowanceInWg,
   ).toMatchObject({ supply: { source: "firm" }, return: { source: "Work", value: 0.2 } });
 });
-it("a value retired into the model store keeps the authored tier over native and firm", () => {
-  // Terminal 1 states 0.5 in-wg on its own catalog parameter; the firm default disagrees too.
+it("a value retired into the model store reads live from its parameter; the receipt is never a rung (ADR 0053)", () => {
+  // Terminal 1 states 0.5 in-wg on its TerminalDrop slot parameter; the firm default disagrees too.
   const native = {
     nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [], terminalDrop: { catalogDropInWg: 0.5 } }],
     segments: [],
+    slots: { terminalDrop: "PE_Drop" },
   } as unknown as CalcSnapshot;
   const drop = (work: object | undefined, store: object | undefined) =>
     resolveInputs({ snapshot: native, firm: TEST_FIRM, work, store }).terminals["1"]!.drop;
   expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.2) } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
-  // The receipt retires the staged cell: Work is cleared and the store holds the same value.
+  // The receipt retires the staged cell: Work is cleared, and a hand edit in Revit since (0.5) is the value.
   const retired = drop(undefined, { terminals: { "1": { inWg: 0.2 } } });
-  expect(retired).toMatchObject({ value: 0.2, source: "model-store", ref: "model-store:1/_PE_DuctLosses", author: null, units: "in-wg" });
+  expect(retired).toMatchObject({ value: 0.5, source: "model", ref: "model:1/PE_Drop", author: null, units: "in-wg" });
   expect(retired.version).toBeNull();
   // A pending Work edit wins over the older stored value.
   expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } }, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({
     value: 0.3,
     source: "Work",
   });
-  // An invalid stored value blocks fallback, as invalid Work does; it never demotes to native or firm.
-  expect(drop(undefined, { terminals: { "1": { inWg: -1 } } })).toMatchObject({
-    value: null,
-    source: "model-store",
-    status: "invalid",
-  });
+  // A receipt never prices, whatever it holds: the live parameter answers.
+  expect(drop(undefined, { terminals: { "1": { inWg: -1 } } })).toMatchObject({ value: 0.5, source: "model", status: "valid" });
   expect(drop(undefined, undefined)).toMatchObject({ value: 0.5, source: "model" });
+  // D3: the written parameter no longer reads, so the value is missing, never the receipt or the firm default.
+  native.nodes[0]!.terminalDrop = {} as never;
+  expect(drop(undefined, { terminals: { "1": { inWg: 0.2 } } })).toMatchObject({ value: null, status: "missing" });
+  expect(drop(undefined, undefined)).toMatchObject({ source: "firm" });
 });
 it("unknown inflow creates a missing leg and cannot certify worksheet totals", () => {
   const walk = {

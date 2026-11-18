@@ -163,8 +163,8 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
           ductSystemsWork: layers.ducts,
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
-          // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
-          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm, layers.settings)),
+          // Under Work: the home that serves each criterion, so a staged one draws beside what it replaces. The model store states none (ADR 0053).
+          criteria: resolveCriteria(null, firmLayer(layers.firm, layers.settings)),
           firm: "refused" in layers.firm ? layers.firm
             : { version: firmLayer(layers.firm, layers.settings).version, path: layers.firm.path, present: layers.firm.present },
           settings: { ducts: layers.settings } as Readonly<Record<string, typeof layers.settings>>,

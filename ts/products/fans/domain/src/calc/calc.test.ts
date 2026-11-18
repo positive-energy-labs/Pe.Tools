@@ -696,6 +696,8 @@ it("firm terminal drop is priced and visible; typed and catalog drops take prece
     catalogDropInWg: 0.09,
     writable: false,
   };
+  // The slot parameter's drop is read only where the snapshot names the TerminalDrop slot (else the connector's assigned drop is).
+  catalog.slots = { ...catalog.slots!, terminalDrop: "PE_M_Grd_ExternalStaticPressure" };
   const priced = buildCalc({
     ...input,
     snapshot: catalog,

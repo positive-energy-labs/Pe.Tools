@@ -147,7 +147,7 @@ export function ductActionExecutors(
           .find((open) => open.openId === target.openId)?.projectHome;
         const settings = readSettingTiers("ducts", pointer);
         const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, {}), settings);
-        const criteria = resolveCriteria(workLayer(design), null, firm);
+        const criteria = resolveCriteria(workLayer(design), firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
           );

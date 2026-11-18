@@ -35,6 +35,7 @@ export const catalogTableSchema = z
   .strictObject({
     id: z.string().min(1),
     title: z.string().min(1),
+    home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }).optional(), // stamped by the host's catalog reader from the home list, over anything a file states
     source: sourceSchema,
     rows: axisSchema,
     columns: axisSchema,

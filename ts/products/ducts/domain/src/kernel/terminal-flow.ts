@@ -40,8 +40,8 @@ export function terminalFlow({ override, confirmed, room }: TerminalFlowInput): 
 export function slotFlowOf(node: Node, slot: string): { slot: string; cfm: number | null } {
   // Revit's own terminal flow is a slot a project may confirm, never a silent per-terminal fallback (history 6).
   if (slot === REVIT_FLOW_SLOT) {
-    const cfm = node.connectors.reduce((sum, c) => sum + (c.flowCfm ?? 0), 0);
-    return { slot, cfm: cfm > 0 ? cfm : null };
+    const stated = node.connectors.flatMap((c) => (c.flowCfm == null ? [] : [c.flowCfm])); // none stated is absent, not zero
+    return { slot, cfm: stated.length ? stated.reduce((sum, cfm) => sum + cfm, 0) : null };
   }
   const named = node.flowParameter ?? null;
   if (named != null && named !== slot) return { slot, cfm: null };
@@ -65,7 +65,7 @@ export function slotCoverage(
   return slots
     .map((slot) => ({
       slot,
-      covered: terminals.filter((t) => slotFlowOf(t, slot).cfm != null).length,
+      covered: terminals.filter((t) => (slotFlowOf(t, slot).cfm ?? 0) > 0).length,
       total: terminals.length,
     }))
     .sort((a, b) => b.covered - a.covered);
