@@ -190,7 +190,6 @@ const calcModel = read("fans.calculation", {
       snapshot,
       work,
       versions: { Work: saved.revision },
-      store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
       firm: firmLayer(saved.firm, saved.settings),
       catalogs: catalog.tables,
     });
@@ -515,7 +514,6 @@ export const fanRoster = body(acquisition.fanRoster, async function(ctx, { targe
       snapshot,
       work: workLayer(design),
       versions: { Work: saved.revision },
-      store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
       firm: firmLayer(saved.firm, saved.settings),
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),

@@ -16,7 +16,7 @@ import {
 } from "@pe/ducts-domain/test-snapshot";
 import { buildCalc, resolveInputs, type CalcSnapshot } from "./index.ts";
 import { grids } from "@pe/ducts-domain/tables.fixture";
-import { inputsFor, TEST_FIRM, TEST_WALK, cell } from "@pe/ducts-domain/test-inputs";
+import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK, cell } from "@pe/ducts-domain/test-inputs";
 
 // The size string is the bare diameter here, not the shared `round`'s `8"ø`.
 const round = (d: number) => ({ shape: "round" as const, size: `${d}`, diameterIn: d });
@@ -46,6 +46,7 @@ const elbow = (id: number, a: [number, number], b: [number, number], facts: Fact
 // Supply: unit 100:0 -> duct 1 -> elbow 2 (r/D 1.5, 35 deg) -> duct 3 -> elbow 4 (r/D 1, matched) -> duct 5 -> grille 6.
 // Return: unit 100:1 -> duct 9 -> grille 10.
 const network: CalcSnapshot = {
+  slots: TEST_SLOTS,
   nodes: [
     node(100, "equipment", { connectors: [conn(0, [1, 0]), conn(1, [9, 0])] }),
     elbow(

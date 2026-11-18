@@ -140,9 +140,9 @@ export function inputsFor(snapshot: CalcSnapshot, s: InputsShorthand = {}): Duct
       kinds[catalogLinkKey(n.family, n.type)] = cell<DuctUnitKind>(kind);
   }
   const snap = s.slot
-    ? { ...snapshot, slots: { ...(snapshot.slots ?? {}), terminalFlow: s.slot } }
+    ? { ...snapshot, slots: { ...snapshot.slots, terminalFlow: s.slot } }
     : snapshot;
-  return resolveInputs({ snapshot: snap as CalcSnapshot, work, firm: s.firm ?? TEST_FIRM });
+  return resolveInputs({ snapshot: snap, work, firm: s.firm ?? TEST_FIRM });
 }
 
 /**

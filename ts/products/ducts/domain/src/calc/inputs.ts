@@ -106,7 +106,6 @@ export interface InputLayers {
   snapshot: CalcSnapshot;
   run?: WorkLayer | null;
   work?: WorkLayer | null;
-  store?: StoreLayer | null;
   firm: DuctsFirm;
   catalogs?: Catalogs;
   versions?: Partial<Record<ValueSource, string | number>>;
@@ -115,7 +114,7 @@ export interface InputLayers {
 const factOf = (n: Node, key: string) => n.facts.find((f) => f.key === key)?.value ?? null;
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
 
-type Slots = Partial<NonNullable<CalcSnapshot["slots"]>>;
+type Slots = CalcSnapshot["slots"];
 // One design value where Pe writes it: the slot parameter (`at`), what it reads now, and the receipt of what Pe last wrote there.
 // The reader says null for an absent parameter and 0 for one that reads 0. A written parameter reads as it stands; an unwritten one states a value only when positive.
 const written = (at: string, read: number | null | undefined, wrote: number | undefined, unit: string) => {
@@ -123,16 +122,16 @@ const written = (at: string, read: number | null | undefined, wrote: number | un
   return { at, wrote, unit, live };
 };
 const WRITTEN = { // keyed by the Work segment that stages each value
-  flows: (n: Node, slots: Slots, store: StoreLayer, slot = slots.terminalFlow ?? "terminalFlow") =>
-    written(slot, slotFlowOf(n, slot).cfm, store.terminalFlows?.[n.id]?.cfm, "cfm"),
-  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) => written(slots.terminalDrop ?? "terminalDrop", n.terminalDrop?.catalogDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
-  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => written(slots.fanFlow ?? "fanFlow", factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]?.cfm, "cfm"),
+  flows: (n: Node, slots: Slots, store: StoreLayer) =>
+    written(slots.terminalFlow, slotFlowOf(n, slots.terminalFlow).cfm, store.terminalFlows?.[n.id]?.cfm, "cfm"),
+  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) => written(slots.terminalDrop, n.terminalDrop?.catalogDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
+  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => written(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]?.cfm, "cfm"),
 };
 
 /** Drift: the one place a receipt is compared with the live parameter. Null where Pe never wrote or the two agree; else what the cell says beside its value. Shown, never blocking, and no write re-asserts it. */
 export function receiptDrift(snapshot: Pick<CalcSnapshot, "nodes" | "slots"> & { store?: StoreLayer | null }, segment: keyof typeof WRITTEN, id: number): string | null {
   const node = snapshot.nodes.find((n) => n.id === id);
-  const { at, live, wrote, unit } = node ? WRITTEN[segment](node, snapshot.slots ?? {}, snapshot.store ?? {}) : { at: "", live: null, wrote: undefined, unit: "" };
+  const { at, live, wrote, unit } = node ? WRITTEN[segment](node, snapshot.slots, snapshot.store ?? {}) : { at: "", live: null, wrote: undefined, unit: "" };
   if (wrote == null) return null;
   if (live == null) return `Pe wrote ${wrote} ${unit} to ${at}, which no longer reads`;
   // The reader rounds a slot parameter to 4 places (`Reading` in DuctSnapshots.cs); the receipt is unrounded, so they agree within half that step.
@@ -266,8 +265,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       units,
       valid,
     );
-  const store = layers.store ?? {};
-  const slots: Slots = snapshot.slots ?? {};
+  const store: StoreLayer = layers.snapshot.store ?? {};
+  const slots: Slots = snapshot.slots;
 
   const criteria = resolveCriteria(work, firm, run, layers.versions);
   // A part's typed drop, else the drop its family was given (`component-drop:<family>`).
@@ -350,7 +349,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
             {
               run: staged(run.componentDrops?.[key]),
               Work: typedDropOf(key, n.family),
-              model: observed("model", `${id}/${slots.componentDrop ?? "Pressure Drop"}`, positive(factOf(n, "pressureDrop"))),
+              model: observed("model", `${id}/${slots.componentDrop}`, positive(factOf(n, "pressureDrop"))),
             },
             "in-wg",
           ),
@@ -367,7 +366,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         "cfm",
       );
       // P-030: ratedStatic comes only from the separate RatedEsp slot, below stated Work and run values.
-      const esp = pick({ run: staged(run.ratedEsp?.[key]), Work: staged(work.ratedEsp?.[key]), model: observed("model", snapshot.slots?.ratedEsp ?? "ratedStatic", snapshot.slots?.ratedEsp ? factOf(n, "ratedStatic") : null) }, "in-wg");
+      const esp = pick({ run: staged(run.ratedEsp?.[key]), Work: staged(work.ratedEsp?.[key]), model: observed("model", snapshot.slots.ratedEsp ?? "", snapshot.slots.ratedEsp ? factOf(n, "ratedStatic") : null) }, "in-wg");
       units[id] = { kind, role, cfm, esp };
       if (work.componentDrops?.[key] || run.componentDrops?.[key])
         components[id] = {
@@ -395,7 +394,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           {
             run: staged(run.componentDrops?.[key]),
             Work: typedDropOf(key, n.family),
-            model: observed("model", `${id}/${slots.componentDrop ?? "Pressure Drop"}`, placeholder ? null : stated),
+            model: observed("model", `${id}/${slots.componentDrop}`, placeholder ? null : stated),
           },
           "in-wg",
         );
