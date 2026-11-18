@@ -44,6 +44,8 @@ export function slotFlowOf(node: Node, slot: string): { slot: string; cfm: numbe
     return { slot, cfm: cfm > 0 ? cfm : null };
   }
   const named = node.flowParameter ?? null;
+  const candidate = node.facts.find(f => f.key === `slot:${slot}`);
+  if (candidate) return { slot, cfm: candidate.value ?? null };
   if (named != null && named !== slot) return { slot, cfm: null };
   return { slot, cfm: node.facts.find((f) => f.key === "flow")?.value ?? null };
 }

@@ -34,7 +34,8 @@ import { calcBreakdown } from "@pe/fans-domain/calc/calc-breakdown";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { rosterInputs } from "@pe/ducts-domain/roster-inputs";
 import { z } from "zod";
-import { firmLayer, workLayer, terminalFlowSlot } from "@pe/ducts-host/ducts-inputs";
+import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
+import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/calc/joins";
 import { designLayers } from "@pe/ducts-host/design-layers";
 import { catalogs } from "@pe/host/builtin-read-handles";
@@ -135,9 +136,7 @@ const calcModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const flow = await terminalFlowSlot(saved.settings, async slots => (await ctx.read(native("ducts.snapshot.roster"), {
-      role: "acquire", target: { kind: "document", ref: request.target }, request: { slots, selector: { kind: "roster" } },
-    })).body), { slots } = flow;
+    const { flow } = await ctx.read(ductsInputs, request.target), { slots } = flow;
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -482,15 +481,8 @@ export const ductCalc = read(CALC_DETAIL_READ, {
 export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const flow = await terminalFlowSlot(saved.settings, async slots => (await ctx.read(native("ducts.snapshot.roster"), {
-      role: "acquire", target: { kind: "document", ref: target }, request: { slots, selector: { kind: "roster" } },
-    })).body), { slots } = flow;
-    const response = await ctx.read(native("ducts.snapshot.roster"), {
-      role: "acquire",
-      target: { kind: "document", ref: target },
-      request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
-    });
-    const snapshot = { ...response.body, nodes: response.body.nodes.filter(node =>
+    const { flow, snapshot: acquired } = await ctx.read(ductsInputs, target), { slots } = flow;
+    const snapshot = { ...acquired, nodes: acquired.nodes.filter(node =>
       ductsRosterResponseSchema.shape.rows.element.shape.uniqueId.safeParse(node.uniqueId).success) };
     const inputs = resolveInputs({
       terminalFlow: flow.terminalFlow,

@@ -8,7 +8,6 @@ import {
   fansCalcData,
   openFanCalcSchema,
   stagedDucts,
-  ductParameterSlots,
   subjectCode,
   subjectOf,
 
@@ -17,6 +16,7 @@ import { calcSnapshot } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { calcState } from "@pe/fans-domain/calc/state";
 import { z } from "zod";
 import { designLayers } from "@pe/ducts-host/design-layers";
+import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 
 import { read } from "@pe/host/read-graph";
 import {
@@ -145,7 +145,7 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
       ? await ctx.read(native("ducts.snapshot.walk"), {
           role: "acquire",
           request: {
-            slots: ductParameterSlots(settings),
+            slots: (await ctx.read(ductsInputs, args.target)).flow.slots,
             labelParameter: staged.labelParameter ?? undefined,
             selector: { kind: "ids", ids },
           },

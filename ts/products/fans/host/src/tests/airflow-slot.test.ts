@@ -22,10 +22,11 @@ const model = (slot = named) => {
 };
 const settings = (tier: "project" | "firm"): SettingTierRead[] => [{ tier, home: "fixture", name: "fixture", path: "fixture", sha256: null, json: { parameters: { terminalFlow: named } } }];
 test("empty named default chooses one Revit Flow slot by coverage and prices the terminal", async () => {
-  const s = model(), zero = await terminalFlowSlot([], async () => ({ ...s, nodes: s.nodes.map(n => ({ ...n, connectors: [], facts: [factOf("flow", 0)] })) }));
+  const s = model(), zero = terminalFlowSlot([], { ...s, nodes: s.nodes.map(n => ({ ...n, connectors: [], facts: [factOf("flow", 0)] })) });
   expect(zero.slots.terminalFlow).toBe(named);
   expect(zero.coverage.map(c => c.covered)).toEqual([0, 0]);
-  const flow = await terminalFlowSlot([], async slots => model(slots.terminalFlow));
+  const flow = terminalFlowSlot([], model());
+  expect(terminalFlowSlot([], { ...model("revit:Flow"), nodes: s.nodes.map(n => ({ ...n, flowParameter: "revit:Flow", connectors: [], facts: [factOf(`slot:${named}`, 100)] })) }).slots.terminalFlow).toBe(named);
   expect(flow.slots.terminalFlow).toBe("revit:Flow");
   const snapshot = model(flow.slots.terminalFlow);
   const inputs = resolveInputs({ snapshot, firm: TEST_FIRM, ...flow });

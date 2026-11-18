@@ -7,7 +7,7 @@ import { commands, tools, canonicalRouteInput, workKey } from "@pe/agent-contrac
 
 
 
-import { ductsDesign, ductsFirmSchema, ductParameterSlots, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -25,7 +25,7 @@ import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 
 
 
-import { firmLayer, workLayer, terminalFlowSlot } from "./ducts-inputs.ts";
+import { firmLayer, workLayer, terminalFlowSlot, acquireSnapshotInputs } from "./ducts-inputs.ts";
 import { readSettingTiers } from "@pe/host/tiered-settings";
 import { resolveFirm } from "@pe/host/reads/evaluator";
 
@@ -46,7 +46,6 @@ export interface DuctActionPreparation {
   deps: DuctActionDependencies; bridge: RevitBridge["Service"]; appliedAt: string | undefined;
 }
 export interface DuctAction {
-  terminalFlow?: typeof terminalFlowSlot;
   snapshot: (intent: Intent, read: ReadSnapshot) => Promise<DuctSnapshot>;
   derive: (input: DuctActionPreparation) => Promise<{ input: object; dependencies: unknown; cells?: readonly (readonly [string,string])[]; subjects?: Record<string,string>; nothingToWrite?: boolean; labels?: Record<string,string>; claim?: { basis: string; requiredEspInWg: number } }>;
   entry: { key: string; native: string; refusePlan: ((value: unknown) => string | null) | null;
@@ -163,7 +162,7 @@ export function ductActionExecutors(
             Effect.map((answer) => nativeResponseSchema(key).parse(answer.value)),
           ),
           );
-        const flow = await action.terminalFlow?.(settings, slots => readNative("ducts.snapshot.roster", { slots, selector: { kind: "roster" } }));
+        const { flow } = await acquireSnapshotInputs(settings, slots => readNative("ducts.snapshot.roster", { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } }));
         const read = (selector: Record<string, unknown>): Promise<DuctSnapshot> =>
           readNative(selector.kind === "roster" ? "ducts.snapshot.roster" : "ducts.snapshot.walk",
             {
@@ -172,7 +171,7 @@ export function ductActionExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: flow?.slots ?? ductParameterSlots(settings),
+              slots: flow.slots,
             });
         const snapshot = await action.snapshot(intent, read);
         const derived = await action.derive({ flow, intent, read, readNative, snapshot, design, doc, fans,

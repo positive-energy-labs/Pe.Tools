@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./ducts-input-acquisition": "./src/ducts-input-acquisition.ts",
     "./action-runtime": "./src/action-runtime.ts",
     "./design-layers": "./src/design-layers.ts",
     "./duct-catalogs": "./src/duct-catalogs.ts",
