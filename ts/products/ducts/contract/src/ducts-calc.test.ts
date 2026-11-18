@@ -1,6 +1,19 @@
 import { expect, it } from "vite-plus/test";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
-import { fansCalcEditsSchema } from "./duct-inputs.ts";
+import { elementSubjectSchema, fansCalcEditsSchema } from "./duct-inputs.ts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+
+it.each(["flows", "ratedEsp", "equipmentFlows", "roles", "terminalDrops", "componentDrops"])("P-119: fans Work %s raw keys explain UniqueId SubjectRefs", segment => {
+  const parsed = fansDocumentSchema.safeParse({ [segment]: { "14577396": {} } });
+  expect(parsed.success).toBe(false);
+  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused");
+});
+
+it("P-119: a canonical non-element subject explains the UniqueId refinement", () => {
+  const parsed = elementSubjectSchema.safeParse("system-name:supply");
+  expect(parsed.success).toBe(false);
+  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused");
+});
 
 it("W5: fans edit raw element keys explain the required UniqueId SubjectRefs", () => {
   const parsed = fansCalcEditsSchema.safeParse({ flows: { "14577396": 100 } });
