@@ -116,6 +116,8 @@ const undispatched = (steps: readonly ActionStep[]) =>
  */
 const unanswered = (step: ActionStep) =>
   step.transport === "bridge" ? step.bridgeReply !== "touched" : step.state === "unknown";
+const targetSession = (target: ActionReceipt["target"]) =>
+  target.kind === "document" ? target.ref.session : target.kind === "session" ? target.session : undefined;
 /** Only native terminal evidence can clear a possible document write. */
 const effected = (step: ActionStep) =>
   step.kind !== "publication" &&
@@ -1952,8 +1954,8 @@ export class ActionJournal implements ReceiptReader {
     if (original.prepared.state === "ready") executor.prepared.parse(original.prepared.value);
     const recover = executor.recover;
     if (original.prepared.state !== "ready") return original;
+    // An answered row is never asked again; one whose answers all succeeded still finishes below.
     const asked = original.steps.filter(unanswered);
-    if (!asked.length) return original;
     const updates: {
       step: ActionStep;
       evidence: unknown;
@@ -2001,7 +2003,10 @@ export class ActionJournal implements ReceiptReader {
       }
     const recovered = await this.serial(async () => {
       const current = this.rows.get(id)!;
-      if (canonicalRouteInput(current) !== canonicalRouteInput(original))
+      // A read that changed no step proves nothing new and writes no revision.
+      const changed = updates.some(({ step }) =>
+        canonicalRouteInput(step) !== canonicalRouteInput(original.steps.find((held) => held.id === step.id)));
+      if (!changed || canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
       let nextRow: ActionReceipt = {
         ...current,
@@ -2066,6 +2071,18 @@ export class ActionJournal implements ReceiptReader {
       return this.wait(id);
     }
     return recovered;
+  }
+  /**
+   * K1b's automatic caller of `recover`. At boot (no session) it finishes every interrupted row
+   * whose steps are all answered; on a bridge connect it asks once about each unknown row on that
+   * session with an unanswered step. A row the SDK cannot settle waits for the next connect.
+   */
+  async reconcile(session?: string): Promise<void> {
+    for (const row of await this.list())
+      if (session === undefined
+        ? (row.state === "unknown" || row.state === "incomplete") && row.steps.length > 0 && !row.steps.some(unanswered)
+        : row.state === "unknown" && targetSession(row.target) === session && row.steps.some(unanswered))
+        await this.recover(row.id).catch((error) => console.error(`action-journal: reconcile ${row.id} failed`, error));
   }
   /**
    * Host shutdown, last of the host's finalizers: refuse admission, join every admitted command

@@ -124,6 +124,31 @@ test("C: a lost reply observed as succeeded retires its Work in retirement-only 
   } finally { await f.dispose(); }
 });
 
+test("E: boot and a connect leave the field row untouched: no SDK read, no revision", async () => {
+  const f = await journalWith({ ...fieldIncomplete, target: { kind: "session", session: "S" } }, succeeded);
+  try {
+    const before = await f.bytes();
+    await f.journal.reconcile();
+    await f.journal.reconcile("S");
+    expect(f.recover).not.toHaveBeenCalled();
+    expect(f.ran).toEqual([]);
+    expect(await f.bytes()).toBe(before);
+  } finally { await f.dispose(); }
+});
+
+test("F: at boot an interrupted row whose steps all succeeded retires its Work without an SDK read", async () => {
+  const answered = row({ state: "incomplete", error: "Host restarted", status: 503, result: null },
+    [step({ state: "succeeded", result: { ok: true }, bridgeReply: "touched", touched: wrote })]);
+  const f = await journalWith(answered, succeeded);
+  try {
+    await f.journal.reconcile();
+    const settled = await f.journal.wait("a1");
+    expect(settled, JSON.stringify(settled)).toMatchObject({ state: "succeeded" });
+    expect(f.ran).toEqual(["work.retire"]);
+    expect(f.recover).not.toHaveBeenCalled();
+  } finally { await f.dispose(); }
+});
+
 test("D: the person- and agent-facing Recover and Resume doors are not routed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-reply-doors-"));
   const native = await fixtureNative(join(dir, "native"));

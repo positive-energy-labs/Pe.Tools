@@ -259,6 +259,30 @@ test("E7 recovery reads the original native UUID and never dispatches a second w
   } finally { await f.close(); }
 });
 
+test("C6 a bridge connect settles a lost reply's row with one SDK read and no second write", async () => {
+  const f = await fixture();
+  try {
+    expect(await f.submit("plan", "parameter-links.apply.plan")).toMatchObject({ state: "succeeded" });
+    const touched: Touched = { kind: "wrote", transactions: ["Apply parameter links"], added: 0, modified: 1, deleted: 0 };
+    f.native.reportTouched("revit.apply.parameter-links", touched);
+    f.native.loseNextReply("revit.apply.parameter-links");
+    const original = await f.apply();
+    expect(original).toMatchObject({ state: "unknown" });
+    f.native.makeLostReplyRecoverable();
+    const reads = f.native.opResultReads;
+    // Revit comes back: nothing but the connect asks about the row.
+    await f.native.connect();
+    await vi.waitFor(async () => expect(await f.native.journal.wait(original.id)).toMatchObject({ state: "succeeded" }), { timeout: 10_000 });
+    const settled = await f.native.journal.wait(original.id);
+    expect(settled.steps).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "revit.apply.parameter-links", state: "succeeded", bridgeReply: "touched", touched }),
+    ]));
+    // parameter-links.apply retires no Work cells; journal-recovery-continuation covers retirement.
+    expect(f.native.opResultReads - reads).toBe(1);
+    expect(f.native.calls.filter(c => c.key === "revit.apply.parameter-links")).toHaveLength(1);
+  } finally { await f.close(); }
+});
+
 test("E9 a queued Page command loses authority before its first effect", async () => {
   const f = await fixture(true);
   let targets = [f.target], release = () => {};
