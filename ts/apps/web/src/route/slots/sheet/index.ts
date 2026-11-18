@@ -1,8 +1,8 @@
 import type { HandleCellProps } from "@pe/kit/lang/cell";
 import { settingOwners } from "@pe/agent-contracts/setting-owners";
 import type { Immutable } from "@pe/agent-contracts";
-import { serveSetting, SETTING_TIERS, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import { schemaOf, type Domain, type ModelValue, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
+import { SETTING_TIERS, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
+import { type Domain, type ModelValue, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";
 export interface SheetInput<W = unknown> {
   readonly rows: readonly string[];
   readonly work: Immutable<W> | null;
@@ -53,12 +53,10 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly CalcCel
     (b.per === "subject" ? (read !== undefined && b.rows?.(read)) || input.rows : [undefined]).map(row => {
       const home = b.home;
       const tiers = home.at === "setting" ? (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)?.settings?.[home.owner] : undefined;
-      const served = home.at === "setting" ? serveSetting(tiers, home.tiers, home.path, schemaOf(b.domain), b.default) : null;
       const held = bindingPath(binding, row).reduce<any>((doc, key) => doc?.[key], input.work);
       const edit = slot.draft ? held?.edit : undefined;
       const staged = home.at === "setting" ? undefined : slot.draft ? edit?.value : held;
-      const layer = served ? { value: served.value, source: served.tier, ref: served.ref, note: served.note }
-        : input.model.find(m => m.binding === binding && m.row === row) ?? (read !== undefined ? b.model?.(read, row) : undefined);
+      const layer = input.model.find(m => m.binding === binding && m.row === row) ?? (read !== undefined ? b.model?.(read, row) : undefined);
       const model = layer?.value ?? null;
       const value = staged ?? model ?? b.default ?? null;
       return {
@@ -66,7 +64,7 @@ export function sheetCells(slot: SheetSlot, input: SheetInput): readonly CalcCel
         value, model, pending: edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
         drift: home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model),
         freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
-        source: staged !== undefined ? "work" : layer && layer.value != null ? ("source" in layer && layer.source) || "model" : b.default !== undefined ? "default" : "model",
+        source: staged !== undefined ? "work" : layer && "source" in layer && layer.source ? layer.source : layer?.value != null ? "model" : b.default !== undefined ? "default" : "model",
         label: (row !== undefined && read !== undefined && b.rowLabel?.(read, row)) || b.label || binding,
         ...domainDraw(b.domain, read, row),
         ...(layer && "unit" in layer && layer.unit ? { unit: layer.unit } : {}),

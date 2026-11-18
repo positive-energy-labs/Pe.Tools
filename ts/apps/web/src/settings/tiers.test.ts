@@ -23,7 +23,7 @@ import { hostState } from "../../../host/src/host-ownership.ts";
 import { SETTING_WRITE_PLACE } from "../../../host/src/notice-feed.ts";
 import { resolveFirm } from "../../../host/src/reads/door.ts";
 import { readSettingTiers, writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-settings.ts";
-import { ductsSettings } from "@pe/agent-contracts/setting-owners";
+import { settingsSheet } from "./route.ts";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
 
@@ -71,7 +71,7 @@ const sheet = async () => {
   const tiers = readSettingTiers("ducts", pointer);
   const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
   const base = firmLayer(resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, {}), tiers);
-  const cells = sheetCells({ bindings: ductsSettings }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
+  const cells = sheetCells(settingsSheet, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
   return {
     tiers,
     cell: (name: DuctsCriteriaCell) => cells.find((cell) => cell.binding === `setting.ducts.${name}`)!,
@@ -196,7 +196,7 @@ test("design friction comes from the project home, never Work", async () => {
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["designFriction"], value: 0.08, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["designFriction"], value: 0.12, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   const tiers = readSettingTiers("ducts", pointer);
-  const cells = sheetCells({ bindings: ductsSettings }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
+  const cells = sheetCells(settingsSheet, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
   expect(cells.find(cell => cell.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.12, source: "project" });
   expect(ductsDocumentSchema.parse({})).not.toHaveProperty("designFriction");
   expect(ductsDocumentSchema.safeParse({ designFriction: {} }).success).toBe(false);
@@ -207,7 +207,7 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
   expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "fanFlow"], value: "Firm flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["parameters", "fanFlow"], value: "Project flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
   const tiers = readSettingTiers("ducts", pointer);
-  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers } } });
+  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, model: [], read: { settings: { ducts: tiers }, calcView: { inputs: null }, calcSnapshot: { slots: ductParameterSlots(tiers) } } });
   expect(cells.find(cell => cell.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: "Project flow", source: "project" });
   expect(ductParameterSlots(tiers)).toEqual({ fanFlow: "Project flow" });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");

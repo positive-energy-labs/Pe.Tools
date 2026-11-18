@@ -8,7 +8,8 @@ import { hostRead } from "../../host-read.ts";
 import { read, route, scrollBody } from "../../defaults.ts";
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";
 import { createFixtureWorkDoor } from "../../../shell/fixture-work-door.ts";
-import { module as settingsModule } from "../../../settings/route.ts";
+import { module as settingsModule, settingsSheet } from "../../../settings/route.ts";
+import { settingLayer } from "@pe/agent-contracts/setting-owners";
 // @vitest-environment jsdom
 import { useState } from "react";
 import { RegistryContext } from "@effect/atom-react";
@@ -103,7 +104,8 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   action.mockClear();
   const refresh = vi.fn();
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
-  const slot = { bindings: { required: ductsSettings["setting.ducts.parameters.requiredEsp"]!, allowance: setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
+  const allowance = setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" });
+  const slot = { bindings: { required: settingsSheet.bindings["setting.ducts.parameters.requiredEsp"]!, allowance: { ...allowance, model: (read: any) => settingLayer(allowance, read.settings.ducts) } } };
   const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
     value: { state: "ready", value: { settings: { ducts: [
       { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { parameters: { requiredEsp: "ESP" }, criteria: { allowanceInWg: { return: 0.2 } } } },
@@ -139,7 +141,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
   const read = () => ({ settings: { ducts: [{ tier: "project", home: "project", name: "project",
     path: "project/Settings/ducts.json", sha256: disk.sha256,
     json: { criteria: { velocityLimitFpm: { supply: disk.value } } } }] } });
-  const slot = { bindings: { velocity: setting("ducts", ["criteria", "velocityLimitFpm", "supply"], { kind: "number" }, ["project"], { label: "Supply velocity" }) } };
+  const slot = { bindings: { velocity: { ...settingsSheet.bindings["setting.ducts.velocitySupplyFpm"]!, label: "Supply velocity" } } };
   function Pane() {
     const [value, setValue] = useState(read);
     const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh: () => setValue(read()),

@@ -6,8 +6,8 @@ export const writeSettingTier = handle("settings.tiers.write");
 /*
  * Tiered settings (ADR 0037 rule 8; homes MAP slice 6b). A setting is one value at `path` inside
  * `Settings/<owner>.json`, and that file may sit in each home. The host reads every tier's file as
- * it stands and says which home it came from; `serveSetting` is the one place that picks the tier,
- * so the sheet's label and the engine's value cannot disagree.
+ * it stands and says which home it came from. Routes draw the host's resolved inputs, including
+ * Work; `serveSetting` resolves home tiers where no more specific input serves the value.
  */
 
 /** The home tiers a setting may declare, most specific first: the first tier that states the value serves it. */
