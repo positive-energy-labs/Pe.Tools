@@ -1,5 +1,5 @@
 export * from "./api-schemas.ts";
-export { familyReadingRoute, savedFamilyRead, specParseSourceSchema, type SpecParseSource } from "./family-actions.ts";
+export { familyReadingRoute, savedFamilyRead } from "./family-actions.ts";
 export { scheduleReadingRoute } from "./schedule-actions.ts";
 export * from "./spatial-evidence.ts";
 export * from "./route-module.ts";

@@ -7,6 +7,10 @@
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";
+import * as dns from "node:dns/promises";
+vi.mock("node:dns/promises", async (original) => ({ ...await original<typeof dns>(), lookup: vi.fn() }));
+import { put } from "../src/action-blobs.ts";
+import { SPEC_SOURCE_MAX_BYTES } from "../src/family-spec.ts";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
@@ -41,9 +45,48 @@ const pdfSize = readFileSync(pdf).length;
 
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   for (const close of closes.splice(0).reverse()) await close();
 });
+
+test.each(["http://127.0.0.1/a.pdf", "http://0.0.0.0/a.pdf", "http://100.64.0.1/a.pdf", "http://[::ffff:127.0.0.1]/a.pdf", "http://[fc00::1]/a.pdf", "http://[fe80::1]/a.pdf", "https://missing.example/a.pdf"])("attach refuses non-public source %s before fetch", async (url) => {
+  const { save, act, handle } = await lab();
+  const { member: saved } = (await save("human")).result;
+  const member = { pod: saved.pod, path: saved.path };
+  vi.mocked(dns.lookup).mockRejectedValue(Error("DNS unavailable"));
+  const fetcher = vi.fn().mockRejectedValue(Error("fetch must not run"));
+  vi.stubGlobal("fetch", fetcher);
+  const receipt = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
+  expect(fetcher).not.toHaveBeenCalled();
+  expect(receipt.error).toMatch(/public address/);
+}, 60_000);
+
+test("attach stores a URL without its signed query or fragment", async () => {
+  const { save, act, handle } = await lab();
+  const { member: saved } = (await save("human")).result;
+  const member = { pod: saved.pod, path: saved.path };
+  const original = fetch;
+  vi.stubGlobal("fetch", vi.fn((input, init) => String(input).startsWith("https://8.8.8.8/")
+    ? Promise.resolve(new Response(readFileSync(pdf))) : original(input, init)));
+  const receipt = await act("family.attach-spec", host, { member, source: { url: "https://8.8.8.8/a.pdf?token=secret#secret" }, work: await handle() });
+  expect(receipt.state).toBe("succeeded");
+  expect(JSON.stringify(receipt)).not.toContain("secret");
+  expect(JSON.stringify(receipt)).toContain('https://8.8.8.8/a.pdf');
+}, 60_000);
+
+test("attach refuses an oversized browser upload", async () => {
+  const { save, act, handle } = await lab();
+  const { member: saved } = (await save("human")).result;
+  const member = { pod: saved.pod, path: saved.path };
+  const bytes = Buffer.alloc(SPEC_SOURCE_MAX_BYTES + 1);
+  bytes.write("%PDF-");
+  const source = await put(bytes, "large.pdf");
+  const receipt = await act("family.attach-spec", host, { member, source, work: await handle() });
+  expect(receipt.state).not.toBe("succeeded");
+  expect(receipt.error).toContain("64 MB");
+}, 60_000);
 
 /** `realParser` leaves the in-process LlamaCloud parser in place; its test substitutes the network. */
 async function lab(beforeParse?: (file: File) => Promise<void>, realParser = false) {
@@ -216,14 +259,11 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   expect(byPath.state, JSON.stringify(byPath).slice(0, 2000)).toBe("succeeded");
   expect(parsed).toEqual([{ name: "acme-fcu400-submittal.pdf", bytes: pdfSize }]);
   let fetched = 0;
-  const server = createServer((_request, response) => {
-    fetched++;
-    response.writeHead(200, { "content-type": "application/pdf" });
-    response.end(readFileSync(pdf));
-  });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  closes.push(() => new Promise((resolve) => server.close(resolve)));
-  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/sheets/acme-by-url.pdf`;
+  const original = fetch;
+  const url = "https://8.8.8.8/sheets/acme-by-url.pdf";
+  vi.stubGlobal("fetch", vi.fn((input, init) => String(input) === url
+    ? (fetched++, Promise.resolve(new Response(readFileSync(pdf))))
+    : original(input, init)));
   const byUrl = await act("family.attach-spec", host, {
     member,
     source: { url },
@@ -338,7 +378,12 @@ async function boxed(beforeParse?: (file: File) => Promise<void>, realParser = f
           server.close(resolve);
         }),
     );
-    return `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const port = (server.address() as { port: number }).port;
+    const original = fetch;
+    const publicOrigin = `http://8.8.8.8:${port}`;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      original(String(input).replace(publicOrigin, `http://127.0.0.1:${port}`), init));
+    return publicOrigin;
   };
   return { ...l, member, attach, serve };
 }

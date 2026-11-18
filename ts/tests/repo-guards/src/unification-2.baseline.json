@@ -6,9 +6,7 @@
   "customDecodes": [],
   "readWrites": [],
   "peaRows": [],
-  "unscopedGeometry": [
-    "dotnet/Pe.Revit.Global/Services/Host/RevitDataRequestService.cs#Op:revit.catalog.electrical-circuits"
-  ],
+  "unscopedGeometry": [],
   "rawPageImports": [
     "ts/apps/web/src/route/app-chrome.tsx#:import { OwnerInspector } from \"#/state/owner-inspector\";",
     "ts/apps/web/src/route/handle.ts#:import type { LogEntry, RouteNote } from \"#/shell/owner\";",

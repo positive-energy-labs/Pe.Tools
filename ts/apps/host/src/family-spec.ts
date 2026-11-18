@@ -1,5 +1,4 @@
 import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed } from "@pe/agent-contracts";
-import type { SpecParseSource } from "@pe/agent-contracts";
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { put, get } from "./action-blobs.ts";
@@ -116,12 +115,16 @@ for (const [net, prefix] of [["::", 127], ["fc00::", 7], ["fe80::", 10]] as cons
  * two gets through; pin the resolved address into the request if that is ever a real threat.
  */
 async function refuseLocalUrl(url: string, shown: string): Promise<void> {
+  if (!["http:", "https:"].includes(new URL(url).protocol))
+    throw sourceRefused(`Only http and https URLs are fetched, not '${shown}'.`);
   const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
   const addresses = isIP(host)
     ? [{ address: host, family: isIP(host) }]
-    : await lookup(host, { all: true }).catch(() => []);
+    : await lookup(host, { all: true }).catch(() => {
+        throw sourceRefused(`Cannot resolve ${shown}; only a verified public address is fetched.`);
+      });
   // An IPv4 rule also matches the IPv4-mapped IPv6 form (`::ffff:127.0.0.1`).
-  if (addresses.some(({ address, family }) => LOCAL_NETWORKS.check(address, family === 6 ? "ipv6" : "ipv4")))
+  if (!addresses.length || addresses.some(({ address, family }) => LOCAL_NETWORKS.check(address, family === 6 ? "ipv6" : "ipv4")))
     throw sourceRefused(
       `${shown} is on this machine or its network, and only a public address is fetched here. Download the PDF and upload the file.`,
     );
@@ -130,18 +133,17 @@ async function refuseLocalUrl(url: string, shown: string): Promise<void> {
  * A PDF fetched once: http(s) only, no redirect followed, timed, and cut off at the cap. Messages
  * name the URL without its query or fragment, where a signed URL keeps its signature.
  */
-async function readPdfUrl(url: string, publicOnly = false): Promise<Uint8Array> {
+async function readPdfUrl(url: string): Promise<Uint8Array> {
   const shown = url.replace(/[?#].*$/s, "");
   if (!["http:", "https:"].includes(new URL(url).protocol))
     throw sourceRefused(
       `Only http and https URLs are fetched, not '${shown}'. For a file on this machine give { path }.`,
     );
-  if (publicOnly) await refuseLocalUrl(url, shown);
   const failed = (error: Error) =>
     sourceRefused(
       error.name === "TimeoutError"
         ? `PDF download did not finish within ${SPEC_SOURCE_TIMEOUT_MS / 1000} s for ${shown}. Download it and attach by { path }.`
-        : `PDF download failed for ${shown}: ${(error.cause as Error | undefined)?.message ?? error.message}. A redirect is not followed: give the PDF's final URL, or download it and attach by { path }.`,
+        : `PDF download failed for ${shown}. A redirect is not followed: give the PDF's final URL, or download it and attach by { path }.`,
     );
   const response = await fetch(url, {
     redirect: "error",
@@ -191,14 +193,15 @@ function keptFamilyParse(store: DerivedDir, pdf: Uint8Array): KeptFamilyParse | 
   return { doc, assets };
 }
 
-type SpecSource = SpecParseSource | { path: string };
+type SpecSource = z.infer<typeof blobRefSchema> | { path: string } | { url: string };
 /**
  * A source read once into a PDF file named by its basename (a URL's pathname, never its query). A
  * vendor file is fetched once per derived store (JOURNEYS target 13), keyed by its URL.
  * ponytail: write-once, so a sheet the vendor revises at the same URL is not seen again; attach the
  * new one by { path } or upload. Add a refresh verb if that bites.
  */
-async function readSpecSource(source: SpecSource, store: DerivedDir, publicOnly = false): Promise<{ file: File; bytes: ArrayBuffer }> {
+async function readSpecSource(source: SpecSource, store: DerivedDir): Promise<{ file: File; bytes: ArrayBuffer }> {
+  if ("url" in source) await refuseLocalUrl(source.url, source.url.replace(/[?#].*$/s, ""));
   const fetched =
     "digest" in source
       ? { bytes: await get(source), name: source.fileName }
@@ -207,9 +210,10 @@ async function readSpecSource(source: SpecSource, store: DerivedDir, publicOnly 
         : {
             bytes:
               readDerivedIn(store, derivedKey(source.url, "fetch/1"))?.bytes ??
-              (await readPdfUrl(source.url, publicOnly)),
+              (await readPdfUrl(source.url)),
             name: new URL(source.url).pathname || "document.pdf",
           };
+  if (fetched.bytes.byteLength > SPEC_SOURCE_MAX_BYTES) throw overCap("PDF source");
   const file = new File([new Uint8Array(fetched.bytes)], basename(fetched.name) || "document.pdf", {
     type: "application/pdf",
   });
@@ -251,31 +255,6 @@ async function familyParse(store: DerivedDir, pdf: Buffer, file: File, parsePdf:
   // Last, so a kept view always has its renders.
   writeDerivedIn(store, derivedKey(pdf, FAMILY_PARSER), JSON.stringify(doc));
   return { doc, assets };
-}
-
-/**
- * The page's upload surface (`POST /pe/family-spec/parse`): the grounded view of an uploaded or
- * URL-fetched PDF, attached to nothing. It shares the attach command's reader and kept parse, so a
- * sheet read here and attached later is sent once. Renders are answered inline: no signed parser
- * URL leaves the host.
- * ponytail: data URLs in one JSON answer, a few MB per ten pages; serve renders from an asset
- * route keyed by the PDF's digest if a large sheet makes the answer slow.
- */
-export async function parseSpecSource(source: SpecParseSource, parsePdf: ParsePdf = parseFamilyPdf): Promise<ParsedDoc> {
-  const store = derivedFor(hostOwnership.rootPath);
-  const { file, bytes } = await readSpecSource(source, store, true);
-  const { doc, assets } = await familyParse(store, Buffer.from(bytes), file, parsePdf);
-  const inline = (name: string | null) => {
-    const render = name === null ? undefined : assets.get(name);
-    if (!render) throw Error("The kept parse names a render it does not hold");
-    return `data:image/${render[0] === 0x89 ? "png" : "jpeg"};base64,${render.toString("base64")}`;
-  };
-  return {
-    ...doc,
-    fileName: file.name,
-    pages: doc.pages.map((page) => ({ ...page, screenshotUrl: inline(page.screenshotUrl) })),
-    images: doc.images.map((image) => ({ ...image, url: inline(image.url) })),
-  };
 }
 
 const assetSchema = z.strictObject({ path: z.string(), blob: blobRefSchema });
@@ -338,7 +317,7 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
                   expected: sha256,
                   probe: {
                     blob: await put(Buffer.from(bytes), file.name),
-                    origin: { kind: "url", url: source.url },
+                    origin: { kind: "url", url: source.url.replace(/[?#].*$/s, "") },
                     capturedAt: new Date().toISOString(),
                   },
                 },

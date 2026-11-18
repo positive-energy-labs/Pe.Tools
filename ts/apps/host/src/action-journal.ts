@@ -1237,6 +1237,13 @@ export class ActionJournal implements ReceiptReader {
     const portable = commands[admission.key as keyof typeof commands];
     if (portable)
       admission.input = portable.input.parse(admission.input) as Record<string, unknown>;
+    // Signed source links are transient fetch authority, never durable receipt input.
+    const receiptInput = () => {
+      const input = structuredClone(admission.input);
+      if (input.source && typeof input.source === "object" && "url" in input.source && typeof input.source.url === "string")
+        input.source.url = input.source.url.replace(/[?#].*$/s, "");
+      return input;
+    };
     const prior = this.rows.get(admission.id);
     // A retry predating the discard may already have run. Missing or malformed first-send times
     // cannot establish that it is new, so they refuse on the safe side; so does a discard time that does not parse (NaN).
@@ -1262,7 +1269,7 @@ export class ActionJournal implements ReceiptReader {
       );
     if (prior) {
       const identity = { id: prior.id, key: prior.key, target: prior.target, input: prior.input };
-      if (canonicalRouteInput(identity) !== canonicalRouteInput(admission))
+      if (canonicalRouteInput(identity) !== canonicalRouteInput({ ...admission, input: receiptInput() }))
         throw new CommandRejected({
           kind: "domain",
           code: "id-conflict",
@@ -1302,7 +1309,7 @@ export class ActionJournal implements ReceiptReader {
       caller: crossing.caller,
       basis: crossing.basis,
       target: structuredClone(admission.target),
-      input: structuredClone(admission.input),
+      input: receiptInput(),
       consumes: activePrior?.consumes ?? [],
       claims: prior?.claims ?? [],
       effects: activePrior?.effects ?? [],
@@ -1356,7 +1363,7 @@ export class ActionJournal implements ReceiptReader {
         });
       if (!retirementOnly) await this.environment?.target?.(admission.target, definition.needs);
       if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
-      row = { ...row, input: structuredClone(admission.input) };
+      row = { ...row, input: receiptInput() };
       if (!prior) {
         binding = await executor.bind(context);
         const effects = await Promise.all(
@@ -1866,6 +1873,7 @@ export class ActionJournal implements ReceiptReader {
           if (!prior)
             await this.export(row.id, "admission.json", {
               ...admission,
+              input: row.input,
               consumes: row.consumes,
               claims: row.claims,
               effects: row.effects,

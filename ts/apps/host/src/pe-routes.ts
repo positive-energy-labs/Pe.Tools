@@ -95,9 +95,7 @@ import {
 } from "./control.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { runPods } from "./family-actions.ts";
-import { familySpecAsset, parseSpecSource } from "./family-spec.ts";
-import { CommandRejected } from "./command-executor.ts";
-import { specParseSourceSchema } from "@pe/agent-contracts";
+import { familySpecAsset } from "./family-spec.ts";
 import { ActionJournalService, HostLogService } from "./receipt-services.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
 import { createProviders } from "./harness/providers.ts";
@@ -453,27 +451,6 @@ export function createPeRoutes(options: PeRoutesOptions) {
         ? await invocation.document({ session: scope.bridgeSessionId, openId: scope.openDocumentId })
         : null;
       return familySpecAsset(url, undefined, document?.projectHome);
-    }
-    // The upload surface's parse (homes ledger, 2026-11-17): it sends at once and leaves the
-    // parser's one notice (ADR 0052). The person's door only; admission already refused the rest.
-    if (declared.id === "family.spec.parse") {
-      if (caller.kind !== "human")
-        return Response.json(
-          { error: "human.only: Reading a cut sheet from the page requires a human caller." },
-          { status: 403, headers: refusalHeaders("human.only") },
-        );
-      const source = specParseSourceSchema.safeParse(await request.json());
-      if (!source.success)
-        return json({ error: { code: "family.spec.source", message: "Send an uploaded PDF as { digest, fileName }, or { url }." } }, 400);
-      try {
-        return json(await parseSpecSource(source.data));
-      } catch (error) {
-        // A refused source is the caller's to fix (400); anything else is the parser's failure (502).
-        return json(
-          { error: { code: "family.spec.source", message: error instanceof Error ? error.message : String(error) } },
-          error instanceof CommandRejected ? 400 : 502,
-        );
-      }
     }
     const parts = url.pathname.split("/").slice(2).map(decodeURIComponent); // drop "", "pe"
     const body = () =>
