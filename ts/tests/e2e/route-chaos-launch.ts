@@ -3,7 +3,8 @@ import { wait as waitFor, exited, stopOwned } from "./owned-runtime.ts";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
 import { openBrowser, type BrowserSession, type SessionInfo } from "@pe/browser";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
 import { emptyThreadLifecycle } from "../../packages/agent-contracts/src/harness-thread.ts";
@@ -29,7 +30,10 @@ if (!["chaos", "selection", "conversation-work", "fans"].includes(values.suite!)
   throw new Error("--suite must be chaos, selection, conversation-work or fans");
 if (values.revit && (values.suite !== "fans" || !process.env.PE_TOOLS_PRODUCT_HOME))
   throw new Error("--revit is fans-only and requires the caller's PE_TOOLS_PRODUCT_HOME");
-if (!["chaos", "fans"].includes(values.suite!) && (values.attached || values.url || values.port || values.target))
+if (
+  !["chaos", "fans"].includes(values.suite!) &&
+  (values.attached || values.url || values.port || values.target)
+)
   throw new Error("The required product suites own their isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
@@ -64,6 +68,7 @@ const receipt = {
   seed: values.seed,
   started: new Date().toISOString(),
   hostPid: 0,
+  home: "",
   hostPort: 0,
   web: "",
   browser: "",
@@ -145,7 +150,11 @@ try {
       }, 1000);
     }
     // --revit shares the caller's drive home with Pe.App; every other suite isolates its own.
-    const home = values.revit ? env.PE_TOOLS_PRODUCT_HOME! : join(dir, "home");
+    // ADR 0037: harness state must not inherit this checkout's instructions.
+    const home = values.revit
+      ? env.PE_TOOLS_PRODUCT_HOME!
+      : await mkdtemp(join(tmpdir(), "pe-route-home-"));
+    receipt.home = home;
     env.PE_TOOLS_PRODUCT_HOME = home;
     env.LOCALAPPDATA = values.revit ? home : join(dir, "localappdata");
     env.APPDATA = join(dir, "appdata");
