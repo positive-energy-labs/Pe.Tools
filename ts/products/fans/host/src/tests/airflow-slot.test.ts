@@ -26,7 +26,9 @@ test("empty named default chooses one Revit Flow slot by coverage and prices the
   expect(zero.slots.terminalFlow).toBe(named);
   expect(zero.coverage.map(c => c.covered)).toEqual([0, 0]);
   const flow = terminalFlowSlot([], model());
-  expect(terminalFlowSlot([], { ...model("revit:Flow"), nodes: s.nodes.map(n => ({ ...n, flowParameter: "revit:Flow", connectors: [], facts: [factOf(`slot:${named}`, 100)] })) }).slots.terminalFlow).toBe(named);
+  const pinned = terminalFlowSlot([], { ...model("revit:Flow"), nodes: s.nodes.map(n => ({ ...n, flowParameter: "revit:Flow", connectors: n.id === 3 ? [] : n.connectors, facts: [factOf(`slot:${named}`, 100)] })) });
+  expect(pinned.slots.terminalFlow).toBe(named);
+  expect(pinned.coverage).toEqual([{ slot: named, covered: 2, total: 2 }, { slot: "revit:Flow", covered: 1, total: 2 }]);
   expect(flow.slots.terminalFlow).toBe("revit:Flow");
   const snapshot = model(flow.slots.terminalFlow);
   const inputs = resolveInputs({ snapshot, firm: TEST_FIRM, ...flow });
