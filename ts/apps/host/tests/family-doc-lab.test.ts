@@ -63,7 +63,7 @@ test.each(["http://127.0.0.1/a.pdf", "http://0.0.0.0/a.pdf", "http://100.64.0.1/
   expect(receipt.error).toMatch(/public address/);
 }, 60_000);
 
-test("attach stores a URL without its signed query or fragment", async () => {
+test("attach keeps the sheet's origin without its signed query or fragment", async () => {
   const { save, act, handle } = await lab();
   const { member: saved } = (await save("human")).result;
   const member = { pod: saved.pod, path: saved.path };
@@ -72,8 +72,9 @@ test("attach stores a URL without its signed query or fragment", async () => {
     ? Promise.resolve(new Response(readFileSync(pdf))) : original(input, init)));
   const receipt = await act("family.attach-spec", host, { member, source: { url: "https://8.8.8.8/a.pdf?token=secret#secret" }, work: await handle() });
   expect(receipt.state).toBe("succeeded");
-  expect(JSON.stringify(receipt)).not.toContain("secret");
-  expect(JSON.stringify(receipt)).toContain('https://8.8.8.8/a.pdf');
+  // The journaled input holds the link as sent (family ledger, Owed 2026-11-18); what attach records does not.
+  expect(JSON.stringify((receipt as { consumes?: unknown }).consumes)).not.toContain("secret");
+  expect(JSON.stringify((receipt as { consumes?: unknown }).consumes)).toContain('"url":"https://8.8.8.8/a.pdf"');
 }, 60_000);
 
 test("attach refuses an oversized browser upload", async () => {
