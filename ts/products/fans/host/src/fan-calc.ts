@@ -12,7 +12,7 @@ import {
   ductsCalcOverviewSchema,
   ductsCalcRequestSchema,
   ductsCalcResponseSchema,
-  ductParameterSlots,
+  ductSlotRequest,
   type DuctsCalcOverview,
   type DuctsCalcRequest,
   fanClaimSchema, fanCloserSchema, fanEspValuesSchema, ductsFanCalcSchema,
@@ -160,7 +160,7 @@ const calcModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]]));
+    const slots = ductSlotRequest(saved.settings);
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -502,7 +502,7 @@ export const ductCalc = read(CALC_DETAIL_READ, {
 export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = Object.fromEntries(Object.entries(ductParameterSlots(saved.settings)).flatMap(([key, slot]) => slot.name == null ? [] : [[key, slot.name]]));
+    const slots = ductSlotRequest(saved.settings);
     const response = await ctx.read(native("ducts.snapshot.roster"), {
       role: "acquire",
       target: { kind: "document", ref: target },
