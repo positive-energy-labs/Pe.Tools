@@ -3,7 +3,7 @@ import { wait as waitFor, exited, stopOwned } from "./owned-runtime.ts";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
 import { openBrowser, type BrowserSession, type SessionInfo } from "@pe/browser";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
@@ -435,6 +435,16 @@ try {
   } catch (error) {
     receipt.cleanup.push(`Host cleanup: ${String(error)}`);
     process.exitCode = 1;
+  }
+  if (!values.revit && receipt.home) {
+    try {
+      await cp(receipt.home, join(dir, "home"), { recursive: true });
+      await rm(receipt.home, { recursive: true, force: true });
+      receipt.cleanup.push(`archived home to ${join(dir, "home")}; removed ${receipt.home}`);
+    } catch (error) {
+      receipt.cleanup.push(`Home archival or cleanup: ${String(error)}`);
+      process.exitCode = 1;
+    }
   }
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);
