@@ -93,6 +93,7 @@ import type { CalcSnapshot } from "@pe/ducts-domain/input-snapshot";
 export type { CalcSnapshot } from "@pe/ducts-domain/input-snapshot";
 
 export interface PricingInput {
+  terminalFlowNote?: string;
   snapshot: CalcSnapshot;
   grids: Grids;
   /** Everything the engine prices from, resolved by the host (`resolveInputs`); the engine defaults nothing. */
@@ -1669,6 +1670,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
   markSiblings(swap ? b! : a, "supply");
   if (b) markSiblings(swap ? a : b, "return");
   const flowOpts: FlowOptions = {
+    terminalFlowNote: input.terminalFlowNote,
     name: g.name,
     terminalCfm,
     // Whatever its source: a receiving unit's design flow read from Revit weights the split exactly

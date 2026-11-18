@@ -8,12 +8,34 @@
 import {
   DUCTS_CRITERIA_CELLS,
   serveSetting,
+  ductParameterSlots,
+  ductParameterNameSchema,
   type DuctsCriteriaCell,
   type DuctsFirm,
   type DuctsFirmFile,
   type SettingTierRead,
 } from "@pe/agent-contracts";
 import type { FirmValue } from "@pe/host/read-graph";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { slotCoverage, REVIT_FLOW_SLOT } from "@pe/ducts-domain/kernel/terminal-flow";
+
+/** One project choice, measured before the fan walk; the override also beats previously stored Slots. */
+export async function terminalFlowSlot(settings: readonly SettingTierRead[], read: (slots: ReturnType<typeof ductParameterSlots>) => Promise<DuctSnapshot>) {
+  const slots = ductParameterSlots(settings), named = slots.terminalFlow;
+  const snapshot = await read({ ...slots, terminalFlow: named ?? "PE_M_Grd_AirFlow" });
+  const coverage = slotCoverage(snapshot.nodes, [named ?? "PE_M_Grd_AirFlow"]);
+  const chosen = coverage.find(row => row.slot === (named ?? coverage[0]?.slot));
+  if (!chosen) throw Error("Terminal airflow coverage returned no candidate");
+  const better = coverage.find(row => row.covered > chosen.covered);
+  const label = (slot: string) => slot === REVIT_FLOW_SLOT ? "Revit Flow" : slot;
+  const tier = serveSetting(settings, ["project", "firm"], ["parameters", "terminalFlow"], ductParameterNameSchema("terminalFlow")).tier;
+  return {
+    slots: { ...slots, terminalFlow: chosen.slot },
+    coverage,
+    terminalFlow: { slot: chosen.slot, ref: `${tier} · ${chosen.slot}${named ? "" : " chosen by coverage"} ${chosen.covered}/${chosen.total}` },
+    terminalFlowNote: named && better ? `${chosen.covered}/${chosen.total} terminals have ${label(chosen.slot)}; ${label(better.slot)} covers ${better.covered}. Save terminalFlow = ${label(better.slot)} at project` : undefined,
+  };
+}
 
 import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
 export { FIRM_SEED, workLayer } from "@pe/ducts-domain/input-layers";

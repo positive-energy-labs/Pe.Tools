@@ -4,9 +4,9 @@ import { hostMarks } from "../../../../../apps/host/src/document-marks.ts";
 import { settle } from "../../../../../apps/host/tests/effect-test.ts";
 
 /** Deterministic native fixtures have no external document events. */
-export function calcPort(source: Omit<ReadSources,"file"|"resource"> & { firm:(owner:string)=>Promise<unknown>;catalogs:()=>Promise<unknown> }, workspace: RouteWorkspace) {
+export function calcPort(source: Omit<ReadSources,"file"|"resource"> & { firm:(owner:string)=>Promise<unknown>;catalogs:()=>Promise<unknown> }, workspace: RouteWorkspace, settings: readonly import("@pe/agent-contracts").SettingTierRead[] = []) {
   return inputPort({
-    source:{...source,file:async (name,args)=>name === "firm" ? source.firm(String(args)):name === "settings" ? []:source.catalogs(),resource:async()=>{throw Error("Fixture has no resources");}},
+    source:{...source,file:async (name,args)=>name === "firm" ? source.firm(String(args)):name === "settings" ? settings:source.catalogs(),resource:async()=>{throw Error("Fixture has no resources");}},
     workspace,
     marks: hostMarks({
       observedSince: 0,
