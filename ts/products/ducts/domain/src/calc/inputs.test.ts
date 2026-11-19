@@ -86,6 +86,15 @@ it("compares Revit Flow receipts at the connector's three-place precision", () =
   expect(drift(snapshotOf(node, slots, receipt(150.1236)), "flows", 1)).toBe("Changed in Revit since Pe wrote 150.1236 cfm");
 });
 
+it.each([0, 0.00004, -0.00004])("treats Revit Flow %s cfm as zero only for a matching receipt", flowCfm => {
+  const node = { ...terminal(), flowParameter: "revit:Flow", connectors: [{ flowCfm }] };
+  const slots = { ...TEST_SLOTS, terminalFlow: "revit:Flow" };
+  const store = { terminalFlows: { "1": { cfm: 0, parameter: slots.terminalFlow } } };
+  const read = (snapshot: never) => resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.cfm;
+  expect(read(snapshotOf(node, slots, store))).toMatchObject({ status: "valid", value: 0, source: "model" });
+  expect(read(snapshotOf(node, slots))).toMatchObject({ status: "missing", value: null });
+});
+
 it("a receipt agrees with its parameter as the reader rounds it (4 places): no drift on an untouched model", () => {
   const wrote = { terminals: { "1": { inWg: 0.07312 } } };
   expect(drift(snapshotOf(terminal({ catalogDropInWg: 0.0731 }), undefined, wrote), "terminalDrops", 1)).toBeNull();
