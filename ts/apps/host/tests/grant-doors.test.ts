@@ -10,9 +10,10 @@ import { Layer } from "effect";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
 import { serveRoutes } from "./real-server.ts";
+import * as receipts from "../src/receipt-export.ts";
 
 let root: string, journal: ActionJournal, server: Awaited<ReturnType<typeof serveRoutes>>;
 let native: Awaited<ReturnType<typeof fixtureNative>>;
@@ -53,6 +54,22 @@ test("an unavailable Pod query has one typed refusal before dispatch", async () 
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ refusal: { code: "permission.undeclared", door: "/call",
     reason: "Pod query has no admitted route: pod.fixture.unavailable" } });
+});
+
+test("a successful /call records a succeeded host operation", async () => {
+  const record = vi.spyOn(receipts, "recordHostFact").mockImplementation(() => {});
+  try {
+    const response = await post("/call", { key: "takeoffs.saved", request: {} }, contextHeaders());
+    expect(response.status).toBe(200);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "host_op", counters: expect.objectContaining({
+        op: "takeoffs.saved", outcome: "succeeded",
+      }) }),
+      expect.objectContaining({ requestId: expect.any(String) }),
+    );
+  } finally {
+    record.mockRestore();
+  }
 });
 test("action controls cannot borrow a human receipt across caller threads", async () => {
   for (const verb of ["cancel"]) {

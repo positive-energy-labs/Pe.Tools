@@ -911,7 +911,7 @@ function recordHostOp(
         op: op.key,
         originClass: op.originClass,
         tsOnly: op.tsOnly,
-        outcome: outcome.ok ? "incomplete" : refused ? "refused" : "failed",
+        outcome: outcome.ok ? "succeeded" : refused ? "refused" : "failed",
         ...(outcome.ok || refused ? {} : { faultCode: "host.failed" as const }),
         durationMs: Date.now() - op.startedAt,
       },
