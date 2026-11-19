@@ -855,7 +855,7 @@ export function machineSessionAcquisition(session: string): string | null {
 }
 
 /** A failed journal retains provenance, but does not certify a live attachment or document read. */
-const receiptProcessOf = (row: SessionObservation): ProcessIdentity | null =>
+export const receiptProcessOf = (row: SessionObservation): ProcessIdentity | null =>
   row.case === "failed-receipt" && row.failure.source === "journal"
     ? row.failure.process
     : processOf(row);

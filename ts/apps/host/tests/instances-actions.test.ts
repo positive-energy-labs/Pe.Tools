@@ -196,8 +196,14 @@ async function setup(
   const calls: string[][] = [];
   const sdk = async (args: readonly string[]) => {
     calls.push([...args]);
+    // The SDK answers a name it no longer lists with `result: {}` (pe-revit 0.1.0-beta.224).
     if (args[0] === "session" && args[1] === "list")
-      return replayAnswer(args, { result: { state: "ok", sessions: sessionRows } });
+      return args.includes("--id") && !sessionRows.some((row) => (row as { id?: string }).id === flag(args, "--id"))
+        ? replayAnswer(args, { result: {}, exitCode: 3,
+            diagnostics: [{ code: "session.no-match", detail: `no session '${flag(args, "--id")}'`, fix: "pe-revit session list" }] })
+        : replayAnswer(args, { result: {
+            state: "ok", sessions: sessionRows, processReadErrors: [], unreadableReceipts: [],
+          } });
     if (args[0] === "doc" && args[1] === "list") {
       census.beforeSdkList?.();
       const { pid, processStartUtc } =
@@ -1618,4 +1624,46 @@ test.each([false, true])("cleanup through /actions removes empty instance folder
     const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
     expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
   }
+});
+
+// K1c option B, shaped like drive1: launch 29d6cc45 succeeded; 55261b6e is the SDK's refusal of a
+// same-year start beside a live session. Only a running action holds a claim, so the SDK guards the year.
+const beside = (rows: unknown[]) => (args: readonly string[]): Answer =>
+  args[1] !== "start"
+    ? { result: { id: "dev", state: "ok", phase: "stopped" } }
+    : rows.length
+      ? { result: { state: "refused", requestId: flag(args, "--request-id") ?? null, legs: [] }, exitCode: 2,
+          diagnostics: [{ code: "op.stale-expectation", detail: "expected no session row, but 'dev' exists. Nothing was dispatched.", fix: null }] }
+      : startedAnswer;
+const start2025 = { year: "2025", owner: "you", addins: "on" };
+
+test("K1c: a start beside a live Revit of its year reaches the SDK and fails undispatched, saying so plainly", async () => {
+  const rows: unknown[] = [];
+  const f = await setup(beside(rows), rows);
+  expect(await f.admit("instances.start", start2025)).toMatchObject({ state: "succeeded" });
+  rows.push(controlledRow());
+  const second = await f.admit("instances.start", start2025);
+  expect(second, JSON.stringify(second)).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: expect.stringMatching(/^Revit 2025 already has a session, so nothing was started\. .*'dev' exists/),
+  });
+  expect(f.calls.filter((argv) => argv[1] === "start")).toHaveLength(2);
+});
+
+test("K1c: once that Revit is gone by any route, a second start of the year runs", async () => {
+  const rows: unknown[] = [];
+  const f = await setup(beside(rows), rows);
+  expect(await f.admit("instances.start", start2025)).toMatchObject({ state: "succeeded" });
+  expect(await f.admit("instances.start", start2025)).toMatchObject({ state: "succeeded" });
+});
+
+test.each([false, true])("K1c: stopping a Revit that already closed succeeds with historical rows=%s", async (history) => {
+  const f = await setup(() => Error("Unexpected SDK mutation"), history ? [
+    { case: "gone-receipt", id: "dev", process: originalProcess },
+    { case: "failed-receipt", id: "older", failure: { source: "receipt" } },
+  ] : []);
+  const stop = await f.admit("instances.stop", { session, unsaved: "discard" });
+  expect(stop).toMatchObject({ state: "succeeded", result: { state: "ok", phase: "already-gone" } });
+  expect(f.calls.every((args) => args[0] === "session" && args[1] === "list")).toBe(true);
 });

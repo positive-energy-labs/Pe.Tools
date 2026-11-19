@@ -81,9 +81,15 @@ export async function dispatchSdk(
     ok?: boolean;
   } | null;
   const state = result?.state;
-  const said =
+  const sdkSaid =
     envelope.diagnostics.map((d) => `${d.code}: ${d.detail}`).join("; ") ||
     `pe-revit ${state ?? "answered no state"}`;
+  // K1c: no claim holds a live Revit's year, so a start that expected no session row and met one is
+  // the SDK's refusal; its detail names the session. An adoption or a recorded-session expectation is not.
+  const said =
+    input.expectSession === "absent" && envelope.diagnostics.some((d) => d.code === "op.stale-expectation")
+      ? `Revit${args.includes("--year") ? ` ${args[args.indexOf("--year") + 1]}` : ""} already has a session, so nothing was started. Use that session or stop it first. (${sdkSaid})`
+      : sdkSaid;
   if (args[0] === "bootstrap") {
     if (envelope.exitCode !== 0 || !result?.ok || envelope.diagnostics.length)
       throw new StepFailure(

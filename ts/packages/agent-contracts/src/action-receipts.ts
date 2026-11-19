@@ -100,6 +100,8 @@ const stepIntent = z.object({
   kind: z.enum(["native", "file", "publication"]),
   input: z.unknown(),
   process: nativeProcessSchema.optional(),
+  // Read-only since K1c: nothing writes or reads it, but stored steps carry it and steps are strict,
+  // so dropping it would fail decoding of an old journal, which is then discarded.
   releases: z.array(z.strictObject({ action: z.string(), claim: claimSchema })).optional(),
   retired: z.literal(true).optional(),
   dispatchedAt: z.string().optional(),

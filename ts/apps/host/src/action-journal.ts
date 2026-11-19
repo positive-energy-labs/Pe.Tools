@@ -147,10 +147,10 @@ const effected = (step: ActionStep) =>
 const wroteBefore = (step: ActionStep) =>
   step.kind !== "publication" &&
   ("touched" in step && step.touched ? ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind) : step.state === "succeeded");
-// Only a running action holds a claim (K1a). Exception: a succeeded launch keeps its session-slot
-// claim until a later step `releases` it, because that Revit is still live. Every other terminal
-// state, `unknown` and `incomplete` included, ends the claim.
-const holdsClaims = (row: ActionReceipt) => row.state === "running" || row.state === "succeeded";
+// Only a running action holds a claim (K1a, K1c): every terminal state ends it, except a plan's
+// `receipt` (claimsOf). A live Revit's year is guarded by the SDK, which refuses a start beside a
+// live session row before it dispatches.
+const holdsClaims = (row: ActionReceipt) => row.state === "running";
 const patchSnapshot = (snapshot: unknown, patch: RouteStatePatch): void => {
   if (!snapshot || typeof snapshot !== "object" || !patch.path.length) return;
   let parent = snapshot as Record<string | number, unknown>;
@@ -257,9 +257,6 @@ export type StepOptions<A> = {
   process?: NativeProcess;
   /** Domain postcondition, evaluated only after the operation returned a concrete outcome. */
   check?(result: A): void;
-  releases?(
-    result: A,
-  ): { action: string; claim: Claim }[] | Promise<{ action: string; claim: Claim }[]>;
 };
 /** The services the journal Layer holds once for every attempt it owns. */
 export type AttemptHost = FileSystem.FileSystem | Path.Path | HttpClient.HttpClient;
@@ -941,29 +938,14 @@ export class ActionJournal implements ReceiptReader {
   }
 
   private claimsOf(row: ActionReceipt): Claim[] {
-    // Exception to K1a: a `receipt` claim is a plan's single-use token, not an exclusion. Every row
-    // that may have dispatched keeps it, because a document mark that did not move is the only other
-    // refusal of a second apply of that plan. It blocks one plan id, never a later plan.
+    // The one exception to holdsClaims: a `receipt` claim is a plan's single-use token, not an
+    // exclusion. Every row that may have dispatched keeps it, because a document mark that did not
+    // move is the only other refusal of a second apply of that plan. It blocks one plan id, never a
+    // later plan.
     const spent = !(
       (row.state === "failed" || row.state === "cancelled") && row.notDispatched === true && undispatched(row.steps)
     );
-    return row.claims.filter(
-      (claim) =>
-        (claim.kind === "receipt" ? spent : holdsClaims(row)) &&
-        ![...this.rows.values()].some((other) =>
-          other.steps.some(
-            (step) =>
-              step.kind === "native" &&
-              step.state === "succeeded" &&
-              step.dispatchedAt &&
-              step.releases?.some(
-                (release) =>
-                  release.action === row.id &&
-                  canonicalRouteInput(release.claim) === canonicalRouteInput(claim),
-              ),
-          ),
-        ),
-    );
+    return row.claims.filter((claim) => (claim.kind === "receipt" ? spent : holdsClaims(row)));
   }
   private reconciles(row: ActionReceipt, original: ActionReceipt): boolean {
     return row.claims.some((claim) => claim.kind === "reconciliation" && claim.id === original.id);
@@ -1802,27 +1784,6 @@ export class ActionJournal implements ReceiptReader {
             }
             yield* io(async () => {
               // Persistence is outside the effect catch: a missing receipt never proves no dispatch.
-              const releases = (await options?.releases?.(result as never)) ?? [];
-              const dispatched = journal.rows
-                .get(row.id)
-                ?.steps.find((held) => held.id === step.id)?.dispatchedAt;
-              if (
-                releases.length &&
-                (kind !== "native" ||
-                  !dispatched ||
-                  releases.some(
-                    (release) =>
-                      release.claim.kind !== "session-slot" ||
-                      !journal.rows
-                        .get(release.action)
-                        ?.claims.some(
-                          (claim) => canonicalRouteInput(claim) === canonicalRouteInput(release.claim),
-                        ),
-                  ))
-              )
-                throw Error(
-                  "A logical session claim releases only with a matching dispatched native outcome",
-                );
               await save((current) => ({
                 ...current,
                 steps: current.steps.map((held) =>
@@ -1831,7 +1792,6 @@ export class ActionJournal implements ReceiptReader {
                         ...held,
                         state: "succeeded",
                         result: structuredClone(result ?? null),
-                        ...(releases.length ? { releases: structuredClone(releases) } : {}),
                       }
                     : held,
                 ),
@@ -2044,7 +2004,6 @@ export class ActionJournal implements ReceiptReader {
           ...variant.strip().parse(update.step),
           ...(step.process ? { process: step.process } : {}),
           ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
-          ...(step.releases ? { releases: step.releases } : {}),
         });
         updates.push({
           ...update,
