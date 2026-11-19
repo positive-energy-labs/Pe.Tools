@@ -1,6 +1,6 @@
 """Native acceptance harness: dev or installed runtime, one controlled Revit on model copies.
 
-    python tools/acceptance.py setup <run> [--installed] [--web] [--foreground] [--detach] [--model PATH[=NAME]]... [--wait-admission MINUTES]
+    python tools/acceptance.py setup <run> [--installed] [--web] [--host-only] [--foreground] [--detach] [--model PATH[=NAME]]... [--wait-admission MINUTES]
     python tools/acceptance.py sdk <run> <name> <pe-revit args...>      envelope -> ev/<name>.json
     python tools/acceptance.py call <run> <who> <METHOD> <path> [body.json] [--out NAME]
     python tools/acceptance.py census <run> [label]
@@ -10,6 +10,7 @@ Evidence lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custod
 The isolated dev product home lives under the system temp directory, outside the checkout.
 Without --model, setup copies the Chadds model from the main checkout's .artifacts/revit/detached, or refuses.
 Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
+--host-only starts a dev host with an empty isolated home and no pre-launched Revit or models.
 `who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
 session ids and host this run recorded; anything else it finds is printed as residue.
 --wait-admission re-reads the machine every 30 s until it admits or the minutes run out, so a
@@ -332,8 +333,11 @@ def admission_refusal() -> str | None:
 def setup(run: str, args: list[str]) -> None:
     wait = value_list(args, "--wait-admission")
     require_setup_admission(float(wait[0]) if wait else 0)  # Includes the host-timeout resume path, before discovery or acquisition.
-    owner = owner_home()
     installed = "--installed" in args
+    host_only = "--host-only" in args
+    if host_only and (installed or "--model" in args):
+        sys.exit("--host-only requires dev and takes no models")
+    owner = None if host_only else owner_home()
     if installed and "--web" in args:
         sys.exit("--web is a checkout frontend option; installed serves its packaged frontend")
     installation = installed_identity() if installed else None
@@ -342,18 +346,21 @@ def setup(run: str, args: list[str]) -> None:
         prior = load(run) if (root / "run.json").exists() else {}
         host = prior.get("host") or {}
         if "launcher" in host and "pid" not in host and not prior["sessions"]:  # a wait that timed out
+            if prior.get("hostOnly", False) != host_only:
+                sys.exit("Resume with the same --host-only setting as the original run")
             log(run, f"resume: adopting the host of launcher {host['launcher']}")
             adopt_host(run, prior, host["launcher"], lambda: pid_alive(host["launcher"]))
-            dev_session(run, prior, args)
+            if not host_only:
+                dev_session(run, prior, args)
             return
         sys.exit(f"{root} exists; pick a new run name or tear it down and delete it")
-    models = pick_models(args, main_checkout() / DEFAULT_MODEL)  # refuse before anything is created
+    models = [] if host_only else pick_models(args, main_checkout() / DEFAULT_MODEL)
     (root / "ev").mkdir(parents=True)
     (root / "docs").mkdir()
     home = owner if installed else Path(tempfile.mkdtemp(prefix="pe-accept-")) / "Pe.Tools"
     if not installed:
         home.mkdir(parents=True)
-    for name in ([] if installed else COPIED):
+    for name in ([] if installed or host_only else COPIED):
         source = owner / name
         destination = home / name
         if os.name == "nt":
@@ -377,7 +384,7 @@ def setup(run: str, args: list[str]) -> None:
         model_copies.append({"source": str(source), "copy": str(target),
                              "sourceSha256": source_hash, "copySha256": target_hash})
         docs.append(str(target))
-    roots = [str(owner), str(LOCAL)]
+    roots = [] if host_only else [str(owner), str(LOCAL)]
     before = root / "owner-before.json"
     before.write_text(json.dumps(owner_files(roots)), encoding="utf8")
     state = {
@@ -385,7 +392,7 @@ def setup(run: str, args: list[str]) -> None:
         "lane": "installed" if installed else "dev", "installation": installation,
         "productHomeIsolated": not installed, "detach": "--detach" in args, "modelCopies": model_copies,
         "ownerRoots": roots, "ownerBefore": str(before), "sessions": [], "host": None,
-        "web": "--web" in args,
+        "web": "--web" in args, "hostOnly": host_only,
         "commit": git("rev-parse", "HEAD"), "revitBefore": revit_pids(),
     }
     if installed:
@@ -408,7 +415,8 @@ def setup(run: str, args: list[str]) -> None:
         creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
     )
     adopt_host(run, state, process.pid, lambda: process.poll() is None)
-    dev_session(run, state, args)
+    if not host_only:
+        dev_session(run, state, args)
 
 
 def adopt_host(run: str, state: dict, launcher: int, launcher_alive, patience: int = 180) -> None:
