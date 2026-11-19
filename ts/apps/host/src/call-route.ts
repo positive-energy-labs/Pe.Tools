@@ -262,12 +262,6 @@ function callRoutes(
           }),
         );
       const entry = linkedCatalog().entries.get(key)?.call ?? {};
-      const humanDoor = entry.humanOnly;
-      if (humanDoor && caller.kind !== "human")
-        return Response.jsonUnsafe(
-          { error: "Only a person can launch RHVAC", notDispatched: true },
-          { status: 403 },
-        );
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
       let scope: HostSessionScope = identity.scope;
@@ -334,7 +328,7 @@ function callRoutes(
             ? { session: resolvedSession.sessionId, openId: openDocumentId }
             : undefined;
         effect = consentedRead(caller, key, request, ref) ? "Read" : definition.effect;
-        if (effect !== "Read" && effect !== "TransactRead" && !humanDoor) {
+        if (effect !== "Read" && effect !== "TransactRead") {
           return yield* Effect.fail(
             new BridgeError(
               "Submit the original exact admission to /actions; raw mutation dispatch is retired",

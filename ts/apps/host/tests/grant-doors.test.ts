@@ -38,13 +38,15 @@ afterEach(async () => {
   expect((await journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
-test("RHVAC launch refuses every non-human caller before dispatch", async () => {
+test("RHVAC launch requires journaled action admission for authenticated callers", async () => {
   const page = { origin: server.base, "sec-fetch-site": "same-origin", referer: `${server.base}/pages/refusals/`, ...serviceHeaders() };
-  for (const headers of [{}, pea(), contextHeaders({ kind: "external-mcp", label: "unpaired" }), page]) {
+  for (const headers of [contextHeaders(), pea(), contextHeaders({ kind: "external-mcp", label: "unpaired" }), page]) {
     const response = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } }, headers);
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "Only a person can launch RHVAC", notDispatched: true });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ notDispatched: true });
   }
+  const anonymous = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } });
+  expect(anonymous.status).toBe(403);
 });
 test("an unavailable Pod query has one typed refusal before dispatch", async () => {
   const response = await post("/call", { key: "pod.fixture.unavailable", request: {} }, contextHeaders());

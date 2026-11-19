@@ -56,25 +56,3 @@ export const automaticUpdatesRpc = {
     throw Error(body?.error ?? `Switch refused (${response.status}).`);
   },
 } satisfies ReadEntry<typeof automaticUpdatesInput>;
-
-async function answer(response: Response) {
-  const value = await response.json();
-  if (!response.ok)
-    throw Object.assign(
-      Error(value.error?.message ?? value.error ?? `Host refused (${response.status})`),
-      { status: response.status },
-    );
-  return value;
-}
-export const rhvacLaunchRpc: ReadEntry<z.ZodObject<{ path: z.ZodString }>> = {
-  key: "rhvac.launch",
-  input: z.object({ path: z.string().min(1) }),
-  run: async (input) =>
-    answer(
-      await fetch("/call", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ key: "rhvac.launch", request: input }),
-      }),
-    ),
-};
