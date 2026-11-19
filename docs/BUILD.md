@@ -25,7 +25,10 @@ tray or host restart before acting, including an idle restart: the owner may be 
 Build and native launch evidence do not prove backend restart recovery or installed behavior.
 
 PWA identity belongs to the lane's origin, not the process: two stable apps per lane.
-Installed uses `http://127.0.0.1:5180` with manifest `id: /`. Dev uses `http://127.0.0.1:5175` with
+The current installed host prefers `http://127.0.0.1:5180` with manifest `id: /`.
+If a foreign process holds that port, the host binds a free port and the PWA uses the bound origin.
+The [host ledger](features/host/LEDGER.md#decided) records the fixed port for the next release.
+Dev uses `http://127.0.0.1:5175` with
 `id: /?dev=e342bc78d3d4`, and the MAIN checkout (its `.git` is a directory) keeps that port. A linked
 worktree takes a stable slot in 5200-5999 hashed from its dev host's service name
 (`devFrontendPort`), so worktrees run beside main; a collision walks to the next free port and

@@ -56,7 +56,7 @@
 
 - Resolve the order of the Fans calculation view. On 2026-11-05 the owner chose the unresolved checklist first with “this”, while the [current view](../../../ts/products/fans/web/src/calc/view.tsx) follows the earlier worksheet-first ruling.
 - Show the incomplete pressure estimate in muted ink. On 2026-11-05 the owner said, “greyed estimate is nice”. The [current summary](../../../ts/products/fans/web/src/calc/view.tsx) mutes the note about completeness.
-- Keep the remaining settings and value ownership findings together for the next design pass. On 2026-11-17 the owner said, “I'm taking the primitive work into a separate muse.” Preserve the open findings from `.artifacts/handoffs/fans-homes-primitives.md` when preparing that work.
+- Review ownership and source labels for the calculation values that remain open. On 2026-11-17 the owner said, “I'm taking the primitive work into a separate muse.” The proposal called seam S would draw the host's resolved value and source in every setting row. Keep that proposal open for design. [ADR 0053](../../adr/0053-the-model-store-is-a-receipt.md) settles the receipt-only rule from seam R. Main now keeps catalog home tiers and shows sources for allowances and rated pressure warnings. Preserve the remaining case evidence in `.artifacts/handoffs/fans-homes-primitives.md` until a design review uses it.
 
 - Show the whole resulting loss record in Write review, including model entries that the write preserves. [W-duct-systems-06-107]
 - Show a known pressure subtotal in the roster for an incomplete fan without presenting it as certified pressure. [W-duct-systems-03-032]
