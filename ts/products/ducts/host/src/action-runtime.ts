@@ -83,12 +83,15 @@ const rulingsDoor: Pick<DuctAction, "snapshot" | "derive" | "entry"> = {
   snapshot: (_intent, read) => read({ kind: "roster" }),
   derive: async ({ design, snapshot, appliedAt }) => ({ ...rulingsRequest(design, snapshot, appliedAt ?? ""), dependencies: ductWriteEvidence(snapshot) }),
   entry: { key: "ducts.apply", native: "ducts.apply.plan",
-    refusePlan: (value) => ((value as DuctsApply.Res.Response).writes.some((w) => w.outcome === "refused") ? "refused" : null),
+    refusePlan: (value) => nativeResponseSchema("ducts.apply.plan").parse(value).writes.some((w) => w.outcome === "refused") ? "refused" : null,
     // The rulings land with the store write, so its outcome retires every cell sent.
     retires: (_input, value, _subjects, cells) => {
-      const { previewOnly, writes } = value as DuctsApply.Res.Response;
+      const { previewOnly, writes } = nativeResponseSchema("ducts.apply").parse(value);
       return !previewOnly && writes.some((w) => w.kind === "store" && (w.outcome === "written" || w.outcome === "unchanged")) ? cells : [];
     } },
+};
+const actionByRoute: Partial<Record<Kind, Readonly<Record<string, typeof rulingsDoor>>>> = {
+  losses: { [ductsRoute]: rulingsDoor },
 };
 /** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
 const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "ducts.plan-assign-fan" } as const;
@@ -99,8 +102,7 @@ export function ductActionExecutors(
   deps: import("@pe/host/family-actions").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] ;
   } = {},
 ) {
-  const actionOf = (ctx: CommandContext, kind: Kind) =>
-    kind === "losses" && (ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle).key.route === ductsRoute ? rulingsDoor : action;
+  const actionOf = (kind: Kind, route: string) => actionByRoute[kind]?.[route] ?? action;
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
     // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
@@ -193,7 +195,7 @@ export function ductActionExecutors(
               } : selector,
               slots: flow.slots,
             });
-        const selected = actionOf(ctx, kind);
+        const selected = actionOf(kind, primary.key.route);
         const snapshot = await selected.snapshot(intent, read);
         const derived = await selected.derive({ flow, intent, read, readNative, snapshot, design, doc, fans,
           firm, pointer, deps, bridge, appliedAt });
@@ -211,7 +213,8 @@ export function ductActionExecutors(
         }, derivedRequest: p.input ,
       };
     }
-    const entry = actionOf(ctx, kind).entry;
+    const { key: asked } = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const entry = actionOf(kind, asked.route).entry;
     // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
     // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
     const key = phase === "apply" ? entry.key : entry.native;
@@ -239,7 +242,6 @@ export function ductActionExecutors(
         };
     }
     // D9: an apply retires only the cells its own route owns, under the route that executed it.
-    const { key: asked } = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
     const owned = (asked.route === fansRoute ? tools.fans : tools.ducts).work.editable;
     const paths = (phase === "apply" ? entry.retires(p.input, value, p.subjects, p.cells) : []).filter((path) => owned.some((pattern) => pattern[0] === path[0]));
     const retired = paths.length ? yield* execution.retireWork(asked, asked.route, paths) : undefined;

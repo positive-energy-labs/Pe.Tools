@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "vite-plus/test";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
-import { nativeFixture } from "../../../../fans/host/src/tests/fans-work-fixture.ts";
-import { closedFan, recordedTables } from "../../../../fans/host/src/tests/closed-fan.fixture.ts";
+import { nativeFixture } from "./fans-work-fixture.ts";
+import { closedFan, recordedTables } from "./closed-fan.fixture.ts";
 
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); });

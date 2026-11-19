@@ -72,7 +72,7 @@ export function fanWriteRequest(input: BuildCalcInput, context: FanWriteContext)
     ductsPricingData.shape.calcs.element.parse(sheet);
     // P-061, P-067: a complete claim carries a runtime symbol that only buildSheet sets and the mint checks, so a decoded sheet
     // or claim cannot pass. Mint only from the buildSheet above, in this process.
-    return { claim, ...mintWriteRequest(claim, sheet, input, context) };
+    return { claim, legs: sheet.legs, ...mintWriteRequest(claim, sheet, input, context) };
   } catch (error) {
     throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
   }
@@ -155,12 +155,14 @@ async function prepareLosses(p: DuctActionPreparation) {
             // A fitting write can use only a table already saved by /duct-systems.
             const cells = [...(doc.writeIntent.edit?.value?.cells ?? []), ...fanWriteCells(fans, snapshot)];
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-            const { claim, request, fittingRules } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
+            const { claim, legs, request, fittingRules } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
             const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot, fittingRules);
-            for (const fitting of scoped.fittings) {
-              const rule = fittingRules.get(fitting.id)!;
-              if (!fitting.table || snapshot.store?.rules?.[rule]?.table?.toUpperCase() !== fitting.table.toUpperCase())
-                throw refused(`Rule ${rule} uses table ${fitting.table}. Save it on /duct-systems before writing its fitting coefficients.`, "ducts.rule-unsaved");
+            const fittingIds = new Set(scoped.fittings.map((fitting) => fitting.id));
+            for (const { elementId, evidence } of Object.values(legs)) {
+              if (!fittingIds.has(elementId) || evidence.kind !== "coefficient") continue;
+              const { rule, table } = evidence;
+              if (snapshot.store?.rules?.[rule]?.table?.toUpperCase() !== table.toUpperCase())
+                throw refused(`Rule ${rule} uses table ${table}. Save it on /duct-systems before writing its fitting coefficients.`, "ducts.rule-unsaved");
             }
             const unwritten = unwrittenCells(scoped, cells, snapshot);
             if (unwritten.length)
