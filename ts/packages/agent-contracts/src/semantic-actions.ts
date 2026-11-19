@@ -418,7 +418,7 @@ const sheetNative = ["revit.detail.parameter-values", "ducts.snapshot.walk", "du
 export const sheetActions = {
   [SHEET_COMMANDS.plan]: {
     native: [...sheetNative, "ducts.apply.plan"],
-    says: "Plan the staged sheet writes without changing Revit: pass the route's Work handle { key, revision } as work. A route with parameter bindings plans each staged cell as a parameter write on its row's element (by UniqueId) and reads the value Revit holds now. /fans plans the staged duct loss writes (fitting coefficients, terminal and component drops, fan static, unit roles): stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent, and name rule cells in route:duct-systems writeIntent.cells to write those rules' fitting coefficients to elements; pass the other Work as readWorks. Report each write's outcome; nothing is committed.",
+    says: "Plan the staged sheet writes without changing Revit: pass the route's Work handle { key, revision } as work. A route with parameter bindings plans each staged cell as a parameter write on its row's element (by UniqueId) and reads the value Revit holds now. /fans plans the staged duct loss writes (fitting coefficients, terminal and component drops, fan static, unit roles): stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent, and name rule cells in route:duct-systems writeIntent.cells to write those rules' fitting coefficients to elements after saving their tables. Pass the other Work as readWorks. With the rule-owning route's own Work handle, plan storing its staged rule tables and ignore verdicts and removing a stored verdict staged for delete. This plan has no element writes. Report each write's outcome; nothing is committed.",
     needs: "project-document",
     effect: "query",
     input: z.strictObject({}),
@@ -426,7 +426,7 @@ export const sheetActions = {
   },
   [SHEET_COMMANDS.apply]: {
     native: [...sheetNative, "revit.apply.parameter-values", "ducts.apply"],
-    says: "Write the planned sheet values to Revit exactly as the plan showed and a person approved, in one transaction; a value Revit changed since the plan refuses. /fans also records the loss provenance and unit roles in Project Information; /duct-systems rule tables and verdicts are never written by it and stay staged.",
+    says: "Write the planned sheet values to Revit exactly as the plan showed and a person approved, in one transaction; a value Revit changed since the plan refuses. /fans also records the loss provenance and unit roles in Project Information. /duct-systems applies its staged rule tables and ignore verdicts, removes a stored verdict staged for delete, and writes nothing to elements.",
     needs: "project-document",
     effect: "command",
     input: z.strictObject({}),

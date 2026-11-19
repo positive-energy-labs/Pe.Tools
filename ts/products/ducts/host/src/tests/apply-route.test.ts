@@ -43,3 +43,7 @@ test("a /duct-systems apply still retires its own verdict, under its own route",
   const { key, calls } = await apply(both({} as never), "duct-systems");
   expect(calls).toEqual([[key, "duct-systems", [["assumptions", "open-end:101:1"]]]]);
 });
+
+test.each(["unregistered", "__proto__", "constructor"])("refuses an apply from unknown route %s", async route => {
+  await expect(apply(both({} as never), route)).rejects.toThrow(`Duct actions are unavailable on route "${route}"`);
+});

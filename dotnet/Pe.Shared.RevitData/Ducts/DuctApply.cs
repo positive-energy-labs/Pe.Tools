@@ -117,7 +117,7 @@ public sealed record DuctInstanceRecord(string? Table, string? Inputs, double Co
 public sealed record DuctDropRecord(double InWg, string? Source, DateTimeOffset AppliedAt);
 
 /// <summary>What Pe wrote on one terminal or unit: the design flow in cfm and where it came from.</summary>
-public sealed record DuctFlowRecord(double Cfm, string? Source, DateTimeOffset AppliedAt);
+public sealed record DuctFlowRecord(double Cfm, string? Source, DateTimeOffset AppliedAt, string? Parameter = null);
 
 /// <summary>
 ///     A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or

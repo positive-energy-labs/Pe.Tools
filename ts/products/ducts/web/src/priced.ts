@@ -17,9 +17,9 @@ const fittingsOf = (priced: Pick<Priced, "calcs">, key: string) => [
   ).values(),
 ];
 /** The table a rule's fittings are looked up under now: the staged one, else the calcs', else the rule's own. */
-export const tableOf = (priced: Pick<Priced, "calcs" | "edit">, key: string) =>
+export const tableOf = (priced: Pick<Priced, "calcs" | "effective">, key: string) =>
   (
-    priced.edit.rules[key]?.table ??
+    priced.effective.rules[key]?.table ??
     fittingsOf(priced, key).find((f) => f.table)?.table ??
     ruleByKey(key)?.table ??
     ""

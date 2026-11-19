@@ -810,7 +810,7 @@ public static class DuctSnapshots {
             diameter,
             width,
             height,
-            network ? null : Try(() => Math.Abs(c.Flow) > 1e-9 ? R(UnitUtils.ConvertFromInternalUnits(c.Flow, UnitTypeId.CubicFeetPerMinute)) : (double?)null),
+            network ? null : Try(() => (double?)ReportedConnectorFlow(c)),
             Try(() => c.Direction switch {
                 FlowDirectionType.In => "in",
                 FlowDirectionType.Out => "out",
@@ -823,6 +823,13 @@ public static class DuctSnapshots {
             frame is not null && shape is DuctShape.Rectangular or DuctShape.Oval ? V(frame.BasisX) : null,
             info?.IsPrimary,
             info?.IsSecondary);
+    }
+
+    private static double ReportedConnectorFlow(Connector c) {
+        var cfm = UnitUtils.ConvertFromInternalUnits(c.Flow, UnitTypeId.CubicFeetPerMinute);
+        var rounded = R(cfm);
+        // Heal needs a measured zero. A tiny nonzero flow keeps its sign and magnitude.
+        return rounded == 0 ? cfm : rounded;
     }
 
     private static DuctRef? ConnectedTo(Connector c) {

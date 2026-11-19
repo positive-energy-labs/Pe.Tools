@@ -6,7 +6,7 @@ import { withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 /**
- * An open end with no same-class open end this close is dangling and takes a cap (ruling 2026-10-20).
+ * An open end with no same-class open end this close is dangling and can be checked for a cap.
  * Still measured here, not from C#'s 36 in `near`: kaitpw 2026-10-29 dropped porting the 60 in search
  * (the heal box is the `healBoxIn` criterion); ducts LEDGER Owed "Model health, network stage".
  */
@@ -137,6 +137,9 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
       i.kind === "open-end" && i.connector != null ? [[`${i.elementId}:${i.connector}`, i.id]] : [],
     ),
   );
+  const wellConnected = new Map<string, boolean>();
+  for (const system of snapshot.systems)
+    wellConnected.set(system.name, !wellConnected.has(system.name) && system.isWellConnected === true);
   const tapped = new Set([
     ...tolerated.taps.map((t) => t.a),
     ...tolerated.inline.flatMap((x) => x.ports),
@@ -190,8 +193,7 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
       continue;
     }
     const near = nearest(x);
-    // Air passes an end Revit gives a flow: it is where the system's air leaves or enters, never a cap
-    const flow = x.c.flowCfm ?? 0;
+    const flow = x.c.flowCfm;
     const facing = facingOf.get(x.k);
     if (!near && facing) {
       say(
@@ -200,12 +202,22 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
       );
       continue;
     }
-    if (!near && flow > 0) {
-      say(x, `${named(x)} carries ${Math.round(flow)} cfm in Revit; a cap would block its air`);
+    if (!near && flow != null && flow !== 0) {
+      const cfm = Math.abs(flow);
+      say(x, `${named(x)} carries ${Math.round(cfm) || cfm} cfm in Revit; a cap would block its air`);
       continue;
     }
     if (!near) {
       if (straightDuct(x.e) || x.e.kind === "fitting") {
+        const system = x.e.systemName;
+        if (!system || wellConnected.get(system) !== true) {
+          say(x, system ? `flow unknown: Revit has no confirmed well-connected system for ${system}` : "flow unknown: this end has no Revit system");
+          continue;
+        }
+        if (flow !== 0) {
+          say(x, `flow unknown: Revit has no reading for this end on ${system}`);
+          continue;
+        }
         items.push({
           key: `cap:${x.k}`,
           kind: "cap",

@@ -1,6 +1,5 @@
 /** Lifted from `losses.ts` (ruleRow, ductRows, terminalRow, the implausible guard) and `equivalent-length.ts`; network-free: prices one leg from explicit facts and flows. */
 import { GridError, lookupBranchLoss, lookupGrid, type Grids } from "../loss-grid.ts";
-import type { ValueResolution } from "@pe/agent-contracts";
 import { friction, sectionOf } from "../loss-physics.ts";
 import { LOSS_RULES, ruleByKey, type FittingFacts, type Leg } from "../loss-rules.ts";
 import { ruleFlows, type LegFlows, type Node, type Segment } from "./fitting-facts.ts";
@@ -33,7 +32,7 @@ export type LegInput =
       inWg: number | null;
       /** Where the drop came from: typed, parameter, firm default (with version), catalog. */
       source: string;
-      resolvedSource: ValueResolution<number>["source"] | null;
+      isDefault?: boolean;
     };
 
 /** Why a fitting leg is not trusted: the lookup, the velocity and the flow behind it. */
@@ -64,7 +63,7 @@ export type LegSource =
       };
       notes: string[];
     }
-  | { kind: "drop"; source: string; resolvedSource: ValueResolution<number>["source"] | null };
+  | { kind: "drop" | "default"; source: string };
 
 export interface PricedLeg {
   kind: LegInput["kind"];
@@ -132,7 +131,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
       elementId: input.element.id,
       lossInWg: input.inWg,
       velocityFpm: null,
-      source: { kind: "drop", source: input.source, resolvedSource: input.resolvedSource },
+      source: { kind: input.isDefault ? "default" : "drop", source: input.source },
       unpriced: null,
     };
   }
@@ -144,7 +143,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
       elementId: node.id,
       lossInWg: input.statedInWg,
       velocityFpm: null,
-      source: { kind: "drop", source: "typed", resolvedSource: null },
+      source: { kind: "drop", source: "typed" },
       unpriced: null,
     };
   if (facts.inputError) return unpriced(input, facts.inputError);

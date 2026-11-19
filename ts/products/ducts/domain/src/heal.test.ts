@@ -3,7 +3,7 @@ import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
 
 import { HEAL_JOIN_GAP_IN, healPlan, healRequestGroup, proximityId } from "./heal.ts";
-import { groupOf, snapshotOf } from "./test-snapshot.ts";
+import { groupOf, snapshotOf, systemOf } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
 import { TEST_SLOTS } from "./test-inputs.ts";
 
@@ -21,6 +21,7 @@ const conn = (index: number, point: number[], facing?: number[], d = 6): Connect
   diameterIn: d,
   direction: "bidirectional",
   classification: "SupplyAir",
+  flowCfm: 0,
   connectedTo: null,
   ...(facing ? { facing } : {}),
 });
@@ -99,6 +100,7 @@ const snap = (segments: Segment[], nodes: Node[] = []): DuctSnapshot => {
     nodes,
     segments,
     issues,
+    systems: [systemOf(1, { name: "SA 1", classification: "SupplyAir", isWellConnected: true })],
     slots: { ...TEST_SLOTS },
   });
 };
@@ -111,6 +113,27 @@ it("caps a dangling duct end, and only that end", () => {
   const caps = items(s).filter((i) => i.kind === "cap");
   expect(caps.map((i) => i.end).sort()).toEqual(["10:0", "11:1"]);
   expect(plan.covered.has("open-end:10:0")).toBe(true);
+});
+
+it("withholds caps when two well-connected systems have the same name", () => {
+  const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
+  s.systems.push({ ...s.systems[0]!, id: 2 });
+  expect(items(s)).toEqual([]);
+  expect(healPlan(s).hard.get("open-end:10:1")?.note).toContain("flow unknown");
+});
+
+it.each([
+  { flowCfm: null, connected: true },
+  { flowCfm: undefined, connected: true },
+  { flowCfm: 0, connected: false },
+  { flowCfm: 0, connected: null },
+  { flowCfm: 0, connected: undefined },
+])("requires a measured zero and a confirmed well-connected system (%j)", ({ flowCfm, connected }) => {
+  const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
+  s.segments[0]!.connectors[1]!.flowCfm = flowCfm;
+  s.systems = connected === undefined ? [] : s.systems.map(system => ({ ...system, isWellConnected: connected }));
+  expect(items(s).map(item => item.end)).not.toContain("10:1");
+  expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(/flow unknown.*Fix it in Revit/);
 });
 
 it("never pairs two ends Revit already connects through a bend; each is a cap", () => {

@@ -13,8 +13,10 @@ export const REVIT_FLOW_SLOT = "revit:Flow";
 export function slotFlowOf(node: Node, slot: string): { slot: string; cfm: number | null } {
   // Revit's own terminal flow is a slot a project may confirm, never a silent per-terminal fallback (history 6).
   if (slot === REVIT_FLOW_SLOT) {
-    const stated = node.connectors.flatMap((c) => (c.flowCfm == null ? [] : [c.flowCfm])); // none stated is absent, not zero
-    return { slot, cfm: stated.length ? stated.reduce((sum, cfm) => sum + cfm, 0) : null };
+    // Null means the connector was unreadable. A measured zero participates in the sum.
+    const stated = node.connectors.flatMap((c) => (c.flowCfm == null ? [] : [c.flowCfm]));
+    const sum = stated.reduce((total, cfm) => total + cfm, 0);
+    return { slot, cfm: stated.length ? Number(sum.toFixed(3)) + 0 : null };
   }
   const named = node.flowParameter ?? null;
   const candidate = node.facts.find(f => f.key === `slot:${slot}`);

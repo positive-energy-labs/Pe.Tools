@@ -13,7 +13,10 @@ test("navigation fixture reaches production pricing with three systems, long lis
   const value = pricingValue(snapshot, publishedCalcs(snapshot, grids, EMPTY_CATALOGS, designOf({}), FIRM_SEED, 0), designOf({}));
   const { survey: priced, analysis, calcs } = value;
   // The read's own contract decodes what the body computes: every calc, the survey and the analysis.
-  expect(pricingWire(value).calcs).toHaveLength(calcs.length);
+  const wire = pricingWire(value);
+  expect(wire.calcs).toHaveLength(calcs.length);
+  expect(wire.survey).not.toHaveProperty("edit");
+  expect(wire.survey).toHaveProperty("effective.parameters.terminalFlow", snapshot.slots.terminalFlow);
   // Every roster fan gets its own calc; none is a group's.
   expect(new Set(calcs.map((calc) => `${calc.fan.unitId}:${calc.fan.portIndex}`)).size).toBe(calcs.length);
   expect(analysis.systems.map((system) => system.name).sort()).toEqual([

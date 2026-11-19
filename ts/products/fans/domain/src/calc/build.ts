@@ -67,7 +67,7 @@ import {
   type Walk,
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
-import { FAN_INPUTS, resolveValue, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
+import { FAN_INPUTS, criteriaCellOf, resolveValue, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
 import { coverageOf } from "@pe/ducts-domain/calc/coverage";
 import { observed, PROPOSED_KEY, sourced, terminalCfmOf } from "@pe/ducts-domain/calc/inputs";
 import { sectionOf } from "@pe/ducts-domain/loss-physics";
@@ -132,6 +132,7 @@ const PENDING: LegEvidence = { kind: "unpriced", issueId: "" };
 const basisOf = (snapshot: CalcSnapshot, rest: object) =>
   `${CALC_ENGINE_VERSION}:${fnv(JSON.stringify([snapshot.document.title, snapshot.document.readAt, CALC_ENGINE_VERSION, rest]))}`;
 const round = (n: number) => +n.toFixed(6);
+const terminalDropCriterion = criteriaCellOf("terminalDropInWg");
 
 /** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
 // A staged value names its tier (and revision); an observed one its tier and the parameter or key its ref ends in.
@@ -173,7 +174,7 @@ function lossSourceOf(src: NonNullable<PricedLeg["source"]>, note = ""): Leg["lo
           kind: "rule",
           ref: `${src.rule} ${src.table} ${src.inputs.res}=${round(src.coefficient)}${note}${src.notes.length ? `; ${src.notes.join("; ")}` : ""}`,
         }
-      : { kind: src.resolvedSource === "default" || src.resolvedSource === "firm" || src.resolvedSource === "project" ? "default" : "drop", ref: src.source };
+      : { kind: src.kind, ref: src.source };
 }
 
 type ProposedPath = NonNullable<FittingPricing["proposed"]>;
@@ -466,23 +467,26 @@ class Pricer {
     const { grids } = this.input;
     const st = w.states[s]!;
     const e = st.el;
-    const drop = (inWg: number | null, source: string, resolvedSource: Resolved<unknown>["source"] | null) => {
-      const p = priceLeg({ kind: "drop", element: e as Node, cfm, inWg, source, resolvedSource }, grids);
+    const drop = (inWg: number | null, source: string, isDefault = false) => {
+      const p = priceLeg({ kind: "drop", element: e as Node, cfm, inWg, source, isDefault }, grids);
       return { p, ids: this.take(p, e.id).ids };
     };
     const stated = this.input.inputs.components[String(e.id)]?.drop;
-    if (stated && stated.value != null) return drop(stated.value, provenance(stated), stated.source);
+    if (stated && stated.value != null) return drop(stated.value, provenance(stated));
     // A refused drop (invalid) withholds the leg with its ref unless it is a model placeholder a loss rule prices.
     // An invalid winning layer blocks fallback (work-value.ts), so a person's or Pea's unreadable drop never falls to a rule (P-054).
     if (stated?.status === "invalid" && stated.source !== "model")
-      return drop(null, `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`, stated.source);
+      return drop(null, `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`);
     if (isSegment(e)) return this.duct(w, flows, side, s, out, cfm);
     const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
     if (e.kind === "terminal") {
-      const t = this.input.inputs.terminals[String(e.id)];
-      return t ? drop(t.drop.value, provenance(t.drop), t.drop.source) : drop(null, "terminal not in inputs", null);
+      const resolved = this.input.inputs.terminals[String(e.id)]?.drop;
+      if (!resolved) return drop(null, "terminal not in inputs");
+      // A catalogue and the terminal-drop criterion can come from the same settings tier.
+      const isDefault = resolved.ref === `${resolved.source}:${terminalDropCriterion}`;
+      return drop(resolved.value, provenance(resolved), isDefault);
     }
-    if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop", null);
+    if (e.kind === "equipment") return drop(null, "inline equipment; no typed drop");
     // What is left is the model's refused family placeholder (Chadds' 302 dampers at 1.0).
     const placeholder = stated && stated.value == null ? stated.ref : undefined;
     if (isTap(e)) return this.tap(w, flows, side, s, cfm);
@@ -504,7 +508,7 @@ class Pricer {
     const facts = fittingFacts({ fitting: e, inlet, outlet, converging });
     if (e.partType === "Tee" && !tee) delete facts.junction;
     if (placeholder && !LOSS_RULES.some((r) => r.when(facts, ruleFlows(legFlows))))
-      return drop(null, `${placeholder}; type the real drop`, stated?.source ?? null);
+      return drop(null, `${placeholder}; type the real drop`);
     const p = this.fit({ kind: "fitting", fitting: e, facts, flows: legFlows, leg: "C" });
     return { p, ids: this.take(p, e.id).ids };
   }
@@ -540,7 +544,6 @@ class Pricer {
       return priceLeg({
         kind: "drop", element: input.fitting,
         cfm: input.flows.through, inWg: stated.value,
-        resolvedSource: stated.source,
         source: `typed drop from ${input.fitting.id} (Cs refused: ${p.unpriced}); ${stated.value == null
           ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
           : provenance(stated)}`,
@@ -775,7 +778,6 @@ class Pricer {
             source: {
               kind: "drop",
               source: "merge boundary; branch loss unavailable without receiving-stream flow",
-              resolvedSource: null,
             },
             unpriced: null,
           },

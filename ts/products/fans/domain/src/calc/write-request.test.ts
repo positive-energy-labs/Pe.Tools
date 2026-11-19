@@ -184,7 +184,7 @@ it("mints fitting values without duct-systems rulings", () => {
   expect(scoped.store?.instances).toEqual({});
 });
 
-it("writes exactly the scoped rule's mapped fittings and preserves stored rules", () => {
+it("writes exactly the scoped rule's mapped fittings and omits duct-systems rulings", () => {
   const snapshot = synthetic();
   const storedRules = { other: { table: "CD3-21" } };
   snapshot.store = { version: 2, workRevision: 3, rules: storedRules, instances: {}, terminals: {}, terminalFlows: {}, equipmentFlows: {}, verdicts: {}, roles: {} };
@@ -197,8 +197,8 @@ it("writes exactly the scoped rule's mapped fittings and preserves stored rules"
   const scoped = scopeApplyRequest(request, snapshot.store, [["rules", "elbow-1d-gt10"]], snapshot, rules);
   expect(scoped.fittings).toEqual([expect.objectContaining({ id: 2 })]);
   expect(Object.keys(scoped.store?.instances ?? {})).toEqual(["2"]);
-  expect(scoped.store?.rules).toBe(storedRules);
-  expect(scopeApplyRequest(request, snapshot.store, [], snapshot, rules).store?.rules).toBe(storedRules);
+  expect(scoped.store).not.toHaveProperty("rules");
+  expect(scoped.store).not.toHaveProperty("verdicts");
 });
 
 // Compile-only witness: explicit cell scope is mandatory, including when empty.
@@ -483,6 +483,8 @@ it("never derives terminal or equipment flow; only Work or run can write", () =>
   expect(request.equipmentFlows.map((f) => f.id)).toEqual([100]);
   expect(request.terminalFlows[0]!.source).toContain("Work");
   expect(request.equipmentFlows[0]!.source).toContain("run");
+  expect(request.store.terminalFlows?.["3"]?.parameter).toBe(snapshot.slots.terminalFlow);
+  expect(request.store.equipmentFlows?.["100"]?.parameter).toBe("Fan Flow");
 });
 it("includes the domain accessory writes and clips every noncohort row to the sheet walk", () => {
   const p = prepared(component()),

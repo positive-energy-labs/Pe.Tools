@@ -72,7 +72,7 @@ export function fanWriteRequest(input: BuildCalcInput, context: FanWriteContext)
     ductsPricingData.shape.calcs.element.parse(sheet);
     // P-061, P-067: a complete claim carries a runtime symbol that only buildSheet sets and the mint checks, so a decoded sheet
     // or claim cannot pass. Mint only from the buildSheet above, in this process.
-    return { claim, ...mintWriteRequest(claim, sheet, input, context) };
+    return { claim, legs: sheet.legs, ...mintWriteRequest(claim, sheet, input, context) };
   } catch (error) {
     throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
   }
@@ -107,7 +107,8 @@ export function unwrittenReason(staged: ReturnType<typeof stagedValues>, [segmen
 
 /**
  * What a fans apply sends of the store's rulings: its own roles only (D9, field map invariant 8). A
- * /duct-systems verdict is priced while staged and lands only from /duct-systems, so none is sent or deleted here.
+ * /duct-systems verdict is priced while staged and lands only from the /duct-systems door (`rulingsDoor`,
+ * `@pe/ducts-host/action-runtime`), so none is sent or deleted here.
  */
 export function fanRulings(design: DuctActionPreparation["design"], snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store">, appliedAt: string) {
   const { roles } = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt, snapshot);
@@ -151,11 +152,18 @@ async function prepareLosses(p: DuctActionPreparation) {
             for (const { elementId: unitId } of peers)
               peerClaims.set(unitId, buildCalc((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
             // Out-of-band rule evidence selects only fittings whose rule cells are in scope.
-            // The rule key never rides the wire, and the rule itself stays staged in /duct-systems (D9).
+            // A fitting write can use only a table already saved by /duct-systems.
             const cells = [...(doc.writeIntent.edit?.value?.cells ?? []), ...fanWriteCells(fans, snapshot)];
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-            const { claim, request, fittingRules } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
+            const { claim, legs, request, fittingRules } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
             const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot, fittingRules);
+            const fittingIds = new Set(scoped.fittings.map((fitting) => fitting.id));
+            for (const { elementId, evidence } of Object.values(legs)) {
+              if (!fittingIds.has(elementId) || evidence.kind !== "coefficient") continue;
+              const { rule, table } = evidence;
+              if (snapshot.store?.rules?.[rule]?.table?.toUpperCase() !== table.toUpperCase())
+                throw refused(`Rule ${rule} uses table ${table}. Save it on /duct-systems before writing its fitting coefficients.`, "ducts.rule-unsaved");
+            }
             const unwritten = unwrittenCells(scoped, cells, snapshot);
             if (unwritten.length)
               throw refused(

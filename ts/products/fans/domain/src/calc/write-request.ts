@@ -210,10 +210,10 @@ export function mintWriteRequest(
         terminals.map((t) => [String(t.id), { inWg: t.inWg, source: t.source, appliedAt }]),
       ),
       terminalFlows: Object.fromEntries(
-        terminalFlows.map((f) => [String(f.id), { cfm: f.cfm, source: f.source, appliedAt }]),
+        terminalFlows.map((f) => [String(f.id), { cfm: f.cfm, source: f.source, appliedAt, parameter: f.slot }]),
       ),
       equipmentFlows: Object.fromEntries(
-        equipmentFlows.map((f) => [String(f.id), { cfm: f.cfm, source: f.source, appliedAt }]),
+        equipmentFlows.map((f) => [String(f.id), { cfm: f.cfm, source: f.source, appliedAt, parameter: f.slot }]),
       ),
       ...context.rulings,
     },

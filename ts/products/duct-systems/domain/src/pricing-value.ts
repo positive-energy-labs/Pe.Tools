@@ -44,7 +44,7 @@ export function pricingValue(
       equipmentFlows: surveyed.equipmentFlows,
       roles: surveyed.roles,
       findings: surveyed.findings,
-      edit: {
+      effective: {
         ...edit,
         designFriction: serveSetting(
           settings,

@@ -210,8 +210,10 @@ public static class DuctApplier {
         foreach (var e in Changes("store-rule", stored?.Rules, next.Rules, v => v.Table ?? "none", _ => null, k => k)) yield return e;
         foreach (var e in Changes("store-instance", stored?.Instances, next.Instances, v => $"{v.Table ?? "no table"} c={v.Coefficient:0.#####}", k => k, _ => null)) yield return e;
         foreach (var e in Changes("store-drop", stored?.Terminals, next.Terminals, v => $"{v.InWg:0.#####} in-wg ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
-        foreach (var e in Changes("store-terminal-flow", stored?.TerminalFlows, next.TerminalFlows, v => $"{v.Cfm:0.###} cfm ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
-        foreach (var e in Changes("store-equipment-flow", stored?.EquipmentFlows, next.EquipmentFlows, v => $"{v.Cfm:0.###} cfm ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
+        foreach (var e in Changes("store-terminal-flow", stored?.TerminalFlows, next.TerminalFlows, FlowReceipt, k => k, _ => null)) yield return e;
+        foreach (var e in Changes("store-equipment-flow", stored?.EquipmentFlows, next.EquipmentFlows, FlowReceipt, k => k, _ => null)) yield return e;
+
+        static string FlowReceipt(DuctFlowRecord v) => $"{v.Cfm:0.###} cfm to {v.Parameter ?? "unknown parameter"} ({v.Source ?? "no source"})";
 
         IEnumerable<Item> Changes<TKey, TValue>(string kind, IReadOnlyDictionary<TKey, TValue>? had, IReadOnlyDictionary<TKey, TValue> will,
             Func<TValue, string> show, Func<TKey, long?> id, Func<TKey, string?> key) where TKey : notnull {
@@ -237,8 +239,8 @@ public static class DuctApplier {
             .Select(kv => $"{map} {kv.Key}");
         var unbacked = Unbacked("instances", stored?.Instances, asked.Instances, (request.Fittings ?? []).Select(w => w.Id), v => $"{v.Table}|{v.Inputs}|{v.Coefficient:R}")
             .Concat(Unbacked("terminals", stored?.Terminals, asked.Terminals, (request.Terminals ?? []).Concat(request.Components ?? []).Select(w => w.Id), v => $"{v.InWg:R}|{v.Source}"))
-            .Concat(Unbacked("terminalFlows", stored?.TerminalFlows, asked.TerminalFlows, (request.TerminalFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}"))
-            .Concat(Unbacked("equipmentFlows", stored?.EquipmentFlows, asked.EquipmentFlows, (request.EquipmentFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}"))
+            .Concat(Unbacked("terminalFlows", stored?.TerminalFlows, asked.TerminalFlows, (request.TerminalFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}|{v.Parameter}"))
+            .Concat(Unbacked("equipmentFlows", stored?.EquipmentFlows, asked.EquipmentFlows, (request.EquipmentFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}|{v.Parameter}"))
             .ToList();
         return unbacked.Count == 0 ? null
             : $"the request authors provenance with no write of its own ({string.Join(", ", unbacked)}); provenance records only writes that land, so stage the write or delete the entry";
@@ -602,17 +604,15 @@ public static class DuctApplier {
         bool Lands(string kind, long id) => items.Any(i => i.Kind == kind && i.Id == id && i.Outcome is "planned" or "unchanged" or "written");
         var rules = DuctLossStore.Overlay(stored?.Rules, asked.Rules, deletes.Rules, StringComparer.Ordinal);
         var instances = DuctLossStore.Overlay(stored?.Instances, null, deletes.Instances);
-        foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id))) {
+        foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id)))
             instances[w.Id] = new DuctInstanceRecord(w.Table, w.Inputs, w.Coefficient, now);
-            if (w.RuleKey is { Length: > 0 } key && !rules.ContainsKey(key)) rules[key] = new DuctRuleChoice(w.Table);
-        }
         var drops = DuctLossStore.Overlay(stored?.Terminals, null, deletes.Terminals);
         foreach (var w in (request.Terminals ?? []).Where(w => Lands("terminal", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
         foreach (var w in (request.Components ?? []).Where(w => Lands("component", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
         var terminalFlows = DuctLossStore.Overlay(stored?.TerminalFlows, null, deletes.TerminalFlows);
-        foreach (var w in (request.TerminalFlows ?? []).Where(w => Lands("terminal-flow", w.Id))) terminalFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now);
+        foreach (var w in (request.TerminalFlows ?? []).Where(w => Lands("terminal-flow", w.Id))) terminalFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now, w.Slot);
         var equipmentFlows = DuctLossStore.Overlay(stored?.EquipmentFlows, null, deletes.EquipmentFlows);
-        foreach (var w in (request.EquipmentFlows ?? []).Where(w => Lands("equipment-flow", w.Id))) equipmentFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now);
+        foreach (var w in (request.EquipmentFlows ?? []).Where(w => Lands("equipment-flow", w.Id))) equipmentFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now, slots.FanFlow);
         var unknown = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(stored?.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>());
         foreach (var kv in asked.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>()) unknown[kv.Key] = kv.Value;
         return new DuctLossStore {

@@ -413,7 +413,7 @@ function Content({
         {run ? (
           <RunDetail
             run={run}
-            designRate={priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
+            designRate={priced?.effective.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE}
             nameOf={nameOf}
           />
         ) : null}

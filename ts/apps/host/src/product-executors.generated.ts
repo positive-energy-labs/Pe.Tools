@@ -11,5 +11,5 @@ export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyAct
   for (const [key, executor] of Object.entries(group0(bridge, deps))) { if (result[key]) throw Error(`Duplicate product executor ${key}`); result[key] = executor; }
   for (const [key, executor] of Object.entries(group1(bridge))) { if (result[key]) throw Error(`Duplicate product executor ${key}`); result[key] = executor; }
   for (const [key, executor] of Object.entries(group2(bridge, deps))) { if (result[key]) throw Error(`Duplicate product executor ${key}`); result[key] = executor; }
-  return { executors: result, sheetRoutes: {"fans":"losses"} as Readonly<Record<string, string>> };
+  return { executors: result, sheetRoutes: {"duct-systems":"losses","fans":"losses"} as Readonly<Record<string, string>> };
 }

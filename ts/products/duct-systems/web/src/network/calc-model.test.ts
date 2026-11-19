@@ -197,15 +197,9 @@ test("fanless: snapshot elements and native health survive with no number and on
       .map((n) => n.id)
       .sort((a, b) => a! - b!),
   ).toEqual([11, 12, 13, 20, 30, 99]);
-  expect(healPlan(snapshot).groups[0]!.items).toContainEqual({
-    key: "cap:99:0",
-    kind: "cap",
-    how: "cap",
-    end: "99:0",
-    gapIn: 0,
-    ids: [99],
-    covers: ["open:99:0"],
-  });
+  const heal = healPlan(snapshot);
+  expect(heal.groups.flatMap(group => group.items).some(item => item.end === "99:0")).toBe(false);
+  expect(heal.hard.get("open:99:0")?.note).toContain("flow unknown");
 });
 
 test("a blocked sheet keeps known arithmetic separate and retains branches no sheet reaches", () => {

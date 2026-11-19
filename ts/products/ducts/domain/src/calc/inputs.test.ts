@@ -10,9 +10,9 @@ const terminal = (drop: object = { catalogDropInWg: 0.5 }, facts: object[] = [{ 
   uniqueId: uid, id: 1, kind: "terminal", flowParameter: "PE_M_Grd_AirFlow", facts, connectors: [], terminalDrop: drop,
 });
 const unit = { uniqueId: uid.replace(/1$/, "2"), id: 2, kind: "equipment", family: "F", type: "T", name: "RTU", facts: [{ key: "fanFlow", value: 900 }], connectors: [{}, {}, {}] };
-const snapshotOf = (node: object, slots: object = { ...TEST_SLOTS, terminalFlow: "PE_M_Grd_AirFlow", terminalDrop: "PE_Drop" }, store?: object) =>
+const snapshotOf = (node: object, slots: object = { ...TEST_SLOTS, terminalFlow: "PE_M_Grd_AirFlow", terminalDrop: "PE_Drop", fanFlow: "Design Flow" }, store?: object) =>
   ({ nodes: [node, unit], segments: [], slots, store }) as never;
-const store = { terminalFlows: { "1": { cfm: 150 } }, terminals: { "1": { inWg: 0.2 } }, equipmentFlows: { "2": { cfm: 800 } } };
+const store = { terminalFlows: { "1": { cfm: 150, parameter: "PE_M_Grd_AirFlow" } }, terminals: { "1": { inWg: 0.2 } }, equipmentFlows: { "2": { cfm: 800, parameter: "Design Flow" } } };
 const drift = (snapshot: never, segment: string, id: number): string | null =>
   (inputs as unknown as { receiptDrift: (s: never, segment: string, id: number) => string | null }).receiptDrift(snapshot, segment, id);
 
@@ -26,7 +26,7 @@ it("w4: the live Revit parameter is the value; a receipt that disagrees is drift
   expect(drift(snapshot, "terminalDrops", 1)).toBe("Changed in Revit since Pe wrote 0.2 in-wg");
   expect(drift(snapshot, "equipmentFlows", 2)).toBe("Changed in Revit since Pe wrote 800 cfm");
   // An agreeing receipt and an element Pe never wrote are silent.
-  expect(drift(snapshotOf(terminal(), undefined, { terminalFlows: { "1": { cfm: 200 } } }), "flows", 1)).toBeNull();
+  expect(drift(snapshotOf(terminal(), undefined, { terminalFlows: { "1": { cfm: 200, parameter: "PE_M_Grd_AirFlow" } } }), "flows", 1)).toBeNull();
   expect(drift(snapshotOf(terminal()), "flows", 1)).toBeNull();
 });
 
@@ -43,9 +43,9 @@ it("D3: a receipt whose parameter no longer reads is missing, never the stored n
 
 it("a written zero is a value: the reader's 0 resolves 0 from the model with no drift, and an absent parameter is still missing", () => {
   // The reader's real shape: a parameter that reads 0 is a `0` fact; an absent one is a `null` fact or no drop.
-  const zeros = { terminalFlows: { "1": { cfm: 0 } }, terminals: { "1": { inWg: 0 } }, equipmentFlows: { "2": { cfm: 0 } } };
+  const zeros = { terminalFlows: { "1": { cfm: 0, parameter: "PE_M_Grd_AirFlow" } }, terminals: { "1": { inWg: 0 } }, equipmentFlows: { "2": { cfm: 0, parameter: "Design Flow" } } };
   const zeroUnit = { ...unit, facts: [{ key: "fanFlow", value: 0 }] };
-  const read = { nodes: [terminal({ catalogDropInWg: 0 }, [{ key: "flow", value: 0 }]), zeroUnit], segments: [], slots: { ...TEST_SLOTS, terminalFlow: "PE_M_Grd_AirFlow", terminalDrop: "PE_Drop" }, store: zeros } as never;
+  const read = { nodes: [terminal({ catalogDropInWg: 0 }, [{ key: "flow", value: 0 }]), zeroUnit], segments: [], slots: { ...TEST_SLOTS, terminalFlow: "PE_M_Grd_AirFlow", terminalDrop: "PE_Drop", fanFlow: "Design Flow" }, store: zeros } as never;
   const r = resolveInputs({ snapshot: read, firm: TEST_FIRM });
   for (const value of [r.terminals["1"]!.cfm, r.terminals["1"]!.drop, r.units["2"]!.cfm])
     expect(value).toMatchObject({ status: "valid", value: 0, source: "model" });
@@ -61,6 +61,38 @@ it("a written zero is a value: the reader's 0 resolves 0 from the model with no 
   expect(gone.cfm.status).toBe("missing");
   expect(gone.drop.status).toBe("missing");
   expect(drift(absent, "terminalDrops", 1)).toBe("Pe wrote 0 in-wg to PE_Drop, which no longer reads");
+});
+
+it.each([undefined, "Old Airflow"])("ignores a terminal and unit receipt whose parameter is %s", parameter => {
+  const slots = { ...TEST_SLOTS, terminalFlow: "PE_M_Grd_AirFlow", fanFlow: "Design Flow" };
+  const read = {
+    nodes: [terminal({}, [{ key: "flow", value: 0 }]), { ...unit, facts: [{ key: "fanFlow", value: 0 }] }],
+    segments: [],
+    slots,
+    store: { slots, terminalFlows: { "1": { cfm: 150, parameter } }, equipmentFlows: { "2": { cfm: 800, parameter } } },
+  } as never;
+  const r = resolveInputs({ snapshot: read, firm: TEST_FIRM });
+  expect(r.terminals["1"]!.cfm).toMatchObject({ status: "missing", value: null });
+  expect(r.units["2"]!.cfm).toMatchObject({ status: "missing", value: null });
+  expect(drift(read, "flows", 1)).toBeNull();
+  expect(drift(read, "equipmentFlows", 2)).toBeNull();
+});
+
+it("compares Revit Flow receipts at the connector's three-place precision", () => {
+  const node = { ...terminal(), flowParameter: "revit:Flow", connectors: [{ flowCfm: 150.123 }] };
+  const slots = { ...TEST_SLOTS, terminalFlow: "revit:Flow" };
+  const receipt = (cfm: number) => ({ terminalFlows: { "1": { cfm, parameter: slots.terminalFlow } } });
+  expect(drift(snapshotOf(node, slots, receipt(150.1234)), "flows", 1)).toBeNull();
+  expect(drift(snapshotOf(node, slots, receipt(150.1236)), "flows", 1)).toBe("Changed in Revit since Pe wrote 150.1236 cfm");
+});
+
+it.each([0, 0.00004, -0.00004])("treats Revit Flow %s cfm as zero only for a matching receipt", flowCfm => {
+  const node = { ...terminal(), flowParameter: "revit:Flow", connectors: [{ flowCfm }] };
+  const slots = { ...TEST_SLOTS, terminalFlow: "revit:Flow" };
+  const store = { terminalFlows: { "1": { cfm: 0, parameter: slots.terminalFlow } } };
+  const read = (snapshot: never) => resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.cfm;
+  expect(read(snapshotOf(node, slots, store))).toMatchObject({ status: "valid", value: 0, source: "model" });
+  expect(read(snapshotOf(node, slots))).toMatchObject({ status: "missing", value: null });
 });
 
 it("a receipt agrees with its parameter as the reader rounds it (4 places): no drift on an untouched model", () => {

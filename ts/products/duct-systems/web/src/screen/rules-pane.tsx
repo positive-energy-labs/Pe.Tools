@@ -82,7 +82,7 @@ export const RulesTree = memo(function RulesTree({
     if (focus && ruleByKey(focus) && !ids.has(focus)) ids.set(focus, new Set());
     const overrides = [
       ...new Set([
-        ...Object.keys(priced.edit.componentDrops).map(key => workElementId(snapshot, key)),
+        ...Object.keys(priced.effective.componentDrops).map(key => workElementId(snapshot, key)),
         // A restored selection lands on its fitting's drop even where no fan calc reaches it yet.
         ...(landing ? [landing.id] : []),
       ]),
@@ -134,7 +134,7 @@ export const RulesTree = memo(function RulesTree({
           at.ids.add(row.id);
           byFamily.set(key, at);
         }
-    for (const family of Object.keys(priced.edit.ruleAssignments))
+    for (const family of Object.keys(priced.effective.ruleAssignments))
       if (!byFamily.has(family)) byFamily.set(family, { family, ids: new Set() });
     return [...byFamily.values()].sort((a, b) => b.ids.size - a.ids.size);
   }, [priced, groupOf, groups, wide]);

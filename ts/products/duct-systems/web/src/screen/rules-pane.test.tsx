@@ -31,7 +31,7 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
   const priced = {
     snapshot,
     calcs: [calc],
-    edit: { componentDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 30)!)]: {} }, ruleAssignments: {} },
+    effective: { componentDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 30)!)]: {} }, ruleAssignments: {} },
   } as unknown as Priced;
   render(
     <RulesTree

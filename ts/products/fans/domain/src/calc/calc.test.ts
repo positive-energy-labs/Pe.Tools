@@ -182,10 +182,19 @@ it("W5: seed terminal drops are defaults while Work drops remain drops", () => {
   for (const source of ["firm", "project"] as const) {
     const drop = inputs.terminals["6"]!.drop;
     if (drop.status !== "valid") throw Error("expected seed terminal drop");
-    inputs.terminals["6"]!.drop = { ...drop, source };
+    inputs.terminals["6"]!.drop = { ...drop, source, ref: `${source}:terminalDropInWg` };
     const tier = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
     expect(Object.values(tier.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "default", ref: `${source}:seed` });
   }
+});
+
+it.each(["firm", "project"] as const)("shows a %s catalogue terminal drop as a drop", source => {
+  const inputs = inputsFor(network, { endCfm: { 6: 200, 8: 100, 10: 300 } });
+  inputs.terminals["6"]!.drop = {
+    ...inputs.terminals["6"]!.drop, status: "valid", value: 0.08, source, ref: `${source}:6/Grille-6`, version: null,
+  };
+  const sheet = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
+  expect(Object.values(sheet.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "drop", ref: `${source}:Grille-6` });
 });
 
 it("a complete sheet: required ESP = worst supply + worst return + allowances", () => {
@@ -854,13 +863,13 @@ it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053:
   expect(shares(staged, inputsFor(staged, { drops: { 2: 0 }, endCfm: { 200: 0 } }))).toEqual([0, 300]);
   // After the apply and retirement: the parameter reads 0 and the store holds the receipt. Nothing was edited.
   const retired = build(fact(0));
-  const units = resolveInputs({ snapshot: { ...retired, store: storeOf({ equipmentFlows: { "200": { cfm: 0, appliedAt: "t" } } }) }, firm: TEST_FIRM }).units;
+  const units = resolveInputs({ snapshot: { ...retired, store: storeOf({ equipmentFlows: { "200": { cfm: 0, appliedAt: "t", parameter: retired.slots.fanFlow } } }) }, firm: TEST_FIRM }).units;
   expect(units["200"]!.cfm).toMatchObject({ value: 0, source: "model" });
   expect(shares(retired, { ...inputsFor(retired, { drops: { 2: 0 } }), units })).toEqual([0, 300]);
   // P29: the priced fan's own written 0 is its side-stream budget, not the ends' sum.
   const zero = build([]);
   zero.nodes.find((n) => n.id === 100)!.facts = fact(0);
-  zero.store = storeOf({ equipmentFlows: { "100": { cfm: 0, appliedAt: "t" } } });
+  zero.store = storeOf({ equipmentFlows: { "100": { cfm: 0, appliedAt: "t", parameter: zero.slots.fanFlow } } });
   const own = inputsFor(zero, { roles: { 100: "fan" }, drops: { 2: 0 } });
   expect(own.units["100"]!.cfm).toMatchObject({ value: 0, source: "model" });
   const priced = buildCalc({ snapshot: zero, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)], grids, inputs: own });
