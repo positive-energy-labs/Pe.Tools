@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import type { SceneSection } from "@pe/agent-contracts";
+import { routeAddress, type SceneSection } from "@pe/agent-contracts";
 import { SectionEditorController } from "./section-editor-controller";
 import { emptyCuts } from "./cuts";
 
@@ -53,6 +53,44 @@ test("P3-C cancel, lost pointer, unchanged and invalid release make no Page entr
   controller.begin({ kind: "cuts", cuts });
   expect(controller.read()?.refusal).toMatch(/cross/);
   controller.release();
+  expect(commit).not.toHaveBeenCalled();
+});
+
+test("release rounds a full cut for the share link after previewing its exact points", () => {
+  const { controller, commit } = fixture();
+  const cuts = emptyCuts();
+  cuts.top.closed = true;
+  cuts.top.polyline = Array.from({ length: 56 }, (_, i) => [
+    1250.123456789 + 20 * Math.cos((i * 2 * Math.PI) / 56),
+    2400.987654321 + 20 * Math.sin((i * 2 * Math.PI) / 56),
+  ]);
+  const section = { kind: "cuts" as const, cuts };
+  controller.begin(section);
+  expect(controller.read()).toEqual({ section, refusal: null });
+  expect(commit).not.toHaveBeenCalled();
+  expect(controller.release()).toBeNull();
+
+  const saved: SceneSection | null = commit.mock.calls[0]?.[0];
+  expect(saved?.kind).toBe("cuts");
+  if (saved?.kind !== "cuts") return;
+  expect(saved.cuts.top.polyline).toHaveLength(56);
+  expect(saved.cuts.top.polyline[0]).toEqual([1270.1235, 2400.9877]);
+  const address = routeAddress("duct-systems");
+  const before = address.link({ sceneView: { preset: "all", section } });
+  const after = address.link({ sceneView: { preset: "all", section: saved } });
+  expect(after.length).toBeLessThan(before.length * 0.8);
+});
+
+test("release refuses a cut whose distinct points become too close after rounding", () => {
+  const { controller, commit } = fixture();
+  const cuts = emptyCuts();
+  cuts.top.polyline = [
+    [1.000051, 1.000051],
+    [1.001, 1.000401],
+  ];
+  controller.begin({ kind: "cuts", cuts });
+  expect(controller.read()?.refusal).toBeNull();
+  expect(controller.release()).toBe("Cut points must be distinct");
   expect(commit).not.toHaveBeenCalled();
 });
 test.each(["document", "section"] as const)(
