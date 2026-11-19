@@ -115,6 +115,13 @@ it("caps a dangling duct end, and only that end", () => {
   expect(plan.covered.has("open-end:10:0")).toBe(true);
 });
 
+it("withholds caps when two well-connected systems have the same name", () => {
+  const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
+  s.systems.push({ ...s.systems[0]!, id: 2 });
+  expect(items(s)).toEqual([]);
+  expect(healPlan(s).hard.get("open-end:10:1")?.note).toContain("flow unknown");
+});
+
 it.each([
   { flowCfm: null, connected: true },
   { flowCfm: undefined, connected: true },

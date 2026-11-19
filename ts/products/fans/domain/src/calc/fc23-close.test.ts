@@ -42,7 +42,12 @@ const load = () => {
   return { snap, roster: [...r.fans, ...r.suggestions] };
 };
 
-it.skipIf(!existsSync(CHADDS))("Chadds RA 37 leaves both side-tapped stubs open even if Revit reports zero", () => {
+it("Chadds RA 37 leaves both side-tapped stubs open even if Revit reports zero", ({ skip }) => {
+  if (!existsSync(CHADDS)) {
+    const reason = `Skipping Chadds RA 37 replay because the retained capture is missing: ${CHADDS}`;
+    console.warn(reason);
+    skip(reason);
+  }
   const { snap } = load();
   const ids = [14663504, 14663546];
   expect(snap.systems.find(system => system.name === "RA 37")?.isWellConnected).toBe(false);

@@ -604,10 +604,8 @@ public static class DuctApplier {
         bool Lands(string kind, long id) => items.Any(i => i.Kind == kind && i.Id == id && i.Outcome is "planned" or "unchanged" or "written");
         var rules = DuctLossStore.Overlay(stored?.Rules, asked.Rules, deletes.Rules, StringComparer.Ordinal);
         var instances = DuctLossStore.Overlay(stored?.Instances, null, deletes.Instances);
-        foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id))) {
+        foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id)))
             instances[w.Id] = new DuctInstanceRecord(w.Table, w.Inputs, w.Coefficient, now);
-            if (w.RuleKey is { Length: > 0 } key && !rules.ContainsKey(key)) rules[key] = new DuctRuleChoice(w.Table);
-        }
         var drops = DuctLossStore.Overlay(stored?.Terminals, null, deletes.Terminals);
         foreach (var w in (request.Terminals ?? []).Where(w => Lands("terminal", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
         foreach (var w in (request.Components ?? []).Where(w => Lands("component", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
