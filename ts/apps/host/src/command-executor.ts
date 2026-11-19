@@ -1,5 +1,6 @@
-import type { z } from "zod";
+import { z } from "zod";
 import type { RouteWorkspace } from "@pe/runtime";
+import { instancesStartSchema } from "@pe/agent-contracts";
 import type {
   ActionAdmission,
   ActionStep,
@@ -25,18 +26,47 @@ import { Effect } from "effect";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 
 export class CommandRejected extends Error {
-  constructor(readonly refusal: CommandRefusal, readonly status = 409) {
+  constructor(readonly refusal: CommandRefusal, readonly status = 409, explanation?: string) {
     super(
-      "message" in refusal
+      explanation ?? ("message" in refusal
         ? refusal.message
         : refusal.kind === "stale_revision"
           ? `Work changed to r${refusal.live}`
           : refusal.kind === "claimed"
-            ? `Resource is reserved by ${refusal.by}`
-            : "Consumed input changed",
+            ? "Another action has reserved this resource."
+            : "Consumed input changed"),
     );
   }
 }
+
+const slotYear = z.object({ year: instancesStartSchema.shape.year });
+const lifecycleVerb = new Map([
+  ["instances.start", "started"],
+  ["instances.open", "opened"],
+  ["instances.stop", "stopped"],
+]);
+
+function describeClaim(claim: Claim, holder: ActionReceipt): string {
+  switch (claim.kind) {
+    case "session-slot": {
+      const year = slotYear.safeParse(claim.selector);
+      const revit = year.success ? `Revit ${year.data.year}` : "This Revit";
+      const verb = lifecycleVerb.get(holder.key);
+      const held = verb ? `${revit} is already being ${verb}.` : `Another action is using ${revit}.`;
+      return `${held} Try again when that action finishes.`;
+    }
+    case "receipt":
+      return holder.state === "running"
+        ? "Another action is applying this plan. Wait for it to finish, then generate a fresh plan."
+        : "An earlier apply already used this plan. Generate a fresh plan before trying again.";
+    case "reconciliation":
+      return "Pe is already cleaning up after this action. Wait for cleanup to finish, then check the action’s outcome.";
+  }
+}
+
+export const claimRejected = (claim: Claim, holder: ActionReceipt) =>
+  new CommandRejected({ kind: "claimed", claim, by: holder.id }, 409, describeClaim(claim, holder));
+
 /** Domain rejection says why. Only the engine and transport boundary know dispatch facts. */
 export const refused = (message: string, code = "domain.refused") =>
   new CommandRejected({ kind: "domain", code, message });

@@ -68,7 +68,12 @@ test.each(["succeeded", "unknown", "incomplete"] as const)(
     const f = await journalAfter(applies[ended]);
     try {
       expect(await f.apply("second-apply", "preview-1"))
-        .toMatchObject({ refusal: { kind: "claimed", claim: plan("preview-1"), by: "first-apply" } });
+        .toMatchObject({
+          status: 409,
+          notDispatched: true,
+          error: "An earlier apply already used this plan. Generate a fresh plan before trying again.",
+          refusal: { kind: "claimed", claim: plan("preview-1"), by: "first-apply" },
+        });
     } finally { await f.close(); }
   },
 );
