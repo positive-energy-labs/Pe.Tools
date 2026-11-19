@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { INVALID, type Codec } from "./page-keys.ts";
+import { spaceCutsSchema } from "./space-view.ts";
 
 const finite = z.number().finite();
 const bounds = z
@@ -18,6 +19,7 @@ const bounds = z
 
 /** Camera-independent section coordinates in host internal feet. */
 export const sceneSectionSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("cuts"), cuts: spaceCutsSchema }),
   z.object({ kind: z.literal("box"), bounds }),
   z.object({
     kind: z.literal("plane"),
