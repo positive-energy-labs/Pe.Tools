@@ -24,3 +24,13 @@
 - Route chords for next and previous op, and pane-tier caret movement between form fields; `Mod+Enter` runs today.
 - Declare `@pe/mcps` in `apps/web/package.json` or stop importing it by relative path; `ops/run.ts` is one of the importers.
 - Field options have no value domain for levels, views and sheets, schedule names, model family type names, materials, fill patterns, text and dimension types, worksets, phases, design options, or units outside schedule formatting; each lands as one registered key (`ValueDomainKeys`) read through the `field-options` Reading.
+
+- Resolve the diagnostics behind 1 guarded check suppression in dotnet/Pe.Revit.Global/Services/Aps/AddParameter.cs and ratchet the allowance down. [owed-20261119 tooling-3-044, 1 item]
+- Move the remaining baselined filesystem mutations behind the store or writer that owns the destination, and reduce the per-file filesystem write allowance. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 ops-filesystem-writes, 3 items]
+- Specify and check the wire representation for native long values above the JavaScript safe integer range. [owed-20261119 tooling-3-177, 1 item]
+- Check generated request authoring against native constructor omissions so the one catalog default is not mistaken for all native fallback behavior. [owed-20261119 tooling-3-184, 1 item]
+- Narrow the operation catalog digest to inputs that affect the catalog so storage-only edits stop creating regeneration and merge churn. [owed-20261119 tooling-3-245, 2 items]
+- Decide whether operation help needs more than three examples per group based on the generated Chat help. [owed-20261119 routes-kernel-1-317, 1 item]
+- Offer Stop only for actions the host can still stop, including in the unknown-action inspector. [owed-20261119 host-journal-1-325, 2 items]
+- Replace 4 counted type assertions in ts/apps/host/tests/operation-script.test.ts with typed fixtures or a checked constructor and ratchet the allowance down. [owed-20261119 tooling-3-342, 1 item]
+- Measure first-use cost of the generated operation catalog bundle and runtime schema conversion before deciding whether codegen should emit per-operation schemas. [owed-20261119 other-1-218, 1 item]
