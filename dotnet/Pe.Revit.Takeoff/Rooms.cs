@@ -18,7 +18,7 @@ public sealed record RoomsPlan(
 ///     The rerun rule (docs/features/rooms/LEDGER.md), pure. Locked regions are kept and never
 ///     created again; untouched machine regions rebind by geometry and are kept or deleted; new
 ///     rooms are created; untouched held residues are deleted and redrawn. A zone that solves to one
-///     face is redesignated a room itself: every machine child is deleted and nothing is created.
+///     eligible face is redesignated a room itself: every machine child is deleted and nothing is created.
 /// </summary>
 public static class RoomsRerun
 {
@@ -70,8 +70,9 @@ public static class RoomsRerun
         if (existing.Concat(existingHeld).Any(r => lockedIds.Contains(r.ElementId)))
             throw new InvalidOperationException("a locked region is also a rerun candidate");
         // zoneSqft is null when a person declared the zone: the declaration wins and it never becomes a room.
-        // The sole face may be held (Project D's garage is held zone-edge-only): the zone is the room either way.
-        if (locked.Count == 0 && SoleFace(accepted, held) is { } only && only.RawSqft >= SoleFaceShare * zoneSqft)
+        // Engineering holds may still become rooms (Project D's garage is zone-edge-only). A person's rejection stays held.
+        if (locked.Count == 0 && SoleFace(accepted, held) is { } only &&
+            only.Partition?.Reason != Pe.Revit.Partition.Reasons.Rejected && only.RawSqft >= SoleFaceShare * zoneSqft)
             return new RoomsPlan([], [], [.. existing, .. existingHeld], [], [], only);
         var rebind = ZoneMaterializer.Rebind(accepted.Where(r => !IsLocked(r.Partition)).ToList(), existing);
         return new RoomsPlan(
