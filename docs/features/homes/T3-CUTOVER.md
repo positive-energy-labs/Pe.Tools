@@ -1,6 +1,6 @@
 # T3 cutover rows
 
-The spec for the T3 track of the [homes MAP](MAP.md) (slice 10), under [ADR 0040](../../adr/0040-t3-is-the-agent-engine-on-a-flagged-track.md). The purger holds this file. Written 2026-11-11 at main a02b8aea. Nothing here is built. Stamp for the whole file: UNPROVEN[no spike touched Revit; the track opens with one]. Sources: the owner's research list in the muse request, `muse/R6-t3-spikes-cutover.md` (the cutover map and the invest lists) and `muse/round3/t3.md` (the falsifiers), all under `.artifacts/runs/homes-crusade-20261111/`. Paths in the tables were checked to exist at a02b8aea. Fates and confidence are the T3 research thread's testimony.
+The spec for the parked T3 track from the [Homes effort](LEDGER.md), under [ADR 0040](../../adr/0040-t3-is-the-agent-engine-on-a-flagged-track.md). The purger holds this file. Written 2026-11-11 at main a02b8aea. Nothing here is built. Stamp for the whole file: UNPROVEN[no spike touched Revit; the track opens with one]. Sources: the owner's research list in the muse request, `muse/R6-t3-spikes-cutover.md` (the cutover map and the invest lists) and `muse/round3/t3.md` (the falsifiers), all under `.artifacts/runs/homes-crusade-20261111/`. Paths in the tables were checked to exist at a02b8aea. Fates and confidence are the T3 research thread's testimony.
 
 The dogma, kaitpw 2026-11-11: "only if it properly deletes, replaces, and integrates everything in that research list that i included in my original message. this will be a major axis where a trailing purger must enforce the dogma".
 

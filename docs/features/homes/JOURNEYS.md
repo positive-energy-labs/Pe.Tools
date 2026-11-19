@@ -1,6 +1,6 @@
 # Homes crusade journeys
 
-The driver's journeys and the end-gate targets for the [homes MAP](MAP.md). Written 2026-11-11 at main a02b8aea. Each journey is frozen as data (a goal or prompt, a setup, steps, a pass witness, a lane, a fixture), not as a script, so the grader survives an engine change. Stamp for every journey: UNPROVEN[not run; the lane named in its record proves it]. Sources: `muse/round3/driver.md` and `muse/round3/journeys.md` under `.artifacts/runs/homes-crusade-20261111/`, as amended by `muse/POSITION-v3.md` and `muse/POSITION-v4.md`.
+The driver's journeys and the end-gate targets for the [Homes effort](LEDGER.md). Written 2026-11-11 at main a02b8aea. Each journey is frozen as data (a goal or prompt, a setup, steps, a pass witness, a lane, a fixture), not as a script, so the grader survives an engine change. Stamp for every journey: UNPROVEN[not run; the lane named in its record proves it]. Sources: `muse/round3/driver.md` and `muse/round3/journeys.md` under `.artifacts/runs/homes-crusade-20261111/`, as amended by `muse/POSITION-v3.md` and `muse/POSITION-v4.md`.
 
 The driver starts at the kernel crusade's end gate. Until then this file is a plan. The driver owns the runbook that implements it.
 

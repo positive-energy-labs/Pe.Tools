@@ -165,6 +165,10 @@ restated here.
 - 2026-11-05, the owner said, “its not worth if it requires a repo cloned”. The Building Coder search must work without asking the user to clone its repository.
 - 2026-11-17, the owner said, “the visual pages are so much more powerful that walls of text. like in particular that table att he bottom that shoed the before after diff, and the proposal diff before that, was way easier to digest”. Show proposals and completed model edits with pictures and before-and-after tables so a person can review what changed.
 
+- 2026-11-12, the owner said, “memory only is fine and probably preferable”. Keep the open T3 run in memory. After a host restart the next turn starts a fresh run and gets one new notice.
+- 2026-11-12, the owner said, “this smells, but yeah lock on t3 start i guess”. A T3 run reads the user's default target at its start, and forks and delegates inherit it. An explicit target still works under [ADR 0041](../../adr/0041-pea-calls-any-target-the-users-target-is-the-default.md).
+- 2026-11-12, the owner said, “I wonder if we should pause the t3 line, or only do the parts of it that relate tot he real home stuff... because itll take so long its just background noise for you, and it was never critical.” The T3 cutover is parked. The [T3 cutoff cases](../homes/T3-CUTOVER.md) preserve what has to pass when it resumes.
+
 ## Tried & rejected
 
 - 2026-11-04, a charter-scripted workflow trial (fixed peers, thread cap, prescribed message protocol, a "blind" control the reviewer could see, one heavy-execution slot granted by the pillar): it measured obedience, not the workflow; 121 of 171 pillar messages negotiated a slot, and the owner revoked the shape twice. Retro: `.artifacts/runs/retro-20261104-testing-pilot/REPORT.md`.

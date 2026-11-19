@@ -1,6 +1,6 @@
 # homes ledger
 
-Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second person finds them, and what Pea may write there. The live frontier is [MAP.md](MAP.md). The rulings that constrain other features are [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md), [ADR 0038](../../adr/0038-consent-is-a-notice-three-guards-on-project-documents.md), [ADR 0039](../../adr/0039-two-failure-policies-by-class.md) [ADR 0040](../../adr/0040-t3-is-the-agent-engine-on-a-flagged-track.md) and [ADR 0041](../../adr/0041-pea-calls-any-target-the-users-target-is-the-default.md). Written 2026-11-11 at main a02b8aea from a read-only muse. Nothing below is built: every Decided line is a ruling, not a proof. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/`. Retention: keep that folder until the MAP is deleted, because the MAP and the ADRs cite its files by name.
+Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second person finds them, and what Pea may write there. The rulings that constrain other features are [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md), [ADR 0038](../../adr/0038-consent-is-a-notice-three-guards-on-project-documents.md), [ADR 0039](../../adr/0039-two-failure-policies-by-class.md) [ADR 0040](../../adr/0040-t3-is-the-agent-engine-on-a-flagged-track.md) and [ADR 0041](../../adr/0041-pea-calls-any-target-the-users-target-is-the-default.md). The Homes effort closed on 2026-11-12. Git keeps the last map at `28d01d55:docs/features/homes/MAP.md`. Keep the run evidence while a surviving proof or replay still depends on it.
 
 ## Decided
 
@@ -37,10 +37,69 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 - 2026-11-18, kaitpw: the project marker `pe-home.json` stays for now ("sure"). The 2026-11-17 ruling removed the firm marker only; the project marker is decided in the project-home UX round.
 - 2026-11-17, kaitpw: the user home stays configurable through `homes.json` `user`. The install folder is not a home and is not made configurable.
 
+- 2026-11-11, the owner said, “im split between manual reapply and blind overwrite. my main concern is that I dont wanna have wire a whole other path to show this error.” Treat old unenveloped model data as absent and use defaults. Preserve a valid envelope with an unknown version and report the refusal through the existing path. [OwnerBlob](../../../dotnet/Pe.Shared.RevitData/Serialization/OwnerBlob.cs) owns the distinction.
+- 2026-11-11, the owner said, “architecturally it still makes the most sense to me. agreed on ur default”. Takeoff keeps each region's record on the element. Project-level owners keep their records on Project Information under [ADR 0032](../../adr/0032-value-domains-declared-on-work-cells.md).
+- 2026-11-11, the owner said, “stuff that is for a specific equipment (ie not just a tag prefix like BT, AWHP, etc) should be kept but they're not important.” Keep those equipment-specific files for reference when sorting firm standards.
+- 2026-11-12, the owner said, “make it required in the snapshot contract and delete the `?? null` collapse”. The bridge document snapshot carries the project-home field explicitly. A document without a pointer carries null.
+- 2026-11-12, the owner said, “yes create firm home”. The chosen firm location is `04 PE Software Files/Pe.Tools` on the shared drive. The 2026-11-17 ruling governs marker and discovery behavior.
+
+**Where the product reads and writes**
+
+The owner asked for this inventory on 2026-11-19. It describes the stores at `28d01d55`. The route columns follow file ownership and route imports. Individual call paths, including rows that say “any”, have not been traced. Start with the [content home resolver](../../../ts/packages/host-contracts/src/product-paths.ts), the [machine state paths](../../../ts/packages/host-contracts/src/service-identity.ts), and the [model owner envelope](../../../dotnet/Pe.Shared.RevitData/Serialization/OwnerBlob.cs).
+
+**Inside the Revit model**
+
+| Place | What is kept there | Routes that read | Routes that write |
+|---|---|---|---|
+| Element parameters and elements | The engineering values and geometry themselves: a fan's required pressure, room boundaries, schedules, family parameters | every model route | /fans (pressure and fitting coefficients), /duct-systems (heal, assign fan), /rooms, /takeoffs, /schedules, /families, /family, any Pod or script, Pea through any of these |
+| Hidden text parameter on Project Information, one per owner | `_PE_DuctLosses` (what a duct write stored, with its inputs), `_PE_AutoTag`, `_PE_TakeoffSystemRegistry`, `_PE_ParameterLinksProfile`, and the project-folder pointer | /fans, /duct-systems, /takeoffs, the AutoTag and parameter-link commands; the host reads the pointer whenever a document is bound | /fans and /duct-systems (duct losses), /takeoffs, the AutoTag and parameter-link commands. The product has no project-folder setter. |
+| Hidden text parameters on individual elements | Takeoff's per-region record (`_PE_TakeoffProvenance`, `_PE_TakeoffRole`, `_PE_TakeoffGuid`), room enclosures (`_PE_PartitionEnclosure`) | /takeoffs, /rooms | /takeoffs, /rooms |
+| Extensible Storage on duct fittings and accessories | The loss coefficient Revit's own pressure calculation reads. The one allowed exception to the ban [ADR 0032 rule 7](../../adr/0032-value-domains-declared-on-work-cells.md) | /fans, /duct-systems, and Revit itself | /fans and /duct-systems writes |
+| The model file on disk (save, save-as, synchronize) | The whole model | n/a | A person. Pea and scripts are held on a project save or synchronize; a script may save family files freely |
+| Family files (.rfa) | Families built or migrated by Family Foundry | /family, /families | /family, Family Foundry scripts |
+
+**Content homes**
+
+| Place | What is kept there | Routes that read | Routes that write |
+|---|---|---|---|
+| Your home, `Documents\Pe.Tools` (or the folder named in Settings) | `Pods\`, `Pages\`, `Catalogs\`, `Skills\`, `Settings\` | /pods, Pages, /duct-systems and /fans and /duct-loss (catalogs), Pea, the command palette | /pods (edit, import), Pages publish, Pea, the import of shipped example Pods at start. No setting declares a personal tier, so nothing writes `Settings\` here |
+| The firm home, `G:\Shared drives\PE Team Folder\04 PE Software Files\Pe.Tools` (or the folder named in Settings) | `Pods\`, `Pages\`, `Catalogs\`, `Settings\ducts.json`, `keys.json` (provider keys, plain text) | the same routes; /fans, /duct-systems and /settings read `Settings\ducts.json`; the host and Pea's tool processes read `keys.json` | /fans, /duct-systems and /settings ("save at firm"); /pods and Pea for a Pod that lives there; `keys.json` is edited by hand |
+| A project home, `<shared drive>\<project folder>\Pe.Tools`, proven by a `pe-home.json` file | the same layout plus `Derived\` (document parses stored once for everyone on the project) | the same routes for a model that points at it; Pea's document reader and /family (attach a spec sheet) read `Derived\` | "save at project" on /fans and /duct-systems; the document reader and /family write `Derived\`. **Unreachable today**: nothing creates the folder's marker or writes the model's pointer |
+
+**Files and settings made by the product on this machine**
+
+All under `<install folder>\state\` for the installed product, and `<checkout>\.artifacts\pe-tools\state\` for a dev run.
+
+| Place | What is kept there | Routes that read | Routes that write |
+|---|---|---|---|
+| `Work\` | Staged edits, one file per route and document | every route with a sheet; Pea | the same; set aside with a notice when a build cannot read them |
+| `host\<service>\` | The action journal (`partition-operations.json`), per-action outputs, the host log, saved feedback | /ops, the Timeline and History on every route, Pea | every plan and apply from any route or from Pea |
+| `recordings\...\history` | Recorded reads that History replays | History on every route | every live read |
+| `Runs\<pod>\<run>\` | A Pod run's inputs, outputs and receipt | /pods, /family, /families, /schedules | the same, and the script runner inside Revit |
+| `Pages\<slug>\` | A Page's binding, text, event log and exports | Pages, /bind | Pages, /bind |
+| `Blobs\sha256\` and `home-writes.jsonl` | The bytes each home write replaced, and the list of home writes (this is what settings undo uses) | /settings, /fans, /duct-systems (undo of a save) | every write into a home |
+| `Derived\` | Document parses for a source that sits in no project | Pea's document reader, /family | the same |
+| `harness-threads\`, `providers.json`, `Agent\` | Pea's conversations, the providers and keys you added, Pea's working folder and skills | /chat, /settings | /chat, /settings |
+| `pea-work\` | The copies of models Pea opens, so your own file is never its scratch | Pea, /open | Pea |
+| `captures\`, `ducts\analyses\`, `families\read-costs.json` | Captured view images, stored duct calculations, how long family reads took | /captures, /takeoffs, /duct-loss, /families | the same |
+| `homes.json`, `plugins.json`, `places.json`, `share.json`, `<service>\devices.json`, `scheduled-tasks.json`, `host-update.json`, `install.json`, `aps-auth\`, `shipped-pods*`, `pod-imports\`, `stored-notices.jsonl`, `pod-discovery.jsonl`, `browser\` | Machine settings: which folders are your homes, which Pods are on, pairing, scheduled tasks, update state, install id, Autodesk sign-in, the notice feed | /settings, /pods, /open, the notice feed on every route | /settings, /pods, the host at start |
+| `<install folder>\logs\`, `scratch\`, `cache\space-linked-geometry`, per-command state folders (colour choices, family snapshots, room traces, palette usage) | Logs, temporary renders, cached link geometry, small C# command state | the Revit add-in, /rooms, the palette | the same |
+| `%LOCALAPPDATA%\Positive Energy\PeScripts.props` | This machine's Revit and Pe assembly paths, so a Pod's project builds offline | a Pod build | the script bootstrap |
+| Browser storage | Theme, pane sizes, panel positions, which thread shelf is open, whether OS notices are on | the web shell | the web shell |
+
+**Services outside this machine**
+
+| Place | What goes there | Read by | Sent by |
+|---|---|---|---|
+| The model provider (OpenAI, Anthropic, or one you added) | Whatever Pea reads in a turn | /chat | /chat |
+| LlamaParse | The bytes of a document sent for parsing | Pea's document reader, /family | the same |
+| PostHog | Usage rows: operation name, duration, outcome, install id | you, in PostHog | the host on every operation |
+| Autodesk (APS) | Sign-in tokens; parameter service and cloud model reads | /open, the takeoff captures | sign-in on /settings |
+
 ## Tried & rejected
 
 - 2026-11-11, a home qualifier on addresses (`home/kind/name`): it changes the frozen names (the contribution key `member:@<pod>/<path>`, the SubjectRef name tuple, the `/pods` `member` field) and puts a machine-local fact into Work keys. The duplicate-id refusal ends shadowing with no qualifier.
-- 2026-11-11, a firm-home cloud index (one file per project in the firm home, keyed by `projectGuid`): the owner ruled that the model points at the humans' folder. The index survives only as the fallback for assumption C in the MAP.
+- 2026-11-11, a firm-home cloud index (one file per project in the firm home, keyed by `projectGuid`): the owner ruled that the model points at the humans' folder. Revisit the index only if the model pointer cannot meet the project's copy and move cases in [the homes journeys](JOURNEYS.md).
 - 2026-11-11, backup files inside a home (`<home>/.pe/prior/…`, `.bak`): on a synced drive they sync, clutter, and become authored content. Prior bytes go to the writer's local blob store.
 - 2026-11-11, the cloud-library shape (a backend as the truth from day one, the drive unused): it brings back migrations, coordinated across a server and clients, and makes a solo developer the operator of a service. The kernel crusade ruling stands: the storage root goes to a shared drive mount before cloud (routes MAP decision log, 2026-11-10). The only cloud work kept is the rule that authored content holds no absolute path, origin or machine id.
 - 2026-11-11, an immutable versions-and-pointers store for shared homes: its own kill criterion fires, because the owner and Pea edit files in the store by hand.
@@ -63,7 +122,7 @@ Content homes: where Pods, Pages, Catalogs, settings and keys live, how a second
 
 - A hand-deleted action journal is indistinguishable from a fresh machine, so a re-send after one is admitted and may run again.
 - A second update apply while an older one still runs after a discard (`update-reader.ts:381-385`): the installer mutex is UNPROVEN for `pe-revit update`; drive two applies one second apart after a discard.
-- Slices 0 to 10 are in [MAP.md](MAP.md); each lands with its red falsifier. Journeys and end-gate targets are in [JOURNEYS.md](JOURNEYS.md).
+- Keep the [homes journeys](JOURNEYS.md) for the model and installer checks they name. The historical slice plan is at `28d01d55:docs/features/homes/MAP.md`.
 - The T3 cutover rows, falsifiers F1 to F11 and the flip rule are in [T3-CUTOVER.md](T3-CUTOVER.md). The purger holds that file. No row may end as "both exist".
 - kaitpw ticks the classified standards list that slice 0 produces (real, test, proof, WIP, archive, one-off, no registered library, dangling reference). Until then no file is called a standard.
 - kaitpw rules the second drive lane after reading about a second Windows profile. One Autodesk licence per named user on a second profile is UNPROVEN[not tried].

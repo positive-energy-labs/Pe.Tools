@@ -1,6 +1,6 @@
 # 0039: Two failure policies, by class
 
-Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's ruling in the homes muse; the helper shape comes from the kernel purger and implementor forks. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`R1-dotnet-storage.md`, `R2-ts-storage.md`, `round3/purger.md`, `round3/implementor.md`). Extends [ADR 0033](0033-one-host-read-graph-history-is-host-publication.md) rule 5 and [ADR 0026](0026-one-route-shell.md) D4. Frontier: [homes MAP](../features/homes/MAP.md) slice 4.
+Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's ruling in the homes muse; the helper shape comes from the kernel purger and implementor forks. Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`R1-dotnet-storage.md`, `R2-ts-storage.md`, `round3/purger.md`, `round3/implementor.md`). Extends [ADR 0033](0033-one-host-read-graph-history-is-host-publication.md) rule 5 and [ADR 0026](0026-one-route-shell.md) D4. See the [homes ledger](../features/homes/LEDGER.md) for the retained decisions and open work.
 
 ## Context
 
@@ -13,7 +13,7 @@ Three failure policies coexist in stored-file readers. Some delete on a parse fa
 1. **Two policies.** kaitpw agreed to this statement on 2026-11-11 ("agree"): authored files are refused and kept; Work, journal and threads are discarded with a notice; nothing stops the host.
    - `keep`: an authored file or a secret that does not decode is refused with a visible reason, its bytes are never rewritten, and defaults stay in force. This covers Pods and members, Pages, Catalogs, `Settings/<owner>.json`, `keys.json` and in-model owner blobs.
    - `discard`: Work, the journal, threads, Page state and derived files that do not decode are deleted, with one notice per file in the host's notice feed. The notice names the Place and, for Work, the staged values lost. It does not repeat on the next start.
-2. **A class is not code.** The policy is one argument (`keep` or `discard`) of one decode helper, beside one write helper that replaces the hand-written temp-then-rename writes. The table of kinds lives in the homes MAP and glossary, not in a registry.
+2. **A class is not code.** The policy is one argument (`keep` or `discard`) of one decode helper, beside one write helper that replaces the hand-written temp-then-rename writes. The [homes glossary](../features/homes/GLOSSARY.md) describes the file classes.
 3. **T3's files are a third class, `foreign`.** Pe never decodes them, never discards them and never applies a policy to them. T3 refuses and migrates its own files.
 4. **No migration code.** A stored shape that changed is handled by its policy. At a T3 cutover, old threads are discarded with a notice and provider records are entered again.
 5. **Scratch is never read back**, so it has no policy.

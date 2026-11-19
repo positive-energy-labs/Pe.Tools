@@ -242,6 +242,8 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 - 2026-11-16, the owner said, “oh and by the awy the docked vs floating thing u can forget abt too”. Let Revit handle how its pane docks and floats.
 - 2026-11-17, the owner said, “we do not have certs set up on this machine nor at all. release unsigned”. The release in question goes out unsigned. Signing future downloads remains an open decision.
 
+- 2026-11-12, the owner said, “4- create a private repo on positive energy labs. does that work?” The SDK source and package feed belong in the organization's private `positive-energy-labs/Pe.Revit.Sdk` repository. The 2026-11-19 tie-up records that the SDK source has been pushed there.
+
 ## Tried & rejected
 
 - 2026-10-14, borrowing the panel HWND for notice cards: rejected by the owner because a card hides an open panel. Round 3 deletes the borrow, hide and restore transitions and their tests.

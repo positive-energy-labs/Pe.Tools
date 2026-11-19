@@ -1,6 +1,6 @@
 # 0037: Three content homes, one write door
 
-Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's rulings in the homes muse after seven code and disk censuses and one round with five threads (T3 research, journeys, and forks of the kernel implementor, purger and driver). Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`POSITION-v2.md` to `POSITION-v4.md`, `round3/`). Amends [ADR 0035](0035-route-slots-subjectref-one-notice-feed.md) rules 3 and 11, [ADR 0032](0032-value-domains-declared-on-work-cells.md) line 129 and [ADR 0026](0026-one-route-shell.md) line 29. Frontier: [homes MAP](../features/homes/MAP.md). Terms: [homes glossary](../features/homes/GLOSSARY.md).
+Date: 2026-11-11. Status: accepted, not built. Source: kaitpw's rulings in the homes muse after seven code and disk censuses and one round with five threads (T3 research, journeys, and forks of the kernel implementor, purger and driver). Evidence: `.artifacts/runs/homes-crusade-20261111/muse/` (`POSITION-v2.md` to `POSITION-v4.md`, `round3/`). Amends [ADR 0035](0035-route-slots-subjectref-one-notice-feed.md) rules 3 and 11, [ADR 0032](0032-value-domains-declared-on-work-cells.md) line 129 and [ADR 0026](0026-one-route-shell.md) line 29. See the [homes ledger](../features/homes/LEDGER.md) for the retained decisions and open work. Terms: [homes glossary](../features/homes/GLOSSARY.md).
 
 ## Context
 
