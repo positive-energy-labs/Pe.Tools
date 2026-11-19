@@ -12,13 +12,11 @@ import {
   ductsCalcOverviewSchema,
   ductsCalcRequestSchema,
   ductsCalcResponseSchema,
-  ductSlotRequest,
   type DuctsCalcOverview,
   type DuctsCalcRequest,
   fanClaimSchema, fanCloserSchema, fanEspValuesSchema, ductsFanCalcSchema,
 } from "@pe/agent-contracts";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import { slotCoverage } from "@pe/ducts-domain/kernel/terminal-flow";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { LOSS_RULES } from "@pe/ducts-domain/loss-rules";
 import { suggestRoster } from "@pe/ducts-domain/roster";
@@ -37,6 +35,7 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { rosterInputs } from "@pe/ducts-domain/roster-inputs";
 import { z } from "zod";
 import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
+import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/calc/joins";
 import { designLayers } from "@pe/ducts-host/design-layers";
 import { catalogs } from "@pe/host/builtin-read-handles";
@@ -44,29 +43,6 @@ import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
 // Wire reads carry FanClaim, never the domain write capability (contract 3a).
 type Calc = Omit<DomainCalc, "claim"> & { claim: import("@pe/agent-contracts").FanClaim };
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
-export const espOptions = body(acquisition.espOptions, async function(ctx, { target, units }) {
-    if (!units.length)
-      return { espOptions: null, espOptionsError: "No unit identities in this fan scope" };
-    try {
-      const response = await ctx.read(native("revit.catalog.field-options"), {
-        target: { kind: "document", ref: target },
-        request: {
-          key: "parameter-identities",
-          context: {
-            ElementUniqueIds: [...new Set(units)].sort().join(","),
-            ParameterScope: "instanceThenType",
-            StorageType: "Double",
-          },
-        },
-      });
-      return { espOptions: response.body, espOptionsError: null };
-    } catch (error) {
-      return {
-        espOptions: null,
-        espOptionsError: error instanceof Error ? error.message : String(error),
-      };
-    }
-});
 const details = ductsCalcResponseSchema.options;
 const enginePath = z.object({
   side: z.enum(["supply", "return"]),
@@ -160,7 +136,7 @@ const calcModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = ductSlotRequest(saved.settings);
+    const { flow } = await ctx.read(ductsInputs, request.target), { slots } = flow;
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -187,6 +163,7 @@ const calcModel = read("fans.calculation", {
       throw Error("Ducts read did not return an observation version");
     const catalog = await ctx.read(catalogs, request.target);
     const layersOf = (snapshot: z.infer<typeof snapshotSchema>) => ({
+      terminalFlow: flow.terminalFlow,
       snapshot,
       work,
       versions: { Work: saved.revision },
@@ -225,6 +202,7 @@ const calcModel = read("fans.calculation", {
     const value =
       request.mode === "fan"
         ? buildCalc({
+            terminalFlowNote: flow.terminalFlowNote,
             snapshot,
             grids,
             inputs,
@@ -502,15 +480,11 @@ export const ductCalc = read(CALC_DETAIL_READ, {
 export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = ductSlotRequest(saved.settings);
-    const response = await ctx.read(native("ducts.snapshot.roster"), {
-      role: "acquire",
-      target: { kind: "document", ref: target },
-      request: { ...(Object.keys(slots).length ? { slots } : {}), selector: { kind: "roster" } },
-    });
-    const snapshot = { ...response.body, nodes: response.body.nodes.filter(node =>
+    const { flow, snapshot: acquired } = await ctx.read(ductsInputs, target), { slots } = flow;
+    const snapshot = { ...acquired, nodes: acquired.nodes.filter(node =>
       ductsRosterResponseSchema.shape.rows.element.shape.uniqueId.safeParse(node.uniqueId).success) };
     const inputs = resolveInputs({
+      terminalFlow: flow.terminalFlow,
       snapshot,
       work: workLayer(design),
       versions: { Work: saved.revision },
@@ -518,12 +492,12 @@ export const fanRoster = body(acquisition.fanRoster, async function(ctx, { targe
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       label = elementLabeler(snapshot);
-    const activeSlot = slots.terminalFlow ?? snapshot.slots?.terminalFlow ?? "terminalFlow";
+    const activeSlot = slots.terminalFlow;
     const wanted = mark?.trim().toLowerCase();
     return ductsRosterResponseSchema.parse({
       target,
       activeSlot,
-      slots: slotCoverage(snapshot.nodes, [activeSlot, snapshot.slots?.terminalFlow]),
+      slots: flow.coverage,
       rows: [...roster.fans, ...roster.suggestions].map((port) => {
         const unit = snapshot.nodes.find((node) => node.id === port.unitId);
         return {

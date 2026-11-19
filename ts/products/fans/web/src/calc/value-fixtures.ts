@@ -48,8 +48,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     .map(stableFanKey);
   const ductSystemsWork = ductsDocumentSchema.parse({}),
     fansWork = fansDocumentSchema.parse({});
-  const data = fansCalcData.parse({espOptions:null,espOptionsError:"Fixture has no native parameter options",
-    open,
+  const data = fansCalcData.parse({open,
     opened,
     rows,
     progress: null,

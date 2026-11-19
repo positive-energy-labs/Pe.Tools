@@ -625,7 +625,7 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews a c
       "human",
       [
         { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
-        { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
+        { path: ["flows", "UniqueId:fixture-terminal", "edit"], value: { value: 200 } },
         {
           path: [
             "flows",

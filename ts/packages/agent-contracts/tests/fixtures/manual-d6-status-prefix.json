@@ -111,9 +111,6 @@
             "kinds"
           ],
           [
-            "calculation"
-          ],
-          [
             "assumptions"
           ],
           [
@@ -168,10 +165,6 @@
         "edits": [
           [
             "writeIntent"
-          ],
-          [
-            "calculation",
-            "*"
           ],
           [
             "assumptions",
@@ -247,10 +240,6 @@
           ],
           [
             "writeIntent"
-          ],
-          [
-            "calculation",
-            "*"
           ],
           [
             "assumptions",
@@ -342,7 +331,6 @@
             "base": 12
           }
         },
-        "calculation": {},
         "assumptions": {
           "join:14106988:1|14122436:1": {
             "edit": {

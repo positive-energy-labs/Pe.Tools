@@ -6,7 +6,6 @@
  */
 import {
   ductsPricingData,
-  ductSlotRequest,
   serveSetting,
   stagedValues,
   type DuctsDesign,
@@ -54,7 +53,7 @@ export function pricingValue(
           z.number().positive(),
           DEFAULT_DESIGN_FRICTION_RATE,
         ).value ?? DEFAULT_DESIGN_FRICTION_RATE,
-        parameters: ductSlotRequest(settings),
+        parameters: Object.fromEntries(Object.entries(snapshot.slots).filter(([, value]) => value != null)),
       },
     },
     analysis: {

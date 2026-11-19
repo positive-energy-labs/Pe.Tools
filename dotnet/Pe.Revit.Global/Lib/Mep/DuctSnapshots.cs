@@ -13,6 +13,7 @@ namespace Pe.Revit.Global.Lib.Mep;
 ///     <see cref="DuctNetwork" />. Read-only: opens no transaction.
 /// </summary>
 public static class DuctSnapshots {
+    private static readonly string DefaultTerminalFlow = new DuctParameterSlotOverrides().Resolve().TerminalFlow;
     // Revit's shipped DuctType/FlexDuctType roughness (galvanized steel). On flex it is wrong by ~10x.
     private const double RevitDefaultRoughnessFt = 0.0003;
 
@@ -508,12 +509,6 @@ public static class DuctSnapshots {
         if (Converted(own, UnitTypeId.CubicFeetPerMinute) is { } cfm) return (cfm, slot);
         var typed = slot != "revit:Flow" && (e as FamilyInstance)?.Symbol is { } symbol ? NamedFlow(symbol) : null;
         if (Converted(typed, UnitTypeId.CubicFeetPerMinute) is { } typeCfm) return (typeCfm, slot);
-        // The firm default is not present in every family. Resolve the terminal itself, never a roster count.
-        if (own is null && typed is null && slot == new DuctParameterSlotOverrides().Resolve().TerminalFlow
-            && e.Category.ToBuiltInCategory() == BuiltInCategory.OST_DuctTerminal) {
-            own = e.get_Parameter(BuiltInParameter.RBS_DUCT_FLOW_PARAM);
-            slot = "revit:Flow";
-        }
         var present = own ?? typed;
         return present is not null && IsAirFlow(present)
             ? (Reading(present, UnitTypeId.CubicFeetPerMinute), slot) : (null, null);
@@ -663,6 +658,7 @@ public static class DuctSnapshots {
                 var (cfm, from) = SlotFlow(e, slots.TerminalFlow);
                 flowParameter = from;
                 facts.Add(Fact(DuctNetwork.TerminalFlow, cfm, "cfm", DuctProvenance.DesignerStated));
+                facts.Add(Fact($"slot:{DefaultTerminalFlow}", slots.TerminalFlow == DefaultTerminalFlow ? cfm : SlotFlow(e, DefaultTerminalFlow).Cfm, "cfm", DuctProvenance.DesignerStated));
                 if (fi?.Symbol.LookupParameter("Pe_Catalog")?.AsString() is { Length: > 0 } catalog)
                     facts.Add(new DuctFact("Pe_Catalog", null, catalog, "", DuctProvenance.DesignerStated));
                 if (!metadataOnly && Space(fi) is { } space) facts.Add(new DuctFact("space", null, space, "", DuctProvenance.Geometry));

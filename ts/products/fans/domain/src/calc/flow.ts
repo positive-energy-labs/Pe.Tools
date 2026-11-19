@@ -22,6 +22,7 @@ import { isSegment, lineage, type Walk } from "./walk.ts";
 import type { AssumedFlow } from "./assumed-flow.ts";
 
 export interface FlowOptions {
+  terminalFlowNote?: string;
   /** A terminal's resolved design flow (`inputs.terminals`); null is a `no-flow` blocker. */
   terminalCfm: (elementId: number) => number | null;
   /**
@@ -246,7 +247,7 @@ export function flowsOf(
           closer: {
             kind: terminal ? "default" : "ruling",
             note: terminal
-              ? "type the terminal's cfm, or confirm a better-covered airflow slot in settings"
+              ? (terminalAt(e) == null && opts.terminalFlowNote ? opts.terminalFlowNote : "type the terminal's cfm, or confirm a better-covered airflow slot in settings")
               : "type the end shares, or set the unit design-flow parameter",
           },
         }),

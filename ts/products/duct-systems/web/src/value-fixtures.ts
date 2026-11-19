@@ -24,7 +24,6 @@ export const pricingFixtures = providers(snapshot => {
   return ductsPricingData.parse({
     ...pricingWire(pricingValue(snapshot, [], design)), network: network(snapshot),
     ductSystemsWork, fansWork, design, effectiveDesign: design, fanRows: [], catalogFindings: [],
-    espOptions: null, espOptionsError: "Fixture has no native parameter options",
     criteria: resolveCriteria(null, FIRM_SEED), firm, settings: {},
   });
 });

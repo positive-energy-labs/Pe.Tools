@@ -23,6 +23,6 @@ test("fan scope walks its port even when no roster system names it as base equip
   };
   const target = { session: "test", openId: "document" };
   const network = await ductsNetwork.run(ctx, { target, system: [], fan });
-  expect(calls).toEqual([{ role: "acquire", target: { kind: "document", ref: target }, request: { selector: { kind: "from", ...fan } } }]);
+  expect(calls).toEqual([{ role: "acquire", target: { kind: "document", ref: target }, request: { slots: roster.slots, selector: { kind: "from", ...fan } } }]);
   expect(network.systems.map(s => s.name)).toEqual(fanSystems(walk, roster.systems));
 });

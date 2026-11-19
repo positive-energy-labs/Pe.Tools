@@ -337,7 +337,6 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
     f.planRefusal.reason = reason;
     const fans = await f.saved.apply({ ...f.key, route: "fans" }, "fans", "human", [
       { path: ["flows", elementSubject(closedFan(100).nodes.find(node => node.id === 3)!), "edit"], value: { value: 321 } },
-      { path: ["calculation", "terminalFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } },
     ], 0);
     if (!fans.ok) throw Error(JSON.stringify(fans));
     const key = { ...f.key, route: "fans" };

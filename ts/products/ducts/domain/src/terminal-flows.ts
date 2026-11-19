@@ -3,7 +3,7 @@ import type { DuctTerminalFlowSource, DuctEquipmentFlowSource } from "@pe/agent-
 /** The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow", ruling 5 of 2026-10-20; Load Preview deleted at FANSPLIT, kaitpw 2026-11-03): an edit override first; else the rooms seam (`roomFlows`); else Revit's own terminal flow when positive; else nothing, and a finding says so. */
 import type { DuctFlow } from "@pe/agent-contracts";
 
-import { terminalCfm } from "./topology.ts";
+import { slotFlowOf } from "./kernel/terminal-flow.ts";
 import type { DuctSnapshot } from "./types.ts";
 
 type Node = DuctSnapshot["nodes"][number];
@@ -37,7 +37,7 @@ export function terminalFlows(
   const flows = new Map<number, TerminalFlow>();
   for (const node of snapshot.nodes.filter((n) => n.kind === "terminal")) {
     const override = flowsStaged[elementSubject(node)];
-    const revit = terminalCfm(node);
+    const revit = slotFlowOf(node, snapshot.slots.terminalFlow).cfm;
     const room = roomFlows?.get(node.id);
     const flow: TerminalFlow = override != null
       ? { cfm: override, source: "override" }

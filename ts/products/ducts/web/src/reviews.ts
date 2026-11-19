@@ -32,7 +32,19 @@ const snapshotOf = (scope: ReviewEvidence) =>
     : scope.readings.ducts?.value) as DuctSnapshot | undefined;
 
 export function presentHeal(result: unknown, scope: ReviewEvidence) {
-  const response = responseOf<DuctsHeal.Res.Response>(result);
+  const native = responseOf<DuctsHeal.Res.Response & {
+    derivedRequest?: import("@pe/agent-contracts").DuctsHealInput;
+  }>(result);
+  const request = native.derivedRequest;
+  const sealed = native.previewOnly && !native.groups ? request : undefined;
+  const groups = sealed?.groups.map((group) => ({
+    group: group.group, outcome: "planned", systemsBefore: [], systemsAfter: [],
+    items: (group.items ?? []).map((item) => ({ ...item, outcome: "planned", created: [], replaced: [] })),
+  }));
+  const response: DuctsHeal.Res.Response = groups ? {
+    previewOnly: true, groups,
+    counts: { planned: groups.reduce((count, group) => count + group.items.length, 0), healed: 0, refused: 0 },
+  } : native;
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   const plan = scope.heal ?? null;
@@ -41,10 +53,11 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
       const proposed = plan?.groups
         .find((g) => g.group === group.group)
         ?.items.find((i) => i.key === item.key);
+      const requested = sealed?.groups.find((g) => g.group === group.group)?.items?.find((i) => i.key === item.key);
       return {
         key: item.key,
-        end: proposed?.end ?? item.key.replace(/^(cap|join):/, "").split("|")[0]!,
-        other: proposed?.other,
+        end: requested?.end ?? proposed?.end ?? item.key.replace(/^(cap|join):/, "").split("|")[0]!,
+        other: requested?.other ?? proposed?.other,
         how: proposed?.how ?? "cap",
         ids: [...(proposed?.ids ?? []), ...(response.previewOnly ? [] : item.created)],
         findings: proposed?.covers ?? [],
@@ -299,7 +312,13 @@ export const fanWords = (response: DuctsAssignFan.Res.Response) =>
     ? `refused: ${response.reason ?? "refused"}`
     : (response.check ?? response.outcome);
 export function presentFan(result: unknown, scope: ReviewEvidence) {
-  const response = responseOf<DuctsAssignFan.Res.Response>(result);
+  const native = responseOf<DuctsAssignFan.Res.Response & {
+    derivedRequest?: import("@pe/agent-contracts").DuctsAssignFanInput;
+  }>(result);
+  const request = native.derivedRequest;
+  const response = native.previewOnly && native.systemId == null && request
+    ? { ...request, previewOnly: true, outcome: "planned" }
+    : native;
   const snapshot = snapshotOf(scope);
   const system = snapshot?.systems.find((s) => s.id === response.systemId)?.name ?? "Duct system";
   const unit = snapshot ? subjectNamer(snapshot)(response.unitId) : null;

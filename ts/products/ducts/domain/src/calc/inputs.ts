@@ -103,6 +103,7 @@ export interface StoreLayer {
 }
 
 export interface InputLayers {
+  terminalFlow?: { slot: string; ref: string };
   snapshot: CalcSnapshot;
   run?: WorkLayer | null;
   work?: WorkLayer | null;
@@ -266,7 +267,9 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       valid,
     );
   const store: StoreLayer = layers.snapshot.store ?? {};
-  const slots: Slots = snapshot.slots;
+  const slots: Slots = layers.terminalFlow
+    ? { ...snapshot.slots, terminalFlow: layers.terminalFlow.slot }
+    : snapshot.slots;
 
   const criteria = resolveCriteria(work, firm, run, layers.versions);
   // A part's typed drop, else the drop its family was given (`component-drop:<family>`).
@@ -283,11 +286,12 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     const id = String(n.id), key = elementSubject(n);
     if (n.kind === "terminal") {
       const flow = WRITTEN.flows(n, slots, store);
+      const flowRef = flow.wrote == null ? layers.terminalFlow?.ref ?? flow.at : flow.at;
       const cfm = pick(
         {
           run: staged(run.flows?.[key]),
           Work: staged(work.flows?.[key]),
-          model: observed("model", `${id}/${flow.at}`, flow.live),
+          model: observed("model", `${id}/${flowRef}`, flow.live),
         },
         "cfm",
       );

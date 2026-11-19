@@ -174,6 +174,20 @@ const network = snapshot(
 const T6 = 0.09187933;
 const T8 = 0.16736657;
 
+it("W5: seed terminal drops are defaults while Work drops remain drops", () => {
+  const inputs = inputsFor(network, { endCfm: { 6: 200, 8: 100, 10: 300 }, drops: { 8: 0.08 }, firm: { ...TEST_FIRM, version: "seed", served: { terminalDropInWg: "default" } } });
+  const sheet = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
+  expect(Object.values(sheet.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "default", ref: "default:seed" });
+  expect(Object.values(sheet.legs).find(l => l.elementId === 8)?.lossSource.kind).toBe("drop");
+  for (const source of ["firm", "project"] as const) {
+    const drop = inputs.terminals["6"]!.drop;
+    if (drop.status !== "valid") throw Error("expected seed terminal drop");
+    inputs.terminals["6"]!.drop = { ...drop, source };
+    const tier = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
+    expect(Object.values(tier.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "default", ref: `${source}:seed` });
+  }
+});
+
 it("a complete sheet: required ESP = worst supply + worst return + allowances", () => {
   const sheet = buildCalc({
     snapshot: network,

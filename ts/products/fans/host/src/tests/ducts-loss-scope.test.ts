@@ -207,7 +207,7 @@ test("unscoped losses do not fire a healing read", async () => {
 test("a requested write cell that derives no write is refused, never planned as an empty request", () => {
   const snapshot = { nodes: [{ id: 1380293, uniqueId: "fixture-terminal", connectors: [] }], segments: [] } as any;
   const empty = { fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [] } as never;
-  expect(unwrittenCells(empty, [["flows", "UniqueId:fixture-terminal"], ["rules", "elbow"], ["calculation", "x"]], snapshot)).toEqual([["flows", "UniqueId:fixture-terminal"]]);
+  expect(unwrittenCells(empty, [["flows", "UniqueId:fixture-terminal"], ["rules", "elbow"]], snapshot)).toEqual([["flows", "UniqueId:fixture-terminal"]]);
   expect(unwrittenCells({ ...(empty as object), terminalFlows: [{ id: 1380293, cfm: 123 }] } as never, [["flows", "UniqueId:fixture-terminal"]], snapshot)).toEqual([]);
 });
 

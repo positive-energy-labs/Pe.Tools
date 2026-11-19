@@ -8,12 +8,42 @@
 import {
   DUCTS_CRITERIA_CELLS,
   serveSetting,
+  ductParameterSlots,
+  ductSlotRequest,
   type DuctsCriteriaCell,
   type DuctsFirm,
   type DuctsFirmFile,
   type SettingTierRead,
 } from "@pe/agent-contracts";
 import type { FirmValue } from "@pe/host/read-graph";
+import type { DuctSnapshot } from "@pe/ducts-domain/types";
+import { slotCoverage, REVIT_FLOW_SLOT } from "@pe/ducts-domain/kernel/terminal-flow";
+export const snapshotInputs = (settings: readonly SettingTierRead[], snapshot: DuctSnapshot) => {
+  const flow = terminalFlowSlot(settings, snapshot);
+  // A derived input view; the retained native body and its parameter facts stay unchanged.
+  return { snapshot: { ...snapshot, slots: { ...snapshot.slots, ...flow.slots } }, flow };
+};
+export const acquireSnapshotInputs = async (settings: readonly SettingTierRead[], read: (slots: ReturnType<typeof ductSlotRequest>) => Promise<DuctSnapshot>) => snapshotInputs(settings, await read(ductSlotRequest(settings)));
+
+/** One project choice, measured before the fan walk when no setting serves a name. */
+export function terminalFlowSlot(settings: readonly SettingTierRead[], snapshot: DuctSnapshot) {
+  const slots = ductSlotRequest(settings), named = slots.terminalFlow;
+  const coverage = slotCoverage(snapshot.nodes, [named ?? "PE_M_Grd_AirFlow"]).filter(row => row.slot === (named ?? "PE_M_Grd_AirFlow") || row.slot === REVIT_FLOW_SLOT);
+  const chosen = coverage.find(row => row.slot === (named ?? coverage[0]?.slot));
+  if (!chosen) throw Error("Terminal airflow coverage returned no candidate");
+  const better = coverage.find(row => row.covered > chosen.covered);
+  const label = (slot: string) => slot === REVIT_FLOW_SLOT ? "Revit Flow" : slot;
+  const slotSources = ductParameterSlots(settings);
+  const terminal = slotSources.terminalFlow!;
+  const ref = `${terminal.source} · ${chosen.slot}${named ? "" : " chosen by coverage"} ${chosen.covered}/${chosen.total}`;
+  return {
+    slots: { ...slots, terminalFlow: chosen.slot },
+    coverage,
+    slotSources: { ...slotSources, terminalFlow: { ...terminal, note: terminal.note ?? ref } },
+    terminalFlow: { slot: chosen.slot, ref },
+    terminalFlowNote: named && better ? `${chosen.covered}/${chosen.total} terminals have ${label(chosen.slot)}; ${label(better.slot)} covers ${better.covered}. Save terminalFlow = ${label(better.slot)} at project` : undefined,
+  };
+}
 
 import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
 export { FIRM_SEED, workLayer } from "@pe/ducts-domain/input-layers";

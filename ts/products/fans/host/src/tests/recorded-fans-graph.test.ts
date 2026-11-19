@@ -440,10 +440,10 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
         const addAll = await send(live, `/pe/resource-subscriptions?connection=${connection}`, { add: all, remove: [] });
         expect(addAll.status).toBe(200); await ready(all);
         const beforeEdit = seen.length;
-        expect(await workspace!.apply(scope, "fans", "human", [{ path: ["calculation", "fanFlow", "edit"], value: { value: { kind: "balanced-design", source: "test" } } }], 0)).toMatchObject({ ok: true });
-        await ready([works[0]!, works[1]!]); expect(writer.capture.truncated(), "changed Work and ack after calculation edit").toBeNull();
+        expect(await workspace!.apply(scope, "fans", "human", [{ path: ["equipmentFlows", "UniqueId:fixture-fan", "edit"], value: { value: 200 } }], 0)).toMatchObject({ ok: true });
+        await ready([works[0]!, works[1]!]); expect(writer.capture.truncated(), "changed Work and ack after equipment flow edit").toBeNull();
         const edits = seen.slice(beforeEdit);
-        expect(edits.find((frame) => frame.key === readingKey(works[0]!))?.value).toMatchObject({ revision: 1, doc: { calculation: { fanFlow: { edit: { value: { kind: "balanced-design", source: "test" } } } } } });
+        expect(edits.find((frame) => frame.key === readingKey(works[0]!))?.value).toMatchObject({ revision: 1, doc: { equipmentFlows: { "UniqueId:fixture-fan": { edit: { value: 200 } } } } });
         expect(edits.find((frame) => frame.key === readingKey(works[1]!))).toMatchObject({ kind: "event", value: { revision: 1 } });
         const previous = batches.flatMap((batch) => batch.add).find((key) => key.kind === "ducts-snapshot")! as Extract<ReadingRequest, { kind: "ducts-snapshot" }>;
         const selected = { ...previous, slots: { ...previous.slots, fanFlow: "PE_M_Fan_AirFlow" } };

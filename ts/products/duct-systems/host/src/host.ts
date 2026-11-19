@@ -8,36 +8,25 @@ import { DUCTS_SYSTEM_MAX,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots, ductSlotRequest, } from "@pe/agent-contracts";
+  } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
 import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
+import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { read } from "@pe/host/read-graph";
 import { systemList } from "@pe/duct-systems-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { fanRoster, espOptions, networkCalcs } from "@pe/fans-contract/fans-host-reads";
+import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";
 import { fanSystems } from "@pe/ducts-contract/fan-scope.neutral";
 
 export const ductsRoster = body(contracts.roster, async function(ctx, { target }) {
-    const saved = await ctx.read(designLayers, target),
-      design = ductsDesign(saved.ducts, saved.fans);
-    const staged = stagedDucts(design, design);
-    const response = await ctx.read(native("ducts.snapshot.roster"), {
-      role: "acquire",
-      target: { kind: "document", ref: target },
-      request: {
-        slots: ductSlotRequest(saved.settings),
-        labelParameter: staged.labelParameter ?? undefined,
-        selector: { kind: "roster" },
-      },
-    });
-    if (!response.version) throw Error("Duct roster has no observation version");
-    const snapshot = response.body;
-    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version, slotSources: ductParameterSlots(saved.settings) };
+    const input = await ctx.read(ductsInputs, target);
+    if (!input.version) throw Error("Duct roster has no observation version");
+    return { ...input.snapshot, rows: systemList(input.snapshot, null), sourceVersion: input.version, slotSources: input.flow.slotSources };
   });
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
@@ -46,11 +35,12 @@ const systems = read("ducts.systems", {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
     const staged = stagedDucts(design, design);
+    const { flow } = await ctx.read(ductsInputs, target);
     const response = await ctx.read(native("ducts.snapshot.walk"), {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: ductSlotRequest(saved.settings),
+        slots: flow.slots,
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },
@@ -60,7 +50,7 @@ const systems = read("ducts.systems", {
     return {
       ...snapshot,
       sourceVersion: response.version,
-      slotSources: ductParameterSlots(saved.settings),
+      slotSources: flow.slotSources,
       systemReads: {
         completed: systemIds,
         missing: systemIds.filter((id) => !snapshot.systems.some((system) => system.id === id)),
@@ -73,7 +63,7 @@ export const ductsNetwork = body(contracts.network, async function(ctx, args) {
     // Roster base equipment misses unassigned fans. Walk the named port before resolving system names.
     const walk = args.fan ? await ctx.read(native("ducts.snapshot.walk"), {
       role: "acquire", target: { kind: "document", ref: args.target },
-      request: { selector: { kind: "from", unitId: args.fan.unitId, portIndex: args.fan.portIndex } },
+      request: { slots: roster.slots, selector: { kind: "from", unitId: args.fan.unitId, portIndex: args.fan.portIndex } },
     }) : null;
     const names =
       walk ? fanSystems(walk.body, roster.systems) : args.system === "all"
@@ -126,10 +116,6 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
     )
       throw Error("Pricing requires every requested system batch; read the network coverage");
     const fans = await ctx.read(fanRoster, { target: args.target });
-    const options = await ctx.read(espOptions, {
-      target: args.target,
-      units: fans.rows.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
-    });
     const { sourceVersion: _version, systemReads: _coverage, slotSources: _sources, ...acquired } = network;
     const calcs = await ctx.read(networkCalcs, { snapshot: acquired, tables: tables.body, catalogs: catalog.tables,
       design: ductsDesign(layers.ducts, layers.fans), firm: firmLayer(layers.firm, layers.settings), revision: layers.revision });
@@ -149,7 +135,6 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
         );
         const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
         return {
-          ...options,
           ...result,
           analysis: {
             ...result.analysis,

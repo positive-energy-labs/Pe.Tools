@@ -218,8 +218,7 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
 // Mutant H5-caption: claim a missing firm file supplied the seed.
 test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
   const read = fansCalcData.parse({
-    open: null, rows: [], progress: null, espOptions: null, espOptionsError: null,
-    ductSystemsRevision: 0, ductSystemsWork: {}, fansWork: {}, design: {}, settings: {},
+    open: null, rows: [], progress: null, ductSystemsRevision: 0, ductSystemsWork: {}, fansWork: {}, design: {}, settings: {},
     calcSnapshot: { kind: "absent" },
     fans: { target: { session: "test", openId: "doc" }, slots: [], activeSlot: "", rows: [] },
     calcView: { blockers: [], tiers: { taken: 0, accept: 0, preview: 0 }, taken: [], inputs: null,

@@ -360,21 +360,10 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
     }
     expect(packet.value!.coverage.unknown, "H23: selected scope reports its coverage").toEqual([]);
     const native = trace.parse(packet.value!.trace).filter((entry) => entry.name === "native");
-    expect(native, "H15: discovery carries exact selected identities and storage type").toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          args: expect.objectContaining({
-            target: { kind: "document", ref },
-            request: expect.objectContaining({
-              context: expect.objectContaining({
-                StorageType: "Double",
-                ElementUniqueIds: [...new Set(chosen.map((row) => row.uniqueId))].sort().join(","),
-              }),
-            }),
-          }),
-        }),
-      ]),
-    );
+    expect(
+      native.some((entry) => JSON.stringify(entry.args).includes("parameter-identities")),
+      "H15: fan reads do not discover unused ESP options",
+    ).toBe(false);
     j.mount.page.subject({ kind: "ids", ids: [] });
     await j.ready();
     const empty = await j.host.send(102, []);
@@ -382,10 +371,6 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
       empty.value!.data.opened,
       "H23: unread scope does not invent engineering answers",
     ).toEqual([]);
-    expect(
-      empty.value!.data.espOptions,
-      "H15: empty selection does not discover the whole model",
-    ).toBeNull();
     expect(
       trace
         .parse(empty.value!.trace)

@@ -48,7 +48,7 @@ test("V3: Settings resolves its own tiers and an unnamed slot reads default", ()
   expect(rows.find(row => row.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: null, source: "default" });
 });
 
-test("P23: host requests name only served slots and rows retain the serving tier", () => {
+test("P23: initial slot requests name only served slots and all consumers use the shared selection", () => {
   const name = "Firm_Flow";
   const tiers = { ducts: [{ ...settings.ducts[0], json: { parameters: { fanFlow: "Firm_Flow" } } }] };
   expect(ductParameterSlots(tiers.ducts)).toMatchObject({ fanFlow: { name, source: "firm" } });
@@ -56,10 +56,11 @@ test("P23: host requests name only served slots and rows retain the serving tier
   expect(ductSlotRequest()).toEqual({});
   expect(Object.values(ductParameterSlots()).every(slot => slot.name === null && slot.source === "default")).toBe(true);
   for (const [file, pattern, count] of [
-    ["duct-systems/host/src/host.ts", /slots: ductSlotRequest\(saved.settings\)/g, 2],
-    ["fans/host/src/host.ts", /slots: ductSlotRequest\(settings\)/g, 1],
-    ["fans/host/src/fan-calc.ts", /const slots = ductSlotRequest\(saved.settings\)/g, 2],
-    ["ducts/host/src/action-runtime.ts", /slots: ductSlotRequest\(settings\)/g, 1],
+    ["duct-systems/host/src/host.ts", /ctx\.read\(ductsInputs, target\)/g, 2],
+    ["fans/host/src/host.ts", /ctx\.read\(ductsInputs, args.target\)/g, 1],
+    ["fans/host/src/fan-calc.ts", /ctx\.read\(ductsInputs, (request.target|target)\)/g, 2],
+    ["ducts/host/src/action-runtime.ts", /await acquireSnapshotInputs\(settings,/g, 1],
+    ["ducts/host/src/ducts-inputs.ts", /await read\(ductSlotRequest\(settings\)\)/g, 1],
   ] as const) {
     const source = readFileSync(new URL(`../../../../../../products/${file}`, import.meta.url), "utf8");
     expect([...source.matchAll(pattern)], file).toHaveLength(count);

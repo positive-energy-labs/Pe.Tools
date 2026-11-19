@@ -8,7 +8,6 @@ import {
   fansCalcData,
   openFanCalcSchema,
   stagedDucts,
-  ductParameterSlots, ductSlotRequest,
   subjectCode,
   subjectOf,
 
@@ -17,6 +16,7 @@ import { calcSnapshot } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { calcState } from "@pe/fans-domain/calc/state";
 import { z } from "zod";
 import { designLayers } from "@pe/ducts-host/design-layers";
+import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 
 import { read } from "@pe/host/read-graph";
 import {
@@ -27,7 +27,6 @@ import {
   fanOverview,
   fanRoster,
   fanCalcBreakdown,
-  espOptions,
 } from "./fan-calc.ts";
 const openFan = read("fans.open", {
   input: fansReadArgs
@@ -88,10 +87,6 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
             if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
             return row;
           });
-    const options = await ctx.read(espOptions, {
-      target: args.target,
-      units: chosen.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
-    });
     if (chosen.length > FAN_READ_MAX) throw Error("Open at most 32 fan ports in one sheet");
     const opened = await ctx.collect(chosen, {
       read: openFan,
@@ -146,11 +141,12 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
         ]),
       ),
     ].sort((a, b) => a - b);
-    const geometry = ids.length
+    const flow = ids.length ? (await ctx.read(ductsInputs, args.target)).flow : null;
+    const geometry = flow
       ? await ctx.read(native("ducts.snapshot.walk"), {
           role: "acquire",
           request: {
-            slots: ductSlotRequest(settings),
+            slots: flow.slots,
             labelParameter: staged.labelParameter ?? undefined,
             selector: { kind: "ids", ids },
           },
@@ -158,7 +154,6 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
         })
       : null;
     return ctx.compute(fansCalcData, { opened, rows, fans, geometry }, (data) => ({
-      ...options,
       open: data.opened[0] ?? null,
       opened: [...data.opened],
       rows: data.rows,
@@ -174,7 +169,7 @@ export const fansCalc = body(contracts.calc, async function(ctx, args) {
         ? {
             ...calcSnapshot(data.geometry.body as Parameters<typeof calcSnapshot>[0]),
             sourceVersion: data.geometry.version ?? undefined,
-            slotSources: ductParameterSlots(settings),
+            slotSources: flow?.slotSources,
           }
         : { kind: "absent" },
     }));
