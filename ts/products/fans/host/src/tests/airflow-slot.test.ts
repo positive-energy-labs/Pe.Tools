@@ -33,7 +33,13 @@ test("empty named default chooses one Revit Flow slot by coverage and prices the
   const snapshot = model(flow.slots.terminalFlow);
   const inputs = resolveInputs({ snapshot, firm: TEST_FIRM, ...flow });
   expect(inputs.terminals[3]?.cfm).toMatchObject({ value: 200, ref: expect.stringContaining("default · revit:Flow chosen by coverage 2/2") });
-  const withReceipt = { ...snapshot, store: storeOf({ ...snapshot.store, terminalFlows: { "3": { cfm: 150 } } }) };
+  const withReceipt = {
+    ...snapshot,
+    store: storeOf({
+      ...snapshot.store,
+      terminalFlows: { "3": { cfm: 150, appliedAt: "2026-11-19T00:00:00Z" } },
+    }),
+  };
   expect(resolveInputs({ snapshot: withReceipt, firm: TEST_FIRM, ...flow }).terminals[3]?.cfm)
     .toMatchObject({ value: 200, source: "model", ref: "model:3/revit:Flow" });
   expect(receiptDrift(withReceipt, "flows", 3)).toBe("Changed in Revit since Pe wrote 150 cfm");
