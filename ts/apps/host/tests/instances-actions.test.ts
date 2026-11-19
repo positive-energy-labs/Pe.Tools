@@ -1667,3 +1667,15 @@ test.each([false, true])("K1c: stopping a Revit that already closed succeeds wit
   expect(stop).toMatchObject({ state: "succeeded", result: { state: "ok", phase: "already-gone" } });
   expect(f.calls.every((args) => args[0] === "session" && args[1] === "list")).toBe(true);
 });
+
+test("restart refuses a session the SDK no longer names without dispatching", async () => {
+  const f = await setup(() => Error("Unexpected SDK mutation"), []);
+  const restart = await f.admit("instances.restart", { session });
+  expect(restart).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: "The supplied session incarnation is not the one the SDK records",
+  });
+  expect(f.calls).toHaveLength(1);
+  expect(f.calls[0]?.slice(0, 4)).toEqual(["session", "list", "--id", "dev"]);
+});
