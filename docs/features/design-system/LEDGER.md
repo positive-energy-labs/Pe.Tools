@@ -679,7 +679,7 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - 2026-11-05, the owner said, “this should be a pattern forced by the ui, the user has no other option.” Compose the controls so the interaction enforces the rule directly. The [surface philosophy](../../design/SURFACE-PHILOSOPHY.md) owns the rule.
 - 2026-11-05, the owner said, “i'd much prefer the fan's "computing or loading" text (but centered in screen) with sweep maybe on the whole page. that being said I also wanna think about how we avoid unmounting during loads. somehting deserve it like the sheets ledger, but others dont, like the picture when you adding a second active system.” Center the loading message on /fans and /duct-systems. Keep an existing picture mounted when a second system loads.
 - 2026-11-19, the owner accepted the search box hiding on lists of seven rows or fewer in the current kit. The broader list-search rules remain provisional while the shared search and filter design is open.
-- 2026-11-19, the owner adopted the chat dock width fix. The chat and plugin panes keep their own minimum widths.
+- 2026-11-19, the owner adopted the dock width fix. A split that declares a minimum width for its opposite side uses that exact width. The nested panes can give way before the outer pane folds, so a person can narrow the docked Pea pane. `2ef22341`.
 
 ## Tried & rejected
 
@@ -979,3 +979,5 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - Keep the unit input stable on hover, draw its input border at rest and make the unit text activate editing. [owed-20261119 design-system-1-192, 1 item]
 - Use the Work slot's own scroll boundary for line rendering once it is available, and verify that long lists avoid drawing every line. [owed-20261119 other-1-219, 1 item]
 - Measure tab labels by rendered width so truncation works across glyph widths and crowded Places. [owed-20261119 pea-1-291, 1 item]
+
+- 2026-11-19, check the dock sizing change on screen. On /duct-systems the drawing side's calculated floor drops from about 620 px to 360 px. Widening Systems folds Rulings to its rail and leaves about 320 px for the picture. Below about 891 px the docked Pea thread list stacks above chat. A route or Pod may declare a floor of zero and leave a sliver. Decide whether the [split schema](../../../ts/packages/agent-contracts/src/route-kernel-data.ts#L178) should require a positive floor.

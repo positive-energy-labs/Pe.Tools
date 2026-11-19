@@ -88,8 +88,9 @@
 - 2026-09-24, Astra wave 4: locked and stale must show together (`b8ab8bf8`, ported to main 2026-10-26 on branch `port/september-small`: locked keeps the outline, stale takes the fill, the legend counts the region under both, tooltip and table read `locked · stale`; regression in `rooms/rooms.test.tsx`): the route row hid `stale:true` on a locked authored region while six machine rows showed it. PROVEN[browser and deterministic, web 114 passed]. Native hatch obscures wall ink, but hatch does not mean Held: a clean crop-connected region is Accepted.
 - 2026-09-24, Astra visual bar: fresh-eye REJECT verdicts (crop geometry, wavy and micro-jog boundaries, obscured ink) may veto an adoption but never rescue a red gate; a candidate with the original Partition gate red is never adopted.
 
-- 2026-11-19, the owner approved “i take your rec on everything else” for showing a person's rejection even if the solver had already held that piece for an engineering reason.
-- 2026-11-19, the owner accepted the three room drawing fixes and said, “dont treat existing rooms ux as set.” Keep the rest of the route open to design changes.
+- 2026-11-19, the owner approved “i take your rec on everything else” for a person's rejection taking precedence over an engineering hold. The piece reads `rejected` and keeps the solver's measurements. A locked room stays as it was. `c087103c`.
+- 2026-11-19, the owner accepted the three room drawing fixes and said, “dont treat existing rooms ux as set.” Pea reads, stages and previews with the same public SDK session name. A refused room-drawing request tells the caller where its inputs belong. `ff5b0699`.
+- 2026-11-19, a person's rejection keeps a piece held as `rejected` even when it is the only face that covers an inferred zone. The solver leaves it held. `093f61aa`.
 
 ## Tried & rejected
 
@@ -110,7 +111,6 @@
 - 2026-10-23, production nonempty plan/region acceptance remains unproven: `00 Mechanical Plan - Basement/Crawlspace` is selectable, has no zones or room regions, and read-only preview refuses `revit.context.view-image` because it can transact. No partition ran. See the [production report](../../../.artifacts/runs/final-20261023/REPORT.md).
 - Mileage 2026-09-26 (`.artifacts/runs/mileage/REPORT.md` holds the evidence): kaitpw rules on zone tiling vs architect area (overrule 3) and on `JoinTolFt`; then merge or drop `mileage-solver` and retire the `Pe.Tools-mileage-fix-loop` worktree (kept for review; the other two were swept).
 - A partition step with non-empty `failures` (`FilledRegion.Create` refusing a near-retraced held loop, `Rooms.cs:449`) settles `succeeded` because `takeoff-actions.ts:202-205` never reads `failures`; the route shows nothing. Dedupe retraced vertices before `Create` and settle such a step `incomplete`.
-- A rejected held face keeps its engineering hold (`Judge.cs:33` before `:36`) and the card reads `fail`; ruling owed: rejected wins whatever the hold reason.
 - A rails-0 partition (links unloaded) flips every zone fill into a locked room and the next save writes it; a rails-0 zone must stay a zone with a held face. Twice on Walden this run; SDK `doc open` (including `--detach`) must reload cloud links from the collaboration cache (type name = cache file once the reference reads `NotFound`).
 - The first `scripting.execute` in a fresh session breaks every later host op with `Could not load Pe.Revit.Takeoff ... 0x80131515`; one read op first cures it. Name the loader line (`ScriptAssemblyLoadService` byte-loads into a collectible ALC).
 - `copy markdown` must carry region names, guids, R-numbers, zone names, geometry and freshness, scoped to the level; today a solver agent cannot act on it (Astra, `ui/round2/main-zone-manual.md` vs `main-zone-copied-extract.md`).
@@ -159,7 +159,7 @@
 - A test bed project with every architectural link kind (native RVT link, IFC link, DWG import) and zones drawn and ready, so solver claims stop resting on project-a alone. kaitpw, 2026-09-24.
 - Purge `/takeoffs` room management once `/rooms` is proven in a session.
 
-- Make a person's rejection take precedence in [the room judge](../../../dotnet/Pe.Revit.Partition/Judge.cs) when the solver has already held the piece. Check that the feedback inbox reports the person's rejection. [D-rooms-01-001]
+- 2026-11-19, drive a person's rejection of a piece the solver already held. Check that the feedback inbox says `rejected`, that the solver's measurements stay visible, and that the rejected sole face and a locked room retain their states. [D-rooms-01-001]
 - Decide whether rooms fill their zone and share edges, and agree on a join tolerance during the Rooms design work. On 2026-11-19 the owner leaned toward shared edges, saying, “it just feels like a sot smell that'll open tons of edge cases for calculation stuff coming later”. The September trial at `archive/2026-09/mileage-solver-a4cd3213` must return the same result on a rerun with no edit before it can stand as evidence for that shape. [D-rooms-01-002]
 
 - Preserve a blank Revit room type through the Rooms read. [W-rooms-02-007, W-rooms-02-016]
@@ -192,8 +192,8 @@
 - Reconcile the Rooms local drawing helper introduced in e7e5bf33 with its archived counterpart. Identify which parts belong with the retained plan drawing code before removing the copy. [owed-20261119 rooms-1-032, 1 item]
 - Give the native room drawing command an atomic boundary so refusal or interruption cannot leave partial geometry. [owed-20261119 host-journal-1-259, 1 item]
 - Resume RHVAC Load Preview integration through Rooms once equipment-derived flow has had real use. [owed-20261119 duct-systems-1-232, 1 item]
-- Repeat the Pea room-drawing baseline after fixes B1 through B6 land. Verify that the refusal names the Work cell, public session targeting works at each step, replanning and native resend produce only one region, blank model room types read back blank, and a lost reply remains recoverable by its original attempt. [owed-20261119 rooms-1-041, 1 item]
-- Preserve the public room draw validation message that tells Pea to stage loose input in writeIntent["rooms.draw"].edit.value. Use eec55934 as the starting point and cover the refusal seen by the caller. [owed-20261119 rooms-1-042, 1 item]
+- 2026-11-19, repeat the Pea room-drawing baseline on a real model copy. Witness the landed input refusal and public SDK session name for staging and preview. Then check whether replanning and resending create only one region, a blank room type reads back blank, and a lost reply remains recoverable by its original attempt. [owed-20261119 rooms-1-041, 1 item]
+- 2026-11-19, confirm that a room-drawing refusal reaches Pea and names the Work cell `writeIntent["rooms.draw"].edit.value` for loose input. The refusal guidance landed in `ff5b0699`. [owed-20261119 rooms-1-042, 1 item]
 - Check the zone GUID saved by rooms.draw against the actual containing zone and the unassigned-room rule. Rooms.cs writes the level scope GUID into that field. Decide what a room drawn outside every zone should store and verify its snapshot and rerun. [owed-20261119 rooms-1-055, 1 item]
 - Verify that door openings separate rooms and that open or header-backed gaps join them on the current solver. Use the ML09 `A_DOOR_SWING` collapse as the negative check. Settle how mechanical designers group rooms by airflow before tuning joins in large open plans or small rooms. [owed-20261119 rooms-1-061, 1 item]
 - Make each wall edge the solver creates traceable to evidence the designer can inspect. Let the designer edit that edge while preserving the zone's diagonal and curved boundaries. [owed-20261119 rooms-1-076, 1 item]
@@ -201,3 +201,5 @@
 - Read an already populated document through the document-scoped Rooms snapshot before partitioning or refreshing it. Compare the returned regions with the native document to extend the existing empty-model witness. [owed-20261119 rooms-1-102, 1 item]
 - Put the steps of a room draw under one native transaction group and define which shared carrier setup, if any, can persist separately. Induce a failure after first-time carrier setup and verify what remains and what the retry reuses. [owed-20261119 pea-1-262, 2 items]
 - Give the tests typed fixtures or checked constructors where they now assert a type, and lower each file's test-cast allowance once the test expresses the same witness. The [guard baseline](../../../ts/tests/repo-guards/src/test-casts.baseline.json) records the file allowances. [owed-20261119 rooms-test-casts, 3 items]
+
+- 2026-11-19, decide whether to keep the sole-face promotion for engineering holds as part of the Rooms design. When a face the solver held covers at least 99% of an inferred zone with no locked rooms, the zone still becomes a locked room and the engineering hold is cleared. Project D's garage motivated this rule.
