@@ -18,7 +18,7 @@ test("native effect changes flow through generation into browser metadata", () =
 
 test("receipt controls select their existing transport and SessionWrite scope", () => {
   const table = generateCommandTable();
-  for (const key of ["action.recover", "action.resume", "action.cancel"]) {
+  for (const key of ["action.cancel"]) {
     expect(table[key]!.effect).toBe("SessionWrite");
     expect(table[key]!.axes.effect).toBe("SessionWrite");
     expect(table[key]!.via).toEqual({ route: key });

@@ -323,7 +323,9 @@ export const workAuthorOf = (caller: Caller): "human" | "pea" => {
 };
 
 /**
- * The caller the identity middleware minted for this request; anonymous outside one. A door reads
+ * The caller of the current invocation context: the one the identity middleware minted for a
+ * request, or a recovered row's stored caller that the journal sets around its re-entry
+ * (`ActionJournal.recover`); anonymous outside both. A door reads
  * it once, before its first suspension, and passes it down: an Effect fiber resumed by a socket or
  * bridge callback runs outside the request's AsyncLocalStorage (`caller-carriage.test.ts`).
  */

@@ -14,7 +14,7 @@ const ports = (value: unknown = {}) => ({
   decode: vi.fn(async (_key: string, value: unknown) => value),
 });
 
-test.each(["action.recover", "action.resume", "action.cancel", "action.read"] as const)(
+test.each(["action.cancel", "action.read"] as const)(
   "%s controls the original receipt without admitting another action",
   async (key) => {
     const receipt = { state: "running", id: "original", key: "sheet.apply", caller: { kind: "human", via: "local" },

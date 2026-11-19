@@ -294,6 +294,7 @@ effectTest(
       let accepted: (() => void) | undefined;
       const journal = {
         bindCommands: () => {},
+        reconcile: async () => {},
         subscribe: (query: unknown, listener: () => void) => {
           expect(query).toEqual({ kinds: ["action"] });
           accepted = listener;

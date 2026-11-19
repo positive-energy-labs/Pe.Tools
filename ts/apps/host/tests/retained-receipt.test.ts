@@ -297,7 +297,6 @@ test("retained original-id observation and retry preserve disk identity and do n
   try {
     const observed = (await f.owner.readFor(caller, undefined, id))[0]!;
     expect(observed.target).toEqual({ kind: "unavailable-original", original: original.target });
-    expect(await f.owner.resume(id, { caller, basis: null })).toEqual(observed);
     const retry = { id, key: original.key, target: original.target, input: original.input };
     expect(await f.owner.invoke(retry, { caller, basis: null })).toEqual(observed);
     await expect(

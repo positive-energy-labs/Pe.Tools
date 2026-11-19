@@ -602,7 +602,7 @@ export function scheduleExecutors(
       };
       if (outcome.unresolved)
         throw new ActionIncomplete(
-          "Native acknowledgment incomplete; staging retained. Recover this original receipt.",
+          "Native acknowledgment incomplete; staging retained. Read this receipt and the schedule before staging again.",
           result,
         );
       if (readbackError)
@@ -702,7 +702,6 @@ export function scheduleExecutors(
                     kind: "member" as const,
                     probe: { pod: source.id, path: source.path },
                     expected: source.sha256,
-                    bytesBase64: source.bytesBase64,
                   },
                 ]
               : [],

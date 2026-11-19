@@ -39,7 +39,7 @@ const MEMBER: Inspectable = {
   },
 };
 
-/** An action receipt, opened in `/ops`, where its recovery controls live. Its id is the action id. */
+/** An action receipt, opened in `/ops`, where its read and stop controls live. Its id is the action id. */
 const RECEIPT: Inspectable = {
   label: (id) => `receipt ${id.slice(0, 8)}`,
   open: { kind: "route", href: (id) => routeAddress("ops").link({ actionId: id }) },

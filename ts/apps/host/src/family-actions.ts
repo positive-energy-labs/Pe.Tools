@@ -553,7 +553,6 @@ export function familyExecutors(
               kind: "member",
               probe: { pod: member.id, path: member.path },
               expected: member.sha256,
-              bytesBase64: member.bytesBase64,
             });
         return {
           familyNames: item.familyNames,
@@ -1320,7 +1319,6 @@ export function familyExecutors(
             kind: "member",
             probe: input.member,
             expected: saved.sha256,
-            bytesBase64: Buffer.from(saved.content).toString("base64"),
           },
         ],
         effects: [],

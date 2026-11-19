@@ -86,6 +86,8 @@ export const invocationOutcomeSchema = z.strictObject({
   ]),
   input: z.unknown(),
   reason: z.string().optional(),
+  // Only "retry" is produced now (K1b deleted Recover and Resume). The decoder keeps the old values
+  // because stored rows carry them, and a journal that fails to decode is discarded.
   recovery: z.enum(["retry", "reconcile", "resume"]).optional(),
   receiptId: z.string().optional(),
   snapshots: z.array(z.string()).optional(),
@@ -404,9 +406,7 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
     receiptId: row.id,
     ...(reason ? { reason } : {}),
     snapshots: row.snapshots?.map((snapshot) => snapshot.id) ?? [],
-    ...(state === "outcome-unknown"
-      ? { recovery: row.state === "incomplete" ? ("resume" as const) : ("reconcile" as const) }
-      : state === "refused" &&
+    ...(state === "refused" &&
           row.state === "failed" &&
           row.notDispatched &&
           row.refusal?.kind !== "invalid" &&

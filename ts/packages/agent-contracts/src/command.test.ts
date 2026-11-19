@@ -1,7 +1,8 @@
 import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 import { z } from "zod";
 import { tools } from "./semantic-actions.ts";
-import type { Command, WorkHandle } from "./command.ts";
+import { consumedSchema, type Command, type Consumed, type WorkHandle } from "./command.ts";
+import { retainedConsumedSchema } from "./receipt-evidence.ts";
 import { bindWork } from "./route-state.ts";
 import { familyActions, familyApplyResultSchema, type FamilyApplyResult } from "./family-actions.ts";
 
@@ -92,5 +93,22 @@ describe("family.capture destination", () => {
     expect(input.safeParse({ pod: "lab", path: "settings/family/box.json" }).success).toBe(true);
     expect(input.safeParse({ pod: "lab", path: "settings/family/../../x.json" }).success).toBe(false);
     expect(input.safeParse({ pod: "lab", path: "settings/family/a\b.json" }).success).toBe(false);
+  });
+});
+
+describe("consumed member facts (K2)", () => {
+  const member = { kind: "member", probe: { pod: "p", path: "pod.json" }, expected: "0".repeat(64) } as const;
+  const blob = { digest: "1".repeat(64), size: 3, fileName: "a.pdf" };
+  it("refuses a member's bytes in a live fact, by type and by parse", () => {
+    // @ts-expect-error a member fact names its sha alone
+    const fact: Consumed = { ...member, bytesBase64: "QUJD" };
+    expect(consumedSchema.safeParse(fact).success).toBe(false);
+    expect(consumedSchema.safeParse({ ...member, blob }).success).toBe(false);
+    expect(consumedSchema.safeParse({ kind: "file", probe: { path: "a" }, expected: null, bytesBase64: "QUJD" }).success).toBe(false);
+  });
+  it("drops the retired bytes from a fact a journal stored before, and keeps a file's blob", () => {
+    expect(retainedConsumedSchema.parse({ ...member, bytesBase64: "QUJD", blob })).toEqual(member);
+    const file = { kind: "file", probe: { path: "a" }, expected: null, blob };
+    expect(retainedConsumedSchema.parse({ ...file, bytesBase64: "QUJD" })).toEqual(file);
   });
 });

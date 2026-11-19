@@ -251,7 +251,7 @@ test("cancel sends op.cancel with the step id and never interrupts the dispatche
   const f = await fixture();
   try {
     const stepId = await f.submit("cancelled");
-    expect(await f.journal.cancel("cancelled")).toMatchObject({ state: "running", cancellationRequested: true });
+    expect(await f.journal.cancel("cancelled")).toMatchObject({ receipt: { state: "running", cancellationRequested: true }, signalled: true });
     expect(f.calls).toEqual([
       { key: "test.hold", requestId: stepId },
       { key: CANCEL_OPERATION_KEY, requestId: stepId },
@@ -326,7 +326,7 @@ test("closing joins a Stop still sending: the cancel settles before the journal 
     await f.journal.wait("stopped-at-close");
     await f.closeHost();
     expect(f.seen.cancelsSettled).toBe(1);
-    await expect(stopping).resolves.toMatchObject({ id: "stopped-at-close" });
+    await expect(stopping).resolves.toMatchObject({ receipt: { id: "stopped-at-close" } });
   } finally {
     await f.dispose();
   }

@@ -7,13 +7,13 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Exit, Layer, Scope } from "effect";
-import { expect, test } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
 import { memberWork, settingsRouteState, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { type ActionJournal } from "../src/action-journal.ts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { bindControl } from "../src/control.ts";
+import { bindControl, currentCaller, workAuthorOf } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { captureStore, settle, testRegistry, journalAt } from "./effect-test.ts";
 
@@ -24,7 +24,7 @@ test.each([
   { later: "pea", pea: true, crash: true },
   { later: null, pea: false, crash: false },
 ] as const)(
-  "registered settings.write resumes retirement after restart: %j",
+  "registered settings.write retires its Work at boot after a crash: %j",
   async ({ later, pea, crash }) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-member-retirement-"));
     const bridgeScope = Scope.makeUnsafe();
@@ -129,7 +129,9 @@ test.each([
         await writeFile(path, crashBytes!);
         for (const [name, bytes] of workBytes) await writeFile(join(workDir, name), bytes);
       }
-      const restoredWork = new RouteWorkspace({ publicationAuthor: () => "human",
+      // The production author, as pe-routes builds it: the retirement must carry a real caller,
+      // because boot's reconcile runs outside any request.
+      const restoredWork = new RouteWorkspace({ publicationAuthor: () => workAuthorOf(currentCaller()),
         registrations: [{ spec: settingsRouteState }],
         store: fileRouteDocumentStore(stateFixture(workDir)),
       });
@@ -153,52 +155,44 @@ test.each([
         { workspace: restoredWork, podsRoot: directory },
         () => Effect.fail(Error("settings.write owns its writer")),
       );
-      expect((await restarted.list(undefined, "once"))[0]!.state).toBe(
-        crash ? "incomplete" : "succeeded",
-      );
-      const recovered = await restarted.recover("once");
+      // Boot finishes the interrupted row by itself: its steps all answered and succeeded, so it
+      // retires its Work with no SDK read and no person pressing anything (K1b).
+      const recovered = crash
+        ? await vi.waitFor(async () => {
+            const row = (await restarted!.list(undefined, "once"))[0]!;
+            expect(row.steps.at(-1)).toMatchObject({ kind: "publication", key: "work.retire", state: "succeeded" });
+            expect(row.state).not.toBe("running");
+            return row;
+          }, { timeout: 10_000 })
+        : (await restarted.list(undefined, "once"))[0]!;
       expect(recovered.state).toBe(crash ? "incomplete" : "succeeded");
       if (crash) {
         if (recovered.state !== "incomplete") throw Error(JSON.stringify(recovered));
-        expect(recovered.error).toContain("explicit resume");
-        expect(recovered.steps.at(-1)).toMatchObject({
-          kind: "publication",
-          key: "work.retire",
-          state: "succeeded",
-        });
+        expect(recovered.error).toContain("only retires its Work");
       }
       const retired = settingsRouteState.schema.parse((await restoredWork.read(key, "pods"))!.doc);
       expect(retired.fields["/height"]?.edit).toBeNull();
       if (later) expect(retired.fields["/width"]?.edit).toMatchObject({ value: 21, by: later });
       else expect(retired.fields["/width"]?.edit).toBeNull();
-      const fresh = { thread: run.thread, turn: "continuation" };
-      runs.open(fresh);
-      const currentCaller: Caller = pea
-        ? { kind: "pea", context: "host-minted", thread: fresh.thread, run: fresh, root: fresh }
-        : caller;
-      await restarted.resume("once", { caller: currentCaller, basis: null });
-      const settled = await restarted.wait("once");
-      expect(settled.state).toBe("succeeded");
-      expect(settled.steps.filter((step) => step.key === "pod.member.save")).toHaveLength(1);
+      // The file was written once, before the crash; finishing never writes it again.
+      expect(recovered.steps.filter((step) => step.key === "pod.member.save")).toHaveLength(1);
       expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ width: 13, height: 14 });
       expect((await stat(file, { bigint: true })).mtimeNs).toBe(landed.mtimeNs);
-      const current = settingsRouteState.schema.parse((await restoredWork.read(key, "pods"))!.doc);
-      expect(current.fields["/height"]?.edit).toBeNull();
-      if (later) expect(current.fields["/width"]?.edit).toMatchObject({ value: 21, by: later });
-      else expect(current.fields["/width"]?.edit).toBeNull();
-      expect(current.basis?.sha256).toBe(
-        createHash("sha256")
-          .update(await readFile(file))
-          .digest("hex"),
-      );
       expect(originalSnapshot).toMatchObject({ address: key, workRevision: staged.revision });
-      expect(settled.snapshots).toEqual([originalSnapshot]);
-      expect(settled.outcome?.snapshots).toEqual([originalSnapshot.id]);
-      const durable = journalAt(path, Date.now);
-      const reopened = (await durable.list(undefined, "once"))[0]!;
-      expect(reopened.snapshots).toEqual([originalSnapshot]);
-      expect(reopened.outcome?.snapshots).toEqual([originalSnapshot.id]);
-      await durable.close();
+      // Its one re-entry is spent: two further boots neither re-enter it nor add a revision.
+      await restarted.reconcile();
+      await restarted.close();
+      const settledBytes = await readFile(path);
+      for (let boot = 0; boot < 2; boot++) {
+        restarted = journalAt(path, Date.now);
+        bindCommandRuntime(restarted, bridge, captures, { workspace: restoredWork, podsRoot: directory },
+          () => Effect.fail(Error("settings.write owns its writer")));
+        await restarted.reconcile();
+        expect((await restarted.list(undefined, "once"))[0]!.state).toBe(crash ? "incomplete" : "succeeded");
+        await restarted.close();
+        expect(await readFile(path)).toEqual(settledBytes);
+      }
+      restarted = undefined;
     } finally {
       runs.closeAll();
       if (restarted) await restarted.close();

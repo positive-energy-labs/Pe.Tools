@@ -85,13 +85,9 @@ export function commandRegistry(
     if (!step.process) throw Error("No exact native process was captured for this step");
     return readNativeReceipt(step, step.process, deps.sdk);
   };
-  const cancel = (requestId: string) =>
-    Effect.flatMap(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => {
-      const result = value as { cancelled?: boolean; message?: string } | null;
-      return result?.cancelled === false
-        ? Effect.fail(Error(result.message ?? "Native request is not running"))
-        : Effect.succeed(result);
-    });
+  // `cancelled: false` says only that Revit holds no in-flight request by this id (done, or not yet
+  // sent); the saved Stop still fences the next step, so it is an answer, not a failure.
+  const cancel = (requestId: string) => Effect.map(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => value);
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
     const definition = entry.definition;
     return {
@@ -177,5 +173,10 @@ export function bindCommandRuntime(
     ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
     readOwnership: owned.readOwnership,
     resolve: commandRegistry(bridge, captures, { ...deps, nativeRead: owned.nativeRead }, local, origin),
+  });
+  // K1b: recover has no door, so the journal calls it itself: once at boot, then on each connect.
+  void owner.reconcile();
+  bridge.subscribe((event) => {
+    if (event.kind === "connected") void owner.reconcile(event.sessionId);
   });
 }
