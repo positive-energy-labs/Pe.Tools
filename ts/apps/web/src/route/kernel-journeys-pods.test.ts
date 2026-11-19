@@ -202,13 +202,13 @@ async function sheetFixture() {
 const sheetScope = { walk: { unitId: 100, portIndex: 0 } };
 
 // H29 exercises the surviving sealed-Plan authority through the real HTTP action handler.
-test("JZ H29 human-only RPC and forged, foreign and stale review reuse refuse", async () => {
+test("JZ H29 raw write RPC and forged, foreign and stale review reuse refuse", async () => {
   const { pea } = await import("../../../host/tests/callers");
   const f = await sheetFixture();
   try {
     for (const caller of [pea("review-owner"), { kind: "external-mcp" as const, label: "foreign", context: "jz-external" }]) {
       const response = await f.post("/call", { key: "rhvac.launch", request: { path: "review.r10" } }, caller);
-      expect(response.status, "H29: RPC refuses non-human binding").toBe(403);
+      expect(response.status, "H29: /call dispatches no write; writes go through /actions").toBe(409);
       expect(await response.json()).toMatchObject({ notDispatched: true });
     }
     const key = { ...f.key, route: "fans" };
