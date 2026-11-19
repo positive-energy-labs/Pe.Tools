@@ -160,6 +160,27 @@ public sealed class RoomsRerunTests
     }
 
     [Test]
+    public void Rejected_sole_face_stays_held_on_the_first_run_and_rerun()
+    {
+        var priorHeld = Region(1, 0, 0, 9.9, 10);
+        var face = new Pe.Revit.Partition.Room(0, Pe.Revit.Partition.Disposition.Held, Pe.Revit.Partition.Reasons.Rejected,
+            [0, 0, 9.9, 0, 9.9, 10, 0, 10], 99, 5, 5, 0, 0, 9, []);
+        var rejected = new ResidueResult { Id = "R01", RawSqft = 99, Partition = face, Polygon = priorHeld.Loops.Single() };
+
+        var first = RoomsRerun.Plan([], [], [], [], [rejected], 100);
+        var rerun = RoomsRerun.Plan([], [priorHeld], [], [], [rejected], 100);
+        var declared = RoomsRerun.Plan([], [], [], [], [rejected], null);
+
+        Assert.Multiple(() => {
+            foreach (var plan in new[] { first, rerun, declared }) {
+                Assert.That(plan.Redesignate, Is.Null);
+                Assert.That(plan.Create, Is.Empty);
+                Assert.That(plan.CreateHeld, Is.EqualTo(new[] { rejected }));
+            }
+        });
+    }
+
+    [Test]
     public void Flipped_zone_is_an_accepted_room_with_no_held_reason()
     {
         // Project D's garage (w9 snapshot): flipped from a zone-edge-only held face, it still read reason zone-edge-only.
