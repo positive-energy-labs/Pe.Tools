@@ -4,7 +4,7 @@ namespace Pe.Revit.Partition;
 
 /// <summary>
 ///     Layer 2: engineering judgment over layer 1's faces (size, confidence, conditioned-space rules). One face in, one
-///     disposition out, first match wins. Geometry never changes here.
+///     disposition out, with the person's rejection taking precedence over room and hold decisions. Geometry never changes here.
 /// </summary>
 public static class Judge {
     // FOOTGUN: widest envelope band (outer face to zone edge) counted as excluded wall. Project D Level 1's thirteen
@@ -20,6 +20,15 @@ public static class Judge {
     public const double RejectedIou = 0.6;
 
     public static (Disposition Disposition, string? Reason) Dispose(FaceFacts f, double levelZ, Knobs knobs, IReadOnlyList<Geometry> rejected) {
+        var engineering = JudgeFace(f, levelZ, knobs);
+        // A rejection wins over engineering holds and accepted candidates. The face facts still carry the evidence.
+        if (f.Proposal?.IsLocked != true && engineering.Disposition is (Disposition.Accepted or Disposition.Held) &&
+            rejected.Any(r => Iou(f.Shape, r) >= RejectedIou))
+            return (Disposition.Held, Reasons.Rejected);
+        return engineering;
+    }
+
+    private static (Disposition Disposition, string? Reason) JudgeFace(FaceFacts f, double levelZ, Knobs knobs) {
         if (f.Kind == FaceKind.Band)
             return f.BandWidthFt is { } w && w > BandHoldFt ? (Disposition.Held, $"envelope-band-{w:0.0}ft") : (Disposition.Excluded, Reasons.Wall);
         if (f.Kind == FaceKind.Contested) return (Disposition.Held, Reasons.NativeOverlap);
@@ -32,8 +41,6 @@ public static class Judge {
         if (f.Shape.Area < knobs.MinRoomSqft && f.FloatingFt > Solve.SampleFt) return (Disposition.Held, Reasons.TooSmallFloating);
         if (f.Narrow) return (Disposition.Held, Reasons.TooNarrow);
         if (f.Proposal is null && f.Backed < knobs.InkBackedAcceptMin) return (Disposition.Held, Reasons.Unbacked);
-        // Last: only a face that would otherwise be a room is held for "not a room"; a held face keeps its first reason.
-        if (rejected.Any(r => Iou(f.Shape, r) >= RejectedIou)) return (Disposition.Held, Reasons.Rejected);
         return (Disposition.Accepted, null);
     }
 

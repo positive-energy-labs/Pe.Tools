@@ -317,6 +317,38 @@ public sealed class RailNetworkTests {
         });
     }
 
+    [Test]
+    public void Rejection_replaces_an_engineering_hold_and_repeats_the_same_partition() {
+        var zone = Box(0, 0, 20, 10);
+        var baseline = RunRails(zone);
+        Assert.That(baseline.Rooms.Single().Reason, Is.EqualTo(Reasons.ZoneEdgeOnly));
+
+        var answer = RunRailsWithRejections(zone, [], [zone]);
+        var rerun = RunRailsWithRejections(zone, [], [zone]);
+        var held = answer.Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That((held.Disposition, held.Reason), Is.EqualTo((Disposition.Held, Reasons.Rejected)));
+            Assert.That(answer.Trace.Faces.Single().OwnEdgeEmpty, Is.True);
+            Assert.That(answer.Accounting, Is.EqualTo(baseline.Accounting));
+            Assert.That(Newtonsoft.Json.Linq.JToken.FromObject(rerun with { Ms = 0 }),
+                Is.EqualTo(Newtonsoft.Json.Linq.JToken.FromObject(answer with { Ms = 0 })));
+        });
+    }
+
+    [Test]
+    public void Rejection_leaves_a_matching_locked_room_accepted() {
+        var zone = Box(0, 0, 20, 10);
+        var locked = new RoomProposal(RoomProposal.LockedPrefix + "g", "Kept room", "", [zone]);
+        var baseline = RunRails(zone, [locked]).Rooms.Single();
+        var room = RunRailsWithRejections(zone, [locked], [zone]).Rooms.Single();
+        Assert.Multiple(() => {
+            Assert.That(room.Disposition, Is.EqualTo(Disposition.Accepted));
+            Assert.That(room.Reason, Is.Null);
+            Assert.That(room.Proposal, Is.SameAs(locked));
+            Assert.That(room.Loop, Is.EqualTo(baseline.Loop));
+        });
+    }
+
     [TestCase(3.0, 4.0, Disposition.Accepted, null)]
     [TestCase(2.0, 2.5, Disposition.Held, Reasons.TooSmallTiny)]
     public void Rail_bounded_closet_is_a_room_down_to_six_square_feet(double w, double h, Disposition expected, string? reason) {
