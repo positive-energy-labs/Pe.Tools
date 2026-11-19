@@ -2,7 +2,9 @@
 import {
   ductsDesign,
   neutralFansWork,
+  stagedValues,
   type DuctAssumption,
+  type DuctsApplyInput,
   type DuctsDesign,
 } from "@pe/agent-contracts";
 
@@ -162,4 +164,30 @@ export function rulingRung(
   return segment === "assumptions"
     ? { value: { kind: "verdict", verdict: choice } }
     : { value: { role: choice } };
+}
+
+/**
+ * What the /duct-systems door sends (D9, P19): the staged rule tables and the verdict set over the store, and no
+ * element row. `cells` are the Work cells this write lands. A verdict the store does not keep stays Work's; fan
+ * roles are the /fans apply's and are neither read nor sent here.
+ */
+export function rulingsRequest(design: DuctsDesign, snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store" | "slots">, appliedAt: string) {
+  const store = snapshot.store, own = { ...design, roles: {} };
+  const { verdicts } = storeRulings(stagedValues(withStoredRulings(own, store, snapshot), own), store, appliedAt, snapshot);
+  const rules = stagedValues(own, own).rules;
+  const deltas = pendingRulings(own, store, snapshot);
+  const input: DuctsApplyInput = {
+    slots: snapshot.slots, fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [],
+    store: { version: 2, workRevision: store?.workRevision ?? 0, appliedAt, rules, verdicts },
+    // The native store overlays per key (K3): a verdict Work takes back is removed only by naming it here.
+    storeDeletes: { verdicts: Object.keys(store?.verdicts ?? {}).filter((key) => !(key in verdicts)) },
+  };
+  return {
+    input,
+    cells: [
+      ...Object.keys(rules).map((key) => ["rules", key] as const),
+      ...deltas.filter((delta) => delta.to !== null || design.assumptions[delta.key]?.edit?.delete).map((delta) => ["assumptions", delta.key] as const),
+    ],
+    nothingToWrite: !Object.keys(rules).length && !deltas.length,
+  };
 }

@@ -30,7 +30,7 @@ export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnaps
 /**
  * The staged segments the /duct-systems pending count names. A /fans apply writes the Fans Work segments and a
  * scoped rule's fitting coefficients to elements, and roles to the store; `rules` tables and `assumptions`
- * verdicts stay staged in /duct-systems Work (D9).
+ * verdicts stay staged in /duct-systems Work until that route's own apply stores them (D9, `rulingsRequest`).
  */
 const WRITTEN = [
   "rules",
@@ -99,7 +99,7 @@ export function scopeApplyRequest(
     ...Object.fromEntries(Object.entries(request.store?.[key] ?? {}).filter(([id]) => ids.includes(Number(id)))),
   });
   return { ...request, fittings, terminals, components, equipment, terminalFlows, equipmentFlows,
-    store: { ...store, version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
+    store: { version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
       instances: merge("instances", fittings.map(row => row.id)),
       terminals: merge("terminals", terminals.map(row => row.id)),
       terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),
