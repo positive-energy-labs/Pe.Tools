@@ -57,3 +57,21 @@
 - Resolve the order of the Fans calculation view. On 2026-11-05 the owner chose the unresolved checklist first with “this”, while the [current view](../../../ts/products/fans/web/src/calc/view.tsx) follows the earlier worksheet-first ruling.
 - Show the incomplete pressure estimate in muted ink. On 2026-11-05 the owner said, “greyed estimate is nice”. The [current summary](../../../ts/products/fans/web/src/calc/view.tsx) mutes the note about completeness.
 - Keep the remaining settings and value ownership findings together for the next design pass. On 2026-11-17 the owner said, “I'm taking the primitive work into a separate muse.” Preserve the open findings from `.artifacts/handoffs/fans-homes-primitives.md` when preparing that work.
+
+- Show the whole resulting loss record in Write review, including model entries that the write preserves. [W-duct-systems-06-107]
+- Show a known pressure subtotal in the roster for an incomplete fan without presenting it as certified pressure. [W-duct-systems-03-032]
+- Refuse to plan another pressure write after a completed calculation when the values and saved intent are unchanged. [W-fans-03-084, W-fans-05-021]
+- Let the engineer activate any open fan without closing the other fans. [W-fans-01-031]
+- Group each unit's ports under that unit in the fan roster. [W-fans-01-029]
+- Format the velocity in the picture using the same precision as the worksheet. [W-fans-02-008]
+- Compare coefficients against Revit on the same fitting and make any divergence between the worksheet and the model visible. [W-fans-01-127]
+- Carry the custom label and selected phase through the pressure walk. [W-fans-01-129]
+- Show the borrowing consequence before Apply when the fan write targets a shared model. [W-fans-01-104]
+- Keep a fan calculation readable when the snapshot contains a generated heal extension. [W-fans-05-020]
+- Decide which geometry repairs and assignment controls belong on the Fans ledger or header and which should open a working control in Duct Systems. [W-fans-01-018, W-fans-01-019]
+- Handle a unit with one duct connector in the pressure walk and explain why an ambiguous unit with several outlets is missing from the roster. [W-fans-01-051, W-fans-01-132, W-fans-02-110]
+- Keep sample views editable on the first history entry and add a complete fan whose priced bars can be seen. [W-fans-04-007, W-fans-04-068]
+- Include the bound model in a copied link and use a public document target in the live-flow journey. [W-fans-04-121, W-fans-05-023]
+- Keep the button that takes Pea's value clear of the cell's focus target at narrow widths. [W-fans-04-075]
+- Name the affected peers in the shared ESP type refusal when their resolved names are available. [W-fans-02-038]
+- Break up the Fans route declaration along existing ownership boundaries when the next route change needs that space. [W-fans-04-084]

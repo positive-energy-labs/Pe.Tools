@@ -18,3 +18,6 @@
 - 2026-11-03, ISOFIX-R: `Pe.Rhvac.Tool` now requires a leading `--lane dev|installed --root <checkout or install root>` (it never infers its owner). The Pod's `launch.ps1` (user content, not in git) must pass it when its `tools/` runner is next rebuilt, e.g. `--lane installed --root "$env:LOCALAPPDATA\Positive Energy\Pe.Tools"`; the runner already copied into the Pod keeps its old bytes until then.
 - Import the user's no-edit RHVAC 10 conversion and optional separately recalculated file; assign their records to the registry and compare conversion/save effects separately from audit inputs. Installed RHVAC is 10.1.57; the audit file records 10.1.17.
 - Before route promotion, choose the host-owned file-operation adapter and Page principal/state integration. The Pod's local companion is the current adapter; no first-party route or installed MSI payload was added.
+
+- Show the unresolved assembly category in the RHVAC export review before allowing it to become a zero row in the destination. [W-rooms-01-069]
+- Validate the shape of the opened RHVAC file and repair the edit audit's default input path. [W-rooms-01-044, W-rooms-01-132, W-rooms-02-099]

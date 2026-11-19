@@ -27,4 +27,24 @@
 - MAP L2-4 and deletion criteria: finish the real Chadds tree/bar/encoding and no-fan drives before calling the cutover accepted.
 - P4-fix-seams, implementor instruction 2026-11-17: product-specific preflight and write selection remain in generic admission.ts and slots/sheet.ts. Their removal must shrink the name baseline under [shared-base name cleanup](../ducts/LEDGER.md#owed); see the [shared-base ruling](../ducts/LEDGER.md).
 
-- Decide where a person accepts the inferred MUAS-1 join on Chadds and give that person a way to complete it. On 2026-11-16 the owner said, “ideally on fans, but if this if its convoluted then it can b an occam cut and a is ok”. The [Fans link](../../../ts/products/fans/web/src/calc/closer.ts) goes to the [duct-system inbox](../../../ts/products/duct-systems/domain/src/inbox-rows.ts), where the inferred join currently has no acceptance action.
+- Decide where a person accepts the inferred MUAS-1 join on Chadds and give that person a way to complete it. On 2026-11-16 the owner said, “ideally on fans, but if this if its convoluted then it can b an occam cut and a is ok”. The [Fans link](../../../ts/products/fans/web/src/calc/closer.ts) goes to the [duct-system inbox](../../../ts/products/duct-systems/domain/src/inbox-rows.ts), where the inferred join currently has no acceptance action. [W-duct-systems-07-005, W-fans-02-062, W-fans-04-080]
+
+- Use the same resolved design friction and source in Settings, the network picture, and the equivalent-length readout. Recheck the sizing wheel and worksheet against the same duct and flow. [W-duct-systems-06-164, W-duct-systems-07-015, W-fans-01-126]
+- Decide whether system status and loss bar popovers should open on hover, then give the two controls one readable interaction. [W-duct-systems-01-047]
+- Check the worksharing borrow footprint before offering Apply for Heal or Assign Fan. [W-duct-systems-05-139]
+- Validate the rectangular straight-collar and round converging junction rules against applicable tables. Keep a fitting outside the table's range visibly unpriced until an applicable rule or verified drop is available. [W-duct-systems-03-050, W-duct-systems-03-055, W-duct-systems-06-116, W-duct-systems-06-162, W-fans-01-003]
+- Check the stock damper placeholder even when the scoped read contains only one damper in its family. [W-duct-systems-06-161]
+- Make a fallback terminal drop of zero show its evidence and require confirmation when the model and catalog provide no drop. [W-duct-systems-03-028]
+- Require a named writable terminal drop parameter in the native write path when the next calculation reads only a named slot. [W-duct-systems-07-066]
+- Trace candidates at equipment connections through the planner and native Heal. Give the engineer the same answer about whether a join can be repaired at both steps. [W-duct-systems-02-050, W-duct-systems-05-030]
+- Make a side tap that the pressure walk can use appear in Heal when the same repair is feasible. [W-duct-systems-03-107]
+- Prove that withdrawing an older fitting rule removes its saved effect on the next model read. [W-duct-systems-06-108, W-duct-systems-07-011]
+- Preserve drawing assignments and links through a harmless network group change or system rename. Use a stable system identity in place of its display name where the route binds it. [W-duct-systems-04-027, W-duct-systems-05-022]
+- Count shared network coverage once in a document-wide read. [W-duct-systems-03-043]
+- Keep the active system consistent between the host reading and the picture when several systems are open. Define what happens to the active system on selecting All. [W-duct-systems-02-149, W-fans-01-036]
+- Reject parameter names that become empty after trimming on both duct calculation routes. [W-duct-systems-07-069, W-fans-05-084]
+- Preserve Revit's full element identity across the JavaScript wire for IDs beyond its safe integer range. [W-duct-systems-07-016]
+- Require explicit slot provenance in pricing reads, and show the actual source of a default in the repair review. [W-duct-systems-06-011, W-duct-systems-07-010]
+- Check the drawing order of selected ducts against translucent context and equipment boxes. [W-duct-systems-02-032, W-duct-systems-02-061]
+- Use the same airflow formatting in the field and picture, with enough precision to explain the calculated path value. [W-duct-systems-04-136]
+- Make the pressure proof's stated airflow match the exact parameter write it exercises. [W-duct-systems-06-088]

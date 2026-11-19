@@ -489,3 +489,15 @@ Rebuilt 2026-10-22 against `a553a15a`; C# declarations and generated metadata ow
 - Revisit TypeScript 7 and Effect lint from `t3/ts7-tsgo-effect-lint` when the plugin has a release past the version that held it. On 2026-11-16 the owner said, “i say i just wait for new release im sure itll come soon. so i should look out for anything above 1.6.0 (probably)”.
 - Keep the activity recorder parked on `t3/activity-tray-occam`. On 2026-10-22 the owner said, “great, i agree on it all. i was also gonna suggest jsonl.” They also said, “the shape that im imagining implementing now is only the collector and revit parts plus persistence, but nothing else in the whole product chain.” On 2026-10-27 they said, “the activity tray wt is the only one I can see in the wt list that Im certain I want to stay parked”.
 - Decide how to sign downloads and whether to pay the installer tool's licence fee before changing the release process.
+
+- Retest replacement of a saved Work value after host loss and restart. The current browser reload check leaves the host crash path open. [W-host-journal-09-188, W-host-journal-09-001]
+
+- Make the historical request door return the typed host identity refusal when a browser presents a foreign host identity. [W-routes-kernel-11-157]
+
+- Admit the intended trailing-slash route aliases without expanding the fallback for APIs or recorded Pages. [W-routes-kernel-11-170]
+
+- Check the PDF parser's Visual C++ runtime on a clean Windows installation and tell an installed user how to recover from a missing dependency. The Sandbox preparation adds that runtime, and the reader's failure text tells a user to install workspace dependencies. [W-release-install-02-004, W-release-install-02-005, W-release-install-02-015]
+
+- Pin the Node version bundled in the installer, or record the version in its build receipt. The packaging module currently resolves the executable from the build environment. [W-release-install-02-027]
+
+- Reproduce the native read queue stall before changing the SDK retry behavior. Preserve the distinction between a queued read and an external event whose next dispatch never arrived. [W-sdk-04-002]

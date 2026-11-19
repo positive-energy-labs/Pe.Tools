@@ -171,3 +171,5 @@ Rebuilt 2026-11-15 as current truth at main 05f17a36, at the end of the pod-page
 
 - Decide if example Pods should ship while they await vetting. On 2026-11-19 the owner kept the current examples while considering their removal, since they provide portable compile and drive targets.
 - Decide whether to replace the load workbooks with a Pod.
+
+- Make composition and export use the same rules for interpreting Pod includes and presets. [W-pods-06-069]

@@ -49,3 +49,5 @@
 - Helium and non-Windows lifecycle behavior remain unverified; exercise them before claiming support.
 - Retire inert owned test directory `C:/Users/kaitp/AppData/Local/Temp/pe-browser-acceptance-1CcrPn`; process census was empty, but automated approval rejected its recursive cleanup with “blocked by policy”.
 - Remove inactive remainder at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-b4f4a2e5`; Git registration is retired and the proof child is archived, but Windows refuses deletion and rename because a file is in use. Do not stop an unidentified process; [cleanup receipt](../../../.artifacts/runs/browser-20261024-port/cleanup-final.json).
+
+- Check retained Google sign-in after closing and reopening the same browser profile with a person present to answer the sign-in checks. [W-tooling-13-222]

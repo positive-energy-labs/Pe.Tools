@@ -188,6 +188,10 @@ All under `<install folder>\state\` for the installed product, and `<checkout>\.
 
 - 2026-11-19, decide the remaining persistence locations in the homes design session. The owner said, “I'm ok merging now and deciding later, im still not entirely convincted in all of our homes/persistence locations”.
 - 2026-11-19, show the places each route reads and writes on its tutorial page from the route manifest. The owner asked for “integrating this into our manifests so that we can somehow reflect all of a routes homes on the tutorial page. our app is really non-standard in the way that it can't really store its own data since it mostly exists to manipulate outside data. as we keep building bigger and bigger it adds a huge scariness to using the tools because its hard to tell where all the data gets read to and written from.”
-- 2026-11-19, give a person a way to set a project folder from the product when project folders return to scope. Keep the present button until that work is designed.
+- 2026-11-19, give a person a way to set a project folder from the product when project folders return to scope. Keep the present button until that work is designed. [W-homes-02-030]
 - Identify the writer of the diagnostic bundles in the firm home's `Diagnostics/` folder and move those machine-derived files to machine state. The owner reserves the firm home for shared content under [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md).
 - Review the older marker in the firm folder and the old loose files in the personal home with the owner before moving them. Their locations fall outside the content home layout in [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md).
+
+- Check the write precondition across processes, including a writer that did not read the file in that process. The local guard in `store.ts` does not cover that case. [W-homes-02-001]
+
+- Drive the marker-free firm home lookup in an installed build with an unavailable or slow shared drive, and show the failed resolution clearly when a person saves that folder. [W-homes-02-013, W-homes-02-027]

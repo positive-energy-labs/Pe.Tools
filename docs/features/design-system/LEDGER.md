@@ -932,3 +932,5 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - Design one search and filter model that composes across lists, palettes, tables, and other surfaces. On 2026-11-19 the owner said, “everything u listed sounds bad tho. i want a rich and unified interface for list, palette, table, and all other types of search filter. composable for each use case. and polished much farther than what we have now. we've had good versions of certain pieces in the past but its never been truly fixed”.
 - Rework the app header with at least six routes open, with chips visible, and with the shared search field in place. On 2026-11-19 the owner said, “our header area of the app is atrocious right now btw. this never came even close to what i wanted.”
 - Clarify what counts as a rail before making a limit part of the kit. On 2026-11-10 the owner said, “it should be 2 at most for pea, and maybe three for routes”.
+
+- Settle which surface owns a shared attention key when two mounted surfaces declare it. The current attention hook keeps the later declaration. [W-design-system-04-001]

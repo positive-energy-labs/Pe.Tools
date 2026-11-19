@@ -161,3 +161,22 @@
 
 - Make a person's rejection take precedence in [the room judge](../../../dotnet/Pe.Revit.Partition/Judge.cs) when the solver has already held the piece. Check that the feedback inbox reports the person's rejection. [D-rooms-01-001]
 - Decide whether rooms fill their zone and share edges, and agree on a join tolerance during the Rooms design work. On 2026-11-19 the owner leaned toward shared edges, saying, “it just feels like a sot smell that'll open tons of edge cases for calculation stuff coming later”. The September trial at `archive/2026-09/mileage-solver-a4cd3213` must return the same result on a rerun with no edit before it can stand as evidence for that shape. [D-rooms-01-002]
+
+- Preserve a blank Revit room type through the Rooms read. [W-rooms-02-007, W-rooms-02-016]
+- Reset an incompatible plan view when the person changes documents and show the plan views that belong to the new document. [W-rooms-02-053]
+- Decide whether the Rooms route should draw room or zone boundaries directly, and keep the Revit boundary workflow clear while that choice is open. [W-rooms-02-005]
+- Let a person choose a level without silently starting a read on its first plan. [W-rooms-01-085, W-rooms-02-131]
+- Make the marks inbox support pinning from the row, show the mark thumbnail, and give the reviewer a status filter. [W-rooms-02-047, W-rooms-02-048, W-rooms-02-049]
+- Consume the exact staged draw when it lands so a fresh plan cannot create a second filled region from the same intent. [W-rooms-02-008, W-rooms-02-016]
+- Keep an inferred zone from becoming a locked room solely because relevant links are unloaded. [W-rooms-01-081, W-rooms-02-113]
+- Report an incomplete partition when Revit refuses a boundary and protect the prior generated regions from partial replacement. [W-rooms-01-080, W-rooms-02-134]
+- Keep the identity of a generated held region stable on an unchanged rerun, or make saved references resolve to its retained geometry. [W-rooms-01-093]
+- Show the current name and system tag before a person adopts a room that already has a staged edit over it. [W-rooms-01-156]
+- Explain an unnamed room when the architect's boundary was dropped. [W-rooms-01-084, W-rooms-02-126]
+- Show what Rooms is waiting for during a Revit reconnect. [W-rooms-02-144]
+- Check that the acceptance helper reports a missing Revit session as a setup failure. [W-rooms-02-023]
+- Make a missing private fixture visible in the partition proof outcome, and correct the solver settings count in the takeoff decision record. [W-rooms-01-006, W-rooms-01-007]
+
+- Use the same public session name for Rooms recovery as the read uses, and keep a lost draw reply recoverable by its original attempt. Check the remaining follow-ups with the owner on a copy of a real model. [W-rooms-02-006, W-rooms-02-016, W-rooms-02-017, W-rooms-02-018]
+
+- Add a crop of the plan image to the room card thumbnail where the underlying image can be read. [W-rooms-02-003]

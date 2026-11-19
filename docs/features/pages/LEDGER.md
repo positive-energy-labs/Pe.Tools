@@ -137,3 +137,5 @@ An agent or a person drops a folder of HTML under the product home and the host 
 - pod-pages D37 (2026-11-14, dev session at e11d4ad3): one Page `/call` answered 500 `{ code: "route.failed", message: "fetch failed" }` while the host was recovering from a discovery expiry, where the designed answer is the typed 503 `pod.discovery.exceeded`. `pe.js` retries only that 503, so the Page shows a failure that the person cannot act on and that a reload would clear. Seen once and not reproduced. Evidence: `.artifacts/runs/pod-pages-20261114/drive/f1/A7c/bodies.jsonl` (stage `recovery-watch`). Next step: watch for it in the next drive under a slow firm drive, and if it repeats, find the host-side fetch that throws and give it a typed refusal.
 
 - Decide who may read the state that a Page has saved.
+
+- Replace the Page's HTTP call back into its own host with direct composition of the admitted service. Verify that leaving a Page cancels reads and leaves admitted commands running. [W-pods-06-053]
