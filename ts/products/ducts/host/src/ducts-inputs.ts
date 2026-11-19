@@ -34,7 +34,7 @@ export function terminalFlowSlot(settings: readonly SettingTierRead[], snapshot:
   const better = coverage.find(row => row.covered > chosen.covered);
   const label = (slot: string) => slot === REVIT_FLOW_SLOT ? "Revit Flow" : slot;
   const slotSources = ductParameterSlots(settings);
-  const terminal = slotSources.terminalFlow!;
+  const terminal = slotSources.terminalFlow;
   const ref = `${terminal.source} · ${chosen.slot}${named ? "" : " chosen by coverage"} ${chosen.covered}/${chosen.total}`;
   return {
     slots: { ...slots, terminalFlow: chosen.slot },

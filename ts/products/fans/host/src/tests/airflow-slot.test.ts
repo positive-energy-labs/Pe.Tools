@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { terminalFlowSlot } from "@pe/ducts-host/ducts-inputs";
 import { receiptDrift, resolveInputs } from "@pe/ducts-domain/calc/inputs";
 import { TEST_FIRM } from "@pe/ducts-domain/test-inputs";
-import { factOf } from "@pe/ducts-domain/test-snapshot";
+import { factOf, storeOf } from "@pe/ducts-domain/test-snapshot";
 import { buildCalc } from "@pe/fans-domain/calc/build";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -33,7 +33,7 @@ test("empty named default chooses one Revit Flow slot by coverage and prices the
   const snapshot = model(flow.slots.terminalFlow);
   const inputs = resolveInputs({ snapshot, firm: TEST_FIRM, ...flow });
   expect(inputs.terminals[3]?.cfm).toMatchObject({ value: 200, ref: expect.stringContaining("default · revit:Flow chosen by coverage 2/2") });
-  const withReceipt = { ...snapshot, store: { ...snapshot.store, terminalFlows: { "3": { cfm: 150 } } } };
+  const withReceipt = { ...snapshot, store: storeOf({ ...snapshot.store, terminalFlows: { "3": { cfm: 150 } } }) };
   expect(resolveInputs({ snapshot: withReceipt, firm: TEST_FIRM, ...flow }).terminals[3]?.cfm)
     .toMatchObject({ value: 200, source: "model", ref: "model:3/revit:Flow" });
   expect(receiptDrift(withReceipt, "flows", 3)).toBe("Changed in Revit since Pe wrote 150 cfm");
@@ -45,7 +45,7 @@ test.each(["project", "firm"] as const)("%s named slot never reads Revit Flow an
   const f = await nativeFixture("real", (_key, input) => model(input.slots?.terminalFlow), null, { native: key => key === "ducts.tables" ? recordedTables() : undefined });
   try {
     const sheet = (await evaluate(fanInputs, { target: f.target.ref, mode: "fan", unitId: 100, portIndex: 0 }, calcPort({
-      firm: owner => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
+      firm: owner => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
       workKey: async () => f.key, call: f.readDucts,
     }, f.saved, settings(tier)))).data;
     expect(Object.values(sheet.inputs.terminals).map(t => t.cfm.value)).toEqual([null, null]);
@@ -58,7 +58,7 @@ test("read and sealed apply request carry the same coverage-chosen slot", async 
   const f = await nativeFixture("real", (_key, input) => model(input.slots?.terminalFlow), null, { native: key => key === "ducts.tables" ? recordedTables() : undefined });
   try {
     const roster = (await evaluate(fanRoster, { target: f.target.ref }, calcPort({
-      firm: owner => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs),
+      firm: owner => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
       workKey: async () => f.key, call: f.readDucts,
     }, f.saved))).data;
     expect(roster.activeSlot).toBe("revit:Flow");

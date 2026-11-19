@@ -1,6 +1,6 @@
 /** Lifted from `losses.ts` (ruleRow, ductRows, terminalRow, the implausible guard) and `equivalent-length.ts`; network-free: prices one leg from explicit facts and flows. */
 import { GridError, lookupBranchLoss, lookupGrid, type Grids } from "../loss-grid.ts";
-import type { DuctInputSource } from "@pe/agent-contracts";
+import type { ValueResolution } from "@pe/agent-contracts";
 import { friction, sectionOf } from "../loss-physics.ts";
 import { LOSS_RULES, ruleByKey, type FittingFacts, type Leg } from "../loss-rules.ts";
 import { ruleFlows, type LegFlows, type Node, type Segment } from "./fitting-facts.ts";
@@ -33,7 +33,7 @@ export type LegInput =
       inWg: number | null;
       /** Where the drop came from: typed, parameter, firm default (with version), catalog. */
       source: string;
-      resolvedSource: DuctInputSource | null;
+      resolvedSource: ValueResolution<number>["source"] | null;
     };
 
 /** Why a fitting leg is not trusted: the lookup, the velocity and the flow behind it. */
@@ -64,7 +64,7 @@ export type LegSource =
       };
       notes: string[];
     }
-  | { kind: "drop"; source: string; resolvedSource: DuctInputSource | null };
+  | { kind: "drop"; source: string; resolvedSource: ValueResolution<number>["source"] | null };
 
 export interface PricedLeg {
   kind: LegInput["kind"];

@@ -33,7 +33,7 @@ const snapshotOf = (scope: ReviewEvidence) =>
 
 export function presentHeal(result: unknown, scope: ReviewEvidence) {
   const native = responseOf<DuctsHeal.Res.Response & {
-    derivedRequest?: import("@pe/agent-contracts").DuctsHealInput;
+    derivedRequest?: DuctsHeal.Req.Request;
   }>(result);
   const request = native.derivedRequest;
   const sealed = native.previewOnly && !native.groups ? request : undefined;
@@ -313,7 +313,7 @@ export const fanWords = (response: DuctsAssignFan.Res.Response) =>
     : (response.check ?? response.outcome);
 export function presentFan(result: unknown, scope: ReviewEvidence) {
   const native = responseOf<DuctsAssignFan.Res.Response & {
-    derivedRequest?: import("@pe/agent-contracts").DuctsAssignFanInput;
+    derivedRequest?: DuctsAssignFan.Req.Request;
   }>(result);
   const request = native.derivedRequest;
   const response = native.previewOnly && native.systemId == null && request

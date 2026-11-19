@@ -23,7 +23,7 @@ test.each(["coverage", "apply"] as const)("P121 cross-route choice is independen
   };
   const f = await nativeFixture("real", (_key, input) => capture(input.slots?.terminalFlow), null, { native: (key, input) => { if (key === "ducts.apply") stored = input.slots.terminalFlow; return key.startsWith("ducts.snapshot.") ? capture(input.slots?.terminalFlow) : key === "ducts.tables" ? recordedTables() : undefined; } });
   try {
-    const port = () => calcPort({ firm: owner => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().ductCatalogs), workKey: async () => f.key, call: f.readDucts }, f.saved);
+    const port = () => calcPort({ firm: owner => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)), workKey: async () => f.key, call: f.readDucts }, f.saved);
     const roster = (await evaluate(fanRoster, { target: f.target.ref }, port())).data;
     expect(roster.activeSlot).toBe("revit:Flow");
     const before = (await evaluate(ductsRoster, { target: f.target.ref }, port())).data;
