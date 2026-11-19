@@ -177,7 +177,8 @@ export function rulingsRequest(design: DuctsDesign, snapshot: Pick<DuctSnapshot,
   const rules = stagedValues(own, own).rules;
   const deltas = pendingRulings(own, store, snapshot);
   const input: DuctsApplyInput = {
-    slots: snapshot.slots, fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [],
+    slots: { ...snapshot.slots, requiredEsp: snapshot.slots.requiredEsp ?? "" },
+    fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [],
     store: { version: 2, workRevision: store?.workRevision ?? 0, appliedAt, rules, verdicts },
     // The native store overlays per key (K3): a verdict Work takes back is removed only by naming it here.
     storeDeletes: { verdicts: Object.keys(store?.verdicts ?? {}).filter((key) => !(key in verdicts)) },

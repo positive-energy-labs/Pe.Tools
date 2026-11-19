@@ -14,12 +14,12 @@ afterEach(async () => { for (const close of closes.splice(0).reverse()) await cl
 const RULE = "elbow-1d-gt10", VERDICT = "open-end:101:1", TABLE = "CD3-21";
 type Sent = { store: { rules?: Record<string, unknown>; verdicts?: Record<string, { verdict: string }> }; storeDeletes?: { verdicts?: string[]; roles?: number[] } } & Record<string, unknown>;
 
-test("a /duct-systems apply stores its staged rule table and verdict, writes no element, and removes a stored verdict on a staged delete", async () => {
+test.each([snapshot.slots.requiredEsp, null])("a /duct-systems apply saves only its rulings and preserves required ESP %s", async (requiredEsp) => {
   // The native owner overlays a request's store per key on the model's whole store (K3). The fixture only echoes
   // the last request, so the store the next read answers is composed here.
   let store: Record<string, unknown> | undefined;
   const f = await nativeFixture("real", undefined, null, { native: (key, input) =>
-    key.startsWith("ducts.snapshot.") && store ? { ...snapshot, slots: { ...snapshot.slots, ...input.slots }, store } : undefined });
+    key.startsWith("ducts.snapshot.") ? { ...snapshot, slots: { ...snapshot.slots, ...input.slots, requiredEsp }, store } : undefined });
   closes.push(() => f.close());
   const round = async (id: string, patches: { path: (string | number)[]; value: unknown }[]) => {
     const before = await f.saved.view(f.key, "duct-systems");
@@ -40,6 +40,7 @@ test("a /duct-systems apply stores its staged rule table and verdict, writes no 
     { path: ["assumptions", VERDICT, "edit"], value: { value: { kind: "verdict", verdict: "ignore" } } },
   ]);
   expect(first.sent).toHaveLength(1);
+  expect(first.sent[0]!.slots).toMatchObject({ requiredEsp: requiredEsp ?? "" });
   expect(first.sent[0]!.store.rules).toEqual({ [RULE]: { table: TABLE } });
   expect(first.sent[0]!.store.verdicts).toEqual({ [VERDICT]: { verdict: "ignore", ruledAt: expect.any(String) } });
   expect(first.sent[0]!.storeDeletes).toEqual({ verdicts: [] });
