@@ -288,6 +288,46 @@ test("graph layout passes the body's furniture and bounded persisted resizing", 
   localStorage.removeItem("graph-layout-policy");
 });
 
+test("the dock's explicit opposite floor permits narrowing a nested Pea layout", () => {
+  vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue(
+    new DOMRect(0, 0, 1600, 600),
+  );
+  localStorage.setItem("pe.toolsWidth", "1410");
+  const view = render(
+    <GraphLayoutView
+      layout={split(
+        "dock",
+        {
+          axis: "h",
+          sized: "end",
+          size: 720,
+          minSize: 420,
+          minOtherSize: 140,
+          persist: "pe.toolsWidth",
+        },
+        split(
+          "pea",
+          { axis: "h", sized: "start", size: 240, minSize: 240, minOtherSize: 651 },
+          pane("plan"),
+          pane("inbox"),
+        ),
+        pane("regions"),
+      )}
+      panes={panes}
+      active={() => true}
+      bodies={bodies}
+    />,
+  );
+  const dock = view.container.querySelector<HTMLElement>(
+    '[data-layout-split=\'["dock","regions"]\']',
+  )!;
+  const seam = dock.querySelector(':scope > div > [role="separator"]')!;
+  expect(seam.getAttribute("aria-valuenow")).toBe("1410");
+  expect(1600 - Number(seam.getAttribute("aria-valuenow"))).toBe(190);
+  fireEvent.keyDown(seam, { key: "ArrowLeft" });
+  expect(seam.getAttribute("aria-valuenow")).toBe("1426");
+});
+
 // The floor an undeclared split holds is the kit's, one per axis: a horizontal side keeps a reading
 // width (and PaneSplit mirrors it to the other side), a vertical side keeps a few rows.
 test("a split that declares no floor holds the kit floor on both sides", () => {

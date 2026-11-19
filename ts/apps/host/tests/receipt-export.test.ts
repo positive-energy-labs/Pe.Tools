@@ -321,7 +321,7 @@ test("thread and update adapters keep opaque joins and honest endings", async ()
     expect(JSON.stringify(f.sent)).not.toContain("private");
     expect((f.sent.at(-1) as { properties: object }).properties).toMatchObject({
       phase: "finished",
-      outcome: "incomplete",
+      outcome: "succeeded",
       component: "pea",
     });
     const requestId = randomUUID();

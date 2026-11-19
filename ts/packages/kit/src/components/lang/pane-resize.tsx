@@ -407,9 +407,10 @@ export function PaneSplit({ id, axis, start, end, resize, grow }: PaneSplitProps
   const own = spec.target === "start" ? startMinimum : endMinimum;
   const other = spec.target === "start" ? endMinimum : startMinimum;
   const ownOpen = Math.max(spec.minSize, own.open);
-  const otherOpen = Math.max(spec.minOtherSize ?? spec.minSize, other.open);
+  // An explicit opposite floor lets that branch yield internally before this seam folds it.
+  const otherOpen = spec.minOtherSize ?? Math.max(spec.minSize, other.open);
   const ownCompact = Math.max(spec.minSize, own.compact);
-  const otherCompact = Math.max(spec.minOtherSize ?? spec.minSize, other.compact);
+  const otherCompact = spec.minOtherSize ?? Math.max(spec.minSize, other.compact);
   const openFits = availableWidth === 0 || availableWidth >= ownOpen + otherOpen + gutter;
   const ownMinimum = openFits ? ownOpen : ownCompact;
   const otherMinimum = openFits ? otherOpen : otherCompact;

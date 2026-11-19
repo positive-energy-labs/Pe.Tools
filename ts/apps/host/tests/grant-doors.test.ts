@@ -10,9 +10,10 @@ import { Layer } from "effect";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
 import { serveRoutes } from "./real-server.ts";
+import * as receipts from "../src/receipt-export.ts";
 
 let root: string, journal: ActionJournal, server: Awaited<ReturnType<typeof serveRoutes>>;
 let native: Awaited<ReturnType<typeof fixtureNative>>;
@@ -38,19 +39,40 @@ afterEach(async () => {
   expect((await journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
 });
 
-test("RHVAC launch refuses every non-human caller before dispatch", async () => {
+test("RHVAC launch requires journaled action admission for authenticated callers", async () => {
   const page = { origin: server.base, "sec-fetch-site": "same-origin", referer: `${server.base}/pages/refusals/`, ...serviceHeaders() };
-  for (const headers of [{}, pea(), contextHeaders({ kind: "external-mcp", label: "unpaired" }), page]) {
+  for (const headers of [contextHeaders(), pea(), contextHeaders({ kind: "external-mcp", label: "unpaired" }), page]) {
     const response = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } }, headers);
-    expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "Only a person can launch RHVAC", notDispatched: true });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      message: "Submit the original exact admission to /actions; raw mutation dispatch is retired",
+      notDispatched: true,
+    });
   }
+  const anonymous = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } });
+  expect(anonymous.status).toBe(403);
 });
 test("an unavailable Pod query has one typed refusal before dispatch", async () => {
   const response = await post("/call", { key: "pod.fixture.unavailable", request: {} }, contextHeaders());
   expect(response.status).toBe(403);
   expect(await response.json()).toMatchObject({ refusal: { code: "permission.undeclared", door: "/call",
     reason: "Pod query has no admitted route: pod.fixture.unavailable" } });
+});
+
+test("a successful /call records a succeeded host operation", async () => {
+  const record = vi.spyOn(receipts, "recordHostFact").mockImplementation(() => {});
+  try {
+    const response = await post("/call", { key: "takeoffs.saved", request: {} }, contextHeaders());
+    expect(response.status).toBe(200);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "host_op", counters: expect.objectContaining({
+        op: "takeoffs.saved", outcome: "succeeded",
+      }) }),
+      expect.objectContaining({ requestId: expect.any(String) }),
+    );
+  } finally {
+    record.mockRestore();
+  }
 });
 test("action controls cannot borrow a human receipt across caller threads", async () => {
   for (const verb of ["cancel"]) {

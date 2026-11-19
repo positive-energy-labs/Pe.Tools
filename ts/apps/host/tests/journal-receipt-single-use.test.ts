@@ -21,6 +21,8 @@ const plan = (id: string): Claim => ({ kind: "receipt", id });
 const unmovedMark = { kind: "document-mark", probe: { ref: document.ref, sealed: { observedSince: 1, changedAt: null } }, expected: true };
 const dispatched = { id: "s1", key: "rooms.write", kind: "native", input: {}, transport: "bridge", dispatchedAt: "2026-11-18T08:01:00Z" };
 const applies = {
+  // Option B ends every other claim at succeeded; the plan's receipt stays spent.
+  succeeded: { state: "succeeded", result: null, steps: [{ ...dispatched, state: "succeeded", result: {} }] },
   unknown: { state: "unknown", error: "Host restarted before the executor recorded an outcome", status: 500,
     steps: [{ ...dispatched, state: "unknown", error: "lost", status: 500 }] },
   incomplete: { state: "incomplete", error: "RuntimeFailed", status: 500, result: null,
@@ -60,8 +62,8 @@ async function journalAfter(first: object) {
   return { apply, close: () => settle(Scope.close(host, Exit.void)) };
 }
 
-test.each(["unknown", "incomplete"] as const)(
-  "after an %s apply, a new action id applying the same preview with an unmoved mark is refused claimed",
+test.each(["succeeded", "unknown", "incomplete"] as const)(
+  "after an apply that ended %s, a new action id applying the same preview with an unmoved mark is refused claimed",
   async (ended) => {
     const f = await journalAfter(applies[ended]);
     try {
@@ -71,7 +73,7 @@ test.each(["unknown", "incomplete"] as const)(
   },
 );
 
-test.each(["unknown", "incomplete"] as const)("after an %s apply, a new preview on the same document is admitted", async (ended) => {
+test.each(["succeeded", "unknown", "incomplete"] as const)("after an apply that ended %s, a new preview on the same document is admitted", async (ended) => {
   const f = await journalAfter(applies[ended]);
   try {
     expect(await f.apply("new-preview", "preview-2")).toMatchObject({ state: "succeeded" });

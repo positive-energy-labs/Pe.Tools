@@ -275,7 +275,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
     "homes.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "homes.put": axes("None", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "machine.bootstrap": axes("Session", "One", ["Metadata"], "SessionWrite", "Mutation", []),
-    // /call refuses raw mutations except the human-only RHVAC launcher. Reads can retain
+    // /call refuses raw mutations. Reads can retain
     // captures and execute scripts, including transactional previews; budget conservatively.
     "operation.call": axes(
       "Session",
@@ -283,7 +283,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
       ["Metadata", "Topology", "Geometry"],
       "ModelWrite",
       "Mutation",
-      [...reads, "scripting.execute", "rhvac.launch"],
+      [...reads, "scripting.execute"],
     ),
     "actions.admit": axes(
       "Session",

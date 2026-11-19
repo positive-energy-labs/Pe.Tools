@@ -1,6 +1,5 @@
 /** Call transport policy is authored on catalog entries, shared by both clients. */
 export interface CallPolicy {
-  humanOnly?: boolean;
   canonicalSession?: boolean;
   hostOnly?: boolean;
   admission?: "intrinsic";
@@ -13,7 +12,6 @@ export interface CallPolicy {
   reading?: "roster" | "walk" | "tables";
 }
 export const callPolicies: Readonly<Record<string, CallPolicy>> = {
-  "rhvac.launch": { humanOnly: true },
   "host.ops.catalog": { hostOnly: true, admission: "intrinsic" },
   "op.cancel": { cancel: true, admission: "intrinsic" },
   "scripting.execute": { script: true },

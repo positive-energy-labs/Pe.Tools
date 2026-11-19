@@ -92,7 +92,8 @@ it("host door bypasses can only shrink (ADR 0026)", () => {
 it("committed host-door allowances only shrink after the identity migration", () => {
   const path = "ts/tests/repo-guards/src/host-door.baseline.json";
   const git = (...args: string[]) => execFileSync("git", args, { cwd: resolve(ROOT, ".."), encoding: "utf8" }).trim();
-  const snapshots = git("log", "--format=%H", "3dc3d091..HEAD", "--", path).split(/\s+/).filter(Boolean);
+  // Include the first approved baseline after the identity migration.
+  const snapshots = git("log", "--format=%H", "a5daa82f^..HEAD", "--", path).split(/\s+/).filter(Boolean);
   for (const sha of snapshots) {
     const floor = JSON.parse(git("show", `${sha}:${path}`));
     expect(ratchet(Object.keys(baseline), floor).violations).toEqual([]);

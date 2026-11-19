@@ -34,6 +34,7 @@ import {
   sessionResetArgv,
   sessionStartArgv,
   sessionStopArgv,
+  type Envelope,
   type Resolved,
   type SessionListResult,
   type SessionDialogsResult,
@@ -59,7 +60,7 @@ import {
 } from "./acquisition.ts";
 
 import { resolveStartProject } from "./session-route.ts";
-import { readMachineSession } from "./machine.ts";
+import { readMachineSession, receiptProcessOf } from "./machine.ts";
 import { downloadCloudVersion } from "./cloud-version.ts";
 import {
   readSdk,
@@ -213,7 +214,8 @@ async function readTarget(
 ): Promise<Target | null> {
   const args = sessionListArgv(selection ?? {});
   const envelope = await sdkEnvelope<SessionListResult>(args, read);
-  const rows = (envelope.result as SessionListResult).sessions.filter(
+  // A refused list (`session.no-match` for a gone name) answers `result: {}`, with no sessions.
+  const rows = (envelope.diagnostics.length ? [] : envelope.result.sessions).filter(
     (row): row is RunningRow =>
       (row.case === "controlled-active" || row.case === "observed-active") &&
       (!expected ||
@@ -271,28 +273,35 @@ const preparedInstancesSchema = z.strictObject({
   artifactOf: z.string().optional(),
 });
 
-const launchClaimsFor = (
-  ctx: CommandContext,
-  process: Pick<NativeProcess, "pid" | "processStartUtc">,
-) =>
-  ctx.read
-    .receipts()
-    .flatMap((row) =>
-      row.effects.some(
-        (effect) =>
-          effect.kind === "session" &&
-          effect.session === `${process.pid}:${process.processStartUtc}`,
-      )
-        ? row.claims.flatMap((claim) =>
-            claim.kind === "session-slot" ? [{ action: row.id, claim }] : [],
-          )
-        : [],
-    );
-
 const controlledPreparedSchema = preparedInstancesSchema.extend({
   target: lifecycleTargetSchema,
   acquisition: z.null(),
 });
+
+const stopPreparedSchema = controlledPreparedSchema.or(z.strictObject({ gone: nativeProcessSchema }));
+const stopCensus = sessionListArgv({ all: true });
+
+function processGone(
+  envelope: Pick<Envelope<SessionListResult>, "exitCode" | "diagnostics" | "result">,
+  expected: Incarnation["process"],
+) {
+  const { result } = envelope;
+  return envelope.exitCode === 0 &&
+    envelope.diagnostics.length === 0 &&
+    result?.processReadErrors?.length === 0 &&
+    result.unreadableReceipts?.length === 0 &&
+    Array.isArray(result.sessions) &&
+    result.sessions.every((row) => {
+      if (
+        row.case === "gone-receipt" ||
+        (row.case === "failed-receipt" && row.failure.source === "receipt") ||
+        (row.case === "controlled-pending" && row.attempt.attempt === "awaiting-launch")
+      ) return true;
+      const process = receiptProcessOf(row);
+      return process !== null &&
+        (process.pid !== expected.pid || process.processStartUtc !== expected.processStartUtc);
+    });
+}
 
 /** One complete census provides both resource aliases. The engine alone checks caller trust. */
 async function observeLifecycle(
@@ -486,7 +495,6 @@ function controlRun(
   execution: ActionExecution,
   read: SdkReceiptReader,
   argv: (session: Effect.Success<ReturnType<typeof controlledRequest>>) => readonly string[],
-  releases?: () => { action: string; claim: import("@pe/agent-contracts").Claim }[],
 ) {
   return Effect.gen(function* () {
   const { target } = execution.prepared as z.infer<typeof controlledPreparedSchema>;
@@ -496,7 +504,7 @@ function controlRun(
     ctx.admission.key,
     { expectSession: session.expectSession, argv: argv(session) },
     read,
-    { process: target.process, releases },
+    { process: target.process },
   );
   yield* physicalEffects(execution, result);
   return result;
@@ -744,13 +752,31 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
           }),
         ),
     }),
-    "instances.stop": command(commands["instances.stop"], controlledPreparedSchema, {
-      bind: (ctx) =>
-        bindControl(ctx, read, ctx.admission.input.session, undefined, (docs) =>
+    "instances.stop": command(commands["instances.stop"], stopPreparedSchema, {
+      bind: async (ctx) => {
+        const { session } = ctx.admission.input;
+        const census = await sdkEnvelope<SessionListResult>(stopCensus, read);
+        if (processGone(census, session.process))
+          return { effects: [], prepare: async () => ({ gone: session.process }) };
+        return bindControl(ctx, read, session, undefined, (docs) =>
           guardDiscard(ctx.caller, docs, "stop"),
-        ),
-      run: (ctx, execution) =>
-        controlRun(
+        );
+      },
+      run: (ctx, execution) => {
+        if ("gone" in execution.prepared) {
+          const { gone } = execution.prepared;
+          return runSdk<Envelope<SessionListResult>>(
+            execution,
+            "instances.stop.gone",
+            { argv: stopCensus },
+            read,
+            { check: (census) => {
+              if (!processGone(census, gone)) throw refused("The SDK cannot confirm the session is gone");
+            } },
+            true,
+          ).pipe(Effect.as({ state: "ok", phase: "already-gone" }));
+        }
+        return controlRun(
           ctx,
           execution,
           read,
@@ -760,8 +786,8 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
               unsaved: ctx.admission.input.unsaved,
               force: ctx.admission.input.force,
             }),
-          () => launchClaimsFor(ctx, execution.prepared.target.process),
-        ),
+        );
+      },
     }),
     "instances.close": command(commands["instances.close"], controlledPreparedSchema, {
       bind: (ctx) =>
@@ -1195,7 +1221,6 @@ function cleanupCommand(read: SdkReceiptReader, peaWork: string) {
         };
         yield* runSdk(execution, "instances.cleanup.stop", stop, read, {
           process: target.process,
-          releases: () => launchClaimsFor(ctx, target.process),
         });
         outcome.stopped = acquired.process;
       }

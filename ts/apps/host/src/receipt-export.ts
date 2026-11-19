@@ -235,7 +235,7 @@ export function projectReceipt(
       properties = {
         phase: body.phase,
         outcome:
-          body.phase === "finished" ? "incomplete" : body.phase === "failed" ? "failed" : undefined,
+          body.phase === "finished" ? "succeeded" : body.phase === "failed" ? "failed" : undefined,
         fault_code: body.code,
         duration_ms: body.durationMs,
         tool_count: body.toolCount,
