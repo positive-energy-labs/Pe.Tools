@@ -483,6 +483,8 @@ it("never derives terminal or equipment flow; only Work or run can write", () =>
   expect(request.equipmentFlows.map((f) => f.id)).toEqual([100]);
   expect(request.terminalFlows[0]!.source).toContain("Work");
   expect(request.equipmentFlows[0]!.source).toContain("run");
+  expect(request.store.terminalFlows?.["3"]?.parameter).toBe(snapshot.slots.terminalFlow);
+  expect(request.store.equipmentFlows?.["100"]?.parameter).toBe("Fan Flow");
 });
 it("includes the domain accessory writes and clips every noncohort row to the sheet walk", () => {
   const p = prepared(component()),

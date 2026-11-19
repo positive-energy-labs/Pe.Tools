@@ -324,6 +324,7 @@ export namespace DuctsApply {
       cfm: number;
       source?: null | string;
       appliedAt: string;
+      parameter?: null | string;
     }
     /**
      * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
@@ -602,6 +603,7 @@ export namespace DuctsApplyPlan {
       cfm: number;
       source?: null | string;
       appliedAt: string;
+      parameter?: null | string;
     }
     /**
      * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
@@ -1735,6 +1737,7 @@ export namespace DuctsSnapshotRoster {
       cfm: number;
       source?: null | string;
       appliedAt: string;
+      parameter?: null | string;
     }
     /**
      * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or
@@ -2419,6 +2422,7 @@ export namespace DuctsSnapshotWalk {
       cfm: number;
       source?: null | string;
       appliedAt: string;
+      parameter?: null | string;
     }
     /**
      * A person's ruling on an issue or inferred-join finding id: `ignore` leaves an open end out of the walk, or

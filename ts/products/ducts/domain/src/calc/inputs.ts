@@ -16,7 +16,7 @@ import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";
 import type { SourcedValue } from "@pe/agent-contracts";
 import { ENCOUNTER_KEY, type EncounterRuling } from "../encounter-ruling.ts";
-import { slotFlowOf } from "../kernel/terminal-flow.ts";
+import { REVIT_FLOW_SLOT, slotFlowOf } from "../kernel/terminal-flow.ts";
 import { suggestKind, suggestRole } from "../roster.ts";
 import type { CalcSnapshot } from "../input-snapshot.ts";
 
@@ -93,13 +93,14 @@ export const observed = <T>(
 const STORE = "_PE_DuctLosses";
 
 /** The model's store as the snapshot carries it. Rulings (verdicts, roles, rules) resolve from it; the three value records are receipts of what Pe last wrote to a parameter, evidence beside the live read and never a rung (ADR 0053). */
+type FlowReceipt = { cfm: number; parameter?: string | null };
 export interface StoreLayer {
   verdicts?: Readonly<Record<string, { verdict: string }>>;
   roles?: Readonly<Record<string, { role: string }>>;
   rules?: Readonly<Record<string, { table?: string | null }>>;
   terminals?: Readonly<Record<string, { inWg: number }>>;
-  terminalFlows?: Readonly<Record<string, { cfm: number }>>;
-  equipmentFlows?: Readonly<Record<string, { cfm: number }>>;
+  terminalFlows?: Readonly<Record<string, FlowReceipt>>;
+  equipmentFlows?: Readonly<Record<string, FlowReceipt>>;
 }
 
 export interface InputLayers {
@@ -122,21 +123,27 @@ const written = (at: string, read: number | null | undefined, wrote: number | un
   const live = wrote == null ? positive(read) : (read ?? null);
   return { at, wrote, unit, live };
 };
+const writtenFlow = (at: string, read: number | null, receipt: FlowReceipt | undefined) =>
+  written(at, read, receipt?.parameter === at ? receipt.cfm : undefined, "cfm");
 const WRITTEN = { // keyed by the Work segment that stages each value
   flows: (n: Node, slots: Slots, store: StoreLayer) =>
-    written(slots.terminalFlow, slotFlowOf(n, slots.terminalFlow).cfm, store.terminalFlows?.[n.id]?.cfm, "cfm"),
+    writtenFlow(slots.terminalFlow, slotFlowOf(n, slots.terminalFlow).cfm, store.terminalFlows?.[n.id]),
   terminalDrops: (n: Node, slots: Slots, store: StoreLayer) => written(slots.terminalDrop, n.terminalDrop?.catalogDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
-  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => written(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]?.cfm, "cfm"),
+  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => writtenFlow(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]),
 };
 
 /** Drift: the one place a receipt is compared with the live parameter. Null where Pe never wrote or the two agree; else what the cell says beside its value. Shown, never blocking, and no write re-asserts it. */
 export function receiptDrift(snapshot: Pick<CalcSnapshot, "nodes" | "slots"> & { store?: StoreLayer | null }, segment: keyof typeof WRITTEN, id: number): string | null {
   const node = snapshot.nodes.find((n) => n.id === id);
-  const { at, live, wrote, unit } = node ? WRITTEN[segment](node, snapshot.slots, snapshot.store ?? {}) : { at: "", live: null, wrote: undefined, unit: "" };
+  if (!node) return null;
+  const { at, live, wrote, unit } = WRITTEN[segment](node, snapshot.slots, snapshot.store ?? {});
   if (wrote == null) return null;
   if (live == null) return `Pe wrote ${wrote} ${unit} to ${at}, which no longer reads`;
-  // The reader rounds a slot parameter to 4 places (`Reading` in DuctSnapshots.cs); the receipt is unrounded, so they agree within half that step.
-  return Math.abs(live - wrote) <= 0.5e-4 + 1e-9 ? null : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
+  // DuctSnapshots rounds each connector flow to 3 places and parameter reads to 4.
+  const tolerance = segment === "flows" && at === REVIT_FLOW_SLOT
+    ? 0.5e-3 * node.connectors.filter(c => c.flowCfm != null).length
+    : 0.5e-4;
+  return Math.abs(live - wrote) <= tolerance + 1e-9 ? null : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
 }
 
 export const JOIN_KEY = (pair: readonly [string, string]) => `join:${[...pair].sort().join("|")}`;
@@ -286,7 +293,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
     const id = String(n.id), key = elementSubject(n);
     if (n.kind === "terminal") {
       const flow = WRITTEN.flows(n, slots, store);
-      const flowRef = flow.wrote == null ? layers.terminalFlow?.ref ?? flow.at : flow.at;
+      const flowRef = layers.terminalFlow?.ref ?? flow.at;
       const cfm = pick(
         {
           run: staged(run.flows?.[key]),

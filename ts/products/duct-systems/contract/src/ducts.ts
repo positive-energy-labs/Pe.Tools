@@ -238,6 +238,12 @@ export const workingPhaseOf = (doc: DuctsRouteDocument | null) =>
  * terminal flows (`terminalFlow` slot) and edited `equipmentFlows` (`fanFlow` slot).
  */
 const optionalText = z.string().nullable().optional();
+const flowReceipts = z.record(z.string(), z.strictObject({
+  cfm: z.number().nonnegative(),
+  source: optionalText,
+  appliedAt: z.string(),
+  parameter: optionalText,
+})).optional();
 const writeDrop = z.strictObject({
   id: z.number().int(),
   inWg: z.number().nonnegative(),
@@ -336,26 +342,8 @@ export const ductsApplyInputSchema = z.strictObject({
         }),
       )
       .optional(),
-    terminalFlows: z
-      .record(
-        z.string(),
-        z.strictObject({
-          cfm: z.number().nonnegative(),
-          source: optionalText,
-          appliedAt: z.string(),
-        }),
-      )
-      .optional(),
-    equipmentFlows: z
-      .record(
-        z.string(),
-        z.strictObject({
-          cfm: z.number().nonnegative(),
-          source: optionalText,
-          appliedAt: z.string(),
-        }),
-      )
-      .optional(),
+    terminalFlows: flowReceipts,
+    equipmentFlows: flowReceipts,
     /** The rulings after this apply: `ignore` verdicts by issue or finding id (`rulings.ts`). */
     verdicts: z
       .record(z.string(), z.strictObject({ verdict: z.string().min(1), ruledAt: z.string() }))

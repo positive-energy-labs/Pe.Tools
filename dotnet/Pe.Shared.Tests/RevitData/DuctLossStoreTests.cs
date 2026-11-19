@@ -20,8 +20,8 @@ public sealed class DuctLossStoreTests {
             Rules = new() { ["Round Elbow:Standard|r/D 1.0"] = new DuctRuleChoice("CD3-1") },
             Instances = new() { [6749371] = new DuctInstanceRecord("SD4-1", "Ao/A1=0.5", 0.25, At) },
             Terminals = new() { [6119626] = new DuctDropRecord(0.05, "catalog", At) },
-            TerminalFlows = new() { [6119626] = new DuctFlowRecord(120, "load-preview:FC-17", At) },
-            EquipmentFlows = new() { [9668311] = new DuctFlowRecord(1800, "submittal p. 3", At) },
+            TerminalFlows = new() { [6119626] = new DuctFlowRecord(120, "load-preview:FC-17", At, "revit:Flow") },
+            EquipmentFlows = new() { [9668311] = new DuctFlowRecord(1800, "submittal p. 3", At, "Design Fan Flow") },
             Verdicts = new() { ["open-end:6119626:1"] = new DuctVerdictRecord("ignore", At) },
             Roles = new() { [9668311] = new DuctRoleRecord("passive", At) },
             Slots = new DuctParameterSlotOverrides(TerminalDrop: "Catalog Drop"),
@@ -44,6 +44,14 @@ public sealed class DuctLossStoreTests {
         Assert.That(back.AppliedAt, Is.EqualTo(At));
         Assert.That(back.ToJson(), Is.EqualTo(store.ToJson()));
         Assert.That(store.ToJson(), Does.StartWith("""{"owner":"duct-losses","version":2,"data":{"rules":"""), "one version, in the envelope");
+    }
+
+    [Test]
+    public void A_receipt_without_a_parameter_does_not_inherit_the_store_slot() {
+        var back = Read(Stored("""{"terminalFlows":{"1":{"cfm":0,"appliedAt":"2026-10-04T12:00:00Z"}},"slots":{"terminalFlow":"Flow"}}""")).Value!;
+
+        Assert.That(back.TerminalFlows[1].Parameter, Is.Null);
+        Assert.That(back.Slots!.TerminalFlow, Is.EqualTo("Flow"));
     }
 
     [Test]
