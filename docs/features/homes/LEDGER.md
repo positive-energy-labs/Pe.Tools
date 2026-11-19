@@ -96,6 +96,8 @@ All under `<install folder>\state\` for the installed product, and `<checkout>\.
 | PostHog | Usage rows: operation name, duration, outcome, install id | you, in PostHog | the host on every operation |
 | Autodesk (APS) | Sign-in tokens; parameter service and cloud model reads | /open, the takeoff captures | sign-in on /settings |
 
+- 2026-11-19, the owner settled the 2026-11-11 question about old model records with “no legacy no migrations, idc if its unreadable, but the error must not lock down further action. im ok with just deleting altho set aside is fine too”. An unreadable old record can be replaced by the next write or set aside so the person can continue.
+
 ## Tried & rejected
 
 - 2026-11-11, a home qualifier on addresses (`home/kind/name`): it changes the frozen names (the contribution key `member:@<pod>/<path>`, the SubjectRef name tuple, the `/pods` `member` field) and puts a machine-local fact into Work keys. The duplicate-id refusal ends shadowing with no qualifier.
@@ -130,7 +132,7 @@ All under `<install folder>\state\` for the installed product, and `<checkout>\.
 - The written promise (freeze item 11) has no home yet: what survives an update, the three guards, the honest limit, and the plain statement that inference sends what Pea reads to the model provider. Slice 6 writes it where a coworker reads it.
 - Coworker-machine journeys (the Revit half of H1, Drive sync in H2 and H4) are owed at the first real release, as scripted runbooks the owner runs.
 - J1 is red on main by design. It depends on three Ducts route defects that the ducts ledger owns on `t3/pea-muas-retest` (the missing ERV taps on MUAS-1, the discharge priced at about twice the walked value, the unnamed in-line units), and on a render-based struck-row read that the agent ledger owns there.
-- Still open after `t3/pea-muas-retest` merges, owned by the host and agent ledgers: the gateway sign-in race, the LiteParse binaries in the installed build, and the stale `session-slot` claim with no recovery verb.
+- The gateway sign-in race and the LiteParse binaries in the installed build remain open in the host and agent ledgers. The [host ledger](../host/LEDGER.md) tracks the Revit drive for the landed stale launch claim fix.
 - The remote MCP gateway stays on its branch until its send tools have a door that returns "held".
 - Slice 6b, FS on real lanes: the falsifier `ts/apps/web/src/settings/tiers.test.ts` covers FS steps 1, 2, 6 and 7 on temp homes with no Revit. The `settings.tiers.read` and `settings.tiers.write` ops, the save-at control in a browser, and steps 3 to 5 are UNPROVEN[two hosts; dev session for step 3].
 - Six host files still find a home with a synchronous lookup on the request path, so a hung firm drive blocks every request. The pods ledger holds the line and its file list (pod-pages O-HOMES).

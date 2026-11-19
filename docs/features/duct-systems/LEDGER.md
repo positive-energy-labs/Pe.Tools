@@ -11,7 +11,12 @@
 - 2026-11-17, the owner said, “very well said. yes partial should be the way.” Label known shared-trunk values as partial and withhold certified pressure and normalized bars until both paths are complete.
 - 2026-11-19, the owner approved the recommendation with “i take your rec on everything else”. Offer a cap only when Revit reports zero airflow at the open end and the rest of the system is well connected. Tell the engineer to check the flow in Revit when it is unknown.
 - 2026-11-19, the owner confirmed that the 2.6-inch gap at MUAS-1 is intended because the intake comes out of the Greenheck plenum.
-- 2026-11-19, the owner approved “i take your rec on everything else” for naming the parameter names actually used in a calculation `effective` in the pricing contract.
+- 2026-11-19, the owner approved “i take your rec on everything else” for the pricing contract. A pricing read reports the parameter names it actually used under `effective`. `cb1f9a16`.
+
+- 2026-11-19, the owner said, “id rather get this fixed now tho, code is the spec, and i dont wanna make that defect look like a product decision”. Write to Revit on /duct-systems saves staged rule tables and ignore verdicts across all systems in the model. The save leaves fittings untouched. `facd0d5f` and `cb9e1599`.
+- 2026-11-19, a Fans plan that would write a fitting coefficient from an unsaved table refuses before writing. It names the rule and tells the person to save it on /duct-systems. A Fans write leaves the model's duct rules and verdicts unchanged. `facd0d5f` and `cb9e1599`.
+- 2026-11-19, saving duct rulings preserves a deliberately blank required-pressure setting and records only parameter names the person chose. `02ff7bbe`.
+- 2026-11-19, only the /duct-systems save creates a stored duct rule. A fitting write changes the fitting's coefficient without creating the rule. `56154bc3`.
 
 ## Tried & rejected
 
@@ -38,7 +43,7 @@
 - Require a named writable terminal drop parameter in the native write path when the next calculation reads only a named slot. [W-duct-systems-07-066]
 - Trace candidates at equipment connections through the planner and native Heal. Give the engineer the same answer about whether a join can be repaired at both steps. [W-duct-systems-02-050, W-duct-systems-05-030]
 - Make a side tap that the pressure walk can use appear in Heal when the same repair is feasible. [W-duct-systems-03-107]
-- Prove that withdrawing an older fitting rule removes its saved effect on the next model read. [W-duct-systems-06-108, W-duct-systems-07-011]
+- 2026-11-19, once the page can withdraw a stored fitting rule, verify its removal on the next model read and check separately what happens to coefficients already written to fittings. [W-duct-systems-06-108, W-duct-systems-07-011]
 - Preserve drawing assignments and links through a harmless network group change or system rename. Use a stable system identity in place of its display name where the route binds it. [W-duct-systems-04-027, W-duct-systems-05-022]
 - Count shared network coverage once in a document-wide read. [W-duct-systems-03-043]
 - Keep the active system consistent between the host reading and the picture when several systems are open. Define what happens to the active system on selecting All. [W-duct-systems-02-149, W-fans-01-036]
@@ -65,10 +70,14 @@
 - Verify a named writable terminal-drop slot and document binding and readback on the Chadds louver and grille family. [owed-20261119 duct-systems-1-093, 2 items]
 - Redrive the named filter chassis and fan-coil proximity issue on the original ports. Verify with a real positive-pressure tie-in that the picture shows the structural backflow finding even while the worksheet explains the separate H5 pressure consequence. [owed-20261119 duct-systems-fan-sheet-1, 2 items]
 - Seal the same bound document and resolved input basis across acquisition, worksheet, preview and apply. [owed-20261119 duct-systems-1-120, 1 item]
-- Save fitting rules through Duct Systems and refuse Fans writes that would bake coefficients from unsaved rules into Revit. Drive a discard after staging and confirm the elements and receipt keep the saved rule's coefficients. [owed-20261119 fans-1-077, 1 item]
+- 2026-11-19, drive the /duct-systems save and the Fans refusal on a real model copy. Check the save across systems, then stage and discard another table and verify the stored rule, fitting coefficients and receipt by independent readback. [owed-20261119 fans-1-077, 1 item]
 - Give inferred taps and split segments stable identities across refresh, pricing and write review. Witness the compact repair row's model name and one-click preview on Chadds. Prove in Revit that the native Heal preview refuses a cap on EX 1's only flowing discharge. Prove the native Heal post-check rejects added harm on an already poorly connected RA 37 network. Census facing gaps on Chadds before extending auto-join or cap-tap acceptance beyond the measured case. Apply the owner's niche-case rule after the census. Check the owner-approved cap eligibility rule on the two RA 37 stubs, whose side taps must retain a path. Drive the sealed Heal review on a disposable Chadds copy without a local plan. Confirm it shows the actual plan, the visible join action and both requested ends without the earlier `flatMap` failure. [owed-20261119 duct-systems-network-repair-2, 11 items]
-- Drive the planned repair for the intended Greenheck plenum join on a disposable Chadds copy. The current Heal offer for connector `14122436:1` shows a cap. Check whether that cap unblocks the fan and prove that the chosen preview and Apply change only the intended geometry. [owed-20261119 fans-1-103, 1 item]
+- 2026-11-19, drive the intended Greenheck plenum join on a disposable Chadds copy. An earlier Heal plan offered a cap for connector `14122436:1`. Check what Heal offers under the new cap rule and confirm that the repair restores the fan's path and changes only the intended geometry. [owed-20261119 fans-1-103, 1 item]
 - Decide whether duct-end intent needs an interoperable Revit parameter, and choose its author and write behavior if it does. [owed-20261119 duct-systems-1-195, 1 item]
 - Resume the owner's paused verification using the named duct scenarios with evidence ready for their judgment. [owed-20261119 duct-systems-1-228, 1 item]
 - Drive real duct membership and stale or unacknowledged recovery in the browser. Drive conversation switching and Write arming through the route disruption journey. [owed-20261119 duct-systems-route-disruption-1, 2 items]
 - Give the tests typed fixtures or checked constructors where they now assert a type, and lower each file's test-cast allowance once the test expresses the same witness. The [guard baseline](../../../ts/tests/repo-guards/src/test-casts.baseline.json) records the file allowances. [owed-20261119 duct-systems-test-casts, 8 items]
+
+- 2026-11-19, decide whether Fans may write required pressure calculated with an unsaved rule. A hand-driven Fans write selects no fitting rule for its write scope. Pea can name a rule and request a coefficient write.
+- 2026-11-19, give the person a way to withdraw a stored rule from the page. Today the person can save a replacement table. A fitting keeps its old coefficient until a Fans write names that rule again.
+- 2026-11-19, decide how to handle catalogue links and rule assignments in the pending count. They can keep the count above zero after a save because the save leaves them staged.

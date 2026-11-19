@@ -21,6 +21,10 @@
 
 - 2026-10-28, the owner said, “A utopia solution would just one-click calcs, once the absolute bare minimum configuration and inputs have been done.” They added, “we should attempt to infer/heal/fix anything that we possible can, the purpose being a one click calc.” Reduce the work an engineer has to supply before pressing Calculate.
 
+- 2026-11-19, the owner said, “yes fix”. Terminal and unit airflow receipts name the parameter Pe wrote. A receipt can make a zero count as real only when it names the parameter in use. Older receipts carry no parameter and cannot establish a zero. A terminal reading zero remains missing until a write creates a receipt for that parameter. `ba3a654e`.
+- 2026-11-19, a drop from a manufacturer catalogue loses the “default” label. The airflow cell keeps the “chosen by coverage” explanation when it has a receipt. The Changed in Revit check allows for Revit Flow at three decimal places. `ba3a654e`.
+- 2026-11-19, the calculation rounds Revit Flow to three decimal places before pricing the terminal. It shows a rounded zero as 0 cfm when a matching receipt exists and shows missing airflow when the receipt is absent. `50b8e216`.
+
 ## Tried & rejected
 
 - 2026-11-16, MAP D2 and RULES.md 20:25: the whole-network circuits solver and ducts.analysis projections are retired. Fan calc is the single pricing path.
@@ -94,7 +98,7 @@
 - Change an automatically matched fitting table through the browser and read back the resulting calculation. [owed-20261119 duct-systems-1-130, 1 item]
 - Complete Outstanding A17 on a real model through the remaining write, native readback and Pea turns, retaining MUAS-1 and FC-23 as distinct witnesses. [owed-20261119 routes-kernel-1-092, 1 item]
 - Recover the Manual D rulings made after run 276 before revisiting the equivalent-length option. Use run 277 to locate the transition into the kernel architecture discussion. [owed-20261119 fans-1-101, 2 items]
-- Drive a successful staged terminal-flow write to Revit's built-in Flow, read the parameter directly, and compare Fans and Duct Systems afterward. The refused Chadds drive left Flow at 235 cfm. The custom slot covered 27 of 394 terminals and Revit Flow covered 355 of 394. [owed-20261119 fans-1-102, 4 items]
+- 2026-11-19, drive a staged terminal-flow write to Revit's built-in Flow. Read the parameter directly, check that the receipt names it, and compare Fans and Duct Systems. Verify that a zero stays missing with an old receipt or a receipt for a different parameter. The earlier refused Chadds drive left Flow at 235 cfm. The custom slot covered 27 of 394 terminals and Revit Flow covered 355 of 394. [owed-20261119 fans-1-102, 4 items]
 - Replace non-null assertions with checked presence or types that establish the invariant, and lower the per-file nonNull allowance as each caller changes. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 fans-non-null, 16 items]
 - Resolve the two outstanding Fans seams with the owner before promoting the field defaults. [owed-20261119 host-journal-1-262, 1 item]
 - Audit the remaining set-aside helpers and fan input row exports after the contract cutover and remove only the exports without live callers. [owed-20261119 fans-1-116, 1 item]
