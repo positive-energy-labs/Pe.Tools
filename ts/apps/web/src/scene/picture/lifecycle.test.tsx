@@ -13,7 +13,17 @@ import { ductsData as ductsGraph } from "@pe/duct-systems-web/route";
 import { reduceLayout } from "../../../../../packages/kit/src/components/lang/layout-graph";
 import type { LayoutNode } from "@pe/agent-contracts";
 
-const io = vi.hoisted(() => ({ call: vi.fn(), orbit: null as Scene3DProps["orbit"] | null }));
+const io = vi.hoisted(
+  (): {
+    call: ReturnType<typeof vi.fn>;
+    orbit: Scene3DProps["orbit"] | null;
+    scene: Scene3DProps | null;
+  } => ({
+    call: vi.fn(),
+    orbit: null,
+    scene: null,
+  }),
+);
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
 vi.mock("../artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
 vi.mock("../psc1", () => ({
@@ -35,7 +45,9 @@ vi.mock("../psc1", () => ({
 }));
 // Capture, retention, status and ModelPicture are real; WebGL is the deterministic boundary.
 vi.mock("../scene3d", () => ({
-  Scene3D: ({ meshes, readout, orbit }: Scene3DProps) => {
+  Scene3D: (props: Scene3DProps) => {
+    const { meshes, readout, orbit } = props;
+    io.scene = props;
     io.orbit = orbit;
     return <div data-rendered={!!meshes}>{readout}</div>;
   },
@@ -89,6 +101,7 @@ function mount(
     },
   );
   const registry = makeAtomRegistry();
+  let sceneView: import("@pe/agent-contracts").SceneView = { preset: "all", section: null };
   const setPage = vi.fn();
   const tree = (refresh: boolean, native = true) => (
     <TestAttention registry={registry} ids={[7311]}>
@@ -107,7 +120,7 @@ function mount(
             issue: "",
             encoding: "none",
             viewport: viewport && { ...viewport, pivot: [...viewport.pivot] },
-            sceneView: { preset: "all", section: null },
+            sceneView,
             contextRadiusFt: 10,
             context: "glass",
             picture: "model",
@@ -135,8 +148,48 @@ function mount(
     resize,
     refresh: (value: boolean) => view.rerender(tree(value)),
     withhold: () => view.rerender(tree(true, false)),
+    replaceSection: (section: import("@pe/agent-contracts").SceneSection) => {
+      sceneView = { ...sceneView, section };
+      view.rerender(tree(refreshing));
+    },
   };
 }
+
+it("P3-C section editing shares the captured renderer and preserves orbit across axes and Escape", async () => {
+  io.call.mockResolvedValue({ id: "cut-lifecycle" });
+  const view = mount("cut-lifecycle");
+  view.resize(640, 480);
+  await waitFor(() => expect(io.scene?.meshes).toBeTruthy());
+  const orbit = JSON.stringify(io.orbit!.read()),
+    calls = io.call.mock.calls.length;
+  fireEvent.click(view.getByRole("button", { name: "Edit bent section" }));
+  expect(io.scene?.plane?.axis).toBe("top");
+  fireEvent.click(view.getByRole("button", { name: "Return to orbit from Top" }));
+  expect(io.scene?.plane).toBeNull();
+  fireEvent.click(view.getByRole("button", { name: "Edit cut from Top" }));
+  const panned = { kind: "plane" as const, scale: 24, tx: 100, ty: 200 };
+  act(() => io.scene?.onPlane?.(panned, "gesture"));
+  expect(io.scene?.plane?.viewport).toEqual(panned);
+  expect(view.setPage).not.toHaveBeenCalled();
+  fireEvent.click(view.getByRole("button", { name: "Edit cut from North" }));
+  expect(io.scene?.plane?.axis).toBe("north");
+  fireEvent.keyDown(view.getByLabelText("North cut drawing"), { key: "Escape" });
+  expect(io.scene?.plane).toBeNull();
+  expect(JSON.stringify(io.orbit!.read())).toBe(orbit);
+  expect(io.call).toHaveBeenCalledTimes(calls);
+  const cuts = (await import("../cuts")).emptyCuts();
+  cuts.top = {
+    ...cuts.top,
+    polyline: [
+      [0, 0],
+      [1, 0],
+    ],
+    closed: false,
+  };
+  view.replaceSection({ kind: "cuts", cuts });
+  expect(io.scene?.clipVolume?.counts[0]).toBeGreaterThan(2);
+  expect(io.call).toHaveBeenCalledTimes(calls);
+});
 
 it("arms capture on growth from 0×0, renders, and re-arms after collapse during a capture", async () => {
   const resolvers: ((value: { id: string }) => void)[] = [];

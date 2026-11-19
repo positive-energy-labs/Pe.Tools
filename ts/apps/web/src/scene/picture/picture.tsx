@@ -589,6 +589,7 @@ export function Picture<L extends string, F extends string>({
         );
         const model = (
           <ModelPicture
+            documentKey={pictureKey}
             sceneView={page.sceneView}
             paint={content.paint}
             // How context draws changes drawing only; detailed acquisition stays explicit.

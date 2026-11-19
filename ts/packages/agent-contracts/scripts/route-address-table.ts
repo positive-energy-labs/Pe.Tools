@@ -29,6 +29,7 @@ export function renderAddressTable(rows: readonly AddressRow[]): string {
   const imports = [
     `import { z } from "zod";`,
     ...(uses("listSearchCodec") ? [`import { listSearchCodec } from "../list-search.ts";`] : []),
+    ...(uses("sceneViewSchema") ? [`import { sceneViewSchema } from "../scene-view.ts";`] : []),
     ...(uses("Immutable<") ? [`import type { Immutable } from "../route-kernel-data.ts";`] : []),
     `import { ${uses("subjectSchema(") ? "subjectSchema, " : ""}focusSelectionSchema } from "../route-kernel-codecs.ts";`,
     `import { jsonCodec, ${uses("textCodec") ? "textCodec, " : ""}type RouteDeclaration } from "../route-field.ts";`,

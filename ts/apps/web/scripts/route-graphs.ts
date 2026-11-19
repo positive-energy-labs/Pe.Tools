@@ -168,9 +168,13 @@ for (const key of keys) {
     const agent = typed.spec.agent !== false;
     const fields = Object.entries(typed.spec.fields).map(([key, field]) => {
       const json = z.toJSONSchema(field.schema, { io: "input" });
-      const schema = field.role === "subject"
-        ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
-        : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
+      // A scene pose's geometric refinements cannot survive JSON Schema projection.
+      const schema =
+        key === "sceneView"
+          ? "sceneViewSchema"
+          : field.role === "subject"
+            ? `subjectSchema(${(json.oneOf as { properties?: { ids?: { maxItems?: number } } }[]).find((part) => part.properties?.ids)?.properties!.ids!.maxItems})`
+            : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
       const codecName = field.codec === listSearchCodec ? "listSearchCodec" : field.codec === textCodec ? "textCodec" : null;
       if (field.codec && !codecName) throw Error(`${key}: the declared field codec has no address projection`);
       const codec = codecName ? `, codec: ${codecName}` : "";
