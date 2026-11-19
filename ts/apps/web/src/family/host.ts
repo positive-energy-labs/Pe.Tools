@@ -1,14 +1,14 @@
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import { z } from "zod";
-import type { Read } from "@pe/host/read-graph";
-import { workRead } from "@pe/host/reads/inputs";
+import type { Read } from "@pe/host-internal/read-graph";
+import { workRead } from "@pe/host-internal/reads/work";
 
 import { executionTargetSchema, familyDraftSchema } from "@pe/agent-contracts";
 
-import { localRead } from "@pe/host/local-inputs";
-import { familySpec, podProfile } from "@pe/host/builtin-read-handles";
-import { workBinding } from "@pe/host/reads/inputs";
+import { localRead } from "@pe/host-internal/reads/local";
+import { familySpec, podProfile } from "@pe/host-internal/builtin-read-handles";
+import { workBinding } from "@pe/host-internal/reads/work";
 
 import { familyArgs, familyData } from "@pe/agent-contracts";
 import { familyGoal } from "./goal.ts";

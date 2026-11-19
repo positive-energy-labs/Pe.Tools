@@ -9,7 +9,7 @@ import {
   type Caller,
   type GuardedAct,
 } from "@pe/agent-contracts";
-import { CommandRejected } from "./command-executor.ts";
+import { CommandRejected } from "@pe/host-internal/command-executor";
 
 /**
  * Whose act this is. Only a human caller is the person; Pea, a Page, an MCP device and a caller

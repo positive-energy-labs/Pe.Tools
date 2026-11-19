@@ -1,6 +1,6 @@
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
-import { resources } from "@pe/host/builtin-read-handles";
+import { body } from "@pe/host-internal/read-graph";
+import { resources } from "@pe/host-internal/builtin-read-handles";
 
 
 

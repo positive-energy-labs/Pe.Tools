@@ -2,13 +2,9 @@ import { createHash } from "node:crypto";
 import { note, type StateDirectory } from "@pe/host-contracts/kinds";
 import type { ReceiptStamp } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
-import {
-  nativeCatalogIdentity,
-  openRecordingReader,
-  openRecordingWriter,
-  type HostInputLane,
-} from "./native-recording.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "./native-recording.ts";
+import { type HostInputLane } from "@pe/host-internal/input-recording";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 
 import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { execFile, spawn } from "node:child_process";

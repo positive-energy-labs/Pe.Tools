@@ -2,7 +2,7 @@ import { ownedSession } from "./callers.ts";
 import { Effect, Queue } from "effect";
 import { type HttpServerRequest } from "effect/http";
 import { BRIDGE_CONTRACT_VERSION, type BridgeFrame, type BridgeStateSnapshot } from "@pe/host-contracts/contracts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}, state: Partial<BridgeStateSnapshot> = {}) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;

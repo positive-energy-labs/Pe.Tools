@@ -13,9 +13,9 @@ import {
   type Read,
   type Trace,
   type Value,
-} from "./evaluator.ts";
+} from "@pe/host-internal/reads/evaluator";
 import { startFlight, type Flight, type ReadLease } from "./read-ownership.ts";
-import { ReadBusy } from "../native-reads.ts";
+import { ReadBusy } from "@pe/host-internal/read-errors";
 
 export interface Publication<T> {
   readonly key: string;

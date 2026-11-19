@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
@@ -11,8 +12,8 @@ import { HostNativeRead } from "@pe/host-internal/native-read";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { valueReadResponse, nativeOutputSchema, executionTargetSchema } from "@pe/agent-contracts";
 import { z } from "zod";
-import { read as hostRead } from "../src/reads/evaluator.ts";
-import { nativeRead } from "../src/reads/evaluator.ts";
+import { read as hostRead } from "@pe/host-internal/reads/evaluator";
+import { nativeRead } from "@pe/host-internal/reads/evaluator";
 import { registeredReads } from "../src/reads/routes.ts";
 import { readInputRoutes } from "../src/builtin-inputs.ts";
 import { HostInputContext } from "../src/input-context.ts";
@@ -22,13 +23,9 @@ import { HostSessionInventory } from "../src/session-inventory.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import {
-  openRecordingReader,
-  openRecordingWriter,
-  nativeCatalogIdentity,
-  type HostInputLane,
-} from "../src/native-recording.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
+import { openRecordingReader, openRecordingWriter, nativeCatalogIdentity } from "../src/native-recording.ts";
+import { type HostInputLane } from "@pe/host-internal/input-recording";
 import * as localInputs from "../src/local-inputs.ts";
 import { settle } from "./effect-test.ts";
 
@@ -115,7 +112,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
                         }),
                   resolve: () => Effect.die("No native resolution"),
                 }),
-                files: DuctFiles.layer({
+                files: DuctFiles.layer(hostState().home, {
                   firm: join(dir, "Settings"),
                   catalogs: [{ tier: "firm", root: dir }],
                 }),

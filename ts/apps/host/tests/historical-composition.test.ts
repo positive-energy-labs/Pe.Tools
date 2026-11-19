@@ -18,10 +18,12 @@ import { readInputRoutes, hostInputGraph } from "../src/app.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
-import { nativeCatalogIdentity, nativeInputIdentity, openRecordingWriter } from "../src/native-recording.ts";
+import { nativeInputIdentity } from "@pe/host-internal/input-recording";
+import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { relaunchOutOfGuard } from "../src/redirection-trust.ts";
-import { admittedRequestIdentity, readSchemas, RequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
+import { readSchemas } from "../src/request-services.ts";
 import { threadPointerPort } from "../src/thread-pointers.ts";
 import { bootHost } from "./real-server.ts";
 

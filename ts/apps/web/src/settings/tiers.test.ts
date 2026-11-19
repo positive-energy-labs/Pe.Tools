@@ -24,8 +24,9 @@ import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { firmLayer } from "@pe/ducts-host/ducts-inputs";
 import { hostState } from "../../../host/src/host-ownership.ts";
 import { SETTING_WRITE_PLACE } from "../../../host/src/notice-feed.ts";
-import { resolveFirm } from "../../../host/src/reads/door.ts";
-import { readSettingTiers, writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-settings.ts";
+import { resolveFirm } from "@pe/host-internal/read-graph";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
+import { writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-settings.ts";
 import { settingsSheet } from "./route.ts";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
@@ -71,7 +72,7 @@ const servedBy = (cell: DuctsCriteriaCell, mounted: boolean) => {
 /** What the host serves and what the sheet draws from it: the setting cells, the criteria and a terminal's row. */
 const sheet = async () => {
   const tiers = readSettingTiers("ducts", pointer);
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))));
   const base = firmLayer(resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, {}), tiers);
   const cells = sheetCells(settingsSheet, { rows: [], work: null, read: { settings: { ducts: tiers } } });
   return {

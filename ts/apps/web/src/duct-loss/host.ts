@@ -1,5 +1,5 @@
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 
 
 import { ductLossData } from "@pe/ducts-contract/duct-loss-read";

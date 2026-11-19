@@ -2,8 +2,8 @@ import { inputKinds, type InputKind, type SourceProvenance } from "@pe/agent-con
 import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { Context, Layer } from "effect";
-import { InvalidRead } from "./native-reads.ts";
-import type { HostInputLane } from "./native-recording.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import type { HostInputLane } from "@pe/host-internal/input-recording";
 
 /** One thing a request is about to use; policy derives its safety from catalogs, never the client. */
 export type InputUse =

@@ -1,7 +1,7 @@
 import { Effect, Exit } from "effect";
 import { expect, test } from "vite-plus/test";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
-import { admittedCommandReadIdentity } from "../src/command-read-identity.ts";
+import { admittedCommandReadIdentity } from "@pe/host-internal/command-read-identity";
 
 const pea: Caller = { kind: "pea", context: "ctx", thread: "t", run: { thread: "t", turn: "1" }, root: { thread: "t", turn: "1" } };
 const plan = (target: ActionAdmission["target"]): ActionAdmission => ({

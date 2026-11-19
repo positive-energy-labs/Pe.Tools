@@ -1,10 +1,12 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { createFixtureHost } from "../../../packages/host-contracts/src/fixture-host.ts";
-import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { settle, callRouteOver } from "./effect-test.ts";
@@ -128,7 +130,7 @@ export async function fixtureNative(
       } };
       const web = serveRoutes(Layer.mergeAll(routes, callRouteOver(journal, captures, dependencies, composition)).pipe(
         Layer.provide(peApiErrorsLayer),
-        Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
+        Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
         Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(directory, "pictures")))),
       ), bridge, Layer.succeed(SdkDriver, args => Effect.promise(() => dependencies.sdk(args))));
       handlers.push(web);

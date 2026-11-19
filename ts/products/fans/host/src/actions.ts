@@ -17,12 +17,12 @@ import { stagedValues } from "@pe/duct-systems-contract/ducts";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { RevitBridge } from "@pe/host/bridge";
-import { refused } from "@pe/host/command-executor";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { refused } from "@pe/host-internal/command-executor";
 
 
 
-import { runPods } from "@pe/host/family-actions";
+import { runPods } from "@pe/host-internal/pod-runner";
 import { buildCalc, encounterRulings, mintWriteRequest, resolveInputs, type BuildCalcInput, type DomainClaim, type FanWriteContext, type CalcSnapshot } from "@pe/fans-domain/calc/index";
 import { followAcceptedJoins } from "@pe/ducts-domain/calc/joins";
 import { pendingRulings, storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";

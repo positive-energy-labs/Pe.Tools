@@ -12,7 +12,7 @@ import {
   type SessionListResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { ActionJournal } from "./action-journal.ts";
-import { command, refused } from "./command-executor.ts";
+import { command, refused } from "@pe/host-internal/command-executor";
 import { requireHuman } from "./control.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { readSdk, runSdk, sdkEnvelope } from "./sdk-dispatch.ts";

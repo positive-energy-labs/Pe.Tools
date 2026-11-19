@@ -10,7 +10,7 @@ import {
   leaf,
   nativeRead,
   type InputPort,
-} from "../src/reads/evaluator.ts";
+} from "@pe/host-internal/reads/evaluator";
 import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads, graphRoute } from "../src/reads/routes.ts";
 import { hostRead } from "../../web/src/route/host-read.ts";
@@ -122,7 +122,7 @@ test("ctx.read(native(key)) is the native door: same body, same input, same valu
   expect(value.data.version).toBe("v1");
   expect(taken).toEqual([["native", { key: "ducts.tables", request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" }]]);
   // @ts-expect-error the handle's input is the native read's whole input: a bare request has no target
-  void ((ctx: import("../src/reads/evaluator.ts").ReadContext) => ctx.read(tables, { ids: [] }));
+  void ((ctx: import("@pe/host-internal/reads/evaluator").ReadContext) => ctx.read(tables, { ids: [] }));
 });
 
 test("the host owns a read's lifetime: the last subscriber's release stops the read, and only then", async () => {

@@ -176,6 +176,9 @@ importers:
       '@pe/fans-contract':
         specifier: workspace:*
         version: link:../../products/fans/contract
+      '@pe/fans-domain':
+        specifier: workspace:*
+        version: link:../../products/fans/domain
       '@pe/fans-host':
         specifier: workspace:*
         version: link:../../products/fans/host
@@ -219,9 +222,15 @@ importers:
         specifier: 'catalog:'
         version: 4.3.6
     devDependencies:
+      '@modelcontextprotocol/client':
+        specifier: 'catalog:'
+        version: 2.4.0
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
+      gunshi:
+        specifier: ^0.29.5
+        version: 0.29.5
       playwright-core:
         specifier: 1.60.0
         version: 1.60.0
@@ -313,9 +322,6 @@ importers:
       '@pe/fans-web':
         specifier: workspace:*
         version: link:../../products/fans/web
-      '@pe/host':
-        specifier: workspace:*
-        version: link:../host
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts
@@ -548,15 +554,24 @@ importers:
 
   packages/host-internal:
     dependencies:
+      '@effect/platform-node':
+        specifier: 4.0.2
+        version: 4.0.2(bufferutil@4.1.0)(effect@4.0.2)(redis@6.3.1(@opentelemetry/api@1.9.1))
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../agent-contracts
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../host-contracts
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       effect:
         specifier: 4.0.2
         version: 4.0.2
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -701,9 +716,6 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@pe/host':
-        specifier: workspace:*
-        version: link:../../apps/host
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -848,19 +860,16 @@ importers:
       '@pe/fans-contract':
         specifier: workspace:*
         version: link:../../fans/contract
-      '@pe/host':
-        specifier: workspace:*
-        version: link:../../../apps/host
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts
+      '@pe/host-internal':
+        specifier: workspace:*
+        version: link:../../../packages/host-internal
       zod:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@pe/ducts-web':
-        specifier: workspace:*
-        version: link:../../ducts/web
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -1020,15 +1029,15 @@ importers:
       '@pe/fans-contract':
         specifier: workspace:*
         version: link:../../fans/contract
-      '@pe/host':
-        specifier: workspace:*
-        version: link:../../../apps/host
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts
       '@pe/host-internal':
         specifier: workspace:*
         version: link:../../../packages/host-internal
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../../../packages/runtime
       effect:
         specifier: 4.0.2
         version: 4.0.2
@@ -1036,12 +1045,6 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@pe/mcps':
-        specifier: workspace:*
-        version: link:../../../packages/mcps
-      '@pe/runtime':
-        specifier: workspace:*
-        version: link:../../../packages/runtime
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -1201,12 +1204,18 @@ importers:
       '@pe/fans-domain':
         specifier: workspace:*
         version: link:../domain
-      '@pe/host':
-        specifier: workspace:*
-        version: link:../../../apps/host
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts
+      '@pe/host-internal':
+        specifier: workspace:*
+        version: link:../../../packages/host-internal
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../../../packages/runtime
+      effect:
+        specifier: 4.0.2
+        version: 4.0.2
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -1214,21 +1223,9 @@ importers:
       '@effect/platform-node':
         specifier: 4.0.2
         version: 4.0.2(bufferutil@4.1.0)(effect@4.0.2)(redis@6.3.1(@opentelemetry/api@1.9.1))
-      '@pe/ducts-web':
-        specifier: workspace:*
-        version: link:../../ducts/web
-      '@pe/host-internal':
-        specifier: workspace:*
-        version: link:../../../packages/host-internal
-      '@pe/runtime':
-        specifier: workspace:*
-        version: link:../../../packages/runtime
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
-      effect:
-        specifier: 4.0.2
-        version: 4.0.2
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -1284,9 +1281,6 @@ importers:
       '@pe/ducts-host':
         specifier: workspace:*
         version: link:../../ducts/host
-      '@pe/host':
-        specifier: workspace:*
-        version: link:../../../apps/host
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts

@@ -10,11 +10,11 @@ import {
   isPackageMember,
   listPackages,
 } from "./packages.ts";
-import { CommandRejected, StepFailure, nativeStep, refused, io } from "./command-executor.ts";
+import { CommandRejected, StepFailure, nativeStep, refused, io } from "@pe/host-internal/command-executor";
 import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { podModelSchema, wrongPodModel } from "./pod-model.ts";
 import { requirePackageEnabled } from "./package-lifecycle.ts";
 import { PackageDiscoveryExceeded, requireIndexedPackageAvailable } from "./pod-capture.ts";

@@ -10,9 +10,9 @@
  */
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { BridgeError, RevitBridge } from "./bridge.ts";
+import { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
 import { canonicalJson } from "@pe/host-internal/native-read";
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import {
   captureInput,
   inputBindingKey,
@@ -20,7 +20,7 @@ import {
   type RecordingReader,
   type RecordingWriter,
   type TakingObserver,
-} from "./native-recording.ts";
+} from "@pe/host-internal/input-recording";
 
 export interface DocumentRef {
   readonly session: string;

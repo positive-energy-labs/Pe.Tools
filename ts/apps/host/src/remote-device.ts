@@ -8,7 +8,7 @@ import {
   type Pairing,
 } from "@pe/host-contracts/pe-api";
 import { read as readFile, writeState, stateKind, type StoredFile } from "@pe/host-contracts/kinds";
-import { Refused } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { hostOwnership } from "./host-ownership.ts";
 
 const persistedSchema = z.strictObject({

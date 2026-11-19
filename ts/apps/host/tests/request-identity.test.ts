@@ -6,7 +6,7 @@ import { NodeHttpServer } from "@effect/platform-node";
 import { expect } from "vite-plus/test";
 import { effectTest } from "./effect-test.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { mintContext, retireContext } from "../src/control.ts";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { HOST_CONTEXT_HEADER, HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";

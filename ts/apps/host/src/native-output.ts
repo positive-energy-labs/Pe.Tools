@@ -4,8 +4,8 @@ import { HostNativeRead } from "@pe/host-internal/native-read";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { captureReceiptSchema, nativeOutputSchema, type Caller } from "@pe/agent-contracts";
 import { type PictureCaptures, PictureStoreFull } from "./captures-route.ts";
-import { InvalidRead } from "./native-reads.ts";
-import { RequestIdentity } from "./request-services.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { callPolicies } from "../../../packages/agent-contracts/src/call-policy.ts";
 import type { HostOperationKey, OpResponseOf } from "@pe/host-contracts/operation-types";
 

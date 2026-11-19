@@ -2,7 +2,7 @@ import { documentRefSchema } from "@pe/agent-contracts";
 import { ductSlotSourcesSchema } from "@pe/ducts-contract/system-work";
 import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { native } from "@pe/agent-contracts/handle";
-import { read } from "@pe/host/read-graph";
+import { read } from "@pe/host-internal/read-graph";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { z } from "zod";
 import { designLayers } from "./design-layers.ts";

@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { nativeFixture } from "../../products/fans/host/src/tests/fans-native.fixture.ts";
+import { nativeFixture } from "../../apps/host/tests/fans/fans-native.fixture.ts";
 import { closedFan, recordedTables, CLOSED_AT } from "../../products/fans/host/src/tests/closed-fan.fixture.ts";
 import { resolveInputs } from "@pe/ducts-domain/calc/inputs";
 import { TEST_FIRM } from "@pe/ducts-domain/test-inputs";

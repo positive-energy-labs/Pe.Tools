@@ -33,7 +33,7 @@ import {
 import { discoverService, readServiceFile } from "@pe/host-contracts/pe-service";
 import { runPeRevitCli } from "./session-route.ts";
 import { hostOwnership } from "./host-ownership.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { Providers } from "./harness/providers.ts";
 import { unreadLeg, type UpdateReader } from "./update-reader.ts";
 import type { ActionJournal } from "./action-journal.ts";

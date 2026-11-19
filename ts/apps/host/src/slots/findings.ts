@@ -25,9 +25,9 @@ import {
   type Stamp,
 } from "@pe/agent-contracts/slots";
 import type { RouteWorkspace } from "@pe/runtime";
-import { command, io, refused, StepFailure, type CommandContext, type CommandWorkReads } from "../command-executor.ts";
-import type { ActionExecution } from "../action-journal.ts";
-import type { RevitBridge } from "../bridge.ts";
+import { command, io, refused, StepFailure, type CommandContext, type CommandWorkReads } from "@pe/host-internal/command-executor";
+import type { ActionExecution } from "@pe/host-internal/action-execution";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { currentDocument } from "../document-lifetime.ts";
 
 

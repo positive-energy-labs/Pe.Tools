@@ -10,8 +10,9 @@ import { Effect } from "effect";
 import { parsedDocViewSchema, type ActionStep } from "@pe/agent-contracts";
 import { commands, tools } from "@pe/mcps/product-actions";
 import { z } from "zod";
-import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
-import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
+import { command, io, refused, type CommandExecutor } from "@pe/host-internal/command-executor";
+import { runPods } from "@pe/host-internal/pod-runner";
+import { podContext, type PodDependencies } from "./family-actions.ts";
 import { podFolder, podMemberKind } from "./settings.ts";
 import { reconcilePackageChanges } from "./package-lifecycle.ts";
 import { writeHome } from "@pe/host-contracts/kinds";
@@ -24,7 +25,7 @@ import { derivedKey,
   readDerivedIn,
   writeDerivedIn, type DerivedDir,
 } from "@pe/host-contracts/kinds";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { PodContext } from "./settings.ts";
 import { hostOwnership, hostState } from "./host-ownership.ts";
 

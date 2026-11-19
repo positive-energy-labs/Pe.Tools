@@ -1,10 +1,9 @@
 import { authorSchema } from "@pe/agent-contracts";
-import { targetHomes } from "./call-route.ts";
+import { targetHomes } from "@pe/host-internal/target-homes";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
 import { resolve, win32 } from "node:path";
-import { Effect, FileSystem } from "effect";
-import { NodeFileSystem } from "@effect/platform-node";
+import { Effect } from "effect";
 import {
   sameCaller,
   familyActions,
@@ -69,9 +68,10 @@ import type {
   RevitCatalogLoadedFamilies,
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import { CANCEL_OPERATION_KEY, invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
+import { CANCEL_OPERATION_KEY, invokeBridge as invoke } from "./bridge.ts";
+import { type RevitBridge } from "@pe/host-internal/bridge";
 import { assertFresh, type DocumentMarks } from "./document-marks.ts";
-import type { ActionExecution } from "./action-journal.ts";
+import type { ActionExecution } from "@pe/host-internal/action-execution";
 import {
   command,
   io,
@@ -80,7 +80,7 @@ import {
   StepFailure,
   type CommandContext,
   type CommandExecutor,
-} from "./command-executor.ts";
+} from "@pe/host-internal/command-executor";
 import { z } from "zod";
 import type { Consumed as Dependency, WorkHandle } from "@pe/agent-contracts";
 import { type TakeoffActionDependencies } from "./takeoff-actions.ts";
@@ -115,11 +115,12 @@ export const sourceRunDirectory = async (pod: string | null | undefined, deps: P
 
 
 /** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
+import { runPods, type PodRunner } from "@pe/host-internal/pod-runner";
+
 export type PodDependencies = {
   parsePdf?: (request: import("@pe/mcps/family-pdf").FamilyPdfRequest) => Promise<unknown>;
   podsRoot?: string;
-  runPods?: <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>, options?: { signal?: AbortSignal }) => Promise<A>;
-};
+} & PodRunner;
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
     marks?: DocumentMarks;
@@ -190,16 +191,6 @@ const draftContent = (spec: string) => {
   return `${JSON.stringify({ $schema: familyModelSchema, ...model }, null, 2)}
 `;
 };
-
-export const runPods = <A, E>(
-  deps: PodDependencies,
-  effect: Effect.Effect<A, E, FileSystem.FileSystem>,
-  options?: { signal?: AbortSignal },
-) =>
-  deps.runPods
-    ? deps.runPods(effect, options)
-    : // effect-edge: island, phase 5
-      Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)), options);
 
 /** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = async (

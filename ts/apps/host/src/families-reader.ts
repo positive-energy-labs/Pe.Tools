@@ -23,7 +23,8 @@ import {
   type DocOpResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import { adaptiveWork, type WorkExecutor } from "./adaptive-work.ts";
-import { CANCEL_OPERATION_KEY, type RevitBridge } from "./bridge.ts";
+import { CANCEL_OPERATION_KEY } from "./bridge.ts";
+import { type RevitBridge } from "@pe/host-internal/bridge";
 import { assertFresh, HostDocumentMarks, type DocumentMarks } from "./document-marks.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";

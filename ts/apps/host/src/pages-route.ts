@@ -1,6 +1,6 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { acquireContentRoots, contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
-import { targetHomes } from "./call-route.ts";
+import { targetHomes } from "@pe/host-internal/target-homes";
 import { readSessionScope } from "./sdk-session.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { servePeRoute, peClientScript, matchPeRoute } from "@pe/mcps/product-catalog";
@@ -53,22 +53,10 @@ import {
 import { z } from "zod";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { resourceSnapshot, type OwnerValue } from "@pe/runtime";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { hostOwnership, hostState } from "./host-ownership.ts";
-import {
-  admitPage,
-  bindControl,
-  currentCaller,
-  mintPageDoor,
-  pageActDoor,
-  readsOnly,
-  Refused,
-  refusalHeaders,
-  documentAcquisition,
-  threadHead,
-  subscribeHeads,
-  emitPagePinRevoke,
-} from "./control.ts";
+import { admitPage, bindControl, currentCaller, mintPageDoor, pageActDoor, readsOnly, refusalHeaders, documentAcquisition, threadHead, subscribeHeads, emitPagePinRevoke } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
 import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs, requirePackageAvailable } from "./pod-capture.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";

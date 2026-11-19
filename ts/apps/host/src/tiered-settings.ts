@@ -1,3 +1,4 @@
+import { readSettingTiers, readTier, tierHome } from "@pe/host-internal/settings-files";
 import { settingOwners } from "./product-contracts.ts";
 /**
  * Tiered settings (ADR 0037 rule 8; homes MAP slice 6b): `Settings/<owner>.json` in the user home,
@@ -8,22 +9,18 @@ import { settingOwners } from "./product-contracts.ts";
  */
 import { existsSync, readFileSync, watch } from "node:fs";
 import { userInfo } from "node:os";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import type { Caller, HomeWriteRow, SettingTier, SettingTierRead } from "@pe/agent-contracts";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import type { Caller, HomeWriteRow, SettingTier } from "@pe/agent-contracts";
 import { SETTING_TIERS, homeWriteRowSchema, callerSchema, sameAddress } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
-  firmHome,
-  noFirmHomeText,
   projectHome,
-  sharedDriveRoot,
-  userRoot,
   homes,
 } from "@pe/host-contracts/product-paths";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { note, sha256Hex } from "@pe/host-contracts/kinds";
 import { SETTING_WRITE_PLACE } from "./notice-feed.ts";
-import { firmOwner } from "./reads/door.ts";
+import { firmOwner } from "@pe/host-internal/read-graph";
 import { appendLine, homeKind, readLines, rested, stateLog, writeHome, type HomeWrite } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
 import { registerTimelineSource } from "./reads/work-timeline.ts";
@@ -125,68 +122,6 @@ registerTimelineSource({
 });
 
 /** A tier's home for the target model: its folder and its name, or why there is none. */
-function tierHome(tier: SettingTier, pointer: string | null | undefined): Pick<SettingTierRead, "home" | "name" | "notFound"> {
-  if (tier === "user") {
-    const home = userRoot();
-    return { home, name: basename(home) };
-  }
-  if (tier === "firm") {
-    const firm = firmHome();
-    const drive = sharedDriveRoot();
-    return firm.root
-      ? { home: firm.root, name: basename(drive ?? firm.root) }
-      : { home: null, name: null, notFound: noFirmHomeText(firm) };
-  }
-  const home = projectHome(pointer);
-  // Pe's files sit in one child folder of the folder the humans use; that folder is the name.
-  if (home) return { home, name: basename(dirname(home)) };
-  return {
-    home: null,
-    name: null,
-    notFound: pointer && sharedDriveRoot() === null
-      ? `No project home: the model names "${pointer}" relative to the shared drive root, which cannot be resolved because no firm home was found.`
-      : pointer
-      ? `No project home: the model names "${pointer}", and no folder with a ${productPathNames.homeMarkerFileName} of tier "project" is there.`
-      : "No project home: this model names none, or no model is the target.",
-  };
-}
-
-/**
- * The one reader of a `Settings/<owner>.json` file, in any home: absent (no hash and no error), or
- * its hash with its JSON object. A file that is not a JSON object is kept and reported, never used.
- */
-export function readSettingsFile(path: string): Pick<SettingTierRead, "sha256" | "json" | "error"> {
-  let bytes: Buffer;
-  try {
-    bytes = readFileSync(path);
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "ENOENT"
-      ? { sha256: null }
-      : { sha256: null, error: String(error) };
-  }
-  const sha256 = sha256Hex(bytes);
-  try {
-    const json: unknown = JSON.parse(bytes.toString("utf8").replace(/^﻿/, ""));
-    return json !== null && typeof json === "object" && !Array.isArray(json)
-      ? { sha256, json }
-      : { sha256, error: "The file is not a JSON object" };
-  } catch (error) {
-    return { sha256, error: String(error) };
-  }
-}
-
-/** One tier's file as it stands. */
-function readTier(tier: SettingTier, owner: string, pointer: string | null | undefined): SettingTierRead {
-  const at = tierHome(tier, pointer);
-  if (at.home === null) return { tier, ...at, path: null, sha256: null };
-  const path = join(at.home, productPathNames.homeSettingsDirectoryName, `${firmOwner.parse(owner)}.json`);
-  return { tier, ...at, path, ...readSettingsFile(path) };
-}
-
-/** Every tier's file for one owner, most specific first. `pointer` is the target model's project pointer. */
-export const readSettingTiers = (owner: string, pointer?: string | null): SettingTierRead[] =>
-  SETTING_TIERS.map((tier) => readTier(tier, owner, pointer));
-
 /** Watch the concrete user/project files consumed by this read owner, including absent files. */
 export function watchSettingTiers(changed: () => void) {
   const watching = new Map<string, () => void>();

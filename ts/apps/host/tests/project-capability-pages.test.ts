@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { bootHost } from "./real-server.ts";
 import { detachedBridge, sessionView } from "./effect-test.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/contracts";
 
 vi.mock("../src/pe-revit-launch.ts", async original => ({

@@ -12,7 +12,7 @@ import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { nativeReadRoot, makeHttpLive } from "../src/app.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 import { TestClock } from "effect/testing";

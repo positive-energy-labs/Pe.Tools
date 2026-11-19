@@ -56,7 +56,6 @@
     "@pe/fans-web": "workspace:*",
     "jiti": "^2.7.0",
     "@pe/browser": "workspace:*",
-    "@pe/host": "workspace:*",
     "@pe/host-internal": "workspace:*"
   },
   "devDependencies": {

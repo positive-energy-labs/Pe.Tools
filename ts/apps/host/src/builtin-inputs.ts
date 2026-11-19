@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
+import { captureInput, replayInput, type RecordedInput } from "@pe/host-internal/input-recording";
+import { nativeInputIdentity } from "@pe/host-internal/input-recording";
 import { CaptureStore } from "./takeoff-captures.ts";
 import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
@@ -23,16 +24,12 @@ import {
   readingRequestSchema,
 } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
-import {
-  CurrentInputConsumption,
-  HostInputReadSets,
-  type ConsumerRecipe,
-  type InputConsumption,
-  type ReadSetId,
-} from "./input-occurrence.ts";
-import type { TakingObserver } from "./native-recording.ts";
+import { CurrentInputConsumption, type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import { HostInputReadSets } from "./input-occurrence.ts";
+import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
+import type { TakingObserver } from "@pe/host-internal/input-recording";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { fingerprint } from "./reads/evaluator.ts";
+import { fingerprint } from "@pe/host-internal/reads/evaluator";
 import { Publications } from "./reads/publications.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
@@ -40,8 +37,9 @@ import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contrac
 import { ActionJournalService } from "./receipt-services.ts";
 import { hostTimeline } from "./reads/work-timeline.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
-import { settingsFile } from "./reads/door.ts";
-import { onSettingWritten, readSettingTiers, watchSettingTiers } from "./tiered-settings.ts";
+import { settingsFile } from "@pe/host-internal/read-graph";
+import { onSettingWritten, watchSettingTiers } from "./tiered-settings.ts";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
 import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
@@ -69,15 +67,15 @@ import {
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { admittedBuiltinsLayer, constructorWorkRegistrations } from "./admitted-builtins.ts";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { nativeCallRouteFor, nativeReadResolveRoute, retainedDuctsRead } from "./call-route.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { createDuctsBodyBasis } from "@pe/ducts-host/ducts-body-basis";
 import { ductCatalogsRoute, DuctFiles } from "@pe/ducts-host/ducts-files";
 import { DuctsReadings, ductsReadings } from "@pe/ducts-host/ducts-readings";
-import { runPods } from "./family-actions.ts";
+import { runPods } from "@pe/host-internal/pod-runner";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { hostNativeReadFor } from "./native-recording.ts";
 import {
   createPeRoutes,
@@ -86,7 +84,7 @@ import {
   type PeInvocationFactory,
 } from "./pe-routes.ts";
 import { hostState } from "./host-ownership.ts";
-import { RequestIdentity } from "./request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { markReadings } from "./resource-adapters.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { HostSessionInventory } from "./session-inventory.ts";
@@ -1345,7 +1343,7 @@ export const readInputRoutes = (
 /** Built-in domain registration lives here; the HTTP kernel composes this module without route knowledge. */
 export const builtinFileLayer = () => Layer.unwrap(Effect.promise(async () => {
   await contentRootsReady();
-  return DuctFiles.layer({
+  return DuctFiles.layer(hostState().home, {
     firm: () => {
       const root = contentFirmHome().root;
       return root && join(root, productPathNames.homeSettingsDirectoryName);

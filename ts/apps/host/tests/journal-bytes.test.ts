@@ -6,7 +6,7 @@ import { randomBytes } from "node:crypto";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { command } from "../src/command-executor.ts";
+import { command } from "@pe/host-internal/command-executor";
 import { markDispatched } from "../src/action-dispatch.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { freezeScript, scriptMemberFacts } from "../src/operation-script.ts";

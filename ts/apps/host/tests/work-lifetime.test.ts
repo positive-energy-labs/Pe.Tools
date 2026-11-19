@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { NodeServices } from "@effect/platform-node";
@@ -24,7 +25,7 @@ import { join } from "node:path";
 import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
-import type { HostBridgeEvent, BridgeSessionView } from "../src/bridge.ts";
+import type { HostBridgeEvent, BridgeSessionView } from "@pe/host-internal/bridge";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
@@ -383,7 +384,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             undefined,
             undefined,
             telemetry,
-          ).pipe(Effect.provide(HostDocumentMarks.none), Effect.provide(DuctFiles.layer()), Effect.provide(PictureCaptureStore.layer()));
+          ).pipe(Effect.provide(HostDocumentMarks.none), Effect.provide(DuctFiles.layer(hostState().home)), Effect.provide(PictureCaptureStore.layer()));
           yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {

@@ -5,15 +5,16 @@ import { workStartExecutor } from "./work-start.ts";
 import { findingsExecutors } from "./slots/findings.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
-import { CatalogCommand, catalogCommandContext } from "./catalog-command-context.ts";
-import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
+import { CatalogCommand, catalogCommandContext } from "@pe/host-internal/catalog-command-context";
+import type { CommandExecutor, CommandRegistry } from "@pe/host-internal/command-executor";
 import type { GatewayLocal } from "./gateway-actions.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, type FamilyActionDependencies } from "./family-actions.ts";
 import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import { productExecutors } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
@@ -56,7 +57,10 @@ export function commandRegistry(
     ),
   };
   // Product-owned sheet writes answer through the generic sheet dispatcher.
-  const products = productExecutors(bridge, deps);
+  const products = productExecutors(bridge, {
+    ...deps,
+    projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
+  });
   const productsWithoutSheet = Object.fromEntries(
     Object.entries(products.executors).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
   );

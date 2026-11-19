@@ -21,11 +21,12 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../packages/host-contracts/src/fixtures/k2-roster.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
-import { hostOwnership } from "../../apps/host/src/host-ownership.ts";
+import { hostOwnership, hostState } from "../../apps/host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../apps/host/src/document-marks.ts";
 import { HostSessionInventory } from "../../apps/host/src/session-inventory.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
-import { RevitBridge, RevitBridgeLive } from "../../apps/host/src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "../../apps/host/src/bridge.ts";
 import { SdkSession } from "../../apps/host/src/sdk-session.ts";
 import { ReadOwner } from "../../apps/host/src/builtin-inputs.ts";
 import { makeCallRoute } from "../../apps/host/src/call-route.ts";
@@ -121,7 +122,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
  const writer=inputs.lane.kind==="live"?inputs.lane.captureStore:undefined;
  if(writer){const stop=writer.capture.stop;vi.spyOn(writer.capture,"stop").mockImplementation((at,reason,source)=>{trace.stops.push({at,reason,stack:new Error().stack});return stop(at,reason,source);});}
- const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
+ const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(hostState().home),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
  trace.base=host.base;
  const subscriptionChanges:any[]=[];
  const forward=async(url:any,init:any={})=>{

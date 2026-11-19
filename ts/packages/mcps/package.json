@@ -71,7 +71,6 @@
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
-    "@pe/host": "workspace:*"
+    "vite-plus": "catalog:"
   }
 }

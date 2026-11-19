@@ -5,7 +5,7 @@ import type {
   NativeAnswer,
   RequestIdentityData,
 } from "@pe/host-internal/request-contracts";
-import type { CatalogReadKey } from "./door.ts";
+import type { CatalogReadKey } from "@pe/host-internal/read-graph";
 
 // These link NativeReads lifetimes; they add no durable identity, journal or dispatcher.
 

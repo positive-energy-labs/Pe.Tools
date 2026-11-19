@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import { readingFrameSchema, readingKey, type ReadingFrame } from "@pe/agent-contracts";
 import { resourceResponse } from "@pe/runtime";
-import type { HostBridgeEvent } from "../src/bridge.ts";
+import type { HostBridgeEvent } from "@pe/host-internal/bridge";
 import { detachedBridge } from "./effect-test.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 

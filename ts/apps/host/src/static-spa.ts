@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerRespondable, HttpServerResponse, HttpStaticServer } from "effect/http";
 import { appRouteByPath } from "@pe/agent-contracts";
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { hostOwnership } from "./host-ownership.ts";
 
 /**

@@ -194,7 +194,7 @@ async function openRecordedGuidanceAfterRefusal() {
   } finally { view.unmount(); vi.unstubAllGlobals(); }
 }
 async function sheetFixture() {
-  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans/fans-work-fixture.ts");
   return nativeFixture("real", (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }), null, {
     native: key => key === "ducts.tables" ? recordedTables() : undefined,
   });
@@ -361,7 +361,7 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
 
 
 test("JZ upload retains BlobRef before command admission and rejects inline intent", async () => {
-  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans/fans-work-fixture.ts");
   const { bindWork } = await import("@pe/agent-contracts");
   const f = await nativeFixture();
   try {

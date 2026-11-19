@@ -8,9 +8,9 @@ import { buildCapabilities, createCapabilityCatalogSource } from "../../../packa
 import { fixture } from "./host-read-graph.test-support.ts";
 import { sessionView } from "./effect-test.ts";
 import { replay } from "./sdk-replay.ts";
-import { read } from "../src/reads/evaluator.ts";
+import { read } from "@pe/host-internal/reads/evaluator";
 import { registeredReads } from "../src/reads/routes.ts";
-import { resources } from "../src/builtin-read-handles.ts";
+import { resources } from "@pe/host-internal/builtin-read-handles";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { listBridgeSessions } from "../src/local-ops.ts";
 import type { HostSessionInventory } from "../src/session-inventory.ts";

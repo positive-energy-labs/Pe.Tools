@@ -24,7 +24,8 @@ import {
   type PageLive,
 } from "../src/pages-route.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { admitCrossing, bindControl, callerOf, currentCaller, live, Refused, onPagePinRevoke } from "../src/control.ts";
+import { admitCrossing, bindControl, callerOf, currentCaller, live, onPagePinRevoke } from "../src/control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
 import * as packages from "../src/packages.ts";
 import * as lifecycle from "../src/package-lifecycle.ts";

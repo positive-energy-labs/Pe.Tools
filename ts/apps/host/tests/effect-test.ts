@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { HostInputContext } from "../src/input-context.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { journalFixture } from "./storage.ts";
@@ -15,7 +16,8 @@ import { Cause, Context, Effect, Exit, Layer, Logger, References, Scope } from "
 import { TestClock } from "effect/testing";
 import { onTestFinished, test, type TestContext } from "vite-plus/test";
 import { FamiliesReader } from "../src/families-reader.ts";
-import { RevitBridge, RevitBridgeDetached, type BridgeSessionView } from "../src/bridge.ts";
+import { RevitBridge, type BridgeSessionView } from "@pe/host-internal/bridge";
+import { RevitBridgeDetached } from "../src/bridge.ts";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
 import { CaptureStore, type TakeoffCaptures } from "../src/takeoff-captures.ts";
@@ -279,9 +281,9 @@ export const journalAt = (
   );
 
 export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(stateFixture(root))), PictureCaptureStore);
-export const testDuctFiles = () => Context.get(testScoped(DuctFiles.layer()), DuctFiles);
+export const testDuctFiles = () => Context.get(testScoped(DuctFiles.layer(hostState().home)), DuctFiles);
 
-export const testHostInputs = Layer.mergeAll(DuctFiles.layer(), PictureCaptureStore.layer(), HostDocumentMarks.layer);
+export const testHostInputs = Layer.mergeAll(DuctFiles.layer(hostState().home), PictureCaptureStore.layer(), HostDocumentMarks.layer);
 
 /** Immediate native acknowledgements for read payload fixtures. Barrier tests supply their own handles. */
 export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBridge["Service"] => ({

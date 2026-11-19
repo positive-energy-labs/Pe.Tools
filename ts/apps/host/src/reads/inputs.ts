@@ -1,43 +1,22 @@
 import { z } from "zod";
 import {
   documentRefSchema,
-  executionTargetSchema,
+  type executionTargetSchema,
   workKeySchema,
   bindWork,
   NATIVE_BODY_VERSION_HEADER,
 } from "@pe/agent-contracts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
-import { leaf, read, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "./evaluator.ts";
+import { leaf, read, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "@pe/host-internal/reads/evaluator";
+import { workBinding } from "@pe/host-internal/reads/work";
 import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
 import { workTimelineInput } from "./work-timeline.ts";
 import type { HostMarks } from "../document-marks.ts";
 import type { WorkInputRunner } from "../work-inputs.ts";
-import type { InputConsumption } from "../input-occurrence.ts";
-import { BridgeError } from "../bridge.ts";
+import type { InputConsumption } from "@pe/host-internal/input-occurrence";
+import { BridgeError } from "@pe/host-internal/bridge";
 import { BridgeError as InputBridgeError } from "@pe/host-internal/dispatch";
 
-const targetSchema = z.union([documentRefSchema, executionTargetSchema]);
-export const workBinding = leaf(
-  "work-scope",
-  z.object({
-    route: z.string(),
-    target: targetSchema.optional(),
-    work: z.string().nullable().optional(),
-  }),
-  workKeySchema.nullable(),
-  false,
-);
-/** The contract is supplied once by the Work owner; routes never decode Work envelopes. */
-export const workRead = <T>(owner: string, schema: z.ZodType<T>) => {
-  const output = z.object({ doc: schema, revision: z.number() }).nullable();
-  return read(`input.work.${owner}`, {
-    input: workKeySchema,
-    output,
-    async run(ctx, scope) {
-      return output.parse(await ctx.work(owner, scope));
-    },
-  });
-};
 export interface ReadSources {
   inputs?: { consumption: InputConsumption; run: WorkInputRunner; work: WorkReadContext };
   workKey: (target: z.output<typeof documentRefSchema>) => Promise<z.output<typeof workKeySchema>>;

@@ -16,26 +16,19 @@ import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { historyPointSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { History } from "../src/reads/history.ts";
-import { nativeRead } from "../src/reads/evaluator.ts";
+import { nativeRead } from "@pe/host-internal/reads/evaluator";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
-import { read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
+import { read, leaf, RefusedPartition } from "@pe/host-internal/reads/evaluator";
 import { Publications } from "../src/reads/publications.ts";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { BridgeError } from "@pe/host-internal/dispatch";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import {
-  CurrentInputConsumption,
-  HostInputReadSets,
-  type ReadSetId,
-} from "../src/input-occurrence.ts";
-import {
-  hostNativeReadFor,
-  openRecordingWriter,
-  openRecordingReader,
-  type HostInputLane,
-} from "../src/native-recording.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
+import { CurrentInputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import { HostInputReadSets } from "../src/input-occurrence.ts";
+import { hostNativeReadFor, openRecordingWriter, openRecordingReader } from "../src/native-recording.ts";
+import { type HostInputLane } from "@pe/host-internal/input-recording";
 import { settle } from "./effect-test.ts";
 import {
   fixture,

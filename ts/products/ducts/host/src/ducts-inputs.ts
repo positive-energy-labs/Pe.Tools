@@ -13,7 +13,7 @@ import {
 } from "@pe/ducts-contract/duct-inputs";
 import { serveSetting, type SettingTierRead } from "@pe/agent-contracts";
 import { ductParameterSlots, ductSlotRequest } from "@pe/ducts-contract/system-work";
-import type { FirmValue } from "@pe/host/read-graph";
+import type { FirmValue } from "@pe/host-internal/read-graph";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { slotCoverage, REVIT_FLOW_SLOT } from "@pe/ducts-domain/kernel/terminal-flow";
 export const snapshotInputs = (settings: readonly SettingTierRead[], snapshot: DuctSnapshot) => {

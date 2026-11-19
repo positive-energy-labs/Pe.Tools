@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { serviceHeaders } from "./callers.ts";
@@ -110,7 +111,7 @@ async function setup(mode = "normal") {
   const live = {
     owner: new DuctsReadings(),
     native,
-    files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
+    files: DuctFiles.layer(hostState().home, { firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
     marks: Layer.succeed(
       HostDocumentMarks,
       hostMarks({ observedSince: 1, changedAt: () => 2, subscribe: () => () => {} }),

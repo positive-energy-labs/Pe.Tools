@@ -46,13 +46,16 @@
     "jiti": "^2.7.0",
     "@pe/web": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
-    "@pe/fans-web": "workspace:*"
+    "@pe/fans-web": "workspace:*",
+    "@pe/fans-domain": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
     "playwright-core": "1.60.0",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "@modelcontextprotocol/client": "catalog:",
+    "gunshi": "^0.29.5"
   },
   "config": {
     "windowsBinaries": {
@@ -64,17 +67,12 @@
     "./settings": "./src/settings.ts",
     "./family-actions": "./src/family-actions.ts",
     "./family-spec": "./src/family-spec.ts",
-    "./read-graph": "./src/reads/door.ts",
-    "./reads/evaluator": "./src/reads/evaluator.ts",
-    "./builtin-read-handles": "./src/builtin-read-handles.ts",
     "./ducts-files": "./src/ducts-files.ts",
     "./ducts-inputs": "./src/ducts-inputs.ts",
-    "./local-inputs": "./src/local-inputs.ts",
     "./reads/inputs": "./src/reads/inputs.ts",
     "./bridge": "./src/bridge.ts",
     "./command-executor": "./src/command-executor.ts",
     "./vite.config": "./vite.config.ts",
-    "./command-read-identity": "./src/command-read-identity.ts",
     "./request-services": "./src/request-services.ts",
     "./action-journal": "./src/action-journal.ts",
     "./document-lifetime": "./src/document-lifetime.ts",

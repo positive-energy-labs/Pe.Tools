@@ -2,7 +2,7 @@ import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src
 import { createHash } from "node:crypto";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
-import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { readSessionScope } from "./sdk-session.ts";
 import { Deferred, Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -22,15 +22,8 @@ import {
   type ReceiptFact,
 } from "@pe/agent-contracts";
 import { matchPeRoute } from "@pe/mcps/product-catalog";
-import {
-  admitRequest,
-  callerOf,
-  browserContextHeaders,
-  mintBrowserContext,
-  Refused,
-  REFUSAL_HEADER,
-  type RoutePermission,
-} from "./control.ts";
+import { admitRequest, callerOf, browserContextHeaders, mintBrowserContext, REFUSAL_HEADER, type RoutePermission } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { recordHostFact, type ReceiptExporter } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";

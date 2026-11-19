@@ -5,8 +5,8 @@ import { commands } from "@pe/mcps/product-actions";
 import { SHEET_COMMANDS, schemaOfData, type SheetSlotData } from "@pe/agent-contracts/slots";
 import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import type { RevitApplyParameterValues, RevitDetailParameterValues } from "@pe/host-contracts/generated";
-import type { RevitBridge } from "../bridge.ts";
-import { command, nativeStep, refused, type CommandExecutor } from "../command-executor.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { command, nativeStep, refused, type CommandExecutor } from "@pe/host-internal/command-executor";
 import { projectReader, type FamilyActionDependencies } from "../family-actions.ts";
 
 /*

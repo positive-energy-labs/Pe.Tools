@@ -9,12 +9,12 @@ import {
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
-import { hostOwnership } from "../../../host/src/host-ownership.ts";
+import { hostOwnership, hostState } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { Publications } from "../../../host/src/reads/publications.ts";
-import { RevitBridge } from "../../../host/src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
 import { bootHost } from "../../../host/tests/real-server.ts";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture.ts";
@@ -63,7 +63,7 @@ async function liveHost(
         inventory: HostSessionInventory.layer.pipe(
           Layer.provide(Layer.mergeAll(ambient(RevitBridge), ambient(SdkSession))),
         ),
-        files: DuctFiles.layer(),
+        files: DuctFiles.layer(hostState().home),
         native: Layer.effect(
           HostNativeRead,
           Effect.gen(function* () {

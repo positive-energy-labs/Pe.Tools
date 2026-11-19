@@ -7,7 +7,7 @@ import { openBrowser } from "@pe/browser";
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { effectTest } from "./effect-test.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
-import { RequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { hostOwnership } from "../src/host-ownership.ts";
 
 /**

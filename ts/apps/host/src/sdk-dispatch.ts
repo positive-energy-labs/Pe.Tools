@@ -14,9 +14,9 @@ import {
 } from "@pe/host-contracts/pe-revit-contract";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
-import { io, refused, StepFailure } from "./command-executor.ts";
+import { io, refused, StepFailure } from "@pe/host-internal/command-executor";
 import { markDispatched, validateDispatch } from "./action-dispatch.ts";
-import type { ActionExecution, StepOptions } from "./action-journal.ts";
+import type { ActionExecution, StepOptions } from "@pe/host-internal/action-execution";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 
 /** SDK supervisor requests and Revit requests share one UUID, but have different refusal evidence. */

@@ -10,7 +10,8 @@ import { machineFixture } from "../../../packages/agent-contracts/tests/machine-
 import { readAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { approvedPea } from "./callers.ts";
-import { localRead, readLocal } from "../src/local-inputs.ts";
+import { localRead } from "@pe/host-internal/reads/local";
+import { readLocal } from "../src/local-inputs.ts";
 
 test("the bridge-free compose reader is available without catalog intent and refuses to resolve native directives", async () => {
   expect(() => localRead("pod.member.compose")).not.toThrow();

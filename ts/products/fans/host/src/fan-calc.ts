@@ -1,6 +1,6 @@
 import * as acquisition from "@pe/fans-contract/fans-host-reads";
 import { CALC_ENGINE_VERSION, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/fans-contract/fan-calc";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
 import { canonicalRouteInput } from "@pe/agent-contracts";
@@ -39,8 +39,8 @@ import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/calc/joins";
 import { designLayers } from "@pe/ducts-host/design-layers";
-import { catalogs } from "@pe/host/builtin-read-handles";
-import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
+import { catalogs } from "@pe/ducts-host/ducts-files";
+import { fingerprint, nativeRead, read } from "@pe/host-internal/reads/evaluator";
 // Wire reads carry FanClaim, never the domain write capability (contract 3a).
 type Calc = Omit<DomainCalc, "claim"> & { claim: import("@pe/fans-contract/fans-inputs").FanClaim };
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
@@ -361,7 +361,7 @@ function overview(entry: CalcModel): DuctsCalcOverview {
   };
 }
 
-async function current(ctx: import("@pe/host/read-graph").ReadContext, request: DuctsCalcRequest) {
+async function current(ctx: import("@pe/host-internal/read-graph").ReadContext, request: DuctsCalcRequest) {
   const entry = await ctx.read(calcModel, subject(request));
   if (request.basis && entry.value.basis !== request.basis)
     throw Error("Stale sheet basis; read a new overview before using detail handles");

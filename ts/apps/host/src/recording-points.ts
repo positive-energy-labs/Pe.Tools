@@ -15,15 +15,10 @@ import {
 } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { canonicalJson } from "@pe/host-internal/native-read";
 import { hostSessionScopeSchema } from "@pe/host-contracts/operation-types";
-import {
-  defaultReadSetLimits,
-  readSetRecords,
-  HostInputReadSets,
-  type InputConsumption,
-  type ReadSetId,
-} from "./input-occurrence.ts";
-import type { ConsumerRecipe, RecordingReader } from "./native-recording.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { defaultReadSetLimits, readSetRecords, HostInputReadSets } from "./input-occurrence.ts";
+import { type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import type { ConsumerRecipe, RecordingReader } from "@pe/host-internal/input-recording";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 
 type Document = DocumentKey;
 type ReadSets = HostInputReadSets["Service"];

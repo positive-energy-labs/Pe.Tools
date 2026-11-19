@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test } from "vite-plus/test";
 import { Context, Effect, Layer } from "effect";
@@ -7,7 +8,7 @@ import { z } from "zod";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { projectFixture } from "./project-home-fixture.ts";
-import { read, leaf } from "../src/reads/door.ts";
+import { read, leaf } from "@pe/host-internal/read-graph";
 import { registeredReads } from "../src/reads/routes.ts";
 import { readInputRoutes } from "../src/builtin-inputs.ts";
 import { HostInputContext } from "../src/input-context.ts";
@@ -17,7 +18,7 @@ import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 import { settle } from "./effect-test.ts";
 
 const closes: (() => Promise<unknown>)[] = [];
@@ -35,7 +36,7 @@ test("file inputs retain the target pointer for project Catalogs and family spec
   const unregister = registeredReads.register({ witness: definition }); closes.push(async () => unregister());
   const inputs = await settle(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" }))));
   const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { store: fileRouteDocumentStore(stateFixture(join(f.dir, "file-work"))), live: {
-    owner: new DuctsReadings(), files: DuctFiles.layer(),
+    owner: new DuctsReadings(), files: DuctFiles.layer(hostState().home),
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("Unexpected native read"), read: () => Effect.die("Unexpected native read") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })),
     inventory: Layer.succeed(HostSessionInventory, { document: () => Effect.succeed({ ...f.target.ref, address: null, projectHome: "Projects/Example" }),

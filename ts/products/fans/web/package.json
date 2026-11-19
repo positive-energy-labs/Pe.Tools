@@ -55,7 +55,6 @@
     "@pe/duct-systems-domain": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-host": "workspace:*",
-    "@pe/host": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/host-internal": "workspace:*",
     "@pe/runtime": "workspace:*",

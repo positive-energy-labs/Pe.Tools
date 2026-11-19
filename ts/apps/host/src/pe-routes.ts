@@ -2,7 +2,7 @@ import { resourceReadingSchema } from "./product-contracts.ts";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable, homesStatus, writeHomesConfig } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
-import { targetHomes } from "./call-route.ts";
+import { targetHomes } from "@pe/host-internal/target-homes";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, Receipt } from "@pe/agent-contracts";
@@ -80,7 +80,7 @@ import { z } from "zod";
 import type { CapabilityContent } from "../../../packages/mcps/src/pea/capabilities.ts";
 import { skillSnapshot } from "../../../packages/mcps/src/pea/skill-publication.ts";
 import { alignBootstrap } from "./bootstrap.ts";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { PictureCaptureStore } from "./captures-route.ts";
 import {
   bindControl,
@@ -91,7 +91,7 @@ import {
   threadHead,
 } from "./control.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
-import { runPods } from "./family-actions.ts";
+import { runPods } from "@pe/host-internal/pod-runner";
 import { familySpecAsset } from "./family-spec.ts";
 import { ActionJournalService, HostLogService } from "./receipt-services.ts";
 import { peaMcpServer } from "./harness/adapter.ts";
@@ -121,7 +121,7 @@ import {
   machineSources,
 } from "./machine.ts";
 
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import {
   readNavigation,
   readThreadWork,

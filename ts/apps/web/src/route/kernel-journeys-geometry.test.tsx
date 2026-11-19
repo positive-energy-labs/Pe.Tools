@@ -1,3 +1,4 @@
+import { hostState } from "../../../host/src/host-ownership.ts";
 // These witnesses test capture and camera ownership; resolve the lazy module before their timed gestures.
 import "./slots/picture/pane.tsx";
 import { valueOf } from "./typed-route";
@@ -176,7 +177,8 @@ import { hostOwnership } from "../../../host/src/host-ownership";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { HostSessionInventory } from "../../../host/src/session-inventory";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
-import { RevitBridge, RevitBridgeLive } from "../../../host/src/bridge";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
 import { ReadOwner } from "../../../host/src/builtin-inputs";
 import { makeCallRoute } from "../../../host/src/call-route";
@@ -226,7 +228,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
  const stamp=admittedReceiptStamps().host!;
  const captureStore=await Effect.runPromise(openRecordingWriter(stateFixture(dir),{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
  const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
- const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
+ const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(hostState().home),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
  trace.base=host.base;
  const forward=async(url:any,init:any={})=>{
    const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);

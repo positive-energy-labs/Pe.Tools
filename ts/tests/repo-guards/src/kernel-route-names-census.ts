@@ -10,12 +10,10 @@ export interface KernelRouteBaseline {
   paths: string[];
   sites: { routeNames: string[] };
 }
-const directories = ["ts/packages/runtime/src"];
+const directories = ["ts/packages/runtime/src", "ts/packages/host-internal/src/reads"];
 const readRoot = "ts/apps/host/src/reads";
 // Ownership is reviewed per file, never inferred from a generated-file glob.
 export const readFileOwnership = {
-  "door.ts": { owner: "kernel", reason: "Effect-free read door Pods and route directories import" },
-  "evaluator.ts": { owner: "kernel", reason: "Tracked evaluation of one recipe into a Value" },
   "history-routes.ts": { owner: "kernel", reason: "Generic History HTTP admission and dispatch" },
   "history.ts": { owner: "kernel", reason: "Durable publication History and replay" },
   "inputs.ts": { owner: "kernel", reason: "Tracked native, Work, file and document inputs" },

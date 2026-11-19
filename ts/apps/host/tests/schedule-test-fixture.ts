@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { ownedSession } from "./callers.ts";
@@ -26,7 +27,7 @@ import {
   type ActionAdmission,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { BridgeError, type HostBridgeEvent } from "../src/bridge.ts";
+import { BridgeError, type HostBridgeEvent } from "@pe/host-internal/bridge";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
 import { createPeRoutes, fileRouteDocumentStore } from "../src/pe-routes.ts";
@@ -250,7 +251,7 @@ export async function setup(options: { cold?: boolean } = {}) {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, callRouteOver(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer()), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
+      Layer.mergeAll(pe, callRouteOver(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer(hostState().home)), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
       bridge,
     );
   let server = await mount();

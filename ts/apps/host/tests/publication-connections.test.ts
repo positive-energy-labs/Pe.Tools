@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { resourceResponse, type ResourceObserver } from "@pe/runtime";
 import { Publications } from "../src/reads/publications.ts";
-import { read, type InputPort } from "../src/reads/evaluator.ts";
+import { read, type InputPort } from "@pe/host-internal/reads/evaluator";
 
 const definition = read("connection-probe", { input: z.number(), output: z.number(), run: (_ctx, n) => n });
 const port: InputPort = { evaluation: "connection", origin: {}, revision: () => 0, take: async () => null };

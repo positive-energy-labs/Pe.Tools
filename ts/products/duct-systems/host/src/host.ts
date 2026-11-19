@@ -1,6 +1,6 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "@pe/duct-systems-contract/contract";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import { z } from "zod";
 import {
   DUCTS_SYSTEM_MAX,
@@ -16,8 +16,8 @@ import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
-import { catalogs } from "@pe/host/builtin-read-handles";
-import { read } from "@pe/host/read-graph";
+import { catalogs } from "@pe/ducts-host/ducts-files";
+import { read } from "@pe/host-internal/read-graph";
 import { systemList } from "@pe/duct-systems-domain/system-list";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";

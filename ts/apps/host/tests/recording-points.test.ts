@@ -13,21 +13,10 @@ import {
   type RecordingConsumer,
 } from "@pe/agent-contracts";
 import type { DocumentKey } from "../../../packages/agent-contracts/src/subject-ref.ts";
-import {
-  CurrentInputConsumption,
-  HostInputReadSets,
-  type InputConsumption,
-} from "../src/input-occurrence.ts";
-import {
-  captureInput,
-  replayInput,
-  openRecordingReader,
-  openRecordingWriter,
-  type ConsumerRecipe,
-  type HostInputLane,
-  type RecordingWriter,
-  type RecordingReader,
-} from "../src/native-recording.ts";
+import { CurrentInputConsumption, type InputConsumption } from "@pe/host-internal/input-occurrence";
+import { HostInputReadSets } from "../src/input-occurrence.ts";
+import { captureInput, replayInput, type ConsumerRecipe, type HostInputLane, type RecordingWriter, type RecordingReader } from "@pe/host-internal/input-recording";
+import { openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
 import { recordingPoints } from "../src/recording-points.ts";
 import { workInput, workInputScope, workInputCodecs } from "../src/work-inputs.ts";
 import { effectTest } from "./effect-test.ts";

@@ -1,10 +1,10 @@
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
-import { workRead } from "@pe/host/reads/inputs";
+import { body } from "@pe/host-internal/read-graph";
+import { workRead } from "@pe/host-internal/reads/work";
 import { z } from "zod";
 import { memberWork, settingsRouteState, settingsCandidate } from "@pe/agent-contracts";
 
-import { localRead } from "@pe/host/local-inputs";
+import { localRead } from "@pe/host-internal/reads/local";
 import { podMemberOfPage as member, } from "@pe/agent-contracts";
 import { compositionReadSchema } from "@pe/agent-contracts";
 

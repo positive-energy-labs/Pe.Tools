@@ -3,8 +3,8 @@ import { HttpRouter, HttpServerResponse } from "effect/http";
 import { addressSchema, historyPoseSchema } from "@pe/agent-contracts";
 import { z } from "zod";
 import { localHistory, type History } from "./history.ts";
-import { RequestIdentity } from "../request-services.ts";
-import { InvalidRead } from "../native-reads.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { httpProblems, isDoorFailure } from "../http-problems.ts";
 
 const run = <A>(work: () => Promise<A>) =>

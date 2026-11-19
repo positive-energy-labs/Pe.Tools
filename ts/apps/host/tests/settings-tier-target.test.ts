@@ -7,6 +7,7 @@ import { Effect, Layer } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { sha256Hex } from "@pe/host-contracts/kinds";
+import * as settingFiles from "@pe/host-internal/settings-files";
 import * as tiers from "../src/tiered-settings.ts";
 import { callRouteOver, captureStore, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
 import { contextHeaders } from "./callers.ts";
@@ -168,9 +169,9 @@ test("/actions refuses a tier write when the fixture document pointer changes af
     connected: true, sessionId: "fixture", state: { openDocuments: [document] },
   })]) });
   const owner = journalAt(join(root, "actions.json"), Date.now);
-  const original = tiers.readSettingTiers;
+  const original = settingFiles.readSettingTiers;
   let changed = false;
-  const gate = vi.spyOn(tiers, "readSettingTiers").mockImplementation((...args) => {
+  const gate = vi.spyOn(settingFiles, "readSettingTiers").mockImplementation((...args) => {
     const result = original(...args);
     // The bind captured the first path. Change the model before execution can resolve it again.
     if (!changed) {

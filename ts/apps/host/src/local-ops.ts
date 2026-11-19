@@ -18,7 +18,7 @@ import {
   type HostShellOpenRequest,
   type HostSessionSummaryData,
 } from "@pe/host-contracts/operation-types";
-import type { BridgeSessionView } from "./bridge.ts";
+import type { BridgeSessionView } from "@pe/host-internal/bridge";
 import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";

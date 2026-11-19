@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
@@ -36,7 +37,7 @@ import { HostSessionInventory } from "../src/session-inventory.ts";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { settle } from "./effect-test.ts";
 export const ref = { session: "spike", openId: "model" };
@@ -132,7 +133,7 @@ export async function fixture(
       },
       live: {
         owner,
-        files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
+        files: DuctFiles.layer(hostState().home, { firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
         marks: Layer.succeed(HostDocumentMarks, {
           ...marks,
           snapshot: (doc) =>

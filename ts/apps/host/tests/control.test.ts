@@ -1,4 +1,4 @@
-import { admittedRequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { afterEach, expect, test } from "vite-plus/test";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -11,20 +11,8 @@ import {
   type DocumentRef,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import {
-  admitCrossing,
-  originOf,
-  bindControl,
-  callerOf,
-  live,
-  Refused,
-  admitScript,
-  mintPageDoor,
-  consentedRead,
-  readsOnly,
-  validateFootprintCaller,
-  writeTerminalContext,
-} from "../src/control.ts";
+import { admitCrossing, originOf, bindControl, callerOf, live, admitScript, mintPageDoor, consentedRead, readsOnly, validateFootprintCaller, writeTerminalContext } from "../src/control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "../src/host-ownership.ts";

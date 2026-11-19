@@ -6,7 +6,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { GUARDED_ACTS, type Caller } from "@pe/agent-contracts";
-import { CommandRejected } from "../src/command-executor.ts";
+import { CommandRejected } from "@pe/host-internal/command-executor";
 import { guardDiscard, guardSave, guards } from "../src/guards.ts";
 import { human, pea } from "./callers.ts";
 

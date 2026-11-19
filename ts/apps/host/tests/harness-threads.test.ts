@@ -18,7 +18,7 @@ import { closedFan, recordedTables } from "../../../products/fans/host/src/tests
 import { detachedBridge, sessionView, registryService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
@@ -51,17 +51,8 @@ import { tools } from "@pe/mcps/product-actions";
 import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human, actAs } from "./callers.ts";
-import {
-  admitCrossing,
-  bindControl,
-  onRevoke,
-  Refused,
-  callerOf,
-  currentCaller,
-  workAuthorOf,
-  originOf,
-  assertRunAdmission,
-} from "../src/control.ts";
+import { admitCrossing, bindControl, onRevoke, callerOf, currentCaller, workAuthorOf, originOf, assertRunAdmission } from "../src/control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { createProviders } from "../src/harness/providers.ts";
 import {
   IDLE_CHILD_MS,

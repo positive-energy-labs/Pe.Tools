@@ -12,23 +12,11 @@ import { randomUUID } from "node:crypto";
 import { Context, Deferred, Effect, Fiber, Layer, Result, Schema } from "effect";
 import { expect } from "vite-plus/test";
 import { effectTest } from "./effect-test.ts";
-import {
-  CurrentInputConsumption,
-  HostInputReadSets,
-  type ConsumerRecipe,
-  type InputReadSetLimits,
-  type ReadSetId,
-} from "../src/input-occurrence.ts";
-import {
-  captureInput,
-  nativeCatalogIdentity,
-  openRecordingReader,
-  openRecordingWriter,
-  replayInput,
-  type HostInputLane,
-  type InputReadSetRecord,
-  type Taking,
-} from "../src/native-recording.ts";
+import { CurrentInputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import { HostInputReadSets, type InputReadSetLimits } from "../src/input-occurrence.ts";
+import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
+import { captureInput, replayInput, type HostInputLane, type InputReadSetRecord, type Taking } from "@pe/host-internal/input-recording";
+import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
 
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 1_000_000, maxTakings: 100 };

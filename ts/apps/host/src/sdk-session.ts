@@ -1,6 +1,6 @@
 import { BridgeError as DispatchBridgeError } from "@pe/host-internal/dispatch";
 import type { DoorFailure, ResolvedSdkSession } from "@pe/host-internal/request-contracts";
-import { RequestIdentity } from "./request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { sdkSessionTargetSchema } from "@pe/agent-contracts";
 import { Context, Effect, Layer } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -15,7 +15,7 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import { BridgeError, NoRevitSession, RevitBridge } from "./bridge.ts";
+import { BridgeError, NoRevitSession, RevitBridge } from "@pe/host-internal/bridge";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";

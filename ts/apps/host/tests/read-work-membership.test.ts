@@ -1,8 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { bindWork, publicationSchema, workKeySchema } from "@pe/agent-contracts";
-import { evaluate, leaf, read, workInput } from "../src/reads/evaluator.ts";
-import { workRead } from "../src/reads/inputs.ts";
+import { evaluate, leaf, read, workInput } from "@pe/host-internal/reads/evaluator";
+import { workRead } from "@pe/host-internal/reads/work";
 import { RouteWorkspace } from "@pe/runtime";
 import { hostTimeline } from "../src/reads/work-timeline.ts";
 

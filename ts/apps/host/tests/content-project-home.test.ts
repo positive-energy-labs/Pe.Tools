@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { expect, test } from "vite-plus/test";
 import { Layer } from "effect";
@@ -13,7 +14,7 @@ import { createContributionContent } from "../src/pe-routes.ts";
 test("Pages and Catalogs HTTP listings read the target document's project home", async () => {
   const f = await projectFixture(false, () => Layer.mergeAll(
     pagesRoute().pipe(Layer.provide(Layer.succeed(HttpServer.HttpServer, { address: { _tag: "TcpAddress", hostname: "127.0.0.1", port: 0 } } as never))),
-    ductCatalogsRoute.pipe(Layer.provide(DuctFiles.layer())),
+    ductCatalogsRoute.pipe(Layer.provide(DuctFiles.layer(hostState().home))),
   ));
   await mkdir(join(f.project, "Pages", "project-page"), { recursive: true });
   await writeFile(join(f.project, "Pages", "project-page", "index.html"), "<title>Project page</title>");

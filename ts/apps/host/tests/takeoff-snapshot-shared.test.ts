@@ -7,7 +7,7 @@ import { expect, test } from "vite-plus/test";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { mintContext, retireContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { RequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { callRouteOver, captureStore, detachedBridge, journalAt, sessionView, testHostInputs } from "./effect-test.ts";
 import { serveRoutes } from "./real-server.ts";

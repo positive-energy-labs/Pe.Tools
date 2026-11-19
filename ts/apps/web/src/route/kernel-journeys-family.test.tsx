@@ -10,7 +10,7 @@ import * as mounts from "../shell/typed-mount";
 import type { UseSource } from "../shell/source-contract";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { settled } from "../test-journey";
-import { evaluate } from "../../../host/src/reads/evaluator";
+import { evaluate } from "@pe/host-internal/reads/evaluator";
 import { reads as familyReads } from "../family/host";
 
 // Family cell behaviour on the typed mount: production FamilyBody over the real host read and a real

@@ -1,12 +1,12 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
-import { workRead } from "@pe/host/reads/inputs";
-import { familyObservation, familyReceipts } from "@pe/host/builtin-read-handles";
+import { body } from "@pe/host-internal/read-graph";
+import { workRead } from "@pe/host-internal/reads/work";
+import { familyObservation, familyReceipts } from "@pe/host-internal/builtin-read-handles";
 import { z } from "zod";
 import { familiesRouteState, canonicalRouteInput, actionReceiptSchema, type FamiliesObservation } from "@pe/agent-contracts";
 import { familiesViewData, } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { workScope, documentMark } from "@pe/host/read-graph";
+import { workScope, documentMark } from "@pe/host-internal/read-graph";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 

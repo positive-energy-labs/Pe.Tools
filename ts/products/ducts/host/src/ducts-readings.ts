@@ -6,8 +6,8 @@ import {
   type DuctsReadingRequest,
   type DuctsReadingEnvelope,
 } from "@pe/ducts-contract/reading";
-import { BridgeError, type HostBridgeEvent, type RevitBridge } from "@pe/host/bridge";
-import { InvalidRead } from "@pe/host/native-reads";
+import { BridgeError, type HostBridgeEvent, type RevitBridge } from "@pe/host-internal/bridge";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 
 export type NativeResult = Effect.Success<ReturnType<RevitBridge["Service"]["invoke"]>>;

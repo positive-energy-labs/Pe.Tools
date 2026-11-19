@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { ductsNetwork, ductsRoster } from "../host.ts";
 import { fanSystems } from "@pe/ducts-contract/fan-scope.neutral";
-import type { ReadContext } from "@pe/host/read-graph";
+import type { ReadContext } from "@pe/host-internal/read-graph";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 
 test("fan scope walks its port even when no roster system names it as base equipment", async () => {

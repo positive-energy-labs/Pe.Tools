@@ -2,7 +2,7 @@ import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { Ajv, type ValidateFunction } from "ajv";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { workAdmissionSchema } from "@pe/agent-contracts";
-import { refused } from "./command-executor.ts";
+import { refused } from "@pe/host-internal/command-executor";
 import { z } from "zod";
 import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
 

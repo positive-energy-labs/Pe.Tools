@@ -2,9 +2,9 @@ import { canonicalRouteInput, documentRefSchema, workKey, workKeySchema } from "
 import { subscribePlaces } from "../places.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type { HostMarks } from "../document-marks.ts";
-import { workInput } from "./evaluator.ts";
+import { workInput } from "@pe/host-internal/reads/evaluator";
 import type { Publications } from "./publications.ts";
-import { settingsFile } from "./door.ts";
+import { settingsFile } from "@pe/host-internal/read-graph";
 
 export function readInvalidations(
   workspace: RouteWorkspace,

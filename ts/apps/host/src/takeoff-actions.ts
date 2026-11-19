@@ -3,7 +3,7 @@ import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
-import { command, io, nativeStep, refused, type CommandContext } from "./command-executor.ts";
+import { command, io, nativeStep, refused, type CommandContext } from "@pe/host-internal/command-executor";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
 import { createHash } from "node:crypto";
@@ -34,8 +34,8 @@ import type {
   RhvacSyncRequest,
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
-import type { RevitBridge } from "./bridge.ts";
-import type { ActionExecution, Step } from "./action-journal.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import type { ActionExecution, Step } from "@pe/host-internal/action-execution";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 import { rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
 

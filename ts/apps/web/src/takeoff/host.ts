@@ -1,6 +1,6 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import { z } from "zod";
 import { readingRequestSchema,
   takeoffsRouteState,
@@ -12,9 +12,9 @@ import { readingRequestSchema,
   nativeOutputSchema, } from "@pe/agent-contracts";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { adoptDrafts } from "@pe/agent-contracts/takeoff-adoption";
-import { leaf, documentMark } from "@pe/host/read-graph";
+import { leaf, documentMark } from "@pe/host-internal/read-graph";
 import { projectTakeoffViews } from "../../../../packages/mcps/src/shared/takeoff-ops.ts";
-import { workRead, workBinding } from "@pe/host/reads/inputs";
+import { workRead, workBinding } from "@pe/host-internal/reads/work";
 const captured = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
 export const takeoffSnapshotInput = z.object({
   target: documentRefSchema,

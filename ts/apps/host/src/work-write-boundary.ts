@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
 import { lifetime } from "./document-lifetime.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
@@ -21,7 +21,7 @@ import {
   type WriteBoundaryBinding,
 } from "@pe/agent-contracts";
 import { tools } from "@pe/mcps/product-actions";
-import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
+import { refused, type CommandContext, type CommandExecutor } from "@pe/host-internal/command-executor";
 
 const hash = (value: unknown) =>
   createHash("sha256").update(canonicalRouteInput(value)).digest("hex");

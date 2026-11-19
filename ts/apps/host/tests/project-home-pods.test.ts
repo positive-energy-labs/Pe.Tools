@@ -5,7 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, isAbsolute } from "node:path";
-import { targetHomes } from "../src/call-route.ts";
+import { targetHomes } from "@pe/host-internal/target-homes";
 import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lifecycle.ts";
 import { listPods, readMember, writeMember, writeRun, runsDirectory } from "../src/settings.ts";
 import { hostState } from "../src/host-ownership.ts";

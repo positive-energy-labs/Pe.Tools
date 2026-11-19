@@ -581,7 +581,7 @@ test.each(["undo after apply", "review identity", "insertText", "pointer keyboar
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 test("JZ Fans undo after apply: public write journey leaves an honest toolbar refusal", async () => {
-  const { nativeFixture } = await import("@pe/fans-host/tests/fans-work-fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans/fans-work-fixture.ts");
   const { closedFan, recordedTables } = await import("@pe/fans-host/tests/closed-fan.fixture");
   const { observeResources } = await import("@pe/runtime");
   const { TimelineButtons } = await import("../shell/situation-band");
@@ -731,7 +731,7 @@ test("JZ header chooser query keys preserve the current schedule until an explic
   } finally { view?.unmount(); mount.dispose(); await Promise.all(pendingReads); }
 });
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
-import { evaluate } from "../../../host/src/reads/evaluator";
+import { evaluate } from "@pe/host-internal/reads/evaluator";
 import { reads as familyReads } from "../family/host";
 import { FAMILY_MODEL_SCHEMA } from "../family/page";
 import { leaks } from "../shell/visible-text";

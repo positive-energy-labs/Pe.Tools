@@ -1,6 +1,6 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "@pe/fans-contract/contract";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import {
   FAN_READ_MAX,
   fansReadArgs,
@@ -15,7 +15,7 @@ import { z } from "zod";
 import { designLayers } from "@pe/ducts-host/design-layers";
 import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 
-import { read } from "@pe/host/read-graph";
+import { read } from "@pe/host-internal/read-graph";
 import {
   ductCalc,
   fanElements,

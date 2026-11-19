@@ -17,7 +17,7 @@ import {
 import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
 import { mergeTimeline, sameStep, type RouteWorkspace, type TimelinePart, type TimelineReceipts } from "@pe/runtime";
 import type { ActionJournal } from "../action-journal.ts";
-import { leaf, read } from "./door.ts";
+import { leaf, read } from "@pe/host-internal/read-graph";
 import type { DocumentRow } from "../session-inventory.ts";
 
 /**

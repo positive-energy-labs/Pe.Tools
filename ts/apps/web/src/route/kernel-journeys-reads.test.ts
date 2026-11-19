@@ -71,7 +71,7 @@ import {
   ductsRosterData,
 } from "@pe/duct-systems-contract/ducts-read";
 import { valueReadResponse } from "@pe/agent-contracts";
-import { InvalidRead } from "../../../host/src/native-reads";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { registeredReads } from "../../../host/src/reads/routes";
 import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/host";
 import { fansCalc } from "@pe/fans-host/host";
@@ -102,9 +102,9 @@ import {
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { nativeReadRoot } from "../../../host/src/app";
-import { RevitBridge } from "../../../host/src/bridge";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { hostOwnership } from "../../../host/src/host-ownership";
-import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-host.fixture";
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
@@ -1000,7 +1000,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 }, 60_000);
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
-  const { nativeFixture } = await import("@pe/fans-host/tests/fans-native.fixture");
+  const { nativeFixture } = await import("../../../host/tests/fans/fans-native.fixture.ts");
   const { BridgeError } = await import("../../../host/src/bridge");
   const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");

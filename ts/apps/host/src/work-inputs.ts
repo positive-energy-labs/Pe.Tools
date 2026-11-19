@@ -29,15 +29,15 @@ import {
   CurrentInputAttempt,
   CurrentInputConsumption,
   type InputConsumption,
-} from "./input-occurrence.ts";
-import { InvalidRead } from "./native-reads.ts";
+} from "@pe/host-internal/input-occurrence";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import {
   captureInput,
   replayInput,
   type RecordingReader,
   type RecordingWriter,
   type TakingObserver,
-} from "./native-recording.ts";
+} from "@pe/host-internal/input-recording";
 
 /** The exact feed admission, from the public Reading contract that carries it. */
 type WorkAdmission = NonNullable<Extract<ReadingRequest, { kind: "work" }>["admission"]>;

@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
@@ -12,7 +13,7 @@ import { Effect } from "effect";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { DuctFiles, firmRootPath } from "@pe/ducts-host/ducts-files";
-import { resolveFirm } from "../src/reads/door.ts";
+import { resolveFirm } from "@pe/host-internal/read-graph";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import { journalAt } from "./effect-test.ts";
 
@@ -25,7 +26,7 @@ const firmHome = () => {
 };
 // The ducts firm layer as the host reads it: the owner-keyed file (the Pod firm door's), decoded.
 const readFirm = async () => {
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))));
   return resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, FIRM_SEED);
 };
 
@@ -51,7 +52,7 @@ test("firm files are per owner: two owners, two files, each reader gets its own 
   const shared = firmHome();
   mkdirSync(join(shared, "Settings"));
   for (const owner of ["ducts", "hydronic"]) writeFileSync(join(shared, "Settings", `${owner}.json`), JSON.stringify({ owner }));
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer())));
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))));
   for (const owner of ["ducts", "hydronic"])
     expect(await Effect.runPromise(files.firm(owner))).toEqual({ path: join(shared, "Settings", `${owner}.json`), json: { owner } });
 });
@@ -134,7 +135,7 @@ test("a failed firm refresh keeps its value and the next refresh still notifies"
     if (fail > 0 && --fail === 0) throw Error("one read failed");
     return join(shared, "Settings");
   };
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer({ firm: root, catalogs: [] }))));
+  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home, { firm: root, catalogs: [] }))));
   const changes: string[] = [];
   const stop = files.subscribe!(name => changes.push(name));
   try {

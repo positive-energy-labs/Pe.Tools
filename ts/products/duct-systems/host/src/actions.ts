@@ -15,8 +15,8 @@ import { fanOf } from "@pe/duct-systems-domain/action-targets";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { RevitBridge } from "@pe/host/bridge";
-import { refused } from "@pe/host/command-executor";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { refused } from "@pe/host-internal/command-executor";
 
 
 

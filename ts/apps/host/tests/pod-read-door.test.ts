@@ -1,10 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
-import type { ReadContext } from "@pe/host/read-graph";
-import { evaluate } from "@pe/host/reads/evaluator";
+import type { ReadContext } from "@pe/host-internal/read-graph";
+import { evaluate } from "@pe/host-internal/reads/evaluator";
 import { contract } from "@pe/agent-contracts/handle";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import { inputPort, type ReadSources } from "../src/reads/inputs.ts";
 import { hostMarks } from "../src/document-marks.ts";
 import { settle } from "./effect-test.ts";

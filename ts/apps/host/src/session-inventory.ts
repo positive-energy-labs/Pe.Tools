@@ -17,8 +17,8 @@ import { canonicalJson } from "@pe/host-internal/native-read";
 import { bridgeSessionsListSchema, type BridgeSessionsListData, type HostSessionScope } from "@pe/host-contracts/operation-types";
 import { listBridgeSessions } from "./local-ops.ts";
 import type { DoorFailure, RequestIdentity } from "@pe/host-internal/request-contracts";
-import { RevitBridge } from "./bridge.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import {
   captureInput,
   inputBindingKey,
@@ -27,7 +27,7 @@ import {
   type RecordingReader,
   type RecordingWriter,
   type TakingObserver,
-} from "./native-recording.ts";
+} from "@pe/host-internal/input-recording";
 import { SdkSession } from "./sdk-session.ts";
 
 export interface DocumentRow {

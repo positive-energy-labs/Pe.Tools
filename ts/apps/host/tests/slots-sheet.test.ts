@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts";
-import { evaluate, read, type InputPort } from "../src/reads/evaluator.ts";
+import { evaluate, read, type InputPort } from "@pe/host-internal/reads/evaluator";
 import { sheetExecutors, sheetWrites } from "../src/slots/sheet.ts";
 import { productExecutors } from "../src/product-executors.generated.ts";
 

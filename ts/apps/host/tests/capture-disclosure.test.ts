@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { nativeResponseSchema } from "@pe/host-contracts/native-schemas";
 import { nativeOutputAssets, nativeOutputSchema } from "@pe/agent-contracts/native-output-read";
 import { callPolicies } from "../../../packages/agent-contracts/src/call-policy.ts";
-import { nativeRead } from "../src/reads/door.ts";
+import { nativeRead } from "@pe/host-internal/read-graph";
 
 const keys = ["revit.context.view-image", "revit.context.view-image.focus"] as const;
 // Deliberately synthetic: this proves the wire boundary, never model visibility.

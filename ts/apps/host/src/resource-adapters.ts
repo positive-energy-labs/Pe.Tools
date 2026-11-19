@@ -17,7 +17,7 @@ import {
 } from "@pe/agent-contracts";
 import { commandTool } from "@pe/mcps/product-actions";
 import { resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
-import type { BridgeError, RevitBridge } from "./bridge.ts";
+import type { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";

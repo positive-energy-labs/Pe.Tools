@@ -17,7 +17,7 @@ import { actionReceiptSchema } from "@pe/agent-contracts";
 import { noticeRows } from "../src/notice-feed.ts";
 import { readNativeReceipt } from "../src/native-receipts.ts";
 import { originalProcess, sdkEnvelope } from "./native-receipt-fixture.ts";
-import { command } from "../src/command-executor.ts";
+import { command } from "@pe/host-internal/command-executor";
 import { z } from "zod";
 import { bindRevoke } from "../src/revoke.ts";
 import { createPagesHandler } from "../src/pages-route.ts";

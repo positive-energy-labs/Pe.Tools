@@ -1,12 +1,12 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "./contract.ts";
-import { body } from "@pe/host/read-graph";
+import { body } from "@pe/host-internal/read-graph";
 import { z } from "zod";
-import type { Read } from "@pe/host/read-graph";
-import { workRead } from "@pe/host/reads/inputs";
+import type { Read } from "@pe/host-internal/read-graph";
+import { workRead } from "@pe/host-internal/reads/work";
 
 import { executionTargetSchema, roomsRouteState } from "@pe/agent-contracts";
-import { workScope, documentMark } from "@pe/host/read-graph";
+import { workScope, documentMark } from "@pe/host-internal/read-graph";
 import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 import { roomsGoal, traceRefusal } from "./goal.ts";

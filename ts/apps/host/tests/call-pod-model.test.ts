@@ -16,10 +16,10 @@ import {
 import { pea } from "./callers.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { nativeReadRoot } from "../src/native-read-root.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 
 const manifest = {
   id: "tour",

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { ActionJournal } from "./action-journal.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { onRevoke, onPagePinRevoke } from "./control.ts";
 import type { DocumentRef } from "@pe/agent-contracts";
 

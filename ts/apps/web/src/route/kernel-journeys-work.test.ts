@@ -1,3 +1,4 @@
+import { hostState } from "../../../host/src/host-ownership.ts";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { refusalOf, valueOf } from "./typed-route";
@@ -33,7 +34,7 @@ import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { PictureCaptureStore } from "../../../host/src/captures-route";
 import { createPeRoutes } from "../../../host/src/pe-routes";
-import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { bindControl } from "../../../host/src/control";
 import { testRegistry } from "../../../host/tests/effect-test";
 import { module as fans } from "@pe/fans-web/route";
@@ -233,7 +234,7 @@ async function journey(module: TypedRoute = fans) {
   const web = HttpRouter.toWebHandler(
     callRouteOver(journal, undefined, { workspace: host.workspace }).pipe(
       nativeReadRoot(),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
+      Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(host.dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(RevitBridgeLive),

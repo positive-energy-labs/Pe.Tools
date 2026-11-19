@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { bindActionDispatch } from "../src/action-dispatch.ts";
-import { StepFailure } from "../src/command-executor.ts";
+import { StepFailure } from "@pe/host-internal/command-executor";
 import { dispatchSdk, namedSdkSession, SDK_REQUEST_ID } from "../src/sdk-dispatch.ts";
 import { replay } from "./sdk-replay.ts";
 

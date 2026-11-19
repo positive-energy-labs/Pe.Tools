@@ -17,7 +17,7 @@ import {
   familiesMatrixEnvelopeSchema,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
+import { RevitBridge, type HostBridgeEvent } from "@pe/host-internal/bridge";
 import { assertFresh, HostDocumentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-recorded-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";

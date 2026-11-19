@@ -3,7 +3,7 @@ import { workAuthorOf } from "./control.ts";
 import { hostAuthoredRefusal, refusalText } from "@pe/agent-contracts";
 import { commands } from "@pe/mcps/product-actions";
 
-import { command, io, refused, StepFailure } from "./command-executor.ts";
+import { command, io, refused, StepFailure } from "@pe/host-internal/command-executor";
 import { Effect } from "effect";
 import type { RouteWorkspace } from "@pe/runtime";
 

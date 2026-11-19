@@ -7,14 +7,9 @@ import { Effect, Exit, Layer } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { HostInputContext } from "../src/input-context.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import {
-  hostNativeReadFor,
-  nativeCatalogIdentity,
-  openRecordingReader,
-  openRecordingWriter,
-  type HostInputLane,
-} from "../src/native-recording.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
+import { hostNativeReadFor, nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
+import { type HostInputLane } from "@pe/host-internal/input-recording";
 
 const dirs: string[] = [];
 afterEach(async () => {

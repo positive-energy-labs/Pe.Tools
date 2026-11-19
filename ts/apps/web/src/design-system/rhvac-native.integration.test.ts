@@ -14,7 +14,7 @@ import type { TakeoffCaptures } from "../../../host/src/takeoff-captures";
 import { captureStore, journalAt, settle } from "../../../host/tests/effect-test";
 import { takeoffExecutors, fileVersion } from "../../../host/src/takeoff-actions";
 import { sdkSessions, readRhvacFixture } from "../../../host/tests/native-receipt-fixture";
-import type { RevitBridge } from "../../../host/src/bridge";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { crossingOf } from "../../../host/tests/callers";
 import { ActionJournal } from "../../../host/src/action-journal";
 import { commandResources } from "../../../host/src/command-reads";

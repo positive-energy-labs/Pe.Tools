@@ -19,15 +19,13 @@ import {
 import { workFingerprintSchema } from "../../../packages/agent-contracts/src/route-kernel-admission.ts";
 import { AdmittedBuiltins, admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
-import {
-  nativeCatalogIdentity,
-  openRecordingReader,
-  openRecordingWriter,
-  type Taking,
-} from "../src/native-recording.ts";
-import { InvalidRead } from "../src/native-reads.ts";
-import type { HostInputLane } from "../src/native-recording.ts";
-import { HostInputReadSets, type ConsumerRecipe, type ReadSetId } from "../src/input-occurrence.ts";
+import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
+import { type Taking } from "@pe/host-internal/input-recording";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import type { HostInputLane } from "@pe/host-internal/input-recording";
+import { HostInputReadSets } from "../src/input-occurrence.ts";
+import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
+import { type ReadSetId } from "@pe/host-internal/input-occurrence";
 import {
   capturedWorkReads,
   recordedWorkSource,

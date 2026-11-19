@@ -12,10 +12,10 @@ import { callRouteOver, detachedBridge, journalAt, sessionView, testHostInputs }
 import { human, pea } from "./callers.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 import { nativeReadRoot } from "../src/native-read-root.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 import { httpProblems } from "../src/http-problems.ts";
 
 // No shipped native op currently excludes Pea. Keep the real catalog/schema, narrowing only policy.

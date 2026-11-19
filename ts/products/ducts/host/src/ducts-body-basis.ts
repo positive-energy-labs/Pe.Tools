@@ -1,15 +1,15 @@
 /** Original retained-owner evidence; native bytes remain in the one taking store. */
 import { Effect, Option, Result, Schema } from "effect";
-import { attemptFor, CurrentInputAttempt, CurrentInputConsumption } from "@pe/host/input-occurrence";
+import { attemptFor, CurrentInputAttempt, CurrentInputConsumption } from "@pe/host-internal/input-occurrence";
 import { z } from "zod";
 import { readingKey } from "@pe/agent-contracts";
 import { ductsReadingSchema, type DuctsReadingRequest } from "@pe/ducts-contract/reading";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { InvalidRead } from "@pe/host/native-reads";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { ductsSubject, type DuctsBody } from "./ducts-readings.ts";
 import { captureInput, replayInput, inputBindingKey, nativeInputIdentity,
-  type HostInputLane, type Taking, type TakingObserver } from "@pe/host/native-recording";
+  type HostInputLane, type Taking, type TakingObserver } from "@pe/host-internal/input-recording";
 
 type Answer = Effect.Success<ReturnType<HostNativeRead["Service"]["read"]>>;
 const target = z.strictObject({ session: z.string(), document: z.string().nullable(),

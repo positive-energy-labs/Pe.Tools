@@ -2,7 +2,7 @@ import { afterEach, vi } from "vite-plus/test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
+import { nativeFixture } from "./fans/fans-work-fixture.ts";
 
 const closes: (() => Promise<unknown>)[] = [];
 afterEach(async () => {

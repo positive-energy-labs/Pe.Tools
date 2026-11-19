@@ -1,3 +1,4 @@
+import { inputBindingKey, inputIdentity, type InputAttempt, type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
 /**
  * Host input occurrences (docs/features/routes/GLOSSARY.md): which exact taking each consumer read. An
  * admitted consumer opens one context; every input it starts reserves its occurrence synchronously,
@@ -9,9 +10,8 @@
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Layer, Result } from "effect";
 import { canonicalJson } from "@pe/host-internal/native-read";
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import {
-  inputIdentity,
   type ConsumerRecipe,
   type HostInputLane,
   type InputReadSetRecord,
@@ -19,42 +19,8 @@ import {
   type RecordingReader,
   type RecordingWriter,
   type Taking,
-  type TakingObserver,
-} from "./native-recording.ts";
+} from "@pe/host-internal/input-recording";
 
-export type { ConsumerRecipe } from "./native-recording.ts";
-declare const readSetBrand: unique symbol;
-/** Host-minted before first consumption; never derived from a request, a time or an ordinal. */
-export type ReadSetId = string & { readonly [readSetBrand]: "ReadSetId" };
-
-export interface InputOccurrence {
-  readonly readSet: ReadSetId;
-  readonly input: RecordedInput;
-  readonly scope: string;
-  /** Zero-based, per (inputIdentity(input), scope), within this context. */
-  readonly start: number;
-}
-export interface InputAttempt {
-  readonly occurrence: InputOccurrence;
-  /** The exact durable taking this occurrence read (replay only). */
-  readonly selected: Effect.Effect<string, InvalidRead>;
-  /** Binds this attempt to the actual taking its capture appended. */
-  readonly observed: TakingObserver;
-}
-export interface InputConsumption {
-  readonly id: ReadSetId;
-  readonly recipe: ConsumerRecipe;
-  readonly child: (recipe: ConsumerRecipe) => Result.Result<InputConsumption, InvalidRead>;
-  readonly start: (input: RecordedInput, scope: string) => Result.Result<InputAttempt, InvalidRead>;
-  readonly linkTaking: (name: string, takingId: string) => Effect.Effect<void, InvalidRead>;
-  readonly taking: (name: string) => Effect.Effect<string, InvalidRead>;
-  readonly linkReadSet: (name: string, id: ReadSetId) => Effect.Effect<void, InvalidRead>;
-  readonly dependency: (name: string) => Effect.Effect<ReadSetId, InvalidRead>;
-  readonly exportBasis: (contract: { readonly key: string }, basis: string) => Effect.Effect<void, InvalidRead>;
-  readonly seal: Effect.Effect<void, InvalidRead>;
-  /** Idempotent; an unsealed context stays incomplete and never synthesizes links. */
-  readonly close: Effect.Effect<void>;
-}
 export interface InputReadSetLimits {
   readonly openRoots: number;
   readonly childrenPerRoot: number;
@@ -70,20 +36,8 @@ export const defaultReadSetLimits: InputReadSetLimits = {
   dependencyDepth: 16,
 };
 
-/** The consumption a boundary reads under; provided per request or frame, never global. */
-export class CurrentInputConsumption extends Context.Service<
-  CurrentInputConsumption,
-  InputConsumption
->()("pe/CurrentInputConsumption") {}
-/** An attempt a boundary reserved before entering a Promise owner; lower helpers reuse it. */
-export class CurrentInputAttempt extends Context.Service<CurrentInputAttempt, InputAttempt>()(
-  "pe/CurrentInputAttempt",
-) {}
-
 const refuse = (problem: string, message: string) =>
   new InvalidRead({ message, status: 409, problem: `recording.${problem}` });
-const occurrenceKey = (input: RecordedInput, scope: string) =>
-  canonicalJson([inputIdentity(input), scope]);
 const recipeKey = (recipe: ConsumerRecipe) =>
   canonicalJson([recipe.key, recipe.input, recipe.scope]);
 const mint = () => randomUUID() as ReadSetId;
@@ -207,7 +161,7 @@ function liveContext(
       const entry = {
         input,
         scope,
-        start: next(occurrenceKey(input, scope)),
+        start: next(inputBindingKey(input, scope)),
         takingId: null as string | null,
       };
       inputs.push(entry);
@@ -407,11 +361,11 @@ function recordedContext(loaded: Loaded, parentOpen: () => boolean = () => true)
     },
     start: (input, scope) => {
       if (!life.open()) return Result.fail(closed());
-      const key = occurrenceKey(input, scope);
+      const key = inputBindingKey(input, scope);
       const start = next(key);
       const entries = record.inputs.filter(
         (candidate) =>
-          occurrenceKey(candidate.input, candidate.scope) === key && candidate.start === start,
+          inputBindingKey(candidate.input, candidate.scope) === key && candidate.start === start,
       );
       if (entries.length > 1)
         return Result.fail(refuse("ambiguous", `Read set ${id} names occurrence ${start} twice`));
@@ -527,20 +481,3 @@ export class HostInputReadSets extends Context.Service<
     });
   }
 }
-
-/**
- * The attempt one input read runs under: a reserved CurrentInputAttempt (which must name this
- * exact input and scope), else a fresh start in the CurrentInputConsumption, else none at all
- * (a caller outside any consumer, served by the legacy exact-binding path).
- */
-export const attemptFor = (input: RecordedInput, scope: string) =>
-  Effect.gen(function* () {
-    const reserved = yield* Effect.serviceOption(CurrentInputAttempt);
-    if (reserved._tag === "Some")
-      return occurrenceKey(reserved.value.occurrence.input, reserved.value.occurrence.scope) ===
-        occurrenceKey(input, scope)
-        ? Result.succeed(reserved.value)
-        : Result.fail(refuse("mismatch", "The reserved attempt names another input or scope"));
-    const consumption = yield* Effect.serviceOption(CurrentInputConsumption);
-    return consumption._tag === "Some" ? consumption.value.start(input, scope) : null;
-  });

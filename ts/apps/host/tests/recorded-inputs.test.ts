@@ -16,17 +16,11 @@ import type { Caller } from "@pe/agent-contracts";
 import { effectTest } from "./effect-test.ts";
 import { DuctFiles, catalogReading } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
-import { InvalidRead } from "../src/native-reads.ts";
-import {
-  inputBindingKey,
-  inputIdentity,
-  nativeCatalogIdentity,
-  openRecordingReader,
-  openRecordingWriter,
-  replayInput,
-  type Taking,
-} from "../src/native-recording.ts";
-import { admittedRequestIdentity, RequestIdentity } from "../src/request-services.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { inputBindingKey, replayInput, type Taking } from "@pe/host-internal/input-recording";
+import { inputIdentity } from "@pe/host-internal/input-occurrence";
+import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
+import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };

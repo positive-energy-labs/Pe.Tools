@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { dirname as storedParent } from "node:path";
@@ -18,8 +19,8 @@ import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
@@ -82,7 +83,7 @@ test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revi
       ),
     ).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
+      Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "store")), 0)),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
@@ -152,7 +153,7 @@ test.each([
   const web = HttpRouter.toWebHandler(
     callRouteOver(journal, undefined, { workspace, sdk: sdkSessions }).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(), HostDocumentMarks.layer)),
+      Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(Layer.succeed(RevitBridge, detachedBridge())),

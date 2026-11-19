@@ -16,30 +16,35 @@ import { subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
-import { admittedCommandReadIdentity } from "@pe/host/command-read-identity";
-import { RequestIdentity } from "@pe/host/request-services";
+import { admittedCommandReadIdentity } from "@pe/host-internal/command-read-identity";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { z } from "zod";
-import type { RevitBridge } from "@pe/host/bridge";
-import { command, nativeStep, refused, type CommandContext } from "@pe/host/command-executor";
-import type { ActionExecution } from "@pe/host/action-journal";
-import { lifetime } from "@pe/host/document-lifetime";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { command, nativeStep, refused, type CommandContext } from "@pe/host-internal/command-executor";
+import type { ActionExecution } from "@pe/host-internal/action-execution";
 import { ductsReadings } from "./ducts-readings.ts";
-import { runPods } from "@pe/host/family-actions";
+import { runPods, type PodRunner } from "@pe/host-internal/pod-runner";
+import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
+import type { DuctFiles } from "./ducts-files.ts";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 
 
 
 import { firmLayer, workLayer, terminalFlowSlot, acquireSnapshotInputs } from "./ducts-inputs.ts";
-import { readSettingTiers } from "@pe/host/tiered-settings";
-import { resolveFirm } from "@pe/host/reads/evaluator";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
+import { resolveFirm } from "@pe/host-internal/reads/evaluator";
 
 import type { DuctsApply } from "@pe/host-contracts/generated";
 import { rulingsRequest } from "@pe/ducts-domain/rulings";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 
-export type DuctActionDependencies = import("@pe/host/family-actions").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] };
+export type DuctActionDependencies = PodRunner & {
+  files?: DuctFiles["Service"];
+  nativeRead?: HostNativeRead["Service"];
+  projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
+};
 type ReadSnapshot = (selector: Record<string, unknown>) => Promise<DuctSnapshot>;
 type Intent = { groups?: string[]; walk?: { unitId: number; portIndex: number }; fan?: { unitId: number; systemId: number } };
 type ReadNative = <K extends "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables">(key: K, input: unknown) => Promise<z.output<ReturnType<typeof nativeResponseSchema<K>>>>;
@@ -107,8 +112,7 @@ const PLAN_OF = { losses: "sheet.plan", heal: "ducts.plan-heal", "assign-fan": "
 export function ductActionExecutors(
   action: DuctAction,
   bridge: RevitBridge["Service"],
-  deps: import("@pe/host/family-actions").FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"] ;
-  } = {},
+  deps: DuctActionDependencies = {},
 ) {
   const actionOf = (kind: Kind, route: string) => {
     const overrides = actionsByRoute.get(route);
@@ -124,7 +128,8 @@ export function ductActionExecutors(
     const ductsView = primary.key.route === ductsRoute || siblings?.[ductsRoute] ? null : await ctx.work.view({ ...primary.key, route: ductsRoute }, ductsRoute);
     const raw = primary.key.route === ductsRoute ? primary : siblings?.[ductsRoute] ?? ductsView?.handle;
     if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
-    const { process } = await lifetime(bridge, target, "project", deps);
+    if (!deps.projectLifetime) throw refused("Ducts preparation requires a project lifetime", "document.unavailable");
+    const process = await deps.projectLifetime(target);
     const doc = await ctx.selectWork(ductSystemsTool.work, raw, (_doc, cells) => ({
       edits: ductSystemsTool.work.editable,
       facts: [["workingPhase"]],

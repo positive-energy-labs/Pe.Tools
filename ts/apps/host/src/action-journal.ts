@@ -1,11 +1,8 @@
+import type { ActionExecution, AttemptHost } from "@pe/host-internal/action-execution";
 import type { HostInputContext } from "./input-context.ts";
-import type {
-  CommandContext,
-  CommandEnvironment,
-  CommandBinding,
-  CommandExecutor,
-} from "./command-executor.ts";
-import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
+import type { CommandContext, CommandBinding, CommandExecutor } from "@pe/host-internal/command-executor";
+import type { CommandEnvironment } from "./command-executor.ts";
+import { CommandRejected, StepFailure, io, refused } from "@pe/host-internal/command-executor";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { validateNativeInput } from "./native-input.ts";
 import type { ReadOwner } from "./reads/read-ownership.ts";
@@ -39,15 +36,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
-import type { HttpClient } from "effect/http";
-import type { FileSystem, Path } from "effect";
 import type { CausalParentId } from "../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type {
   RequestIdentity as IdentityKey,
   RequestIdentityData,
   ValidatedOwner,
 } from "@pe/host-internal/request-contracts";
-import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -94,16 +89,8 @@ import {
   type ReceiptStamp,
 } from "@pe/agent-contracts";
 import { commands } from "@pe/mcps/product-actions";
-import {
-  live,
-  originOf,
-  assertRunAdmission,
-  commandCheckpoint,
-  subscribeRunChanges,
-  validateFootprintCaller,
-  Refused,
-  retainActionCaller,
-} from "./control.ts";
+import { live, originOf, assertRunAdmission, commandCheckpoint, subscribeRunChanges, validateFootprintCaller, retainActionCaller } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 
 /** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
 export type Crossing = {
@@ -253,39 +240,6 @@ const effectsOverlap = (a: ActionReceipt["effects"], b: ActionReceipt["effects"]
     }),
   );
 
-export type StepOptions<A> = {
-  process?: NativeProcess;
-  /** Domain postcondition, evaluated only after the operation returned a concrete outcome. */
-  check?(result: A): void;
-};
-/** The services the journal Layer holds once for every attempt it owns. */
-export type AttemptHost = FileSystem.FileSystem | Path.Path | HttpClient.HttpClient;
-/** An attempt reads its journal-owned identity, never its submitter's request context. */
-export type AttemptServices = AttemptHost | IdentityKey;
-/** A step of an owned attempt: the error channel carries what the step threw, typed or not. */
-export type Step<A> = Effect.Effect<A, unknown, AttemptServices>;
-export type ActionExecution = {
-  step<A>(
-    kind: ActionStep["kind"],
-    key: string,
-    input: unknown,
-    execute: (requestId: string) => Step<A>,
-    options?: StepOptions<A>,
-  ): Step<A>;
-  effect(effect: RouteEffect): Step<void>;
-  publishWork(
-    key: WorkKey,
-    route: string,
-    patches: readonly RouteStatePatch[],
-  ): Step<Extract<RouteStateWriteResult, { ok: true }>>;
-  retireWork(
-    key: WorkKey,
-    route: string,
-    paths: readonly WorkPath[],
-  ): Step<{ retired: WorkPath[]; revision: number }>;
-  readonly prepared: unknown;
-  recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
-};
 /** Fibers by key in the journal Layer's scope; a fork under a running key joins it, never replaces it. */
 export type FiberOwner = {
   readonly map: FiberMap.FiberMap<string, unknown, unknown>;

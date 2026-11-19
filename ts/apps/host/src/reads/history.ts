@@ -18,11 +18,11 @@ import {
   documentKeyOf,
 } from "@pe/agent-contracts";
 import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
-import type { RecordingReader, RecordingWriter } from "../native-recording.ts";
+import type { RecordingReader, RecordingWriter } from "@pe/host-internal/input-recording";
 import { recordingReadSetReferences } from "../recording-points.ts";
 import { readSetRecords } from "../input-occurrence.ts";
-import { InvalidRead } from "../native-reads.ts";
-import { immutable } from "./evaluator.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { immutable } from "@pe/host-internal/reads/evaluator";
 import type { Publication, Publications } from "./publications.ts";
 
 const fail = (message: string) =>

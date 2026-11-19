@@ -23,7 +23,7 @@ import {
 import { productPodsRootPath } from "./product-paths.ts";
 import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { sha256Hex as sha256, validatePageHtml, writeArtifact } from "./page-artifacts.ts";
-import { StepFailure } from "./command-executor.ts";
+import { StepFailure } from "@pe/host-internal/command-executor";
 import { rollbackHomeMembers, podMemberKind, type HomeMemberUndo } from "./settings.ts";
 
 export const archiveExportKind = homeKind({

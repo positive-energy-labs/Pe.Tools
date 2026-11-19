@@ -14,8 +14,8 @@ import {
   type CatalogWork,
   type Command,
 } from "@pe/agent-contracts";
-import type { RevitBridge } from "./bridge.ts";
-import { command, nativeStep, refused, type CommandExecutor } from "./command-executor.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { command, nativeStep, refused, type CommandExecutor } from "@pe/host-internal/command-executor";
 import { projectReader, type FamilyActionDependencies } from "./family-actions.ts";
 
 type Owner = keyof typeof catalogWorks;

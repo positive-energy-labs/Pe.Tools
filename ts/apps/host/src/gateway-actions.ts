@@ -1,8 +1,8 @@
 import { resolve, basename, dirname, join } from "node:path";
 import { hostState } from "./host-ownership.ts";
 import { createHash } from "node:crypto";
-import { readSettingTiers } from "./tiered-settings.ts";
-import { targetHomes } from "./call-route.ts";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
+import { targetHomes } from "@pe/host-internal/target-homes";
 import { captureDirectory } from "./packages.ts";
 import { directorySnapshot } from "./command-reads.ts";
 import {
@@ -17,7 +17,7 @@ import {
   archiveExportKind,
 } from "./pod-transfer.ts";
 import { z } from "zod";
-import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
+import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "@pe/host-internal/command-executor";
 import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { freezeScript, requireScriptSuccess, runPodScript, scriptMemberFacts } from "./operation-script.ts";
@@ -41,8 +41,9 @@ import {
   tsOnlyOperationSchemas,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import { checkFailure, type ActionExecution, type AttemptHost } from "./action-journal.ts";
-import type { RevitBridge } from "./bridge.ts";
+import { checkFailure } from "./action-journal.ts";
+import { type ActionExecution, type AttemptHost } from "@pe/host-internal/action-execution";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { gatewayTarget, operationDefinition, requireEligibleCaller } from "./gateway-catalog.ts";
 import {
   readNativeReceipt,

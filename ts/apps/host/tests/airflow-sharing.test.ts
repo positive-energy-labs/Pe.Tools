@@ -2,13 +2,13 @@ import { expect, test } from "vite-plus/test";
 import { ductsRoster, ductsPricing } from "@pe/duct-systems-host/host";
 import { fanRoster } from "@pe/fans-host/fan-calc";
 import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
-import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
-import { calcPort } from "@pe/ducts-host/tests/ducts-read.fixture";
+import { nativeFixture } from "./fans/fans-work-fixture.ts";
+import { calcPort } from "./ducts/ducts-read.fixture.ts";
 import { resolveInputs } from "@pe/ducts-domain/calc/inputs";
 import { TEST_FIRM } from "@pe/ducts-domain/test-inputs";
 import { terminalFlows } from "@pe/ducts-domain/terminal-flows";
 import { factOf, connOf, nodeOf, systemOf } from "@pe/ducts-domain/test-snapshot";
-import { evaluate } from "@pe/host/reads/evaluator";
+import { evaluate } from "@pe/host-internal/reads/evaluator";
 import { settle, testDuctFiles } from "./effect-test.ts";
 
 test.each(["coverage", "apply"] as const)("P121 cross-route choice is independent of stored slots: %s", async witness => {

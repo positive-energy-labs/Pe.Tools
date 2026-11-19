@@ -6,7 +6,7 @@ import { Context, Deferred, Effect, Exit, Layer, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { persistedActionReceiptSchema, persistedReceiptSchema, type Claim } from "@pe/agent-contracts";
-import { command } from "../src/command-executor.ts";
+import { command } from "@pe/host-internal/command-executor";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { settle } from "./effect-test.ts";
 

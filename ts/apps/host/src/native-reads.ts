@@ -5,12 +5,10 @@ import {
   canonicalJson,
   decodePreparedRead,
 } from "../../../packages/host-internal/src/read-admission.ts";
-import { RevitBridge, CANCEL_OPERATION_KEY } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 
-const fields = { message: Schema.String, status: Schema.Number, problem: Schema.String };
-export class ReadBusy extends Schema.TaggedError<ReadBusy>()("ReadBusy", fields) {}
-export class ReadRetiring extends Schema.TaggedError<ReadRetiring>()("ReadRetiring", fields) {}
-export class InvalidRead extends Schema.TaggedError<InvalidRead>()("InvalidRequest", fields) {}
+import { InvalidRead, ReadBusy, ReadRetiring } from "@pe/host-internal/read-errors";
 
 export const NativeReadLimits = Context.Reference<{
   entries: number;

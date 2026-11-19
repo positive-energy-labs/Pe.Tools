@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { publicationSource } from "./publication-source";
 import { z } from "zod";
 import { Publications } from "../../../host/src/reads/publications.ts";
-import { read, type InputPort } from "../../../host/src/reads/evaluator.ts";
+import { read, type InputPort } from "@pe/host-internal/reads/evaluator";
 import type { Readings } from "./resource-stream";
 
 const stream = vi.hoisted((): { listener?: Parameters<Readings["subscribe"]>[1]; subscribe?: Readings["subscribe"] } => ({}));

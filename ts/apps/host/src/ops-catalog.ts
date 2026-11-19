@@ -10,7 +10,7 @@ import {
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { NoRevitSession } from "@pe/host-internal/dispatch";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";

@@ -7,8 +7,9 @@ import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, test } from "vite-plus/test";
 import { BridgeError as DispatchBridgeError } from "@pe/host-internal/dispatch";
-import { BridgeError, RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
-import { StepFailure } from "../src/command-executor.ts";
+import { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "../src/bridge.ts";
+import { StepFailure } from "@pe/host-internal/command-executor";
 import { serveRoutes } from "./real-server.ts";
 import { settle } from "./effect-test.ts";
 

@@ -2,14 +2,14 @@ import { routeRegistry } from "../routes.generated.ts";
 import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
 import { usesOf } from "@pe/agent-contracts/handle";
-import { bodyOf, evaluate, fingerprint, type InputPort, type Read } from "./evaluator.ts";
+import { bodyOf, evaluate, fingerprint, type InputPort, type Read } from "@pe/host-internal/reads/evaluator";
 import type { Publication, Publications } from "./publications.ts";
 import { withTimelineCaller, workTimelineRead } from "./work-timeline.ts";
 import { WORK_TIMELINE_READ, admittedRouteEntries, type WorkAuthor } from "@pe/agent-contracts";
 import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { linkedCatalog } from "@pe/mcps/product-catalog";
-import { read } from "./door.ts";
+import { read } from "@pe/host-internal/read-graph";
 import { FINDINGS_DOORS, findingsGuide, findingsCommands } from "@pe/agent-contracts/slots";
 
 /** The host joins the wire's entry keys; no executable route code reaches Pea. */

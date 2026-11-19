@@ -47,26 +47,18 @@ import {
 } from "../../../packages/mcps/src/shared/takeoff-ops.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
-import { RevitBridge, BridgeError, NoRevitSession } from "./bridge.ts";
+import { RevitBridge, BridgeError, NoRevitSession } from "@pe/host-internal/bridge";
 import {
   PictureCaptureStore,
   PictureStoreFull,
 } from "./captures-route.ts";
-import { CommandRejected, StepFailure } from "./command-executor.ts";
+import { CommandRejected, StepFailure } from "@pe/host-internal/command-executor";
 import { bindCommandRuntime } from "./command-registry.ts";
 import { ActionJournalService } from "./receipt-services.ts";
-import type { AttemptHost } from "./action-journal.ts";
+import type { AttemptHost } from "@pe/host-internal/action-execution";
 import type { GatewayLocal, GatewayLocalContext } from "./gateway-actions.ts";
-import {
-  admitCrossing,
-  admitScript,
-  consentedRead,
-  currentCaller,
-  readsOnly,
-  Refused,
-  refusalHeaders,
-  admitAnonymousCall,
-} from "./control.ts";
+import { admitCrossing, admitScript, consentedRead, currentCaller, readsOnly, refusalHeaders, admitAnonymousCall } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { ductBodySubject, type DuctsBodyBasisSource } from "@pe/ducts-host/ducts-body-basis";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
@@ -88,12 +80,13 @@ import {
   tailLogs,
 } from "./local-ops.ts";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { validateNativeInput } from "./native-input.ts";
 import { capturePackage } from "./packages.ts";
 import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { recordHostFact } from "./receipt-export.ts";
-import { ReadFreshness, RequestIdentity } from "./request-services.ts";
+import { ReadFreshness } from "./request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import {
   rhvacAssemblies,
   rhvacLaunch,
@@ -115,7 +108,8 @@ import {
   writeMember,
   type PodContext,
 } from "./settings.ts";
-import { readSettingTiers, writeSettingTier } from "./tiered-settings.ts";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
+import { writeSettingTier } from "./tiered-settings.ts";
 import { fileVersion } from "./takeoff-actions.ts";
 import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
@@ -1153,22 +1147,7 @@ const packageError = (key: string, error: unknown) => {
   );
 };
 
-/**
- * The home list a call reads (ADR 0037): the pointer of the document the call targets, as the
- * bridge's open-document snapshot reports it. A call that targets no open document has no project
- * home, and a targeted document with no pointer is `null`.
- */
-export const targetHomes = Effect.fnUntraced(function* (
-  bridge: Pick<RevitBridge["Service"], "list">,
-  scope: HostSessionScope | undefined,
-) {
-  if (!scope?.openDocumentId) return {} satisfies PodContext;
-  const target = (yield* bridge.list)
-    .filter((session) => !scope.bridgeSessionId || session.sessionId === scope.bridgeSessionId)
-    .flatMap((session) => session.state?.openDocuments ?? [])
-    .find((document) => document.openId === scope.openDocumentId);
-  return (target ? { pointer: target.projectHome } : {}) satisfies PodContext;
-});
+import { targetHomes } from "@pe/host-internal/target-homes";
 
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
 const podContext = Effect.fnUntraced(function* (

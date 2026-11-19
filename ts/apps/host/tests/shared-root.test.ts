@@ -1,3 +1,4 @@
+import { homes as catalogHomes } from "@pe/host-contracts/product-paths";
 import { hostState } from "../src/host-ownership.ts";
 import { contentRootsReady } from "../src/content-roots.ts";
 import { ledgerFixture } from "./storage.ts";
@@ -230,7 +231,7 @@ test("a catalog table id in two homes admits no table, with a finding", async ()
   catalog(firm, "smacna", "square", "same folder name, another id");
   catalog(firm, "firm", "round", "firm round");
   catalog(firm, "oval", "oval", "firm oval");
-  const reading = await readDuctCatalogs();
+  const reading = await readDuctCatalogs(catalogHomes(), hostState().home);
   expect(reading.findings).toEqual(["Duplicate catalog table round; no table with this id is admitted"]);
   expect(Object.values(reading.tables).map((t) => [t.id, t.title]).sort()).toEqual([
     ["oval", "firm oval"],

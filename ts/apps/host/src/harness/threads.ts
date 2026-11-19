@@ -81,20 +81,8 @@ import {
   emptyThreadHead,
 } from "@pe/agent-contracts";
 import { HOST_CONTEXT_VARIABLE } from "@pe/host-contracts/contracts";
-import {
-  bindControl,
-  originOf,
-  currentCaller,
-  callerThread,
-  emitRevoke,
-  mintContext,
-  Refused,
-  refusalHeaders,
-  requireHuman,
-  retireContext,
-  documentAcquisition,
-  sessionAcquisition,
-} from "../control.ts";
+import { bindControl, originOf, currentCaller, callerThread, emitRevoke, mintContext, refusalHeaders, requireHuman, retireContext, documentAcquisition, sessionAcquisition } from "../control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect";
 import type { RunRegistry } from "../run-registry.ts";
 import { z } from "zod";

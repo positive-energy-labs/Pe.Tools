@@ -1,6 +1,6 @@
 import type { DocumentRef } from "@pe/agent-contracts";
-import type { RevitBridge } from "./bridge.ts";
-import { refused } from "./command-executor.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { refused } from "@pe/host-internal/command-executor";
 import { readOriginalProcess, type NativeProcess, type SdkReceiptReader } from "./native-receipts.ts";
 import { resolveSdkSession, attachedSession } from "./sdk-session.ts";
 

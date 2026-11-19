@@ -1,6 +1,8 @@
-import { targetHomes } from "@pe/host/call-route";
-import { RevitBridge } from "@pe/host/bridge";
-import { RequestIdentity } from "@pe/host/request-services";
+import { leaf } from "@pe/host-internal/read-graph";
+import { documentRefSchema } from "@pe/agent-contracts";
+import { targetHomes } from "@pe/host-internal/target-homes";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 /**
  * The host's file inputs (ADR 0031 rule 1): the firm files and the duct catalogs. A body reads them
  * through this service so a test or a recording can answer instead of the disk. A firm file is
@@ -17,10 +19,11 @@ import { ductCatalogReadingSchema, ductCatalogRoutes } from "@pe/ducts-contract/
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { firmSettingsDir, homes, type Home } from "@pe/host-contracts/product-paths";
+import type { HomeRoot } from "@pe/host-contracts/kinds";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { readDuctCatalogs, type CatalogReading } from "./duct-catalogs.ts";
-import { firmFileSchema, firmOwner, type FirmFile } from "@pe/host/reads/evaluator";
-import { readSettingsFile } from "@pe/host/tiered-settings";
+import { firmFileSchema, firmOwner, type FirmFile } from "@pe/host-internal/reads/evaluator";
+import { readSettingsFile } from "@pe/host-internal/settings-files";
 import {
   captureInput,
   inputBindingKey,
@@ -28,7 +31,7 @@ import {
   type RecordingReader,
   type RecordingWriter,
   type TakingObserver,
-} from "@pe/host/native-recording";
+} from "@pe/host-internal/input-recording";
 
 /**
  * Firm files are the firm tier of a tiered value (ADR 0037 rule 8), at `<firm home>/Settings/<owner>.json`
@@ -81,6 +84,7 @@ export class DuctFiles extends Context.Service<
   }
 >()("pe/DuctFiles") {
   static readonly layer = (
+    bindHome: (home: Home) => HomeRoot,
     roots: { readonly firm: string | null | (() => string | null); readonly catalogs: readonly Home[] } = {
       firm: firmRootPath,
       catalogs: homes(),
@@ -89,7 +93,7 @@ export class DuctFiles extends Context.Service<
     const firmRoot = () => typeof roots.firm === "function" ? roots.firm() : roots.firm;
     return Layer.succeed(DuctFiles, {
       firm: (owner) => Effect.sync(() => readFirmFile(firmRoot(), owner)),
-      catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? homes({ pointer }) : roots.catalogs)),
+      catalogsFor: (pointer) => Effect.promise(() => readDuctCatalogs(pointer ? homes({ pointer }) : roots.catalogs, bindHome)),
       subscribe: (changed) => {
         const stops = [
           ["firm", firmRoot()] as const,
@@ -102,7 +106,7 @@ export class DuctFiles extends Context.Service<
               name === "firm" ? async () => {
                 const root = firmRoot();
                 return { root, files: await readFirmRoot(root) };
-              } : () => readDuctCatalogs(roots.catalogs);
+              } : () => readDuctCatalogs(roots.catalogs, bindHome);
             let closed = false;
             let value: string | undefined;
             const failed = (error: unknown) => {
@@ -204,3 +208,5 @@ export const ductCatalogsRoute = HttpRouter.use((router) =>
 
 export const catalogsFor = (files: DuctFiles["Service"], pointer?: string | null) =>
   files.catalogsFor(pointer);
+
+export const catalogs = leaf("file:catalogs", documentRefSchema.nullable(), catalogReading);

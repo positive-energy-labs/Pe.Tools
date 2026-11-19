@@ -17,7 +17,7 @@ import { commands } from "@pe/mcps/product-actions";
 import type { ActionStep } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { command, io, refused, type CommandContext, type CommandBinding } from "./command-executor.ts";
+import { command, io, refused, type CommandContext, type CommandBinding } from "@pe/host-internal/command-executor";
 import { Effect } from "effect";
 import { createReadStream, existsSync } from "node:fs";
 import { constants, copyFile, lstat, mkdir, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
@@ -41,7 +41,8 @@ import {
   type SessionObservation,
   type SessionStartResult,
 } from "@pe/host-contracts/pe-revit-contract";
-import { ActionIncomplete, type ActionExecution } from "./action-journal.ts";
+import { ActionIncomplete } from "./action-journal.ts";
+import { type ActionExecution } from "@pe/host-internal/action-execution";
 import { guardDiscard, guardSave, guards, type GuardedDocument } from "./guards.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";

@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Receipt, ReceiptReader } from "@pe/agent-contracts";
 import { read as readFile, writeState, stateKind, type StoredFile } from "@pe/host-contracts/kinds";
-import { currentCaller, Refused, refusalHeaders, requireHuman } from "./control.ts";
+import { currentCaller, refusalHeaders, requireHuman } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 
 const scheduleSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("interval"), everyMs: z.number().finite().int().min(60_000) }),
