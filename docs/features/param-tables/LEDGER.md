@@ -51,3 +51,16 @@ linkage vocabulary and the doc-owned profile) and `/data-tables` (authored synth
 - The human/agent endpoint split is tool-level policy, not a security boundary — pea's general shell can call localhost directly. A stronger commit capability needs a browser-held approval primitive agent tools cannot mint or replay.
 
 - Decide which engineering tables should live in the model and how the import source hands off ownership.
+
+### Carried from the 2026-11-19 census
+
+- Make the matrix journey verify that the selected row contains the target parameter before attempting to open the editor. [owed-20261119 tooling-3-038, 1 item]
+- Publish traceable climate tables to Revit and verify that a source refresh updates the saved table and the parameters linked to selected cells. [owed-20261119 other-1-019, 2 items]
+- Mark unsaved engineering-table cells individually in the revived grid. The destructive prune count is already tracked in the parameter-tables ledger. [owed-20261119 other-1-030, 1 item]
+- Resolve the isolation contract for table columns bound as instance parameters across the entire Generic Models category. [owed-20261119 other-1-034, 1 item]
+- Give authored table columns stable identities so reordering same-kind columns preserves values and links. [owed-20261119 other-1-035, 1 item]
+- Preserve the difference between blank numeric table cells and an authored zero when storing and reading cells. [owed-20261119 other-1-036, 1 item]
+- Carry a typed temperature value from a table cell into a temperature parameter using the corresponding Revit spec and units. [owed-20261119 other-1-037, 1 item]
+- Check whether the removed parameter-links command still leaves a native preview catalog entry, and retire it if there is no consumer. [owed-20261119 routes-kernel-1-154, 1 item]
+- Keep an explicit substrate crumb when reviving the parameter-table picture, and verify it on a case where the picture cannot infer the path. [owed-20261119 design-system-1-103, 1 item]
+- Identify the failing Data Tables route-free write prerequisite against the current omission gate. [owed-20261119 routes-kernel-1-451, 1 item]

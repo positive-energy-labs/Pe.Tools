@@ -24,3 +24,5 @@ Surface: `/grilles` (`apps/web/src/routes/grilles.tsx`, `apps/web/src/grilles/`)
 - `MIN_RIB` (1/4″) is lore; a fabricator has not ruled it, nor stock widths or kerf.
 - `SpecDrawing` fixed px/in scale; fit-to-pane when boards exceed ~24″ (`spec-drawing.tsx` `px`).
 - `MasterTable` row compactness for sheet-like consumers; see `docs/features/design-system/LEDGER.md`.
+
+- Restore authored grille profiles as durable Work when the grille product returns and settle the library scope. [owed-20261119 other-1-047, 1 item]
