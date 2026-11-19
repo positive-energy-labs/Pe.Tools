@@ -1,15 +1,25 @@
 import { z } from "zod";
 
+type Point = [number, number];
+const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
+const cross = (a: Point, b: Point) => a[0] * b[1] - a[1] * b[0];
+
+// Translate before the area sum so large host coordinates do not erase a small area.
+const signedDoubleArea = (points: Point[]) =>
+  points.reduce(
+    (sum, p, i) =>
+      sum + cross(sub(p, points[0]), sub(points[(i + 1) % points.length], points[0])),
+    0,
+  );
+
 /** Canonical authored geometry validation, shared by Page decode and local preview. */
 export function validateCutPolyline(
-  points: [number, number][],
+  points: Point[],
   closed: boolean,
   crossingMessage = "Cut crosses itself",
 ) {
   const n = points.length,
     edges = closed ? n : n - 1;
-  const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1]];
-  const cross = (a: number[], b: number[]) => a[0] * b[1] - a[1] * b[0];
   for (let i = 0; i < edges; i++) {
     const a = points[i],
       b = points[(i + 1) % n],
@@ -44,31 +54,18 @@ export function validateCutPolyline(
         throw new Error("Cut folds back");
     }
   }
-  // Translate before the area sum so large host coordinates do not erase a small area.
-  if (
-    closed &&
-    n &&
-    Math.abs(
-      points.reduce(
-        (s, p, i) => s + cross(sub(p, points[0]), sub(points[(i + 1) % n], points[0])),
-        0,
-      ),
-    ) < 1e-8
-  )
+  if (closed && n && Math.abs(signedDoubleArea(points)) < 1e-8)
     throw new Error("Cut must enclose an area");
 }
 
 /** Offset remains in double host feet until the renderer packs its own local frame. */
 export function offsetSpaceCut(cut: {
-  polyline: [number, number][];
+  polyline: Point[];
   closed: boolean;
   offset: number;
-}): [number, number][] {
-  type Point = [number, number];
+}): Point[] {
   const p = cut.polyline;
   if (p.length < 2 || cut.offset === 0) return p.map((p) => [...p]);
-  const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1]];
-  const cross = (a: Point, b: Point) => a[0] * b[1] - a[1] * b[0];
   const add = (a: Point, d: Point, t: number): Point => [a[0] + d[0] * t, a[1] + d[1] * t];
   const direction = (a: Point, b: Point): Point => {
     const d = sub(b, a),
@@ -76,7 +73,7 @@ export function offsetSpaceCut(cut: {
     if (length < 0.001) throw new Error("Cut points must be distinct");
     return [d[0] / length, d[1] / length];
   };
-  return p.flatMap((at, i): Point[] => {
+  const corners = p.map((at, i): Point[] => {
     const before =
       i > 0 ? direction(p[i - 1], at) : cut.closed ? direction(p[p.length - 1], at) : null;
     const after =
@@ -97,6 +94,19 @@ export function offsetSpaceCut(cut: {
     const join = add(a, before, cross(sub(b, a), after) / denom);
     return Math.hypot(...sub(join, at)) <= Math.abs(cut.offset) * 4 ? [join] : [a, b];
   });
+  const shifted = corners.flat();
+  if (cut.closed) {
+    // An inverted triangle can retain its winding while every corresponding edge reverses.
+    const reversed = corners.some((corner, i) => {
+      const next = (i + 1) % p.length;
+      const edge = sub(p[next], p[i]);
+      const shiftedEdge = sub(corners[next][0], corner[corner.length - 1]);
+      return edge[0] * shiftedEdge[0] + edge[1] * shiftedEdge[1] < 0;
+    });
+    if (reversed || signedDoubleArea(p) * signedDoubleArea(shifted) < 0)
+      throw new Error("This offset turns the closed cut inside out.");
+  }
+  return shifted;
 }
 
 const point = z.tuple([z.number().finite(), z.number().finite(), z.number().finite()]);
