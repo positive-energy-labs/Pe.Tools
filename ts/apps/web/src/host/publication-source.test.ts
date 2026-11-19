@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Publications } from "../../../host/src/reads/publications.ts";
 import { read, type InputPort } from "../../../host/src/reads/evaluator.ts";
 import type { Readings } from "./resource-stream";
+import type { ReadingContext } from "../shell/source-contract";
 
 const stream = vi.hoisted((): { listener?: Parameters<Readings["subscribe"]>[1]; subscribe?: Readings["subscribe"] } => ({}));
 vi.mock("./resource-stream", () => ({
@@ -12,6 +13,34 @@ vi.mock("./resource-stream", () => ({
     stream.listener = args[1]; return () => {};
   } },
 }));
+
+test.each(["open", "session-admin"])("only the Open route follows installed years, route %s", (route) => {
+  const target = { kind: "host" } as const;
+  const generation = 0;
+  const ctx: ReadingContext = {
+    target, workKey: null, workRevision: null, page: {}, work: null,
+    attempt: { target, workKey: null, generation },
+    historyPose: { instance: "tab", route, page: {}, href: `/${route}` },
+    publication: { subscription: "tab-read", generation },
+    trigger: { kind: "demand" },
+    args: {}, inputs: {}, signal: new AbortController().signal,
+  };
+  const subscribe = vi.fn<Readings["subscribe"]>(() => () => {});
+  stream.subscribe = subscribe;
+  const source = publicationSource({ read: async () => ({
+    generation, version: 1, state: "superseded", value: null,
+  }) });
+  const close = source.open(ctx, () => {});
+  try {
+    expect(subscribe.mock.calls[0]?.[0]).toEqual({
+      kind: "publication", subscription: "tab-read", generation,
+      ...(route === "open" ? { watch: "open-years" } : {}),
+    });
+  } finally {
+    if (typeof close === "function") close();
+    stream.subscribe = undefined;
+  }
+});
 
 // The host re-evaluates a raced read itself (host tests: resource-content-http), so its refusal lasts.
 test("a refusal with nothing retained is shown once with the host's reason; the source does not re-read", async () => {
