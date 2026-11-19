@@ -148,7 +148,7 @@ function mount(
     resize,
     refresh: (value: boolean) => view.rerender(tree(value)),
     withhold: () => view.rerender(tree(true, false)),
-    replaceSection: (section: import("@pe/agent-contracts").SceneSection) => {
+    replaceSection: (section: import("@pe/agent-contracts").SceneSection | null) => {
       sceneView = { ...sceneView, section };
       view.rerender(tree(refreshing));
     },
@@ -189,6 +189,37 @@ it("P3-C section editing shares the captured renderer and preserves orbit across
   view.replaceSection({ kind: "cuts", cuts });
   expect(io.scene?.clipVolume?.counts[0]).toBeGreaterThan(2);
   expect(io.call).toHaveBeenCalledTimes(calls);
+});
+
+it("refuses a saved hook against the scene and lets Clear remove it", async () => {
+  io.call.mockResolvedValue({ id: "refused-hook" });
+  const view = mount("refused-hook");
+  view.resize(640, 480);
+  await waitFor(() => expect(io.scene?.meshes).toBeTruthy());
+  const meshes = io.scene?.meshes;
+  const cuts = (await import("../cuts")).emptyCuts();
+  cuts.top.polyline = [
+    [0.2, 0.2],
+    [0.8, 0.2],
+    [0.8, 0.8],
+    [0.5, 0.4],
+  ];
+  const refusal =
+    "Section refused: The open end runs back across the cut. Clear or edit the cut; showing the unsectioned scene.";
+  view.replaceSection({ kind: "cuts", cuts });
+  expect(view.getByText(refusal)).toBeTruthy();
+  expect(io.scene?.meshes).toBe(meshes);
+  expect(io.scene?.clipVolume).toBeNull();
+
+  view.setPage.mockImplementation((next) => view.replaceSection(next.sceneView.section));
+  fireEvent.click(view.getByRole("button", { name: "Clear section" }));
+  expect(view.setPage).toHaveBeenCalledWith(
+    { sceneView: { preset: "all", section: null } },
+    { history: "push" },
+  );
+  expect(view.queryByText(refusal)).toBeNull();
+  expect(view.queryByRole("button", { name: "Clear section" })).toBeNull();
+  expect(io.scene?.clipVolume).toBeNull();
 });
 
 it("arms capture on growth from 0×0, renders, and re-arms after collapse during a capture", async () => {
