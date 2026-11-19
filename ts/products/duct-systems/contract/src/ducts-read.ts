@@ -1,7 +1,7 @@
 import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 import { CALC_ENGINE_VERSION } from "@pe/fans-contract/fan-calc";
 import { ductFirmLineSchema } from "@pe/ducts-contract/duct-inputs";
-import { inferenceReadSchema, stagedDuctsReadSchema } from "./ducts-pricing-read.ts";
+import { inferenceReadSchema, effectiveDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -149,7 +149,7 @@ export const ductsPricingData = z.object({
       }),
     ),
     findings: z.array(ductFindingSchema),
-    edit: stagedDuctsReadSchema,
+    effective: effectiveDuctsReadSchema,
   }),
   analysis: z.object({
     heal: z.object({

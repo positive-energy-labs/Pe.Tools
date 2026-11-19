@@ -403,7 +403,7 @@ export function TreePane({ ctx }: { ctx: DuctsDrawContext }) {
         null,
       ) ?? null;
   const scale = critical?.total ?? null;
-  const designRate = priced?.edit.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
+  const designRate = priced?.effective.designFriction ?? DEFAULT_DESIGN_FRICTION_RATE;
   const treePane = tree ? (
     <>
       <Scroll className="min-h-0 flex-1">

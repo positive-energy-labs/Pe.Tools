@@ -69,7 +69,7 @@ export function Chips({
   work: LossesWork;
 }) {
   const rule = ruleByKey(ruleKey)!;
-  const edit = priced.edit.rules[ruleKey]?.table.toUpperCase();
+  const edit = priced.effective.rules[ruleKey]?.table.toUpperCase();
   if (rule.options.length === 1) return <span className="face-mono">{rule.options[0]}</span>;
   // The pressed chip is the table every instance is looked up under now; a edit one also wears
   return (
@@ -115,13 +115,13 @@ export function StagedRules({
   priced: Priced;
   work: LossesWork;
 }) {
-  const keys = Object.keys(priced.edit.rules).sort();
-  const terminals = Object.keys(priced.edit.terminalDrops).length;
-  const components = Object.keys(priced.edit.componentDrops).length;
-  const catalogs = Object.keys(priced.edit.catalogs).length;
-  const flows = Object.keys(priced.edit.flows).length;
-  const unitFlows = Object.keys(priced.edit.equipmentFlows).length;
-  const roles = Object.keys(priced.edit.roles).length;
+  const keys = Object.keys(priced.effective.rules).sort();
+  const terminals = Object.keys(priced.effective.terminalDrops).length;
+  const components = Object.keys(priced.effective.componentDrops).length;
+  const catalogs = Object.keys(priced.effective.catalogs).length;
+  const flows = Object.keys(priced.effective.flows).length;
+  const unitFlows = Object.keys(priced.effective.equipmentFlows).length;
+  const roles = Object.keys(priced.effective.roles).length;
   const discard = () => {
     const doc = work.doc;
     if (!doc) return;
@@ -165,7 +165,7 @@ export function StagedRules({
             </span>
             <ValueDiff
               from={appliedTableOf(priced, key)}
-              to={priced.edit.rules[key]!.table.toUpperCase()}
+              to={priced.effective.rules[key]!.table.toUpperCase()}
             />
           </div>
         );
