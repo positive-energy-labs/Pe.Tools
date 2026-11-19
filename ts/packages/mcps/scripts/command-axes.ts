@@ -2,15 +2,15 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
-import { hostActions } from "../src/semantic-actions.ts";
-import type { Command } from "../src/command.ts";
-import type { CatalogAxes } from "../src/catalog.ts";
-import type { WriteBoundaryBinding } from "../src/write-intent.ts";
+import { hostActions } from "../src/pea/product-actions.ts";
+import type { Command } from "@pe/agent-contracts";
+import { nativeAxes, type CatalogAxes } from "@pe/agent-contracts/catalog";
+import type { WriteBoundaryBinding } from "@pe/agent-contracts";
 
 type Definition = Command & { writeBoundary?: WriteBoundaryBinding };
 type Native = (typeof hostOpCatalog)[number] | (typeof tsOnlyOperationCatalog)[number];
 type Row = { axes: CatalogAxes; effect: CatalogAxes["effect"]; plan?: string; via: "command" | { route: string } };
-const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"];
+const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"] as const;
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"];
 const max = <T extends string>(values: readonly T[], order: readonly string[]): T =>
   values.reduce((a, b) => order.indexOf(a) >= order.indexOf(b) ? a : b);
@@ -20,18 +20,18 @@ export function generateCommandTable(
   definitions: Readonly<Record<string, Definition>> = hostActions,
   catalog: readonly Native[] = [...hostOpCatalog, ...tsOnlyOperationCatalog],
 ): Record<string, Row> {
-  const native = new Map<string, Native>(catalog.map((op) => [op.key, op]));
+  const native = new Map<string, CatalogAxes>(catalog.map((op) => [op.key, nativeAxes(op)]));
   const table: Record<string, Row> = {};
-  for (const op of catalog) {
-    if (Object.hasOwn(definitions, op.key)) continue;
-    if (!effects.includes(op.effect)) throw Error(`${op.key}: invalid native effect ${op.effect}`);
+  for (const [key, op] of native) {
+    if (Object.hasOwn(definitions, key)) continue;
+    if (!effects.some((effect) => effect === op.effect)) throw Error(`${key}: invalid native effect ${op.effect}`);
     const axes: CatalogAxes = {
-      subject: op.subject as CatalogAxes["subject"],
-      touches: op.touches.split(", ") as CatalogAxes["touches"],
-      effect: op.effect as CatalogAxes["effect"], cost: op.costTier, cardinality: "One",
+      subject: op.subject,
+      touches: op.touches,
+      effect: op.effect, cost: op.cost, cardinality: "One",
       ...(op.effect === "TransactRead" ? { rollsBack: true } : {}),
     };
-    table[op.key] = { axes, effect: axes.effect, via: "command" };
+    table[key] = { axes, effect: axes.effect, via: "command" };
   }
   for (const [key, action] of Object.entries(definitions).sort(([a], [b]) => a.localeCompare(b))) {
     const boundary = action.writeBoundary;
@@ -41,14 +41,15 @@ export function generateCommandTable(
       if (!leaf) throw Error(`Unknown native command dependency: ${key}`);
       return leaf;
     });
-    const effect = action.catalogEffect ?? (leaves.length ? max(leaves.map((op) => op.effect), effects) : undefined);
-    if (!effect) throw Error(`${key}: declare catalogEffect or native dependencies`);
-    if (!effects.includes(effect)) throw Error(`${key}: invalid native effect ${effect}`);
+    const declaredEffect = action.catalogEffect ?? (leaves.length ? max(leaves.map((op) => op.effect), effects) : undefined);
+    if (!declaredEffect) throw Error(`${key}: declare catalogEffect or native dependencies`);
+    const effect = effects.find((effect) => effect === declaredEffect);
+    if (!effect) throw Error(`${key}: invalid native effect ${declaredEffect}`);
     const axes: CatalogAxes = {
-      subject: (leaves.find((op) => op.subject !== "None")?.subject ?? "None") as CatalogAxes["subject"],
-      touches: [...new Set(leaves.length ? leaves.flatMap((op) => op.touches.split(", ")) : ["Metadata"])] as CatalogAxes["touches"],
-      effect: effect as CatalogAxes["effect"],
-      cost: leaves.length ? max(leaves.map((op) => op.costTier), costs) : effect === "Read" ? "Bounded" : "Mutation",
+      subject: leaves.find((op) => op.subject !== "None")?.subject ?? "None",
+      touches: leaves.length ? [...new Set(leaves.flatMap((op) => op.touches))] : ["Metadata"],
+      effect,
+      cost: leaves.length ? max(leaves.map((op) => op.cost), costs) : effect === "Read" ? "Bounded" : "Mutation",
       // Command admission is bounded to one target; native collectors keep their own cardinality.
       cardinality: "One",
       ...(effect === "TransactRead" ? { rollsBack: true } : {}),
@@ -59,11 +60,14 @@ export function generateCommandTable(
   for (const [key, action] of Object.entries(definitions)) {
     const boundary = action.writeBoundary;
     if (!boundary) continue;
-    const row = table[key]!;
+    const row = table[key];
+    if (!row) throw Error(`No catalog row for ${key}`);
     if (boundary.phase === "preview") {
+      const write = table[boundary.key];
+      if (!write) throw Error(`No write row for ${key}`);
       // Plans use the write footprint so catalog admission can check correspondence.
-      row.axes.subject = table[boundary.key]!.axes.subject;
-      row.axes.touches = table[boundary.key]!.axes.touches;
+      row.axes.subject = write.axes.subject;
+      row.axes.touches = write.axes.touches;
     }
     const allowed = boundary.phase === "apply" ? ["ModelWrite"] : ["Read", "TransactRead"];
     if (!allowed.includes(row.effect)) throw Error(`${key}: ${boundary.phase} boundary cannot be ${row.effect}`);
@@ -80,12 +84,12 @@ export function commandTableSource(table = generateCommandTable()): string {
     + Object.keys(table).map((key) => '  ' + JSON.stringify(key) + ': commandTable[' + JSON.stringify(key) + '].axes,').join('\n')
     + '\n};\n';
 }
-const destination = fileURLToPath(new URL("../src/generated/command-axes.generated.ts", import.meta.url));
+const destination = fileURLToPath(new URL("../../agent-contracts/src/generated/command-axes.generated.ts", import.meta.url));
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const source = commandTableSource();
   if (process.argv.includes("--check")) {
     if (readFileSync(destination, "utf8").replace(/\r\n/g, "\n") !== source) {
-      throw Error("Command metadata is stale. Run @pe/agent-contracts codegen.");
+      throw Error("Command metadata is stale. Run @pe/mcps codegen.");
     }
   } else writeFileSync(destination, source);
 }

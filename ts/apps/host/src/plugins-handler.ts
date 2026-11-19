@@ -1,4 +1,5 @@
-import { matchPeRoute, peRoutes } from "@pe/agent-contracts/pe-api";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import type { createContributionContent } from "./pe-routes.ts";
 
 /** Served behind `servePeRoute`: the route matched and its input parsed before this runs. */

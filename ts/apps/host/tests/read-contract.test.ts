@@ -1,6 +1,6 @@
 import { expect, expectTypeOf, test } from "vite-plus/test";
 import { z } from "zod";
-import { ductLossData } from "@pe/agent-contracts";
+import { ductLossData } from "@pe/ducts-contract/duct-loss-read";
 import { contract, native, type ReadHandle } from "@pe/agent-contracts/handle";
 import { result as ductLoss } from "../../web/src/duct-loss/contract.ts";
 import {
@@ -17,7 +17,7 @@ import { hostRead } from "../../web/src/route/host-read.ts";
 import * as fanContracts from "@pe/fans-contract/contract";
 import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = [

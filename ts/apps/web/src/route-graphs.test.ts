@@ -5,7 +5,7 @@ import { agentFields } from "@pe/agent-contracts";
 
 import { projectRouteRead } from "../../host/src/reads/routes";
 import { routeRegistry as hostRoutes } from "../../host/src/routes.generated";
-import { commands } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 import { z } from "zod";
 
 test.each(Object.keys(routeRegistry).sort())("%s wire verbs reflect the declaration and place each verb once", (key) => {

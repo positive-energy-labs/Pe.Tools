@@ -2,7 +2,18 @@ import { hostState } from "../host-ownership.ts";
 import { Effect } from "effect";
 import { subjectName } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";
-import { address, bindWork, commands, refusalText, workHandle, workHandleSchema, type ActionAdmission, type Caller, type RouteStatePatch, type WorkKey } from "@pe/agent-contracts";
+import {
+  address,
+  bindWork,
+  refusalText,
+  workHandle,
+  workHandleSchema,
+  type ActionAdmission,
+  type Caller,
+  type RouteStatePatch,
+  type WorkKey,
+} from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 import {
   FINDING_KINDS,
   FINDINGS_DOORS,

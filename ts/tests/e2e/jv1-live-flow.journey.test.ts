@@ -11,7 +11,9 @@ import { fansCalc } from "../../products/fans/web/src/calc.ts";
 import { sheetCells } from "../../apps/web/src/route/slots/sheet/index.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { factOf } from "@pe/ducts-domain/test-snapshot";
-import { fansDocumentSchema, DUCTS_REFRESH_HEADER, NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
+import { DUCTS_REFRESH_HEADER } from "@pe/ducts-contract/reading";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 
 // Fixture-host target: vp test --config tests/e2e/jv1-live-flow.config.ts

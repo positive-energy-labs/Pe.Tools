@@ -5,7 +5,7 @@ import {
   ductsPricingData,
   ductsRosterArgs,
   ductsRosterData,
-} from "@pe/agent-contracts";
+} from "./ducts-read.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import { fanScopeSchema } from "@pe/ducts-contract/fan-scope.neutral";
 const scopedNetworkArgs = ductsNetworkArgs.extend({ fan: fanScopeSchema.nullable().optional() });

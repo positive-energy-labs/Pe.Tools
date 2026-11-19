@@ -1,6 +1,7 @@
 import { beforeAll, expect, test } from "vite-plus/test";
 import { applyPatches } from "../../../../packages/agent-contracts/src/route-doc.ts";
-import { ductsRouteState, fansRouteState } from "@pe/agent-contracts";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { fansRouteState } from "@pe/fans-contract/fans";
 import { editPatches } from "@pe/fans-domain/calc/index";
 import { DUCTS_FIXES } from "./calc/closer.ts";
 

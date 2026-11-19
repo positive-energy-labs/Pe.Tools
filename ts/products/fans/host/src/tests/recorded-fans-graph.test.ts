@@ -1,3 +1,5 @@
+import { ductsReadingSchema } from "@pe/ducts-contract/reading";
+import { readingRequestSchema, READING_MAX_KEYS } from "@pe/agent-contracts";
 import { stateFixture } from "../../../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -15,7 +17,14 @@ import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
-import { bindWork, address, NATIVE_BODY_VERSION_HEADER, readingKey, readingRequestsSchema, type Caller, type ReadingRequest } from "@pe/agent-contracts";
+import {
+  bindWork,
+  address,
+  NATIVE_BODY_VERSION_HEADER,
+  readingKey,
+  type Caller,
+  type ReadingRequest,
+} from "@pe/agent-contracts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { readInputRoutes } from "../../../../../apps/host/src/app.ts";
@@ -144,7 +153,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   if (isCold && (!driverSource || !existsSync(driverSource))) throw Error("Cold shell proof requires the captured Driver network asset");
   const driver = isCold ? JSON.parse(readFileSync(driverSource!, "utf8").replace(/^\uFEFF/, "")) : undefined;
   const batches: { add: ReadingRequest[]; remove: string[] }[] = driver?.entries.filter((entry: any) => entry.url.includes("/pe/resource-subscriptions")).map((entry: any) => JSON.parse(entry.init.body)) ?? [];
-  const coldKeys = isCold ? readingRequestsSchema.parse(batches[0]!.remove.map((key) => JSON.parse(key))) : [];
+  const coldKeys = isCold ? readingRequestSchema.or(ductsReadingSchema).array().min(1).max(READING_MAX_KEYS).parse(batches[0]!.remove.map((key) => JSON.parse(key))) : [];
   const ref = isCold ? (coldKeys.find((key) => key.kind === "ducts-snapshot") as Extract<ReadingRequest, { kind: "ducts-snapshot" }>).target : { session: "captured-chadds", openId: "chadds-open" };
   const actualTarget = { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: { openId: ref.openId } };
   const capturing = mode !== "off" && mode !== "cold-off", recovery = mode === "recovery";

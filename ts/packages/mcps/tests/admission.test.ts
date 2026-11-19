@@ -368,7 +368,9 @@ test("a direct RPC caller recovers its original command before consulting a miss
 
 
 import { runCapability } from "../src/shared/admission.ts";
-import { ductsDocumentSchema, fansDocumentSchema, workHandle } from "@pe/agent-contracts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { workHandle } from "@pe/agent-contracts";
 test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s Work and refuses groups without a fan walk", async binding => {
  for (const scoped of [false, true]) {
   const posts: unknown[] = [];

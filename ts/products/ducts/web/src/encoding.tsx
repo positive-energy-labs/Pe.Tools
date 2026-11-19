@@ -9,7 +9,7 @@
  */
 import { legendWord, type LegendWord } from "@pe/kit/lang/legend";
 import type { Blocks } from "@pe/ducts-domain/issues";
-import type { DuctInferenceGrade } from "@pe/agent-contracts";
+import type { DuctInferenceGrade } from "@pe/duct-systems-contract/ducts-pricing-read";
 import type { DashRole } from "@pe/kit/lib/token";
 import { token } from "@pe/kit/lib/token";
 import { verdictInk } from "@pe/kit/table/cells";

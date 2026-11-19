@@ -2,7 +2,8 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
-import { ductsApplyInputSchema, type FanClaim } from "@pe/agent-contracts";
+import { ductsApplyInputSchema } from "@pe/duct-systems-contract/ducts";
+import { type FanClaim } from "@pe/fans-contract/fans-inputs";
 import {
   connOf,
   ductOf,

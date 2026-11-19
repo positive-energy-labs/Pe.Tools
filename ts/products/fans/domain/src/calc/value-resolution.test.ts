@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import { factOf, nodeOf, snapshotOf, storeOf } from "@pe/ducts-domain/test-snapshot";
-import { fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { encounterRulings, resolveInputs, resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { cell, stamped, TEST_FIRM, TEST_SLOTS } from "@pe/ducts-domain/test-inputs";
 import type { CalcSnapshot } from "./build.ts";

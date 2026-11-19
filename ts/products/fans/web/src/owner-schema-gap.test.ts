@@ -1,6 +1,6 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { expect, test } from "vite-plus/test";
-import { fansDocumentSchema, type FansRouteDocument } from "@pe/agent-contracts";
+import { fansDocumentSchema, type FansRouteDocument } from "@pe/fans-contract/fans";
 import type { WorkOf } from "../../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type { WorkPatches } from "../../../../packages/agent-contracts/src/route-kernel-bodies.ts";
 import { module } from "../route.ts";

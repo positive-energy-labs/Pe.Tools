@@ -4,12 +4,9 @@
  * own cells on the tree rows. An `ignore` the model's store holds is the base: choosing it again
  * clears the delta, taking it back stages a delete (`rulingRung`, ducts-domain `rulings.ts`).
  */
-import {
-  cellPatches,
-  type DuctAssumption,
-  type DuctsDesign,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { cellPatches, type RouteStatePatch } from "@pe/agent-contracts";
+import { type DuctAssumption } from "@pe/ducts-contract/system-work";
+import { type DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { rulingRung, type RulingSegment } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 

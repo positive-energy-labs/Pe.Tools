@@ -13,7 +13,8 @@ import { CalcPicture } from "./calc/picture.tsx";
 import type { PictureOverlayProps } from "@pe/web/route/slots/picture/overlay";
 import { CalcEmpty, CalcFrame, calcSnapshot, useCalcData } from "./mount.tsx";
 import type { FansDrawContext } from "../route.ts";
-import type { FanEspValues, Immutable } from "@pe/agent-contracts";
+import type { FanEspValues } from "@pe/fans-contract/fans-inputs";
+import type { Immutable } from "@pe/agent-contracts";
 
 type Props = PictureOverlayProps<FansDrawContext>;
 

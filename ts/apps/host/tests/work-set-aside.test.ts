@@ -15,7 +15,9 @@ import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { bindWork, workKey, ductsRouteState, fansRouteState } from "@pe/agent-contracts";
+import { bindWork, workKey } from "@pe/agent-contracts";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { fansRouteState } from "@pe/fans-contract/fans";
 import { RouteWorkspace } from "@pe/runtime";
 import { sha256Hex } from "@pe/host-contracts/kinds";
 

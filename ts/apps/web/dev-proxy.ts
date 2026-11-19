@@ -1,9 +1,11 @@
+import { ductsReadingSchema } from "@pe/ducts-contract/reading";
+import { readingRequestSchema, READING_MAX_KEYS } from "@pe/agent-contracts";
 ﻿import { request, type IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
-import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
 import { hostOpSafety } from "@pe/host-contracts/generated";
-import { familyReads, scheduleReads, readingRequestsSchema, type ReadingRequest } from "@pe/agent-contracts";
+import { familyReads, scheduleReads, type ReadingRequest } from "@pe/agent-contracts";
 // Vite config loads this transport subpath with Node's TypeScript stripper.
 import { decodeResourceSubscriptionUpdate } from "@pe/runtime/resource-stream";
 import type { Plugin, ProxyOptions } from "vite-plus";
@@ -15,6 +17,8 @@ import {
   checkoutRootFrom,
 } from "@pe/host-contracts/service-identity";
 import { checkoutRoot } from "./checkout-paths.ts";
+
+const resourceReadingSchema = readingRequestSchema.or(ductsReadingSchema);
 
 /** Web-only exception: borrow another checkout's reads, never its host lifecycle or writes. */
 export function readHostCheckout(): string | undefined {
@@ -56,7 +60,7 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
     );
   }
   if (method === "POST" && path === "/pe/resource-subscriptions") {
-    const decoded = decodeResourceSubscriptionUpdate(typeof body === "string" ? body : JSON.stringify(body) ?? "");
+    const decoded = decodeResourceSubscriptionUpdate(typeof body === "string" ? body : JSON.stringify(body) ?? "", resourceReadingSchema);
     return !("error" in decoded) && readsOnly(decoded.add);
   }
   if (method !== "GET") return false;
@@ -64,7 +68,7 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
     try {
       const query = new URL(url, "http://127.0.0.1").searchParams;
       return !query.has("keys") && !!query.get("connection") || readsOnly(
-        readingRequestsSchema.parse(JSON.parse(query.get("keys") ?? "null")),
+        resourceReadingSchema.array().min(1).max(READING_MAX_KEYS).parse(JSON.parse(query.get("keys") ?? "null")),
       );
     } catch {
       return false;
@@ -75,7 +79,6 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
     [
       "/host/status",
       "/ops",
-      "/pe/ducts/catalogs",
       "/captures",
       "/captures/",
       "/family/readings",

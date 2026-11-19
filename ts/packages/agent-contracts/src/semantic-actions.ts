@@ -1,7 +1,6 @@
-import { fansRouteState } from "@pe/fans-contract/fans";
+import { commandTable } from "./command-axes.ts";
 import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
-import { ANY_ROUTE, workIntent, workWriteCommands } from "./write-intent.ts";
-import { SHEET_COMMANDS } from "./slots/sheet.ts";
+import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
@@ -128,68 +127,6 @@ const definitions = {
 } as const;
 export const takeoffActions = definitions;
 
-export const ductsActions = {
-  "ducts.refresh": {
-    catalogEffect: "Read",
-    says: "Read this document's duct snapshots and pricing inputs again.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: ["snapshot"],
-  },
-  "ducts.plan-heal": {
-    // The host derives the plan from these Reads; it opens no transaction and calls no rehearsal.
-    native: ["ducts.snapshot.walk", "ducts.snapshot.roster"],
-    says: "Plan healing the staged duct groups: derive each group's repairs (cap dangling open ends, connect coincident same-size ends, close same-size gaps of at most 3 in) from Work and seal them, without opening a transaction. Show the person the planned items before any apply.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: [],
-  },
-  "ducts.rehearse-heal": {
-    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.heal.preview"],
-    says: "Optionally rehearse the planned heal in Revit: runs every repair and Pe's post-check, then rolls all of it back. Refused on a workshared model before any transaction. A rehearsal never arms apply; plan does.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: [],
-  },
-  "ducts.apply-heal": {
-    native: ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.heal"],
-    says: "Heal duct groups in Revit, one transaction per group, with exactly the items a plan showed and a person approved; an item failing Pe's post-check is refused and rolled back. Revit gives rebuilt elements new ids: read the duct snapshot again after.",
-    needs: "project-document",
-    effect: "command",
-    input: z.strictObject({}),
-    dirties: ["snapshot"],
-  },
-  "ducts.plan-assign-fan": {
-    // The host derives the plan from these Reads; it opens no transaction and calls no rehearsal.
-    native: ["ducts.snapshot.walk"],
-    says: "Plan making the staged unit the fan of a duct system (Duct Systems > Select Equipment: the system's base equipment): read the system and seal the request, without opening a transaction. Show the person the plan before any apply.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: [],
-  },
-  "ducts.rehearse-assign-fan": {
-    native: ["ducts.snapshot.walk", "ducts.assign-fan.preview"],
-    says: "Optionally rehearse the planned fan assignment in Revit: runs Pe's guards, the write and its read back, then rolls it back. Refuses a system that already has base equipment, a unit with no port of the system's air classification, and a workshared model before any transaction. A rehearsal never arms apply; plan does.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: [],
-  },
-  "ducts.apply-assign-fan": {
-    native: ["ducts.snapshot.walk", "ducts.assign-fan"],
-    says: "Make a unit the base equipment (the fan) of a duct system in Revit, as a plan showed and a person approved; the system keeps its id, name and type. Read the duct snapshot again after: the unit's role reads base equipment of that system.",
-    needs: "project-document",
-    effect: "command",
-    input: z.strictObject({}),
-    dirties: ["snapshot"],
-  },
-} as const satisfies Record<string, Command>;
-export type DuctsActionKey = keyof typeof ductsActions;
-
 export type TakeoffActionKey = keyof typeof definitions;
 export const actionAdmissionSchema = z.strictObject({
   id: z.string().min(1),
@@ -212,12 +149,8 @@ import { familiesRouteState } from "./families.ts";
 import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { catalogWorkCommands } from "./catalog-work.ts";
 import { findingsCommands, findingsWork } from "./slots/findings.ts";
-/** Ducts derives its native request from the whole staged Work, not one writeIntent cell. */
-const ductsDerive = (work: unknown) =>
-  ductsRouteState.schema.parse(work);
 export const tools = {
   pods: {
     name: "pods",
@@ -330,52 +263,6 @@ export const tools = {
       ...workWriteCommands("rooms", "rooms.merge", definitions["rooms.merge"]),
     },
   },
-  fans: {
-    name: "fans", says: fansRouteState.description,
-    work: { ...fansRouteState, editable: [
-      ["writeIntent"], ["terminalDrops", "*"], ["componentDrops", "*"],
-      ["esp", "*"], ["ratedEsp", "*"], ["equipmentFlows", "*"], ["roles", "*"], ["flows", "*"],
-    ] }, commands: {},
-  },
-  ducts: {
-    name: "duct-systems",
-    says: ductsRouteState.description,
-    work: {
-      ...ductsRouteState,
-      editable: [
-        ["writeIntent"],
-        ["assumptions", "*"],
-        ["rules", "*"],
-        ["catalogs", "*"],
-        ["ruleAssignments", "*"],
-        ["subject", "*"],
-        ["labelParameter"],
-        ["workingPhase"],
-        ["systemColours"],
-        ["kinds", "*"],
-        ["criteria", "*"],
-      ],
-    },
-    commands: {
-      "ducts.refresh": ductsActions["ducts.refresh"],
-      ...workWriteCommands("duct-systems", "ducts.apply-heal", ductsActions["ducts.apply-heal"], {
-        derive: ductsDerive,
-        preview: { key: "ducts.plan-heal", definition: ductsActions["ducts.plan-heal"] },
-      }),
-      // A rehearsal derives the same request from Work but is no plan: it carries no seal and cannot arm apply.
-      ...workIntent("duct-systems", "ducts.rehearse-heal", ductsActions["ducts.rehearse-heal"], { derive: ductsDerive }),
-      ...workIntent("duct-systems", "ducts.rehearse-assign-fan", ductsActions["ducts.rehearse-assign-fan"], { derive: ductsDerive }),
-      ...workWriteCommands(
-        "duct-systems",
-        "ducts.apply-assign-fan",
-        ductsActions["ducts.apply-assign-fan"],
-        {
-          derive: ductsDerive,
-          preview: { key: "ducts.plan-assign-fan", definition: ductsActions["ducts.plan-assign-fan"] },
-        },
-      ),
-    },
-  },
   // Slice 9 (findings): an implicit kernel module, route-free Work per document (ADR 0035 rule 9).
   findings: {
     name: "findings",
@@ -408,63 +295,35 @@ export const tools = {
     },
   },
 } satisfies Record<string, Tool>;
-/*
- * Slice 7, the sheet slot (ADR 0035 rule 3; ADR 0030 rule 4): one plan/apply pair every sheet reaches
- * Revit through, builtin or Pod, bound to no one owner. The handle names the route; the host derives the
- * writes from that route's sheet bindings (a `parameter` binding through the generic parameter-value
- * leaves, the ducts losses store through its own). Other slots add their own keys in their own blocks.
- */
-const sheetNative = ["revit.detail.parameter-values", "ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables"] as const;
-export const sheetActions = {
-  [SHEET_COMMANDS.plan]: {
-    native: [...sheetNative, "ducts.apply.plan"],
-    says: "Plan the staged sheet writes without changing Revit: pass the route's Work handle { key, revision } as work. A route with parameter bindings plans each staged cell as a parameter write on its row's element (by UniqueId) and reads the value Revit holds now. /fans plans the staged duct loss writes (fitting coefficients, terminal and component drops, fan static, unit roles): stage the fan walk { unitId, portIndex } from route:reads.value (read fans.roster) in route:fans writeIntent, and name rule cells in route:duct-systems writeIntent.cells to write those rules' fitting coefficients to elements after saving their tables. Pass the other Work as readWorks. With the rule-owning route's own Work handle, plan storing its staged rule tables and ignore verdicts and removing a stored verdict staged for delete. This plan has no element writes. Report each write's outcome; nothing is committed.",
-    needs: "project-document",
-    effect: "query",
-    input: z.strictObject({}),
-    dirties: [],
-  },
-  [SHEET_COMMANDS.apply]: {
-    native: [...sheetNative, "revit.apply.parameter-values", "ducts.apply"],
-    says: "Write the planned sheet values to Revit exactly as the plan showed and a person approved, in one transaction; a value Revit changed since the plan refuses. /fans also records the loss provenance and unit roles in Project Information. /duct-systems applies its staged rule tables and ignore verdicts, removes a stored verdict staged for delete, and writes nothing to elements.",
-    needs: "project-document",
-    effect: "command",
-    input: z.strictObject({}),
-    dirties: ["snapshot"],
-  },
-} as const satisfies Record<string, Command>;
-export const sheetCommands = workWriteCommands(ANY_ROUTE, SHEET_COMMANDS.apply, sheetActions[SHEET_COMMANDS.apply], {
-  derive: (doc) => ({ doc }),
-  preview: { key: SHEET_COMMANDS.plan, definition: sheetActions[SHEET_COMMANDS.plan] },
-});
-
-export const commands = {
+export const builtinCommandHead = {
   "work.start": {
     catalogEffect: "SessionWrite",
     says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
     input:z.object({key:workKeySchema,seed:z.json()}),
   } as const,
   ...catalogWorkCommands,
-  ...sheetCommands,
+};
+export const commands = {
+  ...builtinCommandHead,
   ...tools.pods.commands,
   ...tools.family.commands,
   ...tools.families.commands,
   ...tools.schedules.commands,
   ...tools.takeoffs.commands,
   ...tools.rooms.commands,
-  ...tools.ducts.commands,
   ...tools.findings.commands,
   ...tools.instances.commands,
 };
 export function commandTool(key: string): Tool | undefined {
   return Object.values(tools).find((tool) => Object.hasOwn(tool.commands, key));
 }
-export function commandTarget(
+export function targetForCommand(
+  actions: Readonly<Record<string, Command>>,
   key: string,
   input: Record<string, unknown>,
   document?: import("./target.ts").DocumentRef,
 ): import("./target.ts").ExecutionTarget {
-  const command: Command | undefined = hostActions[key as keyof typeof hostActions];
+  const command = Object.hasOwn(actions, key) ? actions[key] : undefined;
   if (command?.target) return command.target(input);
   if (command?.needs === "nothing") return { kind: "host" };
   if (document)
@@ -473,6 +332,12 @@ export function commandTarget(
       : { kind: "document", ref: document };
   throw Error(`Command '${key}' requires an exact target`);
 }
+
+export const commandTarget = (
+  key: string,
+  input: Record<string, unknown>,
+  document?: import("./target.ts").DocumentRef,
+) => targetForCommand(hostActions, key, input, document);
 
 export const actionControls = {
   "action.read": {
@@ -507,7 +372,7 @@ export const preparedTakeoffSchema = z.strictObject({
 });
 
 /** Discovery projects the same portable command contracts used by invocation. */
-export const hostActions = {
+const hostActionHead = {
   "ops.read": {
     via: { route: "operation.call" },
     native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => isReadEffect(op.effect)).map((op) => op.key),
@@ -522,7 +387,8 @@ export const hostActions = {
     needs: "nothing", effect: "command", dirties: [],
     input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
   } as const,
-  ...commands,
+} satisfies Record<string, Command>;
+const hostActionTail = {
   ...actionControls,
   // These direct reads consume an owning Work just like journaled commands. The send door
   // projects its handle into the existing family transport's scope, outside the read payload.
@@ -533,23 +399,15 @@ export const hostActions = {
   ...scheduleReads,
   "instances.read": instancesReading,
 } satisfies Record<string, Command>;
-export type HostActionKey = keyof typeof hostActions;
+export const withHostActions = <const C extends Record<string, Command>>(registered: C) => ({
+  ...hostActionHead,
+  ...registered,
+  ...hostActionTail,
+});
+export const hostActions = withHostActions(commands);
 export type SemanticActionKey = keyof typeof commands;
-export type SemanticPreviewKey = {
-  [K in SemanticActionKey]: (typeof commands)[K] extends { writeBoundary: { phase: "preview" } }
-    ? K
-    : never;
-}[SemanticActionKey];
+type PlannedRow = Extract<(typeof commandTable)[keyof typeof commandTable], { plan: string }>;
+export type SemanticPreviewKey = PlannedRow["plan"];
+const previews = new Set<string>(Object.values(commandTable).flatMap(row => "plan" in row ? [row.plan] : []));
 /** The plan half of a Work write: its receipt is review evidence, never a commit. */
-export function isWritePreviewKey(key: string): boolean {
-  const command = commands[key as SemanticActionKey] as
-    | { writeBoundary?: { phase: string } }
-    | undefined;
-  return command?.writeBoundary?.phase === "preview";
-}
-/** The preview entry a Work write seals at. */
-export function writePreviewKey<K extends SemanticActionKey>(key: K): SemanticActionKey {
-  const command = commands[key] as { writeBoundary?: { previewKey: string } };
-  if (!command.writeBoundary) throw Error(`${key} is not a Work write`);
-  return command.writeBoundary.previewKey as SemanticActionKey;
-}
+export const isWritePreviewKey = (key: string): boolean => previews.has(key);

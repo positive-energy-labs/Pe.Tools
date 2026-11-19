@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import type { LedgerProps } from "./types.ts";
 import { Ledger } from "./view.tsx";
-import { openFanCalcSchema as openSheetSchema } from "@pe/agent-contracts";
+import { openFanCalcSchema as openSheetSchema } from "@pe/fans-contract/fans-read";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { FANS_LEDGER_ESP } from "../../../../../tests/e2e/cdp.ts";
 

@@ -1,5 +1,6 @@
 /** Heal proposals only; the native op re-checks and post-checks. Model feet, limits inches. */
-import type { DuctFinding, DuctsDesign } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { tolerate, topologyRulingsKey, verdictOf } from "./proximity.ts";
 import { subjectName } from "./words.ts";
 import { withStoredRulings } from "./rulings.ts";
@@ -348,7 +349,7 @@ export const healRequestGroup = (group: HealGroup, only?: ReadonlySet<string>) =
 });
 
 /** Fold one repair's ends and join before either the inbox or picture numbers findings. */
-export function healFindings(findings: readonly DuctFinding[], plan: HealPlan | import("@pe/agent-contracts").DuctsPricingData["analysis"]["heal"] | null = null) {
+export function healFindings(findings: readonly DuctFinding[], plan: HealPlan | import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"] | null = null) {
   const hard: [string,{ids:number[];covers:string[];note:string}][]=!plan?[]:plan.hard instanceof Map?[...plan.hard]:Object.entries(plan.hard);
   const repairs = new Map(
     hard.flatMap(([id, repair]) =>

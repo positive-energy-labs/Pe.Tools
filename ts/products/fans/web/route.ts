@@ -6,10 +6,8 @@ import { stageField } from "@pe/web/route";
 import { listFields } from "@pe/web/route";
 import { fansDocumentSchema, fansRouteState } from "@pe/fans-contract/fans";
 import { z } from "zod";
-import {
-  fansCalcEditsSchema,
-  type Immutable,
-} from "@pe/agent-contracts";
+import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
+import { type Immutable } from "@pe/agent-contracts";
 import * as reads from "@pe/fans-contract/contract";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import { field, picturePose, route, subjectSchema, split } from "@pe/web/route";
@@ -48,7 +46,7 @@ const roster = read(hostRead(reads.calc, calcValueFixtures), () => ({
   fan: [],
   calcPath: "",
 }));
-export type FansDrawContext = ContextOf<typeof fields, typeof calc, typeof import("@pe/fans-contract/fans").fansDocumentSchema, typeof import("@pe/agent-contracts").fansCalcEditsSchema>;
+export type FansDrawContext = ContextOf<typeof fields, typeof calc, typeof import("@pe/fans-contract/fans").fansDocumentSchema, typeof import("@pe/ducts-contract/duct-inputs").fansCalcEditsSchema>;
 export const module = route({
   key: "fans",
   retiredPage: { fields: ["sheetPath"], values: { stage: ["sheet"] } },

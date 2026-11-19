@@ -1,7 +1,7 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve, relative, isAbsolute } from "node:path";
 import { catalogSchema, type CatalogTable } from "@pe/ducts-domain/catalog";
-import { type ductCatalogReadingSchema } from "@pe/agent-contracts";
+import { type ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
 import type { z } from "zod";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { homes, type Home } from "@pe/host-contracts/product-paths";

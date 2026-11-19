@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import type { DuctFinding } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 import { connOf, ductOf, issueOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { subjectDocument } from "@pe/kit/lang/subject-text";

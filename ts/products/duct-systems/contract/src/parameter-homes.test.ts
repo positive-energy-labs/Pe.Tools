@@ -1,8 +1,9 @@
 import { expect, it } from "vite-plus/test";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
-import { ductParameterSlots, ductsApplyInputSchema } from "@pe/duct-systems-contract/ducts";
+import { ductParameterSlots } from "@pe/ducts-contract/system-work";
+import { ductsApplyInputSchema } from "@pe/duct-systems-contract/ducts";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import { ductsSettings } from "@pe/agent-contracts/setting-owners";
+import { ductsSettings } from "@pe/ducts-contract/settings";
 import { schemaOf } from "@pe/agent-contracts/slots/sheet";
 
 const slots = (parameters: object) => Object.fromEntries(Object.entries(ductParameterSlots([{

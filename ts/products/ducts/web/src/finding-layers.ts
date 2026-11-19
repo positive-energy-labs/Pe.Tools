@@ -9,7 +9,7 @@
  */
 import * as THREE from "three";
 
-import type { DuctsDesign } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { edgesOf, outlineOf, overhang, type Edge, type Outline } from "@pe/ducts-domain/faces";
 import { healPlan, type HealItem } from "@pe/ducts-domain/heal";
 import {

@@ -1,6 +1,10 @@
 import { z } from "zod";
-import { DUCTS_CRITERIA_CELLS, slotLayer } from "@pe/agent-contracts";
-import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansCalcData, type Immutable } from "@pe/agent-contracts";
+import { DUCTS_CRITERIA_CELLS } from "@pe/ducts-contract/duct-inputs";
+import { slotLayer } from "@pe/ducts-contract/system-work";
+import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
+import { FAN_CELLS } from "@pe/fans-contract/fans-inputs";
+import { routeAddress, subjectCode, type Immutable } from "@pe/agent-contracts";
+import { type fansCalcData } from "@pe/fans-contract/fans-read";
 import { cellSource, local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
 import type { ValueSource } from "@pe/agent-contracts/work-value";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
@@ -10,7 +14,8 @@ import { calcSystems } from "@pe/ducts-domain/calc/scoped-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
-import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/settings";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the

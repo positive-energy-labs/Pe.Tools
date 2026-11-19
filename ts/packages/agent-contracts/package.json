@@ -41,6 +41,8 @@
       "import": "./src/semantic-actions.ts"
     },
     "./handle": "./src/handle.ts",
+    "./catalog": "./src/catalog.ts",
+    "./write-intent": "./src/write-intent.ts",
     "./command-axes": {
       "types": "./src/command-axes.ts",
       "import": "./src/command-axes.ts"
@@ -66,8 +68,6 @@
     "access": "public"
   },
   "scripts": {
-    "codegen": "node --import jiti/register scripts/command-axes.ts",
-    "codegen:check": "node --import jiti/register scripts/command-axes.ts --check",
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
@@ -77,10 +77,7 @@
   "dependencies": {
     "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6",
-    "effect": "4.0.2",
-    "@pe/duct-systems-contract": "workspace:*",
-    "@pe/ducts-contract": "workspace:*",
-    "@pe/fans-contract": "workspace:*"
+    "effect": "4.0.2"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

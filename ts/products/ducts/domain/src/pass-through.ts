@@ -14,7 +14,7 @@
  *   model is missing that connection, so the air has no path through to the fan on that side.
  * Revit is untouched: the model's groups stay as they are; this is the route's reading.
  */
-import type { DuctFinding } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 
 import { markOf } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";

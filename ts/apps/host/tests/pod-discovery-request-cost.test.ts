@@ -10,7 +10,7 @@ import { bindPackageLifecycle, createPackageLifecycle } from "../src/package-lif
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { createContributionContent, createPeRoutes } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
-import { servePeRoute } from "@pe/agent-contracts/pe-api";
+import { servePeRoute } from "@pe/mcps/product-catalog";
 import { contentRootsRefreshMs } from "../src/content-roots.ts";
 import { freezeScript } from "../src/operation-script.ts";
 import { readMemberPod } from "../src/settings.ts";

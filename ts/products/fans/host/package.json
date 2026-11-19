@@ -18,6 +18,8 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
     "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",

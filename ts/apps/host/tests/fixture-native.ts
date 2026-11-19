@@ -2,7 +2,7 @@ import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { createFixtureHost } from "../../../packages/host-contracts/src/fixture-host.ts";
 import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";

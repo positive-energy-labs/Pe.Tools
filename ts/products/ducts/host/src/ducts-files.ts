@@ -13,7 +13,8 @@ import { z } from "zod";
 import { existsSync, watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { ductCatalogReadingSchema, ductsFirmSchema } from "@pe/agent-contracts";
+import { ductCatalogReadingSchema, ductCatalogRoutes } from "@pe/ducts-contract/duct-catalog";
+import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { firmSettingsDir, homes, type Home } from "@pe/host-contracts/product-paths";
 import { productPathNames } from "@pe/host-contracts/contracts";
@@ -193,7 +194,7 @@ export const ductCatalogsRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const files = yield* DuctFiles;
     const bridge = yield* RevitBridge;
-    yield* router.add("GET", "/pe/ducts/catalogs", Effect.gen(function* () {
+    yield* router.add("GET", ductCatalogRoutes["ducts.catalogs"].path, Effect.gen(function* () {
       const identity = yield* RequestIdentity;
       const { pointer } = yield* targetHomes(bridge, identity.scope);
       return HttpServerResponse.jsonUnsafe(yield* catalogsFor(files, pointer));

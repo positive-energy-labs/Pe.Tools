@@ -1,5 +1,6 @@
 import { ownedSession } from "./callers.ts";
-import { commands, tools, writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
+import { writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
+import { commands, tools } from "@pe/mcps/product-actions";
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";

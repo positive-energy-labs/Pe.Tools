@@ -1,17 +1,13 @@
 // U4 wires the real fans Work for callers without one.
-import { neutralFansWork } from "@pe/agent-contracts";
+import { neutralFansWork } from "@pe/fans-contract/fans";
 /**
  * What the route runs before reading model health: the snapshot
  * read in Work's working phase (`phases.ts`) and tolerated (`proximity.ts`), every terminal's design flow resolved (`terminal-flows.ts`), and
  * the findings of both beside the snapshot's own issues, each naming who clears it. Cached per
  * snapshot for the last Work. The tolerated snapshot is cached per proximity verdict set.
  */
-import {
-  stagedValues,
-  workingPhaseOf,
-  type DuctFinding,
-  type DuctsDesign,
-} from "@pe/agent-contracts";
+import { stagedValues, workingPhaseOf, type DuctsDesign } from "@pe/duct-systems-contract/ducts";
+import { type DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 
 import { passThrough } from "./pass-through.ts";
 import { phased } from "./phases.ts";

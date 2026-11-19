@@ -23,9 +23,13 @@ const GENERIC = [
 /** Registration sites: the only generic files that may name a product. */
 const ALLOWED = new Set([
   "apps/host/src/command-registry.ts",
+  "apps/host/src/product-contracts.ts",
+  "apps/web/src/route/setting-owners.ts",
   "apps/host/src/routes.generated.ts",
   "apps/host/src/product-executors.generated.ts",
   "packages/mcps/src/pea/guides.generated.ts",
+  "packages/mcps/src/pea/product-actions.ts",
+  "packages/mcps/src/pea/product-catalog.ts",
   "packages/host-contracts/src/product-paths.ts",
   "packages/agent-contracts/src/routes/table.generated.ts",
   "packages/agent-contracts/src/generated/route-directory.ts",

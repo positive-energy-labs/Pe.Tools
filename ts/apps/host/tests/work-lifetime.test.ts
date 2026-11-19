@@ -7,14 +7,14 @@ import {
   workWriteSchema,
   takeoffsRouteState,
   threadHeadSchema,
-  tools,
   bindWork,
   workKey,
   type ThreadHead,
 } from "@pe/agent-contracts";
+import { tools } from "@pe/mcps/product-actions";
 import type { Caller } from "@pe/agent-contracts";
 
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { RouteWorkspace } from "@pe/runtime";
 import { Effect, Layer, PubSub } from "effect";
 import { rm } from "node:fs/promises";

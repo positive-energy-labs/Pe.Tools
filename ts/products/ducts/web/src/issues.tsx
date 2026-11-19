@@ -7,7 +7,7 @@ import type { Tone } from "@pe/kit/lib/token";
  * meaning rides `data-tone`); `shade` orders the kinds inside a class. Shades have no tokens yet
  * (owed in the design-system ledger), so a view draws `tone` and may use `shade` only as order.
  */
-import type { DuctFinding } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 import { ISSUE_BLOCKS, type Blocks, type IssueKind } from "@pe/ducts-domain/issues";
 import { INFERRED_KINDS } from "@pe/ducts-domain/proximity";
 import { SubjectText } from "@pe/kit/lang/subject-text";

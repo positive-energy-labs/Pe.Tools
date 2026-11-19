@@ -1,4 +1,4 @@
-import type { DuctAirType } from "@pe/agent-contracts";
+import type { DuctAirType } from "@pe/ducts-contract/system-work";
 import type { DuctSnapshot } from "./types.ts";
 
 const normalized = (s: string) => s.toLowerCase().replace(/[\s_-]/g, "");

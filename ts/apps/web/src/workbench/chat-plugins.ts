@@ -7,7 +7,6 @@ import {
   actionControls,
   parseContributionKey,
   routeCallOf,
-  commands,
   addressSchema,
   documentRefSchema,
   documentRequestSchema,
@@ -21,6 +20,7 @@ import {
   type ActionReceipt,
   type DocumentRequest,
 } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 
 import { publicRoutes } from "#/route/route-discovery";
 import { isRecord, podMemberCode } from "@pe/agent-contracts";

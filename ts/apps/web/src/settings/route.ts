@@ -8,9 +8,9 @@ import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 import { split } from "../route/typed-route.ts";
 import { setting, type SheetSlot } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
-import { settingOwners } from "@pe/agent-contracts/setting-owners";
+import { settingOwners } from "../route/setting-owners.ts";
 
-import {  } from "../../../../packages/agent-contracts/src/settings-read.ts";
+
 export const loaded = read(hostRead(contracts.machine));
 /** The Revit session row a link focuses. */
 export const fields = { session: field(z.string(), "", "pose") };

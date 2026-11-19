@@ -8,7 +8,7 @@ import type { CalcFitting, CalcInputs } from "@pe/ducts-web/calc/model";
  * so it can still be seen, cleared and restored. Each option says what it means (the ASHRAE
  * fitting the table describes), never the mechanism.
  */
-import type { CalcEdits } from "@pe/agent-contracts";
+import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import type { SubjectPart } from "@pe/kit/lang/subject-text";
 

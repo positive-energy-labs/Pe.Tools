@@ -1,6 +1,7 @@
 import { readIndex, type ReadIndex } from "@pe/ducts-domain/read-index";
 /** Derived inbox in loop order. Off-system findings stay in Diagnostics and never hold the ESP. */
-import type { DuctFinding, DuctsDesign } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { bin } from "@pe/ducts-domain/bins";
 import { fanCandidates, type FanAssignment } from "@pe/ducts-domain/fan-assignment";
 import { healFindings, type HealGroup, type HealItem, type HealPlan } from "@pe/ducts-domain/heal";
@@ -105,7 +106,7 @@ export interface TriageInput {
   doc: DuctsDesign | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
-  heal?: HealPlan | import("@pe/agent-contracts").DuctsPricingData["analysis"]["heal"] | null;
+  heal?: HealPlan | import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"] | null;
   airflow?: { current: string; options: readonly AirflowOption[] };
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
   roles?: ReadIndex<number, { role: "fan" | "passive"; why: string; reason: string }>;

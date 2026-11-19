@@ -1,4 +1,5 @@
-import type { DuctsCalcOverview, DuctsCalcResponse, CalcNote } from "@pe/agent-contracts";
+import type { DuctsCalcOverview, DuctsCalcResponse } from "@pe/fans-contract/calc-read";
+import type { CalcNote } from "@pe/ducts-contract/duct-inputs";
 import type { Immutable } from "@pe/agent-contracts";
 type Tier = "taken" | "accept" | "preview";
 type Compact = Immutable<DuctsCalcOverview["blockers"][number]>;

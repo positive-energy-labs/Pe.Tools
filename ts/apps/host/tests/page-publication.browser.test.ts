@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vite-plus/test";
-import { servePeRoute } from "@pe/agent-contracts/pe-api";
+import { servePeRoute } from "@pe/mcps/product-catalog";
 import { createHash } from "node:crypto";
 import { Context, Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";

@@ -1,6 +1,8 @@
 import { nodeOf } from "./test-snapshot.ts";
 import { expect, test } from "vite-plus/test";
-import { ductsDocumentSchema, fansDocumentSchema, stagedDucts } from "@pe/agent-contracts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { stagedDucts } from "@pe/duct-systems-contract/ducts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { editPatches } from "./calc/edits.ts";
 import { resolveCriteria } from "./calc/inputs.ts";
 import { TEST_FIRM } from "./test-inputs.ts";

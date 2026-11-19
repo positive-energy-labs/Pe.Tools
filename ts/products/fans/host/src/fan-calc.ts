@@ -3,10 +3,10 @@ import { CALC_ENGINE_VERSION, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/
 import { body } from "@pe/host/read-graph";
 import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
+import { canonicalRouteInput } from "@pe/agent-contracts";
+import { ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsInputsSchema } from "@pe/ducts-contract/duct-inputs";
 import {
-  canonicalRouteInput,
-  ductsDesign,
-  ductsInputsSchema,
   ductsRosterRequestSchema,
   ductsRosterResponseSchema,
   ductsCalcOverviewSchema,
@@ -14,8 +14,9 @@ import {
   ductsCalcResponseSchema,
   type DuctsCalcOverview,
   type DuctsCalcRequest,
-  fanClaimSchema, fanCloserSchema, fanEspValuesSchema, ductsFanCalcSchema,
-} from "@pe/agent-contracts";
+} from "@pe/fans-contract/calc-read";
+import { fanClaimSchema, fanCloserSchema, fanEspValuesSchema } from "@pe/fans-contract/fans-inputs";
+import { ductsFanCalcSchema } from "@pe/fans-contract/fan-calc-data";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
 import { LOSS_RULES } from "@pe/ducts-domain/loss-rules";
@@ -41,7 +42,7 @@ import { designLayers } from "@pe/ducts-host/design-layers";
 import { catalogs } from "@pe/host/builtin-read-handles";
 import { fingerprint, nativeRead, read } from "@pe/host/reads/evaluator";
 // Wire reads carry FanClaim, never the domain write capability (contract 3a).
-type Calc = Omit<DomainCalc, "claim"> & { claim: import("@pe/agent-contracts").FanClaim };
+type Calc = Omit<DomainCalc, "claim"> & { claim: import("@pe/fans-contract/fans-inputs").FanClaim };
 const snapshotSchema = nativeResponseSchema("ducts.snapshot.walk");
 const details = ductsCalcResponseSchema.options;
 const enginePath = z.object({

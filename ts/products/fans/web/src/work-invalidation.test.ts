@@ -2,7 +2,8 @@
 import { expect, test, vi } from "vite-plus/test";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { createElement, useSyncExternalStore } from "react";
-import { fansRouteState, workFingerprintSchema, workHandle, workKey } from "@pe/agent-contracts";
+import { fansRouteState } from "@pe/fans-contract/fans";
+import { workFingerprintSchema, workHandle, workKey } from "@pe/agent-contracts";
 import { module as fans } from "../route.ts";
 import { mountTypedRoute } from "../../../../apps/web/src/shell/typed-mount.ts";
 import { publicationSource } from "../../../../apps/web/src/host/publication-source.ts";

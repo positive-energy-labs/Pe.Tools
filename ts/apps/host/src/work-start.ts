@@ -1,6 +1,7 @@
 import { hostState } from "./host-ownership.ts";
 import { workAuthorOf } from "./control.ts";
-import { commands, hostAuthoredRefusal, refusalText } from "@pe/agent-contracts";
+import { hostAuthoredRefusal, refusalText } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 
 import { command, io, refused, StepFailure } from "./command-executor.ts";
 import { Effect } from "effect";

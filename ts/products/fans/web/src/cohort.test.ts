@@ -1,5 +1,7 @@
 import { expect, test } from "vite-plus/test";
-import { ductsDesign, fansDocumentSchema, stagedDucts, stampChanges } from "@pe/agent-contracts";
+import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { stampChanges } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { describeCloser } from "./calc/closer.ts";
 import type { CalcBlocker } from "./calc/tiers.ts";

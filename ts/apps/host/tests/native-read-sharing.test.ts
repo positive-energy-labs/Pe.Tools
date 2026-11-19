@@ -458,7 +458,8 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { ActionJournal } = await import("../src/action-journal.ts");
-  const { NATIVE_BODY_VERSION_HEADER, DUCTS_REFRESH_HEADER } = await import("@pe/agent-contracts");
+  const { NATIVE_BODY_VERSION_HEADER } = await import("@pe/agent-contracts");
+  const { DUCTS_REFRESH_HEADER } = await import("@pe/ducts-contract/reading");
   const { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } = await import("@pe/host-contracts/operation-types");
   const { human, pea } = await import("./callers.ts");
   const { sdkSessions } = await import("./native-receipt-fixture.ts");

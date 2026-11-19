@@ -11,7 +11,7 @@ export type { BridgeRequest } from "@pe/host-internal/dispatch";
 import type { BridgeStateSnapshot, ValidationIssue } from "@pe/host-contracts/contracts";
 
 import { admittedRouteEntries, addressSchema } from "@pe/agent-contracts";
-import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 import { StepFailure } from "./command-executor.ts";
 import { Context, Deferred, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";

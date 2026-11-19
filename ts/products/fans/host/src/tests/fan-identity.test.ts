@@ -5,7 +5,11 @@ import { evaluate } from "@pe/host/reads/evaluator";
 import { calcPort } from "@pe/ducts-host/tests/ducts-read.fixture";
 import { RouteWorkspace } from "@pe/runtime";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
-import { bindWork, ductsRosterResponseSchema, type ductsRosterRequestSchema } from "@pe/agent-contracts";
+import { bindWork } from "@pe/agent-contracts";
+import {
+  ductsRosterResponseSchema,
+  type ductsRosterRequestSchema,
+} from "@pe/fans-contract/calc-read";
 import type { z } from "zod";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 

@@ -7,11 +7,9 @@ import { read } from "@pe/web/route";
 import { stageField } from "@pe/web/route";
 import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { z } from "zod";
-import {
-  listSearchSchema,
-  ductsCalcEditsSchema,
-  DUCTS_SYSTEM_MAX,
-} from "@pe/agent-contracts";
+import { listSearchSchema } from "@pe/agent-contracts";
+import { ductsCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
+import { DUCTS_SYSTEM_MAX } from "@pe/duct-systems-contract/ducts-read";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import {
   route,
@@ -57,7 +55,7 @@ const args = (page: {
 export const roster = read(hostRead(reads.roster, () => fixtures().then(m => m.rosterFixtures)));
 export const network = read(hostRead(reads.network, () => fixtures().then(m => m.networkValueFixtures)), args);
 export const pricing = read(hostRead(reads.pricing, () => fixtures().then(m => m.pricingFixtures)), args);
-export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("@pe/duct-systems-contract/ducts").ductsRouteState, typeof import("@pe/agent-contracts").ductsCalcEditsSchema>;
+export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("@pe/duct-systems-contract/ducts").ductsRouteState, typeof import("@pe/ducts-contract/duct-inputs").ductsCalcEditsSchema>;
 /** What every ducts pane shares, whichever read it names: the pane's own `value` is not part of it. */
 export type DuctsReads = Omit<DuctsDrawContext, "value">;
 /** The systems pane draws the roster, so it still lists systems while pricing is read or refused. */

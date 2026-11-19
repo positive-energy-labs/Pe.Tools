@@ -1,12 +1,12 @@
 /** The rulings that remain after healing (pressure-drop ledger, 2026-10-20): an `ignore` verdict (leave an open end out, object to an inferred join, keep a default) and a unit's role, `fan` or `passive` (a ruling over the role proposed from its design flow, `unit-roles.ts`). */
 import {
   ductsDesign,
-  neutralFansWork,
   stagedValues,
-  type DuctAssumption,
   type DuctsApplyInput,
   type DuctsDesign,
-} from "@pe/agent-contracts";
+} from "@pe/duct-systems-contract/ducts";
+import { type DuctAssumption } from "@pe/ducts-contract/system-work";
+import { neutralFansWork } from "@pe/fans-contract/fans";
 
 import { elementSubject, workElementId } from "./work-subject.ts";
 import type { DuctSnapshot } from "./types.ts";

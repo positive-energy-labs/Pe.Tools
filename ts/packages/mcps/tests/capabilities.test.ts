@@ -20,7 +20,7 @@ import { peDo, peRead, peFind } from "../src/pea/capability-tools.ts";
 import { nativeFixture as workFixture } from "@pe/fans-host/tests/fans-work-fixture";
 import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { commands } from "@pe/agent-contracts";
+import { commands } from "../src/pea/product-actions.ts";
 import { fakeRuntimeHost } from "./runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";

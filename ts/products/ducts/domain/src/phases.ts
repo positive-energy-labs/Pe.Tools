@@ -9,7 +9,7 @@
  * With no working phase, or one the snapshot's `phases.order` does not list, nothing changes.
  */
 import { subjectName } from "./words.ts";
-import { workingPhaseOf, type DuctsDesign } from "@pe/agent-contracts";
+import { workingPhaseOf, type DuctsDesign } from "@pe/duct-systems-contract/ducts";
 
 import { depth, inferJoints, sidesOf, type ProximityFinding } from "./proximity.ts";
 import type { DuctSnapshot } from "./types.ts";

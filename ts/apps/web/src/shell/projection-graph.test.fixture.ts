@@ -5,7 +5,7 @@ import { field } from "../../../../packages/agent-contracts/src/route-field";
 import type {RouteDeclaration} from "../../../../packages/agent-contracts/src/route-field.ts";
 
 /** Galvanized steel's absolute roughness in feet: the duct-loss default and its material row. */
-import {GALVANIZED_STEEL_ROUGHNESS} from "@pe/agent-contracts";
+import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/ducts-contract/duct-loss-read";
 
 export const ductLossAddress = {
   path: "/duct-loss",

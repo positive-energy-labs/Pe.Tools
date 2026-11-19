@@ -1,6 +1,6 @@
 import { publicationRequest, publicationSchema } from "@pe/agent-contracts/value";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsDocumentSchema, ductSlotSourcesSchema } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema, ductSlotSourcesSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "./fans.ts";
 import { subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { z } from "zod";

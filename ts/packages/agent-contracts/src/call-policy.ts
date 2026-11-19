@@ -20,7 +20,4 @@ export const callPolicies: Readonly<Record<string, CallPolicy>> = {
   "revit.context.view-image": { capture: true },
   "revit.context.view-image.focus": { capture: true },
   "host.shell.open": { shell: true },
-  "ducts.snapshot.roster": { canonicalSession: true, reading: "roster" },
-  "ducts.snapshot.walk": { canonicalSession: true, reading: "walk" },
-  "ducts.tables": { canonicalSession: true, reading: "tables" },
 };

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ductsRosterResponseSchema, openFanCalcSchema } from "@pe/agent-contracts";
+import { ductsRosterResponseSchema } from "@pe/fans-contract/calc-read";
+import { openFanCalcSchema } from "@pe/fans-contract/fans-read";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { designCalc } from "@pe/duct-systems-web/design-calc";
 import { SheetPane } from "./route/slots/sheet/pane.tsx";

@@ -1,7 +1,7 @@
 /** Sheet presentation on the kernel's in-memory Work journal; the route owns no undo stack. */
 import { z } from "zod";
 import { decode } from "@pe/agent-contracts";
-import type { CalcEdits } from "@pe/agent-contracts";
+import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
 import type { WorkHistoryEntry } from "@pe/agent-contracts/route-kernel-bodies";
 import { CRITERION_WORDS } from "@pe/ducts-contract/criterion-words.neutral";
 

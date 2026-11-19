@@ -1,6 +1,17 @@
-import { DUCTS_CRITERIA_CELLS, slotLayer, type DuctsCriteriaCell, type DuctsInputs } from "@pe/agent-contracts";
+import {
+  DUCTS_CRITERIA_CELLS,
+  type DuctsCriteriaCell,
+  type DuctsInputs,
+} from "@pe/ducts-contract/duct-inputs";
+import { slotLayer } from "@pe/ducts-contract/system-work";
 import { cellSource, store, type CellLayer, type SheetSlot } from "@pe/agent-contracts/slots";
-import { ductsSettings, settingLayer, criterionDomain, criterionCellLabel as cellLabel, NO_SHARED_ROOT, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { settingLayer, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { criterionCellLabel as cellLabel } from "@pe/ducts-contract/settings";
+import {
+  ductsSettings,
+  criterionDomain,
+  ENGINE_DEFAULT_NO_SHARED_ROOT,
+} from "@pe/ducts-contract/settings";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 
 type DesignRead = {

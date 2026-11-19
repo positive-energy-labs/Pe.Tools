@@ -6,19 +6,19 @@ import { commands } from "./semantic-actions.ts";
 import { minted } from "./command-handle.ts";
 
 test("handle() mints a command from the generated table, with its plan when it is a sealed write", () => {
-  const apply = handle("sheet.apply");
-  expect(apply).toMatchObject({ key: "sheet.apply", effect: "ModelWrite", via: "command" });
-  expect(apply.plan.key).toBe(commands["sheet.apply"].writeBoundary.previewKey);
+  const apply = handle("rooms.partition");
+  expect(apply).toMatchObject({ key: "rooms.partition", effect: "ModelWrite", via: "command" });
+  expect(apply.plan.key).toBe(commands["rooms.partition"].writeBoundary.previewKey);
   expect(["Read", "TransactRead"]).toContain(apply.plan.effect);
-  expect(handle("sheet.apply")).toBe(apply);
+  expect(handle("rooms.partition")).toBe(apply);
   expect(apply[minted]).toBe(true);
   expect(Object.isFrozen(apply)).toBe(true);
   expectTypeOf(apply.effect).toEqualTypeOf<"ModelWrite">();
-  expectTypeOf<InputOf<typeof apply>>().toEqualTypeOf<z.input<(typeof commands)["sheet.apply"]["input"]>>();
+  expectTypeOf<InputOf<typeof apply>>().toEqualTypeOf<z.input<(typeof commands)["rooms.partition"]["input"]>>();
   // A verb declaration demands `present` exactly when the handle carries a plan.
   expectTypeOf(apply).toExtend<{ plan: object }>();
-  expectTypeOf(handle("sheet.plan")).not.toExtend<{ plan: object }>();
-  expect("plan" in handle("sheet.plan")).toBe(false);
+  expectTypeOf(handle("rooms.partition.preview")).not.toExtend<{ plan: object }>();
+  expect("plan" in handle("rooms.partition.preview")).toBe(false);
 });
 
 test("handle() mints a pe-api route key and a raw native key, and the door reads the transport from `via`", () => {

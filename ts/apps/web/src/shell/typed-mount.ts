@@ -18,9 +18,6 @@ import {
   applyPatches,
   bindWork,
   cellPatches,
-  commands,
-  hostActions,
-  commandTarget,
   canonicalRouteInput,
   workKey,
   writePreviewSchema,
@@ -37,6 +34,7 @@ import {
   type RouteFingerprint,
   type InvocationToken,
 } from "@pe/agent-contracts";
+import { commands, hostActions, commandTarget } from "@pe/mcps/product-actions";
 import { ANY_ROUTE, writeSettingTier } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";

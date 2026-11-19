@@ -1,5 +1,6 @@
 /** Ordered subject cuts. Snapshot connectivity owns omissions; tolerated connectivity owns inferences. */
-import type { DuctInferenceGrade, DuctsDesign } from "@pe/agent-contracts";
+import type { DuctInferenceGrade } from "@pe/duct-systems-contract/ducts-pricing-read";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { subjectName } from "@pe/ducts-domain/words";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import { verdictOf } from "@pe/ducts-domain/proximity";

@@ -161,6 +161,9 @@ importers:
       '@pe/duct-systems-web':
         specifier: workspace:*
         version: link:../../products/duct-systems/web
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../../products/ducts/contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../products/ducts/domain
@@ -401,9 +404,6 @@ importers:
       '@pe/fans-contract':
         specifier: workspace:*
         version: link:../../products/fans/contract
-      '@pe/repo-guards':
-        specifier: workspace:*
-        version: link:../../tests/repo-guards
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.20(tailwindcss@4.3.1)
@@ -455,15 +455,6 @@ importers:
 
   packages/agent-contracts:
     dependencies:
-      '@pe/duct-systems-contract':
-        specifier: workspace:*
-        version: link:../../products/duct-systems/contract
-      '@pe/ducts-contract':
-        specifier: workspace:*
-        version: link:../../products/ducts/contract
-      '@pe/fans-contract':
-        specifier: workspace:*
-        version: link:../../products/fans/contract
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../host-contracts
@@ -670,6 +661,9 @@ importers:
       '@pe/browser':
         specifier: workspace:*
         version: link:../browser
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../../products/duct-systems/contract
       '@pe/ducts-contract':
         specifier: workspace:*
         version: link:../../products/ducts/contract
@@ -744,9 +738,6 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@pe/fans-domain':
-        specifier: workspace:*
-        version: link:../../products/fans/domain
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -811,6 +802,9 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../ducts/domain
@@ -922,9 +916,6 @@ importers:
       '@pe/fans-domain':
         specifier: workspace:*
         version: link:../../fans/domain
-      '@pe/fans-web':
-        specifier: workspace:*
-        version: link:../../fans/web
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts
@@ -964,9 +955,6 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
-      '@pe/fans-contract':
-        specifier: workspace:*
-        version: link:../../fans/contract
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts
@@ -989,6 +977,12 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../../duct-systems/contract
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../contract
       '@pe/fans-contract':
         specifier: workspace:*
         version: link:../../fans/contract
@@ -996,15 +990,6 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/host-contracts
     devDependencies:
-      '@pe/ducts-contract':
-        specifier: workspace:*
-        version: link:../contract
-      '@pe/ducts-web':
-        specifier: workspace:*
-        version: link:../web
-      '@pe/fans-domain':
-        specifier: workspace:*
-        version: link:../../fans/domain
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -1023,9 +1008,18 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../../duct-systems/contract
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../domain
+      '@pe/fans-contract':
+        specifier: workspace:*
+        version: link:../../fans/contract
       '@pe/host':
         specifier: workspace:*
         version: link:../../../apps/host
@@ -1042,15 +1036,6 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@pe/ducts-web':
-        specifier: workspace:*
-        version: link:../web
-      '@pe/fans-domain':
-        specifier: workspace:*
-        version: link:../../fans/domain
-      '@pe/fans-host':
-        specifier: workspace:*
-        version: link:../../fans/host
       '@pe/mcps':
         specifier: workspace:*
         version: link:../../../packages/mcps
@@ -1136,9 +1121,6 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
-      '@pe/duct-systems-contract':
-        specifier: workspace:*
-        version: link:../../duct-systems/contract
       '@pe/ducts-contract':
         specifier: workspace:*
         version: link:../../ducts/contract
@@ -1164,6 +1146,12 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../../duct-systems/contract
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../../ducts/contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../ducts/domain
@@ -1195,6 +1183,12 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../../packages/agent-contracts
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../../duct-systems/contract
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../../ducts/contract
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../ducts/domain
@@ -1427,6 +1421,16 @@ importers:
         version: 4.3.6
 
   tests/journey-fixtures:
+    dependencies:
+      '@pe/duct-systems-contract':
+        specifier: workspace:*
+        version: link:../../products/duct-systems/contract
+      '@pe/ducts-contract':
+        specifier: workspace:*
+        version: link:../../products/ducts/contract
+      '@pe/fans-contract':
+        specifier: workspace:*
+        version: link:../../products/fans/contract
     devDependencies:
       '@pe/agent-contracts':
         specifier: workspace:*
@@ -1468,6 +1472,12 @@ importers:
         specifier: ^19.2.0
         version: 19.2.7
     devDependencies:
+      '@pe/ducts-domain':
+        specifier: workspace:*
+        version: link:../../products/ducts/domain
+      '@pe/fans-contract':
+        specifier: workspace:*
+        version: link:../../products/fans/contract
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts

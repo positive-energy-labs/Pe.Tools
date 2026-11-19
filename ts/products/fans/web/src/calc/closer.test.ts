@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { fittingPricingSchema, type FittingPricing } from "@pe/agent-contracts";
+import { fittingPricingSchema, type FittingPricing } from "@pe/fans-contract/calc-read";
 import { describeCloser, type CloserContext } from "./closer.ts";
 import { detailOf, type CalcBlocker } from "./tiers.ts";
 

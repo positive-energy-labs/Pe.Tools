@@ -1,9 +1,8 @@
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "./product-catalog.ts";
 import {
   discoveryMachine,
   capabilityPrincipals,
-  commands,
   capabilityRecentSchema,
   type Machine,
   type Capability,
@@ -13,6 +12,7 @@ import {
   type AdmittedView,
   type PackageProjection,
 } from "@pe/agent-contracts";
+import { commands } from "./product-actions.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import { z } from "zod";

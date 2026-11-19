@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./semantic-actions": "./src/semantic-actions.ts",
     "./contract": "./src/contract.ts",
     "./ducts-pricing-read": "./src/ducts-pricing-read.ts",
     "./ducts-read": "./src/ducts-read.ts",

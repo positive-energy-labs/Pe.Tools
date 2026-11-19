@@ -1,6 +1,7 @@
 import { appliedTableOf, tableOf, type Priced } from "@pe/ducts-web/priced";
 /** proto: copied from losses-view.tsx (round 3, E2 Rules section). */
-import { cellPatches, type DuctsDesign, type RouteStatePatch } from "@pe/agent-contracts";
+import { cellPatches, type RouteStatePatch } from "@pe/agent-contracts";
+import { type DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { LOSS_RULES, ruleByKey } from "@pe/ducts-domain/loss-rules";
 import { Button } from "@pe/kit/lang/button";
 import { cellFromDraft, StateCell } from "@pe/kit/lang/cell";

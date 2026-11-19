@@ -3,7 +3,7 @@ import { hostRead } from "@pe/web/host-read";
 import { contract } from "@pe/agent-contracts/handle";
 import { scrollBody } from "@pe/web/route/body";
 import type { RouteStateSpec } from "@pe/agent-contracts/route-state";
-import { ductsCalcEditsSchema } from "@pe/agent-contracts";
+import { ductsCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import { z } from "zod";
 import { editMetaSchema, describeInputHistory } from "./calc/input-history.neutral.ts";

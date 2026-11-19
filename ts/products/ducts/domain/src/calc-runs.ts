@@ -4,7 +4,8 @@
  * here sums across fans or names an owner. A reader that wants one run for an element or a
  * terminal takes the first in calc order, which only selects which path lights up.
  */
-import type { DuctsPriceRow, FanClaim } from "@pe/agent-contracts";
+import type { DuctsPriceRow } from "@pe/duct-systems-contract/ducts-read";
+import type { FanClaim } from "@pe/fans-contract/fans-inputs";
 import type { Leg, Calc as FanCalc } from "@pe/fans-contract/fan-calc";
 
 /** A fan calc as it crosses the wire: the domain `Sheet` with the wire claim, never the mint's brand. */

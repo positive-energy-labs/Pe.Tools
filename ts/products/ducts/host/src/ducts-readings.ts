@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
+import { readingKey } from "@pe/agent-contracts";
 import {
   ductsReadingSchema,
-  readingKey,
   type DuctsReadingRequest,
   type DuctsReadingEnvelope,
-} from "@pe/agent-contracts";
+} from "@pe/ducts-contract/reading";
 import { BridgeError, type HostBridgeEvent, type RevitBridge } from "@pe/host/bridge";
 import { InvalidRead } from "@pe/host/native-reads";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";

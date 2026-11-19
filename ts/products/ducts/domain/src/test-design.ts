@@ -1,10 +1,6 @@
 /** Test support: one Work literal cut into the ducts and fans Works by segment, then joined (`ductsDesign`). */
-import {
-  ductsDocumentSchema,
-  fansDocumentSchema,
-  type DuctsRouteDocument,
-  type FansRouteDocument,
-} from "@pe/agent-contracts";
+import { ductsDocumentSchema, type DuctsRouteDocument } from "@pe/ducts-contract/system-work";
+import { fansDocumentSchema, type FansRouteDocument } from "@pe/fans-contract/fans";
 
 const fanSegment = (key: string) => key !== "writeIntent" && key in fansDocumentSchema.shape;
 

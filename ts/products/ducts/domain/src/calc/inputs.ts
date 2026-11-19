@@ -1,8 +1,14 @@
 import { elementSubject } from "../work-subject.ts";
-import { criteriaCellOf, resolveValue, type DuctsCriteriaCell, type ValueCell, type ValueLayers, type ValueSource } from "@pe/agent-contracts";
+import { criteriaCellOf, type DuctsCriteriaCell } from "@pe/ducts-contract/duct-inputs";
+import {
+  resolveValue,
+  type ValueCell,
+  type ValueLayers,
+  type ValueSource,
+} from "@pe/agent-contracts";
 /** Duct-specific acquisition feeds the shared Work resolver; observed parameters and catalogs belong to the model layer. */
+import type { DuctUnitKind } from "@pe/host-contracts/generated";
 import type {
-  DuctUnitKind,
   DuctsCriteriaLayer,
   DuctsCriteriaValues,
   DuctsFirm,
@@ -10,7 +16,7 @@ import type {
   CalcEdits,
   Resolved,
   Stated,
-} from "@pe/agent-contracts";
+} from "@pe/ducts-contract/duct-inputs";
 import type { Author } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { catalogLinkKey, catalogLoss, type Catalogs } from "../catalog.ts";

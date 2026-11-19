@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { generateCommandTable, commandTableSource } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
-import { hostActions, commandTarget } from "../src/semantic-actions.ts";
+import { hostActions, commandTarget } from "../src/pea/product-actions.ts";
 
 test("native effect changes flow through generation into browser metadata", () => {
   const source = [...hostOpCatalog, ...tsOnlyOperationCatalog];
@@ -50,7 +50,7 @@ test("a local effect comes from its definition rather than the command name", ()
 });
 
 test("tracked browser table is fresh and contains data alone", () => {
-  const generated = readFileSync(new URL("../src/generated/command-axes.generated.ts", import.meta.url), "utf8");
+  const generated = readFileSync(new URL("../../agent-contracts/src/generated/command-axes.generated.ts", import.meta.url), "utf8");
   expect(generated.replace(/\r\n/g, "\n")).toBe(commandTableSource());
   expect(generated).not.toMatch(/^import\s|Zod|zod|safeParse/m);
 });

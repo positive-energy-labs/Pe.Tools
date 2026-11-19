@@ -1,4 +1,4 @@
-import { fansReadArgs, fansCalcData } from "@pe/agent-contracts";
+import { fansReadArgs, fansCalcData } from "./fans-read.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import { CALC_READ } from "./fan-calc.ts";
 

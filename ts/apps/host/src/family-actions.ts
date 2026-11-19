@@ -6,7 +6,6 @@ import { resolve, win32 } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { NodeFileSystem } from "@effect/platform-node";
 import {
-  commands,
   sameCaller,
   familyActions,
   familyMemberPath,
@@ -50,12 +49,12 @@ import {
   familyCatalogProblem,
   familyCatalogRequest,
   stagedFilter,
-  tools,
   parseContributionKey,
   type FamiliesRouteDocument,
   type FamilyDraft,
   type WorkPath,
 } from "@pe/agent-contracts";
+import { commands, tools } from "@pe/mcps/product-actions";
 import type {
   PodMemberSaveRequest,
   PodMemberWriteRequest,

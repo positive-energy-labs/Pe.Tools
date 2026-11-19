@@ -1,4 +1,4 @@
-import type { DuctsPricingData } from "@pe/agent-contracts";
+import type { DuctsPricingData } from "@pe/duct-systems-contract/ducts-read";
 
 /**
  * What the /ducts panes read: the survey (flows, roles, findings, staged Work values) and every

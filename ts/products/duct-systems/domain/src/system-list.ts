@@ -11,7 +11,7 @@ import { markOf } from "@pe/ducts-domain/terminal-flows";
  * path's loss, never a fan pressure), and only when every one of its paths is whole: one unknown path
  * makes the system unpriced, never priced at its worst known run. `fanless` when no calc reaches it.
  */
-export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null): import("@pe/agent-contracts").DuctsPricingData["analysis"]["systems"] {
+export function systemList(snapshot: DuctSnapshot, calcs: readonly Calc[] | null): import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["systems"] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));
   const systems = systemsOf(snapshot);

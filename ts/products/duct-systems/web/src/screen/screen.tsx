@@ -12,13 +12,10 @@ import { ductElements } from "@pe/ducts-web/identity";
 import { subscribe as knobsChanged } from "@pe/web/knobs/knobs";
 import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
 import { useAdmittedSubject } from "@pe/web/shell/subject";
-import {
-  DUCT_UNIT_KINDS,
-  neutralFansWork,
-  stagedValues,
-  subjectCode,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+import { subjectCode, type RouteStatePatch } from "@pe/agent-contracts";
+import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
+import { neutralFansWork } from "@pe/fans-contract/fans";
+import { stagedValues } from "@pe/duct-systems-contract/ducts";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
 import { StateCell } from "@pe/kit/lang/cell";
@@ -107,7 +104,7 @@ function useNetworkData(ctx: NetworkContext) {
   const networkRead=ctx.read(networkSource);
   // The existing drawing views accept mutable arrays; decoded Values stay immutable.
   const snapshot = ("value" in networkRead ? networkRead.value : null) as
-    | import("@pe/agent-contracts").DuctsNetworkData
+    | import("@pe/duct-systems-contract/ducts-read").DuctsNetworkData
     | null;
   const pricingData = useValue(pricing);
   const priced = pricing.state === "ready" ? pricingData : undefined;

@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import type { DuctFinding } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import { survey } from "@pe/ducts-domain/survey";
 import { syntheticSnapshot } from "@pe/ducts-domain/test-fixture";

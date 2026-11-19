@@ -1,7 +1,10 @@
 /** What the Work has edit for a write, counted from the document alone. */
 import { workElementId } from "./work-subject.ts";
-import { decode, fanBindingRows } from "@pe/agent-contracts";
-import type { DuctsApplyInput, DuctsDesign, WorkPath, FansDocument } from "@pe/agent-contracts";
+import { decode } from "@pe/agent-contracts";
+import { fanBindingRows } from "@pe/fans-contract/fans-inputs";
+import type { DuctsApplyInput, DuctsDesign } from "@pe/duct-systems-contract/ducts";
+import type { WorkPath } from "@pe/agent-contracts";
+import type { FansDocument } from "@pe/fans-contract/fans";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { pendingRulings } from "./rulings.ts";

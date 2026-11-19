@@ -51,8 +51,9 @@ import {
   type WorkInputRunner,
 } from "./work-inputs.ts";
 
-import { bindWork, readingKey, type DuctsReadingEnvelope } from "@pe/agent-contracts";
-import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { bindWork, readingKey } from "@pe/agent-contracts";
+import type { DuctsReadingEnvelope } from "./product-contracts.ts";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import { createRouteRegistrations } from "@pe/mcps";

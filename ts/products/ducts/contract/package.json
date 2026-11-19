@@ -4,7 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./semantic-actions": "./src/semantic-actions.ts",
     "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
+    "./reading": "./src/reading.ts",
+    "./system-work": "./src/system-work.ts",
+    "./settings": "./src/settings.ts",
     "./pea-guide": "./src/pea-guide.ts",
     "./criterion-words.neutral": "./src/criterion-words.neutral.ts",
     "./duct-catalog": "./src/duct-catalog.ts",
@@ -21,7 +25,6 @@
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6"
   },

@@ -10,7 +10,7 @@ import { useContext, useMemo } from "react";
 
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { token } from "@pe/kit/lib/token";
-import type { DuctFinding } from "@pe/agent-contracts";
+import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";
 import type { Project, Size } from "@pe/web/scene/projection";

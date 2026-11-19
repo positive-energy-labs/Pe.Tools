@@ -1,4 +1,5 @@
-import type { DuctsDesign, DuctSystemColours } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
+import type { DuctSystemColours } from "@pe/ducts-contract/system-work";
 
 // UNPROVEN: sampled plan convention, awaiting kaitpw's verdict after use. Editable in Settings.
 // Pixel census: .artifacts/runs/ducts-multisystem-20261024/b1/colours/sample-and-census.json.

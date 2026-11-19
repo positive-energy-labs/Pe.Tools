@@ -3,11 +3,10 @@ import { put as putBlob } from "./action-blobs.ts";
 import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
 import { runPodScript, scriptNeedsDocument } from "./operation-script.ts";
-import {
-  NATIVE_BODY_VERSION_HEADER,
-  DUCTS_REFRESH_HEADER,
-} from "@pe/agent-contracts";
-import { commandTool, receiptsForWork } from "@pe/agent-contracts";
+import { NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
+import { readingBasisHeaders } from "./product-contracts.ts";
+import { receiptsForWork } from "@pe/agent-contracts";
+import { commandTool } from "@pe/mcps/product-actions";
 import type { Caller } from "@pe/agent-contracts";
 import { ADMISSION_RESEND_HEADER, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import {
@@ -17,7 +16,7 @@ import {
   actionStatusSchema,
 } from "@pe/agent-contracts";
 
-import { peRoutes, linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { peRoutes, linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
@@ -284,7 +283,7 @@ function callRoutes(
 
       if (entry.reading && composition?.retainedRead) {
         const response = yield* composition.retainedRead({ key, input: request ?? {}, scope },
-          { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
+          readingBasisHeaders(req.headers));
         recordOperation({ key, tsOnly: false, startedAt: Date.now(), origin, originClass, requestId }, { ok: true });
         return response;
       }
@@ -370,7 +369,7 @@ function callRoutes(
       if (entry.reading) {
         const response = yield* retainedDuctsRead(ductsReadings(bridge), {
           key, input: request ?? {}, scope: { ...scope, bridgeSessionId: bridgeSessionId!, openDocumentId: openDocumentId ?? undefined },
-        }, { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] }, {
+        }, readingBasisHeaders(req.headers), {
           basis: composition?.retainedBasis,
           document: (ref) => Effect.suspend(() => {
             const document = resolvedSession?.state?.openDocuments.find((doc) => doc.openId === ref.openId);
@@ -1419,7 +1418,7 @@ export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: 
     // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
     if (linkedCatalog().entries.get(body.key)?.call?.reading) {
       if (retained) return yield* retained({ key: body.key, input: body.request ?? {}, scope: identity.scope },
-        { version: req.headers[NATIVE_BODY_VERSION_HEADER], refresh: req.headers[DUCTS_REFRESH_HEADER] });
+        readingBasisHeaders(req.headers));
       const missing = inputs.check({ kind: "input", input: "document" });
       if (missing) return yield* missing;
     }

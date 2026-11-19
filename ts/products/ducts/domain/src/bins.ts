@@ -12,7 +12,7 @@
  *   terminals are priceable but never required (kaitpw 2026-10-20).
  * Pure on `{ kind, grade }`, so it classifies a survey finding and a snapshot issue alike.
  */
-import type { DuctInferenceGrade } from "@pe/agent-contracts";
+import type { DuctInferenceGrade } from "@pe/duct-systems-contract/ducts-pricing-read";
 
 export type DuctBin = "diagnostic" | "blocking";
 

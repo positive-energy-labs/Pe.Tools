@@ -67,16 +67,13 @@ import {
   type Walk,
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
-import { FAN_INPUTS, criteriaCellOf, resolveValue, type DuctsInputs, type Resolved } from "@pe/agent-contracts";
+import { FAN_INPUTS } from "@pe/fans-contract/fans-inputs";
+import { criteriaCellOf, type DuctsInputs, type Resolved } from "@pe/ducts-contract/duct-inputs";
+import { resolveValue } from "@pe/agent-contracts";
 import { coverageOf } from "@pe/ducts-domain/calc/coverage";
 import { observed, PROPOSED_KEY, sourced, terminalCfmOf } from "@pe/ducts-domain/calc/inputs";
 import { sectionOf } from "@pe/ducts-domain/loss-physics";
-import type {
-  CoverageGap,
-  Encounter,
-  FanIssue,
-  LegEvidence,
-} from "@pe/agent-contracts";
+import type { CoverageGap, Encounter, FanIssue, LegEvidence } from "@pe/fans-contract/fans-inputs";
 import {
   backflowId,
   claimOf,

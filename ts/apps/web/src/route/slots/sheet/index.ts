@@ -1,5 +1,5 @@
 import type { HandleCellProps } from "@pe/kit/lang/cell";
-import { settingOwners } from "@pe/agent-contracts/setting-owners";
+import { settingOwners } from "../../setting-owners.ts";
 import type { Immutable } from "@pe/agent-contracts";
 import { SETTING_TIERS, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { type Domain, type SheetSlot, type StateCell } from "@pe/agent-contracts/slots";

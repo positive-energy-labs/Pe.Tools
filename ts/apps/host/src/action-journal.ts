@@ -68,7 +68,6 @@ import {
   type WorkKey,
   type RouteStatePatch,
   type RouteStateWriteResult,
-  commands,
   editableCells,
   type Command,
   workKey,
@@ -94,6 +93,7 @@ import {
   type ReceiptReader,
   type ReceiptStamp,
 } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 import {
   live,
   originOf,

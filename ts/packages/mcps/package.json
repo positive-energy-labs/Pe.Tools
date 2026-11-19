@@ -17,6 +17,8 @@
   ],
   "type": "module",
   "exports": {
+    "./product-catalog": "./src/pea/product-catalog.ts",
+    "./product-actions": "./src/pea/product-actions.ts",
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
@@ -34,6 +36,8 @@
     "access": "public"
   },
   "scripts": {
+    "codegen": "node --import jiti/register scripts/command-axes.ts",
+    "codegen:check": "node --import jiti/register scripts/command-axes.ts --check",
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
@@ -41,6 +45,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
+    "@pe/duct-systems-contract": "workspace:*",
     "@llamaindex/liteparse": "catalog:",
     "@llamaindex/llama-cloud": "^2.10.0",
     "@modelcontextprotocol/client": "catalog:",

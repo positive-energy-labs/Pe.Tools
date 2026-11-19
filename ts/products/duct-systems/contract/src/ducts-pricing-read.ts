@@ -1,6 +1,6 @@
 import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 import { z } from "zod";
-import { ductAssumptionSchema } from "./ducts.ts";
+import { ductAssumptionSchema } from "@pe/ducts-contract/system-work";
 import { ductsCriteriaLayerSchema, DUCT_UNIT_KINDS } from "@pe/ducts-contract/duct-inputs";
 /**
  * How far an inferred join stands from the evidence (pressure-drop ledger, 2026-10-19: inference

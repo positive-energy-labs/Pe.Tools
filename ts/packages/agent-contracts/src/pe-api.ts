@@ -1,5 +1,4 @@
 import { callPolicies, type CallPolicy } from "./call-policy.ts";
-import { CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/fans-contract/fan-calc";
 import { commandCatalogAxes, commandTable, type CommandKey } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
@@ -25,26 +24,13 @@ const threadHistoryInput = z.strictObject({
   offset: z.number().int().nonnegative().default(0),
   limit: z.number().int().min(1).max(100).default(50),
 });
-/** What Pea is shown for reads.value: the named duct reads carry their real args; any other registered read keeps open args. */
-const namedRead = <S extends z.ZodType>(read: string, args: S) =>
-  schemas.valueReadRequest.extend({ read: z.literal(read), args });
-const namedReadKeys = ["fans.roster", CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ];
-const valueReadInput = z.union([
-  namedRead("fans.roster", schemas.ductsRosterRequestSchema),
-  namedRead(CALC_READ, schemas.fansReadArgs),
-  namedRead(CALC_DETAIL_READ, schemas.ductsCalcRequestSchema),
-  namedRead(CALC_BREAKDOWN_READ, schemas.ductsCalcRequestSchema),
-  schemas.valueReadRequest.extend({ read: z.string().regex(new RegExp(
-    `^(?!(?:${namedReadKeys.map(key => key.replaceAll(".", "\\.")).join("|")})$)`,
-  )) }),
-]);
 const routeCatalog: Record<
   string,
   {
     description: string;
   }
 > = {
-  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data. Use fans.roster with args {target, mark} to find a fan port by its mark, fans.calc-detail for a pressure sheet, and fans.calc for the Fans worksheet." },
+  "reads.value": { description: "Publish a registered host Value. Supply read, args, subscription (any unique string) and generation (0 for a first read); the result is in value.data." },
   "blobs.put": { description: "Retain uploaded bytes before command admission. Send fileName and base64, then use the returned immutable BlobRef as command input." },
   "threads.history": {
     description:
@@ -53,6 +39,8 @@ const routeCatalog: Record<
 };
 import {
   definePeApi,
+  definePeRouteApi,
+  type route,
   type PeApi,
   type PeApiSchemas,
   type PeRouteTable,
@@ -76,72 +64,130 @@ const routeSchemas: RouteSchemas = {
 type Routes = PeRouteTable<typeof routeSchemas>;
 const api: PeApi<Routes> = definePeApi(routeSchemas);
 export const httpRoutes: Routes = api.peRoutes;
-const routeAxes = hostRouteAxes([
-  ...hostOpCatalog
-    .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
-    .map(nativeEntry),
-  ...tsOnlyOperationCatalog.map(nativeEntry),
-  ...Object.entries(hostActions).map(([key, action]) => commandAxes(key, action as Command)),
-]);
-export const peRoutes: {[K in keyof Routes]: Routes[K] & {catalog: CatalogRow}} = {
-  ...(Object.fromEntries(
-    Object.entries(httpRoutes).map(([key, row]) => [
-      key,
-      {
-        ...row,
-        catalog: {
-          ...routeAxes[key as keyof Routes],
-          ...(routeCatalog[key]
-            ? {
-                discovery: {
-                  key: `route:${key}`,
-                  title: key,
-                  description: routeCatalog[key].description,
-                  needs: "nothing",
-                  effect: "query",
-                  principal: ["human", "pea"],
-                  input: z.toJSONSchema(key === "threads.history" ? threadHistoryInput : key === "reads.value" ? valueReadInput : row.body),
-                },
-              }
-            : {}),
-        } satisfies CatalogRow,
-      },
-    ]),
-  ) as unknown as { [K in keyof Routes]: Routes[K] & { catalog: CatalogRow } }),
-  ...Object.fromEntries(
-    tsOnlyOperationCatalog.map((op) => [
-      `op:${op.key}`,
-      {
-        kind: "operation",
-        catalog: nativeEntry(op),
-      },
-    ]),
-  ),
-  ...Object.fromEntries(
-    Object.entries(hostActions).map(([key, action]) => [
-      `command:${key}`,
-      {
-        kind: "command",
-        input: action.input,
-        catalog: {
-          ...commandAxes(key, action as Command),
-          discovery: {
-            key: `op:${key}`,
-            title: key,
-            description: action.says,
-            needs: action.needs,
-            input: z.toJSONSchema(action.input),
-            effect: action.effect,
-            principal: capabilityPrincipals(
-              action.effect === "command",
-              (action as Command).principal,
-            ),
-          },
-        } satisfies CatalogRow,
-      },
-    ]),
-  ),
+export type PeCatalog<T extends Record<string, ReturnType<typeof route>>> = PeApi<T> & {
+  peRoutes: { [K in keyof T]: T[K] & { catalog: CatalogRow } };
+  linkedCatalog(): LinkedCatalog<CatalogRow>;
 };
+
+export function createPeCatalog<const Extras extends Record<string, ReturnType<typeof route>> = Record<never, never>>(
+  actions: Readonly<Record<string, Command>>,
+  reads?: { inputs: Readonly<Record<string, z.ZodType>>; help: string },
+  extensions?: {
+    routes: Extras;
+    axes: { [K in keyof Extras]: Declaration };
+    resourceReads: readonly string[];
+    callPolicies?: Readonly<Record<string, CallPolicy>>;
+  },
+): PeCatalog<Routes & Extras> {
+  const routes = { ...httpRoutes, ...extensions?.routes } as Routes & Extras;
+  const transport = definePeRouteApi(routes);
+  const opEntry = (op: HostOperationDefinition) =>
+    nativeEntry(op, extensions?.callPolicies?.[op.key] ?? callPolicies[op.key]);
+  const named = Object.entries(reads?.inputs ?? {});
+  const valueReadInput = named.length
+    ? z.union([
+        ...named.map(([read, args]) => schemas.valueReadRequest.extend({ read: z.literal(read), args })),
+        schemas.valueReadRequest.extend({
+          read: z.string().regex(new RegExp(
+            '^(?!(?:' + named.map(([key]) => key.replaceAll(".", "\\.")).join("|") + ')$)',
+          )),
+        }),
+      ])
+    : schemas.valueReadRequest;
+  const routeAxes = hostRouteAxes([
+    ...hostOpCatalog
+      .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
+      .map(opEntry),
+    ...tsOnlyOperationCatalog.map(opEntry),
+    ...Object.entries(actions).map(([key, action]) => commandAxes(key, action)),
+  ], extensions?.resourceReads ?? []);
+  const peRoutes: {[K in keyof typeof routes]: (typeof routes)[K] & {catalog: CatalogRow}} = {
+    ...(Object.fromEntries(
+      Object.entries(routes).map(([key, row]) => [
+        key,
+        {
+          ...row,
+          catalog: {
+            ...routeAxes[key as keyof Routes],
+            ...extensions?.axes[key],
+            key: `route:${key}`,
+            ...(routeCatalog[key]
+              ? {
+                  discovery: {
+                    key: `route:${key}`,
+                    title: key,
+                    description: key === "reads.value" && reads?.help
+                      ? routeCatalog[key].description + " " + reads.help
+                      : routeCatalog[key].description,
+                    needs: "nothing",
+                    effect: "query",
+                    principal: ["human", "pea"],
+                    input: z.toJSONSchema(key === "threads.history" ? threadHistoryInput : key === "reads.value" ? valueReadInput : row.body),
+                  },
+                }
+              : {}),
+          } satisfies CatalogRow,
+        },
+      ]),
+    ) as unknown as { [K in keyof typeof routes]: (typeof routes)[K] & { catalog: CatalogRow } }),
+    ...Object.fromEntries(
+      tsOnlyOperationCatalog.map((op) => [
+        `op:${op.key}`,
+        {
+          kind: "operation",
+          catalog: opEntry(op),
+        },
+      ]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(actions).map(([key, action]) => [
+        `command:${key}`,
+        {
+          kind: "command",
+          input: action.input,
+          catalog: {
+            ...commandAxes(key, action),
+            discovery: {
+              key: `op:${key}`,
+              title: key,
+              description: action.says,
+              needs: action.needs,
+              input: z.toJSONSchema(action.input),
+              effect: action.effect,
+              principal: capabilityPrincipals(
+                action.effect === "command",
+                action.principal,
+              ),
+            },
+          } satisfies CatalogRow,
+        },
+      ]),
+    ),
+  };
+
+  let linked: LinkedCatalog<CatalogRow> | undefined;
+  /**
+   * The linked catalog of native ops and Pe routes, linked once on first use (host boot). Not linked at
+   * import, so a module that only imports this file never sees a catalog refusal.
+   */
+  function linkedCatalog(): LinkedCatalog<CatalogRow> {
+    return (linked ??= requireLinkedCatalog(
+      link<CatalogRow>([
+        ...hostOpCatalog
+          .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
+          .map(opEntry),
+        ...Object.values(peRoutes).flatMap((row) =>
+          "catalog" in row ? [row.catalog as CatalogRow] : [],
+        ),
+      ]),
+    ));
+  }
+  return { ...transport, peRoutes, linkedCatalog };
+}
+
+const sharedCatalog: PeCatalog<Routes> = createPeCatalog(hostActions);
+export const peRoutes: PeCatalog<Routes>["peRoutes"] = sharedCatalog.peRoutes;
+export const linkedCatalog: PeCatalog<Routes>["linkedCatalog"] = sharedCatalog.linkedCatalog;
 
 export interface CatalogRow extends CatalogLink {
   call?: CallPolicy;
@@ -156,10 +202,10 @@ export interface CatalogRow extends CatalogLink {
     finds?: readonly string[];
   };
 }
-export function nativeEntry(op: HostOperationDefinition): CatalogRow {
+function nativeEntry(op: HostOperationDefinition, call: CallPolicy | undefined): CatalogRow {
   return {
     key: op.key,
-    call: callPolicies[op.key],
+    call,
     ...nativeAxes(op),
     // A native write leaf with a `<key>.plan` (Read) or `<key>.preview` (rehearsal) sibling is bound to it,
     // so the linker checks its axis (ADR 0030 rule 4).
@@ -174,23 +220,6 @@ function commandAxes(key: string, action: Command): CatalogLink {
   const axes = commandCatalogAxes[key as keyof typeof commandCatalogAxes];
   if (!axes) throw Error(`Command ${key} has no declared catalog axes`);
   return commandLink(key, action, axes);
-}
-let linked: LinkedCatalog<CatalogRow> | undefined;
-/**
- * The linked catalog of native ops and Pe routes, linked once on first use (host boot). Not linked at
- * import, so a module that only imports this file never sees a catalog refusal.
- */
-export function linkedCatalog(): LinkedCatalog<CatalogRow> {
-  return (linked ??= requireLinkedCatalog(
-    link<CatalogRow>([
-      ...hostOpCatalog
-        .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
-        .map(nativeEntry),
-      ...Object.values(peRoutes).flatMap((row) =>
-        "catalog" in row ? [row.catalog as CatalogRow] : [],
-      ),
-    ]),
-  ));
 }
 export const isPeRouteId: PeApi<Routes>["isPeRouteId"] = api.isPeRouteId;
 export const peRouteUrl: PeApi<Routes>["peRouteUrl"] = api.peRouteUrl;
@@ -251,7 +280,10 @@ function axes(
  * means a Revit model may change. Dynamic doors declare the union of their possible children;
  * a particular request still needs the selected child's admission and cost assessment.
  */
-function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, CatalogLink> {
+function hostRouteAxes(
+  leaves: readonly CatalogLink[],
+  resourceReads: readonly string[],
+): Record<PeRouteId, CatalogLink> {
   const reads = [
     ...new Set(
       [...hostOpCatalog, ...tsOnlyOperationCatalog]
@@ -267,7 +299,6 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
     "families.readings": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "takeoffs.observations": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "captures.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
-    "ducts.catalogs": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "notices.presence": axes("Session", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "features.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "places.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
@@ -384,9 +415,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
       "Expensive",
       [
         "route:capabilities.find",
-        "ducts.snapshot.roster",
-        "ducts.snapshot.walk",
-        "ducts.tables",
+        ...resourceReads,
         "revit.catalog.field-options",
         "families.capture",
         "family.capture",
@@ -402,9 +431,7 @@ function hostRouteAxes(leaves: readonly CatalogLink[]): Record<PeRouteId, Catalo
       "Expensive",
       [
         "route:capabilities.find",
-        "ducts.snapshot.roster",
-        "ducts.snapshot.walk",
-        "ducts.tables",
+        ...resourceReads,
         "revit.catalog.field-options",
         "families.capture",
         "family.capture",

@@ -74,7 +74,7 @@ interface DuctsPictureProps {
    * withdraws action authority, but does not invalidate current native geometry. */
   source: { version: string; current: boolean };
   priced: Priced | null;
-  analysis: import("@pe/agent-contracts").DuctsPricingData["analysis"] | null;
+  analysis: import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"] | null;
   subject: Run | null;
   work: LossesWork;
 }

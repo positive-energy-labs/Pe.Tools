@@ -7,7 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Cause, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
-import { address, bindWork, workKey, fansRouteState } from "@pe/agent-contracts";
+import { address, bindWork, workKey } from "@pe/agent-contracts";
+import { fansRouteState } from "@pe/fans-contract/fans";
 import {
   RouteWorkspace,
   type RouteDocumentStore,
@@ -650,7 +651,7 @@ test("command Work reads carry context through binding and revalidation", async 
   const { dir, writer } = await bundle();
   const commandWorkKey = { ...key, route: "duct-systems" };
   const { ActionJournal } = await import("../src/action-journal.ts");
-  const { commands, tools } = await import("@pe/agent-contracts");
+  const { commands, tools } = await import("@pe/mcps/product-actions");
   const { z } = await import("zod");
   const { crossingOf } = await import("./callers.ts");
   const workspace = new RouteWorkspace({

@@ -91,7 +91,7 @@ type Principal = "read" | "caller" | "human" | "human-or-pea" | "human-or-page";
 export type PeRoutePermission = Principal | "admin" | "grant" | "operation" | "pair";
 type Owner = "tasks" | "pe" | "threads" | "providers" | "share" | "pages" | "gateway" | "plugins";
 
-function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
+export function route<const P extends string, B extends z.ZodType, O extends z.ZodType>(
   method: "GET" | "POST" | "PUT" | "DELETE",
   path: P,
   body: B,
@@ -161,14 +161,6 @@ export type PeApiSchemas = Record<
   | "workStepRequestSchema"
   | "valueReadRequest"
   | "valueReadResponse"
-  | "fansReadRequest"
-  | "fansReadResponse"
-  | "ductsReadRequest"
-  | "ductsReadResponse"
-  | "ductsCalcRequestSchema"
-  | "ductsCalcResponseSchema"
-  | "ductsRosterRequestSchema"
-  | "ductsRosterResponseSchema"
   | "routeViewSchema"
   | "routeViewOpenSchema"
   | "routeViewSetSchema"
@@ -188,7 +180,6 @@ export type PeApiSchemas = Record<
   | "takeoffCaptureSchema"
   | "captureListSchema"
   | "pageTargetReadingSchema"
-  | "ductCatalogReadingSchema"
   | "parsedDocViewSchema",
   z.ZodType
 >;
@@ -307,15 +298,6 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "/captures",
       none,
       schemas.captureListSchema as S["captureListSchema"],
-      "read",
-      "gateway",
-      "read",
-    ),
-    "ducts.catalogs": route(
-      "GET",
-      "/pe/ducts/catalogs",
-      none,
-      schemas.ductCatalogReadingSchema as S["ductCatalogReadingSchema"],
       "read",
       "gateway",
       "read",
@@ -1035,8 +1017,11 @@ export interface PeApi<T extends Record<string, PeRouteLike>> {
 }
 
 export function definePeApi<S extends PeApiSchemas>(schemas: S): PeApi<PeRouteTable<S>> {
-  const peRoutes = peRouteTable(schemas);
-  type PeRouteId = keyof typeof peRoutes;
+  return definePeRouteApi(peRouteTable(schemas));
+}
+
+export function definePeRouteApi<const T extends Record<string, ReturnType<typeof route>>>(peRoutes: T): PeApi<T> {
+  type PeRouteId = keyof T & string;
   type PeInput<K extends PeRouteId> = PeRouteInput<typeof peRoutes, K>;
   type PeOutput<K extends PeRouteId> = PeRouteOutput<typeof peRoutes, K>;
   const isPeRouteId = (id: string): id is PeRouteId => Object.hasOwn(peRoutes, id);
@@ -1050,8 +1035,9 @@ export function definePeApi<S extends PeApiSchemas>(schemas: S): PeApi<PeRouteTa
   }
 
   function matchPeRoute(method: string, path: string) {
-    for (const [id, route] of Object.entries(peRoutes)) {
-      if (route.method !== method) continue;
+    for (const id in peRoutes) {
+      const route = peRoutes[id];
+      if (!route || route.method !== method) continue;
       const names: string[] = [];
       const pattern = route.path.replace(/:([\w]+)/g, (_, name: string) => {
         names.push(name);

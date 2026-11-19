@@ -3,7 +3,7 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { createPeaMcpServer } from "../src/server.ts";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { actionReceiptSchema } from "@pe/agent-contracts";
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peRoutes } from "../src/pea/product-catalog.ts";
 import { bodyText } from "./body-text.ts";
 
 const input = {

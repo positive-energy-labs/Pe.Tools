@@ -10,7 +10,7 @@ import type { CalcInputs } from "@pe/ducts-web/calc/model";
  * one design value edited where it bites (ducts LEDGER 2026-10-29): the cell writes Work `flows`
  * and shows the resolved source; the host recomputes.
  */
-import type { CalcEdits } from "@pe/agent-contracts";
+import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
 import { delivers } from "@pe/fans-domain/calc/calc-breakdown";
 import { AttentionDocument, mention, useAttention } from "@pe/kit/lang/attention";
 import { SubjectText } from "@pe/kit/lang/subject-text";

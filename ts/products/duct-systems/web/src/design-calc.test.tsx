@@ -2,11 +2,12 @@
 import { RegistryContext } from "@effect/atom-react";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ductsDocumentSchema } from "@pe/agent-contracts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { sheetCells } from "../../../../apps/web/src/route/slots/sheet/index.ts";
 import { SheetPane } from "../../../../apps/web/src/route/slots/sheet/pane.tsx";
 import { makeAtomRegistry } from "../../../../apps/web/src/shell/owner.ts";
-import { ENGINE_DEFAULT_NO_SHARED_ROOT, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
+import { ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/settings";
 import { designCalc } from "./design-calc.ts";
 afterEach(cleanup);
 

@@ -1,4 +1,6 @@
-import { documentRefSchema, ductSlotSourcesSchema, ductsDesign, stagedDucts } from "@pe/agent-contracts";
+import { documentRefSchema } from "@pe/agent-contracts";
+import { ductSlotSourcesSchema } from "@pe/ducts-contract/system-work";
+import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { native } from "@pe/agent-contracts/handle";
 import { read } from "@pe/host/read-graph";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";

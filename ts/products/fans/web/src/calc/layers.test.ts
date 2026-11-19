@@ -11,7 +11,7 @@ import {
   snapshotOf,
   type Connector,
 } from "@pe/ducts-domain/test-snapshot";
-import type { DuctsCalcOverview } from "@pe/agent-contracts";
+import type { DuctsCalcOverview } from "@pe/fans-contract/calc-read";
 import type { Detail } from "@pe/ducts-web/calc/model";
 import {
   blockerShapes,

@@ -1,8 +1,6 @@
-import { criteriaCellOf } from "@pe/agent-contracts";
-import type {
-  CalcEdits,
-  RouteStatePatch,
-} from "@pe/agent-contracts";
+import { criteriaCellOf } from "@pe/ducts-contract/duct-inputs";
+import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
+import type { RouteStatePatch } from "@pe/agent-contracts";
 import { EDIT_SEGMENTS, END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts";
 
 /**

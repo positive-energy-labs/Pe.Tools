@@ -1,4 +1,5 @@
-import { peRoutes, servePeRoute } from "@pe/agent-contracts/pe-api";
+import { servePeRoute } from "@pe/mcps/product-catalog";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { execFile } from "node:child_process";
 import { HttpRouter, HttpEffect } from "effect/http";
 import { z } from "zod";

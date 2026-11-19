@@ -61,7 +61,6 @@
     "@types/three": "catalog:",
     "@types/qrcode": "catalog:",
     "@pe/fans-domain": "workspace:*",
-    "@pe/fans-web": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@testing-library/react": "^16.3.0"
   }

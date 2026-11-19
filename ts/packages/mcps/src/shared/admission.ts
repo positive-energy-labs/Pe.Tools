@@ -3,10 +3,8 @@ import { productAdmissionPreflights } from "../pea/guides.generated.ts";
 import { isReadEffect } from "@pe/host-contracts/contracts";
 /** Catalog selection is an adapter; immutable request retention and execution belong to shared owners. */
 import {
-  commands,
   scheduleReads,
   actionControls,
-  commandTarget,
   familyReads,
   instancesReading,
   workKeySchema,
@@ -16,9 +14,9 @@ import {
   type ScheduleReadKey,
   type FamilyReadKey,
   type ExecutionTarget,
-  type SemanticActionKey,
   type ActionNeed,
 } from "@pe/agent-contracts";
+import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.ts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
