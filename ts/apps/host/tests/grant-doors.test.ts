@@ -44,7 +44,10 @@ test("RHVAC launch requires journaled action admission for authenticated callers
   for (const headers of [contextHeaders(), pea(), contextHeaders({ kind: "external-mcp", label: "unpaired" }), page]) {
     const response = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } }, headers);
     expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ notDispatched: true });
+    expect(await response.json()).toMatchObject({
+      message: "Submit the original exact admission to /actions; raw mutation dispatch is retired",
+      notDispatched: true,
+    });
   }
   const anonymous = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } });
   expect(anonymous.status).toBe(403);

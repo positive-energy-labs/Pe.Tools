@@ -436,12 +436,14 @@ test.each(["http", "stdio"])(
       expect(
         JSON.parse(((await chatCall()).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true, revision: 7 });
-      const bySdkId = await chatCall({ ...own, session: `sdk-${own.session}` });
-      expect(bySdkId.isError, JSON.stringify(bySdkId)).not.toBe(true);
-      expect(JSON.parse((bySdkId.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
-        ok: true,
-      });
-      expect(writes.at(-1)).toMatchObject({ target: { kind: "document", ref: own } });
+      for (const session of [own.session, `sdk-${own.session}`]) {
+        const answer = await chatCall({ ...own, session });
+        expect(answer.isError, JSON.stringify(answer)).not.toBe(true);
+        expect(JSON.parse((answer.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+          ok: true,
+        });
+        expect(writes.at(-1)).toMatchObject({ target: { kind: "document", ref: own } });
+      }
       expect(head.targets.map((target) => target.request)).toEqual([{ kind: "open", ref: user }]);
       expect(writes[0]).toMatchObject({
         basis: null,
