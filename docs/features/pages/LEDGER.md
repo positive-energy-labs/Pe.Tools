@@ -139,3 +139,30 @@ An agent or a person drops a folder of HTML under the product home and the host 
 - Decide who may read the state that a Page has saved.
 
 - Replace the Page's HTTP call back into its own host with direct composition of the admitted service. Verify that leaving a Page cancels reads and leaves admitted commands running. [W-pods-06-053]
+
+### Carried from the 2026-11-19 census
+
+- Preserve the History selection at the Page script admission boundary and drive standalone and embedded Pages to verify the refusal leaves the model unchanged. [owed-20261119 pods-1-063, 2 items]
+- Send Page publication through shared admission and verify a real publication by independently reading back the resulting Page. [owed-20261119 pods-1-064, 1 item]
+- Enumerate the Page API routes explicitly and reserve wildcard matching for Page assets. [owed-20261119 pods-1-065, 1 item]
+- Apply common Page admission to binding, text, event and export writes. [owed-20261119 pods-1-066, 1 item]
+- Register screenshots of the Revit window and dialogs as captures with window and document provenance. [owed-20261119 pods-1-076, 1 item]
+- Show before and after captures side by side when their view and element correspondence match. [owed-20261119 pods-1-077, 1 item]
+- Mark a capture stale when a later recorded write affects its document. [owed-20261119 pods-1-078, 1 item]
+- Hold a native Page read in flight across a rebind and verify how its result is attributed to the starting document. [owed-20261119 pods-1-084, 1 item]
+- Decide whether Page authors need a reusable preview-and-apply interaction that shows the proposed change before dispatch. [owed-20261119 pods-1-102, 1 item]
+- Run the browser page-capture and publication cases against the retained journal. [owed-20261119 host-journal-1-015, 1 item]
+- Find and remove stale Page projections left by the merged crusades. [owed-20261119 tooling-3-084, 1 item]
+- Move 5 baselined filesystem mutations in ts/apps/host/src/page-artifacts.ts behind its owning write boundary and ratchet the allowance down. [owed-20261119 tooling-3-137, 1 item]
+- Drive shutdown during an in-flight capture and verify the host waits for its write to finish. [owed-20261119 host-journal-1-206, 1 item]
+- Reuse the admitted page-publication ID on resend instead of minting a second publication. [owed-20261119 host-journal-1-257, 1 item]
+- Record the script revision and action-journal position on Page readings so their model evidence can be traced. [owed-20261119 pods-1-155, 1 item]
+- Render only changed Page regions and add DOM morphing only if a Page drive shows focus loss. [owed-20261119 pods-1-156, 1 item]
+- Provide a Page authoring helper that binds form controls to Page events. [owed-20261119 pods-1-157, 1 item]
+- Add opt-in event identifier deduplication to Page replay. [owed-20261119 pods-1-158, 1 item]
+- Version Page events so replay can skip incompatible versions while preserving the stored log. [owed-20261119 pods-1-159, 1 item]
+- Build the Page rendering libraries into one set of reusable host-served assets when the rendering doors land. [owed-20261119 pods-1-167, 1 item]
+- Give Page authors a clear preview path or refusal for self-transaction scripts that cannot run through the ReadOnly phase of pe.diff. [owed-20261119 pods-1-187, 1 item]
+- Drive a real firm-drive discovery timeout and confirm that an already-open Page retries and recovers. [owed-20261119 pods-1-195, 1 item]
+- Give the tests typed fixtures or checked constructors where they now assert a type, and lower each file's test-cast allowance once the test expresses the same witness. The [guard baseline](../../../ts/tests/repo-guards/src/test-casts.baseline.json) records the file allowances. [owed-20261119 pages-test-casts, 3 items]
+- Drive real Work and Page owners across restart to verify retry, conflict and revision behavior across both stores. [owed-20261119 host-journal-1-369, 1 item]
