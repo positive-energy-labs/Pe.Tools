@@ -110,6 +110,20 @@ test("P3-D open ends close to the left, flip and apply offset exactly once", () 
   expect(sectionContains(s, [0, 1, 0], bounds)).toBe(true);
 });
 
+test("a valid open hook reports when the extended end crosses the cut", () => {
+  const cuts = emptyCuts();
+  cuts.top.polyline = [
+    [0.2, 0.2],
+    [0.8, 0.2],
+    [0.8, 0.8],
+    [0.5, 0.4],
+  ];
+  expect(sceneViewSchema.safeParse({ section: { kind: "cuts", cuts } }).success).toBe(true);
+  expect(() => cutPolygon(cuts.top, axisBounds(bounds, "top"))).toThrow(
+    "The open end runs back across the cut",
+  );
+});
+
 test("P3-D refuses crossing, degeneracy and packed overflow; authored bound remains 56", () => {
   const s = section();
   s.cuts.top.polyline = [

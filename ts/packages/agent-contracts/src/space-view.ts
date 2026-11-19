@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 /** Canonical authored geometry validation, shared by Page decode and local preview. */
-export function validateCutPolyline(points: [number, number][], closed: boolean) {
+export function validateCutPolyline(
+  points: [number, number][],
+  closed: boolean,
+  crossingMessage = "Cut crosses itself",
+) {
   const n = points.length,
     edges = closed ? n : n - 1;
   const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1]];
@@ -30,7 +34,7 @@ export function validateCutPolyline(points: [number, number][], closed: boolean)
       } else {
         const t = cross(sub(c, a), cd) / denom,
           u = cross(sub(c, a), ab) / denom;
-        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) throw new Error("Cut crosses itself");
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) throw new Error(crossingMessage);
       }
     }
     const next = i + 1 < edges ? points[(i + 2) % n] : undefined;

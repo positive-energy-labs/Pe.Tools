@@ -66,6 +66,7 @@ export function cutPolygon(cut: Cut, extent: [Point, Point]): Point[] {
   if (!cut.polyline.length) return [];
   validatePolyline(cut.polyline, cut.closed);
   const p = offsetCut(cut);
+  const shiftedOpen = !cut.closed && cut.offset !== 0 ? p.slice() : null;
   if (!cut.closed) {
     const xs = [...p.map((p) => p[0]), extent[0][0], extent[1][0]],
       ys = [...p.map((p) => p[1]), extent[0][1], extent[1][1]];
@@ -118,7 +119,8 @@ export function cutPolygon(cut: Cut, extent: [Point, Point]): Point[] {
     if (Math.hypot(...sub(p[0], p[p.length - 1])) < 1e-8) p.pop();
   }
   if (p.length > 64) throw new Error("Cut exceeds the 64 packed point limit");
-  validatePolyline(p, true);
+  if (shiftedOpen) validatePolyline(shiftedOpen, false);
+  validatePolyline(p, true, cut.closed ? undefined : "The open end runs back across the cut");
   return p;
 }
 
