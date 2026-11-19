@@ -8,16 +8,16 @@ import { emptyCuts } from "./cuts";
 
 afterEach(cleanup);
 const bounds = { minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 10, maxZ: 10 };
-function fixture() {
+function fixture(withCut = true) {
   const cuts = emptyCuts();
   cuts.top.polyline = [
     [1, 1],
     [8, 1],
     [8, 8],
   ];
-  const source: { document: string; section: SceneSection } = {
+  const source: { document: string; section: SceneSection | null } = {
     document: "doc",
-    section: { kind: "cuts", cuts },
+    section: withCut ? { kind: "cuts", cuts } : null,
   };
   const commit = vi.fn(),
     onAxis = vi.fn();
@@ -67,6 +67,17 @@ test("P3-C corner drag commits at release, lost capture and Escape cancel withou
   f.pointer(f.svg, "pointerup");
   expect(f.commit).not.toHaveBeenCalled();
   expect(f.onAxis).toHaveBeenLastCalledWith(null);
+});
+
+test("New leaves an empty picture alone and clears the last cut", () => {
+  const blank = fixture(false);
+  fireEvent.click(blank.view.getByRole("button", { name: "Draw a new cut" }));
+  expect(blank.commit).not.toHaveBeenCalled();
+  blank.view.unmount();
+
+  const drawn = fixture();
+  fireEvent.click(drawn.view.getByRole("button", { name: "Draw a new cut" }));
+  expect(drawn.commit.mock.calls).toEqual([[null, "named"]]);
 });
 test("P3-C Pea replacement between contact and release cannot be overwritten", () => {
   const f = fixture();

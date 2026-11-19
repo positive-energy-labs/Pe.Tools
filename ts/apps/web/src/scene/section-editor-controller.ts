@@ -12,7 +12,7 @@ export class SectionEditorController {
   constructor(
     private source: () => Source,
     private bounds: () => Bounds | null,
-    private commit: (section: SceneSection, intent: "named") => void,
+    private commit: (section: SceneSection | null, intent: "named") => void,
   ) {}
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -53,14 +53,15 @@ export class SectionEditorController {
     const draft = this.draft,
       basis = this.basis;
     this.cancel();
-    if (
-      draft &&
-      !draft.refusal &&
-      basis !== null &&
-      JSON.stringify(draft.section) !== JSON.stringify(this.source().section)
-    )
-      this.commit(draft.section, "named");
-    return draft?.refusal ?? null;
+    if (!draft || draft.refusal || basis === null) return draft?.refusal ?? null;
+    const section =
+      draft.section.kind === "cuts" &&
+      Object.values(draft.section.cuts).every((cut) => cut.polyline.length === 0)
+        ? null
+        : draft.section;
+    if (JSON.stringify(section) !== JSON.stringify(this.source().section))
+      this.commit(section, "named");
+    return null;
   }
   cancel = () => {
     this.basis = null;
