@@ -1399,6 +1399,7 @@ function* hostPeRoutes(
             kind: "diagnostic",
             code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
             readingKind: "machine",
+            readingLeg: fault.leg,
             elapsedMs: fault.elapsedMs,
           }),
         ),

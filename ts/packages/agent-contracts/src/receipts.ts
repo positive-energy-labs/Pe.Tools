@@ -160,12 +160,18 @@ export const safeMcpMetadataSchema = z.strictObject({
   serverBuild: token,
   faultCode: receiptFaultCodeSchema.optional(),
 });
+const machineReadingLegSchema = z.enum([
+  "sessions", "attachments", "actions", "host", "peers", "years", "providers", "share", "update", "holdings",
+]);
+export type MachineReadingLeg = z.infer<typeof machineReadingLegSchema>;
+
 const diagnosticReceipt = z.strictObject({
   kind: z.literal("diagnostic"),
   code: receiptFaultCodeSchema,
   elapsedMs: milliseconds.optional(),
   localRef: receiptEvidenceRefSchema.optional(),
   readingKind: token.optional(),
+  readingLeg: machineReadingLegSchema.optional(),
   streamKind: token.optional(),
   routeCode: token.optional(),
 });

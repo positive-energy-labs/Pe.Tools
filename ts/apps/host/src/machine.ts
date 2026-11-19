@@ -13,6 +13,7 @@ import type {
   MachineAttachmentDocument,
   MachineHost,
   MachineLeg,
+  MachineReadingLeg,
   MachinePeer,
   MachineProvider,
   MachineSession,
@@ -177,7 +178,7 @@ export class MachineRetired extends Schema.TaggedError<MachineRetired>()("Machin
  * outage (the transition into failure), never once per 5 s tick of a stuck leg.
  */
 export interface MachineLegFault {
-  readonly leg: string;
+  readonly leg: MachineReadingLeg;
   readonly kind: "deadline" | "error";
   readonly elapsedMs: number;
 }
@@ -269,7 +270,12 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
       }),
     );
 
-  const read = <A>(key: string, acquire: Effect.Effect<A, unknown>, accept: (value: A) => void) =>
+  const read = <A>(
+    leg: MachineReadingLeg,
+    acquire: Effect.Effect<A, unknown>,
+    accept: (value: A) => void,
+    key: string = leg,
+  ) =>
     Effect.gen(function* () {
       const attemptedAtUtc = yield* nowIso;
       const startedMs = yield* Clock.currentTimeMillis;
@@ -290,7 +296,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
             legs[key] = { ...(legs[key] ?? unreadLeg()), attemptedAtUtc, error: legError(error) };
             if (!wasFailing)
               options.fault?.({
-                leg: key,
+                leg,
                 kind: error instanceof LegDeadline ? "deadline" : "error",
                 elapsedMs: (yield* Clock.currentTimeMillis) - startedMs,
               });
@@ -482,8 +488,11 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
             const process = processOf(row);
             if (!process) return;
             const key = processKey(process);
-            yield* read(`holdings:${key}`, sources.holdings(process), (value) =>
-              holdings.set(key, value),
+            yield* read(
+              "holdings",
+              sources.holdings(process),
+              (value) => holdings.set(key, value),
+              `holdings:${key}`,
             );
             const attemptedAtUtc = yield* nowIso;
             const previous = documents.get(key) ?? { value: null, leg: unreadLeg() };
