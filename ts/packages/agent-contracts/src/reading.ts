@@ -232,7 +232,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     kind: z.literal("publication"),
     subscription: z.string().min(1).max(128),
     generation: z.number().int().nonnegative(),
-    watch: z.literal("open-years").optional(),
   }),
   /** One Page's target (`page.target`), served again when a thread head or its binding moves. */
   z.strictObject({ kind: z.literal("page-target"), slug: z.string().min(1).max(200) }),

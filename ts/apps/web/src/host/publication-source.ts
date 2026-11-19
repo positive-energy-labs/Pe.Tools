@@ -32,12 +32,7 @@ export function publicationSource<T extends { generation: number; version: numbe
       finally { refreshing = false; if (invalidated) { invalidated = false; void refresh(); } }
     };
     if (ctx.historyPoint) void refresh();
-    else unfollow = peReadings.subscribe({
-      kind: "publication",
-      subscription: publication.subscription,
-      generation: publication.generation,
-      ...(ctx.historyPose?.route === "open" ? { watch: "open-years" as const } : {}),
-    }, frame => {
+    else unfollow = peReadings.subscribe({ kind: "publication", subscription: publication.subscription, generation: publication.generation }, frame => {
       if (closed) return;
       if (frame.kind === "stale") { observed = false; return; }
       if (frame.kind === "failure") return deliver({ kind: "stale" });

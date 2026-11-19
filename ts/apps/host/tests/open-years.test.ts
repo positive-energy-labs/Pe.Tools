@@ -2,6 +2,9 @@ import { canonicalRouteInput, type Machine } from "@pe/agent-contracts";
 import type { ResourceObserver } from "@pe/runtime";
 import { createJiti } from "jiti";
 import { expect, test } from "vite-plus/test";
+import { z } from "zod";
+import { read } from "../src/reads/evaluator.ts";
+import { registeredReads } from "../src/reads/routes.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { fixture, who } from "./host-read-graph.test-support.ts";
 
@@ -11,7 +14,7 @@ const { EMPTY_DRAFT, launchPlan } = await createJiti(import.meta.url).import<{
   launchPlan(draft: object, machine: Machine, rows: readonly never[]): unknown;
 }>("../../web/src/machine/open-model.ts");
 
-async function openYears(years: Machine["revit"]["years"], error: string | null, watch = true) {
+async function openYears(years: Machine["revit"]["years"], error: string | null) {
   const leg = unreadLeg();
   let machine: Machine = {
     observedAtUtc: "2026-11-19T00:00:00Z",
@@ -26,8 +29,10 @@ async function openYears(years: Machine["revit"]["years"], error: string | null,
     legs: { years: { ...leg, error } },
   };
   const listeners = new Set<() => void>();
+  let machineObservations = 0;
   const resourceObserver: ResourceObserver = (reading, publish) => {
     if (reading.kind === "machine") {
+      machineObservations++;
       const send = () => publish({ kind: "snapshot", key: "machine", value: machine });
       listeners.add(send);
       send();
@@ -41,22 +46,21 @@ async function openYears(years: Machine["revit"]["years"], error: string | null,
   const host = await fixture(false, { resourceObserver });
   const subscription = "open-years";
   const url = new URL("http://host/pe/resources");
-  url.searchParams.set("keys", JSON.stringify([{
-    kind: "publication", subscription, generation: 0, ...(watch ? { watch: "open-years" } : {}),
-  }]));
+  url.searchParams.set("keys", JSON.stringify([{ kind: "publication", subscription, generation: 0 }]));
   const response = await host.request(new Request(url));
   const stream = response.body!.getReader();
   await stream.read();
   return {
-    async read() {
+    async read(recipe = "open.documents") {
       const response = await host.request(new Request("http://host/pe/reads/value", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ read: "open.documents", subscription, generation: 0, args: { target: { kind: "host" } } }),
+        body: JSON.stringify({ read: recipe, subscription, generation: 0, args: { target: { kind: "host" } } }),
       }));
       expect(response.status, await response.clone().text()).toBe(200);
       return response.json();
     },
+    observations: () => machineObservations,
     publication: () => host.reads.publications.publication(canonicalRouteInput([who, subscription])),
     async nextEvent(state: string) {
       const decoder = new TextDecoder();
@@ -103,14 +107,22 @@ test("an open tab reacquires its publication when the installed-year check recov
   }
 });
 
-test("the shared documents read keeps its snapshot behavior without the Open watch", async () => {
-  const sessions = await openYears([2025], null, false);
+test("a publication without the Open recipe never starts a machine observation", async () => {
+  const unrelated = read("test.unrelated-publication", {
+    input: z.object({ target: z.unknown() }),
+    output: z.unknown(),
+    run: () => ({ machine: { revit: { years: [2025] }, legs: {} } }),
+  });
+  const unregister = registeredReads.register({ unrelated });
+  const open = await openYears([2025], null);
   try {
-    const first = await sessions.read();
-    sessions.pass([2026], null);
-    expect(sessions.publication()).toMatchObject({ state: "current", version: first.version });
+    const first = await open.read(unrelated.name);
+    expect(open.observations()).toBe(0);
+    open.pass([2026], null);
+    expect(open.publication()).toMatchObject({ state: "current", version: first.version });
   } finally {
-    await sessions.close();
+    unregister();
+    await open.close();
   }
 });
 

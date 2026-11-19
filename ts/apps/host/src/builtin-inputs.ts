@@ -960,7 +960,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               value: { generation, version: publication.version, state: publication.state },
             });
           },
-          reading.watch === "open-years" ? { recipe: "open.documents", observe: fallback } : undefined,
+          { recipe: "open.documents", observe: fallback },
         );
         // Every key is answered once, so a stream that carries only this key is never silent.
         if (!answered)

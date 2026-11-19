@@ -14,7 +14,8 @@ vi.mock("./resource-stream", () => ({
   } },
 }));
 
-test.each(["open", "session-admin"])("only the Open route follows installed years, route %s", (route) => {
+test("the Open route subscribes without specifying what the host watches", () => {
+  const route = "open";
   const target = { kind: "host" } as const;
   const generation = 0;
   const ctx: ReadingContext = {
@@ -34,7 +35,6 @@ test.each(["open", "session-admin"])("only the Open route follows installed year
   try {
     expect(subscribe.mock.calls[0]?.[0]).toEqual({
       kind: "publication", subscription: "tab-read", generation,
-      ...(route === "open" ? { watch: "open-years" } : {}),
     });
   } finally {
     if (typeof close === "function") close();

@@ -103,20 +103,20 @@ export function readInvalidations(
     subscription: string,
     generation: number,
     publish: (publication: Publication<unknown>) => void,
-    machineYears?: { recipe: string; observe: ResourceObserver },
+    machineYears: { recipe: string; observe: ResourceObserver },
   ) => {
     let publishedYears: string | undefined, observedYears: string | undefined;
     let stopMachine: (() => void) | undefined;
     const compare = () => {
       const current = publications.publication(subscription);
-      if (machineYears && publishedYears !== undefined && observedYears !== undefined && publishedYears !== observedYears &&
+      if (publishedYears !== undefined && observedYears !== undefined && publishedYears !== observedYears &&
           current?.generation === generation && current.state === "current")
         publications.invalidate((trace) => trace.name === machineYears.recipe, subscription);
     };
     const stop = publications.observe(subscription, (publication) => {
       if (publication.generation !== generation) return;
       publish(publication);
-      if (recorded || !machineYears || publication.state !== "current") return;
+      if (recorded || publication.state !== "current") return;
       // Keep the existing machine poll observed for the lifetime of the subscription.
       const data = publication.value?.trace.some((trace) => trace.name === machineYears.recipe)
         ? publishedMachine.safeParse(publication.value.data)
