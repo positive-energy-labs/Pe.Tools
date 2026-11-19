@@ -5,7 +5,7 @@ import type {
   CommandBinding,
   CommandExecutor,
 } from "./command-executor.ts";
-import { CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
+import { claimRejected, CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { validateNativeInput } from "./native-input.ts";
 import type { ReadOwner } from "./reads/read-ownership.ts";
@@ -1421,11 +1421,7 @@ export class ActionJournal implements ReceiptReader {
               ),
           );
         if (prior && reconciliation)
-          throw new CommandRejected({
-            kind: "claimed",
-            claim: { kind: "reconciliation", id: prior.id },
-            by: reconciliation.id,
-          });
+          throw claimRejected({ kind: "reconciliation", id: prior.id }, reconciliation);
         for (const claim of row.claims) {
           if (claim.kind !== "reconciliation") continue;
           const original = this.rows.get(claim.id);
@@ -1456,7 +1452,7 @@ export class ActionJournal implements ReceiptReader {
               (held) => canonicalRouteInput(held) === canonicalRouteInput(candidate),
             ),
           )!;
-          throw new CommandRejected({ kind: "claimed", claim, by: claimed.id });
+          throw claimRejected(claim, claimed);
         }
       } catch (error) {
         this.activeCallers.delete(row.id);

@@ -155,6 +155,11 @@ function PatchBayBody({
     [machine],
   );
   const years = machine?.revit.years ?? [];
+  const yearStatus = machine?.legs.years?.error != null
+    ? { kind: "error", label: "The Revit version check failed. Pe is trying again." } as const
+    : machine?.revit.years == null
+      ? { kind: "busy", label: "Pe is finding the installed Revit versions." } as const
+      : { kind: "advisory", label: "No installed Revit versions were found." } as const;
   // The jack in hand: the picked row, else, once the arrow is typed, the first row the query keeps.
   // Derived, never captured: a pasted "clinic -> new 2024" filters and arms in one event.
   const inHand: LaunchDraft =
@@ -489,20 +494,22 @@ function PatchBayBody({
           />
         </div>
         <div className="flex flex-wrap items-center gap-1 px-(--gutter) pb-1 hairline-t pt-1">
-          <Switcher
-            ariaLabel="new Revit year"
-            value={newYear === null ? "" : String(newYear)}
-            onChange={(year) => patchNew(Number(year))}
-            options={years.map((year) => ({
-              value: String(year),
-              label: <span className="face-mono">{year}</span>,
-              title:
-                saved !== null && year < saved
-                  ? `Revit ${year} cannot open a ${saved} file`
-                  : `start Revit ${year}`,
-              disabled: saved !== null && year < saved,
-            }))}
-          />
+          {years.length ? (
+            <Switcher
+              ariaLabel="new Revit year"
+              value={newYear === null ? "" : String(newYear)}
+              onChange={(year) => patchNew(Number(year))}
+              options={years.map((year) => ({
+                value: String(year),
+                label: <span className="face-mono">{year}</span>,
+                title:
+                  saved !== null && year < saved
+                    ? `Revit ${year} cannot open a ${saved} file`
+                    : `start Revit ${year}`,
+                disabled: saved !== null && year < saved,
+              }))}
+            />
+          ) : <OutcomeLine {...yearStatus} />}
           <Switcher
             ariaLabel="whose"
             value={newOwner}

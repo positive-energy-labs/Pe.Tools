@@ -268,6 +268,24 @@ const typeInto = (text: string) => {
 };
 const chip = (label: string) => screen.getByText(label, { selector: "[data-slot='query-box'] *" });
 
+test.each([
+  [null, "Pe is finding the installed Revit versions."],
+  ["years leg timed out", "The Revit version check failed. Pe is trying again."],
+])("the new Revit card explains an unknown year list with error %s", (error, message) => {
+  render(<Bay machine={{
+    ...world,
+    revit: { ...world.revit, years: null },
+    legs: { ...world.legs, years: { observedAtUtc: null, attemptedAtUtc: null, error } },
+  }} />);
+  expect(within(screen.getByRole("group", { name: "new Revit" })).getByText(message)).toBeTruthy();
+});
+
+test("the new Revit card reports a completed check that found no installations", () => {
+  render(<Bay machine={{ ...world, revit: { ...world.revit, years: [] } }} />);
+  expect(within(screen.getByRole("group", { name: "new Revit" }))
+    .getByText("No installed Revit versions were found.")).toBeTruthy();
+});
+
 test("patching Clinic into your Revit 2025 by click names the upgrade and sends the consent", async () => {
   render(<Bay />);
   fireEvent.click(await screen.findByText("Clinic-Fitout.rvt"));
