@@ -18,6 +18,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 
 import type { ConnectorPairRuling } from "@pe/ducts-domain/kernel/inferred-joins";
+import { healPlan } from "@pe/ducts-domain/heal";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -40,6 +41,23 @@ const load = () => {
   const r = suggestRoster(snap);
   return { snap, roster: [...r.fans, ...r.suggestions] };
 };
+
+it.skipIf(!existsSync(CHADDS))("Chadds RA 37 leaves both side-tapped stubs open even if Revit reports zero", () => {
+  const { snap } = load();
+  const ids = [14663504, 14663546];
+  expect(snap.systems.find(system => system.name === "RA 37")?.isWellConnected).toBe(false);
+  // The capture predates the zero/null distinction. Replay the two open ends as explicit zeroes.
+  const segments = snap.segments.filter(segment => ids.includes(segment.id));
+  expect(segments.map(segment => segment.id).sort()).toEqual(ids);
+  for (const segment of segments)
+    segment.connectors.find(connector => connector.index === 1)!.flowCfm = 0;
+  const plan = healPlan(snap);
+  for (const id of ids) {
+    expect(plan.groups.flatMap(group => group.items).some(item => item.key === `cap:${id}:1`)).toBe(false);
+    expect(plan.hard.get(`open-end:${id}:1`)?.note).toContain("flow unknown");
+  }
+});
+
 const gaps = (bs: Calc["blockers"]) => bs.filter((b) => b.kind !== "not-priced");
 const ids = (bs: Calc["blockers"]) =>
   gaps(bs)
