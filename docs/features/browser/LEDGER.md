@@ -51,3 +51,27 @@
 - Remove inactive remainder at `C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-b4f4a2e5`; Git registration is retired and the proof child is archived, but Windows refuses deletion and rename because a file is in use. Do not stop an unidentified process; [cleanup receipt](../../../.artifacts/runs/browser-20261024-port/cleanup-final.json).
 
 - Check retained Google sign-in after closing and reopening the same browser profile with a person present to answer the sign-in checks. [W-tooling-13-222]
+
+### Carried from the 2026-11-19 census
+
+- Move each baselined Effect runtime crossing to its owning framework or test boundary, and lower the source and test allowances as the crossings disappear. The [guard baseline](../../../ts/tests/repo-guards/src/effect-islands.baseline.json) records the file allowances. [owed-20261119 browser-effect-edges, 3 items]
+- Replace non-null assertions with checked presence or types that establish the invariant, and lower the per-file nonNull allowance as each caller changes. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 browser-non-null, 6 items]
+- Record browser requests at dispatch so hung reads remain visible in diagnostics after failure. [owed-20261119 tooling-3-020, 1 item]
+- Verify the Home directory scroll fix and restored Ducts scrollbars in the rendered views. [owed-20261119 tooling-4-031, 1 item]
+- Adopt the browser package in a real journey and send concrete feedback to its owning thread. [owed-20261119 tooling-4-032, 1 item]
+- Reconcile the Family browser cutover status against the final bf4ffc159 integration inventory and its capture evidence. [owed-20261119 tooling-4-033, 1 item]
+- Drive the omitted thread-switch and native arming checks in the browser recovery journey. [owed-20261119 tooling-4-034, 1 item]
+- Encode the idle pricing worker's pause-then-Refresh ordering in the recovery journey so it dispatches work before waiting for the pause. [owed-20261119 tooling-4-035, 1 item]
+- Preserve the actual browser callback error and offer closure advice only when the failure supports that diagnosis. [owed-20261119 tooling-1-010, 1 item]
+- Update the browser ledger to cite the copied production SEA worker and separately packaged capture evidence, and retain any installed proof gap. [owed-20261119 tooling-4-037, 1 item]
+- Give the Node/jiti browser driver a stable module entry point and verify import resolution through its launcher. [owed-20261119 tooling-3-031, 1 item]
+- Trace the failed subscription POST through preview origin routing after session minting and add an end-to-end check. [owed-20261119 tooling-3-034, 1 item]
+- Replace the 2 relative imports from other into @pe/browser with an appropriate declared export or move the code to its owning package, then lower the boundary allowance. [owed-20261119 tooling-3-092, 1 item]
+- Replace the guarded dynamic browser import in ts/apps/web/scripts/heal-click-proof.ts with the supported browser driver entry point and delete that exception. [owed-20261119 tooling-3-114, 1 item]
+- Replace the guarded dynamic browser import in ts/apps/web/scripts/heal-review-proof.ts with the supported browser driver entry point and delete that exception. [owed-20261119 tooling-3-115, 1 item]
+- Replace the guarded dynamic browser import in ts/apps/web/scripts/layout-proof.ts with the supported browser driver entry point and delete that exception. [owed-20261119 tooling-3-116, 1 item]
+- Reduce ts/packages/browser/src/keeper.ts below the health census source-length limit while preserving its behavior, then retire its allowance. [owed-20261119 tooling-4-180, 1 item]
+- Replace unchecked production casts with decoded boundaries or types that preserve the data invariant, and lower the per-file casts allowance after each repair. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 browser-production-casts, 12 items]
+- Add thread switching and write arming to the standard route journey’s verified outcomes, beyond its optional coverage hooks. [owed-20261119 tooling-1-063, 1 item]
+- Capture the actual preview origin and dependency readiness in browser startup failure receipts so a responsive page cannot stand in for ready dependencies. [owed-20261119 tooling-3-260, 1 item]
+- Give browser journeys an isolated host Place store in addition to a fresh browser profile so a prior journey’s Places cannot leak into a new one. [owed-20261119 tooling-1-084, 1 item]

@@ -43,3 +43,9 @@ The substrate is the declared set of tools, runtimes, tasks, env, and dotfiles t
 - Node 26 wave: `pnpm verify` and `vp pack` pass on an exact 26.x pin; the shipped executables embed it.
 - PATH admin cleanup, then the PATH doctor check.
 - Install PowerShell 7; record how Claude Code, Codex, T3, and Herdr shells change.
+
+- Decide whether the atom inspector needs transient value capture that preserves idle-node disposal. [owed-20261119 tooling-3-015, 1 item]
+- Decide whether the atom inspector needs a recomputation count that includes equal-value results. [owed-20261119 tooling-3-016, 1 item]
+- Decide whether to add a visual dependency graph to the atom inspector. [owed-20261119 tooling-3-017, 1 item]
+- Evaluate a read-only atom inspector export to Redux DevTools. [owed-20261119 tooling-3-018, 1 item]
+- Recheck upstream atom inspector support at the six-month checkpoint from August 24. [owed-20261119 tooling-3-019, 1 item]

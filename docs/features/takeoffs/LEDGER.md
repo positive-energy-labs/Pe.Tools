@@ -95,3 +95,25 @@
 - ADR 0011 says nine knobs replace eighty; `Knobs` has eight fields. Correct the count before the ADR leaves `proposed`.
 - `eval/rhvac/edit-check.ps1:10` reads `.privateixtures` and `project-ahvac`: a token rewrite ate `\f` and `\r`. The script throws on every default run.
 - Four suites `skipIf` when `.private/fixtures` is absent and nothing asserts the root exists; a machine without fixtures reports clean green. One deterministic test asserts the resolver default and names the missing root.
+
+### Carried from the 2026-11-19 census
+
+- Move takeoff and RHVAC engineering rules into the product domain, including room-to-system and opening-to-wall validation. Keep transport, journaling, custody, persistence and native dispatch in the host. [owed-20261119 rooms-1-112, 3 items]
+- Check callers of demo-rhvac.ts and demo-settings.ts. Delete unused helpers, or move the fixed loads, geometry, assemblies and expected sync request into test fixtures if a caller still needs them. [owed-20261119 rooms-1-120, 1 item]
+- Decide whether a Takeoffs level can keep the registered plan image for its in-crop zones when another zone is outside its owning view crop. Preserve the Outside zone warning and verify the remaining overlay registration. [owed-20261119 rooms-1-121, 1 item]
+- Bound the visible atom inspector scan so observing the full Takeoffs graph does not slow browser interaction. [owed-20261119 tooling-3-014, 1 item]
+- Move 9 baselined filesystem mutations in ts/apps/host/src/takeoff-captures.ts behind its owning write boundary and ratchet the allowance down. [owed-20261119 tooling-3-144, 1 item]
+- Clear the Initialize plan and stale changed-since-plan state after Initialize succeeds. [owed-20261119 routes-kernel-1-155, 2 items]
+- Drive Takeoffs writes against a connected host and populated Revit model, observe push invalidation after a native change, and verify that the RHVAC read sees the updated room data. [owed-20261119 rooms-1-026, 1 item]
+- Find a wall source for Project A Lower Level and keep its partitions held until the source establishes wall evidence, as required by ADR 0011. The seven Lower Level 08 raster rooms at 0.14 edge-on-geometry cannot serve as the reference. [owed-20261119 rooms-1-073, 1 item]
+- Choose and label concrete room-shape examples that show the settled order of geometry defects in the full-level visual review. [owed-20261119 rooms-1-074, 1 item]
+- Align the visual review of wall edges with the solver. Judge interior walls by their centerline and exterior boundaries by the outside face. [owed-20261119 rooms-1-075, 1 item]
+- Calibrate the full-level room review against a named baseline. Record the coverage denominator, visual rubric and review evidence bundle before using the results to compare candidates. [owed-20261119 rooms-1-077, 1 item]
+- Once the rubric and baseline are stable, define what counts as a plateau in both visual quality and numeric coverage. Change one solver mechanism per comparison and stop tuning when both measures reach that plateau. [owed-20261119 rooms-1-078, 2 items]
+- Check that rooms cover their zones in full-level renders aligned to the model. Verify that coverage independently of the solver's count, including the Walden Art Corridor and Manuella R87 gaps. Require legal boundaries and the designer's visual review before accepting the result. [owed-20261119 rooms-1-080, 1 item]
+- Drive a live Takeoffs write and verify invalidation through the host. [owed-20261119 routes-kernel-1-367, 1 item]
+- Finish the remaining Takeoffs command-family migration and verify a real write with independent readback. [owed-20261119 other-1-157, 1 item]
+- Prove the sealed Takeoff sync path through its public command. [owed-20261119 routes-kernel-1-431, 1 item]
+- Verify the shared deterministic target preserves the effective Windows platform version before deleting the explicit Takeoff target. [owed-20261119 tooling-3-268, 1 item]
+- Give the tests typed fixtures or checked constructors where they now assert a type, and lower each file's test-cast allowance once the test expresses the same witness. The [guard baseline](../../../ts/tests/repo-guards/src/test-casts.baseline.json) records the file allowances. [owed-20261119 takeoffs-test-casts, 2 items]
+- Confirm the old Takeoffs plan has no consumer and remove it. [owed-20261119 routes-kernel-1-450, 1 item]

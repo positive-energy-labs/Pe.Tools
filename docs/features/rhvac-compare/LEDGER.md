@@ -21,3 +21,7 @@
 
 - Show the unresolved assembly category in the RHVAC export review before allowing it to become a zero row in the destination. [W-rooms-01-069]
 - Validate the shape of the opened RHVAC file and repair the edit audit's default input path. [W-rooms-01-044, W-rooms-01-132, W-rooms-02-099]
+
+- Move 3 baselined filesystem mutations in ts/apps/host/src/rhvac-ops.ts behind its owning write boundary and ratchet the allowance down. [owed-20261119 tooling-3-141, 1 item]
+- Drive load comparison with a valid real database, a Pod launcher rebuilt with explicit lane and root, and a fresh APS sign-in. [owed-20261119 release-install-1-053, 1 item]
+- Replace 1 counted type assertion in ts/apps/web/src/design-system/rhvac-native.integration.test.ts with typed fixtures or a checked constructor and ratchet the allowance down. [owed-20261119 tooling-3-367, 1 item]

@@ -27,3 +27,11 @@
 - Partial-push failure attribution: cheapest path is the push handler setting `review: "attention"` (error as note) on each failed cell, which rides the attention-axis ruling (design-system ledger, Owed) and makes failures countable/filterable. Otherwise needs the outcome-link model work.
 - "Clear this parameter" is inexpressible — need a model-level staged `{value: null}` = clear, distinct from refusing `""`, and the push op must support clearing first (a contracts question, not a grammar one).
 - When a proposal ledger ships, the sever patch should retire the proposal into it rather than deleting it.
+
+- Fix the diagnostics behind baselined check suppressions, then lower each file's suppressions allowance when the normal check can read it. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 schedule-grid-suppressions, 2 items]
+- Drive the ported Schedules interactions in the browser. Family edit acceptance has its own ledger entry. [owed-20261119 design-system-1-034, 1 item]
+- Drive a schedule push through its visible control and verify the keyed native readback. [owed-20261119 routes-kernel-1-383, 1 item]
+- Drive a real schedule plan and apply through the journal bundle storage path. [owed-20261119 host-journal-1-304, 1 item]
+- Change an included dependency during one host boot to isolate hash refusal from document-mark refusal. [owed-20261119 host-journal-1-306, 1 item]
+- Make schedule discovery explain the three entry points in place: global Find searches saved Work, the route picker lists live model schedules, and Bind acts inside the route. [owed-20261119 other-1-130, 1 item]
+- Finish the Schedules command-family migration and verify a real schedule write with independent readback. [owed-20261119 other-1-156, 1 item]

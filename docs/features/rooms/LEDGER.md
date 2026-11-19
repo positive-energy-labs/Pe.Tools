@@ -180,3 +180,24 @@
 - Use the same public session name for Rooms recovery as the read uses, and keep a lost draw reply recoverable by its original attempt. Check the remaining follow-ups with the owner on a copy of a real model. [W-rooms-02-006, W-rooms-02-016, W-rooms-02-017, W-rooms-02-018]
 
 - Add a crop of the plan image to the room card thumbnail where the underlying image can be read. [W-rooms-02-003]
+
+### Carried from the 2026-11-19 census
+
+- Replace non-null assertions with checked presence or types that establish the invariant, and lower the per-file nonNull allowance as each caller changes. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 rooms-non-null, 9 items]
+- Let an engineer match pasted residential load airflow rows to stable room identities and review unmatched rooms. [owed-20261119 duct-systems-1-009, 1 item]
+- If Rooms gains a browser drawing control, drive a room or zone draw on an admitted browser lane and compare the staged outline with the filled region read back from the selected Revit view. [owed-20261119 rooms-1-007, 1 item]
+- Resolve fixture behavior for RoomsPlan through its injected owner or reading and retire the direct fixture-mode allowance at ts/apps/web/src/rooms/plan.tsx. [owed-20261119 tooling-2-051, 1 item]
+- Prove that a saved Rooms Work key still resolves after partition replaces its FilledRegion. [owed-20261119 routes-kernel-1-148, 1 item]
+- Filter candidate partition fixtures before loading their models in the benchmark. [owed-20261119 tooling-3-171, 1 item]
+- Reconcile the Rooms local drawing helper introduced in e7e5bf33 with its archived counterpart. Identify which parts belong with the retained plan drawing code before removing the copy. [owed-20261119 rooms-1-032, 1 item]
+- Give the native room drawing command an atomic boundary so refusal or interruption cannot leave partial geometry. [owed-20261119 host-journal-1-259, 1 item]
+- Resume RHVAC Load Preview integration through Rooms once equipment-derived flow has had real use. [owed-20261119 duct-systems-1-232, 1 item]
+- Repeat the Pea room-drawing baseline after fixes B1 through B6 land. Verify that the refusal names the Work cell, public session targeting works at each step, replanning and native resend produce only one region, blank model room types read back blank, and a lost reply remains recoverable by its original attempt. [owed-20261119 rooms-1-041, 1 item]
+- Preserve the public room draw validation message that tells Pea to stage loose input in writeIntent["rooms.draw"].edit.value. Use eec55934 as the starting point and cover the refusal seen by the caller. [owed-20261119 rooms-1-042, 1 item]
+- Check the zone GUID saved by rooms.draw against the actual containing zone and the unassigned-room rule. Rooms.cs writes the level scope GUID into that field. Decide what a room drawn outside every zone should store and verify its snapshot and rerun. [owed-20261119 rooms-1-055, 1 item]
+- Verify that door openings separate rooms and that open or header-backed gaps join them on the current solver. Use the ML09 `A_DOOR_SWING` collapse as the negative check. Settle how mechanical designers group rooms by airflow before tuning joins in large open plans or small rooms. [owed-20261119 rooms-1-061, 1 item]
+- Make each wall edge the solver creates traceable to evidence the designer can inspect. Let the designer edit that edge while preserving the zone's diagonal and curved boundaries. [owed-20261119 rooms-1-076, 1 item]
+- Prevent the room callout from drawing a negative SVG rectangle width during rapid route switches. Reproduce the switch sequence and verify that the callout either draws with valid bounds or waits for the new plan layout. [owed-20261119 rooms-1-091, 1 item]
+- Read an already populated document through the document-scoped Rooms snapshot before partitioning or refreshing it. Compare the returned regions with the native document to extend the existing empty-model witness. [owed-20261119 rooms-1-102, 1 item]
+- Put the steps of a room draw under one native transaction group and define which shared carrier setup, if any, can persist separately. Induce a failure after first-time carrier setup and verify what remains and what the retry reuses. [owed-20261119 pea-1-262, 2 items]
+- Give the tests typed fixtures or checked constructors where they now assert a type, and lower each file's test-cast allowance once the test expresses the same witness. The [guard baseline](../../../ts/tests/repo-guards/src/test-casts.baseline.json) records the file allowances. [owed-20261119 rooms-test-casts, 3 items]
