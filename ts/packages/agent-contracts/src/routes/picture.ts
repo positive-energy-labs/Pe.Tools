@@ -13,14 +13,3 @@ export type PicturePage<_L extends string = string, _F extends string = string> 
   /** The picked inbox row or issue; empty = none. */
   issue: string;
 };
-
-/** Network picture layer names. Context is the pose's `context`, never a layer. */
-export const DUCTS_LAYERS = [
-  "meshes",
-  "system-colours",
-  "stub-labels",
-  "centrelines",
-  "no-run",
-  "labels",
-  "findings",
-] as const;

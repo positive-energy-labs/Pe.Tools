@@ -1,17 +1,16 @@
 import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
-import { CALC_ENGINE_VERSION } from "@pe/fans-contract/fan-calc";
 import { ductFirmLineSchema } from "@pe/ducts-contract/duct-inputs";
 import { inferenceReadSchema, effectiveDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { documentRefSchema } from "@pe/agent-contracts/target";
-import { ductsDocumentSchema, ductSlotSourcesSchema } from "./ducts.ts";
+import { ductsDocumentSchema, ductSlotSourcesSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
-import { encounterSchema, fanClaimSchema, fanEspValuesSchema, fanIssueSchema } from "@pe/fans-contract/fans-inputs";
+import { ductsFanCalcSchema } from "@pe/fans-contract/fan-calc-data";
 import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-pricing-read.ts";
 import { catalogTableSchema } from "@pe/ducts-contract/duct-catalog";
-import { ductsInputsSchema, ductsCalcOverviewSchema, ductsCalcResponseSchema } from "@pe/fans-contract/calc-read";
+import { ductsInputsSchema } from "@pe/fans-contract/calc-read";
 import { fansReadRequest, fansReadResponse, fansCalcData } from "@pe/fans-contract/fans-read";
 
 const numberOrNull = z.number().nullable();
@@ -85,40 +84,6 @@ const flow = z.object({
   finding: z.literal("no-flow").optional(),
 });
 const equipmentFlow=z.object({cfm:numberOrNull,source:ductEquipmentFlowSourceSchema.nullable(),grilles:z.number().optional()});
-const details = ductsCalcResponseSchema.options;
-const calcPath = z.object({
-  side: z.enum(["supply", "return"]),
-  legIds: z.array(z.string()),
-  end: details[4].shape.ends.element,
-  knownInWg: z.number(),
-  blockerIds: z.array(z.string()),
-});
-/**
- * One fan calc whole (the domain `Sheet`, `ducts-domain/src/sheet/types.ts`), as /ducts reads it:
- * the same wire parts the fans read publishes. The claim is the wire `FanClaim`; the brand never crosses.
- */
-export const ductsFanCalcSchema = z.object({
-  engineVersion: z.literal(CALC_ENGINE_VERSION, "Retired calc engine; record this calculation again. Recording bytes were not changed."),
-  basis: z.string(),
-  fan: ductsCalcOverviewSchema.shape.fan.unwrap().omit({ ratedEspInWg: true }),
-  legs: details[3].shape.legs,
-  paths: z.array(calcPath),
-  claim: fanClaimSchema,
-  esp: fanEspValuesSchema,
-  encounters: z.array(encounterSchema),
-  issues: z.array(fanIssueSchema),
-  network: z.string(),
-  totals: ductsCalcOverviewSchema.shape.totals.unwrap(),
-  assumed: z.object({
-    paths: z.array(calcPath),
-    legs: details[3].shape.legs,
-    blockers: details[4].shape.blockers,
-  }),
-  blockers: details[4].shape.blockers,
-  notes: details[4].shape.notes,
-  fittings: details[4].shape.fittings,
-  walkedElementIds: details[2].shape.walkedElementIds,
-});
 export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
   fanRows: fansCalcData.shape.rows,

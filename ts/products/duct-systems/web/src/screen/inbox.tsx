@@ -2,7 +2,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cite, citation, citationOwner, leaveCitation } from "@pe/kit/lang/attention";
 import { useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { Ban, Eye, EyeOff, Fan, Link, Pencil, type LucideIcon } from "lucide-react";
-import type { DuctsDesign } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import type { LossesWork } from "@pe/ducts-web/work";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { Button, ButtonIcon } from "@pe/kit/lang/button";

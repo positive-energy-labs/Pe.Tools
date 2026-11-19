@@ -4,13 +4,9 @@
  * staged Work values; it prices nothing), and the network-health analysis. The host body encodes
  * it to the wire; a fixture that stands in for the read calls this same function.
  */
-import {
-  ductsPricingData,
-  serveSetting,
-  stagedValues,
-  type DuctsDesign,
-  type SettingTierRead,
-} from "@pe/agent-contracts";
+import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
+import { serveSetting, type SettingTierRead } from "@pe/agent-contracts";
+import { stagedValues, type DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "./equivalent-length.ts";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { inferJoints } from "@pe/ducts-domain/proximity";

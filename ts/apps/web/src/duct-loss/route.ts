@@ -2,11 +2,11 @@ import * as contracts from "./contract.ts";
 import type { ContextOf } from "../route/defaults";
 import { read } from "../route/defaults";
 import { z } from "zod";
-import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
+import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/ducts-contract/duct-loss-read";
 import { route, field } from "../route/defaults";
 import { hostRead } from "../route/host-read";
 import { draw } from "../route/draw";
-import { ductLossArgs } from "@pe/agent-contracts";
+import { ductLossArgs } from "@pe/ducts-contract/duct-loss-read";
 export const fields = {
   shape: field(ductLossArgs.shape.shape, "round", "query", "push"),
   a: field(z.number(), 12, "query"),

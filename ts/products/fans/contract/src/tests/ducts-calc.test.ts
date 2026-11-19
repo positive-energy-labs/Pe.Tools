@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
-import { elementSubjectSchema, fansCalcEditsSchema } from "./duct-inputs.ts";
-import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { elementSubjectSchema, fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
+import { fansDocumentSchema } from "../fans.ts";
 
 it.each(["flows", "ratedEsp", "equipmentFlows", "roles", "terminalDrops", "componentDrops"])("P-119: fans Work %s raw keys explain UniqueId SubjectRefs", segment => {
   const parsed = fansDocumentSchema.safeParse({ [segment]: { "14577396": {} } });
@@ -29,7 +29,7 @@ import {
   ductsCalcEditsSchema,
   calcEditsSchema,
   fittingPricingSchema,
-} from "@pe/fans-contract/calc-read";
+} from "../calc-read.ts";
 
 const row = {
   family: "proposed transition",
@@ -125,7 +125,7 @@ it("criteriaMeta keeps who staged each criterion, and a cell with no `by` has no
 });
 
 it("a resolved wire value agrees with its status, as the kernel resolution does (P-024)", async () => {
-  const { ductsInputsSchema } = await import("@pe/fans-contract/calc-read");
+  const { ductsInputsSchema } = await import("../calc-read.ts");
   const cfm = ductsInputsSchema.shape.terminals.valueType.shape.cfm;
   const base = { units: "cfm", version: null };
   const ok = [

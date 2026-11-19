@@ -1,7 +1,9 @@
+import { fansDocumentSchema, fansRouteState } from "./fans.ts";
+import { DUCT_SYSTEMS_ROUTE } from "@pe/ducts-contract/system-work";
 import { z } from "zod";
-import { fansDocumentSchema, tools, workHandleSchema, workKey, type WorkHandle } from "@pe/agent-contracts";
+import { workHandleSchema, workKey, type WorkHandle } from "@pe/agent-contracts";
 
-const ductsRoute = tools.ducts.work.route, fansRoute = tools.fans.work.route;
+const ductsRoute = DUCT_SYSTEMS_ROUTE, fansRoute = fansRouteState.route;
 
 /** Product-owned preview prerequisites; the adapter supplies the shared Work read door. */
 export const admissionPreflight = {

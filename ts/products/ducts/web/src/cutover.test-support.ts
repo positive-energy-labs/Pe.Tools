@@ -3,7 +3,9 @@ import { fixtureTimeline } from "../../../../apps/web/src/shell/fixture-work-doo
 import * as ductsReads from "@pe/duct-systems-contract/contract";
 import { createHash } from "node:crypto";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
-import { ductsDesign, ductsDocumentSchema, fansDocumentSchema } from "@pe/agent-contracts";
+import { ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import {
   fansCalcData,
   openFanCalcSchema,
@@ -20,7 +22,9 @@ import { nativeTestAdapter } from "./native.test-support.ts";
 import { admitModules } from "./admission.test-support.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Calc } from "@pe/fans-contract/fan-calc";
-import type { DuctsDesign, DuctsFirm, DuctsPricingData } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
+import type { DuctsFirm } from "@pe/ducts-contract/duct-inputs";
+import type { DuctsPricingData } from "@pe/duct-systems-contract/ducts-read";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { Catalogs } from "@pe/ducts-domain/catalog";
 

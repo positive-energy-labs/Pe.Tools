@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./semantic-actions": "./src/semantic-actions.ts",
+    "./read-discovery": "./src/read-discovery.ts",
     "./admission": "./src/admission.ts",
     "./calc-read": "./src/calc-read.ts",
     "./contract": "./src/contract.ts",
+    "./fan-calc-data": "./src/fan-calc-data.ts",
     "./fan-calc": "./src/fan-calc.ts",
     "./fans-host-reads": "./src/fans-host-reads.ts",
     "./fans-inputs": "./src/fans-inputs.ts",
@@ -22,7 +25,6 @@
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
-    "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6"

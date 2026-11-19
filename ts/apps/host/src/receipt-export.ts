@@ -1,4 +1,4 @@
-import { peRoutes } from "@pe/agent-contracts/pe-api";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
 import { isSea } from "node:sea";

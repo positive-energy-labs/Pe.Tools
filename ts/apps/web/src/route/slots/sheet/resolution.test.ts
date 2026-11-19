@@ -1,12 +1,13 @@
 import { expect, test } from "vite-plus/test";
-import { DUCTS_DEFAULT_CRITERIA, DUCTS_CRITERIA_CELLS } from "@pe/agent-contracts";
+import { DUCTS_DEFAULT_CRITERIA, DUCTS_CRITERIA_CELLS } from "@pe/ducts-contract/duct-inputs";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { designCalc } from "@pe/duct-systems-web/design-calc";
 import { fansCalc } from "@pe/fans-web/calc";
 import { settingsSheet } from "../../../settings/route.ts";
 import { sheetCells } from "./index.ts";
 import { readFileSync } from "node:fs";
-import { ductsNetworkData, ductParameterSlots, ductSlotRequest } from "@pe/agent-contracts";
+import { ductsNetworkData } from "@pe/duct-systems-contract/ducts-read";
+import { ductParameterSlots, ductSlotRequest } from "@pe/ducts-contract/system-work";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 
 const settings = { ducts: [{ tier: "firm" as const, home: "firm", name: "Firm", path: "Settings/ducts.json", sha256: "hash", json: { criteria: { autoJoinGapIn: 5 } } }] };

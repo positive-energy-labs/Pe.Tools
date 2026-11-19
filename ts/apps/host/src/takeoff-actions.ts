@@ -10,8 +10,6 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
 import {
-  commands,
-  tools,
   roomEditAddress,
   takeoffEditAddress,
   takeoffDecisionAddress,
@@ -28,6 +26,7 @@ import {
   type StagedRoomEdit,
   type ModelRoom,
 } from "@pe/agent-contracts";
+import { commands, tools } from "@pe/mcps/product-actions";
 import type { RouteWorkspace } from "@pe/runtime";
 import type {
   RhvacInsertRoomData,

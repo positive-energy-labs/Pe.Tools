@@ -3,15 +3,12 @@ import * as contracts from "@pe/fans-contract/contract";
 import { body } from "@pe/host/read-graph";
 import {
   FAN_READ_MAX,
-  ductsDesign,
   fansReadArgs,
   fansCalcData,
   openFanCalcSchema,
-  stagedDucts,
-  subjectCode,
-  subjectOf,
-
-} from "@pe/agent-contracts";
+} from "@pe/fans-contract/fans-read";
+import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
+import { subjectCode, subjectOf } from "@pe/agent-contracts";
 import { calcSnapshot } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { calcState } from "@pe/fans-domain/calc/state";
 import { z } from "zod";

@@ -1,4 +1,4 @@
-import { fansDocumentSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { expect, test } from "vite-plus/test";
 
 test("parameter slot names cannot enter Fans Work", () => {

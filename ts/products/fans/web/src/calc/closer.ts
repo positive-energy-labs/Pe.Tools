@@ -15,7 +15,8 @@ import type { CalcFitting } from "@pe/ducts-web/calc/model";
  * through a proposed tee or tap takes a typed drop for that path only (`edits.fittingDrops`), with
  * no default. Everything else is ruled in Revit and the row says so.
  */
-import type { FanCloser, Stated } from "@pe/agent-contracts";
+import type { FanCloser } from "@pe/fans-contract/fans-inputs";
+import type { Stated } from "@pe/ducts-contract/duct-inputs";
 import { ruleByKey, ruleWords } from "@pe/ducts-domain/loss-rules";
 import { tableMeaning } from "./fitting-groups.ts";
 import type { CalcBlocker } from "./tiers.ts";

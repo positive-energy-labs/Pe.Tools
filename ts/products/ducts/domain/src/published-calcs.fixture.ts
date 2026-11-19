@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { ductsPricingData } from "@pe/agent-contracts";
+import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
 import { fansCalcData } from "@pe/fans-contract/fans-read";
 import saved from "./fixtures/published-calcs.fixture.json" with { type: "json" };
 

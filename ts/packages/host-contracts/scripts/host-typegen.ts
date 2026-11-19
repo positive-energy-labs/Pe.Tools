@@ -296,7 +296,7 @@ function regenerateCommandTable(check: boolean) {
   // Custom outputs are isolated artifacts; only the checkout catalog refreshes its command table.
   if (resolve(outPath) !== DEFAULT_OUT) return;
   // A fresh process reads the just-written catalog, not this process's cached modules.
-  const cwd = fileURLToPath(new URL("../../agent-contracts/", import.meta.url));
+  const cwd = fileURLToPath(new URL("../../mcps/", import.meta.url));
   const result = spawnSync(process.execPath,
     ["--import", "jiti/register", "scripts/command-axes.ts", ...(check ? ["--check"] : [])],
     { cwd, stdio: "inherit" });

@@ -10,7 +10,7 @@ import {
 } from "./native-recording.ts";
 import { InvalidRead } from "./native-reads.ts";
 
-import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { execFile, spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";

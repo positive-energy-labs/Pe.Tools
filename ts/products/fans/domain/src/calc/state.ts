@@ -1,6 +1,6 @@
 import type { Immutable } from "@pe/agent-contracts";
 import type { z } from "zod";
-import type { openFanCalcSchema } from "@pe/agent-contracts";
+import type { openFanCalcSchema } from "@pe/fans-contract/fans-read";
 type OpenCalc = Immutable<z.output<typeof openFanCalcSchema>>;
 import { detailOf, takenClosures, tierCounts } from "./tiers.ts";
 

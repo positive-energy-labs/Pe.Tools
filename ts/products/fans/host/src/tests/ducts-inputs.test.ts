@@ -3,22 +3,17 @@ import { mkdtemp } from "../../../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  addressSchema,
-  bindWork,
-  ductsRouteState,
-  ductsDocumentSchema,
-  ductsDesign,
-  neutralFansWork,
-  fansDocumentSchema,
-  type DuctsCalcEdits,
-} from "@pe/agent-contracts";
+import { addressSchema, bindWork } from "@pe/agent-contracts";
+import { ductsRouteState, ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { neutralFansWork, fansDocumentSchema } from "@pe/fans-contract/fans";
+import { type DuctsCalcEdits } from "@pe/ducts-contract/duct-inputs";
 import { RouteWorkspace } from "@pe/runtime";
 import { nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { expect, test } from "vite-plus/test";
 import { fileRouteDocumentStore } from "../../../../../apps/host/src/route-document-store.ts";
 import { editPatches, workLayer } from "@pe/ducts-host/ducts-inputs";
-import { criteriaLayer } from "@pe/agent-contracts";
+import { criteriaLayer } from "@pe/ducts-contract/duct-inputs";
 import { resolveInputs, type WorkLayer } from "@pe/fans-domain/calc/index";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { TEST_FIRM } from "@pe/ducts-domain/test-inputs";

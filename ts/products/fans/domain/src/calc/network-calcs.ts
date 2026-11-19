@@ -1,4 +1,5 @@
-import type { DuctsDesign, DuctsFirm } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
+import type { DuctsFirm } from "@pe/ducts-contract/duct-inputs";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Grids } from "@pe/ducts-domain/loss-grid";
 import type { Catalogs } from "@pe/ducts-domain/catalog";

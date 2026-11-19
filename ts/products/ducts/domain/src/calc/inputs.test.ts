@@ -1,7 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import * as inputs from "./inputs.ts";
 import { catalogLoss, catalogSchema, catalogTableSchema, type Catalogs } from "../catalog.ts";
-import { ductCatalogReadingSchema } from "@pe/agent-contracts";
+import { ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
 import { TEST_FIRM, TEST_SLOTS } from "../test-inputs.ts";
 
 const { resolveInputs } = inputs;

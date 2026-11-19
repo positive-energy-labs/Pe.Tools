@@ -4,11 +4,8 @@ import { cleanup, waitFor } from "@testing-library/react";
 import { expect } from "vite-plus/test";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import type { Readings } from "../host/resource-stream";
-import {
-  bindWork,
-  commands,
-  actionReceiptSchema,
-} from "@pe/agent-contracts";
+import { bindWork, actionReceiptSchema } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 import type {
   WorkJournalDoor,
   AcceptedResult,

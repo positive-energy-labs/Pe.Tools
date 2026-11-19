@@ -1,5 +1,12 @@
 import { networkFixtures } from "@pe/ducts-web/network-fixtures";
-import { ductsDesign, ductsDocumentSchema, fansDocumentSchema, ductsRosterData, ductsNetworkData, ductsPricingData } from "@pe/agent-contracts";
+import { ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import {
+  ductsRosterData,
+  ductsNetworkData,
+  ductsPricingData,
+} from "@pe/duct-systems-contract/ducts-read";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { systemList } from "@pe/duct-systems-domain/system-list";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";

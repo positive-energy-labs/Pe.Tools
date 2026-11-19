@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
-import { ductsFanCalcSchema } from "@pe/duct-systems-contract/ducts-read";
+import { ductsFanCalcSchema } from "../fan-calc-data.ts";
 import { fansReadArgs, fansCalcData } from "../fans-read.ts";
 import saved from "@pe/ducts-contract/fixtures/synthetic-snapshot.json" with { type: "json" };
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";

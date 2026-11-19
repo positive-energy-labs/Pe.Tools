@@ -9,7 +9,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { analyticsConfig } from "@pe/runtime";
 import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/receipt-fixture.ts";
 import { Effect } from "effect";
-import { ductsFirmSchema } from "@pe/agent-contracts";
+import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { DuctFiles, firmRootPath } from "@pe/ducts-host/ducts-files";
 import { resolveFirm } from "../src/reads/door.ts";

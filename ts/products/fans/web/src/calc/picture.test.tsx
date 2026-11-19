@@ -22,7 +22,7 @@ import * as Atom from "effect/reactivity/Atom";
 import { createElement, type ComponentProps } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { NAVIGATION_FIXTURE } from "@pe/ducts-web/navigation.fixture";
-import { openFanCalcSchema as openSheetSchema } from "@pe/agent-contracts";
+import { openFanCalcSchema as openSheetSchema } from "@pe/fans-contract/fans-read";
 import type { OpenCalc } from "./types.ts";
 import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { type FanPort } from "@pe/ducts-web/calc/model";

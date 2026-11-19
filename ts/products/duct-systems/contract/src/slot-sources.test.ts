@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { ductSlotSourcesSchema, ductSlotRequest, slotLayer } from "./ducts.ts";
+import { ductSlotSourcesSchema, ductSlotRequest, slotLayer } from "@pe/ducts-contract/system-work";
 
 test("slot sources refuse retired model and user tiers", () => {
   for (const source of ["model", "user"])

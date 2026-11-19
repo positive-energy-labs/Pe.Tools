@@ -1,9 +1,9 @@
+import type { DuctsInputs } from "@pe/ducts-contract/duct-inputs";
 import type {
-  DuctsInputs,
   DuctsRosterResponse,
   DuctsCalcResponse,
   FittingPricing,
-} from "@pe/agent-contracts";
+} from "@pe/fans-contract/calc-read";
 import type { Immutable } from "@pe/agent-contracts";
 import { subjectCode, uniqueIdSchema, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 

@@ -28,6 +28,9 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
     "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/host": "workspace:*",
@@ -40,9 +43,6 @@
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:",
-    "@pe/ducts-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*",
-    "@pe/fans-host": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*"
   },

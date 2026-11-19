@@ -2,12 +2,14 @@ import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
-import { ductsPricingData, type DuctsApplyInput, type FanClaim } from "@pe/agent-contracts";
+import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
+import { type DuctsApplyInput } from "@pe/duct-systems-contract/ducts";
+import { type FanClaim } from "@pe/fans-contract/fans-inputs";
 
 
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
-import { stagedValues } from "@pe/agent-contracts";
+import { stagedValues } from "@pe/duct-systems-contract/ducts";
 
 
 

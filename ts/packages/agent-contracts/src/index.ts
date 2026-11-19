@@ -22,7 +22,6 @@ export {
   orderedListField,
 } from "./route-field.ts";
 
-export * from "@pe/ducts-contract/duct-catalog";
 export * from "./input-lane.ts";
 export * from "./recording-points.ts";
 
@@ -52,12 +51,9 @@ export * from "./bind-read.ts";
 export * from "./captures-read.ts";
 export type { CaptureDisclosure } from "./capture.ts";
 export * from "./chat-read.ts";
-export * from "@pe/ducts-contract/duct-loss-read";
-export * from "@pe/duct-systems-contract/ducts-read";
 export * from "./native-output-read.ts";
 export * from "./families-read.ts";
 export * from "./family-read.ts";
-export * from "@pe/fans-contract/fans-read";
 export * from "./open-read.ts";
 export * from "./ops-read.ts";
 export * from "./pods-read.ts";
@@ -75,4 +71,3 @@ export * from "./notice-feed.ts";
 
 export type { ParamSpec } from "./family-param-spec.ts";
 export * from "./places.ts";
-export * from "@pe/fans-contract/fans-inputs";

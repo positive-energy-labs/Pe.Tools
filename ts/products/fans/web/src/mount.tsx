@@ -4,7 +4,8 @@ import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
 import { useRouteSearchSlice } from "@pe/web/route/activity";
 import { useAdmittedSubject } from "@pe/web/shell/subject";
 
-import type { FansCalcEdits, SubjectRefCode } from "@pe/agent-contracts";
+import type { FansCalcEdits } from "@pe/ducts-contract/duct-inputs";
+import type { SubjectRefCode } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";

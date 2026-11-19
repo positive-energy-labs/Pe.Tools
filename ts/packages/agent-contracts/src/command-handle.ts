@@ -30,7 +30,9 @@ export interface CommandHandle<
 }
 export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
 
-type Commands = typeof hostActions;
+/** Product contracts contribute their command types through their own registration modules. */
+export interface ProductCommands {}
+type Commands = typeof hostActions & ProductCommands;
 type Routes = typeof httpRoutes;
 type Row<K extends CommandKey> = (typeof commandTable)[K];
 /** The generated table (K1) names every key: semantic commands, raw native commands, pe-api routes. */

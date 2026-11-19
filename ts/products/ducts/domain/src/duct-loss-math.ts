@@ -1,4 +1,4 @@
-import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/agent-contracts";
+import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/ducts-contract/duct-loss-read";
 /**
  * Imperial duct friction loss — ASHRAE Fundamentals, Duct Design (Darcy with the Altshul-Tsal
  * friction factor). Units: cfm, ft, in, fpm, lbm/ft³, in. wg.

@@ -1,7 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { address, bindWork, fansRouteState, resolveValue } from "@pe/agent-contracts";
-import { RouteWorkspace, type RouteDocumentStore } from "../src/route-workspace.ts";
+import { address, bindWork, resolveValue } from "@pe/agent-contracts";
+import { fansRouteState } from "@pe/fans-contract/fans";
+import { RouteWorkspace, type RouteDocumentStore } from "@pe/runtime";
 import stored from "./fixtures/fans-29e4d97e.json" with { type: "json" };
 import qualified from "./fixtures/fans-cellkey.json" with { type: "json" };
 

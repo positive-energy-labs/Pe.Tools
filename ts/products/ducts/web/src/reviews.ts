@@ -7,14 +7,14 @@ type ReviewEvidence = {
   readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
   readonly page?: { readonly stage?: "network" | "calc" };
   readonly work?:
-    | import("@pe/agent-contracts").Immutable<import("@pe/agent-contracts").DuctsRouteDocument>
+    | import("@pe/agent-contracts").Immutable<import("@pe/ducts-contract/system-work").DuctsRouteDocument>
     | null;
   readonly readings: {
     readonly ducts?: { readonly value?: unknown };
     readonly calcSnapshot?: { readonly value?: unknown };
     readonly fansWork?: {
       readonly value?: import("@pe/agent-contracts").Immutable<
-        import("@pe/agent-contracts").FansDocument
+        import("@pe/fans-contract/fans").FansDocument
       >;
     };
   };
@@ -151,8 +151,8 @@ const spoken = (value: string | null | undefined) =>
 export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
-    derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput;
-    receipt?: { result?: { derivedRequest?: import("@pe/agent-contracts").DuctsApplyInput } };
+    derivedRequest?: import("@pe/duct-systems-contract/ducts").DuctsApplyInput;
+    receipt?: { result?: { derivedRequest?: import("@pe/duct-systems-contract/ducts").DuctsApplyInput } };
   };
   const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
   const snapshot =

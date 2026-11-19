@@ -1,6 +1,9 @@
 import { workRead } from "@pe/host/reads/inputs";
 import { z } from "zod";
-import { ductsDocumentSchema, ductsFirmSchema, fansDocumentSchema, documentRefSchema, settingTiersSchema } from "@pe/agent-contracts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { documentRefSchema, settingTiersSchema } from "@pe/agent-contracts";
 import { firmReading } from "./ducts-files.ts";
 import { read, workScope } from "@pe/host/read-graph";
 export const designLayers = read("ducts.design-layers", {

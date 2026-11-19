@@ -1,3 +1,4 @@
+import { route } from "@pe/host-contracts/pe-api";
 import { z } from "zod";
 const sourceSchema = z.strictObject({
   file: z.string().min(1),
@@ -95,3 +96,20 @@ export const ductCatalogReadingSchema = z.object({
   tables: z.record(z.string(), catalogTableSchema),
   findings: z.array(z.string()),
 });
+
+export const ductCatalogRoutes = {
+  "ducts.catalogs": route(
+    "GET", "/pe/ducts/catalogs", z.undefined(), ductCatalogReadingSchema, "read", "gateway", "read",
+  ),
+} as const;
+
+export const ductCatalogRouteAxes = {
+  "ducts.catalogs": {
+    subject: "None",
+    cardinality: "One",
+    touches: ["Metadata"],
+    effect: "Read",
+    cost: "Cheap",
+    uses: [],
+  },
+} as const;

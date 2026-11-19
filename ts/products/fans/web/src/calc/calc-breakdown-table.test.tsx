@@ -6,7 +6,7 @@
  */
 import { cleanup, fireEvent, render, screen, act } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
-import type { DuctsInputs } from "@pe/agent-contracts";
+import type { DuctsInputs } from "@pe/ducts-contract/duct-inputs";
 import type { Detail } from "@pe/ducts-web/calc/model";
 import { derivedFlowSource, sideCaption, CalcBreakdown } from "./calc-breakdown-table.tsx";
 import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";

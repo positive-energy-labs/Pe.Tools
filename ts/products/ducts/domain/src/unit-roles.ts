@@ -1,6 +1,6 @@
 /** Every unit's role, `fan` or `passive`, with why (pressure-drop ledger, 2026-10-21, multi-fan spike). */
 import { elementSubject } from "./work-subject.ts";
-import type { DuctUnitRole } from "@pe/agent-contracts";
+import type { DuctUnitRole } from "@pe/fans-contract/fans";
 
 import type { EquipmentFlow } from "./terminal-flows.ts";
 import type { DuctSnapshot } from "./types.ts";

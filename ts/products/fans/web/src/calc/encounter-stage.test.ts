@@ -1,6 +1,8 @@
 import { expect, it } from "vite-plus/test";
-import { address, bindWork, fansDocumentSchema } from "@pe/agent-contracts";
-import { ductsRouteState, ductsDocumentSchema, stagedDucts, encounterPatches } from "@pe/duct-systems-contract/ducts";
+import { address, bindWork } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { ductsRouteState, stagedDucts, encounterPatches } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { RouteWorkspace } from "@pe/runtime";
 import { encounterRulings } from "@pe/ducts-domain/calc/inputs";
 import { TEST_COVERAGE, TEST_FIRM } from "@pe/ducts-domain/test-inputs";

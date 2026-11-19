@@ -1,4 +1,14 @@
-import { DUCTS_LAYERS } from "@pe/agent-contracts";
+/** Network picture layer names. Context is the pose's `context`, never a layer. */
+export const DUCTS_LAYERS = [
+  "meshes",
+  "system-colours",
+  "stub-labels",
+  "centrelines",
+  "no-run",
+  "labels",
+  "findings",
+] as const;
+
 const LAYER_WORDS: Record<
   (typeof DUCTS_LAYERS)[number],
   { label: string; chord?: "M" | "L"; off?: true }

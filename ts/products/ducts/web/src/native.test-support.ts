@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { kernelPane } from "../../../../apps/web/src/shell/typed-shell.tsx";
 import { SheetPane } from "../../../../apps/web/src/route/slots/sheet/pane.tsx";
 import { planned, type TypedMount } from "../../../../apps/web/src/shell/typed-mount.ts";
-import type { FansRouteDocument } from "@pe/agent-contracts";
+import type { FansRouteDocument } from "@pe/fans-contract/fans";
 import { completion } from "../../../../apps/web/src/shell/work-door-observation.ts";
 import type { WorkJournalDoor, WorkWriteOutcome } from "../../../../packages/agent-contracts/src/work-journal-door.ts";
 

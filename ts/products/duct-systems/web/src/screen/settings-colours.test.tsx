@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { applyPatches, ductsRouteState } from "@pe/agent-contracts";
+import { applyPatches } from "@pe/agent-contracts";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { SystemColours } from "./settings.tsx";
 import { FIRM_COLOURS } from "@pe/ducts-web/colours";

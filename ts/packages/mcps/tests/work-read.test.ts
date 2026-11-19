@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { fansDocumentSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { peaWorkValue } from "../src/pea/capability-tools.ts";
 import { renderDuctsSkill } from "@pe/fans-contract/pea/ducts-skill";
 

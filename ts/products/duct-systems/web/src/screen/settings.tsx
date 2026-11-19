@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { DUCT_AIR_TYPES, type DuctAirType } from "@pe/agent-contracts";
+import { DUCT_AIR_TYPES, type DuctAirType } from "@pe/ducts-contract/system-work";
 import { Input } from "@pe/kit/lang/input";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { coloursOf } from "@pe/ducts-web/colours";

@@ -27,13 +27,13 @@ import { isViewImage } from "@pe/agent-contracts/native-output-read";
 import { Effect, Schema } from "effect";
 import {
   actionStepSchema,
-  commands,
   type Consumed,
   type Command,
   nativeProcessSchema,
   type Footprint,
   canonicalRouteInput,
 } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 import { admitScript, consentedRead } from "./control.ts";
 import { guards } from "./guards.ts";
 import {

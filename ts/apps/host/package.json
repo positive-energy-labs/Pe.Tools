@@ -39,6 +39,7 @@
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/duct-systems-host": "workspace:*",
     "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
     "@pe/ducts-web": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/fans-host": "workspace:*",

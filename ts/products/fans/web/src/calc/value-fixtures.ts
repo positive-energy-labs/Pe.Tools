@@ -1,11 +1,8 @@
-import {
-  ductsRosterResponseSchema,
-  ductsDesign,
-  ductsDocumentSchema,
-  fansDocumentSchema,
-  fansCalcData,
-  openFanCalcSchema,
-} from "@pe/agent-contracts";
+import { ductsRosterResponseSchema } from "@pe/fans-contract/calc-read";
+import { ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { fansCalcData, openFanCalcSchema } from "@pe/fans-contract/fans-read";
 import { networkFixtures } from "@pe/ducts-web/network-fixtures";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { calcState } from "./state.ts";

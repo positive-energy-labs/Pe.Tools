@@ -2,7 +2,8 @@
 import { Effect, Option, Result, Schema } from "effect";
 import { attemptFor, CurrentInputAttempt, CurrentInputConsumption } from "@pe/host/input-occurrence";
 import { z } from "zod";
-import { ductsReadingSchema, readingKey, type DuctsReadingRequest } from "@pe/agent-contracts";
+import { readingKey } from "@pe/agent-contracts";
+import { ductsReadingSchema, type DuctsReadingRequest } from "@pe/ducts-contract/reading";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { InvalidRead } from "@pe/host/native-reads";

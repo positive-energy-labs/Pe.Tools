@@ -7,7 +7,7 @@ import { field, route } from "../route/defaults";
 import { hostRead } from "../route/host-read.ts";
 import { draw } from "../route/draw.tsx";
 
-import {  } from "../../../../packages/agent-contracts/src/captures-read.ts";
+
 export const loaded = read(hostRead(contracts.browse));
 export const fields = {
   focus: field(z.string(), "", "pose"),

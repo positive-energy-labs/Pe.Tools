@@ -7,7 +7,9 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { bindWork, ductsDocumentSchema, familiesRouteState, fansRouteState, workKey } from "@pe/agent-contracts";
+import { bindWork, familiesRouteState, workKey } from "@pe/agent-contracts";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { fansRouteState } from "@pe/fans-contract/fans";
 import { decode, subjectCode, uniqueIdSchema } from "../../../packages/agent-contracts/src/subject-ref.ts";
 
 import { createPeRoutes } from "../src/pe-routes.ts";

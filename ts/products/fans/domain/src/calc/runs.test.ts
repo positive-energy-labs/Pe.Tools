@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { ductsPricingData } from "@pe/agent-contracts";
+import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
 import { buildCalc } from "./index.ts";
 import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import { connOf, nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";

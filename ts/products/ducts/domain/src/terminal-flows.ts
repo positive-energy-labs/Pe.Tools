@@ -1,7 +1,10 @@
 import { elementSubject } from "./work-subject.ts";
-import type { DuctTerminalFlowSource, DuctEquipmentFlowSource } from "@pe/agent-contracts";
+import type {
+  DuctTerminalFlowSource,
+  DuctEquipmentFlowSource,
+} from "@pe/duct-systems-contract/ducts-read";
 /** The design flow at every air terminal (pressure-drop ledger, 2026-10-16 "terminal design flow", ruling 5 of 2026-10-20; Load Preview deleted at FANSPLIT, kaitpw 2026-11-03): an edit override first; else the rooms seam (`roomFlows`); else Revit's own terminal flow when positive; else nothing, and a finding says so. */
-import type { DuctFlow } from "@pe/agent-contracts";
+import type { DuctFlow } from "@pe/ducts-contract/duct-inputs";
 
 import { slotFlowOf } from "./kernel/terminal-flow.ts";
 import type { DuctSnapshot } from "./types.ts";
@@ -81,4 +84,3 @@ export function equipmentFlows(
       }),
   );
 }
-

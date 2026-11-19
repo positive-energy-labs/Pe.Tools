@@ -1,4 +1,4 @@
-import type { DuctsCriteriaValues } from "@pe/fans-contract/calc-read";
+import type { DuctsCriteriaValues } from "./duct-inputs.ts";
 
 /** Each design criterion in words: the inputs pane's labels and the review's, one map. */
 export const CRITERION_WORDS: Record<keyof DuctsCriteriaValues, string> = {

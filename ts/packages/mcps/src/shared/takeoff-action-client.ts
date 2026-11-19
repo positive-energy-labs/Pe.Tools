@@ -12,8 +12,6 @@ import {
 } from "@pe/runtime/context";
 import {
   canonicalRouteInput,
-  commands,
-  commandTarget,
   actionAdmissionSchema,
   ADMISSION_RESEND_HEADER,
   type ExecutionTarget,
@@ -26,9 +24,9 @@ import {
   type ActionAdmission,
   type DocumentRef,
   type ActionReceipt,
-  type SemanticActionKey,
   type WorkKey,
 } from "@pe/agent-contracts";
+import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.ts";
 
 /**
  * A refused admission. A door's typed refusal rides on the error (`refusal`) and its sentence is

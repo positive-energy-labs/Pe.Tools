@@ -37,7 +37,8 @@
  */
 import { subjectName } from "./words.ts";
 import { elementLabeler } from "./element-label.ts";
-import type { DuctInferenceGrade, DuctsDesign } from "@pe/agent-contracts";
+import type { DuctInferenceGrade } from "@pe/duct-systems-contract/ducts-pricing-read";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { cells } from "./geometry.ts";
 import type { DuctSnapshot } from "./types.ts";
 

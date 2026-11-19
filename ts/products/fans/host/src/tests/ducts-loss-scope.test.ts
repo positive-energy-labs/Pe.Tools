@@ -14,7 +14,9 @@ import { TEST_WALK, inputsFor, withFamilyFlipped, withPeersRead } from "@pe/duct
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { writeSeal } from "../../../../../apps/host/src/work-write-boundary.ts";
 import { nativeResponseSchema } from "../../../../../packages/host-contracts/src/decoders.ts";
-import { ductsDesign, fanClaimSchema, fansDocumentSchema, stagedValues } from "../../../../../packages/agent-contracts/src/index.ts";
+import { ductsDesign, stagedValues } from "@pe/duct-systems-contract/ducts";
+import { fanClaimSchema } from "@pe/fans-contract/fans-inputs";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
 
 // The saved captures predate the native vocabulary; it is the generated one, added whole.
 const walkCapture = { parse: (raw: object) => nativeResponseSchema("ducts.snapshot.walk").parse({ ...raw, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }) };

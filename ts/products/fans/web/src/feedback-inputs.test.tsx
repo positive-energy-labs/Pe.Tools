@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Roster } from "./calc/view.tsx";
 import { SubjectDoor } from "../../../../apps/web/src/shell/subject.ts";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
-import { ductsRosterResponseSchema } from "@pe/agent-contracts";
+import { ductsRosterResponseSchema } from "@pe/fans-contract/calc-read";
 
 afterEach(cleanup);
 

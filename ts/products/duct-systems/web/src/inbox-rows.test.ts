@@ -1,4 +1,4 @@
-import { type DuctFinding } from "@pe/agent-contracts";
+import { type DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { HealPlan } from "@pe/ducts-domain/heal";

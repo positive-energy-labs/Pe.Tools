@@ -1,7 +1,9 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { fansDocumentSchema, ductsDocumentSchema, workKey } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { workKey } from "@pe/agent-contracts";
 import type {
   Observation,
   WorkWriteOutcome,

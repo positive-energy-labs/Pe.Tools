@@ -3,6 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*"
+  },
   "devDependencies": {
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",

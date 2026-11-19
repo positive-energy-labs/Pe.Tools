@@ -1,5 +1,5 @@
 // U4 wires the real fans Work for callers without one.
-import { neutralFansWork } from "@pe/agent-contracts";
+import { neutralFansWork } from "@pe/fans-contract/fans";
 /**
  * The rulings the model keeps (pressure-drop ledger, 2026-10-20): the store's `ignore` verdicts
  * and `passive` roles are the base every reader sees, Work holds only the deltas, and a person can
@@ -7,7 +7,7 @@ import { neutralFansWork } from "@pe/agent-contracts";
  */
 import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { stagedValues } from "@pe/agent-contracts";
+import { stagedValues } from "@pe/duct-systems-contract/ducts";
 
 import { pendingRulings, storeRulings, withStoredRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";

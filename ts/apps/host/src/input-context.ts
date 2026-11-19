@@ -1,5 +1,5 @@
 import { inputKinds, type InputKind, type SourceProvenance } from "@pe/agent-contracts";
-import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { Context, Layer } from "effect";
 import { InvalidRead } from "./native-reads.ts";

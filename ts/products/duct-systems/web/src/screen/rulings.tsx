@@ -41,7 +41,7 @@ export function useMarks({
 }: {
   snapshot: DuctSnapshot;
   priced: Priced | null;
-  heal: import("@pe/agent-contracts").DuctsPricingData["analysis"]["heal"] | import("@pe/ducts-domain/heal").HealPlan | null;
+  heal: import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"] | import("@pe/ducts-domain/heal").HealPlan | null;
   scene: Scene;
   work: LossesWork;
   issueScope: ReadonlySet<string> | null;

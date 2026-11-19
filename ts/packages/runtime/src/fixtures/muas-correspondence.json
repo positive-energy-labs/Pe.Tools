@@ -1,0 +1,20 @@
+{
+  "document": {
+    "title": "MEP_YoramLePairArchitects_ChaddsFord_R25_standalone_20261019",
+    "readAt": "2026-10-27T14:36:28.828346-05:00",
+    "elapsedMs": 6594,
+    "networkBasedCalculations": false
+  },
+  "nodes": [
+    {
+      "id": 8733277,
+      "uniqueId": "ac4fd2d4-c027-4981-aa73-478c23a7fa79-0085425d",
+      "kind": "cap"
+    },
+    {
+      "id": 9448322,
+      "uniqueId": "671fdf43-cfca-415d-a394-110aa4fab77f-00902b82",
+      "kind": "fitting"
+    }
+  ]
+}

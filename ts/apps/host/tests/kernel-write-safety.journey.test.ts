@@ -7,7 +7,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, catalogWorkSpecs, tools, roomEditKey, type Caller, type Touched, type WorkKey } from "@pe/agent-contracts";
+import {
+  address,
+  catalogWorkSpecs,
+  roomEditKey,
+  type Caller,
+  type Touched,
+  type WorkKey,
+} from "@pe/agent-contracts";
+import { tools } from "@pe/mcps/product-actions";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 import { testRegistry } from "./effect-test.ts";

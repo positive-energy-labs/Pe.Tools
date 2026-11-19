@@ -21,7 +21,7 @@ import {
   type MachineShare,
   type ReceiptFact,
 } from "@pe/agent-contracts";
-import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
 import {
   admitRequest,
   callerOf,

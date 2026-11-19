@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";
 import {
   subjectCode,
@@ -12,6 +11,8 @@ import type {
   RecordingDiffSnapshot,
 } from "../../agent-contracts/src/recording-diff.ts";
 import { diffKeyed } from "./recording-diff.ts";
+// The first two nodes and document metadata from the retained MUAS recording at da9a4041.
+import actual from "./fixtures/muas-correspondence.json" with { type: "json" };
 
 const document = "doc-a" as DocumentKey;
 const element = (uniqueId: string, doc?: string) =>
@@ -60,12 +61,6 @@ it("keeps a section across healing/splitting and separates all three facets", ()
 });
 
 it("uses captured UniqueIds across renumbering; reused numeric ids never match different UniqueIds", () => {
-  const actual = JSON.parse(
-    readFileSync(
-      new URL(import.meta.resolve("@pe/fans-domain/calc/fixtures/muas-real.json"), import.meta.url),
-      "utf8",
-    ),
-  ) as { document: object; nodes: { id: number; uniqueId: string; kind: string }[] };
   const node = actual.nodes[0]!;
   // Projection deliberately omits transient native id. The capture has no canonical document
   // identity or full id-set evidence, so this certifies a core law, not a product adapter.

@@ -1,6 +1,12 @@
 /** Test-only: build a resolved `DuctsInputs` from the shorthand the sheet tests used to pass the engine directly (typed end cfm and drops by element id, join and end rulings, a unit's own flow), through the real resolver over a test firm. */
 import { elementSubject } from "./work-subject.ts";
-import { DUCTS_CRITERIA_CELLS, type DuctsCriteriaCell, type DuctsFirm, type DuctsInputs, type DuctUnitKind } from "@pe/agent-contracts";
+import {
+  DUCTS_CRITERIA_CELLS,
+  type DuctsCriteriaCell,
+  type DuctsFirm,
+  type DuctsInputs,
+} from "@pe/ducts-contract/duct-inputs";
+import type { DuctUnitKind } from "@pe/host-contracts/generated";
 import { catalogLinkKey } from "./catalog.ts";
 import type { DuctSnapshot } from "./types.ts";
 import type { CalcSnapshot } from "./input-snapshot.ts";

@@ -9,13 +9,8 @@ export const CALC_READ = "fans.calc";
 export const CALC_DETAIL_READ = "fans.calc-detail";
 export const CALC_BREAKDOWN_READ = "fans.calc-breakdown";
 
-import type {
-  Encounter,
-  FanBlockerKind,
-  FanEspValues,
-  FanIssue,
-  LegEvidence,
-} from "@pe/agent-contracts";
+import type { Encounter, FanEspValues, FanIssue, LegEvidence } from "./fans-inputs.ts";
+import type { FanBlockerKind } from "@pe/host-contracts/generated";
 
 
 /** A roster entry's identity. Reached ends decide the physical discharge/inlet in the sheet. */
@@ -128,7 +123,7 @@ export interface Blocker {
 }
 
 /** How one fitting, or one path through a proposed fitting, is priced (the wire type, W1-F). */
-export type FittingPricing = import("@pe/agent-contracts").FittingPricing;
+export type FittingPricing = import("./calc-read.ts").FittingPricing;
 
 /** A calculation assumption, never a model write. Points use snapshot coordinates (feet). */
 export interface HealProposal {

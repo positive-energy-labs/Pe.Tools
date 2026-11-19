@@ -1,13 +1,18 @@
+import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
+import { sheetCommands } from "@pe/ducts-contract/semantic-actions";
+import { fansTool } from "@pe/fans-contract/semantic-actions";
 
 
 
 
-import { commands, tools, canonicalRouteInput, workKey } from "@pe/agent-contracts";
+import { canonicalRouteInput, workKey } from "@pe/agent-contracts";
 
 
 
 
-import { ductsDesign, ductsFirmSchema, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
+import { subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -41,18 +46,20 @@ type ReadNative = <K extends "ducts.snapshot.roster" | "ducts.snapshot.walk" | "
 export interface DuctActionPreparation {
   flow?: Awaited<ReturnType<typeof terminalFlowSlot>>;
   intent: Intent; read: ReadSnapshot; readNative: ReadNative; snapshot: DuctSnapshot;
-  design: import("@pe/agent-contracts").DuctsDesign;
-  doc: import("@pe/agent-contracts").DuctsRouteDocument;
-  fans: import("@pe/agent-contracts").FansRouteDocument;
-  firm: import("@pe/agent-contracts").DuctsFirm; pointer: string | null | undefined;
+  design: import("@pe/duct-systems-contract/ducts").DuctsDesign;
+  doc: import("@pe/ducts-contract/system-work").DuctsRouteDocument;
+  fans: import("@pe/fans-contract/fans").FansRouteDocument;
+  firm: import("@pe/ducts-contract/duct-inputs").DuctsFirm; pointer: string | null | undefined;
   deps: DuctActionDependencies; bridge: RevitBridge["Service"]; appliedAt: string | undefined;
 }
+const ductCommands = { ...ductSystemsTool.commands, ...sheetCommands };
+
 export interface DuctAction {
   snapshot: (intent: Intent, read: ReadSnapshot) => Promise<DuctSnapshot>;
   derive: (input: DuctActionPreparation) => Promise<{ input: object; dependencies: unknown; cells?: readonly (readonly [string,string])[]; subjects?: Record<string,string>; nothingToWrite?: boolean; labels?: Record<string,string>; claim?: { basis: string; requiredEspInWg: number } }>;
   entry: { key: string; native: string; refusePlan: ((value: unknown) => string | null) | null;
     retires: (input: Record<string, unknown>, value: unknown, subjects: Record<string,string>, cells: [string,string][]) => readonly import("@pe/agent-contracts").WorkPath[] };
-  bindings: readonly (readonly [keyof typeof commands, Kind, Phase])[];
+  bindings: readonly (readonly [keyof typeof ductCommands, Kind, Phase])[];
 }
 
 const prepared = z.object({
@@ -72,7 +79,7 @@ const targetOf = (ctx: CommandContext) => {
 type Kind = "losses" | "heal" | "assign-fan";
 /** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
 type Phase = "plan" | "rehearse" | "apply";
-const ductsRoute = tools.ducts.work.route, fansRoute = tools.fans.work.route;
+const ductsRoute = ductSystemsTool.work.route, fansRoute = fansTool.work.route;
 
 /**
  * The /duct-systems door (D9, P19): the sheet pair asked from /duct-systems stores that route's staged rule
@@ -118,8 +125,8 @@ export function ductActionExecutors(
     const raw = primary.key.route === ductsRoute ? primary : siblings?.[ductsRoute] ?? ductsView?.handle;
     if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     const { process } = await lifetime(bridge, target, "project", deps);
-    const doc = await ctx.selectWork(tools.ducts.work, raw, (_doc, cells) => ({
-      edits: tools.ducts.work.editable,
+    const doc = await ctx.selectWork(ductSystemsTool.work, raw, (_doc, cells) => ({
+      edits: ductSystemsTool.work.editable,
       facts: [["workingPhase"]],
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));
@@ -128,8 +135,8 @@ export function ductActionExecutors(
     if (!fanView) throw refused("Fans Work is unavailable", "work.unavailable");
     if (siblings?.[fansRoute] && workKey(siblings[fansRoute].key) !== workKey(fanView.handle.key))
       throw refused("Fans Work belongs to another document", "work.target");
-    const fans = await ctx.selectWork(tools.fans.work, siblings?.[fansRoute] ?? (primary.key.route === fansRoute ? primary : fanView.handle), (_doc, cells) => ({
-      edits: tools.fans.work.editable,
+    const fans = await ctx.selectWork(fansTool.work, siblings?.[fansRoute] ?? (primary.key.route === fansRoute ? primary : fanView.handle), (_doc, cells) => ({
+      edits: fansTool.work.editable,
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }),
     );
@@ -247,7 +254,7 @@ export function ductActionExecutors(
         };
     }
     // D9: an apply retires only the cells its own route owns, under the route that executed it.
-    const owned = (asked.route === fansRoute ? tools.fans : tools.ducts).work.editable;
+    const owned = (asked.route === fansRoute ? fansTool : ductSystemsTool).work.editable;
     const paths = (phase === "apply" ? entry.retires(p.input, value, p.subjects, p.cells) : []).filter((path) => owned.some((pattern) => pattern[0] === path[0]));
     const retired = paths.length ? yield* execution.retireWork(asked, asked.route, paths) : undefined;
     return {
@@ -266,7 +273,7 @@ export function ductActionExecutors(
       (action.bindings      ).map(([key, kind, phase]) => {
         return [
           key,
-          command(commands[key], prepared, {
+          command(ductCommands[key], prepared, {
             seal: (p) => ({ request: p.input, evidence: p.dependencies }),
             bind: (ctx) => bind(ctx, kind, phase),
             run: (ctx, execution) => run(ctx, execution, kind, phase),
@@ -278,7 +285,7 @@ export function ductActionExecutors(
 }
 
 export function ductsRefreshExecutors(bridge: RevitBridge["Service"]) { return {
-    "ducts.refresh": command(commands["ducts.refresh"], z.null(), {
+    "ducts.refresh": command(ductSystemsTool.commands["ducts.refresh"], z.null(), {
       bind: async (ctx) => {
         targetOf(ctx);
         return { effects: [] };

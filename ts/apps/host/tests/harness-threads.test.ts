@@ -4,7 +4,7 @@ import { updateFixture } from "./storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { markReadings } from "../src/resource-adapters.ts";
 import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
-import { fansDocumentSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
@@ -22,7 +22,8 @@ import { RevitBridge } from "../src/bridge.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
-import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { servePeRoute } from "@pe/mcps/product-catalog";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
@@ -39,7 +40,15 @@ import type {
   HarnessThreadBody,
   WorkHandle,
 } from "@pe/agent-contracts";
-import { HARNESS_EVENT_MAX_BYTES, readingKey, tools, bindWork, stagedDucts, workKey, address as documentAddress } from "@pe/agent-contracts";
+import {
+  HARNESS_EVENT_MAX_BYTES,
+  readingKey,
+  bindWork,
+  workKey,
+  address as documentAddress,
+} from "@pe/agent-contracts";
+import { tools } from "@pe/mcps/product-actions";
+import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human, actAs } from "./callers.ts";
 import {

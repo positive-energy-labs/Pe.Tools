@@ -3,9 +3,7 @@ import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
 import {
-  commands,
   scheduleActions,
-  tools,
   scheduleReadingSchema,
   scheduleCellBindingSchema,
   canonicalRouteInput,
@@ -26,6 +24,7 @@ import {
   type ScheduleReadKey,
   type ScheduleGridDocument,
 } from "@pe/agent-contracts";
+import { commands, tools } from "@pe/mcps/product-actions";
 import {
   parameterValueApplyBounds,
   type RevitDetailSchedules,

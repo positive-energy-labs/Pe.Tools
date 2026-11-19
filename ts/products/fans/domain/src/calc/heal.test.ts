@@ -1,4 +1,4 @@
-import { fittingPricingSchema } from "@pe/agent-contracts";
+import { fittingPricingSchema } from "@pe/fans-contract/calc-read";
 import { inputsFor, TEST_WALK } from "@pe/ducts-domain/test-inputs";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { expect, it } from "vite-plus/test";

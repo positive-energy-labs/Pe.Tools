@@ -7,7 +7,8 @@ import { inputsFor } from "@pe/ducts-domain/test-inputs";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { toGrids, lookupGrid, type Grid } from "@pe/ducts-domain/loss-grid";
 import tables from "@pe/ducts-domain/fixtures/manual-d-tables.json" with { type: "json" };
-import { ductsPricingData, ductsApplyInputSchema } from "@pe/agent-contracts";
+import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
+import { ductsApplyInputSchema } from "@pe/duct-systems-contract/ducts";
 
 const readSchema = ductsPricingData.shape.calcs.element;
 function scenario(coefficient = -0.1) {

@@ -1,3 +1,4 @@
+import { resourceReadingSchema } from "./product-contracts.ts";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable, homesStatus, writeHomesConfig } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
@@ -36,12 +37,8 @@ import {
 } from "@pe/agent-contracts";
 import { receiptQuerySchema } from "@pe/agent-contracts";
 
-import {
-  httpRoutes as peRoutes,
-  peRouteUrl,
-  servePeRoute,
-  matchPeRoute,
-} from "@pe/agent-contracts/pe-api";
+import { httpRoutes as peRoutes, peRouteUrl } from "@pe/agent-contracts/pe-api";
+import { servePeRoute, matchPeRoute } from "@pe/mcps/product-catalog";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
@@ -573,9 +570,9 @@ export function createPeRoutes(options: PeRoutesOptions) {
       }
     }
     if (method === "POST" && declared.id === "resources.subscriptions")
-      return updateResourceSubscriptions(request, observe, invocation.resourceOwner);
+      return updateResourceSubscriptions(request, observe, invocation.resourceOwner, resourceReadingSchema);
     if (method === "GET" && declared.id === "resources.stream")
-      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceOwner);
+      return resourceResponse(request, invocation.observe ?? observe, undefined, observe, invocation.closeResources, invocation.resourceOwner, resourceReadingSchema);
     // Agent feedback (owner ruling 2026-10-14): any admitted caller may file; the host stamps it.
     if (method === "POST" && declared.id === "agent-feedback.submit") {
       const parsed = agentFeedbackSchema.safeParse(await body());

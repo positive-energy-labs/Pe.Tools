@@ -1,6 +1,5 @@
 import { hostState } from "./host-ownership.ts";
 import {
-  commands,
   nativeProcessSchema,
   sdkSessionSelectionSchema,
   type Consumed,
@@ -14,6 +13,7 @@ import {
   canonicalRouteInput,
   type Basis,
 } from "@pe/agent-contracts";
+import { commands } from "@pe/mcps/product-actions";
 import type { ActionStep } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";

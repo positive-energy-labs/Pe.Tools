@@ -65,7 +65,12 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import type { UseSource } from "../shell/source-contract";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsPricingData, ductsNetworkData, ductsRosterData, valueReadResponse } from "@pe/agent-contracts";
+import {
+  ductsPricingData,
+  ductsNetworkData,
+  ductsRosterData,
+} from "@pe/duct-systems-contract/ducts-read";
+import { valueReadResponse } from "@pe/agent-contracts";
 import { InvalidRead } from "../../../host/src/native-reads";
 import { registeredReads } from "../../../host/src/reads/routes";
 import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/host";

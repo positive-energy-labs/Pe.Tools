@@ -2,13 +2,13 @@ import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "@pe/duct-systems-contract/contract";
 import { body } from "@pe/host/read-graph";
 import { z } from "zod";
-import { DUCTS_SYSTEM_MAX,
+import {
+  DUCTS_SYSTEM_MAX,
   ductsRosterArgs,
   ductsNetworkData,
   ductsPricingData,
-  ductsDesign,
-  stagedDucts,
-  } from "@pe/agent-contracts";
+} from "@pe/duct-systems-contract/ducts-read";
+import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";

@@ -1,7 +1,7 @@
 import { systemsOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { unitFlowsIn } from "@pe/ducts-domain/survey";
 import type { survey } from "@pe/ducts-domain/survey";
-import type { DuctsDesign } from "@pe/agent-contracts";
+import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import { holding, triage, type TriageInput } from "./inbox-rows.ts";
 
 /** What waits on a system in the inbox: Fix rows holding its ESP (the inbox's rule) and Set rows. */

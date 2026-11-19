@@ -239,7 +239,8 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
  vi.stubGlobal("EventSource",Stream);
  const unbind=bindActionReadings();
  let generation=0;
- const {fansReadResponse,address:workAddress}=await import("@pe/agent-contracts");
+ const { fansReadResponse } = await import("@pe/fans-contract/fans-read");
+const { address:workAddress } = await import("@pe/agent-contracts");
  const source: import("../shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
    const subscription=crypto.randomUUID(),current=++generation;
    const body={read:"fans.calc",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};

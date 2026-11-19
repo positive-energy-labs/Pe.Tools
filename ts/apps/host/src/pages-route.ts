@@ -2,13 +2,9 @@ import { stateScope } from "@pe/host-contracts/service-identity";
 import { acquireContentRoots, contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 import { targetHomes } from "./call-route.ts";
 import { readSessionScope } from "./sdk-session.ts";
-import {
-  peRoutes,
-  servePeRoute,
-  peClientScript,
-  matchPeRoute,
-  peRouteUrl,
-} from "@pe/agent-contracts/pe-api";
+import { peRouteUrl } from "@pe/agent-contracts/pe-api";
+import { servePeRoute, peClientScript, matchPeRoute } from "@pe/mcps/product-catalog";
+import { peRoutes } from "@pe/mcps/product-catalog";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
 import { readFileSync, watch } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";

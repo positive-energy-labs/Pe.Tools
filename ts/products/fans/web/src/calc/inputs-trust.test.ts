@@ -4,12 +4,8 @@
  * fittings ungrouped with mechanism-echo descriptions, rows that vanished when cleared, no undo.
  */
 import { expect, it } from "vite-plus/test";
-import {
-  ductsInputsSchema,
-  type DuctsInputs,
-  type FittingPricing,
-  type Stated,
-} from "@pe/agent-contracts";
+import { ductsInputsSchema, type DuctsInputs, type Stated } from "@pe/ducts-contract/duct-inputs";
+import { type FittingPricing } from "@pe/fans-contract/calc-read";
 import { connOf, factOf, nodeOf } from "@pe/ducts-domain/test-snapshot";
 import { fittingGroups, tableMeaning } from "./fitting-groups.ts";
 import { kindDisabledReason, kindMeaning } from "@pe/ducts-web/calc/kind-meaning";

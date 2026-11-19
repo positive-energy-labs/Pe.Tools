@@ -1,4 +1,4 @@
-import { matchPeRoute } from "@pe/agent-contracts/pe-api";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { claudeInit, claudeSessionMeta, undeclaredContext } from "./manifest.ts";
 import type { AdapterChild } from "./adapter.ts";

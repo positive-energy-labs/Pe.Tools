@@ -2,12 +2,12 @@ import type { Immutable } from "@pe/agent-contracts/route-kernel-data";
 import { friction, sectionOf } from "./loss-physics.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-export {
-  catalogSchema,
-  catalogTableSchema,
+export { catalogSchema, catalogTableSchema, type CatalogTable } from "@pe/ducts-contract/duct-catalog";
+import {
   type CatalogTable,
-} from "@pe/agent-contracts";
-import { type CatalogTable, type Catalogs as ContractCatalogs, type CatalogInput } from "@pe/agent-contracts";
+  type Catalogs as ContractCatalogs,
+  type CatalogInput,
+} from "@pe/ducts-contract/duct-catalog";
 export type Catalogs = Immutable<ContractCatalogs>;
 export const EMPTY_CATALOGS: Catalogs = Object.freeze({});
 export const catalogLinkKey = (

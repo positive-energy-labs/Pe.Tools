@@ -7,7 +7,8 @@ import { join } from "node:path";
 import type { HarnessEvent, HostEvent } from "@pe/agent-contracts";
 import { HostLog } from "../src/host-log.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
-import { createPeClient, servePeRoute } from "@pe/agent-contracts/pe-api";
+import { createPeClient } from "@pe/agent-contracts/pe-api";
+import { servePeRoute } from "@pe/mcps/product-catalog";
 
 const dirs: string[] = [];
 afterEach(() => {

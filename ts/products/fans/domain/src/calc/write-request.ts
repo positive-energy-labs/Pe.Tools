@@ -1,4 +1,4 @@
-import type { DuctsApplyInput } from "@pe/agent-contracts";
+import type { DuctsApplyInput } from "@pe/duct-systems-contract/ducts";
 import type { BuildCalcInput } from "./build.ts";
 import { isCompleteClaim, type CompleteClaim, type DomainClaim } from "./encounters.ts";
 import type { Calc } from "./types.ts";

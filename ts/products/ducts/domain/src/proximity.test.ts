@@ -8,7 +8,7 @@
  */
 import { designOf } from "./test-design.ts";
 import { expect, it } from "vite-plus/test";
-import { type DuctsDesign } from "@pe/agent-contracts";
+import { type DuctsDesign } from "@pe/duct-systems-contract/ducts";
 
 import { axisOf, inferJoints, tolerate, MISSED_JOIN_MAX_IN } from "./proximity.ts";
 import { withHealth } from "./health.fixture.ts";

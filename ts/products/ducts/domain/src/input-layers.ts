@@ -1,4 +1,5 @@
-import { DUCTS_DEFAULT_CRITERIA, stagedDucts, type DuctsDesign, type DuctsFirm, type StagedCell } from "@pe/agent-contracts";
+import { DUCTS_DEFAULT_CRITERIA, type DuctsFirm } from "@pe/ducts-contract/duct-inputs";
+import { stagedDucts, type DuctsDesign, type StagedCell } from "@pe/duct-systems-contract/ducts";
 import type { WorkLayer } from "./calc/inputs.ts";
 // The engine default: what a criterion runs on when no home tier states it. Velocity limits are
 // Manual D's rules of thumb (trunk 900 supply, 700 return); 0.03 in-wg is the grille placeholder;

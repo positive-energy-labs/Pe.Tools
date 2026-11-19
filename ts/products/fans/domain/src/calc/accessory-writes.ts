@@ -1,4 +1,4 @@
-import type { DuctsApplyInput } from "@pe/agent-contracts";
+import type { DuctsApplyInput } from "@pe/duct-systems-contract/ducts";
 import type { CalcSnapshot } from "./build.ts";
 import type { Calc } from "./types.ts";
 

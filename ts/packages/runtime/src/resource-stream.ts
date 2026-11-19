@@ -1,10 +1,10 @@
+import type { z } from "zod";
 import {
   READING_MAX_FRAME_BYTES,
   READING_MAX_KEYS,
   readingRequestSchema,
   READING_MAX_REQUEST_BYTES,
   readingKey,
-  readingRequestsSchema,
   type ReadingFrame,
   type ReadingRequest,
   type ThreadHead,
@@ -132,12 +132,12 @@ const connections = new WeakMap<
   Map<string, { update: (add: ReadingRequest[], remove: string[], owner: string | null) => Response | void }>
 >();
 /** The host and its borrowed-read proxy admit the same bounded subscription body. */
-export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingRequest[]; remove: string[] } | { error: string } {
+export function decodeResourceSubscriptionUpdate(raw: string, requests: z.ZodType<ReadingRequest> = readingRequestSchema): { add: ReadingRequest[]; remove: string[] } | { error: string } {
   if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
     return { error: "Resource request is too large" };
   try {
     const value = JSON.parse(raw);
-    const add = readingRequestSchema.array().max(READING_MAX_KEYS).parse(value.add);
+    const add = requests.array().max(READING_MAX_KEYS).parse(value.add);
     if (
       !Array.isArray(value.remove) ||
       value.remove.length > READING_MAX_KEYS ||
@@ -149,11 +149,11 @@ export function decodeResourceSubscriptionUpdate(raw: string): { add: ReadingReq
     return { error: "Invalid resource keys" };
   }
 }
-export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver, owner: string | null = null): Promise<Response> {
+export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver, owner: string | null = null, requests: z.ZodType<ReadingRequest> = readingRequestSchema): Promise<Response> {
   const id = new URL(request.url).searchParams.get("connection") ?? "";
   const update = connections.get(observe)?.get(id);
   if (!update) return retiredConnection();
-  const value = decodeResourceSubscriptionUpdate(await request.text());
+  const value = decodeResourceSubscriptionUpdate(await request.text(), requests);
   if ("error" in value) return Response.json({ error: value.error }, { status: 400 });
   return update.update(value.add, value.remove, owner) ?? Response.json({ ok: true });
 }
@@ -185,6 +185,7 @@ export function resourceResponse(
   registryOwner: ResourceObserver = observe,
   onClose?: () => void,
   owner: string | null = null,
+  requestSchema: z.ZodType<ReadingRequest> = readingRequestSchema,
 ): Response {
   const url = new URL(request.url);
   const raw = url.searchParams.get("keys") ?? "";
@@ -197,7 +198,7 @@ export function resourceResponse(
   let requests: ReadingRequest[];
   try {
     requests = !url.searchParams.has("keys") && url.searchParams.get("connection")
-      ? [] : readingRequestsSchema.parse(JSON.parse(raw));
+      ? [] : requestSchema.array().min(1).max(READING_MAX_KEYS).parse(JSON.parse(raw));
   } catch {
     return Response.json({ error: "Invalid resource keys" }, { status: 400 });
   }

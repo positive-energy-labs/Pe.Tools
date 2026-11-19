@@ -4,7 +4,7 @@
  * out `read` or `lost`, and a source it cannot account for is `lost`. Only `wholeCoverage` makes
  * the value a `complete` claim is built from.
  */
-import type { CoverageGap } from "@pe/agent-contracts";
+import type { CoverageGap } from "@pe/fans-contract/fans-inputs";
 import type { DuctSnapshot } from "../types.ts";
 
 type Peer = { elementId: number; connector: number };

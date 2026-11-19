@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { readFileSync } from "node:fs";
-import { linkedCatalog } from "@pe/agent-contracts/pe-api";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { FINDING_KINDS, FINDINGS_DOORS, findingSchema, findingsWork, type Finding } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { findingMark, kernelVerbs } from "./index.ts";

@@ -12,7 +12,6 @@ import {
   writePreviewSchema,
   workAdmissionSchema,
   workBinding,
-  tools,
   ANY_ROUTE,
   type Tool,
   type WorkHandle,
@@ -21,6 +20,7 @@ import {
   type WorkIntentBinding,
   type WriteBoundaryBinding,
 } from "@pe/agent-contracts";
+import { tools } from "@pe/mcps/product-actions";
 import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
 
 const hash = (value: unknown) =>

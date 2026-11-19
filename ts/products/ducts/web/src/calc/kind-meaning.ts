@@ -5,7 +5,8 @@
  * engine does: which ports become fan ports, whether the unit moves air or is walked through, and
  * where its flow comes from. fan-coil, air-handler and muas price identically; the words show it.
  */
-import type { DuctUnitKind, DuctsInputs } from "@pe/agent-contracts";
+import type { DuctUnitKind } from "@pe/host-contracts/generated";
+import type { DuctsInputs } from "@pe/ducts-contract/duct-inputs";
 import { kindStripsFanPort, suggestRole, suggestRoster } from "@pe/ducts-domain/roster";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 

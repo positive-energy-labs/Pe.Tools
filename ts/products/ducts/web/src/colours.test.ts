@@ -1,7 +1,7 @@
-import { neutralFansWork } from "@pe/agent-contracts";
+import { neutralFansWork } from "@pe/fans-contract/fans";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { expect, test } from "vite-plus/test";
-import { stagedDucts } from "@pe/agent-contracts";
+import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { coloursOf, FIRM_COLOURS } from "./colours.ts";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
 import { paintOfDucts } from "./selection.ts";

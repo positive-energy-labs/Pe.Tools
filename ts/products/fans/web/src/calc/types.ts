@@ -1,6 +1,6 @@
-import type { CalcEdits } from "@pe/agent-contracts";
+import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
 import type { ValueHandle, ListPersist } from "@pe/kit/lang/collection";
-import { openFanCalcSchema } from "@pe/agent-contracts";
+import { openFanCalcSchema } from "@pe/fans-contract/fans-read";
 import type { Immutable } from "@pe/agent-contracts";
 import type { z } from "zod";
 export type OpenCalc = Immutable<z.output<typeof openFanCalcSchema>>;

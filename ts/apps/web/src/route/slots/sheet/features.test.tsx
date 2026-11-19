@@ -1,8 +1,9 @@
 import { contract } from "@pe/agent-contracts/handle";
 import { native } from "@pe/agent-contracts/handle";
 import * as resources from "../../../host/resource-state";
-import { ductsRouteState, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
-import { ductsSettings } from "@pe/agent-contracts/setting-owners";
+import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
+import { ductsSettings } from "@pe/ducts-contract/settings";
 
 import { hostRead } from "../../host-read.ts";
 import { read, route, scrollBody } from "../../defaults.ts";
