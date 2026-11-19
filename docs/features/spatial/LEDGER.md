@@ -66,6 +66,8 @@ One metric substrate sits under every Pe.\* helper that reads or writes Revit ge
 - 2026-10-28, SA 7 does not drop sharply, and that is the model, not the read: 32,404 IFC elements lie within 10 ft of SA 7's 501 members (dense joists over the runs), against 43,345 in main's crop. Reach cut the link 25%; loading those elements is 2.4 s of SA 7's cold 4.7 s.
 - 2026-10-28, PROVEN[session dev, harness `probe-r` headless, `8b5359fe` (Chadds 08:18Z, Manuella 08:07Z) and its byte-identical rebase `6842220f` (Cleremont 09:00Z); 13/13 Space tests]: the warm-time fix for step 2 (exclusions in one pass over the reach ids, each class counted over only what that pass excluded; loads in document order). Against main's baseline, cold context: Chadds EX 7 1.14→1.12 s (step 2 had 1.50), SA 7 4.75 s; warm SA 7 1.34→1.15 s (step 2 had 1.64); Cleremont SA 19 0.79→0.59 s, SA 2 2.41→0.32 s, SA 21 0.27→0.39 s; Manuella flat. Memory, counts and the witness (0 near-run building lost) unchanged. **Residual time cost, recorded: Cleremont SA 21 cold +0.12 s and SA 19 warm +0.23 s against main.** On Cleremont's house links most ids in reach are excluded (sketch, view-specific), so the one pass costs ≈70 ms extra there while saving ≈0.5 s on Chadds, where the IFC link excludes almost nothing. A 2 s sampler across the Cleremont open stayed clean (free ≥15.0 GiB; kernel pools flat at 9.8/5.6 GiB); the 08:14Z open that died with free memory at 1.3 GiB while probe Revit held 2.6 GB has no named consumer (the orchestrator's memlog had stopped; probe-sheet reports builds near then). Evidence: `.artifacts/accept/space-proof/8b5359fe-20261028T081800Z`, `…/6842220f-20261028T090011Z`, sampler `…/6842220f-20261028T090011Z/memsample.csv`.
 
+- 2026-10-27, the owner said, “The goal is to refine our collection such that pe.tools is never the cause for a revit slowdown bad enough that requires a revit restart, even in a hypothetical future where most of pea's tools and daily operation were reading space data and doing 3d manipulation.” Keep this target when changing geometry collection and model interaction.
+
 ## Tried & rejected
 
 - 2026-10-28, per-class exclusion counts as queries ANDed with the reach filter: 13 OR-of-hundreds-of-boxes queries per source took Cleremont SA 19 from 1.5 s to 6.2 s. One reach query per source.
@@ -151,3 +153,5 @@ One metric substrate sits under every Pe.\* helper that reads or writes Revit ge
 - IFC elements 1422648 and 1341401 tessellate to Mesh only, against the 4,138 of 4,143 solid census. Re-census `Kind` across the link before an insideness claim leans on it.
 - Two host-linked `.3dm` imports dominate one joist bay (296,000 triangles in one).
 - `Pe.Partition.Tests` fails 3 of 19 on the private captures (project-a hash drift, region count 15 against 16, project-c replay). Recapture, or rule which side is truth.
+
+- Review the look of the 3D picture with the owner on Chadds in light theme.

@@ -70,6 +70,8 @@ Rebuilt 2026-11-15 as current truth at main 05f17a36, at the end of the pod-page
   - The MSI: `<run>builds/build-05f17a36/MSI-RECORD.md`, 0.7.30, sha256 5e592a19, four of four Pod zips.
   - Row 8, Pea writes a tool, is PROVEN on the dev lane only (`<run>drive/f2/C1/`).
 
+- 2026-11-16, the owner said, “i want to make it for engineers now. its a demo, but to hae impact it needs to be usable.” The MEP editing demo must support real work by engineers.
+
 ## Tried & rejected
 
 - 2026-11-15, Page isolation (owner queue 12, `pp/page-isolation` f6c80dd4): each Page in an opaque origin under `Content-Security-Policy: sandbox`, with a host-minted door token scoped to its own doors and Referer identity deleted. It was built and reviewed "safe after four fixes" (`<run>purger/REVIEW-page-isolation-f6c80dd4.md`). Rejected by kaitpw: freedom to run anything outweighs theorized attacks. A Page would also give up `localStorage`, workers, new windows and `pe.fetch` to foreign routes. The P1 junction confinement it found is kept on main (c557fb71), because it is a path-traversal fix in its own right.
@@ -86,6 +88,8 @@ Rebuilt 2026-11-15 as current truth at main 05f17a36, at the end of the pod-page
 - 2026-11-14, pod-pages O-UNDO2: undo posted from a script with `RevitCommandId.LookupCommandId("ID_EDIT_UNDO")`. Revit refused it: "The commandId must be in Autodesk.Revit.UI.PostableCommand or an external command" (`<run>drive/f1/A5/undo.cs`). `Document` has no undo call. `PostableCommand.Undo` does post, but Revit runs it only when idle, so a run cannot undo and read back in one call ([ADR 0044](../../adr/0044-a-script-run-is-fenced-to-its-target-document.md)). On the background lane it answered Succeeded and restored nothing, because that document is never the active UI document (`<run>drive/f2/A3`).
 - 2026-11-14, pod-pages PIN-MUT: keeping the first revision recorded for a content hash. Pea would then run the old helper after a helper-only edit. A script revision identity over the whole source bundle replaced it (`ts/packages/host-contracts/src/script-revision.ts`, b495e2bc): a helper edit is fresh, and an old pin returns its old bytes or refuses.
 - 2026-11-14, pod-pages F-W44-4: a root-phase timeout so that a slow home cannot stall another home's Pages. It broke W26's kept late-publication tests. The adopted cross-home rule needs no timer (Owed "Cross-home root isolation").
+
+- 2026-11-13, the owner said, “frozen fixture idea is cool but i dont want it right now at least.” Defer frozen release fixtures.
 
 ## Owed
 
@@ -164,3 +168,6 @@ Rebuilt 2026-11-15 as current truth at main 05f17a36, at the end of the pod-page
 - Migrate the user's local `OneDrive/Documents/Pe.Tools` to `Pods/<folder>` shape by a one-shot destructive script after committing; the old tree is deleted.
 - Prove actual Family Foundry and Schedules operations with current APS resolution in a controlled checkout session; constructor, deterministic, and compile checks do not prove this workflow.
 - Add Git or cloud transport only when its concrete workflow is selected; archive transport is the present carrier.
+
+- Decide if example Pods should ship while they await vetting. On 2026-11-19 the owner kept the current examples while considering their removal, since they provide portable compile and drive targets.
+- Decide whether to replace the load workbooks with a Pod.

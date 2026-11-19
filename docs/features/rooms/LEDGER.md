@@ -88,6 +88,9 @@
 - 2026-09-24, Astra wave 4: locked and stale must show together (`b8ab8bf8`, ported to main 2026-10-26 on branch `port/september-small`: locked keeps the outline, stale takes the fill, the legend counts the region under both, tooltip and table read `locked · stale`; regression in `rooms/rooms.test.tsx`): the route row hid `stale:true` on a locked authored region while six machine rows showed it. PROVEN[browser and deterministic, web 114 passed]. Native hatch obscures wall ink, but hatch does not mean Held: a clean crop-connected region is Accepted.
 - 2026-09-24, Astra visual bar: fresh-eye REJECT verdicts (crop geometry, wavy and micro-jog boundaries, obscured ink) may veto an adoption but never rescue a red gate; a candidate with the original Partition gate red is never adopted.
 
+- 2026-11-19, the owner approved “i take your rec on everything else” for showing a person's rejection even if the solver had already held that piece for an engineering reason.
+- 2026-11-19, the owner accepted the three room drawing fixes and said, “dont treat existing rooms ux as set.” Keep the rest of the route open to design changes.
+
 ## Tried & rejected
 
 - 2026-09-26, the white "Controls Plan - Level 2" view image was suspected to be a headless-export defect; falsified: the view holds nothing that draws (section boxes, circuits, a camera, a link contributing one element; template hides ducts, fixtures, grids), and exports are byte-identical headless, windowed, and as the active view zoomed to fit (`docs/research/2026-09-26-headless-documents.md`).
@@ -155,3 +158,6 @@
 - The plan image lands only after the second snapshot read; the first paint draws regions with no underlay.
 - A test bed project with every architectural link kind (native RVT link, IFC link, DWG import) and zones drawn and ready, so solver claims stop resting on project-a alone. kaitpw, 2026-09-24.
 - Purge `/takeoffs` room management once `/rooms` is proven in a session.
+
+- Make a person's rejection take precedence in [the room judge](../../../dotnet/Pe.Revit.Partition/Judge.cs) when the solver has already held the piece. Check that the feedback inbox reports the person's rejection. [D-rooms-01-001]
+- Decide whether rooms fill their zone and share edges, and agree on a join tolerance during the Rooms design work. On 2026-11-19 the owner leaned toward shared edges, saying, “it just feels like a sot smell that'll open tons of edge cases for calculation stuff coming later”. The September trial at `archive/2026-09/mileage-solver-a4cd3213` must return the same result on a rerun with no edit before it can stand as evidence for that shape. [D-rooms-01-002]

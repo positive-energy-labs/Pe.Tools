@@ -19,6 +19,8 @@
 - 2026-11-17, RULES.md owner-queue item 6: the owner accepted the default. Direction mismatch is an error, never complete, and cannot write.
 - 2026-11-17, RULES.md handoff ruling, kaitpw: "The link names the fan, not every system id." Handoffs must retain fan identity without an unbounded system list.
 
+- 2026-10-28, the owner said, “A utopia solution would just one-click calcs, once the absolute bare minimum configuration and inputs have been done.” They added, “we should attempt to infer/heal/fix anything that we possible can, the purpose being a one click calc.” Reduce the work an engineer has to supply before pressing Calculate.
+
 ## Tried & rejected
 
 - 2026-11-16, MAP D2 and RULES.md 20:25: the whole-network circuits solver and ducts.analysis projections are retired. Fan calc is the single pricing path.
@@ -51,3 +53,7 @@
 - BACKLOG FANS-BASE-LOAD, root ruling 2026-11-16, 19:35: kernel read and out-of-band Work journeys fail under suite load but pass alone. Measure test contention before changing product behavior; this performance finding holds no product work.
 - BACKLOG FANS-BASE-GATE, root ruling 2026-11-16, 19:35: baseline format fails on 1080 files and lint fails. These failures predate this run; bulk formatting remains outside the crusade scope and does not stop its end gate.
 - P4-fix-seams, implementor instruction 2026-11-17: generic host slots/sheet.ts LOSSES_ROUTES and MCP shared/admission.ts fan preflight are in flight. Lower their baseline counts under the [shared-base Owed item](../ducts/LEDGER.md#owed) when the seams move.
+
+- Resolve the order of the Fans calculation view. On 2026-11-05 the owner chose the unresolved checklist first with “this”, while the [current view](../../../ts/products/fans/web/src/calc/view.tsx) follows the earlier worksheet-first ruling.
+- Show the incomplete pressure estimate in muted ink. On 2026-11-05 the owner said, “greyed estimate is nice”. The [current summary](../../../ts/products/fans/web/src/calc/view.tsx) mutes the note about completeness.
+- Keep the remaining settings and value ownership findings together for the next design pass. On 2026-11-17 the owner said, “I'm taking the primitive work into a separate muse.” Preserve the open findings from `.artifacts/handoffs/fans-homes-primitives.md` when preparing that work.

@@ -27,6 +27,8 @@ linkage vocabulary and the doc-owned profile) and `/data-tables` (authored synth
 
 - 2026-08-16 — Per-cell unsaved grammar deliberately not built: the whole draft (name/columns/rows) is unsaved until apply and the route keeps no baseline, so the commit verb is honestly the loudest thing on the page. Only worth building if review wants per-cell honesty on a synthetic table nobody else edits.
 
+- 2026-10-22, the owner said, “bod and fom are hard to answer because im revamping them currently. see .artifacts/poc-flow for some context, and the ducts route + rhvac/takeoffs is very related. as of now tho they live in excel and are owned by the import source.” Keep the import source as the owner of BOD and FOM until their redesign.
+
 ## Tried & rejected
 
 - 2026-08-17 — Layouts already discarded by their own audits: `/parameter-links`' definition-card UI (nothing in it says "table") and `/data-tables`' inert value cells (no linkage concept at all). Round 1 rebuilt from the fixture instead of extending either.
@@ -47,3 +49,5 @@ linkage vocabulary and the doc-owned profile) and `/data-tables` (authored synth
 - (/parameter-links) The local-draft/remote-draft/`syncedRef` co-edit reconcile is hand-rolled and route-local; no primitive owns "co-edited nested document". Root cause of the page-level-unsaved gap (design-system ledger, Owed).
 - Route commands read a document, await external work, then replace the whole route document — a concurrent patch during the await is silently overwritten. Needs compare-and-swap revision or a transactional document updater before routes are the default authoring surface.
 - The human/agent endpoint split is tool-level policy, not a security boundary — pea's general shell can call localhost directly. A stronger commit capability needs a browser-held approval primitive agent tools cannot mint or replay.
+
+- Decide which engineering tables should live in the model and how the import source hands off ownership.

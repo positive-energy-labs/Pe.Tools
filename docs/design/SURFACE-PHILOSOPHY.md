@@ -225,3 +225,7 @@ The long rationale is in git history.
 
 - One typed graph per route (`RouteGraph` in each route's `graph.ts`, ADR 0026) declares the subject (ADR 0027), stages, verbs, readings, layout, keys and URL-owned fields; the kernel in `apps/web/src/shell/` executes it. [The routes ledger](../features/routes/LEDGER.md) holds the kernel's decisions.
 - A route never calls the host; `host-door.guard.test.ts` ratchets every route onto the one host door (ADR 0026). Descendants render typed state and return typed verbs.
+
+The owner ruled on 2026-10-26 that “opinionated primitives that force a certain pattern for composing uis also forces consistency onto our interfaces”. Prefer shared primitives that enforce how a surface composes. “Breaking compile is not a concern either. a better deeper integration is much higher priority”.
+
+The owner ruled on 2026-11-05 that “this should be a pattern forced by the ui, the user has no other option.” Where a control can enforce an interaction rule, make that rule part of the control itself.

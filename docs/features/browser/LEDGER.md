@@ -23,6 +23,8 @@
 - 2026-10-24: Independent final proof on `af21713c` passed native A0–A8, required route refresh/reconnect/worker, and serial `pnpm verify` through R24 compile. [Audited receipts](../../../.artifacts/runs/browser-20261024-port/completion-audit.json) pin unchanged sources and ROOT executable parity; optional thread/arming remain omitted.
 - 2026-11-10: A session launch on Windows starts its keeper through WMI (`Pe.Browser.Guardian.exe --create-outside-job`), because `vp run` holds its task in a KILL_ON_JOB_CLOSE job with no breakaway (limit flags 0x2000) and killed every keeper with its launcher. The keeper gets the user's default environment, not the launcher's. Drives and measurements run headless (no OS window to cover); every launch passes `--disable-backgrounding-occluded-windows`, so `--unthrottled` is retired. `launch --viewport WxH` (default 1600x900) sizes the real window to the viewport; Emulation overrides are not used because they lift when their client detaches. Helium was measured against Chrome (headless, three pages, 30 s idle, median of three): 698 against 646 MB private, so Chrome stays first.
 
+- 2026-10-24, the owner said, “concurrency is a starting-line feature, one step beyond poc, but none-negotiable for adoption.” The browser library must support concurrent sessions before adoption.
+
 ## Tried & rejected
 
 - 2026-10-25: Escape does not dismiss the focus-expanded table query fold. A demo-lane actor leaves it through the pane title (`[data-slot="pane-title"]`) before the next grid edit (`t3/browser-cutover-surface`, `c19f5a64`).

@@ -671,6 +671,16 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 
 - 2026-10-24, scene look knobs follow kaitpw: "i intended dev only for now ... a floater kinda like the protoui switcher. no integration into ui yet" and "a copy button that copies only the values not in the code yet ... refresh clears the state". The app-shell floater uses dev-only module memory and copies differences from code defaults; native controls are an explicit dev-tool exception to P1 and the parallel-settings-store ruling, and `list-census.test.ts` allows only this dev floater. Colour by system starts on, using stable paint-key hashes across kit `--viz-1..6`, with the palette and switch tunable in `scene/grounds.ts`.
 
+- 2026-10-25, the owner said, “yes thats probably smarter. great suggestion.” Place the context bar based on whether the threads sidebar is visible.
+- 2026-10-25, the owner said, “both chat and plugin should get a good minimum width before they auto collapse. chat's can be pretty thin, but plugin wider.” Keep a minimum width for each pane and give the plugin pane the wider floor.
+- 2026-10-25, the owner said, “i want hover in 3d to highlight our scroll bar, like how hover in list did”. Hovering an item in the picture marks its position on the scroll track.
+- 2026-10-27, the owner said, “i thinkg hover/click on the globe would actually b more harmful than anything.” Keep the orientation globe out of the picking interaction.
+- 2026-11-03, the owner said, “the flow strands should be their own layer.” Give flow strands a separate layer in the picture shared by /fans and /duct-systems.
+- 2026-11-05, the owner said, “this should be a pattern forced by the ui, the user has no other option.” Compose the controls so the interaction enforces the rule directly. The [surface philosophy](../../design/SURFACE-PHILOSOPHY.md) owns the rule.
+- 2026-11-05, the owner said, “i'd much prefer the fan's "computing or loading" text (but centered in screen) with sweep maybe on the whole page. that being said I also wanna think about how we avoid unmounting during loads. somehting deserve it like the sheets ledger, but others dont, like the picture when you adding a second active system.” Center the loading message on /fans and /duct-systems. Keep an existing picture mounted when a second system loads.
+- 2026-11-19, the owner accepted the search box hiding on lists of seven rows or fewer in the current kit. The broader list-search rules remain provisional while the shared search and filter design is open.
+- 2026-11-19, the owner adopted the chat dock width fix. The chat and plugin panes keep their own minimum widths.
+
 ## Tried & rejected
 
 - 2026-10-27, retire the original prerender spike branch at `a06ce43a`, preserved as `archive/2026-10-27/prerender-progressive-loading`. Its useful early-guide behavior was adapted in `40b09346` and superseded by `HelpWorld` ([TUTORIAL-PRELOAD.md](TUTORIAL-PRELOAD.md)); it never implemented progressive native geometry acquisition. Do not merge the old experiment again.
@@ -917,3 +927,8 @@ These rows are byte-for-byte text from `34bd5e17`. The searchable comment preser
 - Name sweep, one commit per item: `scope` naming a `WorkKey` at ten sites; `ScopeStore` persisting `scope:${threadId}`; `bridgeSelector`; `OpenDocumentCount` beside `OpenDocuments`; the `schedule-grid` literal in `bridge-protocol.ts`; `TakeoffPromotionFacts` on the generated wire; two `Thumbnail` components; two `ListPopup` specimens; two synthetic zone worlds.
 - "Update check unavailable" conflates endpoint 500, dead network and a dev proxy with no host (`ts/apps/web/src/machine/update.tsx`, `host/install.ts`). Decide the front door's brand dot: a real host lamp or gone.
 - Feedback picture rasterizes the whole page per send (2.5-6 s on `/design-system`; untested on canvas, 3D, iframe routes), and travels as an inline data URL that PostHog shows as text (`components/feedback-picker.tsx`).
+
+- Give the flow strands their own layer control on /fans and /duct-systems. The [Fans picture](../../../ts/products/fans/web/src/calc/picture.tsx) passes the strands as picture data without a separate control.
+- Design one search and filter model that composes across lists, palettes, tables, and other surfaces. On 2026-11-19 the owner said, “everything u listed sounds bad tho. i want a rich and unified interface for list, palette, table, and all other types of search filter. composable for each use case. and polished much farther than what we have now. we've had good versions of certain pieces in the past but its never been truly fixed”.
+- Rework the app header with at least six routes open, with chips visible, and with the shared search field in place. On 2026-11-19 the owner said, “our header area of the app is atrocious right now btw. this never came even close to what i wanted.”
+- Clarify what counts as a rail before making a limit part of the kit. On 2026-11-10 the owner said, “it should be 2 at most for pea, and maybe three for routes”.
