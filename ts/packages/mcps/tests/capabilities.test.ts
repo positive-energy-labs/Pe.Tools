@@ -172,6 +172,7 @@ test.each(["http", "stdio"])(
     ];
     const sessions = [user, own, other].map((ref) => ({
       sessionId: ref.session,
+      sdkSessionId: `sdk-${ref.session}`,
       custody: "controlled" as const,
       connected: true,
       openDocuments: [
@@ -435,9 +436,12 @@ test.each(["http", "stdio"])(
       expect(
         JSON.parse(((await chatCall()).content as Array<{ text: string }>)[0]!.text),
       ).toMatchObject({ ok: true, revision: 7 });
-      expect(
-        JSON.parse(((await chatCall(own)).content as Array<{ text: string }>)[0]!.text),
-      ).toMatchObject({ ok: true });
+      const bySdkId = await chatCall({ ...own, session: `sdk-${own.session}` });
+      expect(bySdkId.isError, JSON.stringify(bySdkId)).not.toBe(true);
+      expect(JSON.parse((bySdkId.content as Array<{ text: string }>)[0]!.text)).toMatchObject({
+        ok: true,
+      });
+      expect(writes.at(-1)).toMatchObject({ target: { kind: "document", ref: own } });
       expect(head.targets.map((target) => target.request)).toEqual([{ kind: "open", ref: user }]);
       expect(writes[0]).toMatchObject({
         basis: null,
@@ -876,6 +880,46 @@ test("W0-1: a Pea undo on /fans steps the Ducts edit the fans read used", async 
     expect(historyBodies).toEqual([
       { direction: "undo", works: [fansWork, ductSystemsWork], expected: step },
     ]);
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+});
+
+test("pe_do route Work accepts the SDK session id pe_read accepts (rooms-draw-baseline 2026-11-16)", async () => {
+  // Pea read rooms Work with {session: "acc-rdb"} and then had its edit refused "no longer open":
+  // pe_do skipped the SDK-to-bridge rewrite that pe_read applies.
+  fakeRuntimeHost("http://127.0.0.1:9");
+  const projectA = "C:\\Models\\projectA.rvt";
+  const familiesWork = { binding: "address", route: "families", target: projectA };
+  vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname === "/ops") return Response.json({ operations: [] });
+    if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
+      return Response.json({
+        sessions: [{ sessionId: "b1", sdkSessionId: "acc-x", connected: true,
+          openDocuments: [{ openId: "project-a", address: projectA, isFamilyDocument: false }] }],
+      });
+    if (url.pathname === "/pe/capabilities") return Response.json(catalog());
+    if (url.pathname === "/pe/reads/value") {
+      const body = JSON.parse(String(init?.body));
+      return body.release
+        ? Response.json({ value: null, state: "superseded" })
+        : Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
+    }
+    if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
+    return Response.json({ route: "families", revision: 2, handle: { key: familiesWork, revision: 2 }, doc: {}, ok: true });
+  });
+  const target = { kind: "open", ref: { session: "acc-x", openId: "project-a" } };
+  try {
+    const read = (await run(peRead, { key: "route:families", target, timeoutSeconds: 30 }, turn)) as { ok: boolean };
+    expect(read.ok).toBe(true);
+    const edit = (await run(peDo, {
+      key: "route:families.edit", target, expectedRevision: 2, timeoutSeconds: 30,
+      input: { patches: [{ path: ["intent"], value: "x" }] },
+    }, turn)) as { ok?: boolean; content?: string };
+    expect(edit.content ?? "").not.toContain("no longer open");
+    expect(edit.ok).toBe(true);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();

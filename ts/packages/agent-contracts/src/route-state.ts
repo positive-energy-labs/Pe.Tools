@@ -281,7 +281,9 @@ export function message(error: unknown): string {
     return error.issues
       .map((issue) => {
         const at = issue.path.length ? issue.path.join(".") : "(root)";
-        if (issue.code === "unrecognized_keys") return `${at} has unknown field ${issue.keys.join(", ")}`;
+        // A schema's own refusal (a Work command naming its writeIntent cell) outranks the generic line.
+        if (issue.code === "unrecognized_keys")
+          return /^Unrecognized keys?:/.test(issue.message) ? `${at} has unknown field ${issue.keys.join(", ")}` : issue.message;
         return issue.code === "invalid_type" && /received undefined/.test(issue.message)
           ? `${at} is missing`
           : `${at}: ${issue.message}`;
