@@ -1634,14 +1634,13 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
           evidence: `c${input.fan.portIndex} ${aRule.source} (score ${aRule.score}); c${pairedInlet} ${bRule.source} (score ${bRule.score})`,
         }
       : null;
-  // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit or stored value
-  // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input).
+  // The unit's own flow: typed is the side-stream exception's asserted flow, a Revit value (a retired flow included, ADR 0053)
+  // its design parameter; absent both, an ordinary fan's flow is the sum of its ends (never an input). A `model` 0 is a 0 Pe
+  // wrote (the resolver states an unwritten 0 as null), so it stays the flow it was while typed.
   const unitCfm = input.inputs.units[String(unit.id)]?.cfm;
-  // A stored flow is the authored value a receipt retired from Work; it keeps its typed meaning.
-  const authored =
-    unitCfm?.source === "Work" || unitCfm?.source === "run" || unitCfm?.source === "model-store";
+  const authored = unitCfm?.source === "Work" || unitCfm?.source === "run";
   const typedCfm = authored ? unitCfm.value : null;
-  const designCfm = unitCfm && !authored ? positive(unitCfm.value) : null;
+  const designCfm = authored ? null : (unitCfm?.value ?? null);
   const terminalCfm = (id: number) => terminalCfmOf(input.inputs, id);
   const derived =
     assumeHeals && input.assumeServedFlow !== false
@@ -1672,13 +1671,11 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
     name: g.name,
     terminalCfm,
     // Whatever its source: a receiving unit's design flow read from Revit weights the split exactly
-    // as a typed one does (ducts LEDGER 2026-10-29). A typed 0 is a share; an untyped 0 is unset.
+    // as a typed one does (ducts LEDGER 2026-10-29). A 0 is a share, typed or written by Pe (ADR 0053);
+    // a 0 Pe never wrote resolves null and is unset.
     unitCfm: (unitId) => {
       const u = input.inputs.units[String(unitId)]?.cfm;
-      return u?.value != null &&
-        (u.source === "Work" || u.source === "run" || u.source === "model-store" || u.value > 0)
-        ? { cfm: u.value, source: provenance(u) }
-        : null;
+      return u?.value != null ? { cfm: u.value, source: provenance(u) } : null;
     },
     ordinary,
     sideStream:
@@ -1869,7 +1866,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
           // Chadds louver 14088043 states 1120 there while its airflow slot is empty).
           const resolved = input.inputs.terminals[String(id)]?.cfm;
           const node = g.byId.get(id);
-          const revit = node && !isSegment(node) ? slotFlowOf(node, REVIT_FLOW_SLOT).cfm : null;
+          const revit = node && !isSegment(node) ? positive(slotFlowOf(node, REVIT_FLOW_SLOT).cfm) : null;
           const stated: Resolved<number | null> | null =
             resolved?.value != null
               ? resolved

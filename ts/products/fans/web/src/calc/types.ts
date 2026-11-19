@@ -8,8 +8,6 @@ import type { Closer } from "./closer.ts";
 import type { FanPort, CalcInputs } from "@pe/ducts-web/calc/model";
 import type { CalcBlocker } from "./tiers.ts";
 
-export type CalcCriteria = CalcInputs["criteria"];
-export type CalcFirm = Exclude<import("@pe/ducts-contract/duct-inputs").DuctFirmLine, { refused: string }>;
 /** Presentation leaves receive only the data their own pane draws. */
 export interface RosterProps {
   value?: ValueHandle<unknown>;

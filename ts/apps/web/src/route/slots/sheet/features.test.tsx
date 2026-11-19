@@ -8,7 +8,8 @@ import { hostRead } from "../../host-read.ts";
 import { read, route, scrollBody } from "../../defaults.ts";
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";
 import { createFixtureWorkDoor } from "../../../shell/fixture-work-door.ts";
-import { module as settingsModule } from "../../../settings/route.ts";
+import { module as settingsModule, settingsSheet } from "../../../settings/route.ts";
+import { settingLayer } from "@pe/agent-contracts/setting-owners";
 // @vitest-environment jsdom
 import { useState } from "react";
 import { RegistryContext } from "@effect/atom-react";
@@ -31,7 +32,7 @@ test("default layer: an unstaged, unread cell draws its default with its unit an
   const slot = { draft: true as const, bindings: {
     localRate: local({ kind: "number", unit: "in-wg/100 ft", min: 0, digits: 3 }, "route", { label: "Design friction", default: 0.08 }),
   } };
-  const [cell] = sheetCells(slot, { rows: [], work: { localRate: {} }, model: [] });
+  const [cell] = sheetCells(slot, { rows: [], work: { localRate: {} } });
   expect([cell!.value, cell!.source, cell!.label, cell!.unit, cell!.numeric]).toEqual([0.08, "default", "Design friction", "in-wg/100 ft", { min: 0, digits: 3 }]);
   expect(sheetSlotData(slot).bindings.localRate).toEqual({ home: { at: "local" }, domain: { kind: "number", unit: "in-wg/100 ft", min: 0, digits: 3 }, per: "route", label: "Design friction", default: 0.08 });
 });
@@ -40,7 +41,7 @@ test("model value from the read: a binding reads its row's model value out of th
   const slot = { draft: true as const, bindings: {
     terminalDrop: local({ kind: "enum", shape: z.string(), choices: [] }, "route", { model: (read: { slots: Record<string, string> }) => ({ value: read.slots.terminalDrop }) }),
   } };
-  const [cell] = sheetCells(slot, { rows: [], work: {}, model: [], read: { slots: { terminalDrop: "PE_Drop" } } });
+  const [cell] = sheetCells(slot, { rows: [], work: {}, read: { slots: { terminalDrop: "PE_Drop" } } });
   expect([cell!.value, cell!.model, cell!.source, cell!.freshness]).toEqual(["PE_Drop", "PE_Drop", "model", "fresh"]);
 });
 
@@ -48,7 +49,7 @@ test("choice kind with options from the read: a binding offers the read's option
   const slot = { bindings: {
     requiredEsp: local({ kind: "enum", shape: z.string(), choices: (read: { esp: string[] }) => read.esp.map((p) => ({ value: p, label: p })) }),
   } };
-  const [cell] = sheetCells(slot, { rows: [], work: {}, model: [], read: { esp: ["ESP", "PE_ESP"] } });
+  const [cell] = sheetCells(slot, { rows: [], work: {}, read: { esp: ["ESP", "PE_ESP"] } });
   expect(cell!.choices?.map((c) => c.key)).toEqual(["ESP", "PE_ESP"]);
 });
 
@@ -57,7 +58,7 @@ test("rows per binding: a binding names its own rows from the read, apart from t
     roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.string(), choices: [] } } }, "subject", { rows: (read: { units: string[] }) => read.units, rowLabel: (_r, row) => `Unit ${row}` }),
     note: local({ kind: "enum", shape: z.string(), choices: [] }, "subject"),
   } };
-  const cells = sheetCells(slot, { rows: ["fan-1"], work: { roles: { u1: draft({ role: "fan" }) } }, model: [], read: { units: ["u1", "u2"] } });
+  const cells = sheetCells(slot, { rows: ["fan-1"], work: { roles: { u1: draft({ role: "fan" }) } }, read: { units: ["u1", "u2"] } });
   expect(cells.map((c) => [c.binding, c.row, c.label])).toEqual([["roles", "u1", "Unit u1"], ["roles", "u2", "Unit u2"], ["note", "fan-1", "note"]]);
 });
 
@@ -65,12 +66,12 @@ test("firm layer on source: a model value the firm file supplies draws as firm w
   const slot = { draft: true as const, bindings: {
     velocity: local({ kind: "number", unit: "ft/min" }, "route", { model: () => ({ value: 900, source: "firm" as const, ref: "v3 · ducts.json", unit: "fpm" }) }),
   } };
-  const [cell] = sheetCells(slot, { rows: [], work: { velocity: {} }, model: [], read: {} });
+  const [cell] = sheetCells(slot, { rows: [], work: { velocity: {} }, read: {} });
   // The read's own unit for the row wins over the binding's.
   expect([cell!.value, cell!.source, cell!.ref, cell!.unit]).toEqual([900, "firm", "v3 · ducts.json", "fpm"]);
   // The read may also lock a row and say why, or note a conflict beside its value.
   const locked = sheetCells({ bindings: { flow: local({ kind: "number" }, "route", { model: () => ({ value: 1, refusal: "no flow parameter", note: "Conflict: walk 900" }) }) } },
-    { rows: [], work: {}, model: [], read: {} });
+    { rows: [], work: {}, read: {} });
   expect([locked[0]!.refusal, locked[0]!.note]).toEqual(["no flow parameter", "Conflict: walk 900"]);
 });
 
@@ -103,7 +104,8 @@ test.each([null, { kind: "document" as const, ref: { session: "session", openId:
   action.mockClear();
   const refresh = vi.fn();
   action.mockResolvedValue({ state: "succeeded", result: { tier: "firm", path: "shared/Settings/ducts.json" } });
-  const slot = { bindings: { required: ductsSettings["setting.ducts.parameters.requiredEsp"]!, allowance: setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" }) } };
+  const allowance = setting("ducts", ["criteria", "allowanceInWg", "return"], { kind: "number" }, ["firm"], { label: "Return allowance" });
+  const slot = { bindings: { required: settingsSheet.bindings["setting.ducts.parameters.requiredEsp"]!, allowance: { ...allowance, model: (read: any) => settingLayer(allowance, read.settings.ducts) } } };
   const ctx = { target, cells: { doc: {} }, page: { read: () => ({}) }, refresh,
     value: { state: "ready", value: { settings: { ducts: [
       { tier: "firm", home: "shared", name: "shared", path: "shared/Settings/ducts.json", sha256: "prior", json: { parameters: { requiredEsp: "ESP" }, criteria: { allowanceInWg: { return: 0.2 } } } },
@@ -139,7 +141,7 @@ test.each(["refused", "stale"])("a %s stale-hash save re-reads the tier and draw
   const read = () => ({ settings: { ducts: [{ tier: "project", home: "project", name: "project",
     path: "project/Settings/ducts.json", sha256: disk.sha256,
     json: { criteria: { velocityLimitFpm: { supply: disk.value } } } }] } });
-  const slot = { bindings: { velocity: setting("ducts", ["criteria", "velocityLimitFpm", "supply"], { kind: "number" }, ["project"], { label: "Supply velocity" }) } };
+  const slot = { bindings: { velocity: { ...settingsSheet.bindings["setting.ducts.velocitySupplyFpm"]!, label: "Supply velocity" } } };
   function Pane() {
     const [value, setValue] = useState(read);
     const ctx = { cells: { doc: {} }, page: { read: () => ({}) }, refresh: () => setValue(read()),

@@ -49,7 +49,7 @@ it.each(["connect", "ignore"] as const)("closer stages %s through duct-systems W
     parameterCohorts: [{ parameter: "ESP", owner: { kind: "instance", id: 300 }, complete: true, basis: at, members: [{ elementId: 300, uniqueId: uniqueIdOf(300) }] }] });
   const sheet = { ...prior, fan: { ...prior.fan, ...fan }, claim, legs, walkedElementIds: [] };
   expect(mintWriteRequest(claim, sheet, { snapshot, fan, roster: [], grids: {}, inputs: resolveInputs({ snapshot, firm: TEST_FIRM }) },
-    { appliedAt: at, slots: { requiredEsp: "ESP" }, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [], verdicts: [] } }).equipment).toEqual([{ id: 300, externalStaticInWg: 1 }]);
+    { appliedAt: at, slots: { requiredEsp: "ESP" }, peerClaims: new Map(), rulings: {}, storeDeletes: { roles: [] } }).request.equipment).toEqual([{ id: 300, externalStaticInWg: 1 }]);
 });
 it("a deadhead has no accept closer and staging acceptance is refused", () => {
   const deadhead: FanIssue = { ...issue, closer: { kind: "none", reason: "backflow/deadhead" } };

@@ -14,7 +14,6 @@ export function networkCalcs(snapshot: DuctSnapshot, grids: Grids, catalogs: Cat
     snapshot,
     work,
     versions: { Work: revision },
-    store: snapshot.store,
     firm,
     catalogs,
   });

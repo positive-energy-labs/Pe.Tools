@@ -1,0 +1,14 @@
+{
+  "name": "@pe/journey-fixtures",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/browser": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
+    "vite-plus": "catalog:"
+  }
+}

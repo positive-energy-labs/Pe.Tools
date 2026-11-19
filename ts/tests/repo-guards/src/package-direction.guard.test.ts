@@ -19,8 +19,11 @@ const under = (dir: string) =>
 
 // Sites, partition and owners of .artifacts/runs/analysis-20261104/comparison/imports-frozen.mjs over
 // measure.py's manifest, so the counts are the research thread's (355 at 5ad5625f and c75ffe79).
+// Exemption (reach-through rule): product `journeys/` are driver-run journey tooling like the `test|fixture`
+// paths already skipped, not route code; the boundary that holds is that no route source imports a journey
+// (asserted in route-closure.guard.test.ts).
 const SKIP =
-  /(?:^|\/)(?:generated|vendor|dist|dist-installed|bin|obj|node_modules|\.artifacts)\/|\.generated\.|routeTree\.gen\.ts$|test|typecheck|fixture|prototype|\/examples\//i;
+  /(?:^|\/)(?:generated|vendor|dist|dist-installed|bin|obj|node_modules|\.artifacts)\/|\.generated\.|routeTree\.gen\.ts$|\/journeys\/|test|typecheck|fixture|prototype|\/examples\//i;
 function reachThrough(): Record<string, number> {
   const names = new Map(
     git("ls-files", "ts/**/package.json")

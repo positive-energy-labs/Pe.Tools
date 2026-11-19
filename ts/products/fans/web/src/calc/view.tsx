@@ -1,4 +1,5 @@
 import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { cellSource, espWord } from "@pe/agent-contracts/slots";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The
@@ -11,6 +12,7 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView, PlainList, type ListRowParts } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
+import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Fragment, useMemo, useState } from "react";
 import { BlockerRow } from "./blocker-row.tsx";
 import type { Closer } from "./closer.ts";
@@ -27,12 +29,7 @@ import {
 import type { LedgerProps, RosterProps } from "./types.ts";
 import { branchesKnown, CalcBreakdown } from "./calc-breakdown-table.tsx";
 
-const rosterState = (row: FanPort) =>
-  row.complete
-    ? `ESP ${pressure(row.requiredEspInWg)} in-wg`
-    : row.complete === false
-      ? "incomplete"
-      : "not computed";
+const rosterState = (row: FanPort) => row.complete ? `ESP ${pressure(row.requiredEspInWg)} in-wg ${espWord(true)}` : espWord(row.complete);
 const rosterSearch = (row: FanPort) => ({
   text: [row.mark, row.kind, row.side, String(row.portIndex)],
   ids: [row.unitId],
@@ -133,10 +130,10 @@ function Sides({ props }: { props: LedgerProps }) {
           {totals.requiredEspInWg == null ? (
             <span className="text-ink-2">— needs two complete sides</span>
           ) : (
-            `${pressure(totals.requiredEspInWg)} in-wg`
+            `${pressure(totals.requiredEspInWg)} in-wg ${espWord(true)}`
           )}
           {totals.requiredEspAssumedInWg != null &&
-            ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)}`}
+            ` · with assumptions ${pressure(totals.requiredEspAssumedInWg)} ${espWord(true)}`}
         </span>
         {/* The resolver includes staged Work; a Read plan cannot claim a native write. */}
         {/* Rated ESP is only ever a stated value (P-030, P-033c): unstated, the row says so and shows no number. */}
@@ -160,11 +157,22 @@ function Sides({ props }: { props: LedgerProps }) {
             </span>
             <span className="face-mono text-right">
               {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}
+              {totals[side].worstPath != null && ` ${espWord(true)}`}
               {totals[side].worstPath == null && ws?.[side].worstKnownInWg != null && (
-                <span data-tone="caution"> partial</span>
+                <span data-tone="caution"> {espWord(false)}</span>
               )}
             </span>
-            <span className="face-mono text-right">{pressure(totals[side].allowanceInWg)}</span>
+            <span className="face-mono text-right">
+              {pressure(props.inputs?.criteria.allowanceInWg[side].value ?? null)}{" "}
+              <TooltipHint content={props.inputs?.criteria.allowanceInWg[side].ref}>
+                <span
+                  className="t-small text-ink-2"
+                  data-input-source={props.inputs ? cellSource(props.inputs.criteria.allowanceInWg[side].source) : "none"}
+                >
+                  {props.inputs ? cellSource(props.inputs.criteria.allowanceInWg[side].source) : "none"}
+                </span>
+              </TooltipHint>
+            </span>
           </span>
         ))}
       </div>

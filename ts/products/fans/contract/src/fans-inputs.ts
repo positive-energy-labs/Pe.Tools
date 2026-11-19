@@ -75,10 +75,6 @@ export type FanEspValues = {
   rated: SourcedValue<number>;
   required: FanClaim;
 };
-export type SetAsideRow = {
-  work: "fans" | "duct-systems"; segment: string; row: string;
-  source: string | null; ref: string | null;
-};
 
 export type { DuctUnitKind, FanBlockerKind } from "@pe/host-contracts/generated";
 
@@ -116,11 +112,10 @@ export const fanParameterCohortSchema = z.strictObject({
   members: z.array(z.strictObject({ elementId: id, uniqueId: ref })), basis: ref, complete: z.boolean(),
 }).refine(c => !c.complete || (c.members.length > 0 && new Set(c.members.map(m => m.elementId)).size === c.members.length && (c.owner.kind !== "instance" || (c.members.length === 1 && c.members[0].elementId === c.owner.id))), "complete cohorts require distinct members and one instance owner");
 export const fanEspValuesSchema = z.strictObject({ rated: sourcedValueSchema(pressure), required: fanClaimSchema });
-export const setAsideRowSchema = z.strictObject({ work: z.enum(["fans", "duct-systems"]), segment: ref, row: ref, source: z.string().nullable(), ref: ref.nullable() });
 
 const numberDomain = (unit: string) => ({ kind: "number", min: 0, unit } as const);
 const inWg = { kind: "object", fields: { inWg: numberDomain("in-wg") } } as const;
-import { DUCTS_CRITERIA_CELLS as FAN_CRITERIA_CELLS, DUCT_PARAMETER_KEYS, DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
+import { DUCTS_CRITERIA_CELLS as FAN_CRITERIA_CELLS, DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 export { DUCTS_CRITERIA_CELLS as FAN_CRITERIA_CELLS } from "@pe/ducts-contract/duct-inputs";
 const row = <const R extends Omit<FanInputRow<unknown>, "accepts" | "layers">>(definition: R) => ({
   ...definition, layers: VALUE_SOURCES,
@@ -151,8 +146,6 @@ export const FAN_INPUTS = [
   row({ name: "requiredEsp", role: "result", on: "fan", domain: numberDomain("in-wg"), home: "derived", owner: "fans", segment: null, parameter: null, write: "never" }),
   ...Object.entries(FAN_CRITERIA_CELLS).map(([name, cell]) => row({ name, role: "input", on: "criteria", domain: cell.domain, home: "project", owner: "duct-systems", segment: "criteria", parameter: null, write: "never" })),
 ] as const satisfies readonly FanInputRow<unknown>[];
-export const fanInputRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.role === "input");
 export const fanWriteRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.write === "stated-only" && r.segment !== null);
 export const fanBindingRows = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => rows.filter(r => r.segment !== null);
 export const fanInputShape = (rows: readonly FanInputRow<unknown>[] = FAN_INPUTS) => Object.fromEntries(fanBindingRows(rows).map(r => [r.name, schemaOf(r.domain)]));
-export const FAN_PARAMETER_KEYS = DUCT_PARAMETER_KEYS;

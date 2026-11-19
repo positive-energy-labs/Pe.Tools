@@ -12,7 +12,7 @@ import {
   ductsCalcOverviewSchema,
   ductsCalcRequestSchema,
   ductsCalcResponseSchema,
-  ductParameterSlots,
+  ductSlotRequest,
   type DuctsCalcOverview,
   type DuctsCalcRequest,
   fanClaimSchema, fanCloserSchema, fanEspValuesSchema, ductsFanCalcSchema,
@@ -155,12 +155,12 @@ const calcModel = read("fans.calculation", {
     const saved = await ctx.read(designLayers, request.target);
     const design = ductsDesign(saved.ducts, saved.fans),
       work = workLayer(design);
-    const criteria = resolveCriteria(work, null, firmLayer(saved.firm, saved.settings));
+    const criteria = resolveCriteria(work, firmLayer(saved.firm, saved.settings));
     const tolerances = {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const slots = ductParameterSlots(saved.settings);
+    const slots = ductSlotRequest(saved.settings);
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -190,7 +190,6 @@ const calcModel = read("fans.calculation", {
       snapshot,
       work,
       versions: { Work: saved.revision },
-      store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
       firm: firmLayer(saved.firm, saved.settings),
       catalogs: catalog.tables,
     });
@@ -503,7 +502,7 @@ export const ductCalc = read(CALC_DETAIL_READ, {
 export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
     const saved = await ctx.read(designLayers, target),
       design = ductsDesign(saved.ducts, saved.fans);
-    const slots = ductParameterSlots(saved.settings);
+    const slots = ductSlotRequest(saved.settings);
     const response = await ctx.read(native("ducts.snapshot.roster"), {
       role: "acquire",
       target: { kind: "document", ref: target },
@@ -515,7 +514,6 @@ export const fanRoster = body(acquisition.fanRoster, async function(ctx, { targe
       snapshot,
       work: workLayer(design),
       versions: { Work: saved.revision },
-      store: snapshot.store as Parameters<typeof resolveInputs>[0]["store"],
       firm: firmLayer(saved.firm, saved.settings),
     });
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),

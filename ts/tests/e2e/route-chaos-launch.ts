@@ -1,8 +1,10 @@
+import { wait as waitFor, exited, stopOwned } from "./owned-runtime.ts";
 // One owned demo runtime, or an explicit borrowed browser/server. Never starts Revit.
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify, parseArgs } from "node:util";
 import { openBrowser, type BrowserSession, type SessionInfo } from "@pe/browser";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import { createHash } from "node:crypto";
 import { emptyThreadLifecycle } from "../../packages/agent-contracts/src/harness-thread.ts";
@@ -28,7 +30,10 @@ if (!["chaos", "selection", "conversation-work", "fans"].includes(values.suite!)
   throw new Error("--suite must be chaos, selection, conversation-work or fans");
 if (values.revit && (values.suite !== "fans" || !process.env.PE_TOOLS_PRODUCT_HOME))
   throw new Error("--revit is fans-only and requires the caller's PE_TOOLS_PRODUCT_HOME");
-if (!["chaos", "fans"].includes(values.suite!) && (values.attached || values.url || values.port || values.target))
+if (
+  !["chaos", "fans"].includes(values.suite!) &&
+  (values.attached || values.url || values.port || values.target)
+)
   throw new Error("The required product suites own their isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
@@ -63,6 +68,7 @@ const receipt = {
   seed: values.seed,
   started: new Date().toISOString(),
   hostPid: 0,
+  home: "",
   hostPort: 0,
   web: "",
   browser: "",
@@ -98,49 +104,14 @@ const trayHash = async () => {
   );
   return bytes ? createHash("sha256").update(bytes).digest("hex") : null;
 };
-const pause = (ms: number) => new Promise((done) => setTimeout(done, ms));
-async function wait<T>(
-  read: () => Promise<T | undefined>,
-  label: string,
-  timeout: number,
-): Promise<T> {
-  const end = Date.now() + timeout;
-  while (!cancelled && Date.now() < end) {
-    const result = await read();
-    if (result !== undefined) return result;
-    await pause(100);
-  }
-  throw new Error(`${cancelled ? "Interrupted" : "Timed out"}: ${label}`);
-}
-async function exited(child: ChildProcess, timeout: number) {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  await new Promise<void>((done, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`Owned process ${child.pid} did not exit`)),
-      timeout,
-    );
-    child.once("exit", () => {
-      clearTimeout(timer);
-      done();
-    });
-  });
-}
+const wait = <T>(read: () => Promise<T | undefined>, label: string, timeout: number) =>
+  waitFor(read, label, timeout, () => cancelled);
 const interrupt = () => {
   cancelled = true;
   documentAbort?.abort(new Error("Interrupted during source document readiness"));
   if (testProcess)
     void stopOwned(testProcess).catch((error) => receipt.cleanup.push(String(error)));
 };
-async function stopOwned(child: ChildProcess) {
-  if (child.exitCode !== null || child.signalCode !== null || !child.pid) return;
-  if (process.platform === "win32")
-    await exec("taskkill.exe", ["/PID", String(child.pid), "/T", "/F"], {
-      timeout: 10_000,
-      windowsHide: true,
-    });
-  else child.kill("SIGKILL");
-  await exited(child, 5000);
-}
 process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
@@ -179,7 +150,11 @@ try {
       }, 1000);
     }
     // --revit shares the caller's drive home with Pe.App; every other suite isolates its own.
-    const home = values.revit ? env.PE_TOOLS_PRODUCT_HOME! : join(dir, "home");
+    // ADR 0037: harness state must not inherit this checkout's instructions.
+    const home = values.revit
+      ? env.PE_TOOLS_PRODUCT_HOME!
+      : await mkdtemp(join(tmpdir(), "pe-route-home-"));
+    receipt.home = home;
     env.PE_TOOLS_PRODUCT_HOME = home;
     env.LOCALAPPDATA = values.revit ? home : join(dir, "localappdata");
     env.APPDATA = join(dir, "appdata");
@@ -460,6 +435,16 @@ try {
   } catch (error) {
     receipt.cleanup.push(`Host cleanup: ${String(error)}`);
     process.exitCode = 1;
+  }
+  if (!values.revit && receipt.home) {
+    try {
+      await cp(receipt.home, join(dir, "home"), { recursive: true });
+      await rm(receipt.home, { recursive: true, force: true });
+      receipt.cleanup.push(`archived home to ${join(dir, "home")}; removed ${receipt.home}`);
+    } catch (error) {
+      receipt.cleanup.push(`Home archival or cleanup: ${String(error)}`);
+      process.exitCode = 1;
+    }
   }
   process.removeListener("SIGINT", interrupt);
   process.removeListener("SIGTERM", interrupt);

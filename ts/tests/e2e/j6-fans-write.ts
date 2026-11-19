@@ -1,3 +1,4 @@
+import { plan } from "./fans-plan.ts";
 // E2E-J6 · Fans mutation: Pea stages ESP for a fan, the human plans, Write consumes
 // the stage, and a re-plan refuses with "no staged edit". Real host, real Pea, real Revit.
 // Data by env: E2E_FAN (mark, default MUAS-1), E2E_PORT (default 2), E2E_VALUE (ESP in. wg, default 1.25).
@@ -31,24 +32,10 @@ const ESP = process.env.E2E_VALUE || "1.25";
 const CHAOS = new Set((process.env.E2E_CHAOS ?? "").split(",").filter(Boolean));
 const ROSTER = `[data-pane-id="${fansPanes.roster}"]`;
 const POPOVER = "[data-write-popover]";
-const PLAN_WRITE = /^plan Write to Revit$/;
 const fanRow = fanRosterRow(FAN, PORT);
 
 /** The resolved unit ESP as drawn; calculated required ESP need not change after an ESP write. */
 const esp = (page: Page) => page.textOf(FANS_LEDGER_ESP);
-
-/** Plan through the visible control and return the popover's text once it names an outcome. */
-async function plan(page: Page) {
-  await page.click(PLAN_WRITE);
-  return page.until(
-    async () => {
-      const text = await page.textOf(POPOVER);
-      return /planned|refused|no staged edit|nothing to write/i.test(text) ? text : null;
-    },
-    "the plan outcome in the Write popover",
-    300_000,
-  );
-}
 
 // Not the README's J6 (old-shape /families Work): its own id keeps the proof directories apart.
 await journey("J6-fans", async (page, step) => {
@@ -56,6 +43,10 @@ await journey("J6-fans", async (page, step) => {
   await page.open(revit.url("/fans"));
   await requireRevit(page, 600_000);
   await page.until(() => page.has(fanRow, ROSTER), `${FAN} on the fans roster`, 600_000);
+  const unitId = await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) => {
+    const rows = [...document.querySelectorAll<HTMLElement>(`${scope} [role="option"]`)].filter(e => new RegExp(pattern).test(e.innerText));
+    return rows.length === 1 ? rows[0]?.getAttribute("data-revit-ids") ?? null : null;
+  }, { scope: ROSTER, pattern: fanRow.source });
   step(`pick ${FAN} port ${PORT} from the roster`);
   const selected = await page.read<boolean>(
     `[...document.querySelectorAll(${JSON.stringify(`${ROSTER} [aria-selected="true"]`)})].some((e) => ${fanRow}.test(e.innerText.trim()))`,
@@ -89,6 +80,7 @@ await journey("J6-fans", async (page, step) => {
     FAN,
     (scope, pattern) => page.click(new RegExp(pattern), scope),
     (scope, pattern) => page.until(() => page.has(new RegExp(pattern), scope), "the Write scope"),
+    unitId,
   );
   await page.until(async () => settled(await marks(page)), "fans settled before plan", 300_000);
   step("open the human plan");

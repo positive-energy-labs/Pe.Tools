@@ -110,7 +110,7 @@ it("Manual D r52 human Work drops close both unpriced legs and permit minting", 
       kind: "drop", value: expect.objectContaining({ value, source: "Work", author: "human", ref: "work:test" }),
     });
   if (sheet.claim.kind !== "complete") throw Error("complete replay required");
-  const minted = mintWriteRequest(sheet.claim, sheet, accepted, {
+  const { request: minted } = mintWriteRequest(sheet.claim, sheet, accepted, {
     appliedAt: input.snapshot.document.readAt, slots: input.snapshot.slots!,
     peerClaims: new Map(), rulings: {}, storeDeletes: {},
   });

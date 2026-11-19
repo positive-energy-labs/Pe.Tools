@@ -32,7 +32,7 @@ export type CatalogLoss = {
   source?: CatalogTable["source"];
   notes: string[];
 } & (
-  | { dp: number; staticInWg: number | null; pv: number; fpm: number }
+  | { dp: number; tier: CatalogTable["home"]["tier"]; staticInWg: number | null; pv: number; fpm: number }
   | { dp: null; finding: CatalogFinding; error: string }
 );
 
@@ -142,5 +142,5 @@ export function catalogLoss(
       : staticInWg + pv;
   if (!Number.isFinite(dp))
     return bad("catalog-input", "Catalog conversion or velocity pressure is not finite");
-  return { ...base, staticInWg, pv, fpm, dp };
+  return { ...base, tier: t.home.tier, staticInWg, pv, fpm, dp };
 }

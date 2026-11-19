@@ -35,7 +35,3 @@ export function withEquivalentLength(rows: readonly Row[], designRate: number): 
     return { ...row, eqFt: Math.max(0, (row.dp / refRate(i)) * 100) };
   });
 }
-
-/** Total effective length of a path: straight duct plus every fitting and terminal in feet. */
-export const telOf = (rows: readonly Row[]): number =>
-  rows.reduce((sum, r) => sum + (r.eqFt ?? 0), 0);

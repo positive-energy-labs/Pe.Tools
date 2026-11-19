@@ -183,35 +183,33 @@ public sealed record DuctParameterSlotOverrides(
     string? TerminalDrop = null,
     string? FittingCoefficient = null,
     string? TerminalFlow = null) {
-    // Overrides preserve absence until they merge over the store. Dispatch populates ctor defaults.
     // firm-default: PE_* names belong in firm config, not code (kaitpw 2026-10-20, later).
     private static readonly DuctParameterSlots Defaults = new(
         "PE_M_Fan_ExternalStaticPressure", null, "PE_M_Fan_AirFlowDesign", "Pressure Drop",
         "PE_M_Grd_ExternalStaticPressure", DuctParameterSlots.DefaultFittingCoefficient, "PE_M_Grd_AirFlow");
 
-    /// <summary>Resolve nullable overrides over the stored names, then engine defaults, exactly once.</summary>
-    // R3: RequiredEsp absent/null inherits; "" is explicit none; a nonblank name targets that parameter.
-    // Resolved slots expose none as null. Persist it back as "" so the default cannot reappear.
-    public DuctParameterSlots Resolve(DuctParameterSlotOverrides? stored = null) {
-        var required = this.RequiredEsp ?? stored?.RequiredEsp ?? Defaults.RequiredEsp;
+    /// <summary>Resolve request overrides over the C# defaults; stored slots are write receipts only.</summary>
+    // R3: RequiredEsp absent/null uses the C# default; "" is explicit none; a nonblank name targets that parameter.
+    public DuctParameterSlots Resolve() {
+        var required = this.RequiredEsp ?? Defaults.RequiredEsp;
         required = string.IsNullOrWhiteSpace(required) ? null : required.Trim();
-        var rated = this.RatedEsp ?? stored?.RatedEsp;
+        var rated = this.RatedEsp;
         rated = string.IsNullOrWhiteSpace(rated) ? null : rated.Trim();
         if (required != null && string.Equals(required, rated, StringComparison.OrdinalIgnoreCase))
             throw new ArgumentException("RequiredEsp and RatedEsp name the same parameter");
         return new(required, rated,
-        Name(this.FanFlow, stored?.FanFlow, Defaults.FanFlow),
-        Name(this.ComponentDrop, stored?.ComponentDrop, Defaults.ComponentDrop),
-        Name(this.TerminalDrop, stored?.TerminalDrop, Defaults.TerminalDrop),
-        Name(this.FittingCoefficient, stored?.FittingCoefficient, Defaults.FittingCoefficient),
-        Name(this.TerminalFlow, stored?.TerminalFlow, Defaults.TerminalFlow));
+        Name(this.FanFlow, Defaults.FanFlow),
+        Name(this.ComponentDrop, Defaults.ComponentDrop),
+        Name(this.TerminalDrop, Defaults.TerminalDrop),
+        Name(this.FittingCoefficient, Defaults.FittingCoefficient),
+        Name(this.TerminalFlow, Defaults.TerminalFlow));
     }
 
-    private static string Name(string? authored, string? stored, string fallback) =>
-        !string.IsNullOrWhiteSpace(authored) ? authored : !string.IsNullOrWhiteSpace(stored) ? stored : fallback;
+    private static string Name(string? authored, string fallback) =>
+        !string.IsNullOrWhiteSpace(authored) ? authored : fallback;
 }
 
-/// <summary>Complete parameter names after override, store and engine-default resolution.</summary>
+/// <summary>Complete parameter names after request override and C# default resolution.</summary>
 public sealed record DuctParameterSlots(
     [property: JsonProperty(NullValueHandling = NullValueHandling.Include, DefaultValueHandling = DefaultValueHandling.Include)] string? RequiredEsp,
     string? RatedEsp,

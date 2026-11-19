@@ -6,6 +6,7 @@ import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
  * refuse a miss, another ref, an ambiguity, a full bundle or an older format.
  */
 import { writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -13,7 +14,7 @@ import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
 import type { Caller } from "@pe/agent-contracts";
 import { effectTest } from "./effect-test.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { DuctFiles, catalogReading } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { InvalidRead } from "../src/native-reads.ts";
 import {
@@ -49,8 +50,23 @@ const catalogs = {
 };
 const liveFiles = Layer.succeed(DuctFiles, {
   firm: () => Effect.succeed(firm),
-  ductCatalogs: Effect.succeed(catalogs),
+  catalogsFor: () => Effect.succeed(catalogs),
 });
+
+effectTest("S5: replay the frozen base catalog scope without recapturing", () => Effect.gen(function* () {
+  // Frozen with the base adapter's literal scope and output version, independently of catalogsFor.
+  const open = yield* openRecordingReader(fileURLToPath(new URL("./fixtures/catalog-scope-990bbfd9/", import.meta.url)), { build: "990bbfd9", catalog: "legacy-catalog-fixture" }, bounds);
+  const files = yield* service(DuctFiles, DuctFiles.recorded(open));
+  expect(yield* files.catalogsFor(undefined)).toEqual(catalogs);
+  expect(yield* files.catalogsFor(null)).toEqual(catalogs);
+  expect(yield* problem(files.catalogsFor("Projects/Other"))).toBe("recording.scope");
+}));
+
+effectTest("S5: the host catalog reading still refuses unknown fields", () => Effect.sync(() => {
+  expect(catalogReading.safeParse({ ...catalogs, extra: true }).success).toBe(false);
+  expect(catalogReading.safeParse({ ...catalogs, tables: [] }).success).toBe(false);
+  expect(catalogReading.safeParse({ ...catalogs, findings: [1] }).success).toBe(false);
+}));
 
 effectTest("format 1 and 2 bundles refuse explicitly and are never migrated", () =>
   Effect.gen(function* () {
@@ -75,10 +91,10 @@ effectTest(
         DuctFiles,
         DuctFiles.capturing(writer).pipe(Layer.provide(liveFiles)),
       );
-      expect(yield* files.ductCatalogs).toEqual(catalogs);
+      expect(yield* files.catalogsFor(undefined)).toEqual(catalogs);
       expect(writer.coverage()).toEqual(["files"]);
       const recorded = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
-      expect(yield* recorded.ductCatalogs).toEqual(catalogs);
+      expect(yield* recorded.catalogsFor(undefined)).toEqual(catalogs);
       expect(yield* problem(recorded.firm("ducts"))).toBe("recording.miss");
       yield* files.firm("ducts");
       const again = yield* service(DuctFiles, DuctFiles.recorded(yield* reader(dir)));
@@ -179,7 +195,7 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     });
     const broken = Layer.succeed(DuctFiles, {
       firm: () => Effect.fail(new Error("disk") as never),
-      ductCatalogs: Effect.succeed(catalogs),
+      catalogsFor: () => Effect.succeed(catalogs),
     });
     const files = yield* service(
       DuctFiles,
@@ -192,8 +208,8 @@ effectTest("an unrebuildable failure or a full bundle stops capture, keeps no ta
     const fullDir = yield* bundle;
     const full = yield* openRecordingWriter(stateFixture(fullDir), identity, { maxBytes: 1_000_000, maxTakings: 1 });
     const kept = yield* service(DuctFiles, DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)));
-    yield* kept.ductCatalogs;
-    expect(yield* kept.ductCatalogs).toEqual(catalogs);
+    yield* kept.catalogsFor(undefined);
+    expect(yield* kept.catalogsFor(undefined)).toEqual(catalogs);
     expect(full.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
     expect((yield* reader(fullDir)).coverage()).toEqual(["files"]);
   }),
@@ -216,7 +232,7 @@ effectTest(
       );
       yield* files.firm("ducts");
       yield* files.firm("ducts");
-      yield* files.ductCatalogs;
+      yield* files.catalogsFor(undefined);
       const [first, second, catalog] = seen;
       expect(first!.id).not.toBe(second!.id);
       const open = yield* reader(dir);

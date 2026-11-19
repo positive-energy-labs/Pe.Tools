@@ -5,9 +5,12 @@
  * so it only shrinks. Slice 13 lands when the list is empty. C7's falsifier is this census with
  * the route set narrowed to `chat`.
  */
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import ts from "typescript";
 import { expect, test } from "vite-plus/test";
-import { BASELINE, census, closureCensus, routeFolders } from "./route-closure-census.ts";
+import { BASELINE, census, closureCensus, isProduction, routeFolders } from "./route-closure-census.ts";
 
 const frozen: string[] = JSON.parse(readFileSync(BASELINE, "utf8"));
 
@@ -67,4 +70,28 @@ test("the census sees every route folder and exempts only the design-system wind
   const routes = routeFolders();
   for (const name of ["chat", "products/fans/web", "products/duct-systems/web", "open", "sessions", "settings"]) expect(routes).toContain(name);
   for (const name of ["design-system", "shell", "route", "navigation", "workbench", "routes"]) expect(routes).not.toContain(name);
+});
+
+// Boundary of both `journeys/` exemptions: no production source imports a journey, in any form
+// (static, side-effect, dynamic, re-export). Scope: every tracked non-test, non-journey source under products, apps, packages.
+const journeyImports = (text: string) =>
+  ts.preProcessFile(text, true, true).importedFiles.map((f) => f.fileName).filter((m) => /(?:^|\/)journeys(?:\/|$)/.test(m));
+
+test("the journey matcher flags each import form and passes a non-journey import", () => {
+  for (const text of [
+    `import { a } from "../journeys/x.ts";`,
+    `import "./journeys/x.ts";`,
+    `export const l = () => import("../journeys/x.ts");`,
+    `export * from "../journeys";`,
+  ]) expect(journeyImports(text), text).toHaveLength(1);
+  expect(journeyImports(`import { a } from "../journal/x.ts"; import "./b"; export * from "./c"; import("./d");`)).toEqual([]);
+});
+
+test("no production source imports a journey file", () => {
+  const root = join(import.meta.dirname, "../../../..");
+  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "ts/products", "ts/apps", "ts/packages"], { encoding: "utf8", maxBuffer: 1 << 28 })
+    .split("\0")
+    .filter((file) => isProduction(file) && !/\/(?:journeys|tests?|node_modules)\//.test(file));
+  expect(files.length).toBeGreaterThan(100);
+  expect(files.filter((file) => journeyImports(readFileSync(join(root, file), "utf8")).length > 0)).toEqual([]);
 });

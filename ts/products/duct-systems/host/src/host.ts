@@ -8,11 +8,11 @@ import { DUCTS_SYSTEM_MAX,
   ductsPricingData,
   ductsDesign,
   stagedDucts,
-  ductParameterSlots, } from "@pe/agent-contracts";
+  ductParameterSlots, ductSlotRequest, } from "@pe/agent-contracts";
 import { SYSTEMS_PER_READ, mergeSnapshots } from "@pe/ducts-domain/system-reads";
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { designLayers } from "@pe/ducts-host/design-layers";
-import { firmLayer } from "@pe/ducts-host/ducts-inputs";
+import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { catalogs } from "@pe/host/builtin-read-handles";
@@ -30,14 +30,14 @@ export const ductsRoster = body(contracts.roster, async function(ctx, { target }
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: ductParameterSlots(saved.settings),
+        slots: ductSlotRequest(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "roster" },
       },
     });
     if (!response.version) throw Error("Duct roster has no observation version");
     const snapshot = response.body;
-    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version };
+    return { ...snapshot, rows: systemList(snapshot, null), sourceVersion: response.version, slotSources: ductParameterSlots(saved.settings) };
   });
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
@@ -50,7 +50,7 @@ const systems = read("ducts.systems", {
       role: "acquire",
       target: { kind: "document", ref: target },
       request: {
-        slots: ductParameterSlots(saved.settings),
+        slots: ductSlotRequest(saved.settings),
         labelParameter: staged.labelParameter ?? undefined,
         selector: { kind: "systems", systemIds },
       },
@@ -60,6 +60,7 @@ const systems = read("ducts.systems", {
     return {
       ...snapshot,
       sourceVersion: response.version,
+      slotSources: ductParameterSlots(saved.settings),
       systemReads: {
         completed: systemIds,
         missing: systemIds.filter((id) => !snapshot.systems.some((system) => system.id === id)),
@@ -95,6 +96,7 @@ export const ductsNetwork = body(contracts.network, async function(ctx, args) {
     });
     return {
       ...(mergeSnapshots(parts) ?? roster),
+      slotSources: parts.at(-1)?.slotSources ?? roster.slotSources,
       sourceVersion: parts.length
         ? parts.map((part) => part.sourceVersion).join("+")
         : roster.sourceVersion,
@@ -128,14 +130,13 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
       target: args.target,
       units: fans.rows.flatMap((row) => (row.uniqueId ? [row.uniqueId] : [])),
     });
-    const { sourceVersion: _version, systemReads: _coverage, ...acquired } = network;
+    const { sourceVersion: _version, systemReads: _coverage, slotSources: _sources, ...acquired } = network;
     const calcs = await ctx.read(networkCalcs, { snapshot: acquired, tables: tables.body, catalogs: catalog.tables,
       design: ductsDesign(layers.ducts, layers.fans), firm: firmLayer(layers.firm, layers.settings), revision: layers.revision });
     return ctx.compute(
       ductsPricingData,
-      { roster, fans, network, layers, catalog, calcs },
-      ({ roster, fans, network, layers, catalog, calcs }) => {
-        const { sourceVersion: _version, systemReads: _coverage, ...snapshot } = network;
+      { roster, fans, network, snapshot: acquired, layers, catalog, calcs },
+      ({ roster, fans, network, snapshot, layers, catalog, calcs }) => {
         const design = ductsDesign(layers.ducts, layers.fans);
         const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
         const result = pricingWire(
@@ -161,8 +162,8 @@ export const ductsPricing = body(contracts.pricing, async function(ctx, args) {
           ductSystemsWork: layers.ducts,
           fansWork: layers.fans,
           catalogFindings: catalog.findings,
-          // Under Work: the store over the firm file, so a staged criterion draws beside what it replaces.
-          criteria: resolveCriteria(null, snapshot.store as Parameters<typeof resolveCriteria>[1], firmLayer(layers.firm, layers.settings)),
+          // The criteria as pricing resolved them (MAP invariant 5): the Work layer and revision `networkCalcs` prices on, over the home that serves each. The model store states none (ADR 0053).
+          criteria: resolveCriteria(workLayer(design), firmLayer(layers.firm, layers.settings), null, { Work: layers.revision }),
           firm: "refused" in layers.firm ? layers.firm
             : { version: firmLayer(layers.firm, layers.settings).version, path: layers.firm.path, present: layers.firm.present },
           settings: { ducts: layers.settings } as Readonly<Record<string, typeof layers.settings>>,

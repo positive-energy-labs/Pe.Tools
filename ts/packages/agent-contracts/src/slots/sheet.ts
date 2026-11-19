@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { SETTING_TIERS, type SettingTier } from "../tiered-setting.ts";
+import { SETTING_TIERS, serveSetting, type SettingTier, type SettingTierRead } from "../tiered-setting.ts";
+import type { ValueSource } from "../work-value.ts";
 import type { native } from "../handle.ts";
 import type { OpRequestOf } from "@pe/host-contracts/operation-types";
 type OptionsRequest = OpRequestOf<"revit.catalog.field-options">;
@@ -59,6 +60,8 @@ export interface CellLayer {
   readonly refusal?: string;
   /** What the read says about this row beside its value (a model/walk flow conflict). */
   readonly note?: string;
+  /** The live value is not what Pe last wrote there (a receipt disagrees): the kernel ORs it into the cell's `drift`. */
+  readonly drift?: true;
 }
 
 /**
@@ -76,7 +79,7 @@ export interface BindingDraw<R = any> {
 
 export type SheetBinding = BindingDraw & { readonly domain: Domain } & (
   | { readonly home: Extract<Home, { at: "parameter" }>; readonly per: "subject" }
-  | { readonly home: Extract<Home, { at: "setting" }>; readonly per: "route" }
+  | { readonly home: Extract<Home, { at: "setting" }>; readonly per: "route"; readonly model: NonNullable<BindingDraw["model"]> }
   | { readonly home: Extract<Home, { at: "store" | "local" }>; readonly per: BindingPer }
 );
 export const parameter = (parameter: string, domain: Domain, draw?: BindingDraw): SheetBinding =>
@@ -85,8 +88,15 @@ export const store = (store: string, domain: Domain, per: BindingPer = "subject"
   ({ ...draw, domain, home: { at: "store", store }, per });
 export const local = (domain: Domain, per: BindingPer = "route", draw?: BindingDraw): SheetBinding =>
   ({ ...draw, domain, home: { at: "local" }, per });
-export const setting = (owner: string, path: readonly string[], domain: Domain, tiers: readonly SettingTier[], draw?: BindingDraw): SheetBinding =>
-  ({ ...draw, domain, home: { at: "setting", owner, path, tiers }, per: "route" });
+export const settingLayer = (b: Pick<SheetBinding, "home" | "domain" | "default">, tiers?: readonly SettingTierRead[]) => {
+  if (b.home.at !== "setting") return null;
+  const served = serveSetting(tiers, b.home.tiers, b.home.path, schemaOf(b.domain), b.default);
+  return { value: served.value, source: served.tier, ref: served.ref, note: served.note };
+};
+export const setting = (owner: string, path: readonly string[], domain: Domain, tiers: readonly SettingTier[], draw?: BindingDraw): SheetBinding => {
+  const binding = { ...draw, domain, home: { at: "setting" as const, owner, path, tiers }, per: "route" as const };
+  return { ...binding, model: draw?.model ?? ((read: { settings?: Record<string, readonly SettingTierRead[]> }) => settingLayer(binding, read?.settings?.[owner])) };
+};
 
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>> {
@@ -115,11 +125,13 @@ export interface CellAddress {
 }
 
 /**
- * Where the drawn value came from (ADR 0026 layers: Work → model store → project → firm → default), or
- * the model itself. `user`, `project` and `firm` name the home that served it; a home that was not
+ * Where the drawn value came from: Work, model-store receipts, the model, a home tier or default.
+ * `user`, `project` and `firm` name the home that served it; a home that was not
  * found is never a source.
  */
 export type CellSource = "work" | "model-store" | SettingTier | "default" | "model";
+export const cellSource = (source: ValueSource): CellSource => source === "Work" || source === "run" ? "work" : source;
+export const espWord = (complete: boolean | null | undefined) => complete ? "computed" : complete === false ? "partial" : "not computed";
 
 /** Every value Pea can touch (ADR 0030 rule 8): current, model (struck), pending author, drift, freshness, source. */
 export interface StateCell<V = unknown> extends CellAddress {
@@ -131,12 +143,6 @@ export interface StateCell<V = unknown> extends CellAddress {
   readonly drift: boolean;
   readonly freshness: "fresh" | "stale" | "unverified" | "never";
   readonly source: CellSource;
-}
-
-/** One model-side value the kernel reads for a binding's row before drawing. */
-export interface ModelValue<V = unknown> extends CellAddress {
-  readonly value: V | null;
-  readonly freshness: StateCell["freshness"];
 }
 
 /**

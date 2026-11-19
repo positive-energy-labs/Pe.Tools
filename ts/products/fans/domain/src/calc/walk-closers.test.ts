@@ -1,4 +1,4 @@
-import { inputsFor } from "@pe/ducts-domain/test-inputs";
+import { inputsFor, TEST_SLOTS } from "@pe/ducts-domain/test-inputs";
 import { expect, it } from "vite-plus/test";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { buildChain } from "./build.ts";
@@ -48,6 +48,7 @@ function fixture(gapIn: number) {
   });
   return {
     document: { title: "joins", readAt: "fixed" },
+    slots: TEST_SLOTS,
     nodes: [root, terminal],
     segments: [
       duct(1, 0, 4, [port(0, 0, [-1, 0, 0], [100, 0]), port(1, 4, [1, 0, 0], null)]),

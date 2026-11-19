@@ -104,14 +104,6 @@ const FIX = "Fix it in Revit; its own tools enforce the rules its API does not."
 
 const plans = new WeakMap<DuctSnapshot, { key: string; plan: HealPlan }>();
 
-export function rememberHealPlan(
-  snapshot: DuctSnapshot,
-  work: DuctsDesign | null,
-  plan: HealPlan,
-) {
-  plans.set(snapshot, { key: topologyRulingsKey(withStoredRulings(work, snapshot.store, snapshot)), plan });
-}
-
 /** Only edit topology verdicts affect healing; a unit-flow edit cannot rebuild it. */
 export function healPlan(snapshot: DuctSnapshot, work: DuctsDesign | null = null): HealPlan {
   const key = topologyRulingsKey(withStoredRulings(work, snapshot.store, snapshot));

@@ -54,9 +54,9 @@ public static class DuctSnapshots {
         SnapshotCore(doc, null, null, selector, false, peers, beforeSeedRead);
 
     private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) {
-        // The names the person staged win, then the names the last apply recorded in the store, then the defaults.
+        // Request slot overrides win over C# defaults; stored slots are write receipts only.
         var (store, storeError) = DuctApplier.ReadStore(doc);
-        var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve(store?.Slots);
+        var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve();
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
         List<Element> Of(BuiltInCategory category) => new FilteredElementCollector(doc)
@@ -516,7 +516,7 @@ public static class DuctSnapshots {
         }
         var present = own ?? typed;
         return present is not null && IsAirFlow(present)
-            ? (Converted(present, UnitTypeId.CubicFeetPerMinute), slot) : (null, null);
+            ? (Reading(present, UnitTypeId.CubicFeetPerMinute), slot) : (null, null);
     }
 
     /// <summary>The element's created (or demolished) phase name; null when it has no phases or none is set.</summary>
@@ -605,7 +605,7 @@ public static class DuctSnapshots {
             c is null ? null : Try(() => (double?)R(UnitUtils.ConvertFromInternalUnits(c.AssignedPressureDrop, UnitTypeId.InchesOfWater60DegreesFahrenheit), 5)),
             method,
             method == nameof(DuctLossMethodType.SpecificLoss),
-            slots.TerminalDrop is { } name ? Converted(Named(e, name), UnitTypeId.InchesOfWater60DegreesFahrenheit) : null);
+            slots.TerminalDrop is { } name ? Reading(Named(e, name), UnitTypeId.InchesOfWater60DegreesFahrenheit) : null);
     }
 
     private static DuctSegment Segment(Document doc, MEPCurve curve, bool network) {
@@ -863,7 +863,11 @@ public static class DuctSnapshots {
     private static double? Converted(Element e, BuiltInParameter p, ForgeTypeId unit) => Converted(e.get_Parameter(p), unit);
 
     private static double? Converted(Parameter? param, ForgeTypeId unit) =>
-        param is { HasValue: true, StorageType: StorageType.Double } && Math.Abs(param.AsDouble()) > 1e-9
+        Reading(param, unit) is { } value && Math.Abs(value) > 0 ? value : null;
+
+    /// <summary>For the values Pe writes (slot drop, slot flows): null when absent or empty, 0 when it reads 0 (ADR 0053).</summary>
+    private static double? Reading(Parameter? param, ForgeTypeId unit) =>
+        param is { HasValue: true, StorageType: StorageType.Double }
             ? R(UnitUtils.ConvertFromInternalUnits(param.AsDouble(), unit), 4)
             : null;
 

@@ -5,6 +5,9 @@ import {
   resolveMany,
 } from "../../../../packages/agent-contracts/src/route-field";
 import { openSet } from "./open-set.neutral";
+import { module as ownerModule } from "@pe/duct-systems-web/route";
+import { module as presenterModule } from "@pe/fans-web/route";
+import { admitModules } from "@pe/ducts-web/admission.test-support";
 
 test("picker selection preserves active membership and resolves its removal", () => {
   const set = openSet((id: string) => id, ["a", "b", "c"]);
@@ -52,8 +55,7 @@ test("an open set keeps its active member explicit: add never moves it, remove h
 
 // FANSPLIT Q2: exercise admitted declarations as well as the legacy policy fixture.
 test("admitted ducts and fans publish distinct subject nouns and Work bindings", async () => {
-  const { admit } = await import("../../../../tests/e2e/fans-witness.test-support.ts");
-  const { owner, presenter } = await admit();
+  const { owner, presenter } = await admitModules(ownerModule, presenterModule);
   expect(owner.data.subject).toMatchObject({ field: "system", noun: "system" });
   expect(presenter.data.subject).toMatchObject({ field: "fan", noun: "fan" });
   expect(owner.typed.spec.edits!.work.route).toBe("duct-systems");

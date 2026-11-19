@@ -6,7 +6,7 @@ import { z } from "zod";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { documentRefSchema } from "@pe/agent-contracts/target";
-import { ductsDocumentSchema } from "./ducts.ts";
+import { ductsDocumentSchema, ductSlotSourcesSchema } from "./ducts.ts";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { encounterSchema, fanClaimSchema, fanEspValuesSchema, fanIssueSchema } from "@pe/fans-contract/fans-inputs";
 import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-pricing-read.ts";
@@ -67,11 +67,12 @@ export const ductsNetworkArgs = ductsRosterArgs.extend({
 export const ductsNetworkData = nativeResponseSchema("ducts.snapshot.walk").and(
   z.object({
     sourceVersion: z.string(),
+    slotSources: ductSlotSourcesSchema.optional(),
     systemReads: z.object({ completed: z.array(z.number()), missing: z.array(z.number()) }),
   }),
 );
 export const ductsRosterData = nativeResponseSchema("ducts.snapshot.roster").and(
-  z.object({ sourceVersion: z.string(), rows: z.array(systemRow) }),
+  z.object({ sourceVersion: z.string(), rows: z.array(systemRow), slotSources: ductSlotSourcesSchema.optional() }),
 );
 const record = <T extends z.ZodType>(schema: T) => z.record(z.string(), schema);
 export const ductTerminalFlowSourceSchema=z.union([z.enum(["override","revit"]),z.templateLiteral(["rooms:",z.string()])]);
@@ -118,7 +119,6 @@ export const ductsFanCalcSchema = z.object({
   fittings: details[4].shape.fittings,
   walkedElementIds: details[2].shape.walkedElementIds,
 });
-export type DuctsFanCalc = z.infer<typeof ductsFanCalcSchema>;
 export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
   espOptions: nativeResponseSchema("revit.catalog.field-options").nullable(),
@@ -130,7 +130,7 @@ export const ductsPricingData = z.object({
   ductSystemsWork: ductsDocumentSchema,
   fansWork: fansDocumentSchema,
   catalogFindings: z.array(z.string()),
-  /** The design criteria as they stand under Work (the store over the firm file), each with its source: the /ducts design sheet's model layer. */
+  /** The resolved design criteria, each with the source pricing used. */
   criteria: ductsInputsSchema.shape.criteria,
   /** The firm line, or refused without a shared root (slice 2b): criteria then resolve on the seed. */
   firm: ductFirmLineSchema,
@@ -202,7 +202,6 @@ export const ductsReadResponse = z.union([
   ductsRosterReadResponse,
   ductsPricingReadResponse,
 ]);
-export type DuctsRosterData = z.infer<typeof ductsRosterData>;
 export type DuctsNetworkData = z.infer<typeof ductsNetworkData>;
 export type DuctsPricingData = z.infer<typeof ductsPricingData>;
 

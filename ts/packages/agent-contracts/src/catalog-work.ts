@@ -258,5 +258,5 @@ export interface ForeignCell {
   path: WorkPath;
 }
 
-/** Where a cell's value comes from. A receipt retires `work` into `model-store` at equal precedence. */
+/** Where a cell's value comes from. A receipt retires a ruling from `work` into `model-store`; a design value it retires is read live from the model (ADR 0053). */
 export type CellLayer = "work" | "model-store";

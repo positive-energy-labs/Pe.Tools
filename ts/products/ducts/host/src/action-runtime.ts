@@ -7,7 +7,7 @@ import { commands, tools, canonicalRouteInput, workKey } from "@pe/agent-contrac
 
 
 
-import { ductsDesign, ductsFirmSchema, ductParameterSlots, subjectOf, workHandleSchema } from "@pe/agent-contracts";
+import { ductsDesign, ductsFirmSchema, ductSlotRequest, subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import { Effect } from "effect";
@@ -147,7 +147,7 @@ export function ductActionExecutors(
           .find((open) => open.openId === target.openId)?.projectHome;
         const settings = readSettingTiers("ducts", pointer);
         const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, {}), settings);
-        const criteria = resolveCriteria(workLayer(design), null, firm);
+        const criteria = resolveCriteria(workLayer(design), firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
           );
@@ -169,7 +169,7 @@ export function ductActionExecutors(
                 autoJoinGapIn: criteria.autoJoinGapIn.value,
                 candidateBoxIn: criteria.healBoxIn.value,
               } : selector,
-              slots: ductParameterSlots(settings),
+              slots: ductSlotRequest(settings),
             });
         const snapshot = await action.snapshot(intent, read);
         const derived = await action.derive({ intent, read, readNative, snapshot, design, doc, fans,
@@ -215,14 +215,11 @@ export function ductActionExecutors(
             ).join("; "),
         };
     }
-    const asked = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
-    const handle = { key: { ...asked.key, route: "duct-systems" } };
-    const paths = phase === "apply" ? entry.retires(p.input, value, p.subjects, p.cells) : [];
-    const fanPaths = paths.filter((path) => tools.fans.work.editable.some((pattern) => pattern[0] === path[0]),
-    );
-    const ductPaths = paths.filter((path) => !fanPaths.includes(path));
-    const retired = ductPaths.length ? yield* execution.retireWork(handle.key, "duct-systems", ductPaths) : undefined;
-    if (fanPaths.length) yield* execution.retireWork({ ...handle.key, route: "fans" }, "fans", fanPaths);
+    // D9: an apply retires only the cells its own route owns, under the route that executed it.
+    const { key: asked } = ctx.admission.input.work as { key: import("@pe/agent-contracts").WorkKey };
+    const owned = (asked.route === fansRoute ? tools.fans : tools.ducts).work.editable;
+    const paths = (phase === "apply" ? entry.retires(p.input, value, p.subjects, p.cells) : []).filter((path) => owned.some((pattern) => pattern[0] === path[0]));
+    const retired = paths.length ? yield* execution.retireWork(asked, asked.route, paths) : undefined;
     return {
       value,
       derivedRequest: p.input,

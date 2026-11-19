@@ -412,6 +412,7 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
       (scope, pattern) => press(page, scope, pattern),
       (scope, pattern) =>
         expect.poll(() => find(page, scope, pattern), { timeout: 30_000 }).not.toBeNull(),
+      unit ? String(unit.id) : null,
     );
     // The Inputs pane's reading status (PaneStatus) is absent only when every reading it draws is
     // current. Its other status cells (the write scope's) are not readings.

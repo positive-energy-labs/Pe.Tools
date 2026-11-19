@@ -167,7 +167,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   } });
   const snapshotContract = await run(readSchemas("ducts.snapshot.walk"));
   if (snapshotContract) Schema.decodeUnknownSync(snapshotContract.response)(snapshot);
-  await mkdir(join(dir, "catalogs")); await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
+  await mkdir(join(dir, "Catalogs")); await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
   const writer = await run(openRecordingWriter(stateFixture(join(dir, "bundle")), identity, bounds));
   const inputs = await run(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", ...(capturing ? { captureStore: writer } : {}) }))));
   const native = Layer.succeed(HostNativeRead, {
@@ -186,7 +186,7 @@ test.each(["off", "on", "recovery", "endurance", "tamper", "truncated", "legacy"
   let changedAt = 300;
   const markListeners = new Set<() => void>();
   const livePorts = {
-    native, files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: join(dir, "catalogs") }),
+    native, files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ observedSince: 100, generation: () => changedAt, changedAt: () => changedAt, subscribe: (notify) => { markListeners.add(notify); return () => { markListeners.delete(notify); }; } })),
     inventory: Layer.succeed(HostSessionInventory, { list: () => Effect.die("inventory not requested"), subscribe: () => () => {}, document: () => Effect.succeed(row),
       session: () => Effect.succeed({ sessionId: ref.session }), attachment: () => Effect.succeed({ sessionId: ref.session }) }),
@@ -754,7 +754,7 @@ test.each(["on", "off", "full", "io"] as const)("inventory consumers %s", async 
   vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane) => lowCap(lane, { ...defaultReadSetLimits, childrenPerRoot: 3, openRoots: 4 }));
   const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { live: { inventory, owner: new DuctsReadings(),
     native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("unexpected native"), read: () => Effect.die("unexpected native") }),
-    files: Layer.succeed(DuctFiles, { firm: () => Effect.die("unexpected files"), ductCatalogs: Effect.die("unexpected files") }),
+    files: Layer.succeed(DuctFiles, { firm: () => Effect.die("unexpected files"), catalogsFor: () => Effect.die("unexpected files") }),
     marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })) },
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), initialize: async (owner) => { workspace = owner; } }), { disableLogger: true });
   const send = (owner: typeof web, url: string, body?: unknown) => withInvocationContext({ caller, hostBaseUrl: "http://host" }, () => owner.handler(

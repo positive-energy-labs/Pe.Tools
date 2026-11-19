@@ -51,7 +51,7 @@ test("the borrowed body is gone: no route file mounts a Picture, and the picture
   // The /fans overlay reaches the duct walk through one module, where it reached 22.
   const borrowed = (from: string) => /^@pe\/(?:ducts|duct-systems)-web\//.test(from) || from.startsWith("./calc/") || /\/picture(?:\.tsx?)?$/.test(from);
   expect(["./calc/picture.tsx", "@pe/ducts-web/second-picture"].filter(borrowed)).toHaveLength(2);
-  expect(imports(`${src}picture.tsx`).map((i) => i.from).filter(borrowed)).toEqual(["./calc/picture.tsx"]);
+  expect(imports(`${src}picture.tsx`).map(i => i.from).filter(borrowed)).toEqual(["./calc/picture.tsx"]);
   // Nothing under ducts/ is typed by the /fans route.
   const back = productFiles().filter(file => !file.startsWith(src) || file.startsWith(`${src}calc/`)).filter((file) => imports(file).some((i) => i.names.includes("FansDrawContext")));
   expect(back).toEqual([]);

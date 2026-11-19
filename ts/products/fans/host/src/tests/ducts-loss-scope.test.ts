@@ -2,7 +2,10 @@ import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "../../../../../packages/host
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vite-plus/test";
-import { claimRefusal, fanWriteRequest, lossSnapshot, unwrittenCells, unwrittenReason } from "@pe/fans-host/actions";
+import { claimRefusal, fanRulings, fanWriteRequest, fansExecutors, lossSnapshot, unwrittenCells, unwrittenReason } from "@pe/fans-host/actions";
+import { Effect } from "effect";
+import type { WorkPath } from "@pe/agent-contracts";
+import { designOf } from "@pe/ducts-domain/test-design";
 import { mergeFar } from "@pe/ducts-domain/calc/joins";
 import { buildCalc, type BuildCalcInput, type FanWriteContext, type CalcSnapshot } from "@pe/fans-domain/calc/index";
 import { suggestRoster } from "@pe/ducts-domain/roster";
@@ -15,6 +18,24 @@ import { ductsDesign, fanClaimSchema, fansDocumentSchema, stagedValues } from ".
 
 // The saved captures predate the native vocabulary; it is the generated one, added whole.
 const walkCapture = { parse: (raw: object) => nativeResponseSchema("ducts.snapshot.walk").parse({ ...raw, vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } }) };
+
+// D9: the real executor retires its own role under /fans; the shared runtime's filter is tested in ducts-host.
+test("the real /fans apply asks to retire its own role only, and retires it under /fans", async () => {
+  const role = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000005";
+  const answer = { previewOnly: false, writes: [
+    { kind: "verdict", key: "open-end:101:1", outcome: "written" },
+    { kind: "fitting", id: 7, outcome: "written" },
+    { kind: "role", id: 5, outcome: "written" },
+  ] };
+  const input = { terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [], fittings: [{ id: 7, ruleKey: "elbow" }] };
+  const key = { binding: "open", route: "fans", target: null, open: { session: "A", openId: "doc" } };
+  const retireWork = vi.fn((_key: unknown, _route: string, paths: readonly WorkPath[]) => Effect.succeed({ retired: [...paths], revision: 2 }));
+  const ctx = { admission: { target: { kind: "document", ref: { session: "A", openId: "doc" } }, input: { work: { key, revision: 1 } } } };
+  const execution = { prepared: { process: {}, input, dependencies: null, subjects: { [role]: "5" }, cells: [["roles", role]] },
+    step: () => Effect.succeed(answer), retireWork };
+  await Effect.runPromise(fansExecutors({} as never)["sheet.apply"]!.run(ctx as never, execution as never) as Effect.Effect<unknown>);
+  expect(retireWork.mock.calls).toEqual([[key, "fans", [["roles", role]]]]);
+});
 
 test("fan preview survives identical re-pricing but rejects changed model inputs", () => {
   const snapshot = walkCapture.parse(
@@ -199,4 +220,22 @@ test("an unwritten cell names why: an empty or consumed Work cell is not a stage
   expect(unwrittenReason(staged, ["componentDrops", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00de6eef"])).toMatch(/no staged edit/);
   // A staged cell that still derives nothing is a different case; it is never called empty.
   expect(unwrittenReason(staged, ["componentDrops", "UniqueId:6d52156a-3876-4d76-b641-341454252f26-0098d62d"])).toMatch(/^staged/);
+});
+
+// Ruling D9 (2026-11-18; field map invariant 8). Red at 272c0120: the fans request carried the staged
+// /duct-systems verdict into the store and named the taken-back one in `storeDeletes.verdicts`.
+test("a /fans apply stores its own roles only: a staged /duct-systems verdict stays out of the store request", () => {
+  const at = "2026-10-20T12:00:00.000Z";
+  const verdicts = { "open-end:101:1": { verdict: "ignore", ruledAt: at } };
+  const { input, context } = manualD(true, { store: { version: 2, rules: {}, instances: {}, terminals: {}, terminalFlows: {}, equipmentFlows: {}, verdicts, roles: {}, workRevision: 3 } });
+  const fan = elementSubject(input.snapshot.nodes.find((n) => n.id === 14577391)!);
+  const design = designOf({
+    assumptions: { "open-end:202:1": { edit: { by: "human", value: { kind: "verdict", verdict: "ignore" } } }, "open-end:101:1": { edit: { by: "human", delete: true } } },
+    roles: { [fan]: { edit: { by: "human", value: { role: "fan" } } } },
+  });
+  const { request } = fanWriteRequest(input, { ...context, ...fanRulings(design, input.snapshot, context.appliedAt) });
+  // The stored verdict Work takes back is neither re-ruled nor deleted here; the staged one is not sent.
+  expect(request.store!.verdicts).toEqual(verdicts);
+  expect(request.storeDeletes).toEqual({ roles: [] });
+  expect(request.store!.roles).toEqual({ 14577391: { role: "fan", ruledAt: context.appliedAt } });
 });

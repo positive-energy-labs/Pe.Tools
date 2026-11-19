@@ -40,16 +40,49 @@ const drawn = (read: object, doc: Record<string, unknown>, at: (path: readonly s
 };
 const snapshot = { nodes: [], segments: [], slots: { requiredEsp: "Old ESP" } };
 
+test("a run airflow draws work provenance on Fans", () => {
+  const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", connectors: [], facts: [] };
+  const read = { calcSnapshot: { ...snapshot, nodes: [unit] }, calcView: { inputs: { units: { "7": { cfm: { value: 1234, source: "run" } } } } } };
+  const view = drawn(read, {}, () => handle({}), "equipmentFlows");
+  expect(view.container.querySelector('[data-input-source="work"]')?.textContent).toBe("work");
+});
+
+test("a none source supplies no airflow layer, even with a retained number", () => {
+  const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", connectors: [], facts: [] };
+  const read = { calcSnapshot: { ...snapshot, nodes: [unit] }, calcView: { inputs: { units: { "7": { cfm: { value: 1234, source: "none" } } } } } };
+  const cells = sheetCells({ bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } }, { rows: [], work: {}, read });
+  expect(cells[0]).toMatchObject({ value: null, model: null, pending: null });
+  expect(cells[0]?.source).not.toBe("none");
+});
+
 test("D25: a retained resolved Work airflow keeps Work provenance after its live edit is undone", () => {
   const unit = { id: 7, kind: "equipment", uniqueId: "unit-7", family: "MUAS", type: "A", mark: "MA-1", connectors: [], facts: [] };
   const row = elementSubject(unit);
   const read = { calcSnapshot: { ...snapshot, nodes: [unit] }, calcView: { inputs: { units: { "7": { cfm: { value: 1234, source: "Work" } } } } } };
-  const cells = sheetCells({ ...fansCalc, bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } }, { rows: [], work: fansDocumentSchema.parse({}), model: [], read });
+  const cells = sheetCells({ ...fansCalc, bindings: { equipmentFlows: fansCalc.bindings.equipmentFlows } }, { rows: [], work: fansDocumentSchema.parse({}), read });
   expect(cells.find(cell => cell.row === row)).toMatchObject({ value: 1234, source: "work", pending: null });
   const view = drawn(read, {}, () => handle({}), "equipmentFlows", "refreshing");
   expect(view.container.querySelector('[data-input-source="work"]')?.textContent).toBe("work");
   expect(view.container.querySelector('[data-sheet-cell]')?.textContent).not.toContain("model");
   expect(view.container.textContent).toContain("1234");
+});
+
+test("ADR 0053: a receipt that disagrees with the live parameter is the cell's drift note, beside the live value", () => {
+  const terminal = { id: 9, kind: "terminal", uniqueId: "terminal-9", flowParameter: "PE_Flow", connectors: [], facts: [{ key: "flow", value: 200 }], terminalDrop: { catalogDropInWg: 0.5 } };
+  const slots = { ...snapshot.slots, terminalFlow: "PE_Flow", terminalDrop: "PE_Drop" };
+  const inputs = { terminals: { "9": { cfm: { value: 200, source: "model" }, drop: { value: 0.5, source: "model" } } }, units: {} };
+  const read = (store: object) => ({ calcSnapshot: { ...snapshot, slots, nodes: [terminal], store }, calcView: { inputs } });
+  const model = (binding: "flows" | "terminalDrops", store: object) =>
+    (fansCalc.bindings[binding] as unknown as { model: (read: object, row: string) => object }).model(read(store), elementSubject(terminal));
+  const store = { terminalFlows: { "9": { cfm: 150 } }, terminals: { "9": { inWg: 0.5 } } };
+  expect(model("flows", store)).toMatchObject({ value: 200, source: "model", note: "Changed in Revit since Pe wrote 150 cfm" });
+  // An agreeing receipt, and an element Pe never wrote, draw no note.
+  expect(model("terminalDrops", store)).not.toHaveProperty("note");
+  expect(model("flows", {})).not.toHaveProperty("note");
+  // P26: one drift signal. The retired value equals the model, so the kernel's compare is silent; the receipt's drift is the cell's.
+  const cells = (store: object) => sheetCells({ ...fansCalc, bindings: { flows: fansCalc.bindings.flows } }, { rows: [], work: fansDocumentSchema.parse({}), read: read(store) });
+  expect(cells(store)[0]).toMatchObject({ value: 200, model: 200, drift: true, note: "Changed in Revit since Pe wrote 150 cfm" });
+  expect(cells({})[0]).toMatchObject({ value: 200, drift: false });
 });
 
 test("slot names use project and firm settings and never stage Work", () => {

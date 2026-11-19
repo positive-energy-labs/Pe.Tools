@@ -9,7 +9,34 @@ namespace Pe.Revit.Tests;
 [TestFixture]
 public sealed class DuctSlotChainTests {
     [Test]
-    public void Applied_slots_survive_next_preview_and_inputs_read_and_revert(UIApplication uiApplication) {
+    public void Null_snapshot_overrides_use_defaults_instead_of_stored_slot_receipts(UIApplication uiApplication) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            Assert.That(document.IsWorkshared, Is.False);
+            using var group = new TransactionGroup(document, "Snapshot stored slot receipt and revert");
+            group.Start();
+            var slots = new DuctParameterSlotOverrides { FanFlow = "Stored Fan Flow" };
+            var request = new DuctApplyRequest(slots, [], [], [], [], [], [],
+                new DuctLossStore { Version = DuctLossStore.CurrentVersion });
+            var applied = DuctApplier.Apply(document, request, false);
+            Assert.That(applied.Writes.Any(w => w.Kind == "store" && w.Outcome == "written"), Is.True);
+            Assert.That(DuctApplier.ReadStore(document).Store!.Slots!.FanFlow, Is.EqualTo("Stored Fan Flow"));
+
+            var snapshot = DuctSnapshots.Snapshot(document, overrides: null,
+                selector: new DuctSnapshotSelector(Kind: DuctSelectorKind.Roster), metadataOnly: true);
+            Assert.Multiple(() => {
+                Assert.That(snapshot.Slots.FanFlow, Is.EqualTo(new DuctParameterSlotOverrides().Resolve().FanFlow));
+                Assert.That(snapshot.Store!.Slots!.FanFlow, Is.EqualTo("Stored Fan Flow"));
+            });
+            group.RollBack();
+            Assert.That(DuctApplier.ReadStore(document).Store, Is.Null);
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
+    [Test]
+    public void Applied_slot_receipts_do_not_override_next_request_defaults(UIApplication uiApplication) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
@@ -25,17 +52,18 @@ public sealed class DuctSlotChainTests {
             var applied = DuctApplier.Apply(document, initial, false);
             Assert.That(applied.Writes.Any(w => w.Kind == "store" && w.Outcome == "written"), Is.True);
 
-            // Inputs uses the native roster read; omitted slots must consult the newly written store.
+            // The store is a receipt; omitted request slots use the C# defaults.
             var inputs = DuctSnapshots.Snapshot(document, Decode("{}"),
                 selector: new DuctSnapshotSelector(Kind: DuctSelectorKind.Roster), metadataOnly: true);
             Assert.Multiple(() => {
-                Assert.That(inputs.Slots.FanFlow, Is.EqualTo("PE_M_Fan_AirFlow"));
-                Assert.That(inputs.Slots.TerminalFlow, Is.EqualTo("revit:Flow"));
+                Assert.That(inputs.Slots, Is.EqualTo(new DuctParameterSlotOverrides().Resolve()));
+                Assert.That(inputs.Store!.Slots!.FanFlow, Is.EqualTo("PE_M_Fan_AirFlow"));
+                Assert.That(inputs.Store.Slots.TerminalFlow, Is.EqualTo("revit:Flow"));
             });
             var next = initial with { Slots = Decode("{}"), Store = inputs.Store! };
             var preview = DuctApplier.Apply(document, next, true);
-            Assert.That(preview.Writes.Where(w => w.Kind == "slot"), Is.Empty,
-                "The next preview must not propose resetting stored slots");
+            Assert.That(preview.Writes.Where(w => w.Kind == "slot").Select(w => w.Key),
+                Is.EquivalentTo(new[] { "fanFlow", "terminalFlow" }), "the receipt reports the names this request would write");
             var partial = DuctSnapshots.Snapshot(document, Decode("""{"componentDrop":"Damper Drop"}"""),
                 selector: new DuctSnapshotSelector(Kind: DuctSelectorKind.Roster), metadataOnly: true);
             Assert.Multiple(() => {

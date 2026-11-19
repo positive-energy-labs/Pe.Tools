@@ -75,10 +75,9 @@ public static class DuctApplier {
     }
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request, bool preview) {
-        // Name by name: a staged slot wins over the model's stored one (never the request's copy of it), so a
-        // partial request never drops a stored name.
+        // Request slot overrides win over C# defaults; stored slots are write receipts only.
         var (stored, storeError) = ReadStore(doc);
-        var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve(stored?.Slots);
+        var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve();
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
             [SpecificLoss] = Schema(SpecificLoss),

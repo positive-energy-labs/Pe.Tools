@@ -44,6 +44,15 @@
     "tests/e2e": {
       "entry": ["*.ts"]
     },
+    "products/fans/web": {
+      "entry": ["journeys/*.ts"]
+    },
+    "products/duct-systems/web": {
+      "entry": ["journeys/*.{ts,tsx}"]
+    },
+    "tests/journey-fixtures": {
+      "entry": ["*.ts"]
+    },
     "tests/repo-guards": {}
   }
 }

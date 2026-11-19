@@ -1,8 +1,11 @@
 import { z } from "zod";
+import { DUCTS_CRITERIA_CELLS, slotLayer } from "@pe/agent-contracts";
 import { DUCT_UNIT_ROLES, FAN_CELLS, routeAddress, subjectCode, type fansCalcData, type Immutable } from "@pe/agent-contracts";
-import { local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import { cellSource, local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import type { ValueSource } from "@pe/agent-contracts/work-value";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
+import { receiptDrift } from "@pe/ducts-domain/calc/inputs";
 import { calcSystems } from "@pe/ducts-domain/calc/scoped-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
@@ -43,14 +46,20 @@ const rowsOf = (read: Read, ids: readonly string[]) =>
  * source is the tier the host served: `project` or `firm` only when that home's file states the
  * value; a criterion no home states is `default`, and says so when the firm home was not found.
  */
-const SOURCES: Readonly<Record<string, CellLayer["source"]>> = { Work: "work", "model-store": "model-store", project: "project", firm: "firm", default: "default" };
-const layer = (resolved: { readonly value: unknown; readonly source: string; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
-  if (!resolved || resolved.value == null) return null;
-  const source = SOURCES[resolved.source] ?? "model";
+const layer = (resolved: { readonly value: unknown; readonly source: ValueSource | "none"; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+  if (!resolved || resolved.value == null || resolved.source === "none") return null;
+  const source = cellSource(resolved.source);
   const firm = read?.calcView.firm;
   // The evidence the resolver named rides with the value; only a refused firm home replaces it.
   return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
     ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : resolved.ref ? { ref: resolved.ref } : {}) };
+};
+
+/** A design value's model layer with its drift: what Revit holds now, and `drift` with a note where that is not what Pe last wrote. */
+const live = (read: Read, segment: Parameters<typeof receiptDrift>[1], row: string | undefined, resolved: Parameters<typeof layer>[0], wrap: (v: unknown) => unknown): CellLayer | null => {
+  const snapshot = snapshotOf(read), id = idOf(read, row), base = layer(resolved, wrap, read);
+  const note = snapshot && id != null ? receiptDrift(snapshot, segment, id) : null;
+  return note ? { ...(base ?? { value: null }), note, drift: true } : base;
 };
 
 const units = (read: Read) => Object.keys(inputsOf(read)?.units ?? {});
@@ -92,7 +101,6 @@ export const fansCalc = {
     const snapshot = snapshotOf(read);
     const systems = snapshot ? calcSystems(snapshot) : [];
     return {
-      // Slice 2b: without a shared root the firm layer is refused and the design runs on the engine seed.
       says: `Priced with the /ducts design, Work r${read.ductSystemsRevision}${!firm ? "" : "refused" in firm
         ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
         : !firm.present ? " over defaults where no home states a value"
@@ -103,9 +111,16 @@ export const fansCalc = {
     };
   },
   bindings: {
-    // The design criteria this fan prices under, each with the home tier that served it; "save at" writes that home.
     // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
-    ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction")),
+    ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction").map(([key, b]) => [key, { ...b, model: (read: Read) => {
+      if (b.home.at !== "setting") return null;
+      const [, name] = b.home.path;
+      if (b.home.path[0] === "parameters") return slotLayer(read?.calcSnapshot && !("kind" in read.calcSnapshot) ? read.calcSnapshot : null, name ?? "");
+      const declared = Object.entries(DUCTS_CRITERIA_CELLS).find(([cell]) => key === `setting.ducts.${cell}`)?.[1];
+      const criteria = inputsOf(read)?.criteria;
+      const resolved = declared && criteria?.[declared.layer[0]], side = declared?.layer[1];
+      return layer(resolved && "supply" in resolved ? side ? resolved[side] : undefined : resolved, v => v, read);
+    } }])),
     writeIntent: local({ kind: "enum", shape: z.strictObject({ walk: z.strictObject({ unitId: z.number().int().positive(), portIndex: z.number().int().nonnegative() }) }), choices: scopeChoices }, "route", { label: "Write scope" }),
     roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(role => ({ value: role, label: role === "fan" ? "Fan" : "Passive" })) } } }, "subject", {
       rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
@@ -123,10 +138,10 @@ export const fansCalc = {
       model: (read: Read, row) => {
         const id = idOf(read, row), node = snapshotOf(read)?.nodes.find((n) => n.id === id);
         const conflict = id === fanUnit(read) ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text : undefined;
-        const base = layer(inputsOf(read)?.units[String(id)]?.cfm, (v) => v) ?? { value: null };
+        const base = live(read, "equipmentFlows", row, inputsOf(read)?.units[String(id)]?.cfm, (v) => v) ?? { value: null };
         return {
           ...base,
-          ...(conflict ? { note: conflict.replace(/^fan \d+: /, "Conflict: ") } : {}),
+          ...(conflict ? { note: [conflict.replace(/^fan \d+: /, "Conflict: "), base.note].filter(Boolean).join(". ") } : {}),
           ...(node && node.flowParameter === null ? { refusal: `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${snapshotOf(read)?.slots.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter` } : {}),
         };
       },
@@ -140,12 +155,12 @@ export const fansCalc = {
     flows: input(FAN_CELLS.flows, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm, (v) => v),
+      model: (read: Read, row) => live(read, "flows", row, inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm, (v) => v),
     }),
     terminalDrops: input(FAN_CELLS.terminalDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
-      model: (read: Read, row) => layer(inputsOf(read)?.terminals[String(idOf(read, row))]?.drop, (v) => ({ inWg: v }), read),
+      model: (read: Read, row) => live(read, "terminalDrops", row, inputsOf(read)?.terminals[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
     }),
     componentDrops: input(FAN_CELLS.componentDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),

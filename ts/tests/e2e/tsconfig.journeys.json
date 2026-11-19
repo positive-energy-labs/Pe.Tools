@@ -1,5 +1,5 @@
 {
-  "extends": "../../packages/browser/tsconfig.json",
-  "compilerOptions": { "declaration": false, "lib": ["es2024", "dom"] },
-  "include": ["cdp.ts", "walk.ts", "marks*.ts", "fan-ports*.ts", "f1-*.ts", "j*.ts", "sig-*.ts", "st*.ts", "snowdon-pod.ts", "fans-reds*.ts", "conversation-work.fixture.ts"]
+  "extends": "../../apps/web/tsconfig.json",
+  "compilerOptions": { "declaration": false, "incremental": false, "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"] },
+  "include": ["cdp.ts", "walk.ts", "marks*.ts", "fan-ports*.ts", "f1-*.ts", "j*.ts", "sig-*.ts", "st*.ts", "snowdon-pod.ts", "fans-reds*.ts", "conversation-work.fixture.ts", "../../products/fans/web/journeys/*.ts", "../../products/duct-systems/web/journeys/*.ts", "../../products/duct-systems/web/journeys/*.tsx", "../journey-fixtures/*.ts"]
 }

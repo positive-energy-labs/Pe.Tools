@@ -23,12 +23,12 @@ import { refused } from "@pe/host/command-executor";
 import { runPods } from "@pe/host/family-actions";
 import { buildCalc, encounterRulings, mintWriteRequest, resolveInputs, type BuildCalcInput, type DomainClaim, type FanWriteContext, type CalcSnapshot } from "@pe/fans-domain/calc/index";
 import { followAcceptedJoins } from "@pe/ducts-domain/calc/joins";
-import { storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
+import { pendingRulings, storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
 import { suggestRoster } from "@pe/ducts-domain/roster";
 import { workLayer } from "@pe/ducts-host/ducts-inputs";
 
 
-import { scopeApplyRequest, appliedCellPaths, pendingCount, fanWriteCells } from "@pe/ducts-domain/staged";
+import { scopeApplyRequest, appliedCellPaths, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { ductActionExecutors, type DuctActionPreparation, type DuctActionDependencies } from "@pe/ducts-host/action-runtime";
@@ -72,13 +72,12 @@ export function fanWriteRequest(input: BuildCalcInput, context: FanWriteContext)
     ductsPricingData.shape.calcs.element.parse(sheet);
     // P-061, P-067: a complete claim carries a runtime symbol that only buildSheet sets and the mint checks, so a decoded sheet
     // or claim cannot pass. Mint only from the buildSheet above, in this process.
-    return { claim, request: mintWriteRequest(claim, sheet, input, context) };
+    return { claim, ...mintWriteRequest(claim, sheet, input, context) };
   } catch (error) {
     throw refused(error instanceof Error ? error.message : String(error), "ducts.mint-refused");
   }
 }
 
-/** The requested cells whose segment writes only through request rows but derived none (rules also write the store). */
 export function unwrittenCells(
   request: Pick<DuctsApplyInput, "terminals" | "components" | "equipment" | "terminalFlows" | "equipmentFlows">,
   cells: readonly (readonly [string, string])[],
@@ -104,6 +103,16 @@ export function unwrittenReason(staged: ReturnType<typeof stagedValues>, [segmen
   return cells && key in cells
     ? "staged, but this scope derives no write for it"
     : "no staged edit: its Work cell is empty (published, restored or never staged); stage it again to write it";
+}
+
+/**
+ * What a fans apply sends of the store's rulings: its own roles only (D9, field map invariant 8). A
+ * /duct-systems verdict is priced while staged and lands only from /duct-systems, so none is sent or deleted here.
+ */
+export function fanRulings(design: DuctActionPreparation["design"], snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store">, appliedAt: string) {
+  const { roles } = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt, snapshot);
+  // The native store overlays per key (K3): a role Work takes back is removed only by naming it here.
+  return { rulings: { roles }, storeDeletes: { roles: Object.keys(snapshot.store?.roles ?? {}).filter((id) => !(id in roles)).map(Number) } };
 }
 
 async function prepareLosses(p: DuctActionPreparation) {
@@ -141,19 +150,12 @@ async function prepareLosses(p: DuctActionPreparation) {
             const peerClaims = new Map<number, DomainClaim>();
             for (const { elementId: unitId } of peers)
               peerClaims.set(unitId, buildCalc((await inputOf({ unitId, portIndex: walk.portIndex }, await read({ kind: "from", unitId }))).input).claim);
+            // Out-of-band rule evidence selects only fittings whose rule cells are in scope.
+            // The rule key never rides the wire, and the rule itself stays staged in /duct-systems (D9).
             const cells = [...(doc.writeIntent.edit?.value?.cells ?? []), ...fanWriteCells(fans, snapshot)];
-            const rulings = storeRulings(stagedValues(withStoredRulings(design, snapshot.store, snapshot), design), snapshot.store, appliedAt ?? "", snapshot);
             // Timestamp is authored-revision stable; wall time would invalidate an identical preview.
-            const { claim, request } = fanWriteRequest(
-              input,
-              { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, rulings,
-                // The native store overlays per key (K3): a ruling Work takes back is removed only by naming it here.
-                storeDeletes: {
-                  verdicts: Object.keys(snapshot.store?.verdicts ?? {}).filter((key) => !(key in rulings.verdicts)),
-                  roles: Object.keys(snapshot.store?.roles ?? {}).filter((id) => !(id in rulings.roles)).map(Number),
-                } },
-            );
-            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot);
+            const { claim, request, fittingRules } = fanWriteRequest(input, { appliedAt: appliedAt ?? "", slots: snapshot.slots, peerClaims, ...fanRulings(design, snapshot, appliedAt ?? "") });
+            const scoped = scopeApplyRequest(request, snapshot.store, cells, snapshot, fittingRules);
             const unwritten = unwrittenCells(scoped, cells, snapshot);
             if (unwritten.length)
               throw refused(
@@ -167,7 +169,9 @@ async function prepareLosses(p: DuctActionPreparation) {
               subjects: Object.fromEntries(cells.filter(([s]) => ["terminalDrops", "componentDrops", "flows", "equipmentFlows", "roles"].includes(s)).map(([, k]) => [k, String(workElementId(snapshot, k))])),
               input: scoped as unknown as Record<string, unknown>,
               // The required ESP has no Work cell (R1): a complete claim's equipment rows are a write on their own.
-              nothingToWrite: pendingCount(design, snapshot.store, snapshot) === 0 && scoped.equipment.length === 0,
+              // D9: only what this apply sends counts; a staged /duct-systems cell is not a fans write.
+              nothingToWrite: !pendingRulings(design, snapshot.store, snapshot).some((delta) => delta.segment === "roles")
+                && [scoped.fittings, scoped.terminals, scoped.components, scoped.equipment, scoped.terminalFlows, scoped.equipmentFlows].every((rows) => rows.length === 0),
               labels: Object.fromEntries(snapshot.nodes.map((n) => [String(n.id), label(n.id)])),
               // R1 (root ruling 20:25): the write's author is the caller who applies it; its ref is the claim's basis.
               claim: { basis: claim.basis, requiredEspInWg: claim.requiredEspInWg },

@@ -2,7 +2,8 @@ import { z } from "zod";
 import { DUCT_PARAMETER_KEYS, ductParameterNameSchema, DUCTS_CRITERIA_CELLS, DUCTS_DEFAULT_CRITERIA, type DuctsCriteriaCell } from "@pe/ducts-contract/duct-inputs";
 import { criterionLabel } from "@pe/ducts-contract/criterion-words.neutral";
 import { setting, schemaOf, type Domain, type Home, type SheetBinding } from "./slots/sheet.ts";
-import type { SettingTier } from "./tiered-setting.ts";
+import { type SettingTier } from "./tiered-setting.ts";
+export { settingLayer } from "./slots/sheet.ts";
 
 export const NO_SHARED_ROOT = "No firm home, so the firm files (Settings/<owner>.json) are not read. Set your firm home in Settings";
 export const ENGINE_DEFAULT_NO_SHARED_ROOT = "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
