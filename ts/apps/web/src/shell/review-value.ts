@@ -2,7 +2,7 @@ import { showCellValue } from "@pe/agent-contracts";
 
 /** Review and cells share one projection; the receipt retains authoritative structured values. */
 export const reviewValue = showCellValue;
-export const reviewChange = (before: unknown, after: unknown): string =>
+const reviewChange = (before: unknown, after: unknown): string =>
   `${reviewValue(before)} \u2192 ${reviewValue(after)}`;
 
 /** Native plans may nest under transport envelopes; every change uses the same exact projection. */

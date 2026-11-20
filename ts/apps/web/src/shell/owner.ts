@@ -4,20 +4,11 @@ import * as Atom from "effect/reactivity/Atom";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import * as Reactivity from "effect/reactivity/Reactivity";
 import { useEffect, useInsertionEffect, useMemo, useRef, useSyncExternalStore } from "react";
-import type { ExecutionTarget, CellLike } from "@pe/agent-contracts";
 import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { causeRefusal, refuse, type Refusal } from "../route/refusal";
 import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { useRouteActivity } from "@pe/web-kernel/route/activity";
-
-/** A resolved Target is only ever two headers on the one `/call` endpoint. */
-export const targetHeaders = (target: ExecutionTarget) =>
-  target.kind === "session"
-    ? { bridgeSessionId: target.session }
-    : target.kind === "document"
-      ? { bridgeSessionId: target.ref.session, openDocumentId: target.ref.openId }
-      : {};
 
 /**
  * The one place a registry is constructed (fable law 5). `?fixture=` owners get their own isolated
@@ -62,7 +53,7 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
 /** Internal unwind only; the public action boundary still returns the structured refusal. */
-export class ActionRefusal extends Error {
+class ActionRefusal extends Error {
   constructor(readonly refusal: Refusal) {
     super(refusal.message);
   }
@@ -334,7 +325,6 @@ export interface LogEntry {
   readonly refused: boolean;
   /** The action key of a verb entry; its reading tabs derive from the action's `dirties`. */
   readonly action?: string;
-  /** What the entry produced, resolved through the manifest's inspectables when drawn. */
   readonly link?: InspectableRef;
   /** A fact logged once: a second note with the same key is dropped (a reload re-noting a saved read). */
   readonly key?: string;
@@ -352,18 +342,6 @@ export type RouteNote = (
 ) => void;
 const clock = (at: Date | string | number = new Date()) =>
   new Date(at).toLocaleTimeString([], { hour12: false });
-
-/** What a bare run lacks: the fields an empty object misses, or "a value" when it is not an object. */
-export const missingFields = (schema: {
-  safeParse: (value: unknown) => {
-    success: boolean;
-    error?: { issues: { path: PropertyKey[] }[] };
-  };
-}) => {
-  const issues = schema.safeParse({}).error?.issues ?? [];
-  const names = issues.map((issue) => issue.path.map(String).join(".")).filter(Boolean);
-  return names.length ? names.join(", ") : "a value";
-};
 
 /**
  * How the page log says a verb's returned outcome. A sentence that already names what happened
@@ -442,81 +420,4 @@ export function routeSearch(search: Record<string, unknown>): {
     ...(work ? { work } : {}),
     ...(thread ? { thread } : {}),
   };
-}
-
-/** Staged cell counts: what a Work revision changed, when the route has cells. */
-type CellTally = { edit: number; byPea: number };
-
-const cells = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-/** What one Work revision did to its cells, as the person would say it. */
-function workWords(was: CellTally | null, now: CellTally | null, revision: number) {
-  if (!was || !now) return `loaded Work r${revision}`;
-  const edit = now.edit - was.edit;
-  if (edit > 0) return `edit ${cells(edit, "cell")}`;
-  if (edit < 0) return `unstaged ${cells(-edit, "cell")}`;
-  return `changed Work r${revision}`;
-}
-
-/**
- * Page-log rows for the three events that are not verbs (Situation, 2026-09-13): the target
- * binding, the stage word and the Work revision. Each notes only when its value changes, with a
- * label that says what happened; hover keeps the detail.
- */
-export function usePageLogNotes(
-  owner: Pick<ReturnType<typeof createRouteOwner>, "note">,
-  now: {
-    target: string;
-    stage: string | undefined;
-    /** The Work slice, and the segment its cells sit in when the route declares cells. */
-    work: { slice: Slice<unknown> | null; segment: string | undefined };
-    lost: { ref: { session: string; openId: string }; reason: string } | null;
-  },
-) {
-  const { target, stage, lost } = now;
-  const revision = now.work.slice?.revision ?? null;
-  const { segment } = now.work;
-  const cells = segment
-    ? Object.values(
-        ((now.work.slice?.doc ?? {}) as Record<string, Record<string, CellLike>>)[segment] ?? {},
-      )
-    : null;
-  const edit = cells?.filter((cell) => cell.edit != null).length ?? null;
-  const byPea = cells?.filter((cell) => cell.edit?.by === "pea").length ?? null;
-  const lostKey = lost ? `${lost.ref.session}/${lost.ref.openId}` : null;
-  const seen = useRef({
-    target,
-    stage,
-    revision,
-    tally: null as CellTally | null,
-    lost: null as string | null,
-  });
-  useEffect(() => {
-    const tally = edit === null || byPea === null ? null : { edit, byPea };
-    if (seen.current.target !== target) {
-      seen.current.target = target;
-      const bound = JSON.parse(target) as { session: string; openId: string } | null;
-      // A lost binding notes itself below, with its reason, on load as on a transition.
-      if (bound || !lost)
-        owner.note(
-          "target",
-          bound ? `bound ${bound.openId}` : "unbound",
-          bound ? `${bound.session} › ${bound.openId}` : "no document",
-        );
-    }
-    if (seen.current.lost !== lostKey) {
-      seen.current.lost = lostKey;
-      if (lost) owner.note("target", `unbound: ${lost.reason.replace("-", " ")}`, lostKey!);
-    }
-    if (seen.current.stage !== stage) {
-      seen.current.stage = stage;
-      if (stage) owner.note("stage", `now ${stage.toLowerCase()}`, stage);
-    }
-    if (seen.current.revision !== revision) {
-      seen.current.revision = revision;
-      if (revision !== null)
-        owner.note("work", workWords(seen.current.tally, tally, revision), `r${revision}`);
-      seen.current.tally = tally;
-    }
-  }, [owner, target, stage, revision, edit, byPea, lostKey, lost]);
 }

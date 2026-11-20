@@ -639,37 +639,6 @@ export function followBeat(
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>
   source.dirty(request);
 
-/** Imperative readers join the stream and release only their observation. */
-export function readReading(
-  request: ReadingRequest,
-  signal: AbortSignal = AbortSignal.timeout(30_000),
-  source: Readings = peReadings,
-): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let release = () => {};
-    let settled = false;
-    const finish = (value?: unknown, error?: unknown) => {
-      if (settled) return;
-      settled = true;
-      release();
-      signal.removeEventListener("abort", abort);
-      if (error) reject(error);
-      else resolve(value);
-    };
-    const abort = () => finish(undefined, signal.reason);
-    signal.addEventListener("abort", abort, { once: true });
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-    release = source.subscribe(request, (frame) => {
-      if (frame.kind === "snapshot" && !frame.stale) finish(frame.value);
-      else if (frame.kind === "failure" && !frame.stale) finish(undefined, Error(frame.error));
-    });
-    if (settled) release();
-  });
-}
-
 /* -- TakeoffModel events: the one push channel that is not a subject ----------------------------- */
 
 function subscribeHostEvents<T>(listener: (event: T) => void): () => void {

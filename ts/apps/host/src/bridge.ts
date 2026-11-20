@@ -6,7 +6,6 @@ import {
   type Session,
 } from "@pe/host-internal/dispatch";
 export { RevitProcessAlive, CANCEL_OPERATION_KEY } from "@pe/host-internal/dispatch";
-export type { BridgeRequest } from "@pe/host-internal/dispatch";
 import {
   BridgeError,
   NoRevitSession,

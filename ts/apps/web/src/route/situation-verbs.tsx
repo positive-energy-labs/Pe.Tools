@@ -1,4 +1,3 @@
-import { ButtonGroup } from "@pe/kit/lang/button-group";
 /** The Situation's verb row: each verb button with its flag, and the board that stands them up. */
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import {
@@ -7,8 +6,6 @@ import {
   PopoverTrigger,
 } from "@pe/kit/lang/popover";
 import type { LucideIcon } from "lucide-react";
-import { FactChip } from "@pe/kit/lang/chip";
-import { KeyHint } from "@pe/kit/lang/key-hint";
 import { Button } from "@pe/kit/lang/button";
 import { changedInRevit } from "#/host/resource-state";
 import type { ActionHandle, RouteHandle } from "./handle";
@@ -17,7 +14,7 @@ import { useSituationPresentation } from "#/navigation/route-controls";
 const DONE_FADE_MS = 5000;
 
 /** A verb's standing question, by verb name, drawn in its flag (ruling 39: apply's stale cells). */
-export const ActionFlag = createContext<Readonly<Record<string, ReactNode>>>({});
+const ActionFlag = createContext<Readonly<Record<string, ReactNode>>>({});
 
 /** A verb button with its flag: refused persists until Esc or the next press; busy counts; done fades. */
 export function SituationAction({
@@ -151,133 +148,5 @@ export function SituationAction({
         </PopoverContent>
       </Popover>
     </span>
-  );
-}
-
-/** The small caps word that names a row or a column of the board. */
-export const Label = ({ children }: { children: ReactNode }) => (
-  <span className="t-small t-upper text-ink-mute">{children}</span>
-);
-
-/** The disclosure glyph, one mark for every fold and projection in the head. */
-const Turn = ({ open }: { open: boolean }) => (
-  <span
-    aria-hidden
-    className={`inline-block face-mono transition-transform ${open ? "rotate-90" : ""}`}
-  >
-    ▸
-  </span>
-);
-
-/** A noun the machine knows — a target kind, a Reading, an actor — as a fact chip, not prose. */
-const Noun = ({ children, title }: { children: ReactNode; title: string }) => (
-  <FactChip title={title}>{children}</FactChip>
-);
-
-/**
- * The verb row, and its projection. Closed: the buttons in one row with the stage's ready count.
- * Open: the same buttons stood vertically, each with why it is refused (or what it does) and what
- * it dispatches and where — actor, the target it needs, the Readings it dirties, its chord. The
- * buttons are the same `SituationAction`s, so a flag grows from the same place in either view.
- */
-export function ActionBoard({
-  handle,
-  verbs,
-  chords,
-  commit,
-  work,
-}: {
-  handle: RouteHandle<any, any, any, any>;
-  verbs: readonly [string, ActionHandle][];
-  /** The chords the stage node binds, by verb; a route-bound chord comes off the action. */
-  chords?: Readonly<Record<string, string | undefined>>;
-  commit?: string;
-  /** Where Work stands, beside the verbs ("r3"; the Work sentence owns counts); null draws no meter. */
-  work: string | null;
-}) {
-  const [open, setOpen] = useState(false);
-  const meter = work ? <span className="t-small face-mono text-ink-mute">{work}</span> : null;
-  const declared = (handle.manifest.actions ?? {}) as Record<
-    string,
-    { dirties: readonly string[] } | undefined
-  >;
-  const head = (
-    <span className="w-[9rem]">
-      <Button
-        kind="quiet"
-        label="verbs"
-        aria-expanded={open}
-        reason={
-          open
-            ? "back to the row"
-            : "stand the verbs up: why each is refused or what it does, and what it dispatches"
-        }
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Turn open={open} /> verbs
-      </Button>
-    </span>
-  );
-  const board = (
-    <>
-      {head}
-      {meter}
-      {verbs.map(([name, action]) => {
-        const spec = declared[name];
-        const chord = chords?.[name] ?? action.chord;
-        return (
-          <div key={name} className="pe-action-board-item">
-            <span className="flex min-w-0 justify-start">
-              <SituationAction
-                handle={handle}
-                name={name}
-                action={action}
-                chord={chord}
-                commit={name === commit}
-              />
-            </span>
-            <div className="pe-action-board-detail" aria-hidden={!open} inert={!open}>
-              <div className="pe-action-board-detail-inner">
-                <span
-                  className={`t-prose ${action.refusal ? "" : "text-ink-2"}`}
-                  data-tone={action.refusal ? "caution" : undefined}
-                >
-                  {action.refusal ?? action.says}
-                </span>
-                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 t-small face-mono text-ink-mute">
-                  {spec ? (
-                    <>
-                      needs
-                      <Noun title={`the target this verb needs bound: ${action.needs}`}>
-                        {action.needs}
-                      </Noun>
-                      → dirties
-                      {spec.dirties.length
-                        ? spec.dirties.map((key) => (
-                            <Noun
-                              key={key}
-                              title={`${action.label} marks the ${key} Reading stale`}
-                            >
-                              {key}
-                            </Noun>
-                          ))
-                        : "nothing"}
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                  {chord ? <KeyHint>{chord}</KeyHint> : null}
-                </span>
-              </div>
-            </div>
-          </div>
-        );
-      })}
-    </>
-  );
-  return (
-    <div className="pe-action-board hairline-t" data-expanded={open}>
-      {open ? board : <ButtonGroup>{board}</ButtonGroup>}
-    </div>
   );
 }

@@ -14,7 +14,7 @@ export const workFingerprintSchema = z
 
 declare const fingerprint: unique symbol;
 export type RouteFingerprint = string & { readonly [fingerprint]: "sha256:route-v1" };
-export interface ExecutableMember {
+interface ExecutableMember {
   /** Case-sensitive POSIX package-relative path; reject .., absolute paths and duplicates. */
   readonly path: string;
   /** SHA-256 of exact shipped bytes, including whitespace, line endings and source maps if loaded. */

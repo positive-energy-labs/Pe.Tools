@@ -2,7 +2,7 @@ import { runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import type { ParsedDocView, PodMember } from "@pe/agent-contracts";
 
-export const assetUrl = (pod: string, path: string) =>
+const assetUrl = (pod: string, path: string) =>
   runtimeStreamUrl(peRouteUrl("family.spec", { query: { pod, path } }));
 
 /** Resolve portable paths only at the presentation boundary; persisted JSON never holds host URLs. */

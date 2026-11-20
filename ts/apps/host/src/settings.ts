@@ -92,7 +92,7 @@ export type PodContext = {
 
 /** Only for undoing a newly created Pod member after failed publication; never delete a later edit.
  * Like writeHome, this has the store's compare-then-I/O concurrency ceiling. */
-export function deleteHomeIfSha(file: StoredFile<unknown, "home">, expectSha256: string): boolean {
+function deleteHomeIfSha(file: StoredFile<unknown, "home">, expectSha256: string): boolean {
   const path = file.path;
   let bytes: Buffer;
   try {
@@ -865,7 +865,7 @@ function issue(code: string, message: string, severity: MemberIssue["severity"] 
 }
 
 /** Member text with every library `$schema` stored as its path. Other bytes, and other schemas, are untouched. */
-export const storedSchemaPaths = (content: string): string =>
+const storedSchemaPaths = (content: string): string =>
   content.replace(
     /("\$schema"\s*:\s*)("(?:[^"\\]|\\.)*")/g,
     (whole, key: string, literal: string) => {

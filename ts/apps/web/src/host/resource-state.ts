@@ -26,8 +26,6 @@ import { Schema, Exit } from "effect";
 import { reportFault } from "#/host/diagnostics";
 import { peReadings, type Readings } from "./resource-stream";
 
-export type { Lane };
-
 /** How long a subject may stay silent with no evidence before it fails. */
 const SUBJECT_WAIT_S = 30;
 

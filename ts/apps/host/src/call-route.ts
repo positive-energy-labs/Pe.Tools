@@ -1699,7 +1699,6 @@ export const nativeCallRouteFor = (
       }),
     ),
   );
-export const nativeCallRoute = nativeCallRouteFor();
 
 const nativeCallBody = (req: HttpServerRequest.HttpServerRequest) =>
   Effect.gen(function* () {

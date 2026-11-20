@@ -16,7 +16,7 @@ import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
-export const familiesView = body(contracts.view, async function (ctx, args) {
+const familiesView = body(contracts.view, async function (ctx, args) {
   await ctx.read(documentMark, args.target);
   const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
   const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);

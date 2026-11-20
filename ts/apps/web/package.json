@@ -50,7 +50,6 @@
     "effect": "4.0.2",
     "jiti": "^2.7.0",
     "lucide-react": "1.21.0",
-    "mermaid": "catalog:",
     "modern-screenshot": "catalog:",
     "qrcode": "catalog:",
     "react": "^19.2.0",
@@ -64,6 +63,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
+    "@effect/platform-node": "4.0.2",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
     "@pe/fans-contract": "workspace:*",

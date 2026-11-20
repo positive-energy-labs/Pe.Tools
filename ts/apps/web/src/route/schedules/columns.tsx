@@ -49,7 +49,7 @@ export const scheduleLock = (binding: Binding | undefined): string | null =>
         : "read-only — this parameter cannot be written from a schedule";
 
 /** A stale key's note (`basis.stale`), in the grid and the pending strip alike. */
-export const STALE_NOTE = "stale: Revit changed under the staged value; review before overwriting";
+const STALE_NOTE = "stale: Revit changed under the staged value; review before overwriting";
 
 type GridCell = NonNullable<ScheduleGridDocument["cells"][string]>;
 

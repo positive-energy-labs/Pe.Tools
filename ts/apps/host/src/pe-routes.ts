@@ -194,7 +194,7 @@ export interface HostWork {
   workspace: RouteWorkspace;
   registrations: readonly RouteWorkspaceRegistration[];
   /** Bound here to the thread service so the call route dispatches pointers into thread meta. */
-  pointers?: import("./thread-pointers.ts").ThreadPointerPort;
+  pointers?: ReturnType<typeof import("./thread-pointers.ts").threadPointerPort>;
 }
 
 export interface PeRoutesOptions {

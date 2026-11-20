@@ -1,7 +1,7 @@
 import { appendLinesBounded, stateLog, type StoredLog } from "@pe/host-contracts/kinds";
 import { z } from "zod";
 
-export const packageScanLogLineLimit = 1_000;
+const packageScanLogLineLimit = 1_000;
 export const packageScanLog = stateLog({
   schema: z.string(),
   place: () => "Host Pod scan diagnostics",

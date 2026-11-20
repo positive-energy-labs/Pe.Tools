@@ -108,7 +108,7 @@ const preparedScheduleCaptureSchema = z.strictObject({
 });
 
 /** A schedule's Work key: its document's address and its Revit UniqueId, never a capture. */
-export const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
+const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
   `schedule:${createHash("sha256")
     .update(canonicalRouteInput([document, scheduleUniqueId]))
     .digest("hex")}`;

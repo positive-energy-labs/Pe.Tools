@@ -59,7 +59,7 @@ const adopted = ((): TakeoffModel => {
 })();
 
 /** The demo lane's `takeoffs.candidates` answer: the seed's drawn regions. */
-export const DEMO_CANDIDATES: CandidateRegion[] = model.zones.map((zone, index) => ({
+const DEMO_CANDIDATES: CandidateRegion[] = model.zones.map((zone, index) => ({
   elementId: index + 1,
   typeName: zone.name,
   view: zone.zone.lane.view,

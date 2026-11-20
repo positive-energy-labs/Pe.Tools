@@ -41,7 +41,7 @@ export interface DocumentMarks {
 }
 
 /** The marks one reading consumed for one document, exactly as the holder answered them. */
-export interface MarkSnapshot {
+interface MarkSnapshot {
   readonly generation?: number;
   readonly observedSince?: number;
   readonly changedAt: number | null;
@@ -104,7 +104,7 @@ export function assertFresh(marks: DocumentMarks, ref: DocumentRef, takenAt: str
 }
 
 /** The one refusal a sealed write gets when its document's mark moved after the plan. */
-export const PLAN_CHANGED =
+const PLAN_CHANGED =
   "Plan changed (documentMark): Revit changed this document after the plan; plan the current Work again.";
 
 /**

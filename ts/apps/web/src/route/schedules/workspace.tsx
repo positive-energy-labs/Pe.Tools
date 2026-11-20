@@ -66,7 +66,7 @@ const bindingOf = (snapshot: ScheduleGridState["snapshot"], key: string) => {
     ?.bindings.find((binding) => binding.columnNumber === columnNumber);
 };
 
-export function useScheduleCellWrites({
+function useScheduleCellWrites({
   slice,
   at,
   snapshot,

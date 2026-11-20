@@ -26,11 +26,3 @@ export function useChooseTarget(): [
   );
   return [target ?? null, choose];
 }
-
-/**
- * The selected conversation, from `?thread`; null when none. A tool route never mints or writes
- * one: only Pea's composer starts a draft, and its first Send promotes it.
- */
-export function useRouteThread(): string | null {
-  return useRouteSearchSlice((search) => search.thread) ?? null;
-}

@@ -13,7 +13,7 @@ import type { CatalogReadKey } from "@pe/host-internal/read-graph";
 export interface ReadLease {
   release(): void;
 }
-export interface ReadFlight<T> {
+interface ReadFlight<T> {
   readonly result: Promise<T>;
   /** Refuses a retiring flight. Each consumer is admitted before it joins. */
   join(): ReadLease;

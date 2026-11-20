@@ -32,7 +32,7 @@ export function subscribePlaces(changed: () => void, root: StateRoot = hostState
     unwatchFile(file, changed);
   };
 }
-export const placesInput = leaf("places", z.object({}), placesFileSchema);
+const placesInput = leaf("places", z.object({}), placesFileSchema);
 export const placesRead = graphRead("places", {
   input: z.object({}),
   output: placesFileSchema,

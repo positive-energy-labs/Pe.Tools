@@ -57,7 +57,6 @@
     "./tiered-setting": "./src/tiered-setting.ts",
     "./native-output-read": "./src/native-output-read.ts",
     "./setting-owners": "./src/setting-owners.ts",
-    "./criterion-words": "./src/criterion-words.neutral.ts",
     "./draft": "./src/draft.ts",
     "./slots/sheet": "./src/slots/sheet.ts",
     "./route-kernel-data": "./src/route-kernel-data.ts",

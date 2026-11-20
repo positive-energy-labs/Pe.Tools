@@ -69,7 +69,7 @@ export const CONTEXT_DEFAULT = "overview" satisfies PictureContext;
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
 /** The capture request a focus asks for; null when nothing is walked or near. */
-export function captureRequest(
+function captureRequest(
   focus: PictureContent["focus"],
   context: boolean,
   radiusFt: number,
@@ -92,7 +92,7 @@ export function captureRequest(
 
 /** A subject's leaves through the declared members: transitive, cycle-bounded; an undeclared key
  * is its own leaf (attention's `expand`, over a plain map). */
-export function leavesOf(members: Members, key: SubjectKey, seen = new Set<SubjectKey>()) {
+function leavesOf(members: Members, key: SubjectKey, seen = new Set<SubjectKey>()) {
   if (seen.has(key)) return [];
   seen.add(key);
   const children = members.get(key);

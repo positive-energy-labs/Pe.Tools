@@ -133,9 +133,6 @@ const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
   alias: {
-    "#/family/authored-families": fileURLToPath(
-      new URL("./route-projection-fixtures.ts", import.meta.url),
-    ),
     "./generated/route-directory.ts": fileURLToPath(
       new URL("./route-projection-runtime.ts", import.meta.url),
     ),

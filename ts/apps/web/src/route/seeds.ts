@@ -9,7 +9,6 @@ import { SCHEDULE_SEED_BYTES } from "./seed-schedule-content";
 import { SCHEDULE_SEED_CAPTURED_SCHEMA } from "./seed-schedule-schema";
 
 import type { PodRow } from "./pods";
-import type { Run } from "./pods";
 
 /** Saved member bytes, their schema, and optional proposal cells for a read-only fixture. */
 export interface DemoSpec {
@@ -22,11 +21,10 @@ const SCHEDULE_SCHEMA = "/schemas/settings/CmdScheduleManager/schedules.json";
 const FAMILIES_SCHEMA = "/schemas/settings/FamilyFoundry/patches.json";
 const hash = (n: number) => String(n).repeat(64).slice(0, 64);
 
-export const DEMO_SPEC_PATH = "settings/schedule/DX Fan Coil Unit.json";
-export const DEMO_FAMILIES_SPEC_PATH = "settings/families/Mech equipment standard.json";
+const DEMO_SPEC_PATH = "settings/schedule/DX Fan Coil Unit.json";
+const DEMO_FAMILIES_SPEC_PATH = "settings/families/Mech equipment standard.json";
 const DEMO_HEADER_PATH = "settings/_fields/Header.json";
 const DEMO_PERF_HEAT_PATH = "settings/_fields/IU Perf Heat.json";
-const DEMO_RECEIPT_PATH = "output/2026-09-12T14-02-11Z/receipt.json";
 
 export const DEMO_PODS: readonly PodRow[] = [
   {
@@ -84,23 +82,6 @@ export const DEMO_PODS: readonly PodRow[] = [
   },
 ];
 
-export const DEMO_RUN: Run = {
-  runId: "2026-09-12T14-02-11Z",
-  receiptPath: DEMO_RECEIPT_PATH,
-  error: null,
-  receipt: {
-    podId: "mech-standards",
-    memberPath: DEMO_SPEC_PATH,
-    memberSha256: hash(2),
-    origin: "SavedMember",
-    operation: "schedule.apply",
-    planHash: null,
-    outcome: "Succeeded",
-    outputs: ["result.json"],
-    reason: null,
-  },
-};
-
 /** The captured schema names a fragment no demo pod holds; the seed drops that one example. */
 const SCHEDULE_SEED_SCHEMA = SCHEDULE_SEED_CAPTURED_SCHEMA.replace(
   ',\r\n                  "@global/_fields/my-fragment"',
@@ -130,26 +111,4 @@ export const DEMO_SPEC: DemoSpec = {
   content: SCHEDULE_SEED_RAW,
   schema: SCHEDULE_SEED_SCHEMA,
   fields: SCHEDULE_SEED_FIELDS,
-};
-
-const fragment = (fields: object[]): DemoSpec => ({
-  content: JSON.stringify(fields, null, 2),
-  schema: "",
-});
-
-/** The schedule member's field fragments: plain data, fixture bytes. */
-export const DEMO_FRAGMENTS: Record<string, DemoSpec> = {
-  [DEMO_HEADER_PATH]: fragment([
-    { ParameterName: "PE_G___TagInstance", ColumnHeaderOverride: "Tag" },
-    { ParameterName: "PE_G___Model", ColumnHeaderOverride: "Model" },
-  ]),
-  [DEMO_PERF_HEAT_PATH]: fragment([
-    { ParameterName: "PE_M___HeatingCapacity", ColumnHeaderOverride: "Heating (MBH)" },
-    { ParameterName: "PE_M___EnteringAirTempHeating", ColumnHeaderOverride: "EAT (F)" },
-  ]),
-};
-
-/** `/pods?fixture=browse`: the demo pods, the schedule spec open, its run beside it. */
-export const PODS_SEEDS = {
-  browse: { title: "two pods, a schedule spec and its run", work: null, readings: {}, page: {} },
 };

@@ -14,9 +14,6 @@ import {
 } from "@pe/host-contracts/operation-types";
 export type HostCallOptions = HostSessionScope & { signal?: AbortSignal; baseURL?: string };
 
-/** A host-relative path on the base host calls use (the page's origin, proxied in dev). */
-export const hostUrl = (path: string, baseURL = "") => `${baseURL}${path}`;
-
 /**
  * The typed client: POST { key, request } as JSON, keys constrained to the
  * checked-in typegen output + TS-only ops. Errors arrive as problem-JSON with

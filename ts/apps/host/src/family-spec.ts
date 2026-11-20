@@ -82,7 +82,7 @@ export async function familySpecAsset(
 
 /** The largest PDF either source door reads; a cut sheet is a few MB. */
 export const SPEC_SOURCE_MAX_BYTES = 64 * 1024 * 1024;
-export const SPEC_SOURCE_TIMEOUT_MS = 30_000;
+const SPEC_SOURCE_TIMEOUT_MS = 30_000;
 const sourceRefused = (message: string) => refused(message, "family.spec.source");
 const overCap = (what: string) =>
   sourceRefused(

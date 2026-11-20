@@ -46,7 +46,7 @@ export class PictureStoreFull extends Schema.TaggedError<PictureStoreFull>()("Pi
 }) {}
 
 /** Chosen default (no bound existed): 1 GiB over blobs plus the receipts file (ADR 0029 rule 15). */
-export const PICTURE_STORE_MAX_BYTES = 1024 ** 3;
+const PICTURE_STORE_MAX_BYTES = 1024 ** 3;
 
 export class PictureCaptures {
   private readonly blobs: string;

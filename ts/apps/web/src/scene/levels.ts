@@ -1,8 +1,6 @@
-import * as THREE from "three";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
-import type { Bounds, Layer3D } from "@pe/web-kernel/scene/types";
+import type { Bounds } from "@pe/web-kernel/scene/types";
 import type { Section } from "@pe/web-kernel/scene/section";
-import { datumMaterial } from "@pe/web-kernel/scene/grounds";
 
 const SOURCE_STATES = { loaded: true, unloaded: true, unavailable: true } satisfies Record<
   RevitDetailSpaceScene.Artifact.SceneSourceState,
@@ -55,28 +53,6 @@ export function levelExtents(levels: SceneLevels, bounds: Bounds) {
         [bounds.minX, bounds.maxY],
       ].map(([x, y]) => [x!, y!, height(p.plane, x!, y!)]),
     }));
-}
-
-/** One quiet perimeter per measured datum. The group owns disposal; no fill obscures the model. */
-export function levelLayer(levels: SceneLevels, bounds: Bounds): Layer3D {
-  const positions = levelExtents(levels, bounds).flatMap(({ corners }) =>
-    corners.flatMap((point, i) => [...point, ...corners[(i + 1) % corners.length]!]),
-  );
-  const materials = new WeakMap<THREE.Group, THREE.LineBasicMaterial>();
-  return {
-    key: "model-levels",
-    build(group) {
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-      const material = datumMaterial();
-      materials.set(group, material);
-      group.add(new THREE.LineSegments(geometry, material));
-    },
-    frame(group, at) {
-      if (at.ink) materials.get(group)?.color.copy(at.ink);
-      return false;
-    },
-  };
 }
 
 /** PSC1 is an external boundary; a corrupt datum must not put a plausible line in the picture. */

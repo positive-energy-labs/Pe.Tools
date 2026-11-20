@@ -41,7 +41,7 @@ export interface ReadCost {
 }
 
 /** Typed host/admission failure, never a numeric cost refusal. */
-export interface NativeReadFailure {
+interface NativeReadFailure {
   readonly code: string;
   readonly message: string;
 }

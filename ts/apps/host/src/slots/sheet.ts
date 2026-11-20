@@ -92,7 +92,7 @@ const sheetInput = z.looseObject({
 });
 
 /** Every staged value is decoded before the generic or route-specific native executor binds. */
-export function validateSheetValues(sheet: SheetSlotData, doc: unknown): void {
+function validateSheetValues(sheet: SheetSlotData, doc: unknown): void {
   for (const [name, b] of Object.entries(sheet.bindings)) {
     if (b.home.at === "setting") continue;
     const held = name.split(".").reduce(get, doc);

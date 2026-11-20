@@ -5,7 +5,7 @@ import type { BuiltinClosure, HostRouteModule } from "@pe/agent-contracts";
  * `docs/features/routes/REGISTRY-SHAPE.md`). The generator writes static imports because the host
  * is packed by rolldown and run under jiti: neither follows a glob or a computed import.
  */
-export interface RouteRegistryRow {
+interface RouteRegistryRow {
   /** `module.data.key`. */
   readonly key: string;
   readonly closure: { readonly fingerprint: string; readonly envelope: BuiltinClosure };

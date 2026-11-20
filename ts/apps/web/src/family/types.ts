@@ -1,6 +1,4 @@
-import type { FamilyDocument, SettingsFieldState, SettingsSnapshot } from "@pe/agent-contracts";
-
-export type FieldState = SettingsFieldState;
+import type { FamilyDocument, SettingsSnapshot } from "@pe/agent-contracts";
 export type FamilySnapshot = Omit<SettingsSnapshot, "member"> & {
   member?: SettingsSnapshot["member"];
 };

@@ -1022,12 +1022,8 @@ export class TakeoffCaptures {
     return capture;
   }
 }
-
-/** Where this host service keeps its Takeoff, schedule and Families readings. */
-export const takeoffCapturesDirectory = () =>
-  join(hostOwnership.rootPath, "state", "host", hostOwnership.serviceName, "takeoff-captures");
 /** The APS Parameters Service cache Families readings reference. */
-export const apsParameterCachePath = () =>
+const apsParameterCachePath = () =>
   join(
     hostOwnership.rootPath,
     productPathNames.stateDirectoryName,

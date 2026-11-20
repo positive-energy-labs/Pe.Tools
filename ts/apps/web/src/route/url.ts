@@ -8,7 +8,7 @@
  */
 import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
-import { useEffect, useState, useRef, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { places } from "../workbench/places";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
@@ -238,29 +238,6 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
       unhistory();
     };
   }, [router, url, owner, activity]);
-}
-
-/** First render: the page the address names, before any effect runs. */
-export function useInitialUrlPage<P>(url: UrlPage<P> | null): Partial<P> {
-  const router = useRouter({ warn: false });
-  const activity = useRouteActivity();
-  return useState(() =>
-    url
-      ? url.read(
-          restorePageSearch(
-            activity?.search ??
-              tabPageSearch(
-                router?.state.location.pathname ??
-                  (typeof location === "undefined" ? "" : location.pathname),
-              ),
-            !activity || activity.current() ? router?.state.location.search : undefined,
-          ) ??
-            (typeof location === "undefined"
-              ? {}
-              : Object.fromEntries(new URLSearchParams(location.search))),
-        )
-      : {},
-  )[0];
 }
 
 /** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */

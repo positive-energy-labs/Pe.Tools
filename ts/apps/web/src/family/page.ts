@@ -19,4 +19,3 @@ export const familyPageSchema = z.object({
     .default(""),
   doc: z.enum(["text", "sheet"]).default("text"),
 });
-export type FamilyPage = z.output<typeof familyPageSchema>;
