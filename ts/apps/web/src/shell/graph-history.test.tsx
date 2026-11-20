@@ -162,16 +162,18 @@ test.each(["succeeded", "cancelled"])(
       words: RegExp,
       progress?: { phase: "Prepare" | "Solve"; zonesDone: number; zonesTotal: number | null },
       race = false,
+      whileReading?: () => void,
     ) => {
-      const read = race
-        ? { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() }
-        : undefined;
+      const read =
+        race || whileReading
+          ? { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() }
+          : undefined;
       await act(async () => {
-        if (read) {
+        if (race && read) {
           held = read;
           receiptChanged(); // A preceding receipt revision starts a read before the next one lands.
           await read.started.promise;
-        }
+        } else if (read) held = read;
         snapshot = {
           ...base,
           rows: [
@@ -189,8 +191,15 @@ test.each(["succeeded", "cancelled"])(
           ],
         };
         receiptChanged();
-        read?.release.resolve();
+        await read?.started.promise;
       });
+      if (read) {
+        try {
+          whileReading?.();
+        } finally {
+          await act(async () => read.release.resolve());
+        }
+      }
       expect(await screen.findByText(words, {}, { timeout: 1500 })).toBeTruthy();
       expect(view.container.firstElementChild).toBe(section);
     };
@@ -198,16 +207,31 @@ test.each(["succeeded", "cancelled"])(
     try {
       await screen.findByText("Choose rooms.partition scope");
       await step("running", /you \/ running/, undefined, true);
-      await step("running", /Reading model geometry/, {
-        phase: "Prepare",
-        zonesDone: 0,
-        zonesTotal: null,
-      });
+      const scroller = view.container.querySelector<HTMLElement>("[data-scroll]");
+      if (!scroller) throw Error("Timeline scroller is absent");
+      const row = screen.getByText("rooms.partition").closest("[data-key]");
+      scroller.scrollTop = 93;
+      const samePosition = () => {
+        expect(view.container.querySelector("[data-scroll]")).toBe(scroller);
+        expect(screen.getByText("rooms.partition").closest("[data-key]")).toBe(row);
+        expect(scroller.scrollTop).toBe(93);
+      };
+      await step(
+        "running",
+        /Reading model geometry/,
+        { phase: "Prepare", zonesDone: 0, zonesTotal: null },
+        false,
+        () => {
+          expect(screen.getByRole("status").textContent).toBe("Refreshing Timeline");
+          samePosition();
+        },
+      );
       await step("running", /Finding rooms · 1\/2 zones done/, {
         phase: "Solve",
         zonesDone: 1,
         zonesTotal: 2,
       });
+      samePosition();
       if (terminal === "cancelled")
         await step("stopping", /Stopping…/, { phase: "Solve", zonesDone: 1, zonesTotal: 2 });
       await step(terminal, new RegExp(`you / ${terminal}`), undefined, true);
