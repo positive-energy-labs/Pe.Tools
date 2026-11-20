@@ -2,7 +2,7 @@ import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
 import { sheetCommands } from "@pe/ducts-contract/semantic-actions";
 import { fansTool } from "@pe/fans-contract/semantic-actions";
 
-import { canonicalRouteInput, workKey } from "@pe/agent-contracts";
+import { canonicalRouteInput, isRecord, workKey } from "@pe/agent-contracts";
 
 import { ductsDesign, ownerBlobReplacementSchema } from "@pe/duct-systems-contract/ducts";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
@@ -224,11 +224,11 @@ export function ductActionExecutors(
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
       .findLast((r) => phase !== "apply" || r.id === ctx.admission.id);
+    const result = plan?.state === "succeeded" ? plan.result : undefined;
+    const value = isRecord(result) ? result.value : undefined;
     const replacement =
       kind === "losses" && phase === "apply" && plan?.state === "succeeded"
-        ? ownerBlobReplacementSchema.parse(
-            (plan.result as { value?: { replacement?: unknown } }).value?.replacement,
-          )
+        ? ownerBlobReplacementSchema.parse(isRecord(value) ? value.replacement : undefined)
         : undefined;
     const appliedAt =
       phase === "plan"

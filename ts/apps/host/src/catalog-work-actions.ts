@@ -11,6 +11,7 @@ import {
   CatalogWorkRefused,
   catalogWorkCommands,
   catalogWorks,
+  isRecord,
   nativeProcessSchema,
   type CatalogWork,
   type Command,
@@ -85,11 +86,9 @@ export function catalogWorkExecutors(
                   const plan = ctx.read
                     .receipts(ctx.admission.id)
                     .find((r) => r.key === `${key}.plan` && r.state === "succeeded");
-                  const adoptedReplacement =
-                    plan?.state === "succeeded"
-                      ? (plan.result as { evidence?: { replacement?: unknown } }).evidence
-                          ?.replacement
-                      : undefined;
+                  const result = plan?.state === "succeeded" ? plan.result : undefined;
+                  const evidence = isRecord(result) ? result.evidence : undefined;
+                  const adoptedReplacement = isRecord(evidence) ? evidence.replacement : undefined;
                   const { request, touched } = work.derive(doc, before);
                   return {
                     target,
@@ -110,9 +109,10 @@ export function catalogWorkExecutors(
           },
           run: (_ctx, execution) => {
             const { target, request, adoptedReplacement } = execution.prepared;
-            const input = adoptedReplacement
-              ? { ...(request as object), replacement: adoptedReplacement }
-              : request;
+            const input =
+              adoptedReplacement && isRecord(request)
+                ? { ...request, replacement: adoptedReplacement }
+                : request;
             return execution.step(
               "native",
               work.op,
