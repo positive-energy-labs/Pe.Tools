@@ -32,20 +32,6 @@ public sealed class OwnerBlobRoundTripTests {
     private static string? Raw(Document document, OwnerDescriptor owner) =>
         document.ProjectInformation.get_Parameter(owner.Guid)?.AsString();
 
-    private static string? Raw(Element element) => element.get_Parameter(TakeoffCarriers.Provenance.Guid)?.AsString();
-
-    private static FilledRegion SeedRegion(Document document) {
-        var level = Level.Create(document, 0);
-        var planType = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType))
-            .Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
-        var view = ViewPlan.Create(document, planType.Id, level.Id);
-        while (TakeoffCarriers.Preflight(document, TakeoffCarrierStage.Materialization).MissingCarrierGuids.Count > 0)
-            TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Materialization);
-        var type = new FilteredElementCollector(document).OfClass(typeof(FilledRegionType)).FirstElementId();
-        List<double[]> square = [[0, 0], [30, 0], [30, 30], [0, 30]];
-        return FilledRegion.Create(document, type, view.Id, Kernel.ToLoops(square, [], 0));
-    }
-
     private static (Document Document, string Path) SaveCloseReopen(Application application, Document document) {
         var path = Path.Combine(Path.GetTempPath(), $"pe-owner-blob-{Guid.NewGuid():N}.rvt");
         document.SaveAs(path, new SaveAsOptions { OverwriteExistingFile = true });
@@ -62,17 +48,12 @@ public sealed class OwnerBlobRoundTripTests {
             var storage = new ParameterLinksProfileStorage();
             var registry = new SystemRegistry();
             var system = registry.Register("FC-8");
-            var zoneGuid = Guid.NewGuid();
             var pointer = ProjectHomePointer.Create("Projects/2026-014 Chadds Ford").Pointer!;
-            long regionId;
             using (var transaction = new Transaction(document, "Write every owner blob")) {
                 _ = transaction.Start();
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 3 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
-                var region = SeedRegion(document);
-                regionId = region.Id.Value();
                 TakeoffCarriers.WriteRegistry(document, registry);
-                TakeoffCarriers.WriteProvenance(region, new RegionProvenance(zoneGuid, "run-1", "R01", 100).ToJson());
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.True);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.False, "an unchanged value is a no-op");
@@ -96,9 +77,6 @@ public sealed class OwnerBlobRoundTripTests {
                     Assert.That(EnclosureDeclaration.Read(doc).Source, Does.StartWith("declared"));
                     Assert.That(ProjectHomePointer.FromData(OwnerBlobStore.Read(doc, ProjectHomePointer.Owner).Data!).Pointer!.Path, Is.EqualTo(pointer.Path));
                     Assert.That(AutoTagService.Instance.HasSettingsInDocument(doc), Is.True);
-                    var region = (FilledRegion)doc.GetElement(regionId.ToElementId());
-                    Assert.That(Raw(region), Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"""));
-                    Assert.That(TakeoffCarriers.ReadRegion(region).Value!.ZoneGuid, Is.EqualTo(zoneGuid));
                 });
             }
 
@@ -131,22 +109,17 @@ public sealed class OwnerBlobRoundTripTests {
         string? path = null;
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
-            long regionId;
             using (var transaction = new Transaction(document, "Plant old un-enveloped blobs")) {
                 _ = transaction.Start();
                 foreach (var owner in ProjectOwners)
                     _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
-                var region = SeedRegion(document);
-                regionId = region.Id.Value();
                 document.Regenerate();
                 foreach (var owner in ProjectOwners)
                     Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(old), Is.True, owner.Name);
-                Assert.That(region.get_Parameter(RegionProvenance.Owner.Guid).Set(old), Is.True);
                 _ = transaction.Commit();
             }
 
             (document, path) = SaveCloseReopen(uiApplication.Application, document);
-            var planted = (FilledRegion)document.GetElement(regionId.ToElementId());
             var storage = new ParameterLinksProfileStorage();
 
             // Absent: every owner starts from its defaults, with no error.
@@ -156,8 +129,6 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(DuctApplier.ReadStore(document), Is.EqualTo(((DuctLossStore?)null, (string?)null)));
                 Assert.That(storage.Read(document), Is.EqualTo(new ProfileReadResult(null, false, null)));
                 Assert.That(TakeoffCarriers.ReadRegistry(document).Systems, Is.Empty);
-                Assert.That(TakeoffCarriers.TryReadProvenance(planted), Is.EqualTo(new OwnerValue<string>(null, null)));
-                Assert.That(TakeoffCarriers.ReadRegion(planted).Value!.RunId, Is.EqualTo(Rooms.RunDrawn), "no envelope reads as the drawn default");
                 Assert.That(TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable, Is.Empty, "an old shape is not listed as unreadable");
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:"));
                 Assert.That(AutoTagService.Instance.HasSettingsInDocument(document), Is.False);
@@ -172,7 +143,6 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 1 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
                 TakeoffCarriers.WriteRegistry(document, registry);
-                TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(Guid.NewGuid(), "run-1", "R01", 100).ToJson());
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, ProjectHomePointer.Create("Projects/Chadds").Pointer!.ToData()), Is.True);
                 _ = transaction.Commit();
@@ -184,7 +154,6 @@ public sealed class OwnerBlobRoundTripTests {
                     Assert.That(Raw(document, owner), Does.StartWith($$"""{"owner":"{{owner.Owner}}","version":{{owner.Version}},"data":{"""), owner.Name);
                     Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Ok), owner.Name);
                 }
-                Assert.That(Raw(planted), Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"""));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);
@@ -334,37 +303,29 @@ public sealed class OwnerBlobRoundTripTests {
         string? path = null;
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
-            long regionId;
             using (var transaction = new Transaction(document, "Plant blobs this build cannot read")) {
                 _ = transaction.Start();
                 foreach (var owner in ProjectOwners)
                     _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
-                var region = SeedRegion(document);
-                regionId = region.Id.Value();
                 document.Regenerate();
                 foreach (var owner in ProjectOwners)
                     Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(plant(owner)), Is.True, owner.Name);
-                Assert.That(region.get_Parameter(TakeoffCarriers.Provenance.Guid).Set(plant(TakeoffCarriers.Provenance)), Is.True);
                 _ = transaction.Commit();
             }
 
             // "Opens": the planted model is saved, closed and opened again before anything reads it.
             (document, path) = SaveCloseReopen(application, document);
-            var planted = (FilledRegion)document.GetElement(regionId.ToElementId());
             var storage = new ParameterLinksProfileStorage();
 
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)
                     Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(expected), owner.Name);
-                Assert.That(OwnerBlobStore.Read(planted, TakeoffCarriers.Provenance).Status, Is.EqualTo(expected));
                 Assert.That(DuctApplier.ReadStore(document).Error, Is.Not.Null);
                 Assert.That(storage.Read(document).Error, Is.Not.Null);
                 Assert.That(() => TakeoffCarriers.ReadRegistry(document), Throws.InvalidOperationException);
-                Assert.That(() => TakeoffCarriers.ReadRegion(planted).OrThrow(), Throws.InvalidOperationException);
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("unreadable"));
                 // The keep policy for reads (ADR 0039): the refusal is a value, so a listing goes on.
                 Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("unreadable"));
-                Assert.That(TakeoffCarriers.TryReadProvenance(planted).Refusal, Does.Contain("unreadable"));
                 Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Does.Contain("unreadable"));
                 Assert.That(() => TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable!.Select(blob => blob.ElementId),
                     Is.EqualTo(new long?[] { null }), "the roster read reports the registry and does not throw");
@@ -373,7 +334,6 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)
                     Assert.That(Raw(document, owner), Is.EqualTo(plant(owner)), $"{owner.Name} bytes are unchanged");
-                Assert.That(Raw(planted), Is.EqualTo(plant(TakeoffCarriers.Provenance)), "the region blob's bytes are unchanged");
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);

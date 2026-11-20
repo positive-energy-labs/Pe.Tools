@@ -583,7 +583,7 @@ test("E9 a queued Page command loses authority before its first effect", async (
         rooms,
         "rooms",
         request.regions.map((room: any) => ({
-          path: ["edits", roomEditKey(room.guid, "name")],
+          path: ["edits", roomEditKey(room.uniqueId, "name")],
           value: { edit: { value: room.name } },
         })),
         0,

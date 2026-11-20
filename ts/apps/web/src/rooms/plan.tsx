@@ -178,7 +178,7 @@ export function RoomsPlan({
   const selected = new Set(
     rows
       .filter((row) => attention.selected.has(elementKey(row.region.uniqueId)))
-      .map((row) => row.region.guid),
+      .map((row) => row.region.uniqueId),
   );
   const onHover = (guid: string | null) =>
     setHovered(registry, guid == null ? null : { doc, key: regionSubject(guid) });
@@ -239,7 +239,7 @@ export function RoomsPlan({
     return { frame, width, height, shapes, fit, pxPerFt: Math.abs(fx - ox) };
   }, [bounds, rows, plan]);
 
-  const picked = world?.shapes.filter((shape) => selected.has(shape.region.guid)) ?? [];
+  const picked = world?.shapes.filter((shape) => selected.has(shape.region.uniqueId)) ?? [];
   const readout = picked.length ? (
     <PictureReadout
       title={
@@ -317,7 +317,7 @@ export function RoomsPlan({
 
   const selectedPoints =
     world?.shapes
-      .filter((shape) => selected.has(shape.region.guid))
+      .filter((shape) => selected.has(shape.region.uniqueId))
       .flatMap((shape) => [
         [shape.box.minX, shape.box.minY] as const,
         [shape.box.maxX, shape.box.maxY] as const,
@@ -332,7 +332,7 @@ export function RoomsPlan({
     const items: (CalloutItem & { guid: string; ink: string })[] = world.shapes
       .filter((shape) => shape.state !== "zone")
       .map(({ region, label, state, box, anchor }) => ({
-        guid: region.guid,
+        guid: region.uniqueId,
         ink: token(REGION_INK[state].ink!),
         label,
         anchor: toScreen(anchor),
@@ -404,16 +404,16 @@ export function RoomsPlan({
       <GoToPopup
         items={() =>
           rows.map((row) => ({
-            key: row.region.guid,
+            key: row.region.uniqueId,
             name: row.region.name || row.label,
-            id: row.region.elementId ?? row.region.guid,
-            detail: `${row.label} ${row.region.guid}`,
+            id: row.region.elementId ?? row.region.uniqueId,
+            detail: `${row.label} ${row.region.uniqueId}`,
           }))
         }
         hover={(item) => onHover(item?.key ?? null)}
         onGo={(item) => {
           onSelect(item.key, false);
-          const shape = world?.shapes.find((shape) => shape.region.guid === item.key);
+          const shape = world?.shapes.find((shape) => shape.region.uniqueId === item.key);
           if (shape) {
             const to = frameBox(shape.box, ZOOM_PAD_PX);
             if (to) move(to, "move");
@@ -501,14 +501,14 @@ export function RoomsPlan({
                     const ink = token(REGION_INK[state].ink!);
                     const stale = lockedStale(region);
                     const fillInk = stale ? token(REGION_INK.stale.ink!) : ink;
-                    const on = selected.has(region.guid);
+                    const on = selected.has(region.uniqueId);
                     const hot =
                       attention.hovered.has(elementKey(region.uniqueId)) ||
                       attention.lit.has(elementKey(region.uniqueId));
                     const width = on ? 3 : 2;
                     return (
                       <path
-                        key={region.guid}
+                        key={region.uniqueId}
                         {...revitTarget([region.elementId])}
                         data-state={state}
                         data-unassigned={unassigned(region) || undefined}
@@ -526,10 +526,10 @@ export function RoomsPlan({
                           strokeWidth: `calc(var(--sw) * ${width}px)`,
                           cursor: "pointer",
                         }}
-                        {...mention({ doc, key: regionSubject(region.guid) })}
+                        {...mention({ doc, key: regionSubject(region.uniqueId) })}
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (dragDist.current < CLICK_PX) onSelect(region.guid, event.shiftKey);
+                          if (dragDist.current < CLICK_PX) onSelect(region.uniqueId, event.shiftKey);
                         }}
                       >
                         <SvgTip content={stale ? "locked · stale" : state} />
@@ -555,7 +555,7 @@ export function RoomsPlan({
                 >
                   {callouts.map((callout) => {
                     const on = selected.has(callout.guid);
-                    const region = rows.find((row) => row.region.guid === callout.guid)?.region;
+                    const region = rows.find((row) => row.region.uniqueId === callout.guid)?.region;
                     const hot =
                       !!region &&
                       (attention.hovered.has(elementKey(region.uniqueId)) ||
@@ -567,7 +567,7 @@ export function RoomsPlan({
                       <g
                         key={callout.guid}
                         {...revitTarget([
-                          world.shapes.find((shape) => shape.region.guid === callout.guid)!.region
+                          world.shapes.find((shape) => shape.region.uniqueId === callout.guid)!.region
                             .elementId,
                         ])}
                         data-callout={callout.label}

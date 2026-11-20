@@ -1,5 +1,5 @@
 import { commandTable } from "./command-axes.ts";
-import { roomsViewId, stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
+import { roomsViewId, roomRegionUniqueId, stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleReads } from "./schedule-actions.ts";
@@ -39,15 +39,15 @@ const definitions = {
     dirties: ["snapshot", "takeoff-views", "candidates"],
   },
   "takeoffs.partition": {
-    native: ["takeoffs.initialize-carrier", "takeoffs.partition"],
-    says: "Prepare carriers and partition the selected adopted zone.",
+    native: ["takeoffs.partition"],
+    says: "Partition the selected adopted zone.",
     needs: "project-document",
     effect: "command",
     input: z.object({
       zoneRegion: z.number().int(),
       view: z.string(),
       zoneName: z.string(),
-      zoneGuid: z.string(),
+      zoneUniqueId: z.string(),
       runId: z.string().optional(),
     }),
     dirties: ["snapshot", "takeoff-views"],
@@ -75,7 +75,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.draw": {
-    native: ["takeoffs.initialize-carrier", "rooms.draw"],
+    native: ["rooms.draw"],
     says: "Draw one room (locked) or zone region from loops on a plan selected by numeric Revit view id.",
     needs: "project-document",
     effect: "command",
@@ -96,15 +96,15 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.write": {
-    native: ["takeoffs.initialize-carrier", "rooms.write"],
-    says: "Write the given room fields, and a person's room or zone designation, onto regions by guid.",
+    native: ["rooms.write"],
+    says: "Write room fields by FilledRegion UniqueId and confirm each cell read back after commit.",
     needs: "project-document",
     effect: "command",
     input: z.object({
       regions: z
         .array(
           z.object({
-            guid: z.string().min(1),
+            uniqueId: roomRegionUniqueId,
             name: z.string().optional(),
             type: z.string().optional(),
             ceilingFt: roomNumber,
@@ -121,13 +121,13 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.merge": {
-    native: ["takeoffs.initialize-carrier", "rooms.merge"],
+    native: ["rooms.merge"],
     says: "Combine two or more touching rooms of one zone on a plan selected by numeric Revit view id into one locked room.",
     needs: "project-document",
     effect: "command",
     input: z.object({
       view: roomsViewId,
-      guids: z.array(z.string().min(1)).min(2),
+      uniqueIds: z.array(roomRegionUniqueId).min(2),
       name: z.string().nullable().optional(),
     }),
     dirties: ["snapshot"],

@@ -5,7 +5,7 @@ namespace Pe.Takeoff.Tests;
 public sealed class RoomsPartitionCancellationTests
 {
     [Test]
-    public void PartitionBindsMissingCarriersInsideItsOwnTransaction()
+    public void PartitionWritesTheRegionRecordInsideItsOwnTransaction()
     {
         var root = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
         while (root is not null && !File.Exists(Path.Combine(root.FullName, "Pe.Tools.slnx"))) root = root.Parent;
@@ -16,11 +16,11 @@ public sealed class RoomsPartitionCancellationTests
             ..source.IndexOf("internal static void SolveZones", StringComparison.Ordinal)];
         Assert.That(partition, Does.Not.Contain("TakeoffCarriers.Require("));
         var transaction = partition.IndexOf("DocumentSandbox.BeginCommit(", StringComparison.Ordinal);
-        var bind = partition.IndexOf("TakeoffCarriers.InitializeNext(", StringComparison.Ordinal);
+        var write = partition.IndexOf("record.Save(doc)", StringComparison.Ordinal);
         var commit = partition.IndexOf("transaction.Complete()", StringComparison.Ordinal);
         Assert.That(transaction, Is.GreaterThanOrEqualTo(0));
-        Assert.That(bind, Is.GreaterThan(transaction));
-        Assert.That(commit, Is.GreaterThan(bind));
+        Assert.That(write, Is.GreaterThan(transaction));
+        Assert.That(commit, Is.GreaterThan(write));
     }
 
     [TestCase(1)]

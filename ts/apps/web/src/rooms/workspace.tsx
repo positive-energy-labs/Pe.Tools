@@ -21,7 +21,7 @@ function useWorkspace(ctx: RoomsContext) {
   // The subject is the open rooms (ADR 0035 rule 1); the drawing reads their carrier GUIDs.
   const selected =
     raw.room.kind === "all"
-      ? all.map((region) => region.guid)
+      ? all.map((region) => region.uniqueId)
       : raw.room.ids.flatMap((id) => regionOf(id) ?? []);
   const page = roomsPageSchema.parse({ ...raw, selected });
   const setPage = (patch: Partial<RoomsPage>) => {
@@ -73,7 +73,7 @@ function useWorkspace(ctx: RoomsContext) {
     else if (!id) door?.clear();
     ctx.page.pose({ card: id ?? "" });
   };
-  const labels = useMemo(() => new Map(rows.map((row) => [row.region.guid, row.label])), [rows]);
+  const labels = useMemo(() => new Map(rows.map((row) => [row.region.uniqueId, row.label])), [rows]);
   const trace: TraceRead = { data: data?.trace ?? null, none: data?.traceError ?? error };
   const plan = data?.plan ?? null;
   const empty = !document

@@ -62,16 +62,16 @@ export function RoomsTable({
   const selected = new Set(
     rows
       .filter((row) => attention.selected.has(elementKey(row.region.uniqueId)))
-      .map((row) => row.region.guid),
+      .map((row) => row.region.uniqueId),
   );
   const hovered =
-    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.guid ?? null;
+    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.uniqueId ?? null;
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(
       // A zone that flipped to a room is its own zone.
       rows
-        .filter((row) => row.region.role === "zone" || row.region.zone === row.region.guid)
-        .map((row) => [row.region.guid, row.label]),
+        .filter((row) => row.region.role === "zone" || row.region.zone === row.region.uniqueId)
+        .map((row) => [row.region.uniqueId, row.label]),
     );
     const zoneOf = (region: RoomsRegion) =>
       region.role === "zone"
@@ -90,7 +90,7 @@ export function RoomsTable({
       if (!cells) return { value: held, cap: "locked", capReason: "No writable owner" };
       const baseline =
         field === "role" && row.region.designation !== "person" ? undefined : row.region[field];
-      const owned = cells.at(["edits", roomEditKey(row.region.guid, field)], undefined, {
+      const owned = cells.at(["edits", roomEditKey(row.region.uniqueId, field)], undefined, {
         model: row.region[field],
         ...(baseline == null || baseline === "" ? {} : { baseline }),
       });
@@ -201,7 +201,7 @@ export function RoomsTable({
 
   // The table is a collection like any list (SURFACE-PHILOSOPHY N3): one search, "/" focuses it.
   const [state, setState] = useState<TableState>({ sorts: [], query: "" });
-  const rowKey = (row: RoomRow) => row.region.guid;
+  const rowKey = (row: RoomRow) => row.region.uniqueId;
   const visibleKeys = useMemo(
     () => visibleRows(rows, columns, state).map(rowKey),
     [rows, columns, state],
@@ -226,7 +226,7 @@ export function RoomsTable({
         visibleKeys={visibleKeys}
         selection={{ selected, onChange: onSelect }}
         activeKey={hovered}
-        subject={(row) => ({ doc, key: regionSubject(row.region.guid) })}
+        subject={(row) => ({ doc, key: regionSubject(row.region.uniqueId) })}
         empty={
           rows.length ? (
             <EmptyState story="filter" exit="clear the search">

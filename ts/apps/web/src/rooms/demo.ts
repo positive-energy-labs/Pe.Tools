@@ -22,11 +22,10 @@ export const DEMO_ROOMS: RoomsSnapshot.Res.Response = {
   regions: rectangles.map(([role, x, y, right, top], index) => ({
     elementId: 1001 + index,
     uniqueId: `00000000-0000-4000-9000-${String(index).padStart(12, "0")}-${(1001 + index).toString(16).padStart(8, "0")}`,
-    guid: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     view: DEMO_VIEW,
     level: "Fixture level",
     role,
-    zone: index ? "00000000-0000-4000-8000-000000000000" : null,
+    zone: index ? "00000000-0000-4000-9000-000000000000-000003e9" : null,
     name: "",
     type: "hall",
     sqft: (right - x) * (top - y),

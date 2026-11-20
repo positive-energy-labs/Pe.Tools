@@ -85,7 +85,7 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
         zoneRegion: candidate.elementId,
         view: candidate.view,
         zoneName: "Reviewed zone",
-        zoneGuid: candidate.guid,
+        zoneUniqueId: candidate.guid,
       },
     }),
   };

@@ -20,25 +20,25 @@ Each step has one owner and writes to one home. "Op" means a `takeoff.*`/`rhvac.
 
 | Datum | Home | Notes |
 |-------|------|-------|
-| Native measurements | Room Region provenance `measurement` | Explicit rerun; geometry basis includes zone, siblings, current region and level. Original `partition` evidence and prior decisions are retained. Freshness describes that geometry basis, not every external model change. |
-| Zone geometry, name, System tags | Zoning Region FR + Pe params | designer-authored |
+| Native measurements | Rooms document record, region provenance `measurement` | Explicit rerun; geometry basis includes zone, siblings, current region and level. Solver originals live in the local trace store. Freshness describes that geometry basis, not every external model change. |
+| Zone geometry, name, System tags | Zoning Region geometry in Revit, name and System tags in the Rooms document record | designer-authored |
 | System identity (GUID ↔ tag) | System registry: versioned JSON-blob param on Project Information | rename = registry edit through explicit reconciliation |
 | Room geometry | Room Region FR | reshaped only in Revit |
-| Room identity, provenance, `.r10` link | Pe params + JSON blob on the Room Region FR | machine bookkeeping; surfaced read-only in the web UI |
-| Room type | `PE_M___RoomType` on the Room Region FR | closed vocabulary from the PE equipment table; assists derive from it |
+| Region roles, identity, provenance, `.r10` link | Rooms record on Project Information, keyed by FilledRegion UniqueId | machine bookkeeping; surfaced read-only in the web UI |
+| Rooms name, type, ceiling and load inputs | `fields` on each Rooms row | `rooms.write` confirms submitted cells from committed readback |
 | Manual J room data (people, lighting, equipment, assemblies, ventilation) | the `.r10` | edited via the grid; assists compute, engineer confirms |
 | Loads and results | the `.r10` | RHVAC is the calculation authority; no headless calc exists |
 | Equipment identity and parameters | `PE_G___TagInstance` etc. on equipment instances | office standard; read-only to this pipeline |
 | Manual S selection | FOM workbook | read-only to this pipeline |
-| Held data conflicts (e.g. two accepted rooms merged) | marker on the surviving Room Region's blob | the only persisted pending state; blocks export until resolved |
+| Held data conflicts (e.g. two accepted rooms merged) | marker on the surviving region's row | the only persisted pending state; blocks export until resolved |
 | Pending proposals (unaccepted rerun diffs) | nowhere — session-ephemeral | admissible because reruns are deterministic and every decision writes through immediately |
-| Run artifacts (replay, ink, evidence) | project-scoped artifact directory | diagnostics, never state |
+| Partition trace and solver originals | Local Rooms state by document identity | the committed run selects the view trace and a region row's digest selects its solver original |
 
 Every blob in this table is an owner blob: the `{owner, version, data}` envelope in a hidden shared text parameter, written through `OwnerBlobStore` (ADR 0032 storage amendment). An old un-enveloped blob reads as absent and the next write replaces it. An enveloped blob this build can't read is refused and kept: a read reports it as "can't read, kept" with its reason and goes on, and no write goes over it (ADR 0039). Extensible storage is banned. The one exception in the repo is the duct per-fitting results entity, which Revit's pressure-drop server API requires.
 
 ## Identity spine
 
-Two tiers everywhere: a stable GUID for machine joins, a mutable human tag or name for display and export. Designers type tags; validate resolves them against the registry and asks when a tag vanishes while another appears (rename vs new System). The equipment↔zone relationship is a tag join computed at query time — no persisted element-to-element links. The `.r10` link is `{file identity, room Identifier}` stored in the Room Region's provenance blob, so revision export matches on `Identifier` instead of fragile name strings.
+Regions join by FilledRegion UniqueId. Systems join by registry GUID and use a mutable tag for display and export. Designers type tags; validate resolves them against the registry and asks when a tag vanishes while another appears (rename vs new System). The equipment↔zone relationship is a tag join computed at query time — no persisted element-to-element links. The `.r10` link is `{file identity, room Identifier}` stored in the region's provenance in the Rooms record, so revision export matches on `Identifier` instead of fragile name strings.
 
 ## Scope
 
@@ -50,13 +50,13 @@ Dev-lane is acceptable during build-out, but installability is a standing constr
 
 ## Feedback loops
 
-Gates are conservation and identity laws — no oracle, no tolerance dial: accounting closes per zone; accepted regions stay inside their zone; reruns re-bind every GUID with zero silent drops; edits survive recalc with zero orphaned decisions; a zone known to contain rooms never vacuously passes by rejecting everything. Diagnostics that carry the tuning gradient but never gate: promotion/rejection histogram (rejections carry their magnitudes — a tolerance refusal states what the tolerance would have had to be), ink-backed edge fraction, held/void fractions, per-zone disposition render. Coverage %, IoU, and junk-vs-real are retired (see the takeoffs ledger).
+Gates are conservation and identity laws — no oracle, no tolerance dial: accounting closes per zone; accepted regions stay inside their zone; reruns re-bind native region identities with zero silent drops; edits survive recalc with zero orphaned decisions; a zone known to contain rooms never vacuously passes by rejecting everything. Diagnostics that carry the tuning gradient but never gate: promotion/rejection histogram (rejections carry their magnitudes — a tolerance refusal states what the tolerance would have had to be), ink-backed edge fraction, held/void fractions, per-zone disposition render. Coverage %, IoU, and junk-vs-real are retired (see the takeoffs ledger).
 
 Tuning has its own currency on top of the gates: `eval/rhvac/score-looks-good.py` board **savedWork** is the number to beat (per-zone recall / edge-on-ink / swallowed-wall-sf / edit-cost carry the gradient), and the honesty bar is **per-room** — no previously-accepted room's own edge-on-ink may fall beyond ~0.005 noise; zone and board means are diagnostic only (dilution by honest newcomers is a statistical artifact). The standing brief is [docs/features/takeoffs/TUNING.md](../../docs/features/takeoffs/TUNING.md); kaitpw A/B verdicts land in the tuning worktree's TASTE.md and outrank any proxy metric. Per-zone fixtures derive from `eval/rhvac/project-a/zones-mech.json` — 45 real designer-drawn zones; the room-bearing ones are partition fixtures, the empty ones are abstention fixtures.
 
 ## Proof obligations
 
-Still live-unproven — probe each in a scratch document before building on it. (What is already proven is `FOOTGUN:`-marked at the site it governs: FR carrier binding in `TakeoffCarriers.cs`, registry blob capacity in `SystemRegistry.cs`, `.r10` PK/COUNTER and runtime column lists in `Rhvac/sync-rhvac.ps1` and `Rhvac/extract-rhvac.ps1`.)
+Still live-unproven — probe each in a scratch document before building on it. (What is already proven is `FOOTGUN:`-marked at the site it governs: registry blob capacity in `SystemRegistry.cs`, `.r10` PK/COUNTER and runtime column lists in `Rhvac/sync-rhvac.ps1` and `Rhvac/extract-rhvac.ps1`.)
 
 - **FR boundary read-back under user editing** — arcs, splines, self-touching rings drawn by hand must hit STRAIGHT-ONLY enforcement at read time.
 - **Capture cache** — per-zone runs are only cheap if the level-wide raster capture is shared and keyed by document/level/capture-options hash.

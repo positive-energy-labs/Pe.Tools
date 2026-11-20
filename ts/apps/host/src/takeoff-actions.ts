@@ -17,10 +17,13 @@ import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
 import {
   roomEditAddress,
+  roomEditKey,
+  roomsWriteReceiptSchema,
   takeoffEditAddress,
   takeoffDecisionAddress,
   type RoomsRouteDocument,
   type WorkPath,
+  roomEditSchema,
   takeoffCaptureSchema,
   type Consumed,
   type WorkHandle,
@@ -114,20 +117,20 @@ const nativeFor =
     );
 type Native = ReturnType<typeof nativeFor>;
 
-/** The carrier stage is bounded by native remaining work, shared by the seven concrete commands. */
-const runCarrier = (
+/** Only Takeoffs registry initialization needs a separate binding step. */
+const runModel = (
   ctx: CommandContext,
   execution: ActionExecution & { readonly prepared: { process: NativeProcess } },
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
-  stage: string,
+  stage: string | null,
   perform: (native: Native) => Step<unknown>,
 ) => {
   const target = modelTarget(ctx);
   const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
   return Effect.gen(function* () {
     captures.invalidate(target);
-    let remaining = Infinity;
+    let remaining = stage === null ? 0 : Infinity;
     while (remaining > 0) {
       const result = yield* native<{ remaining: string[] }>("takeoffs.initialize-carrier", {
         stage,
@@ -186,7 +189,7 @@ export function takeoffExecutors(
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
+        runModel(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
           Effect.succeed({ text: `wrote the shared parameters for ${ctx.admission.input.stage}` }),
         ),
     }),
@@ -194,7 +197,7 @@ export function takeoffExecutors(
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Adoption", (native) =>
+        runModel(ctx, execution, captures, bridge, "Adoption", (native) =>
           Effect.gen(function* () {
             let adopted = 0;
             for (const view of ctx.admission.input.views)
@@ -208,7 +211,7 @@ export function takeoffExecutors(
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) => {
+        runModel(ctx, execution, captures, bridge, null, (native) => {
           return value(ctx, native, "takeoffs.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
@@ -227,24 +230,19 @@ export function takeoffExecutors(
             }),
           ),
         ),
-      run: (ctx, execution) => {
-        const target = modelTarget(ctx);
-        const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
-        const invalidate = Effect.sync(() => captures.invalidate(target));
-        return Effect.andThen(
-          invalidate,
+      run: (ctx, execution) =>
+        runModel(ctx, execution, captures, bridge, null, (native) =>
           value(ctx, native, "rooms.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
           }),
-        ).pipe(Effect.ensuring(invalidate));
-      },
+        ),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
+        runModel(ctx, execution, captures, bridge, null, (native) =>
           value(ctx, native, "rooms.draw", nativeRequestInput(ctx.admission.input)),
         ),
       retires: (result) => {
@@ -252,12 +250,11 @@ export function takeoffExecutors(
         return [["writeIntent", "rooms.draw"]];
       },
     }),
-    // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
     "rooms.write": command(
       {
         ...commands["rooms.write"],
         authoredInput: commands["rooms.write"].authoredInput.extend({
-          regions: z.array(z.object({ guid: z.string() }).passthrough()),
+          regions: z.array(z.object({ uniqueId: z.string(), ...roomEditSchema.shape })),
         }),
       },
       preparedCarrierSchema,
@@ -265,19 +262,37 @@ export function takeoffExecutors(
         seal: (p) => ({ request: { process: p.process } }),
         bind: (ctx) =>
           bindCarrier(ctx, () =>
-            selectRooms(ctx, (_doc, paths) =>
+            selectRooms(ctx, (doc, paths) =>
               paths.filter((path) => {
                 if (path[0] !== "edits") return false;
-                const { guid, field } = roomEditAddress(String(path[1]));
-                return ctx.admission.input.regions.some(
-                  (region) => region.guid === guid && region[field] !== undefined,
-                );
+                const key = String(path[1]);
+                const { uniqueId, field } = roomEditAddress(key);
+                const submitted = ctx.admission.input.regions.find(
+                  (region) => region.uniqueId === uniqueId,
+                )?.[field];
+                return submitted !== undefined && submitted === doc.edits[key]?.edit?.value;
               }),
             ),
           ),
         run: (ctx, execution) =>
-          runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
-            value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
+          runModel(ctx, execution, captures, bridge, null, (native) =>
+            Effect.gen(function* () {
+              const receipt = roomsWriteReceiptSchema.parse(
+                yield* native("rooms.write", { regions: ctx.admission.input.regions }),
+              );
+              const handle = workHandle(ctx);
+              const paths = receipt.cells.flatMap(({ uniqueId, field, value }) => {
+                const submitted = ctx.admission.input.regions.find(
+                  (region) => region.uniqueId === uniqueId,
+                )?.[field];
+                return submitted !== undefined && submitted === value
+                  ? [["edits", roomEditKey(uniqueId, field)]]
+                  : [];
+              });
+              if (handle && paths.length)
+                yield* execution.retireWork(handle.key, "rooms", paths);
+              return { value: receipt, target: { session: modelTarget(ctx).session, document: null } };
+            }),
           ),
       },
     ),
@@ -292,13 +307,13 @@ export function takeoffExecutors(
               return (
                 mark?.kind === "merge" &&
                 mark.anchor.view === ctx.admission.input.view &&
-                !!mark.guids?.some((guid) => ctx.admission.input.guids.includes(guid))
+                !!mark.guids?.some((guid) => ctx.admission.input.uniqueIds.includes(guid))
               );
             }),
           ),
         ),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
+        runModel(ctx, execution, captures, bridge, null, (native) => {
           return value(ctx, native, "rooms.merge", nativeRequestInput(ctx.admission.input));
         }),
     }),

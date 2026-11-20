@@ -12,8 +12,12 @@
 using Autodesk.Revit.DB;
 using System.Collections.Generic;
 using System.Linq;
+using Pe.Revit.Parameters;
+using Pe.Revit.Takeoff;
 var Prefixes = new[] { "Rooms Truth - ", "Room Truth - " };   // kaitpw named the first one singular
-var role = new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9001");   // TakeoffCarriers.RoleGuid: ours carry it, truth does not
+var record = OwnerBlobStore.Read(doc, RoomsRegionRecord.Owner);
+if (!record.MayOverwrite) throw new InvalidOperationException(record.Error);
+var tracked = record.Data?["regions"];
 var views = new List<object>();
 foreach (var view in new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
              .Where(v => !v.IsTemplate && Prefixes.Any(p => v.Name.StartsWith(p))))
@@ -21,7 +25,7 @@ foreach (var view in new FilteredElementCollector(doc).OfClass(typeof(ViewPlan))
     var rooms = new List<object>();
     foreach (var fr in new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
     {
-        if (!string.IsNullOrEmpty(fr.get_Parameter(role)?.AsString())) continue;
+        if (tracked?[fr.UniqueId] != null) continue;
         var loops = fr.GetBoundaries().Select(loop => loop.SelectMany(curve => {
             var t = curve.Tessellate();
             return t.Take(t.Count - 1).SelectMany(p => new[] { p.X, p.Y });

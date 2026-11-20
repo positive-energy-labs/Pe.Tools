@@ -1,7 +1,7 @@
 {
   "regions": [
     {
-      "guid": "f8d99992-423e-453d-99be-934a98ec8bf4",
+      "uniqueId": "04a06654-51ab-45b8-8154-c4e534d88aec-0012d9c5",
       "name": "Office - recorded",
       "type": null,
       "ceilingFt": null,
@@ -13,7 +13,7 @@
       "role": null
     },
     {
-      "guid": "21b58397-cd33-4609-8548-d08424a09b60",
+      "uniqueId": "04a06654-51ab-45b8-8154-c4e534d88aec-0012d9d0",
       "name": "Lobby - recorded",
       "type": null,
       "ceilingFt": null,

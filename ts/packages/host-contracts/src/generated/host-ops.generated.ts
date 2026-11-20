@@ -11080,7 +11080,7 @@ export namespace RoomsDraw {
   export namespace Res {
     export interface Response {
       elementId: number;
-      guid: string;
+      uniqueId: string;
     }
   }
 }
@@ -11090,21 +11090,21 @@ export namespace RoomsMerge {
   export namespace Req {
     export interface Request {
       view: number;
-      guids: string[];
+      uniqueIds: string[];
       name?: null | string;
     }
   }
   export namespace Res {
     export interface Response {
       elementId: number;
-      guid: string;
-      merged: string[];
+      uniqueId: string;
+      mergedFrom: string[];
       sqft: number;
     }
   }
 }
 
-/** Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction. */
+/** Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record. */
 export namespace RoomsPartition {
   export namespace Req {
     export interface Request {
@@ -11154,7 +11154,6 @@ export namespace RoomsRoster {
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
-      guid: string;
       view: number;
       level: string;
       role: string;
@@ -11177,11 +11176,10 @@ export namespace RoomsRoster {
       touched: boolean;
       locked: boolean;
       stale: boolean;
+      mergedFrom?: string[] | null;
     }
     /**
-     * A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
-     * holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
-     * region is left out of what it lists, and no write goes over the blob.
+     * A model record the listing cannot read. Document records report a null ElementId.
      *
      */
     export interface TakeoffUnreadableBlob {
@@ -11218,7 +11216,6 @@ export namespace RoomsSnapshot {
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
-      guid: string;
       view: number;
       level: string;
       role: string;
@@ -11241,11 +11238,10 @@ export namespace RoomsSnapshot {
       touched: boolean;
       locked: boolean;
       stale: boolean;
+      mergedFrom?: string[] | null;
     }
     /**
-     * A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
-     * holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
-     * region is left out of what it lists, and no write goes over the blob.
+     * A model record the listing cannot read. Document records report a null ElementId.
      *
      */
     export interface TakeoffUnreadableBlob {
@@ -11256,7 +11252,7 @@ export namespace RoomsSnapshot {
   }
 }
 
-/** Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
+/** Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the view's latest committed run when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
 export namespace RoomsTrace {
   export namespace Req {
     export interface Request {
@@ -11273,7 +11269,7 @@ export namespace RoomsTrace {
       zones: RoomsZoneTrace[];
     }
     export interface RoomsZoneTrace {
-      zoneGuid: string;
+      zoneUniqueId: string;
       label: string;
       trace: RoomsTrace;
       accounting: RoomsTraceAccounting;
@@ -11326,14 +11322,14 @@ export namespace RoomsTrace {
   }
 }
 
-/** Write the given room fields, and a person's room or zone designation, onto regions by guid. */
+/** Write submitted Rooms fields by FilledRegion UniqueId and return cells confirmed by committed readback. */
 export namespace RoomsWrite {
   export namespace Req {
     export interface Request {
       regions: RoomsWriteRegion[];
     }
     export interface RoomsWriteRegion {
-      guid: string;
+      uniqueId: string;
       name?: null | string;
       type?: null | string;
       ceilingFt?: null | number;
@@ -11346,8 +11342,24 @@ export namespace RoomsWrite {
     }
   }
   export namespace Res {
+    export type RoomField =
+      | "name"
+      | "type"
+      | "ceilingFt"
+      | "people"
+      | "lightingW"
+      | "equipSensible"
+      | "equipLatent"
+      | "ventilationCfm"
+      | "role";
+
     export interface Response {
-      written: number;
+      cells: RoomsWriteCell[];
+    }
+    export interface RoomsWriteCell {
+      uniqueId: string;
+      field: RoomField;
+      value: unknown;
     }
   }
 }
@@ -11880,7 +11892,7 @@ export namespace TakeoffsAdopt {
     }
     export interface TakeoffAdopted {
       elementId: number;
-      guid: string;
+      uniqueId: string;
       ownerCrop?: null | RevitCropCoverage;
     }
   }
@@ -11909,7 +11921,7 @@ export namespace TakeoffsCandidates {
       color: string;
       sqft: number;
       role?: null | string;
-      guid?: null | string;
+      uniqueId: string;
       blob: string;
       loops: number[][][];
       ownerCrop?: null | RevitCropCoverage;
@@ -11921,7 +11933,7 @@ export namespace TakeoffsCandidates {
 /** Bind the next missing Takeoff carrier for the requested stage in one transaction. */
 export namespace TakeoffsInitializeCarrier {
   export namespace Req {
-    export type TakeoffCarrierStage = "Adoption" | "Materialization" | "Rooms";
+    export type TakeoffCarrierStage = "Adoption" | "Materialization";
 
     export interface Request {
       stage?: TakeoffCarrierStage;
@@ -11943,7 +11955,7 @@ export namespace TakeoffsPartition {
       zoneRegion: number;
       view: string;
       zoneName: string;
-      zoneGuid: string;
+      zoneUniqueId: string;
       runId: string;
     }
   }
@@ -11992,7 +12004,7 @@ export namespace TakeoffsPartition {
     export interface TakeoffLiveRegion {
       elementId: number;
       role: string;
-      guid: string;
+      uniqueId: string;
       sqft: number;
       roomType: string;
       blob: string;
@@ -12060,7 +12072,8 @@ export namespace TakeoffsRhvacLinks {
     }
     export interface TakeoffWriteResult {
       elementId: number;
-      zoneGuid: string;
+      uniqueId: string;
+      zoneUniqueId?: null | string;
       bytes: number;
       blob: string;
     }
@@ -12075,11 +12088,11 @@ export namespace TakeoffsSnapshot {
      */
     export interface Request {
       views?: string[] | null;
-      zoneGuids?: string[] | null;
+      zoneUniqueIds?: string[] | null;
     }
   }
   export namespace Res {
-    export type TakeoffCarrierStage = "Adoption" | "Materialization" | "Rooms";
+    export type TakeoffCarrierStage = "Adoption" | "Materialization";
     /**
      * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
      */
@@ -12122,7 +12135,7 @@ export namespace TakeoffsSnapshot {
       color: string;
       sqft: number;
       role?: null | string;
-      guid?: null | string;
+      uniqueId: string;
       blob: string;
       loops: number[][][];
       ownerCrop?: null | RevitCropCoverage;
@@ -12131,7 +12144,7 @@ export namespace TakeoffsSnapshot {
     export interface TakeoffLiveRegion {
       elementId: number;
       role: string;
-      guid: string;
+      uniqueId: string;
       sqft: number;
       roomType: string;
       blob: string;
@@ -12150,9 +12163,7 @@ export namespace TakeoffsSnapshot {
       hold?: null | string;
     }
     /**
-     * A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that
-     * holds it, or null for the System registry on Project Information. A listing reports these and goes on: the
-     * region is left out of what it lists, and no write goes over the blob.
+     * A model record the listing cannot read. Document records report a null ElementId.
      *
      */
     export interface TakeoffUnreadableBlob {

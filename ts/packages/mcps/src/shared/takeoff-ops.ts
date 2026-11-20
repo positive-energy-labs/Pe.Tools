@@ -15,15 +15,10 @@ import type {
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { Schema, SchemaGetter } from "effect";
 
-/**
- * FilledRegion blobs `Pe.Revit.Takeoff` writes with camelCase Newtonsoft (ADR 0029 rule 7):
- * `TakeoffZoneProvenance(V, View, Name, SystemTag)` on a Zoning Region, `RegionProvenance` on a
- * materialized room or residue. PascalCase run keys are the pre-camelCase blobs readers still meet.
- * Promise callers until phase 5 decode with `decodeUnknownSync`; a bad blob throws its path.
- */
+/** The native Takeoffs projection exposes each Rooms row's provenance as JSON. */
 export const ZoneProvenance = Schema.fromJsonString(
   Schema.Struct({
-    view: Schema.String,
+    view: Schema.optionalKey(Schema.String),
     name: Schema.optionalKey(Schema.NullOr(Schema.String)),
     systemTag: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
@@ -96,17 +91,18 @@ export function projectTakeoffSnapshot(
   views: readonly Pick<ViewFacts, "name" | "level">[],
 ): TakeoffSnapshot {
   const snapshot = response.snapshot;
-  const zoneFrs = snapshot.zoneFrs.map((region) => ({
+  const zoneFrs = snapshot.zoneFrs.map(({ uniqueId, ...region }) => ({
     ...region,
     role: region.role ?? null,
-    guid: region.guid ?? null,
+    guid: uniqueId,
     loops: region.loops.map(points),
   }));
   const regionsByZone = Object.fromEntries(
     Object.entries(snapshot.regionsByZone).map(([key, regions]) => [
       key,
-      regions.map((region) => ({
+      regions.map(({ uniqueId, ...region }) => ({
         ...region,
+        guid: uniqueId,
         analysis: region.analysis ? takeoffRegionAnalysisSchema.parse(region.analysis) : null,
         outer: points(region.outer),
         holes: region.holes.map(points),
@@ -125,8 +121,7 @@ export function projectTakeoffSnapshot(
   const ordinals = new Map<string, number>();
   const zones: ModelZone[] = zoneFrs.map((region) => {
     const meta = Schema.decodeUnknownSync(ZoneProvenance)(region.blob);
-    if (!meta.view) throw Error("Zoning Region provenance is missing view");
-    const view = region.view || meta.view;
+    const view = region.view || meta.view || "";
     const name = meta.name?.trim() || `${view} · ${region.elementId}`;
     const label = levelByView.get(view) || view;
     let lane = lanes.find((item) => item.view === view);
@@ -226,8 +221,8 @@ function savedReview(
     region,
     value: Schema.decodeUnknownSync(RegionProvenance)(region.blob),
   }));
-  if (values.some(({ value }) => !value.runId || !value.sourceRoomId))
-    throw Error("Native takeoff review provenance is missing runId or sourceRoomId");
+  if (values.some(({ value }) => !value.runId))
+    throw Error("Native takeoff review provenance is missing runId");
   const runIds = [...new Set(values.map(({ value }) => value.runId!))];
 
   return {
@@ -240,7 +235,7 @@ function savedReview(
     shapes: values.map(({ region, value }) => ({
       original: {
         runId: value.runId!,
-        sourceRoomId: value.sourceRoomId!,
+        sourceRoomId: value.sourceRoomId ?? "",
         disposition: disposition(value.partition?.disposition),
         reason: value.partition?.reason ?? null,
       },
@@ -303,7 +298,7 @@ function room(region: LiveRegion): ModelRoom {
   const runId = value.RunId ?? value.runId;
   const sourceRoomId = value.SourceRoomId ?? value.sourceRoomId;
   const sourceSqft = value.SourceSqft ?? value.sourceSqft;
-  if (!runId || !sourceRoomId || typeof sourceSqft !== "number")
+  if (!runId || sourceRoomId === undefined || typeof sourceSqft !== "number")
     throw Error("Room Region provenance is missing runId, sourceRoomId, or sourceSqft");
   const analysis = region.analysis;
   const current = analysis?.state === "current";
@@ -316,7 +311,7 @@ function room(region: LiveRegion): ModelRoom {
     analysis,
     guid: region.guid,
     elementId: region.elementId,
-    name: sourceRoomId,
+    name: sourceRoomId || String(region.elementId),
     type: (region.roomType || "hall") as ModelRoom["type"],
     sqft: Math.round(region.sqft),
     ceilingFt:

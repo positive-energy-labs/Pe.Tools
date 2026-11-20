@@ -64,7 +64,7 @@ test("a confirmed room draw consumes only its staged intent and cannot dispatch 
     const receipt = await submit("draw", "rooms.draw", 1);
     expect(receipt).toMatchObject({
       state: "succeeded",
-      result: { value: { elementId: expect.any(Number), guid: expect.any(String) } },
+      result: { value: { elementId: expect.any(Number), uniqueId: expect.any(String) } },
     });
     const current = (await workspace.read(key, "rooms"))!;
     const doc = tools.rooms.work.schema.parse(current.doc);
@@ -76,10 +76,7 @@ test("a confirmed room draw consumes only its staged intent and cannot dispatch 
         error: expect.stringContaining("No room draw is staged"),
       });
     expect(await submit("draw", "rooms.draw", 1)).toEqual(receipt);
-    expect(native.calls.map((call) => call.key)).toEqual([
-      "takeoffs.initialize-carrier",
-      "rooms.draw",
-    ]);
+    expect(native.calls.map((call) => call.key)).toEqual(["rooms.draw"]);
     expect(doc.writeIntent?.["rooms.draw"]?.edit).toBeNull();
   } finally {
     await native.close();
@@ -163,12 +160,10 @@ test.each(["initialize", "adopt", "partition"])(
       expect(native.calls).toEqual([]);
       expect(await invoke("apply", action)).toMatchObject({ state: "succeeded" });
       expect(native.calls.map((call) => call.key)).toEqual(
-        verb === "initialize" ? [leaf] : ["takeoffs.initialize-carrier", leaf],
+        verb === "adopt" ? ["takeoffs.initialize-carrier", leaf] : [leaf],
       );
-      expect(
-        nativeRequestSchema("takeoffs.initialize-carrier").safeParse(native.calls[0]!.input)
-          .success,
-      ).toBe(true);
+      if (verb === "adopt")
+        expect(nativeRequestSchema("takeoffs.initialize-carrier").safeParse(native.calls[0]!.input).success).toBe(true);
       expect(nativeRequestSchema(leaf).safeParse(native.calls.at(-1)!.input).success).toBe(true);
     } finally {
       await native.close();
@@ -178,7 +173,7 @@ test.each(["initialize", "adopt", "partition"])(
 );
 
 test.each(["selected", "unrelated", "none"] as const)(
-  "recorded rooms.write admission fences %s changes and a current preview reaches both declared leaves",
+  "recorded rooms.write admission fences %s changes and a current preview retires only confirmed field values",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
     const native = await fixtureNative(
@@ -189,11 +184,11 @@ test.each(["selected", "unrelated", "none"] as const)(
     const socket = await native.connect();
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
     const regions = nativeRecordingRequest("fresh-rooms.write").regions as {
-      guid: string;
+      uniqueId: string;
       name: string;
     }[];
-    const a = roomEditKey(regions[0]!.guid, "name"),
-      b = roomEditKey(regions[1]!.guid, "name");
+    const a = roomEditKey(regions[0]!.uniqueId, "name"),
+      b = roomEditKey(regions[1]!.uniqueId, "name");
     let state: unknown;
     const work = new RouteWorkspace({
       publicationAuthor: () => "human",
@@ -236,7 +231,7 @@ test.each(["selected", "unrelated", "none"] as const)(
         key,
         "rooms",
         regions.map((region) => ({
-          path: ["edits", roomEditKey(region.guid, "name")],
+          path: ["edits", roomEditKey(region.uniqueId, "name")],
           value: { edit: { value: region.name } },
         })),
         0,
@@ -284,18 +279,22 @@ test.each(["selected", "unrelated", "none"] as const)(
           state: "succeeded",
         });
       }
-      expect(native.calls.map((call) => call.key)).toEqual([
-        "takeoffs.initialize-carrier",
-        "rooms.write",
-      ]);
+      expect(native.calls.map((call) => call.key)).toEqual(["rooms.write"]);
+      const current = tools.rooms.work.schema.parse((await work.read(key, "rooms"))!.doc);
+      for (const [index, key] of [a, b].entries())
+        expect(current.edits[key]?.edit ?? null).toEqual(
+          changed !== "none" && index === (changed === "selected" ? 0 : 1)
+            ? expect.objectContaining({ value: "newer" })
+            : null,
+        );
       const values = regions.map((region) => ({
-        guid: region.guid,
+        uniqueId: region.uniqueId,
         name:
-          changed !== "none" && region.guid === regions[changed === "selected" ? 0 : 1]!.guid
+          changed !== "none" && region.uniqueId === regions[changed === "selected" ? 0 : 1]!.uniqueId
             ? "newer"
             : region.name,
       }));
-      expect(native.calls[1]).toMatchObject({ action: "rooms.write", input: { regions: values } });
+      expect(native.calls[0]).toMatchObject({ action: "rooms.write", input: { regions: values } });
     } finally {
       runs.closeAll();
       bindControl({ runs: undefined });
@@ -305,7 +304,7 @@ test.each(["selected", "unrelated", "none"] as const)(
   },
 );
 
-test("invalid derived room GUID refuses before the carrier can mutate the model", async () => {
+test("invalid derived room UniqueId refuses before any native write", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-rooms-invalid-"));
   const native = await fixtureNative(
     join(directory, "native"),
@@ -383,7 +382,7 @@ test("foreign Rooms Work is refused by real action admission before native prepa
         {
           path: [
             "edits",
-            roomEditKey(nativeRecordingRequest("fresh-rooms.write").regions[0].guid, "name"),
+            roomEditKey(nativeRecordingRequest("fresh-rooms.write").regions[0].uniqueId, "name"),
           ],
           value: { edit: { value: "Intent" } },
         },

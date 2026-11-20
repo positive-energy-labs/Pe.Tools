@@ -15,7 +15,7 @@ const rawSnapshot = {
       color: "0,0,0",
       sqft: 100,
       role: "zoning-region",
-      guid: "zone-1",
+      uniqueId: "zone-1",
       blob: JSON.stringify({ view: "Zoning", name: "Zone 1", systemTag: "FC-1" }),
       loops: [
         [
@@ -32,7 +32,7 @@ const rawSnapshot = {
       {
         elementId: 84,
         role: "held-residue",
-        guid: "native-held-1",
+        uniqueId: "native-held-1",
         sqft: 100,
         blob: JSON.stringify({
           runId: "saved-run-1",
@@ -50,7 +50,7 @@ const rawSnapshot = {
       {
         elementId: 85,
         role: "held-residue",
-        guid: "native-void-1",
+        uniqueId: "native-void-1",
         sqft: 25,
         blob: JSON.stringify({
           runId: "saved-run-1",

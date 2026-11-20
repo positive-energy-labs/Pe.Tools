@@ -81,7 +81,7 @@ export const reads = {
           snapshot: (
             await ctx.read(native("takeoffs.snapshot"), {
               target,
-              request: { views: zones.length ? [] : views, zoneGuids: zones },
+              request: { views: zones.length ? [] : views, zoneUniqueIds: zones },
             })
           ).body,
         });
@@ -100,7 +100,7 @@ export const reads = {
           )
         )
           .flatMap((value) => value.body.regions)
-          .map((region) => ({ ...region, role: region.role ?? null, guid: region.guid ?? null }));
+          .map(({ uniqueId, ...region }) => ({ ...region, role: region.role ?? null, guid: uniqueId }));
     const rows = adoptDrafts(
       candidateRegionSchema.array().parse(candidates),
       stagedAdoptChoices(doc),
