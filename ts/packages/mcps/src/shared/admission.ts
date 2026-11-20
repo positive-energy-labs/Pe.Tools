@@ -22,7 +22,10 @@ import {
   commandTarget,
   type SemanticActionKey,
 } from "../pea/product-actions.generated.ts";
-import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "../pea/product-operations.generated.ts";
+import {
+  isTsOnlyOperationKey,
+  tsOnlyOperationCatalog,
+} from "../pea/product-operations.generated.ts";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";

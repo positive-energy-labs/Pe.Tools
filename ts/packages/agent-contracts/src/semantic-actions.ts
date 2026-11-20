@@ -8,7 +8,10 @@ import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { builtinLocalCatalog, type HostLocalCatalogEntry } from "@pe/host-contracts/operation-types";
+import {
+  builtinLocalCatalog,
+  type HostLocalCatalogEntry,
+} from "@pe/host-contracts/operation-types";
 import { isReadEffect } from "@pe/host-contracts/contracts";
 
 import type { Command } from "./command.ts";
@@ -147,39 +150,40 @@ export const actionControls = {
 } as const satisfies Record<string, Command>;
 export type ActionControlKey = keyof typeof actionControls;
 
-/** Discovery projects the same portable command contracts used by invocation. */
 /** The local catalog a registration site assembled: the built-in rows plus each product's. */
 export type LocalCatalog = readonly HostLocalCatalogEntry<string>[];
-const hostActionHead = (local: LocalCatalog) => ({
-  "ops.read": {
-    via: { route: "operation.call" },
-    native: [...hostOpCatalog, ...local]
-      .filter((op) => isReadEffect(op.effect))
-      .map((op) => op.key),
-    says: "Read one native operation through the guarded operation door.",
-    needs: "nothing",
-    effect: "query",
-    dirties: [],
-    input: z.object({
-      op: z
-        .object({
-          key: z.string(),
-          effect: z.string().refine(isReadEffect, "ops.read requires a native Read"),
-        })
-        .passthrough(),
-      request: z.unknown(),
-    }),
-  } as const,
-  "page.bind": {
-    via: { route: "page.bind" },
-    catalogEffect: "SessionWrite",
-    says: "Bind a Page to its exact execution target.",
-    needs: "nothing",
-    effect: "command",
-    dirties: [],
-    input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
-  } as const,
-}) satisfies Record<string, Command>;
+/** Discovery projects the same portable command contracts used by invocation. */
+const hostActionHead = (local: LocalCatalog) =>
+  ({
+    "ops.read": {
+      via: { route: "operation.call" },
+      native: [...hostOpCatalog, ...local]
+        .filter((op) => isReadEffect(op.effect))
+        .map((op) => op.key),
+      says: "Read one native operation through the guarded operation door.",
+      needs: "nothing",
+      effect: "query",
+      dirties: [],
+      input: z.object({
+        op: z
+          .object({
+            key: z.string(),
+            effect: z.string().refine(isReadEffect, "ops.read requires a native Read"),
+          })
+          .passthrough(),
+        request: z.unknown(),
+      }),
+    } as const,
+    "page.bind": {
+      via: { route: "page.bind" },
+      catalogEffect: "SessionWrite",
+      says: "Bind a Page to its exact execution target.",
+      needs: "nothing",
+      effect: "command",
+      dirties: [],
+      input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
+    } as const,
+  }) satisfies Record<string, Command>;
 const hostActionTail = {
   ...actionControls,
   // These direct reads consume an owning Work just like journaled commands. The send door

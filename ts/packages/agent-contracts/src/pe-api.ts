@@ -130,9 +130,7 @@ export function createPeCatalog<const Extra extends HttpReads = Record<never, ne
     : schemas.valueReadRequest;
   const routeAxes = hostRouteAxes(
     [
-      ...hostOpCatalog
-        .filter((op) => !local.some((local) => local.key === op.key))
-        .map(opEntry),
+      ...hostOpCatalog.filter((op) => !local.some((local) => local.key === op.key)).map(opEntry),
       ...local.map(opEntry),
       ...Object.entries(actions).map(([key, action]) => commandAxes(key, action)),
     ],
@@ -215,9 +213,7 @@ export function createPeCatalog<const Extra extends HttpReads = Record<never, ne
   function linkedCatalog(): LinkedCatalog<CatalogRow> {
     return (linked ??= requireLinkedCatalog(
       link<CatalogRow>([
-        ...hostOpCatalog
-          .filter((op) => !local.some((local) => local.key === op.key))
-          .map(opEntry),
+        ...hostOpCatalog.filter((op) => !local.some((local) => local.key === op.key)).map(opEntry),
         ...Object.values(peRoutes).flatMap((row) =>
           "catalog" in row ? [row.catalog as CatalogRow] : [],
         ),
