@@ -33,8 +33,10 @@ type Source = Pick<EventSource, "onopen" | "onmessage" | "onerror" | "close">;
 
 /** How long a fresh connection may stay silent with keys unanswered; past it the connection is dead. */
 const READING_DEADLINE_MS = 30_000;
-/** Reconnect delays double from 1 s to this ceiling, and reset on the first fresh frame. */
+/** The ceiling for background calls and streams in a hidden tab. */
 const RETRY_CEILING_MS = 30_000;
+/** A visible tab should be able to re-admit its readings as soon as its host is back. */
+const VISIBLE_RECONNECT_CEILING_MS = 2_000;
 /**
  * The one retry rule for a host that does not answer: retry `attempt` (from 1) waits `baseMs`
  * doubled each time up to the ceiling, drawn from the upper half so tabs do not retry in step.
@@ -329,7 +331,11 @@ export class PeReadings {
         this.retry = undefined;
         this.open();
       },
-      retryDelayMs(++this.attempts),
+      retryDelayMs(
+        ++this.attempts,
+        1000,
+        document.visibilityState === "hidden" ? RETRY_CEILING_MS : VISIBLE_RECONNECT_CEILING_MS,
+      ),
     );
   }
 

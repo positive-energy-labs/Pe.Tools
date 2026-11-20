@@ -16,7 +16,11 @@ import type { ReadingContext } from "../shell/source-contract";
 import { publicationSource } from "./publication-source";
 import { PeReadings, peReadings } from "./resource-stream";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const live = new Set<string>();
 class Stream {
@@ -74,4 +78,38 @@ test("a page that leaves view frees its socket at once, and takes one again when
     readings.close();
   }
   expect(held.size).toBe(0);
+});
+
+test("a live tab re-admits its Open publication within three seconds of an answering host", async () => {
+  vi.useFakeTimers();
+  vi.spyOn(Math, "random").mockReturnValue(0.99);
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  let answering = true;
+  let admitAt = -1;
+  let lose = () => {};
+  const publication = { kind: "publication", subscription: "open-tab", generation: 0 } as const;
+  const readings = new PeReadings(() => "http://127.0.0.1/pe/resources", () => {
+    const stream = { onopen: null as (() => void) | null, onerror: null as (() => void) | null, onmessage: null, close() {} };
+    lose = () => stream.onerror?.();
+    setTimeout(() => (answering ? stream.onopen : stream.onerror)?.(), 0);
+    return stream;
+  }, undefined, async (_connection, add) => {
+    expect(add).toEqual([publication]);
+    admitAt = Date.now();
+  });
+  try {
+    const stop = readings.subscribe(publication, () => {});
+    await vi.advanceTimersByTimeAsync(10);
+    expect(admitAt).toBeGreaterThan(0);
+    answering = false;
+    lose();
+    await vi.advanceTimersByTimeAsync(25_000);
+    answering = true;
+    const hostAnsweredAt = Date.now();
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(admitAt).toBeGreaterThanOrEqual(hostAnsweredAt);
+    stop();
+  } finally {
+    readings.close();
+  }
 });

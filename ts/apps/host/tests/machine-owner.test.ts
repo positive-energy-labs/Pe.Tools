@@ -49,6 +49,39 @@ const counting = () => {
 /** Let every forked fiber that is ready run. */
 const settleFibers = Effect.repeat(Effect.yieldNow, { times: 20 });
 
+effectTest("the years deadline releases a stalled check before a retry", () =>
+  Effect.gen(function* () {
+    const { sources } = counting();
+    const scope = yield* Scope.make();
+    yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+    let starts = 0;
+    let active = 0;
+    const years = () => Effect.suspend(() =>
+      ++starts === 1 ? Effect.succeed([2025]) : Effect.scoped(
+        Effect.acquireRelease(
+          Effect.sync(() => { active++; }),
+          () => Effect.sync(() => { active--; }),
+        ).pipe(Effect.andThen(Effect.never)),
+      ),
+    );
+    const context = yield* Layer.buildWithScope(MachineOwner.layer({ ...sources, years }, { updatePeriodMs: 0 }), scope);
+    const owner = Context.get(context, MachineOwner);
+    yield* owner.refresh;
+    yield* owner.refresh;
+    yield* settleFibers;
+    expect(active).toBe(1);
+    yield* TestClock.adjust("15 seconds");
+    yield* settleFibers;
+    expect(active).toBe(0);
+    expect(owner.current().legs.years?.error).toContain("15000 ms");
+    yield* owner.refresh;
+    yield* settleFibers;
+    expect(active).toBe(1);
+    yield* Scope.close(scope, Exit.void);
+    expect(active).toBe(0);
+  }),
+);
+
 effectTest("an observed owner polls once per period and closing its scope stops the poll", () =>
   Effect.gen(function* () {
     const { reads, sources } = counting();
