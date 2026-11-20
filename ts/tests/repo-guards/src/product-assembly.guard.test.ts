@@ -41,46 +41,55 @@ const reference = (name: string) => ({ module: "./registration", export: name })
 const freshCommand = "proof.inspect-fresh-assembly";
 const contractManifest = {
   name: "@pe/proof-contract",
-  exports: { "./registration": "./registration.ts" },
+  exports: { "./product": "./src/product.ts", "./registration": "./registration.ts" },
+  // The kinds the declaration has no word for stay on the pointer path until S4a rules on them.
   pe: {
-    tool: { ...reference("tool"), key: "proof" },
-    reads: reference("reads"),
     http: { module: "./registration", routes: "routes", axes: "axes" },
     settings: { ...reference("settings"), key: "proof" },
     reading: reference("reading"),
     callPolicies: reference("policies"),
-    guide: "./registration",
   },
 };
 
 const fixtureFiles = {
   "contract/package.json": JSON.stringify(contractManifest),
+  "contract/src/product.ts": [
+    'import { z } from "zod";',
+    'import { product as declare } from "@pe/agent-contracts/product";',
+    "export const product = declare({",
+    '  id: "proof",',
+    '  says: "Fixture tool",',
+    '  readings: { echo: { handle: { key: "proof.echo", input: z.object({ text: z.string() }) }, says: "A proof reading." } },',
+    `  commands: { "${freshCommand}": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", catalogEffect: "Read", dirties: [] } },`,
+    "  routes: {},",
+    '  guide: { instructions: "Fixture guide.", skills: [] },',
+    "});",
+  ].join("\n"),
   "contract/registration.ts": [
     'import { z } from "zod";',
     'import { route } from "@pe/host-contracts/pe-api";',
-    'export const tool = { name: "proof", says: "Fixture tool", commands: {',
-    `  "${freshCommand}": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", catalogEffect: "Read", dirties: [] },`,
-    "} };",
-    'export const reads = { inputs: { "proof.echo": z.object({ text: z.string() }) }, help: "A proof reading." };',
     'export const routes = { "proof.stats": route("GET", "/pe/proof", z.undefined(), z.object({ ok: z.boolean() }), "read", "gateway", "read") };',
     'export const axes = { "proof.stats": { subject: "None", cardinality: "One", touches: ["Metadata"], effect: "Read", cost: "Cheap", uses: [] } };',
     "export const settings = { bindings: [], at: () => null, accepts: () => false };",
     'export const reading = z.strictObject({ kind: z.literal("proof-reading"), id: z.string() });',
     'export const policies = { "document.temporary.status": { canonicalSession: true } };',
-    'export const peaGuide = { instructions: "Fixture guide.", skills: [] };',
   ].join("\n"),
   "host/package.json": JSON.stringify({
     name: "@pe/proof-host",
-    exports: { "./registration": "./registration.ts" },
-    pe: {
-      httpLayer: reference("httpLayer"),
-      executors: { module: "./registration", factory: "executors", arguments: [] },
-    },
+    exports: { "./product": "./src/product.ts", "./registration": "./registration.ts" },
+    pe: { httpLayer: reference("httpLayer") },
   }),
+  "host/src/product.ts": [
+    'import { implement } from "@pe/host-internal/product";',
+    'import { product } from "@pe/proof-contract/product";',
+    "export const host = implement(product, {",
+    "  readings: { echo: (_ctx, args) => args },",
+    `  commands: { "${freshCommand}": () => ({ definition: "fixture executor" }) },`,
+    "});",
+  ].join("\n"),
   "host/registration.ts": [
     'import { HttpRouter, HttpServerResponse } from "effect/http";',
     'export const httpLayer = HttpRouter.add("GET", "/pe/proof", () => HttpServerResponse.json({ ok: true }));',
-    'export const executors = () => ({ "proof.execute": { definition: "fixture executor" } });',
   ].join("\n"),
   "web/package.json": JSON.stringify({ name: "@pe/proof-web" }),
   "web/route.ts": 'export const module = { data: { key: "proof", address: "/proof" } };',
@@ -109,6 +118,7 @@ function loadFixtureModules(root: string, commandTable?: string) {
   const modules = [
     "@pe/agent-contracts/semantic-actions",
     "@pe/agent-contracts/pe-api",
+    "@pe/agent-contracts/product",
     "@pe/agent-contracts",
     "@pe/host-contracts/pe-api",
     "effect/http",
@@ -122,8 +132,11 @@ function loadFixtureModules(root: string, commandTable?: string) {
         modules.map((name) => [name, fileURLToPath(import.meta.resolve(name))]),
       ),
       zod: createRequire(new URL("../../../apps/web/package.json", import.meta.url)).resolve("zod"),
+      "@pe/host-internal/product": join(ROOT, "packages/host-internal/src/product.ts"),
       "@pe/proof-contract/registration": join(root, product, "contract/registration.ts"),
+      "@pe/proof-contract/product": join(root, product, "contract/src/product.ts"),
       "@pe/proof-host/registration": join(root, product, "host/registration.ts"),
+      "@pe/proof-host/product": join(root, product, "host/src/product.ts"),
       ...(commandTable ? { "./generated/command-axes.generated.ts": commandTable } : {}),
     },
   });
@@ -206,7 +219,7 @@ test("an authored product folder feeds Host, web and Pea without editing their s
       discovery: { title: freshCommand },
     });
     expect(guides.productGuides).toEqual([{ instructions: "Fixture guide.", skills: [] }]);
-    expect(hostExecutors.productExecutors({} as never).executors).toHaveProperty(["proof.execute"]);
+    expect(hostExecutors.productExecutors({} as never).executors).toHaveProperty([freshCommand]);
     const discovery = catalog.linkedCatalog().entries.get("route:reads.value")?.discovery;
     expect(discovery?.description).toContain("A proof reading.");
     expect(discovery?.input).toMatchObject({

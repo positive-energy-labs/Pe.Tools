@@ -20,6 +20,7 @@
     "./route/body": "./src/route/body.ts",
     "./route/draw": "./src/route/draw.tsx",
     "./route/field-codec": "./src/route/field-codec.ts",
+    "./route/screen": "./src/route/screen.ts",
     "./route/slots/findings": "./src/route/slots/findings/index.ts",
     "./route/slots/picture": "./src/route/slots/picture/index.ts",
     "./route/slots/picture/overlay": "./src/route/slots/picture/overlay.tsx",

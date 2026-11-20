@@ -27,7 +27,8 @@
     "./builtin-read-handles": "./src/builtin-read-handles.ts",
     "./refused": "./src/refused.ts",
     "./input-recording": "./src/input-recording.ts",
-    "./input-occurrence": "./src/input-occurrence.ts"
+    "./input-occurrence": "./src/input-occurrence.ts",
+    "./product": "./src/product.ts"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",

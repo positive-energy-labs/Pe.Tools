@@ -75,6 +75,13 @@ function products(checkout: string) {
       host: layer(id, "host"),
       web: layer(id, "web"),
       route: existsSync(join(root, id, "web/route.ts")),
+    }))
+    .map((row) => ({
+      ...row,
+      // The product list (ruling 1): a layer that exports `./product` (its `src/product.ts`) is read
+      // from that one value. A declaration is in no app until its package exports it.
+      declared: Object.hasOwn(row.contract?.exports ?? {}, "./product"),
+      implemented: Object.hasOwn(row.host?.exports ?? {}, "./product"),
     }));
 }
 
@@ -158,6 +165,19 @@ export function renderProductAssembly(checkout: string) {
     ];
   });
 
+  const declared = refs(
+    inputs.flatMap((row) => (row.declared && row.contract ? [row.contract] : [])),
+    "product",
+    () => ({ module: "./product", export: "product" }),
+  );
+  const implemented = refs(
+    inputs.flatMap((row) => (row.implemented && row.host ? [row.host] : [])),
+    "host",
+    () => ({ module: "./product", export: "host" }),
+  );
+  const of = (rows: readonly { alias: string }[], member: string) =>
+    rows.map((row) => row.alias + "." + member);
+
   const lines = (...groups: ReadonlyArray<readonly { line: string }[]>) =>
     groups.flat().map((row) => row.line);
   const list = (rows: readonly { alias: string }[]) => rows.map((row) => row.alias);
@@ -188,7 +208,11 @@ export function renderProductAssembly(checkout: string) {
     "builtinCommands",
     ...list(ownCommands),
     ...list(tools).map((tool) => tool + ".commands"),
+    ...of(declared, "commands"),
   ];
+  // A literal `id` types the computed key, so Pea's tool table keeps one named member per product.
+  const declaredTools = declared.map((row) => `[${row.alias}.id]: ${row.alias}.tool`);
+  const readTables = [...list(reads), ...of(declared, "reads")];
   // Command-table generation loads the action registry before it can load the linked catalog.
   const catalogChecks = [
     ...axes.map(
@@ -208,14 +232,24 @@ export function renderProductAssembly(checkout: string) {
       ...(catalogChecks.length
         ? ['import { assertProductCatalogKeys } from "@pe/agent-contracts/pe-api";']
         : []),
-      ...lines(tools, ownCommands, axes, policies),
+      ...lines(tools, ownCommands, axes, policies, declared),
       ...catalogChecks,
       "const productTools = { " + entries("tool", tools) + " };",
-      'assertUniqueProductKeys("tool", [builtinTools, productTools]);',
+      'assertUniqueProductKeys("tool", [' +
+        ["builtinTools", "productTools", ...declaredTools.map((tool) => "{ " + tool + " }")].join(
+          ", ",
+        ) +
+        "]);",
       'assertUniqueProductKeys("command", [' + commandTables.join(", ") + "]);",
       "export const tools: typeof builtinTools & { " +
         tools.map((row) => JSON.stringify(row.key) + ": typeof " + row.alias).join("; ") +
-        " } = { ...builtinTools, ...productTools };",
+        " }" +
+        declared
+          .map((row) => ` & { [K in typeof ${row.alias}.id]: typeof ${row.alias}.tool }`)
+          .join("") +
+        " = { " +
+        [spreads(["builtinTools", "productTools"]), ...declaredTools].join(", ") +
+        " };",
       "export const commands = { " + spreads(commandTables) + " };",
       "export const hostActions = withHostActions(commands);",
       "export type SemanticActionKey = keyof typeof commands;",
@@ -230,7 +264,7 @@ export function renderProductAssembly(checkout: string) {
       'import { createPeCatalog, httpRoutes, type PeCatalog } from "@pe/agent-contracts/pe-api";',
       'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
       'import { hostActions } from "./product-actions.generated.ts";',
-      ...lines(reads, routes, axes, policies),
+      ...lines(reads, routes, axes, policies, declared),
       "const routes = { " + spreads(list(routes)) + " };",
       "const axes = { " + spreads(list(axes)) + " };",
       "const callPolicies = { " + spreads(list(policies)) + " };",
@@ -239,17 +273,13 @@ export function renderProductAssembly(checkout: string) {
         "]);",
       'assertUniqueProductKeys("call policy", [' + list(policies).join(", ") + "]);",
       'assertUniqueProductKeys("named read", [' +
-        list(reads)
-          .map((alias) => alias + ".inputs")
-          .join(", ") +
+        readTables.map((alias) => alias + ".inputs").join(", ") +
         "]);",
       "type ProductCatalog = PeCatalog<typeof httpRoutes & typeof routes>;",
       "const catalog: ProductCatalog = createPeCatalog(hostActions, {",
-      "  inputs: { " + spreads(list(reads).map((alias) => alias + ".inputs")) + " },",
+      "  inputs: { " + spreads(readTables.map((alias) => alias + ".inputs")) + " },",
       "  help: [" +
-        list(reads)
-          .map((alias) => alias + ".help")
-          .join(", ") +
+        readTables.map((alias) => alias + ".help").join(", ") +
         '].filter(Boolean).join(" "),',
       "}, { routes, axes, callPolicies, resourceReads: [...new Set([...Object.keys(callPolicies), ..." +
         JSON.stringify(resourceReads) +
@@ -285,8 +315,10 @@ export function renderProductAssembly(checkout: string) {
       "});",
     ),
     [productAssemblyPaths.guides]: source(
-      ...lines(guides, preflights),
-      "export const productGuides = [" + list(guides).join(", ") + "] as const;",
+      ...lines(guides, preflights, declared),
+      "export const productGuides = [" +
+        [...list(guides), ...of(declared, "guide")].join(", ") +
+        "] as const;",
       "export const productAdmissionPreflights = [" + list(preflights).join(", ") + "] as const;",
     ),
     [productAssemblyPaths.executors]: source(
@@ -295,7 +327,7 @@ export function renderProductAssembly(checkout: string) {
       'import type { HostNativeRead } from "@pe/host-internal/native-read";',
       'import type { FamilyActionDependencies } from "./family-actions.ts";',
       'import type { CommandExecutor } from "@pe/host-internal/command-executor";',
-      ...lines(executors),
+      ...lines(executors, implemented),
       'export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"]; projectLifetime?: (target: DocumentRef) => Promise<NativeProcess> } = {}) {',
       "  const result: Record<string, CommandExecutor> = {};",
       ...executors.map(
@@ -305,6 +337,12 @@ export function renderProductAssembly(checkout: string) {
           "(" +
           row.arguments.join(", ") +
           '))) { if (result[key]) throw Error("Duplicate product executor " + key); result[key] = executor; }',
+      ),
+      ...implemented.map(
+        (row) =>
+          "  for (const [key, body] of Object.entries(" +
+          row.alias +
+          '.commands)) { if (result[key]) throw Error("Duplicate product executor " + key); result[key] = body(bridge, deps); }',
       ),
       "  return { executors: result, sheetRoutes: { " +
         entries("sheet route", sheetRoutes) +
@@ -326,9 +364,13 @@ export function renderProductAssembly(checkout: string) {
   return {
     outputs,
     dependencies: {
-      "ts/packages/mcps/package.json": names(contracts),
+      "ts/packages/mcps/package.json": names([
+        ...contracts,
+        ...inputs.map((row) => (row.declared ? row.contract : undefined)),
+      ]),
       "ts/apps/host/package.json": names([
         ...hosts,
+        ...inputs.map((row) => (row.implemented ? row.host : undefined)),
         ...inputs.filter((row) => row.route).flatMap((row) => [row.host, row.contract]),
       ]),
       "ts/apps/web/package.json": names(inputs.filter((row) => row.route).map((row) => row.web)),
