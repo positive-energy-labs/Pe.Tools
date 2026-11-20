@@ -1,11 +1,19 @@
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { expect, test } from "vite-plus/test";
 
 // A Pod bundles only what it imports; the evaluator drags effect in through the agent-contracts
 // barrel, so the Pod's read door has its own effect-free module (the subject-ref door's rule).
 test("the Pod read door imports only zod and effect-free subpaths", () => {
-  const source = readFileSync(new URL("../src/reads/door.ts", import.meta.url), "utf8");
-  const imports = [...source.matchAll(/^(import|export)( type)? .* from "([^"]+)";$/gm)].map((m) => `${m[2] ? "type " : ""}${m[3]}`);
+  const door = new URL(import.meta.resolve("@pe/host-internal/read-graph"));
+  const source = ts.createSourceFile("door.ts", readFileSync(door, "utf8"), ts.ScriptTarget.Latest);
+  const imports = source.statements.flatMap(statement => {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteral(statement.moduleSpecifier))
+      return [(statement.importClause?.isTypeOnly ? "type " : "") + statement.moduleSpecifier.text];
+    if (ts.isExportDeclaration(statement) && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier))
+      return [(statement.isTypeOnly ? "type " : "") + statement.moduleSpecifier.text];
+    return [];
+  });
   expect(imports).toEqual([
     "zod",
     "@pe/agent-contracts/target",
@@ -19,5 +27,5 @@ test("the Pod read door imports only zod and effect-free subpaths", () => {
     "type ./evaluator.ts",
     "type @pe/agent-contracts/handle",
   ]);
-  expect(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).exports["./read-graph"]).toBe("./src/reads/door.ts");
+  expect(door.href).toBe(new URL("../../../packages/host-internal/src/reads/door.ts", import.meta.url).href);
 });

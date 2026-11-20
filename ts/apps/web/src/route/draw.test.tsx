@@ -3,7 +3,7 @@
 // `settled` (test-journey.ts) in jsdom, and `readMarks` (tests/e2e/marks.ts), the function a CDP
 // journey runs in Chrome.
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -51,9 +51,12 @@ test("D18 a hidden Place's loading drawing does not hold the shown page", () => 
 });
 
 test("D18 one boundary owns the loading fallback: no other source writes it", () => {
-  const src = join(dirname(fileURLToPath(import.meta.url)), "..");
-  const writers = readdirSync(src, { recursive: true, encoding: "utf8" })
-    .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
-    .filter((file) => readFileSync(join(src, file), "utf8").includes("Loading drawing"));
-  expect(writers.map((file) => file.replaceAll("\\", "/"))).toEqual(["route/draw.tsx"]);
+  const root = fileURLToPath(new URL("../../../../", import.meta.url));
+  const writers = ["apps/web/src", "packages/web-kernel/src"].flatMap(dir =>
+    readdirSync(join(root, dir), { recursive: true, encoding: "utf8" })
+      .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
+      .filter((file) => readFileSync(join(root, dir, file), "utf8").includes("Loading drawing"))
+      .map(file => dir + "/" + file.replaceAll("\\", "/")),
+  );
+  expect(writers).toEqual(["packages/web-kernel/src/route/draw.tsx"]);
 });
