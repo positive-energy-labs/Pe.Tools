@@ -284,7 +284,7 @@ test("the legend is a floater that folds with the field, never the pane's fixed 
   expect(container.querySelector("[data-floater='legend']")?.textContent).toContain("health key");
 });
 
-test("a declared plan mounts the registered PNG and routes polygon attention through the pane", async () => {
+test("a screen declaration mounts the registered PNG and routes polygon attention through the pane", async () => {
   const route = declaredPlan();
   expect(route.spec.panes).toHaveProperty(
     "picture",
