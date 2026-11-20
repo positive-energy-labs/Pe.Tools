@@ -34,7 +34,10 @@ export const roomEditAddress = (key: string) => {
 
 const choosePlan = "Choose a plan view.";
 const choosePlanId = "Choose a plan view by its Revit view id.";
-export const roomsViewId = z.int({ error: choosePlanId }).positive();
+export const roomsViewId = z
+  .int({ error: choosePlan })
+  .positive({ error: choosePlan })
+  .meta({ description: choosePlanId });
 
 const point = z.tuple([z.number(), z.number()]);
 /** Where feedback points: model feet on one plan view of one level. R-numbers are display only. */

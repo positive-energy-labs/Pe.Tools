@@ -67,7 +67,7 @@ const definitions = {
   },
   "rooms.partition": {
     native: ["rooms.partition"],
-    says: "Partition every zone drawn on one plan view into rooms, keeping locked and matched rooms.",
+    says: "Partition every zone on a plan selected by numeric Revit view id, keeping locked and matched rooms.",
     needs: "project-document",
     effect: "command",
     // rejected: standing "not a room" rings (model feet, outer only); a face at IoU >= 0.6 is held `rejected`.
@@ -76,7 +76,7 @@ const definitions = {
   },
   "rooms.draw": {
     native: ["takeoffs.initialize-carrier", "rooms.draw"],
-    says: "Draw one room (locked) or zone region from loops on a plan view.",
+    says: "Draw one room (locked) or zone region from loops on a plan selected by numeric Revit view id.",
     needs: "project-document",
     effect: "command",
     input: z.object({
@@ -85,9 +85,10 @@ const definitions = {
           error: (issue) =>
             issue.input === undefined
               ? "No room draw is staged with a plan view. Nothing was written."
-              : "Choose a plan view by its Revit view id.",
+              : "Choose a plan view.",
         })
-        .positive(),
+        .positive({ error: "Choose a plan view." })
+        .meta({ description: "Choose a plan view by its Revit view id." }),
       loops: z.array(loop).min(1),
       name: z.string().nullable().optional(),
       role: z.enum(["room", "zone"]).optional(),
@@ -121,7 +122,7 @@ const definitions = {
   },
   "rooms.merge": {
     native: ["takeoffs.initialize-carrier", "rooms.merge"],
-    says: "Combine two or more touching rooms of one zone on one plan view into one locked room.",
+    says: "Combine two or more touching rooms of one zone on a plan selected by numeric Revit view id into one locked room.",
     needs: "project-document",
     effect: "command",
     input: z.object({

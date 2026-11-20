@@ -71,7 +71,7 @@ it("a name-only Rooms intent stays editable but asks for a plan id before dispat
   const input = commands["rooms.partition"].authoredInput;
   const failed = input.safeParse(work.writeIntent?.["rooms.partition"]?.edit?.value);
   expect(failed.success).toBe(false);
-  expect(message(failed.error)).toContain("Choose a plan view");
+  expect(message(failed.error)).toBe("view: Choose a plan view.");
   expect(work.marks.old?.edit?.value.anchor.view).toBeNull();
   for (const view of [9948, 1371629]) expect(input.parse({ view })).toEqual({ view });
 });
