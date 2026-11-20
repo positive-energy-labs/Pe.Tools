@@ -182,7 +182,22 @@ test.each(["adopt", "partition"] as const)(
   },
 );
 
-test.each(["selected", "unrelated", "none", "gone", "unreadable", "elsewhere"] as const)(
+const rosterRefusals = {
+  newer: "the stored _PE_RoomsRegions blob is unreadable (a newer Pe wrote version 2; update Pe)",
+  recoverable:
+    "Rooms data needs a regions map. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.",
+};
+
+test.each([
+  "selected",
+  "unrelated",
+  "none",
+  "gone",
+  "unreadable",
+  "elsewhere",
+  "newer",
+  "recoverable",
+] as const)(
   "recorded Rooms sheet admission fences %s changes and a current preview retires only confirmed field values",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
@@ -248,6 +263,8 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable", "elsewhere"] a
     try {
       if (changed === "unreadable")
         native.reportTakeoffReplacements({ regions: unreadableRooms, registry: null });
+      if (changed === "newer" || changed === "recoverable")
+        native.reportRoomsUnreadable(rosterRefusals[changed]);
       await work.publish(
         key,
         "rooms",
@@ -287,6 +304,16 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable", "elsewhere"] a
         for (const command of ["rooms.partition.preview", "rooms.partition"])
           expect(await submit(command, command, staged)).toMatchObject(fenced);
         expect(native.calls).toEqual([]);
+        return;
+      }
+      if (changed === "newer" || changed === "recoverable") {
+        // The roster's native reason is shown as given: no recovery advice for a record a newer Pe wrote.
+        expect(preview).toMatchObject({
+          state: "failed",
+          notDispatched: true,
+          error: rosterRefusals[changed],
+          refusal: { kind: "domain", code: "rooms.record-unreadable" },
+        });
         return;
       }
       if (changed === "unreadable") {

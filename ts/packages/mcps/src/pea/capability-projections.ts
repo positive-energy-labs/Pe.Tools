@@ -14,7 +14,7 @@ import {
   type PackageProjection,
   type ViewRoute,
 } from "@pe/agent-contracts";
-import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey } from "./product-operations.generated.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { opWrites } from "../shared/admission.ts";
 import type { SkillSnapshot } from "./skill-publication.ts";

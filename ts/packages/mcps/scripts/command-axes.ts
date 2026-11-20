@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationCatalog } from "../src/pea/product-operations.generated.ts";
 import { hostActions } from "../src/pea/product-actions.generated.ts";
 import type { Command } from "@pe/agent-contracts";
 import { nativeAxes, type CatalogAxes } from "@pe/agent-contracts/catalog";

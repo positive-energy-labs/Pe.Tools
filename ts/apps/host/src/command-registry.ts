@@ -8,7 +8,7 @@ import {
 } from "./command-reads.ts";
 import { workStartExecutor } from "./work-start.ts";
 import { findingsExecutors } from "./slots/findings.ts";
-import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
+import { isAnyOperationKey } from "@pe/mcps/product-operations";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
 import { CatalogCommand, catalogCommandContext } from "@pe/host-internal/catalog-command-context";
 import type { CommandExecutor, CommandRegistry } from "@pe/host-internal/command-executor";

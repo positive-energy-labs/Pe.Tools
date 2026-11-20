@@ -8,7 +8,7 @@ import { resourceResponse, observeResources, RouteWorkspace } from "@pe/runtime"
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { fixtureNative } from "./fixture-native.ts";
 import { approvedPea } from "./callers.ts";
 import { rm } from "node:fs/promises";

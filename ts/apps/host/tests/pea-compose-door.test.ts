@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test, vi } from "vite-plus/test";
 import { peDo, buildCapabilities } from "@pe/mcps";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { withInvocationContext } from "@pe/runtime/context";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
 import { readAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";

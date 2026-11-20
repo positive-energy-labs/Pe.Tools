@@ -1,11 +1,8 @@
 import { readSessionScope, SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import { HttpRouter, type HttpServerRequest, HttpServerResponse as Response } from "effect/http";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  isTsOnlyOperationKey,
-  tsOnlyOperationCatalog,
-} from "@pe/host-contracts/operation-types";
+import { HOST_RPC_BRIDGE_SESSION_HEADER } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { RevitBridge } from "@pe/host-internal/bridge";
 import { NoRevitSession } from "@pe/host-internal/dispatch";
 import { HostNativeRead } from "@pe/host-internal/native-read";

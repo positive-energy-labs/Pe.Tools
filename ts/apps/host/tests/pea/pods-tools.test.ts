@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { settingsRouteState, workWriteSchema, type Publication } from "@pe/agent-contracts";
 import { projectRouteRead } from "../../src/reads/routes.ts";
 import { routeRegistry } from "../../src/routes.generated.ts";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace.ts";
 import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes.ts";
 import { buildCapabilities } from "../../../../packages/mcps/src/pea/capabilities.ts";

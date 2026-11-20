@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import {
-  tsOnlyOperationSchemas,
+  builtinLocalSchemas,
   type OpRequestOf,
   type OpResponseOf,
 } from "@pe/host-contracts/operation-types";
@@ -17,7 +17,7 @@ type LocalOutput<K extends LocalReadKey> = JsonData<
   K extends "pod.list" ? Extract<OpResponseOf<K>, { pods: unknown }> : OpResponseOf<K>
 >;
 export const localRead = <K extends LocalReadKey>(key: K) => {
-  const contract = tsOnlyOperationSchemas[key];
+  const contract = builtinLocalSchemas[key];
   const input = effectDecoder(contract.request) as unknown as z.ZodType<OpRequestOf<K>>;
   const output = effectDecoder(contract.response) as unknown as z.ZodType<LocalOutput<K>>;
   return leaf(`local:${key}`, input, output);
