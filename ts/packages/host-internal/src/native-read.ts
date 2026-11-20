@@ -12,6 +12,8 @@ export interface NativeReadInput {
   readonly key: string;
   readonly input: unknown;
   readonly scope: HostSessionScope;
+  /** A publication can keep its last Value while an earlier native read settles. */
+  readonly waitForRetirement?: boolean;
 }
 
 /** The one native Read admission (ADR 0029 rule 16): every call is admitted for its own caller,

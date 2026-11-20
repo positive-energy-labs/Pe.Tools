@@ -125,7 +125,14 @@ export interface InputPort {
   /** Synchronous event revision: also fences a change while final validation is awaiting I/O. */
   readonly revision: (name: string, args: unknown) => number;
 }
-export class RefreshNeeded extends Error {}
+export class RefreshNeeded extends Error {
+  constructor(
+    message: string,
+    readonly input?: string,
+  ) {
+    super(message);
+  }
+}
 export class RefusedPartition extends Error {}
 /** A lasting refusal's reason reaches the pane, so it names the input in words, never its args as JSON. */
 const moved = (name: string, args: unknown, when = "while this was being read") =>
@@ -226,7 +233,7 @@ export async function evaluate<I, O>(
           trace.push({ recipe, name: definition.name, args, outcome: "answered", hash });
           if ("leaf" in definition) {
             if (port.revision(definition.name, args) !== revision)
-              throw new RefreshNeeded(moved(definition.name, args));
+              throw new RefreshNeeded(moved(definition.name, args), definition.name);
             if (definition.validate) checks.set(recipe, { definition, args, hash, revision });
           }
           return data;
@@ -323,12 +330,14 @@ export async function evaluate<I, O>(
       outcome: "answered",
       hash,
     });
-    if (hash !== check.hash) throw new RefreshNeeded(moved(check.definition.name, check.args));
+    if (hash !== check.hash)
+      throw new RefreshNeeded(moved(check.definition.name, check.args), check.definition.name);
   }
   for (const check of checks.values())
     if (port.revision(check.definition.name, check.args) !== check.revision)
       throw new RefreshNeeded(
         moved(check.definition.name, check.args, "before this could be shown"),
+        check.definition.name,
       );
   const dependencies = trace.sort(
     (a, b) => a.recipe.localeCompare(b.recipe) || a.outcome.localeCompare(b.outcome),

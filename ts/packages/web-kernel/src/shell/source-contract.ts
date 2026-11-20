@@ -50,7 +50,7 @@ export type ReadingPublication<T = unknown> =
       fresh?: boolean;
       reason?: string;
     }
-  | { kind: "pending" | "stale" }
+  | { kind: "pending" | "stale" | "document-changed" }
   | { kind: "failure"; error: unknown }
   | { kind: "log"; value: unknown; id?: string };
 

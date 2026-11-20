@@ -273,6 +273,37 @@ effectTest(
     }),
 );
 
+effectTest(
+  "a replacement publication waits for the retiring native read and then reads again",
+  () =>
+    Effect.gen(function* () {
+      const { reads, jobs, answer, cancels } = yield* harness;
+      const prepared = yield* prepare();
+      const old = yield* reads.join(prepared, "session").pipe(Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      yield* Fiber.interrupt(old);
+      yield* until(() => cancels.length === 1);
+
+      const abandoned = yield* reads
+        .join(prepared, "session", undefined, true)
+        .pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      expect((yield* reads.retained).joiners).toBe(1);
+      yield* Fiber.interrupt(abandoned);
+      expect((yield* reads.retained).joiners).toBe(0);
+
+      const next = yield* reads.join(prepared, "session", undefined, true).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      expect(next.pollUnsafe()).toBeUndefined();
+      expect(jobs).toHaveLength(1);
+      yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+      yield* until(() => jobs.length === 2);
+      yield* answer(1);
+      expect((yield* Fiber.join(next)).nativeRequestId).toBe(jobs[1]!.id);
+      expect(cancels).toHaveLength(1);
+    }),
+);
+
 effectTest("successful values reach surviving joiners and are never cached after terminal", () =>
   Effect.gen(function* () {
     const { reads, jobs, answer, cancels } = yield* harness;
