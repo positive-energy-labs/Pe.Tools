@@ -17,7 +17,7 @@ const mesh = () =>
       documentKey: "doc",
       linkInstanceId: null,
       categoryId: null,
-      category: "Ducts",
+      category: "Pipes",
       focus: true,
       firstVertex: 0,
       vertexCount: 3,

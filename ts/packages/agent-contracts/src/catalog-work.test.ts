@@ -6,13 +6,13 @@ import { address } from "./target.ts";
 
 describe("Work identity", () => {
   const from = { session: "s", openId: "o" };
-  const saved = bindWork("ducts", address("C:/Jobs/A.rvt"), undefined, from);
-  const plain = bindWork("ducts", address("c:\\jobs\\a.rvt"));
+  const saved = bindWork("pipes", address("C:/Jobs/A.rvt"), undefined, from);
+  const plain = bindWork("pipes", address("c:\\jobs\\a.rvt"));
 
   it("folds address spelling into one key and keeps Save As from until carry-over", () => {
     expect(workKey(saved)).toBe(workKey(plain));
     expect(canonicalWorkKey(saved)).toEqual({ ...plain, target: "c:\\jobs\\a.rvt", from });
-    expect(workKey(bindWork("ducts", null, undefined, from))).not.toBe(workKey(plain));
+    expect(workKey(bindWork("pipes", null, undefined, from))).not.toBe(workKey(plain));
   });
 });
 

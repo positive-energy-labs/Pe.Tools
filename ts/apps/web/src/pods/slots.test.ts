@@ -11,19 +11,19 @@ import { memberFields, fieldsEmpty } from "./fields.tsx";
 import { titlePane } from "../shell/typed-shell.tsx";
 import { member, module } from "./route.ts";
 
-const code = podMemberCode({ pod: "share-ducts", path: "settings/checks.json" });
+const code = podMemberCode({ pod: "share-pipes", path: "settings/checks.json" });
 const saved = '{"$schema":"./checks.schema.json","maxSystems":25,"names":["Elbow","Tee"],"a/b":1}';
 const read = (basis: boolean, fields: Record<string, unknown> = {}) => ({
-  scope: { pod: "share-ducts", path: "settings/checks.json", runs: "member" as const },
+  scope: { pod: "share-pipes", path: "settings/checks.json", runs: "member" as const },
   member: {
-    member: { pod: "share-ducts", path: "settings/checks.json" },
+    member: { pod: "share-pipes", path: "settings/checks.json" },
     content: saved,
     sha256: "f".repeat(64),
   },
   work: {
     basis: basis
       ? {
-          member: { pod: "share-ducts", path: "settings/checks.json" },
+          member: { pod: "share-pipes", path: "settings/checks.json" },
           rawContent: saved,
           sha256: "f".repeat(64),
         }
@@ -42,11 +42,11 @@ const read = (basis: boolean, fields: Record<string, unknown> = {}) => ({
 });
 
 test("the member is a name SubjectRef over [pod, path], and only that kind decodes", () => {
-  expect(code).toBe('name:["share-ducts","settings%2fchecks.json"]');
-  expect(podMemberOfCode(code)).toEqual({ pod: "share-ducts", path: "settings/checks.json" });
-  expect(podMemberOfCode("workspace:share-ducts")).toBeNull();
+  expect(code).toBe('name:["share-pipes","settings%2fchecks.json"]');
+  expect(podMemberOfCode(code)).toEqual({ pod: "share-pipes", path: "settings/checks.json" });
+  expect(podMemberOfCode("workspace:share-pipes")).toBeNull();
   expect(member({ member: { kind: "ids", ids: [code] } })).toEqual({
-    pod: "share-ducts",
+    pod: "share-pipes",
     path: "settings/checks.json",
   });
 });

@@ -20,8 +20,8 @@ const list = {
   places: [
     {
       id: "00000000-0000-4000-8000-000000000001",
-      route: "fans",
-      link: "/fans",
+      route: "pumps",
+      link: "/pumps",
       at: "2026-11-13T00:00:00Z",
     },
   ],

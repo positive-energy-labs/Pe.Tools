@@ -7,7 +7,7 @@ import { expect, test } from "vite-plus/test";
 import { chromeExecutable } from "../../../../packages/browser/src/platform.ts";
 
 // jsdom has no layout, so the real stylesheet is hit-tested in a headless browser. The fixture is
-// the gate drive's measured tab: a 28px "Fans" label and its 24px close (VERDICT fix line 1).
+// the gate drive's measured tab: a 28px route label and its 24px close (VERDICT fix line 1).
 test("a Place tab's label never sits under its close", async () => {
   const dir = mkdtempSync(join(tmpdir(), "route-tabs-"));
   try {

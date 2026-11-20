@@ -7,7 +7,7 @@ import {
   type ResourceObserver,
 } from "../src/resource-stream.ts";
 
-test.each(["hydronic--sizing", "snowdon-circuits--tour", "snowdon-ducts--tour"])(
+test.each(["hydronic--sizing", "snowdon-circuits--tour", "snowdon-pipes--tour"])(
   "the captured %s update decodes",
   (slug) => {
     const body = { add: [{ kind: "page-target", slug }], remove: [] };

@@ -50,7 +50,7 @@ const instance = (primitive: ScenePrimitive, id = 1): SceneInstance => ({
   uniqueId: String(id),
   documentKey: "test",
   linkInstanceId: null,
-  category: "Ducts",
+  category: "Pipes",
   categoryId: -2008000,
   focus: true,
   firstVertex: 0,

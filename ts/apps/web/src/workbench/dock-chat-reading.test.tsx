@@ -26,9 +26,9 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 test.each([
-  ["/fans?fixture=scene", true],
-  ["/duct-systems?fixture=navigation", true],
-  ["/fans?fixture=scene", false],
+  ["/pumps?fixture=scene", true],
+  ["/pipe-systems?fixture=navigation", true],
+  ["/pumps?fixture=scene", false],
 ] as const)("Pea beside %s settles and labels fixture origin %s", async (href, demo) => {
   window.history.replaceState({}, "", href);
   vi.stubGlobal(

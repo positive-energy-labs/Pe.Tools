@@ -45,4 +45,4 @@ test("cold native command admission and its recorded outcome cross the real brid
   }
 });
 // Lost/late native replies and fabricated validation failures are no longer emulated here.
-// Root Stop/run lifetime has the real-admission Fans and harness surface homes listed in the sweep report.
+// Root Stop/run lifetime has the real-admission product and harness surface homes listed in the sweep report.

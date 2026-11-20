@@ -66,7 +66,7 @@ import {
 
 type Builtin = BodyBindings<typeof builtinData, typeof schemas, typeof entries, string>;
 type Pod = BodyBindings<typeof podData, typeof schemas, typeof podEntries, string>;
-type Ducts = BodyBindings<typeof multiSubjectData, typeof schemas, typeof entries, string>;
+type Pipes = BodyBindings<typeof multiSubjectData, typeof schemas, typeof entries, string>;
 
 /** Never executed. tsc checks every refusal with declarations ON; Vitest checks the data. */
 export function typeRefusals(
@@ -127,11 +127,11 @@ export function typeRefusals(
     // @ts-expect-error derive must return its referenced schema, not an arbitrary value
     run: () => ({ total: "bad" }),
   };
-  const ducts: Ducts["calculate"] = {
+  const pipes: Pipes["calculate"] = {
     ...builtinBodies.calculate,
-    run: ({ page: ductsPage }) => {
+    run: ({ page: pipesPage }) => {
       // @ts-expect-error changing the subject cardinality invalidates scalar body code
-      ductsPage.system.toUpperCase();
+      pipesPage.system.toUpperCase();
       return { total: 1 };
     },
   };
@@ -214,7 +214,7 @@ export function typeRefusals(
     picker,
     pod,
     wrongDerive,
-    ducts,
+    pipes,
     edit,
     command,
     pane,

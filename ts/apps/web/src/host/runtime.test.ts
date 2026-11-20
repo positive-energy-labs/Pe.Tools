@@ -81,7 +81,7 @@ test("a write refused context.missing after a host restart re-admits through a n
   vi.stubGlobal("fetch", fetcher);
   sessionStorage.clear();
   try {
-    const write = hostFetch("/pe/route-view/fans", { method: "PUT", body: '{"a":1}' });
+    const write = hostFetch("/pe/route-view/pumps", { method: "PUT", body: '{"a":1}' });
     // The first send is already refused; the host admits what follows the navigation.
     admitted = true;
     const navigation = await answerNavigation();
@@ -172,11 +172,11 @@ test("a write sent during a re-admission waits for it, so the host receives writ
   );
   sessionStorage.clear();
   try {
-    const first = hostFetch("/pe/route-view/fans", { method: "PUT", body: "first" });
+    const first = hostFetch("/pe/route-view/pumps", { method: "PUT", body: "first" });
     await vi.waitFor(() => expect(document.querySelector("iframe")).not.toBeNull());
     // The navigation's response headers have minted the context; its `load` has not fired yet.
     admitted = true;
-    const second = hostFetch("/pe/route-view/fans", { method: "PUT", body: "second" });
+    const second = hostFetch("/pe/route-view/pumps", { method: "PUT", body: "second" });
     await new Promise((resolve) => setTimeout(resolve, 20));
     await answerNavigation();
     expect((await first).status).toBe(200);
@@ -203,7 +203,7 @@ test("the admission layer's { refusal } envelope re-admits as the { error } one 
   vi.stubGlobal("fetch", fetcher);
   sessionStorage.clear();
   try {
-    const write = hostFetch("/pe/route-view/fans", { method: "PUT", body: "{}" });
+    const write = hostFetch("/pe/route-view/pumps", { method: "PUT", body: "{}" });
     admitted = true;
     await answerNavigation();
     expect((await write).status).toBe(200);

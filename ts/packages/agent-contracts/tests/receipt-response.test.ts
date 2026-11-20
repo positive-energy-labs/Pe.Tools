@@ -21,7 +21,7 @@ test("an SDK step needs a decoded op receipt to carry touched", () => {
   expect(actionStepSchema.safeParse({ ...step, transport: "sdk", touched }).success).toBe(false);
   expect(actionStepSchema.safeParse({ ...step, touched }).success).toBe(false);
   expect(actionStepSchema.safeParse({ ...step, transport: "bridge", touched }).success).toBe(true);
-  const op = { ...step, key: "takeoffs.partition" };
+  const op = { ...step, key: "surveys.partition" };
   const opReceipt = {
     requestId: op.id,
     key: op.key,

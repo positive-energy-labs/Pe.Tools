@@ -36,11 +36,11 @@ test("receipt projections remain representable as the public JSON schema", () =>
   expect(z.toJSONSchema(actionStatusSchema)).toBeDefined();
 });
 
-test("rooms partition progress carries known counts through the action status", () => {
+test("zones partition progress carries known counts through the action status", () => {
   const progress = { phase: "Solve", zonesDone: 1, zonesTotal: 2 };
   const row = actionStatusSchema.parse({
     id: "one",
-    key: "rooms.partition",
+    key: "zones.partition",
     state: "running",
     caller: { kind: "human", via: "local" },
     basis: null,
@@ -112,7 +112,7 @@ test.each([
   { kind: "stale", consumed: [] },
   {
     kind: "stale_revision",
-    handle: { key: { route: "fans", binding: "host", target: null }, revision: 1 },
+    handle: { key: { route: "pumps", binding: "host", target: null }, revision: 1 },
     live: 2,
   },
 ])("undispatched $kind refusals do not offer retry", (refusal) => {

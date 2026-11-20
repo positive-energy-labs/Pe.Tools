@@ -8,7 +8,7 @@ import { address } from "@pe/agent-contracts";
 import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract/product";
 import { captureStore, testRegistry, testDocumentMarks } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
-import { withRoomsSheet } from "./rooms-sheet.ts";
+import { withRoomsSheet } from "@pe/rooms-host/tests/rooms-sheet";
 import { nativeRecordingRequest } from "../native-recordings.ts";
 import { bindControl } from "../../src/control.ts";
 import { nativeRequestSchema } from "@pe/host-contracts/decoders";

@@ -4,7 +4,7 @@
   "include": [
     "typed-page.ts",
     "product-selection*.ts",
-    "../journey-fixtures/fans-reds*.ts",
+    "../../products/fans/web/journeys/fans-reds*.ts",
     "route-chaos-launch.ts"
   ]
 }

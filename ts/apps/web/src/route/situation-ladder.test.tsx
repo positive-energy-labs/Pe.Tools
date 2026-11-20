@@ -124,7 +124,7 @@ function holdingsMachine() {
         holdings: {
           elements: Array.from({ length: 100000 }, (_, id) => ({
             id,
-            category: "Ducts",
+            category: "Pipes",
             name: "HELD_ELEMENT_SENTINEL",
             changedSinceSync: null,
             requesters: [],

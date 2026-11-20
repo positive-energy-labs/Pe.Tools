@@ -14,7 +14,7 @@ import {
   takeoffEditKey,
   takeoffObservationSchema,
 } from "@pe/rooms-contract/takeoffs";
-import { demoSeedCodec } from "./demo-seed.ts";
+import { demoSeedCodec } from "@pe/rooms-host/tests/demo-seed";
 import { landings } from "@pe/agent-contracts/product";
 import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract/product";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
@@ -29,7 +29,7 @@ import {
   testRegistry,
 } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
-import { withRoomsSheet } from "./rooms-sheet.ts";
+import { withRoomsSheet } from "@pe/rooms-host/tests/rooms-sheet";
 import { sdkSessions } from "../native-receipt-fixture.ts";
 import { nativeRecordingRequest } from "../native-recordings.ts";
 import syncSeed from "./fixtures/sync-seed.json" with { type: "json" };

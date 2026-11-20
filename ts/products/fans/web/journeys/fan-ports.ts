@@ -1,6 +1,6 @@
 // The F1 rule "the URL's fans agree with the roster selection", as a pure check. A fan port id is
 // a SubjectRef code `UniqueId:<unit>#port:<n>`; it is decoded through the one codec, never a regex.
-import { decode } from "../../packages/agent-contracts/src/subject-ref.ts";
+import { decode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 
 /** "FC-23 · Level 1/Main Level / port 1" → { mark: "FC-23", port: "1" }; the heading draws mark · port. */
 export const part = (label: string) => {

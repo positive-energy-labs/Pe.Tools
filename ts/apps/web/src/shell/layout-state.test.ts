@@ -8,18 +8,18 @@ test("device layout validates persisted data and tolerates unavailable storage",
     setItem: (key: string, value: string) => values.set(key, value),
   });
   try {
-    writeLayoutState("rooms", { plan: { folded: true, sizes: { seam: 320 } } });
-    expect(readLayoutState("rooms")).toEqual({ plan: { folded: true, sizes: { seam: 320 } } });
+    writeLayoutState("zones", { plan: { folded: true, sizes: { seam: 320 } } });
+    expect(readLayoutState("zones")).toEqual({ plan: { folded: true, sizes: { seam: 320 } } });
     values.set(
-      "rooms",
+      "zones",
       JSON.stringify({
         plan: { folded: "bad", sizes: { seam: -5, good: 200, bad: "x" } },
         broken: null,
       }),
     );
-    expect(readLayoutState("rooms")).toEqual({ plan: { sizes: { good: 200 } } });
-    values.set("rooms", "{bad");
-    expect(readLayoutState("rooms")).toEqual({});
+    expect(readLayoutState("zones")).toEqual({ plan: { sizes: { good: 200 } } });
+    values.set("zones", "{bad");
+    expect(readLayoutState("zones")).toEqual({});
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw Error("disabled");
@@ -28,8 +28,8 @@ test("device layout validates persisted data and tolerates unavailable storage",
         throw Error("disabled");
       },
     });
-    expect(readLayoutState("rooms")).toEqual({});
-    expect(() => writeLayoutState("rooms", {})).not.toThrow();
+    expect(readLayoutState("zones")).toEqual({});
+    expect(() => writeLayoutState("zones", {})).not.toThrow();
   } finally {
     vi.unstubAllGlobals();
   }

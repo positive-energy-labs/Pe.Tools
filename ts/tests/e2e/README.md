@@ -200,7 +200,7 @@ A missing precondition (no Revit bridge, no seed, wrong chips) ends as `RESULT: 
 
 From `ts`, on an `acceptance.py setup <run> --web` drive with your own `pea browser launch` (headless, 1600x900):
 
-    CDP_PORT=… CDP_TARGET=… E2E_WEB=<frontend> E2E_SESSION=acc-<run> node tests/journey-fixtures/f1-fans.ts [--seed N] [--walk 30] [--steps open,reopenPlace,reload]
+    CDP_PORT=… CDP_TARGET=… E2E_WEB=<frontend> E2E_SESSION=acc-<run> node products/fans/web/journeys/f1-fans.ts [--seed N] [--walk 30] [--steps open,reopenPlace,reload]
 
 Under Git Bash, set `MSYS_NO_PATHCONV=1`, or a `/regex/` argument is rewritten into a Windows path. The run writes `steps.jsonl` (action, draws, settle time in ms, rule results, notes), `errors.json`, one screenshot per failing step plus `final.png`, and a `run.log` result line that carries the seed. Every walk starts at `open`.
 

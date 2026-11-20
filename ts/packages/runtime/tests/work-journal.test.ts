@@ -180,7 +180,7 @@ test("a durable publish remains a barrier after restart even when values return"
 test("receipt-confirmed retirement is committed history after restart, never changed elsewhere", async () => {
   const f = fixture();
   await f.edit("human", "flow-edit", 950);
-  await f.host.publish(f.key, f.key.route, [{ path: ["a"], value: 0 }], 1, "ducts-write");
+  await f.host.publish(f.key, f.key.route, [{ path: ["a"], value: 0 }], 1, "pipes-write");
   f.restart();
   const journal = createWorkJournal(f.key);
   journal.name(() => ({ label: "Edit fan airflow" }));
@@ -190,7 +190,7 @@ test("receipt-confirmed retirement is committed history after restart, never cha
     id: "human:flow-edit",
     by: "human",
     label: "Edit fan airflow",
-    barrier: { receiptId: "ducts-write" },
+    barrier: { receiptId: "pipes-write" },
   });
   expect(journal.read().undo[0]!.superseded).toBeUndefined();
   expect(

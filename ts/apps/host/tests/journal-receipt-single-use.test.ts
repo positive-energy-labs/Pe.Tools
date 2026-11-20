@@ -29,7 +29,7 @@ const unmovedMark = {
 };
 const dispatched = {
   id: "s1",
-  key: "rooms.write",
+  key: "zones.write",
   kind: "native",
   input: {},
   transport: "bridge",
@@ -70,7 +70,7 @@ async function journalAfter(first: object) {
   const dir = await mkdtemp(join(tmpdir(), "pe-receipt-single-use-"));
   const value = persistedActionReceiptSchema.parse({
     id: "first-apply",
-    key: "rooms.write",
+    key: "zones.write",
     target: { kind: "host" },
     input: {},
     caller: human,
@@ -184,7 +184,7 @@ test("an apply refused before it dispatched spends nothing: the same preview app
     steps: [
       {
         id: "s1",
-        key: "rooms.write",
+        key: "zones.write",
         kind: "native",
         input: {},
         state: "failed",

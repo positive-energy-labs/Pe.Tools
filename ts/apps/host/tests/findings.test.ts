@@ -118,7 +118,7 @@ async function doors() {
         findingsWork.schema.parse((await workspace.view(at, "findings"))?.doc ?? {}).findings,
       ),
     /**
-     * `on` is the route whose own Work handle the caller holds; a row verb on /fans holds Fans'.
+     * `on` is the route whose own Work handle the caller holds; a row verb on /pumps holds Pumps'.
      * `on: null` sends no handle, as Pea's first call does: the host binds the target document's.
      * `on` as a handle is sent as it is: one keyed to another document must not carry the write there.
      */
@@ -167,7 +167,7 @@ async function doors() {
       ),
     /** As a client presses undo: it names its route's Work only, and sends back the step the read shows. */
     async undo(caller: Caller, by: "human" | "pea") {
-      const works = [bindWork("fans", target)];
+      const works = [bindWork("pumps", target)];
       const shown = await hostTimeline(workspace, native.journal).read(works, by);
       return this.door("history", { direction: "undo", works, expected: shown.undo }, caller);
     },
@@ -435,11 +435,11 @@ test("the person's undo through the Work history door reverts the person's own f
   }
 });
 
-test("a row verb's own route handle (Fans, Families) addresses the same document's findings Work", async () => {
+test("a row verb's own route handle (Pumps, Families) addresses the same document's findings Work", async () => {
   const d = await doors();
   try {
     await d.say(input("p1", port, "note"), d.peaCaller);
-    await d.say(input("h1", port, "check", "fail"), human, "fans");
+    await d.say(input("h1", port, "check", "fail"), human, "pumps");
     await d.say(input("h2", row, "note"), human, "families");
     expect(await d.authors()).toEqual([
       ["p1", "pea"],

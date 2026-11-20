@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { subjectCode, uniqueIdSchema } from "../../packages/agent-contracts/src/subject-ref.ts";
+import { subjectCode, uniqueIdSchema } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import { fanPortsAgree } from "./fan-ports.ts";
 
 // The id the /fans roster mints (apps/web/src/fans/host.ts): a real `UniqueId:<unit>#port:<n>` code.

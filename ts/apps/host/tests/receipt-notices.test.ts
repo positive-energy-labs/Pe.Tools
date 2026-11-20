@@ -51,7 +51,7 @@ const receipt = (
   revision,
   action: actionReceiptSchema.parse({
     id,
-    key: "revit.ducts.resize",
+    key: "revit.pipes.resize",
     state,
     caller: { kind: "pea", context: "notice", thread: "t1" },
     startedAt: at,

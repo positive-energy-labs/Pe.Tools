@@ -29,7 +29,7 @@ const feed: NoticeFeed = {
       group: "failed",
       revision: 1,
       verb: "failed",
-      what: "revit.ducts.resize",
+      what: "revit.pipes.resize",
       where: "Pea",
       says: "Revit never answered",
       at: "2026-11-10T11:00:00.000Z",
@@ -64,7 +64,7 @@ test("red (slice 6 seam c): home Activity reads the notice feed", async () => {
   const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
   render(<Ledger presentation={LEDGER_PRESENTATIONS.home} />);
   expect(screen.queryByText("Wiring"), GAP).not.toBeNull();
-  expect(screen.queryByText("revit.ducts.resize"), GAP).not.toBeNull();
+  expect(screen.queryByText("revit.pipes.resize"), GAP).not.toBeNull();
   expect(screen.queryByRole("button", { name: /Confirm: send/ })).toBeNull();
 });
 
@@ -98,7 +98,7 @@ test("a tier-save feed row exposes its stored receipt in the overlay DOM", async
   const { Ledger } = await import("./ledger");
   const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
   const receipt = "165c9d43-0e40-457b-b4fa-53d2477964e9";
-  const reason = `kaitp set 800 at ducts criteria.velocityLimitFpm.supply in the project home. Receipt ${receipt}.`;
+  const reason = `kaitp set 800 at pipes criteria.velocityLimitFpm.supply in the project home. Receipt ${receipt}.`;
   const before = feed.rows;
   feed.rows = noticeRows(
     {
@@ -110,7 +110,7 @@ test("a tier-save feed row exposes its stored receipt in the overlay DOM", async
         {
           class: "keep",
           place: SETTING_WRITE_PLACE,
-          path: "project/Settings/ducts.json",
+          path: "project/Settings/pipes.json",
           sha256: "saved",
           at: new Date().toISOString(),
           reason,
@@ -129,7 +129,7 @@ test("a tier-save feed row exposes its stored receipt in the overlay DOM", async
     expect(line.classList.contains("break-all")).toBe(true);
     expect(line.classList.contains("face-mono")).toBe(true);
     expect(feed.rows[0]?.detail).toBe(`Receipt ${receipt}.`);
-    expect(feed.rows[0]?.where).toBe("project/Settings/ducts.json");
+    expect(feed.rows[0]?.where).toBe("project/Settings/pipes.json");
   } finally {
     feed.rows = before;
   }

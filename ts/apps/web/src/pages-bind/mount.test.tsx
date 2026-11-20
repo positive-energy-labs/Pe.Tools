@@ -39,7 +39,7 @@ test("the Bind viewer carries the Page query from the shell URL into the iframe"
  * its slug (`<pod>--<page>`). The body compared the two, so a 200 reading never drew.
  */
 const reading: PageTargetReading = {
-  page: "page:@snowdon-ducts/pages/tour",
+  page: "page:@snowdon-pipes/pages/tour",
   slot: "default",
   binding: { kind: "none" },
   resolution: { kind: "choose", reason: "missing" },
@@ -55,7 +55,7 @@ const mount = () => {
     });
   const ctx = {
     page: {
-      read: () => ({ page: oneName("snowdon-ducts--tour"), view: false, query: {}, fragment: "" }),
+      read: () => ({ page: oneName("snowdon-pipes--tour"), view: false, query: {}, fragment: "" }),
     },
     value: { state: "ready", value: null },
     verb: () => ({ run: vi.fn() }),
@@ -68,7 +68,7 @@ test("a chosen Page's target draws from its Reading without a press, though the 
   expect(await screen.findByText("choose: missing")).toBeTruthy();
   expect(screen.queryByText("no reading yet")).toBeNull();
   expect(stream.subscribe).toHaveBeenCalledWith(
-    { kind: "page-target", slug: "snowdon-ducts--tour" },
+    { kind: "page-target", slug: "snowdon-pipes--tour" },
     expect.any(Function),
   );
 });
@@ -96,7 +96,7 @@ test("D9: a viewed unbound Page shows its chip, the chip reaches the picker, and
     return render(<BindBody ctx={ctx as never} />);
   };
   const viewed = address.link({
-    page: oneName("snowdon-ducts--tour"),
+    page: oneName("snowdon-pipes--tour"),
     view: true,
     query: { walk: "1" },
     fragment: "p3",
@@ -108,7 +108,7 @@ test("D9: a viewed unbound Page shows its chip, the chip reaches the picker, and
   cleanup();
   const picker = at(toPicker);
   expect(picker.getByTestId("pages-bind")).toBeTruthy();
-  expect(picker.queryByTitle("Page snowdon-ducts--tour")).toBeNull();
+  expect(picker.queryByTitle("Page snowdon-pipes--tour")).toBeNull();
   expect(picker.getByRole("link", { name: "Back to the Page" }).getAttribute("href")).toBe(viewed);
 });
 

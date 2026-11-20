@@ -3,7 +3,7 @@ import { leaks } from "./visible-text";
 
 test("Manual D's leaked strings are each caught; their human forms pass", () => {
   for (const bad of [
-    "Fans · 78fb66ed-…@2",
+    "Pumps · 78fb66ed-…@2",
     "FC-23 (00d1f963) / port 0",
     "9cb9f188-28aa-4094-8b76-785395cc35e1-00000002@0",
     "Fitting [1] · Specific Loss: no server → 0.1 in-wg",
@@ -20,7 +20,7 @@ test("Manual D's leaked strings are each caught; their human forms pass", () => 
     expect(leaks(bad), bad).not.toEqual([]);
   expect(leaks("calc-inputs · succeeded", ["calc-inputs"])).toEqual(["internal token calc-inputs"]);
   for (const good of [
-    "Fans · MUAS-1 / port 2",
+    "Pumps · MUAS-1 / port 2",
     "FC-23 · Level 2 / port 0",
     "MUAS 10 · PE_M_Fan_AirFlow: 900 cfm → 950 cfm",
     "Specific Loss 0.03224273 in-wg · 09:45:05 · 1:100",

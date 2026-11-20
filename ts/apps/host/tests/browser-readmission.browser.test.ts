@@ -42,7 +42,7 @@ effectTest(
             ),
           ),
         ),
-        HttpRouter.add("PUT", "/pe/route-view/fans", () =>
+        HttpRouter.add("PUT", "/pe/route-view/pumps", () =>
           Effect.gen(function* () {
             return HttpServerResponse.jsonUnsafe({ caller: (yield* RequestIdentity).caller.kind });
           }),
@@ -70,7 +70,7 @@ effectTest(
           const write = async () => {
             const sent = await page.evaluate(
               async (header: string, service: string) => {
-                const response = await fetch("/pe/route-view/fans", {
+                const response = await fetch("/pe/route-view/pumps", {
                   method: "PUT",
                   headers: { [header]: service, "content-type": "application/json" },
                   body: "{}",
