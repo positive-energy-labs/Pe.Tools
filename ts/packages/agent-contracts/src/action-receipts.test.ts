@@ -149,7 +149,7 @@ test("a receipt written before `emitted` still decodes, and one with it keeps bo
   expect("emitted" in before).toBe(false);
   const emitted = [
     { store: "picture", sha: "a".repeat(64) },
-    { store: "reading", kind: "takeoff", id: "b".repeat(64) },
+    { store: "reading", kind: "kept", id: "b".repeat(64) },
   ];
   expect(actionStatusSchema.parse({ ...old, emitted }).emitted).toEqual(emitted);
   expect(() => actionStatusSchema.parse({ ...old, emitted: [{ store: "other", id: "x" }] })).toThrow();

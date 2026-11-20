@@ -194,7 +194,7 @@ function callRoutes(
   // The injected store, else the `CaptureStore` of the layer that builds these routes (set below,
   // before any handler can run).
   const observations = (): ObservationFiles => {
-    if (!captures) throw Error("Takeoff captures are read before the call route layer is built.");
+    if (!captures) throw Error("Captures are read before the call route layer is built.");
     return captures;
   };
   const owner = () => operations;

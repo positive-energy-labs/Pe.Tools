@@ -228,7 +228,7 @@ export function hostResourceObserver(
   bridge?: RevitBridge["Service"],
   journal?: () => ActionJournal,
   captures: () => ObservationFiles = () => {
-    throw Error("Takeoff captures are unavailable: pass the host's CaptureStore.");
+    throw Error("Captures are unavailable: pass the host's CaptureStore.");
   },
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
