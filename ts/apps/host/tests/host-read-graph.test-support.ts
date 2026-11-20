@@ -410,7 +410,7 @@ export async function fixture(
       nativeHold?.release.resolve();
       for (const hold of holds.values()) hold.release.resolve();
       await web.dispose();
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
     },
   };
 }

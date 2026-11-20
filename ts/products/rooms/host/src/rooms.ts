@@ -1,6 +1,6 @@
 /** The Rooms model writes. Each is one native leaf behind the carrier pattern of `takeoffs.ts`. */
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import { command, nativeStep, refused } from "@pe/host-internal/command-executor";
+import { command, nativeStep, refused, type CommandContext } from "@pe/host-internal/command-executor";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -24,17 +24,62 @@ import {
 
 const { commands } = product;
 const written = nativeResponseSchema("rooms.write");
+const roster = nativeResponseSchema("rooms.roster");
+
+async function requireRoomsSelection(
+  bridge: RevitBridge["Service"],
+  ctx: CommandContext,
+  { view, uniqueIds = [] }: { view?: string; uniqueIds?: readonly string[] },
+) {
+  const { target } = ctx.admission;
+  if (target.kind !== "document") throw refused("Exact document target required");
+  const { levels, trackedRegionIds } = roster.parse(
+    await Effect.runPromise(nativeStep(bridge, target.ref, "rooms.roster", {})),
+  );
+  if (view !== undefined && !levels.some((level) => level.views.some((row) => row.uniqueId === view)))
+    throw refused(
+      "The selected plan is missing from this document. Choose a plan here.",
+      "rooms.selection-missing",
+    );
+  if (!uniqueIds.length) return;
+  if (!trackedRegionIds)
+    throw refused(
+      "The Rooms record is unreadable. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.",
+      "rooms.record-unreadable",
+    );
+  const tracked = new Set(trackedRegionIds);
+  const missing = uniqueIds.find((id) => !tracked.has(id));
+  if (missing !== undefined)
+    throw refused(
+      `Room region ${missing} is missing from this document. Remove it from Work and choose regions here.`,
+      "rooms.selection-missing",
+    );
+}
 
 // A one-shot write consumes its staged intent: a repeat needs a fresh one (no second native write).
 export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
   const { bind } = carrier(bridge, deps);
+  const bindRooms = async (
+    ctx: CommandContext,
+    leaf: "rooms.partition" | "rooms.draw" | "rooms.merge",
+    request: { view: string; uniqueIds?: readonly string[] } & Record<string, unknown>,
+  ) => {
+    const bound = await bind(ctx, leaf, [request]);
+    return {
+      ...bound,
+      prepare: async () => {
+        await requireRoomsSelection(bridge, ctx, request);
+        return bound.prepare();
+      },
+    };
+  };
   return {
     "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
       seal: sealCarrier,
       retires: () => [["writeIntent", "rooms.partition"]],
       bind: (ctx) => {
         const { view, rejected } = ctx.admission.input;
-        return bind(ctx, "rooms.partition", [{ view, rejected, runId: ctx.admission.id }]);
+        return bindRooms(ctx, "rooms.partition", { view, rejected, runId: ctx.admission.id });
       },
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, null, (native) => {
@@ -53,7 +98,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       retires: () => [["writeIntent", "rooms.draw"]],
       bind: (ctx) => {
         const { view, loops, name, role } = ctx.admission.input;
-        return bind(ctx, "rooms.draw", [{ view, loops, name, role }]);
+        return bindRooms(ctx, "rooms.draw", { view, loops, name, role });
       },
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, null, (native) => {
@@ -72,7 +117,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       retires: () => [["writeIntent", "rooms.merge"]],
       bind: (ctx) => {
         const { view, regions, name } = ctx.admission.input;
-        return bind(ctx, "rooms.merge", [{ view, uniqueIds: regions.map(regionId), name }]);
+        return bindRooms(ctx, "rooms.merge", { view, uniqueIds: regions.map(regionId), name });
       },
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, null, (native) => {
@@ -96,7 +141,6 @@ const sheetInput = builtinCommands["sheet.plan"].input
   .loose();
 const preparedSheet = preparedCarrierSchema.extend({
   request: nativeRequestSchema("rooms.write"),
-  refused: z.array(z.object({ uniqueId: z.string(), field: z.string(), reason: z.string() })),
 });
 /**
  * The Rooms body of the platform's sheet pair: the staged field cells of the admitted Work, one
@@ -107,9 +151,9 @@ export const roomsSheet =
   (bridge, deps) => {
     const { bind } = carrier(bridge, deps);
     return command(builtinCommands[key], preparedSheet, {
-      seal: ({ request, refused: held, ...carrier }) => ({
+      seal: ({ request, ...carrier }) => ({
         request: { ...sealCarrier(carrier).request, ...request },
-        evidence: { ...carrier.replacement, refused: held },
+        evidence: carrier.replacement,
       }),
       bind: async (ctx) => {
         const { doc } = sheetInput.parse(ctx.admission.input);
@@ -126,53 +170,20 @@ export const roomsSheet =
                 `${replacement.reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.`,
                 "sheet.plan-refused",
               );
-            const { target } = ctx.admission;
-            if (target.kind !== "document") throw refused("Exact document target required");
-            const roster = await Effect.runPromise(
-              nativeStep(bridge, target.ref, "rooms.roster", {}),
-            );
-            const { trackedRegionIds } = nativeResponseSchema("rooms.roster").parse(roster);
-            if (!trackedRegionIds)
-              throw refused(
-                "The Rooms record is unreadable. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.",
-                "sheet.plan-refused",
-              );
-            const tracked = new Set(trackedRegionIds);
-            const held = regions.flatMap(({ uniqueId, ...values }) =>
-              tracked.has(uniqueId)
-                ? []
-                : Object.keys(values).map((field) => ({
-                    uniqueId,
-                    field,
-                    reason: "The region is missing from the document.",
-                  })),
-            );
-            return {
-              ...prepared,
-              request: { regions: regions.filter(({ uniqueId }) => tracked.has(uniqueId)) },
-              refused: held,
-            };
+            await requireRoomsSelection(bridge, ctx, {
+              uniqueIds: regions.map(({ uniqueId }) => uniqueId),
+            });
+            return { ...prepared, request: { regions } };
           },
         };
       },
       run: (ctx, execution) => {
-        const {
-          request: { regions },
-          refused: held,
-        } = execution.prepared;
+        const { regions } = execution.prepared.request;
         if (key === "sheet.plan")
           return Effect.succeed({
             writes: regions,
-            refused: held,
             evidence: execution.prepared.replacement,
-            ...(!regions.length && {
-              planRefusal: "All staged room fields are on missing regions. Remove them from Work.",
-            }),
           });
-        if (!regions.length)
-          return Effect.fail(
-            refused("All staged room fields are on missing regions. Remove them from Work."),
-          );
         const asked = new Map(regions.map((row) => [row.uniqueId, new Map(Object.entries(row))]));
         const { key: work } = sheetInput.parse(ctx.admission.input).work;
         return runModel(ctx, execution, deps, bridge, null, (native) =>
@@ -191,7 +202,7 @@ export const roomsSheet =
                 work.route,
                 confirmed.map((cell) => [cell.field, regionCode(cell.uniqueId)]),
               );
-            return { ...z.record(z.string(), z.unknown()).parse(value), confirmed, refused: held };
+            return { ...z.record(z.string(), z.unknown()).parse(value), confirmed };
           }),
         );
       },

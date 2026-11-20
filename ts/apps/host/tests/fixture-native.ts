@@ -34,6 +34,7 @@ const fetchRecorded = globalThis.fetch;
 export async function fixtureNative(directory: string, ...recordings: string[]) {
   let selected = nativeRecordings(...recordings);
   let trackedRegionIds: readonly string[] | undefined;
+  let roomsPlans: readonly string[] | undefined;
   let linkCapacityRefusal: string | undefined;
   let replacementEvidence: HostOpResponse<"takeoffs.record-replacements"> = {
     regions: null,
@@ -109,6 +110,9 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
     },
     reportTrackedRooms(ids: readonly string[]) {
       trackedRegionIds = ids;
+    },
+    reportRoomsPlans(ids: readonly string[]) {
+      roomsPlans = ids;
     },
     reportTakeoffReplacements(evidence: HostOpResponse<"takeoffs.record-replacements">) {
       replacementEvidence = evidence;
@@ -301,7 +305,8 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
               const input: unknown = JSON.parse(req.payloadJson);
               const takeoffReplacementRead = req.operationKey === "takeoffs.record-replacements";
               const modeledRoster =
-                req.operationKey === "rooms.roster" && trackedRegionIds !== undefined;
+                req.operationKey === "rooms.roster" &&
+                (trackedRegionIds !== undefined || roomsPlans !== undefined);
               if (!takeoffReplacementRead && !modeledRoster)
                 calls.push({ key: req.operationKey, input, action: req.derivedCommand });
               yield* Effect.promise(() => beforeReply(req.operationKey));
@@ -329,7 +334,17 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
                   : modeledRoster
                     ? (transport.admit(action, req.operationKey, input),
                       nativeResponseSchema("rooms.roster").parse({
-                        levels: [],
+                        levels: [
+                          {
+                            name: "Fixture level",
+                            elevation: 0,
+                            views: (roomsPlans ?? []).map((uniqueId) => ({
+                              uniqueId,
+                              name: uniqueId,
+                              type: "FloorPlan",
+                            })),
+                          },
+                        ],
                         regions: [],
                         trackedRegionIds,
                       }))

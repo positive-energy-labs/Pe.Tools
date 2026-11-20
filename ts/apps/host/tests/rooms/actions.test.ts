@@ -62,6 +62,7 @@ test.each([null, unreadableRooms])(
     };
     try {
       const { role: _nativeNullRole, ...draw } = nativeRecordingRequest("fresh-rooms.draw");
+      native.reportRoomsPlans([draw.view]);
       await workspace.publish(
         key,
         "rooms",
@@ -195,7 +196,7 @@ test.each(["initialize", "adopt", "partition"])(
   },
 );
 
-test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
+test.each(["selected", "unrelated", "none", "foreign", "unreadable"] as const)(
   "recorded Rooms sheet admission fences %s changes and a current preview retires only confirmed field values",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
@@ -204,6 +205,7 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
       "fresh-takeoffs.initialize-carrier",
       "fresh-rooms.write",
       "fresh-rooms.partition",
+      "fresh-rooms.draw",
     );
     const socket = await native.connect();
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
@@ -253,14 +255,16 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
       expect([200, 202], await response.clone().text()).toContain(response.status);
       return native.journal.wait(id);
     };
-    const gone = "8a0c1e3f-0000-4000-8000-000000000001-00715157";
+    const foreign = "d453732c-41bf-4858-87b8-f116504e7c95-00c67840";
+    const partition = nativeRecordingRequest("fresh-rooms.partition");
+    native.reportRoomsPlans([partition.view]);
     try {
       if (changed === "unreadable")
         native.reportTakeoffReplacements({ regions: unreadableRooms, registry: null });
       await work.publish(
         key,
         "rooms",
-        [...regions, ...(changed === "gone" ? [{ uniqueId: gone, name: "Gone" }] : [])].map(
+        [...regions, ...(changed === "foreign" ? [{ uniqueId: foreign, name: "Foreign" }] : [])].map(
           (region) => ({
             path: ["name", regionCode(region.uniqueId)],
             value: { edit: { value: region.name } },
@@ -287,7 +291,6 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
           notDispatched: true,
         });
         expect(native.calls).toEqual([]);
-        const partition = nativeRecordingRequest("fresh-rooms.partition");
         await work.publish(
           key,
           "rooms",
@@ -317,17 +320,43 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
         ]);
         return;
       }
-      expect(preview).toMatchObject({
-        state: "succeeded",
-        ...(changed === "gone"
-          ? {
-              result: {
-                writes: regions.map(({ uniqueId, name }) => ({ uniqueId, name })),
-                refused: [{ uniqueId: gone, field: "name" }],
-              },
-            }
-          : {}),
-      });
+      if (changed === "foreign") {
+        const refusal = {
+          state: "failed",
+          notDispatched: true,
+          refusal: { kind: "domain", code: "rooms.selection-missing" },
+        };
+        expect(preview).toMatchObject(refusal);
+        expect(await submit("foreign-sheet-apply", "sheet.apply", revision)).toMatchObject({
+          state: "failed",
+          notDispatched: true,
+        });
+        const draw = nativeRecordingRequest("fresh-rooms.draw");
+        for (const [command, intent] of [
+          ["rooms.partition", { view: foreign }],
+          ["rooms.draw", { view: foreign, loops: draw.loops }],
+          ["rooms.merge", { view: partition.view, regions: [a, regionCode(foreign)] }],
+        ] as const) {
+          const current = (await work.read(key, "rooms"))!.revision;
+          await work.publish(
+            key,
+            "rooms",
+            [{ path: ["writeIntent", command], value: { edit: { value: intent } } }],
+            current,
+          );
+          const staged = (await work.read(key, "rooms"))!.revision;
+          expect(await submit(`${command}-plan`, `${command}.preview`, staged)).toMatchObject(
+            refusal,
+          );
+          expect(await submit(`${command}-apply`, command, staged)).toMatchObject({
+            state: "failed",
+            notDispatched: true,
+          });
+        }
+        expect(native.calls).toEqual([]);
+        return;
+      }
+      expect(preview).toMatchObject({ state: "succeeded" });
       expect(native.calls).toEqual([]);
       // Pea's write asks nobody (ADR 0038); Work that moved after its preview refuses it at admission.
       if (changed === "selected" || changed === "unrelated")
@@ -370,7 +399,6 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
             ? expect.objectContaining({ value: "newer" })
             : null,
         );
-      if (changed === "gone") expect(current.name[regionCode(gone)]?.edit?.value).toBe("Gone");
       const values = regions.map((region) => ({
         uniqueId: region.uniqueId,
         name:

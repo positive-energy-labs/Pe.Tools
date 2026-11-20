@@ -32,8 +32,9 @@ export async function mounted(
   /** The host reads this route's panes open. */
   reads: string[],
   native: Native,
-  { search = new URLSearchParams(), start = true } = {},
+  { search = new URLSearchParams(), start = true, document = { ref, path } } = {},
 ) {
+  const { ref, path } = document;
   const route = module.spec.key;
   const nativeCalls: { key: string; input: unknown }[] = [];
   const actions: { key: string; input: Record<string, unknown> }[] = [];
