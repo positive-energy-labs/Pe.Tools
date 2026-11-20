@@ -18,6 +18,11 @@ import { unreadLeg } from "../src/update-reader.ts";
 import { planAcquisition } from "../src/acquisition.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
+import { mkdtemp, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 
 /** Effect yields on setImmediate: only the clock and its timers are faked, or no fiber ever resumes. */
 const FAKE_CLOCK: { toFake: ("setTimeout" | "clearTimeout" | "Date")[] } = {
@@ -87,7 +92,7 @@ const docs: DocListResult = {
   ],
 };
 
-function fixture() {
+function fixture(options?: import("../src/machine.ts").MachineOptions) {
   const update = {
     plan: null,
     receipt: null,
@@ -148,8 +153,34 @@ function fixture() {
       subscribe: vi.fn(() => vi.fn()),
     },
   };
-  return { sources, machine: machineOwner(sources, { periodMs: 60_000 }) };
+  return { sources, machine: machineOwner(sources, { periodMs: 60_000, ...options }) };
 }
+
+test("a new host serves kept years immediately, survives a refusal, and replaces them after success", async () => {
+  const root = stateFixture(await mkdtemp(join(tmpdir(), "pe-kept-years-")));
+  const yearsState = stateDirectory(root.machine, "host", "test-host");
+  const now = "2026-11-19T00:00:00.000Z";
+  mkdirSync(yearsState.path, { recursive: true });
+  writeFileSync(join(yearsState.path, "revit-years.json"), "{damaged");
+  const first = fixture({ yearsState, now: () => now });
+  expect(first.machine.current().revit.years).toBeNull();
+  await first.machine.refresh();
+
+  const second = fixture({ yearsState });
+  vi.mocked(second.sources.years).mockRejectedValueOnce(Error("SDK timed out")).mockResolvedValue([2026]);
+  const received: Machine[] = [];
+  const stop = second.machine.observe((value) => received.push(value));
+  try {
+    expect(received[0]).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now, attemptedAtUtc: null } } });
+    const failed = await second.machine.refresh();
+    expect(failed).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now } } });
+    expect(failed.legs.years?.error).toContain("timed out");
+    expect((await second.machine.refresh()).revit.years).toEqual([2026]);
+  } finally {
+    stop();
+  }
+  expect(fixture({ yearsState }).machine.current().revit.years).toEqual([2026]);
+});
 
 test("a stalled observed-document leg publishes unknown at the Machine deadline", async () => {
   vi.useFakeTimers(FAKE_CLOCK);

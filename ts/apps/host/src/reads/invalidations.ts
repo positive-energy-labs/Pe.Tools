@@ -1,4 +1,4 @@
-import { canonicalRouteInput, documentRefSchema, machineLegSchema, machineSchema, workKey, workKeySchema } from "@pe/agent-contracts";
+import { canonicalRouteInput, documentRefSchema, keptMachineLegAt, machineLegSchema, machineSchema, workKey, workKeySchema } from "@pe/agent-contracts";
 import { subscribePlaces } from "../places.ts";
 import type { ResourceObserver, RouteWorkspace } from "@pe/runtime";
 import { z } from "zod";
@@ -9,11 +9,11 @@ import { settingsFile } from "./door.ts";
 
 const yearEvidence = z.object({
   revit: machineSchema.unwrap().shape.revit.unwrap().pick({ years: true }),
-  legs: z.object({ years: machineLegSchema.unwrap().pick({ error: true }).optional() }),
+  legs: z.object({ years: machineLegSchema.optional() }),
 });
 const publishedMachine = z.object({ machine: yearEvidence });
 const yearsKey = ({ revit, legs }: z.infer<typeof yearEvidence>) =>
-  canonicalRouteInput([revit.years?.slice().sort((a, b) => a - b) ?? null, legs.years?.error != null]);
+  canonicalRouteInput([revit.years?.slice().sort((a, b) => a - b) ?? null, legs.years?.error != null, keptMachineLegAt(legs.years)]);
 
 export function readInvalidations(
   workspace: RouteWorkspace,

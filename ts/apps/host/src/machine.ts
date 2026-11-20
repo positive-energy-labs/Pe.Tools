@@ -4,6 +4,7 @@ import { join, win32 } from "node:path";
 import { Cause, Clock, Context, Deferred, Effect, Layer, Queue, Schedule, Schema } from "effect";
 import { z } from "zod";
 import { DOCUMENT_IDENTITY_AUTHORITY, productIdentity } from "@pe/host-contracts/contracts";
+import { read as readState, stateKind, writeState, type StateDirectory } from "@pe/host-contracts/kinds";
 import type {
   ActionReceipt,
   DocumentRef,
@@ -189,9 +190,19 @@ export interface MachineOptions {
   periodMs?: number;
   updatePeriodMs?: number;
   automaticUpdates?: { peaActive(): boolean };
+  yearsState?: StateDirectory;
   /** The spine's intake for leg faults; absent where nothing observes them. */
   fault?: (fault: MachineLegFault) => void;
 }
+
+const installedYearsKind = stateKind({
+  schema: z.strictObject({
+    years: z.array(z.number().int()),
+    observedAtUtc: z.iso.datetime(),
+  }),
+  place: () => "Last installed Revit versions check",
+  segments: () => ["revit-years.json"],
+});
 
 /**
  * A leg's error as the wire has always spelled it: `Error: <message>`, so a tagged failure reads
@@ -243,10 +254,14 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   let peers: readonly MachinePeer[] = [];
   let sessions: readonly SessionObservation[] | null = null;
   let attachments: readonly AttachmentRead[] = [];
-  let years: readonly number[] | null = null;
+  const yearsFile = options.yearsState && installedYearsKind.in(options.yearsState);
+  const storedYears = yearsFile && readState(yearsFile);
+  const keptYears = storedYears?.kind === "ok" ? storedYears.value : null;
+  let years: readonly number[] | null = keptYears?.years ?? null;
   let providers: readonly MachineProvider[] | null = null;
   let share: MachineShare | null = null;
   const legs: Record<string, MachineLeg> = {};
+  if (keptYears) legs.years = { ...unreadLeg(), observedAtUtc: keptYears.observedAtUtc };
   /** The last fold of the journal this Machine read; an unread actions leg folds nothing. */
   let acquisitions: readonly Acquisition[] = [];
   const documents = new Map<string, { value: MachineSession["documents"]; leg: MachineLeg }>();
@@ -254,11 +269,11 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   let latest: Machine = {
     observedAtUtc: yield* nowIso,
     host: null,
-    revit: { years: null, sessions: null, unclassifiedAttachments: [] },
+    revit: { years, sessions: null, unclassifiedAttachments: [] },
     update: sources.update.current(),
     share: null,
     providers: null,
-    legs: {},
+    legs: { ...legs },
   };
 
   /** Bound one source by the leg deadline; a stall is a typed failure, not an unsettled frame. */
@@ -273,20 +288,20 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   const read = <A>(
     leg: MachineReadingLeg,
     acquire: Effect.Effect<A, unknown>,
-    accept: (value: A) => void,
+    accept: (value: A, observedAtUtc: string) => void,
     key: string = leg,
   ) =>
     Effect.gen(function* () {
       const attemptedAtUtc = yield* nowIso;
       const startedMs = yield* Clock.currentTimeMillis;
       return yield* deadline(acquire, key).pipe(
-        Effect.flatMap((value) => parsed(() => accept(value))),
-        Effect.flatMap(() =>
+        Effect.flatMap((value) =>
           nowIso.pipe(
-            Effect.map((observedAtUtc) => {
+            Effect.flatMap((observedAtUtc) => parsed(() => {
+              accept(value, observedAtUtc);
               legs[key] = { observedAtUtc, attemptedAtUtc, error: null };
               return true;
-            }),
+            })),
           ),
         ),
         Effect.catchCause((cause) =>
@@ -354,8 +369,14 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                   ),
                 ),
               ),
-              (value) => {
+              (value, observedAtUtc) => {
                 years = value;
+                if (yearsFile)
+                  try {
+                    writeState(yearsFile, JSON.stringify({ years, observedAtUtc }));
+                  } catch (error) {
+                    console.warn("Could not keep installed Revit versions for the next host start", error);
+                  }
               },
             )
           : Effect.succeed(true),
@@ -670,7 +691,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   function observe(accept: (value: Machine) => void) {
     if (closed) throw new MachineRetired();
     listeners.add(accept);
-    if (latest.legs.sessions) accept(latest);
+    if (latest.legs.sessions || latest.revit.years !== null) accept(latest);
     if (listeners.size === 1) {
       const unwatch = sources.subscribe?.(notify);
       const untarget = sources.targets.subscribe(notify);
