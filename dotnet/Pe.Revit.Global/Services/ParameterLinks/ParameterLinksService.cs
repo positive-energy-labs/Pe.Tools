@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData.Serialization;
 using Pe.Revit.DocumentData.ParameterLinks;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Loader.Documents;
@@ -67,7 +68,7 @@ public sealed class ParameterLinksService {
     }
 
     public ParameterLinksData Apply(RevitDocument document, ParameterLinksApplyRequest request, bool preview) {
-        var state = this.ResolveState(document);
+        var state = this.ResolveState(document, refreshTriggers: !preview);
         var profile = request.Profile ?? state.Profile;
         if (profile == null) {
             var missingProfileEvaluation = AddStorageIssue(
@@ -77,11 +78,10 @@ public sealed class ParameterLinksService {
         }
 
         var evaluated = ParameterLinksEngine.Evaluate(document, profile);
-        // ADR 0026 D4: a stored profile this build cannot read is never written over. The error issue stops the apply.
-        if (request.Profile != null && state.ReadError != null)
-            evaluated = AddStorageIssue(evaluated, $"Refusing to overwrite the stored profile: {state.ReadError}");
-        if (preview || evaluated.Issues.Any(issue => issue.Severity == ParameterLinkIssueSeverity.Error)) {
-            return new ParameterLinksData(profile, evaluated, this.BuildStatus(state, profile), false, 0);
+        var hasErrors = evaluated.Issues.Any(issue => issue.Severity == ParameterLinkIssueSeverity.Error);
+        if (preview || hasErrors) {
+            return new ParameterLinksData(profile, evaluated, this.BuildStatus(state, profile), false, 0,
+                preview && !hasErrors && request.Profile != null ? state.Replacement : null);
         }
 
         var profileChanged = false;
@@ -146,8 +146,8 @@ public sealed class ParameterLinksService {
         }
     }
 
-    private DocumentState ResolveState(RevitDocument document) {
-        var tracked = this._documents?.Find(document);
+    private DocumentState ResolveState(RevitDocument document, bool refreshTriggers = true) {
+        var tracked = refreshTriggers ? this._documents?.Find(document) : null;
         if (tracked != null) {
             var state = tracked.State(_ => new DocumentState());
             var read = this._storage.Read(document);
@@ -156,12 +156,9 @@ public sealed class ParameterLinksService {
             return state;
         }
 
-        var direct = this._storage.Read(document);
-        return new DocumentState {
-            Profile = direct.Profile,
-            HasStoredProfile = direct.HasStoredProfile,
-            ReadError = direct.Error
-        };
+        var direct = new DocumentState();
+        this.UpdateState(direct, this._storage.Read(document));
+        return direct;
     }
 
     private void RegisterTriggers(RevitDocument document, ParameterLinkProfile? profile) {
@@ -220,6 +217,7 @@ public sealed class ParameterLinksService {
         state.Profile = read.Profile;
         state.HasStoredProfile = read.HasStoredProfile;
         state.ReadError = read.Error;
+        state.Replacement = read.Replacement;
     }
 
     private ParameterLinksRuntimeStatus BuildStatus(DocumentState state, ParameterLinkProfile? overrideProfile = null) {
@@ -251,6 +249,7 @@ public sealed class ParameterLinksService {
         public ParameterLinkProfile? Profile;
         public bool HasStoredProfile;
         public string? ReadError;
+        public OwnerBlobReplacement? Replacement;
     }
 
 }

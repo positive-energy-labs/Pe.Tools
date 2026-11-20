@@ -3808,6 +3808,7 @@ export namespace RevitApplyParameterLinks {
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
     export type ParameterLinkIssueSeverity = "warning" | "error";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Response {
       profile?: null | ParameterLinkProfile;
@@ -3815,6 +3816,7 @@ export namespace RevitApplyParameterLinks {
       status: ParameterLinksRuntimeStatus;
       profileChanged: boolean;
       appliedWriteCount: number;
+      replacement?: null | OwnerBlobReplacement;
     }
     export interface ParameterLinkProfile {
       formatVersion: number;
@@ -3898,6 +3900,12 @@ export namespace RevitApplyParameterLinks {
       updaterRegistered: boolean;
       activeDefinitionCount: number;
       activeAssignmentCount: number;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
 }
@@ -3959,6 +3967,7 @@ export namespace RevitApplyParameterLinksPreview {
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
     export type ParameterLinkIssueSeverity = "warning" | "error";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Response {
       profile?: null | ParameterLinkProfile;
@@ -3966,6 +3975,7 @@ export namespace RevitApplyParameterLinksPreview {
       status: ParameterLinksRuntimeStatus;
       profileChanged: boolean;
       appliedWriteCount: number;
+      replacement?: null | OwnerBlobReplacement;
     }
     export interface ParameterLinkProfile {
       formatVersion: number;
@@ -4049,6 +4059,12 @@ export namespace RevitApplyParameterLinksPreview {
       updaterRegistered: boolean;
       activeDefinitionCount: number;
       activeAssignmentCount: number;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
 }
@@ -7303,6 +7319,7 @@ export namespace RevitDetailParameterLinks {
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
     export type ParameterLinkIssueSeverity = "warning" | "error";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Response {
       profile?: null | ParameterLinkProfile;
@@ -7310,6 +7327,7 @@ export namespace RevitDetailParameterLinks {
       status: ParameterLinksRuntimeStatus;
       profileChanged: boolean;
       appliedWriteCount: number;
+      replacement?: null | OwnerBlobReplacement;
     }
     export interface ParameterLinkProfile {
       formatVersion: number;
@@ -7393,6 +7411,12 @@ export namespace RevitDetailParameterLinks {
       updaterRegistered: boolean;
       activeDefinitionCount: number;
       activeAssignmentCount: number;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
 }

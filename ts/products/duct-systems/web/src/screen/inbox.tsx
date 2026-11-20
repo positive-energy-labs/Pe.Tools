@@ -188,9 +188,7 @@ export function Inbox({
             verb.label,
             verb.says,
             () =>
-              void work.write(
-                rulingPatches(work.doc, work.store, "roles", String(verb.id), verb.role),
-              ),
+              void work.write(rulingPatches(work.doc, work.store, "roles", verb.key, verb.role)),
           );
         case "airflow":
           // The choice is the shared compact picker, in the open row only.

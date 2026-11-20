@@ -1,3 +1,5 @@
+using Pe.Shared.Product;
+using Pe.Shared.RevitData.Serialization;
 using Pe.Revit.DocumentData.ParameterLinks;
 using Pe.Revit.DocumentData.Parameters;
 using Pe.Revit.Global.Services.ParameterLinks;
@@ -424,13 +426,6 @@ public sealed class ParameterLinksBehaviorTests {
                 _ = transaction.Commit();
             }
 
-            using (var transaction = new Transaction(document, "Seed blocked reconcile")) {
-                _ = transaction.Start();
-                Assert.That(document.ProjectInformation.get_Parameter(sourceGuid).Set(51.5), Is.True);
-                Assert.That(document.ProjectInformation.get_Parameter(targetGuid).Set(0), Is.True);
-                _ = transaction.Commit();
-            }
-
             var projectName = document.ProjectInformation.get_Parameter(BuiltInParameter.PROJECT_NAME);
             Assert.That(projectName, Is.Not.Null);
             var blockedProfile = profile with {
@@ -452,15 +447,18 @@ public sealed class ParameterLinksBehaviorTests {
             int blockedApplied;
             using (var transaction = new Transaction(document, "Reject partial reconcile")) {
                 _ = transaction.Start();
+                Assert.That(document.ProjectInformation.get_Parameter(sourceGuid).Set(51.5), Is.True);
+                Assert.That(document.ProjectInformation.get_Parameter(targetGuid).Set(0), Is.True);
                 (blockedEvaluation, blockedApplied) = ParameterLinksEngine.Reconcile(document, blockedProfile);
-                _ = transaction.Commit();
+                // Read the attempted reconcile before the registered product updater runs at transaction commit.
+                Assert.That(document.ProjectInformation.get_Parameter(targetGuid).AsDouble(), Is.Zero);
+                _ = transaction.RollBack();
             }
 
             Assert.Multiple(() => {
                 Assert.That(blockedEvaluation.Issues.Select(issue => issue.Code),
                     Does.Contain("IncompatibleParameters"));
                 Assert.That(blockedApplied, Is.Zero);
-                Assert.That(document.ProjectInformation.get_Parameter(targetGuid).AsDouble(), Is.Zero);
             });
 
             updater = new ParameterLinksUpdater(uiApplication.ActiveAddInId, _ => profile, Guid.NewGuid());
@@ -497,6 +495,36 @@ public sealed class ParameterLinksBehaviorTests {
                 Assert.That(appliedEvaluation.Issues, Is.Empty);
                 Assert.That(document.ProjectInformation.get_Parameter(targetGuid).AsDouble(), Is.EqualTo(73.25));
             });
+
+            var owner = ParameterLinkProfile.Owner;
+            var raw = $$$"""{"owner":"parameter-links","version":{{{owner.Version}}},"data":{"definitions":[],"test":"{{{Guid.NewGuid():N}}}"}}""";
+            using (var transaction = new Transaction(document, "Plant unreadable parameter-links profile")) {
+                _ = transaction.Start();
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
+                _ = transaction.Commit();
+            }
+
+            var service = ParameterLinksService.Instance;
+            var request = new ParameterLinksApplyRequest(profile, Reconcile: false);
+            var old = storage.Read(document);
+            var plan = service.Apply(document, request, preview: true);
+            Assert.That(plan.Replacement, Is.EqualTo(old.Replacement));
+            Assert.That(plan.Replacement?.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
+            Assert.That(plan.Evaluation!.Issues, Is.Empty);
+            Assert.That(plan.ProfileChanged, Is.False);
+            Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).AsString(), Is.EqualTo(raw));
+            var state = ProductRuntimeLayout.Current.State.RootPath;
+            var fingerprint = plan.Replacement!.RawUtf8Sha256;
+            var backup = Path.Combine(state, "model-recovery", "owner-parameter-links", fingerprint + ".txt");
+            var notices = Path.Combine(state, ProductPathNames.StoredNoticesFileName);
+            int NoticeCount() => File.Exists(notices) ? File.ReadLines(notices).Count(line =>
+                line.Contains(fingerprint, StringComparison.Ordinal)) : 0;
+            Assert.That(File.Exists(backup), Is.False);
+            Assert.That(NoticeCount(), Is.Zero);
+            Assert.That(service.Apply(document, request, preview: false).ProfileChanged, Is.True);
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(System.Text.Encoding.UTF8.GetBytes(raw)));
+            Assert.That(NoticeCount(), Is.EqualTo(1));
+            Assert.That(storage.Read(document).Profile?.Definitions.Single().Id, Is.EqualTo("project-info-number"));
         } finally {
             if (updater != null && UpdaterRegistry.IsUpdaterRegistered(updater.GetUpdaterId()))
                 UpdaterRegistry.UnregisterUpdater(updater.GetUpdaterId());

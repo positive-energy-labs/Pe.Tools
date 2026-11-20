@@ -171,5 +171,6 @@ public sealed record ParameterLinksData(
     ParameterLinkEvaluation? Evaluation,
     ParameterLinksRuntimeStatus Status,
     bool ProfileChanged,
-    int AppliedWriteCount
+    int AppliedWriteCount,
+    Serialization.OwnerBlobReplacement? Replacement = null
 );
