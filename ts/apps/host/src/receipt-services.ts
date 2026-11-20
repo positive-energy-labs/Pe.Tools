@@ -40,7 +40,7 @@ const fiberOwner = Effect.fnUntraced(function* () {
  * FiberMaps of the caller's scope. Its finalizer joins both before the maps close, so closing the
  * scope never interrupts an attempt.
  */
-export const makeActionJournal = Effect.fn("ActionJournal.make")(function* (
+const makeActionJournal = Effect.fn("ActionJournal.make")(function* (
   path: StoredFile<unknown, "state">,
   now: () => number,
   stamp?: () => ReceiptStamp | null,

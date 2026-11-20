@@ -17,7 +17,6 @@ import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import { z } from "zod";
 import { opRow, dynamicCapabilityProvider, podCapabilities } from "./capability-projections.ts";
-export { dynamicCapabilityProvider } from "./capability-projections.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import {
   HOST_RPC_SDK_SESSION_HEADER,

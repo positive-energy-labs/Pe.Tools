@@ -5,7 +5,7 @@ import ts from "typescript";
 import { routeDirectory } from "../../../packages/agent-contracts/src/generated/route-directory.ts";
 import { files, identity, resolveModule, root, syntax, walk } from "./unification-2-census.ts";
 
-export const kernelRouteBaselinePath = "ts/tests/repo-guards/src/kernel-route-names.baseline.json";
+const kernelRouteBaselinePath = "ts/tests/repo-guards/src/kernel-route-names.baseline.json";
 export interface KernelRouteBaseline {
   paths: string[];
   sites: { routeNames: string[] };
@@ -13,7 +13,7 @@ export interface KernelRouteBaseline {
 const directories = ["ts/packages/runtime/src", "ts/packages/host-internal/src/reads"];
 const readRoot = "ts/apps/host/src/reads";
 // Ownership is reviewed per file, never inferred from a generated-file glob.
-export const readFileOwnership = {
+const readFileOwnership = {
   "completed-reads.ts": {
     owner: "kernel",
     reason: "Bounded completed reads and declared freshness",

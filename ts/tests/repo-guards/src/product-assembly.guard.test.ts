@@ -130,6 +130,7 @@ function loadFixtureModules(root: string, commandTable?: string) {
     // The production generator loads the catalog in a fresh process after writing the table.
     moduleCache: !commandTable,
     alias: {
+      "@pe/agent-contracts": fileURLToPath(import.meta.resolve("@pe/agent-contracts")),
       ...Object.fromEntries(
         modules.map((name) => [name, fileURLToPath(import.meta.resolve(name))]),
       ),

@@ -10,7 +10,7 @@ import { pushes } from "#/machine/notice-follow";
 import { GROUP_NAME } from "./ledger-model";
 import { useReading } from "#/host/resource-state";
 
-export const NOTICE_FEED: ReadingRequest = { kind: "notices" };
+const NOTICE_FEED: ReadingRequest = { kind: "notices" };
 
 export function useNoticeFeed(): Reading<NoticeFeed> {
   return useReading<NoticeFeed>(NOTICE_FEED);

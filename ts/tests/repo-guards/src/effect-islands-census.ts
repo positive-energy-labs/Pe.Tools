@@ -27,7 +27,7 @@ function walk(dir: string): string[] {
 }
 
 /** The `//` comment bodies of one source text, as the compiler tokenizes it. */
-export function lineComments(text: string, file = "probe.ts"): string[] {
+function lineComments(text: string, file = "probe.ts"): string[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const seen = new Set<number>();
   const found: string[] = [];

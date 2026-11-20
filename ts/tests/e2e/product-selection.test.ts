@@ -1,8 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { expect, test } from "vite-plus/test";
 import { connectTypedPage, type TypedPage } from "./typed-page.ts";
 
+const systemCode = (name: string) => subjectCode({ keyKind: "system-name", key: name });
 const SYSTEMS = '[data-list-view][aria-label="systems"] [role="option"][data-key]';
 
 async function click(page: TypedPage, selector: string) {
@@ -75,31 +77,26 @@ function state(page: TypedPage) {
   return page.evaluate(() => {
     const url = new URL(location.href);
     const encoded = url.searchParams.get("system");
-    const system = encoded ? encoded.split(",").filter(Boolean) : [];
-    const chips = [
+    const system = (encoded ? JSON.parse(encoded) : { kind: "ids", ids: [] }) as {
+      ids: string[];
+      active?: string;
+    };
+    const rows = [
       ...document.querySelectorAll<HTMLElement>(
-        '[data-open-systems] button[aria-label^="Remove the "]',
+        '[data-list-view][aria-label="systems"] [role="option"][data-key]',
       ),
-    ]
-      .filter((element) => element.getClientRects().length > 0)
-      .map((element) => element.getAttribute("aria-label"));
-    const crumb = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[data-pane-id="e-picture"] [data-slot="pane-title"] [data-crumb-segment]',
-      ),
-    ]
-      .filter((element) => element.getClientRects().length > 0)
-      .map((element) => element.innerText.trim());
+    ];
     const picture = document.querySelector('[data-pane-id="e-picture"] [data-model-picture]');
     return {
       url: url.href,
-      system,
-      chips,
-      crumb,
-      ready:
-        document.readyState === "complete" &&
-        !!picture?.getClientRects().length &&
-        !document.querySelector('[data-model-picture][data-reading="pending"]'),
+      system: { ids: system.ids, active: system.active ?? system.ids[0] ?? null },
+      selected: rows
+        .filter((row) => row.getAttribute("aria-selected") === "true")
+        .map((row) => row.dataset.key ?? "")
+        .sort((a, b) => a.localeCompare(b)),
+      ready: document.readyState === "complete" && rows.some((row) => row.getClientRects().length),
+      picture:
+        !!picture?.getClientRects().length && picture.getAttribute("data-reading") !== "pending",
       alerts: [...document.querySelectorAll<HTMLElement>('[role="alert"]')]
         .filter((element) => element.getClientRects().length > 0)
         .map((element) => element.innerText),
@@ -110,9 +107,7 @@ function state(page: TypedPage) {
 test("opening a second duct system retains the first through reload and browser history", async () => {
   const resultPath = process.env.E2E_RESULT_PATH;
   if (!resultPath) throw new Error("E2E_RESULT_PATH is required");
-  const url = new URL(process.env.E2E_WEB!);
-  expect(url.pathname).toBe("/ducts");
-  expect(url.search).toBe("?demo=navigation");
+  const url = new URL("/duct-systems?fixture=navigation", process.env.E2E_WEB!);
   expect(["127.0.0.1", "localhost"]).toContain(url.hostname);
   const page = await connectTypedPage();
   const checkpoints: { label: string; state: Awaited<ReturnType<typeof state>> }[] = [];
@@ -127,31 +122,21 @@ test("opening a second duct system retains the first through reload and browser 
           expect(current.alerts).toEqual([]);
           return {
             ready: current.ready,
-            system: current.system,
-            crumb: current.crumb,
+            system: current.system.ids,
+            active: current.system.active,
+            selected: current.selected,
+            picture: current.picture,
           };
         },
         { timeout: 20_000, message: label },
       )
       .toEqual({
         ready: true,
-        system: systems,
-        crumb: systems.length ? ["Systems", systems.join(" + ")] : ["Systems"],
+        system: systems.map(systemCode),
+        active: systems.length ? systemCode(systems[0]!) : null,
+        selected: [...systems].sort((a, b) => a.localeCompare(b)),
+        picture: systems.length > 0,
       });
-    // History can fold the scope pane; reveal it before inspecting its drawn chips.
-    if (systems.length && !(await state(page)).chips.length)
-      await click(page, `button[aria-label=${JSON.stringify(`Expand ${systems.join(" + ")}`)}]`);
-    await expect
-      .poll(async () => (await state(page)).chips, {
-        timeout: 20_000,
-        message: `${label}: open-system chips`,
-      })
-      .toEqual(
-        systems.map(
-          (name, index) =>
-            `Remove the "${name}${index === systems.length - 1 ? " active" : ""}" narrowing`,
-        ),
-      );
     checkpoints.push({ label, state: await state(page) });
   };
   try {

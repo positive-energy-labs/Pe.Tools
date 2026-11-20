@@ -29,11 +29,6 @@ export const historyRequest = async (query: string, body?: unknown) => {
   if (!response.ok) throw Error(value?.error?.message ?? "History unavailable");
   return value;
 };
-export const currentHistoryPoint = () =>
-  typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("at");
-export const recordingView = () =>
-  currentHistoryPoint() !== null &&
-  new URLSearchParams(window.location.search).get("compare") !== "now";
 export const publicationPose = (
   instance: string,
   route: string,

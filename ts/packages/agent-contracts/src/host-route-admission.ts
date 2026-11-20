@@ -46,7 +46,7 @@ export interface HostRouteModule extends Omit<HostWorkRegistration, "spec"> {
     Record<string, (args: unknown, services: HostLeafServices) => Promise<unknown>>
   >;
 }
-export interface HostLeafServices {
+interface HostLeafServices {
   readonly evaluation: string;
   readonly origin: unknown;
   take(name: string, args: unknown): Promise<unknown>;

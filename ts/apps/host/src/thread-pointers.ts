@@ -34,7 +34,6 @@ export function threadPointerPort(inputs?: HostInputContext["Service"]) {
     },
   } satisfies ThreadPointers & { bind(threads: ThreadPointers): void };
 }
-export type ThreadPointerPort = ReturnType<typeof threadPointerPort>;
 
 /** Pea points in its own thread only; a person names the thread they are looking at. */
 export function pointerThread(caller: Caller, named: string | undefined): string {

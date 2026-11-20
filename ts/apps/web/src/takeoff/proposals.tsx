@@ -37,10 +37,6 @@ export const showAdopt = (value: unknown) => {
     .join(" ");
 };
 
-/** The shape a review-flag key names: `[zoneKey, shapeKey]`. */
-export const flagShape = (key: string) => (JSON.parse(key) as [string, string])[1];
-export const flagZone = (key: string) => (JSON.parse(key) as [string, string])[0];
-
 const proposing = (cell: CellLike | undefined) => cell?.edit != null;
 
 /** One review row per proposing cell whose key passes `keep`; nothing when none. */

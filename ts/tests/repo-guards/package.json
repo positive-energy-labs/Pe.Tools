@@ -8,16 +8,10 @@
     "ratchets:tighten": "node src/unification-2-census.ts --tighten && node src/tighten-effect-islands.ts && node src/test-casts-census.ts --tighten && node src/health-census.ts --tighten && node src/route-closure-census.ts --tighten"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
-    "@pe/kit": "workspace:*",
-    "effect": "4.0.2",
-    "react": "^19.2.0"
+    "effect": "4.0.2"
   },
   "devDependencies": {
-    "@pe/ducts-domain": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/web": "workspace:*",

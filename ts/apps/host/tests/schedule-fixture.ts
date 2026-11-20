@@ -1,5 +1,5 @@
 /** One reviewed native parameter behind a binding. */
-export const target = (elementId: number, rawValue: string | null = "100") => ({
+const target = (elementId: number, rawValue: string | null = "100") => ({
   elementId,
   parameterId: 555,
   parameterName: "Load",

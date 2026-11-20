@@ -11,7 +11,7 @@ export interface DiscoveredWork<W = any> {
   admission?: WorkAdmission;
   memberKey?: true;
 }
-export interface RegisteredRoute {
+interface RegisteredRoute {
   manifest: TypedRoute["data"];
   typed: TypedRoute;
   work?: DiscoveredWork;
@@ -22,7 +22,6 @@ export interface RegisteredRoute {
     work?: string;
   }): import("react").ReactNode;
 }
-export type DiscoveredRoute = RegisteredRoute;
 /** Typed Work describes its cell containers once; the chat head consumes the same schema. */
 export function typedWorkCells(
   module: import("@pe/web-kernel/route/typed-route").TypedRoute,
@@ -65,7 +64,7 @@ export function typedWorkCells(
 }
 
 /** Verified typed modules are the only executable discovery registrations. */
-export function createRouteDiscovery() {
+function createRouteDiscovery() {
   const registered = new Map<string, RegisteredRoute>();
   const listeners = new Set<() => void>();
   let revision = 0;

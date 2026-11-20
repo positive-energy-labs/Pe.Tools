@@ -188,7 +188,7 @@ export function searchAu(input: { query: string; year?: number; max: number }): 
   return withAuPage(async (page) => parseAuHits(await searchAuItems(page, input), input.max));
 }
 
-export function auSlugOf(url: string): string {
+function auSlugOf(url: string): string {
   const match = /\/autodesk-university\/class\/([^/?#]+)/.exec(url);
   if (!match) throw new Error(`Not an AU class URL: ${url}`);
   return match[1]!;

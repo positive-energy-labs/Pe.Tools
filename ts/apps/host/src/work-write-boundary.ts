@@ -33,10 +33,7 @@ const hash = (value: unknown) =>
 const canonicalSet = <T>(values: readonly T[]): T[] =>
   [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
 /** The document mark the plan read, as the seal carries it (ADR 0030 rule 4). */
-export const sealedDocumentMark = (
-  marks: DocumentMarks,
-  ref: DocumentRef,
-): WriteSeal["documentMark"] => ({
+const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef): WriteSeal["documentMark"] => ({
   session: ref.session,
   openId: ref.openId,
   observedSince: marks.observedSince ?? null,

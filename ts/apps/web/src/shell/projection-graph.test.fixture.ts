@@ -7,7 +7,7 @@ import type { RouteDeclaration } from "../../../../packages/agent-contracts/src/
 /** Galvanized steel's absolute roughness in feet: the duct-loss default and its material row. */
 import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/ducts-contract/duct-loss-read";
 
-export const ductLossAddress = {
+const ductLossAddress = {
   path: "/duct-loss",
   title: "Duct Loss",
   fields: {

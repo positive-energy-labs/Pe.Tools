@@ -75,7 +75,7 @@ export const validValueSchema = <T extends z.ZodType>(value: T) =>
     ...provenance,
     units: z.string().nullable(),
   });
-export const valueResolutionSchema = <T extends z.ZodType>(value: T) =>
+export const sourcedValueSchema = <T extends z.ZodType>(value: T) =>
   z
     .discriminatedUnion("status", [
       validValueSchema(value),
@@ -103,7 +103,6 @@ export const valueResolutionSchema = <T extends z.ZodType>(value: T) =>
         v.author === "pea",
       "valid Work/run values require a known caller",
     );
-export const sourcedValueSchema = valueResolutionSchema;
 export const authoredValueSchema = <T extends z.ZodType>(value: T) =>
   z.strictObject({
     value,

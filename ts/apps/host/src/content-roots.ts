@@ -293,7 +293,7 @@ export function contentHomes(pointer?: string | null): readonly Home[] {
  * Resolve again now, after Settings changed homes.json: a found firm home is otherwise only re-read
  * where it was, and a pending read may predate the file. Waits at most the resolve timeout.
  */
-export async function reresolveContentRoots(): Promise<void> {
+async function reresolveContentRoots(): Promise<void> {
   const roots = owner();
   roots.pending?.stop.abort();
   roots.pending = undefined;

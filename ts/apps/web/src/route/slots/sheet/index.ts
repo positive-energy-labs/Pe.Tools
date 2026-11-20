@@ -34,7 +34,7 @@ export const bindingPath = (binding: string, row?: string): [string, ...string[]
   const [first = binding, ...rest] = binding.split(".");
   return [first, ...rest, ...(row === undefined ? [] : [row])];
 };
-export function domainDraw(
+function domainDraw(
   domain: Domain,
   read: unknown,
   row?: string,

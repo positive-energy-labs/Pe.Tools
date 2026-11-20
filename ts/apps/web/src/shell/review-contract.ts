@@ -1,6 +1,6 @@
 import { z } from "zod";
 /** Host-owned: what a ModelWrite commit borrows on a workshared central (C# WorksharingDisclosure). */
-export const worksharingSchema = z.object({
+const worksharingSchema = z.object({
   cloud: z.boolean(),
   elements: z.array(
     z.object({

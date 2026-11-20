@@ -24,7 +24,7 @@ import type { TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, type NativeProcess } from "./native-receipts.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 
-export const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
+const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
   `schedule:${createHash("sha256")
     .update(canonicalRouteInput([document, scheduleUniqueId]))
     .digest("hex")}`;

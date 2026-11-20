@@ -29,7 +29,7 @@ export interface ActionHandle extends ActionFacts {
 }
 
 /** What the last run of an action left behind: the action, and its refusal or nothing. */
-export interface RouteOutcome<A extends string> {
+interface RouteOutcome<A extends string> {
   readonly key: A;
   readonly label: string;
   readonly refusal: Refusal | null;

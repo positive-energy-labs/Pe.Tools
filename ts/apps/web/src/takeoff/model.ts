@@ -67,7 +67,7 @@ const shoelace = (loop: readonly (readonly [number, number])[]) => {
   return Math.abs(sum) / 2;
 };
 
-export const loopBounds = (loops: readonly (readonly (readonly [number, number])[])[]) =>
+const loopBounds = (loops: readonly (readonly (readonly [number, number])[])[]) =>
   boundsOf(loops.flat());
 
 export function containsEvenOdd(
@@ -126,14 +126,3 @@ export function buildZones(declared: DeclaredZone[]): Zone[] {
   });
   return zones;
 }
-
-export const FLAG_MEANING: Record<string, string> = {
-  seedless: "no seed room backs this space — verify it is a real room",
-  "suspect:narrow": "narrow enough that the boundary may be a wall band, not a room",
-  "suspect:ceiling-variance": "ceiling height varies across the space — chase, void, or vault",
-  "low-evidence-boundary": "boundary placed on weak wall evidence",
-  "orphaned-region": "an existing region no room in this run claims",
-  "materialize-failed": "Revit refused the loop — dropped whole rather than bent to fit",
-  "unhomed-suggestion":
-    "this rerun found a room with no materialized region yet — accept to materialize it, or dismiss to drop it",
-};

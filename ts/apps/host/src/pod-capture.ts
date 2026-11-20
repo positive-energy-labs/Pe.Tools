@@ -168,7 +168,7 @@ export function rememberPackageCensus(roots: PodsRoots, listing: PackageListing)
 export const packageDiscoveryTimeoutMs = 5_000;
 // Parallel metadata and capture each get one third; root discovery and publication keep the rest.
 export const packagePodWorkTimeoutMs = Math.floor(packageDiscoveryTimeoutMs / 3);
-export const packageScanMaxAgeMs = 60_000;
+const packageScanMaxAgeMs = 60_000;
 
 export class PackageDiscoveryExceeded extends Error {
   readonly code = "pod.discovery.exceeded";

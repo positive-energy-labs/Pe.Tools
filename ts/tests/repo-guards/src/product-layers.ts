@@ -3,7 +3,7 @@ import { join, posix, resolve } from "node:path";
 import ts from "typescript";
 
 const root = resolve(import.meta.dirname, "../../..");
-export const productPackages = readdirSync(join(root, "products")).flatMap((product) =>
+const productPackages = readdirSync(join(root, "products")).flatMap((product) =>
   readdirSync(join(root, "products", product)).flatMap((layer) => {
     const key = `products/${product}/${layer}`;
     const manifest = join(root, key, "package.json");

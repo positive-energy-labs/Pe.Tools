@@ -14,7 +14,7 @@ import { DockBand } from "../shell/pane-actions";
 import { routePath } from "./model";
 
 export type RouteControlName = "controls" | "lamp" | "palette" | "inspector";
-export type SituationSignal = {
+type SituationSignal = {
   kind: "history" | "failure" | "busy" | "health" | "ready" | "unbound";
   tone: "nav" | "alarm" | "commit" | "caution" | "done";
   title: string;
@@ -195,18 +195,6 @@ export function usePalette() {
 export function useSituationSignal() {
   return useContext(Context)?.signal ?? null;
 }
-export function usePublishSituationSignal(route: string, value: SituationSignal) {
-  const context = useContext(Context);
-  const primary = useIsPrimaryRoute(route);
-  const owner = useRef(Symbol(route)).current;
-  const publish = context?.setSignal;
-  const clear = context?.clearSignal;
-  useEffect(() => {
-    if (!primary || !publish || !clear) return;
-    publish({ ...value, owner });
-    return () => clear(owner);
-  }, [primary, publish, clear, owner, value.kind, value.tone, value.title, value.stamp]);
-}
 export function useSituationPresentation(route: string) {
   const slot = useContext(Context);
   const primary = useIsPrimaryRoute(route);
@@ -227,15 +215,6 @@ export function useIsPrimaryRoute(route: string) {
   const hosted = useContext(DockBand);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   return slot != null && hosted == null && pathname === routePath(route);
-}
-/**
- * Whether this route answers keys pressed outside every route mount (its portaled Situation, the
- * app bar, nothing focused): the URL's route, or, with no app bar to portal into, any unhosted one.
- */
-export function useRouteKeysPrimary(route: string, hosted: boolean) {
-  const slot = useContext(Context);
-  const primary = useIsPrimaryRoute(route);
-  return !hosted && (slot == null || primary);
 }
 export function RouteControlsOutlet({
   slot: name = "controls",

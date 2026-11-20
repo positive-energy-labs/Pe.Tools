@@ -314,8 +314,6 @@ export function ComposerState(_: { situation: ChatSituation }) {
   return <PlanChip tasks={tasks} />;
 }
 
-export type ComposerStatus = { text: string; caution: boolean; detail?: string };
-
 /** Pea's live questions, then the Work the bound document holds: the top of the composer box. */
 export function ComposerWork({ situation }: { situation: ChatSituation }) {
   const { answerQuestion, store, cancel, currentThreadId } = useWorkbench();

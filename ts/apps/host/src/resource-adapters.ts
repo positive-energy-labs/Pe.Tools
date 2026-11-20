@@ -28,7 +28,7 @@ import type { ActionJournal } from "./action-journal.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
-import type { DocumentMarks, DocumentRef } from "./document-marks.ts";
+import type { DocumentMarks, DocumentRef, MarkFrame } from "./document-marks.ts";
 import type { MachineOwnerPromise } from "./machine.ts";
 import { ductsReadings } from "@pe/ducts-host/ducts-readings";
 
@@ -132,7 +132,7 @@ export const markReadings =
       at?: number,
       carriage?: WorkCarriage,
       update?: boolean,
-    ) => Promise<import("./document-marks.ts").MarkFrame | null>,
+    ) => Promise<MarkFrame | null>,
   ) =>
   (observe: ResourceObserver): ResourceObserver =>
   (request, publish, after) => {

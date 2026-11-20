@@ -48,7 +48,6 @@
     "effect": "4.0.2",
     "jiti": "^2.7.0",
     "lucide-react": "1.21.0",
-    "mermaid": "catalog:",
     "modern-screenshot": "catalog:",
     "qrcode": "catalog:",
     "react": "^19.2.0",
@@ -67,6 +66,7 @@
     "@pe/fans-web": "workspace:*"
   },
   "devDependencies": {
+    "@effect/platform-node": "4.0.2",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/devtools-vite": "0.8.4",

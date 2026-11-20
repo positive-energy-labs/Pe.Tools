@@ -132,7 +132,7 @@ export const replayThreadEvents = Effect.fn("thread.replay")(function* (
 });
 
 /** One thread directory whose `meta.json` could not be read or decoded; the others still load. */
-export class ThreadUnreadable extends Schema.TaggedError<ThreadUnreadable>()("ThreadUnreadable", {
+class ThreadUnreadable extends Schema.TaggedError<ThreadUnreadable>()("ThreadUnreadable", {
   dir: Schema.String,
   reason: Schema.String,
 }) {
@@ -142,7 +142,7 @@ export class ThreadUnreadable extends Schema.TaggedError<ThreadUnreadable>()("Th
 }
 
 /** The thread root itself cannot be created or listed: the store has nowhere to live. */
-export class ThreadStoreUnavailable extends Schema.TaggedError<ThreadStoreUnavailable>()(
+class ThreadStoreUnavailable extends Schema.TaggedError<ThreadStoreUnavailable>()(
   "ThreadStoreUnavailable",
   { root: Schema.String, reason: Schema.String },
 ) {

@@ -18,7 +18,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
  * POSIX: SIGTERM to the process group, then SIGKILL after this grace (backend timer, not `Clock`).
  * Windows has no graceful signal for a console tree: `taskkill /T /F` is immediate.
  */
-export const CHILD_EXIT_GRACE = Duration.seconds(2);
+const CHILD_EXIT_GRACE = Duration.seconds(2);
 
 /** Exactly what the child receives: `env` is the whole environment, never merged with the host's. */
 export interface ChildLaunch {

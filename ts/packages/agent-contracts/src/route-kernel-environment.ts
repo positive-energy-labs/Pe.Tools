@@ -14,7 +14,7 @@ import type {
   ScopeToken,
 } from "./route-kernel-page.ts";
 
-export type GeometryCost = Immutable<RevitDetailSpaceScene.Artifact.GeometryCost>;
+type GeometryCost = Immutable<RevitDetailSpaceScene.Artifact.GeometryCost>;
 export type SceneContextRepresentation = RevitDetailSpaceScene.Req.SceneContextRepresentation;
 export type GeometryScope =
   | {
@@ -29,44 +29,12 @@ export type GeometryScope =
     }
   | { readonly kind: "region"; readonly id: SubjectRefCode }
   | { readonly kind: "family-document"; readonly id: DocumentKey };
-let mintExplicit: (token: AcceptanceToken) => ExplicitDetailRequest;
-let mintReach: (
-  subject: GeometryScope,
-  reachFt: number,
-  explicit: ExplicitDetailRequest,
-) => PreparedDetailReach;
-let mintRead: <T>(
-  key: ResolvedReadKey,
-  output: z.ZodType<T>,
-  route: AdmittedRoute,
-) => ResolvedRead<T>;
-let mintGeometry: <T>(
-  key: ResolvedReadKey,
-  output: z.ZodType<GeometryOutcome<T>>,
-  route: AdmittedRoute,
-  token: AcceptanceToken,
-  request: GeometryRequest<SceneContextRepresentation>,
-) => ResolvedGeometryRead<T>;
-let newGeometry: <T>(
-  key: ResolvedReadKey,
-  output: z.ZodType<GeometryOutcome<T>>,
-  route: AdmittedRoute,
-  token: AcceptanceToken,
-  request: GeometryRequest<SceneContextRepresentation>,
-  descriptor: ResolvedReadDescriptor,
-) => ResolvedGeometryRead<T>;
-let mintNative: (
-  submit: import("./work-journal-door.ts").WorkJournalDoor["submit"],
-) => NativeWriteCapability;
 
 /** Owner-issued for a human/Pea explicit request, never a dependency/focus refresh. */
 export class ExplicitDetailRequest {
   declare private readonly explicitAuthority: void;
   private constructor(readonly token: AcceptanceToken) {
     Object.freeze(this);
-  }
-  static {
-    mintExplicit = (token) => new ExplicitDetailRequest(token);
   }
 }
 /** Prepared by the geometry owner; finite reach >= 5 feet. */
@@ -78,9 +46,6 @@ export class PreparedDetailReach {
     readonly explicit: ExplicitDetailRequest,
   ) {
     Object.freeze(this);
-  }
-  static {
-    mintReach = (subject, reachFt, explicit) => new PreparedDetailReach(subject, reachFt, explicit);
   }
 }
 /** An unparameterized request can ONLY ask for the zero-tessellation overview. */
@@ -127,10 +92,6 @@ export class ResolvedRead<T> {
   ) {
     Object.freeze(this);
   }
-  static {
-    mintRead = <T>(key: ResolvedReadKey, output: z.ZodType<T>, route: AdmittedRoute) =>
-      new ResolvedRead(key, output, route);
-  }
 }
 /** Exact resolver-issued composite; copies/proxies refuse at acquisition. Membership does
  * not establish admission, document freshness or the current scope/attempt. */
@@ -146,30 +107,12 @@ export class ResolvedGeometryRead<T> {
   ) {
     Object.freeze(this);
   }
-  static {
-    mintGeometry = <T>(
-      key: ResolvedReadKey,
-      output: z.ZodType<GeometryOutcome<T>>,
-      route: AdmittedRoute,
-      token: AcceptanceToken,
-      request: GeometryRequest<SceneContextRepresentation>,
-    ) => new ResolvedGeometryRead(key, output, route, token, request);
-    newGeometry = (key, output, route, token, request, descriptor) =>
-      new ResolvedGeometryRead(
-        key,
-        output,
-        route,
-        token,
-        Object.freeze({ ...request }),
-        descriptor,
-      );
-  }
 }
 /** These are synchronous acquisition/submission ports, not a Promise or fiber runtime.
  * D's scoped Effect services own the acquisitions behind handles; release interrupts reads,
  * unsubscribe closes SSE, and command lifetime belongs to ActionJournal after submit.
  * TODO: D proves fixture isolation/missing-seed refusal and native transport import exclusion. */
-export interface ReadHandle<T> {
+interface ReadHandle<T> {
   readonly lifetime: "read";
   readonly key: ResolvedReadKey;
   read(): ReadingState<T>;
@@ -214,9 +157,6 @@ export class NativeWriteCapability {
   private constructor(readonly submit: import("./work-journal-door.ts").WorkJournalDoor["submit"]) {
     Object.freeze(this);
   }
-  static {
-    mintNative = (submit) => new NativeWriteCapability(submit);
-  }
 }
 
 /** Recursively sorted JSON input, with array order retained. */
@@ -236,146 +176,15 @@ export function canonicalEnvironmentInput(value: unknown): string {
   return encoded;
 }
 
-/** Kernel-private authority, retained at composition rather than exposed to route bodies.
- * Validators at acquisition still own admission and token/invocation freshness. */
-export function createRouteEnvironmentIssuer() {
-  const issued = new WeakSet<object>();
-  const own = <T extends object>(value: T): T => {
-    issued.add(value);
-    return value;
-  };
-  const owns = (value: unknown): boolean =>
-    typeof value === "object" && value !== null && issued.has(value);
-  return Object.freeze({
-    owns,
-    mintExplicit: (token: AcceptanceToken) => own(mintExplicit(token)),
-    mintReach: (subject: GeometryScope, reachFt: number, explicit: ExplicitDetailRequest) => {
-      if (
-        !owns(explicit) ||
-        !(explicit instanceof ExplicitDetailRequest) ||
-        !Number.isFinite(reachFt) ||
-        reachFt < 5
-      )
-        throw new Error("Invalid explicit detail reach");
-      if (
-        subject.kind === "subjects" &&
-        ("scope" in subject
-          ? subject.scope !== explicit.token.scope ||
-            subject.scope.identity.target?.kind !== "document" ||
-            !subject.ids.length ||
-            !subject.ids.every((id) => Number.isSafeInteger(id) && id > 0)
-          : subject.ids.some((id) => typeof id !== "string"))
-      )
-        throw new Error("Native detail subjects require the invocation document scope");
-      const captured: GeometryScope =
-        subject.kind === "subjects"
-          ? "scope" in subject
-            ? Object.freeze({
-                ...subject,
-                ids: Object.freeze([subject.ids[0], ...subject.ids.slice(1)] as const),
-              })
-            : Object.freeze({
-                ...subject,
-                ids: Object.freeze([subject.ids[0], ...subject.ids.slice(1)] as const),
-              })
-          : Object.freeze({ ...subject });
-      return own(mintReach(captured, reachFt, explicit));
-    },
-    mintRead: <T>(key: ResolvedReadKey, output: z.ZodType<T>, route: AdmittedRoute) =>
-      own(mintRead(Object.freeze({ ...key }), output, route)),
-    mintGeometry: <T>(
-      key: ResolvedReadKey,
-      output: z.ZodType<GeometryOutcome<T>>,
-      route: AdmittedRoute,
-      token: AcceptanceToken,
-      request: GeometryRequest<SceneContextRepresentation>,
-    ) => {
-      if (
-        request.representation === "overview"
-          ? request.scope !== token.scope
-          : !owns(request.reach) ||
-            !(request.reach instanceof PreparedDetailReach) ||
-            request.reach.explicit.token !== token
-      )
-        throw new Error("Geometry request/attempt mismatch");
-      const captured =
-        request.representation === "overview"
-          ? Object.freeze({
-              ...request,
-              subjects:
-                request.subjects.kind === "all"
-                  ? Object.freeze({ kind: "all" as const })
-                  : Object.freeze({
-                      kind: "ids" as const,
-                      ids: Object.freeze([...request.subjects.ids]),
-                    }),
-            })
-          : Object.freeze({ ...request });
-      if (key.sortedKeyInput !== canonicalEnvironmentInput(captured))
-        throw new Error("Geometry key/request mismatch");
-      return own(mintGeometry(Object.freeze({ ...key }), output, route, token, captured));
-    },
-    mintGeometryFromHost: <T>(
-      descriptor: ResolvedReadDescriptor,
-      output: z.ZodType<GeometryOutcome<T>>,
-      route: AdmittedRoute,
-      token: AcceptanceToken,
-      request: GeometryRequest<SceneContextRepresentation>,
-    ) => {
-      if (
-        request.representation === "overview"
-          ? request.scope !== token.scope
-          : !owns(request.reach) || request.reach.explicit.token !== token
-      )
-        throw Error("Geometry request/attempt mismatch");
-      const nativeTarget =
-        request.representation !== "overview" &&
-        request.reach.subject.kind === "subjects" &&
-        "scope" in request.reach.subject
-          ? request.reach.subject.scope.identity.target
-          : undefined;
-      if (
-        (request.native && descriptor.operationKey !== request.native.operationKey) ||
-        (nativeTarget?.kind === "document" &&
-          (!("openId" in descriptor.openDocumentLifetime) ||
-            descriptor.openDocumentLifetime.openId !== nativeTarget.ref.openId)) ||
-        descriptor.representation !==
-          (request.representation === "overview" ? "overview" : "detail")
-      )
-        throw Error("Host descriptor/request mismatch");
-      const freeze = (value: unknown): void => {
-        if (value && typeof value === "object" && !Object.isFrozen(value)) {
-          Object.values(value).forEach(freeze);
-          Object.freeze(value);
-        }
-      };
-      freeze(descriptor);
-      const captured = descriptor;
-      const key: ResolvedReadKey = Object.freeze({
-        op: captured.operationKey,
-        processIncarnation: canonicalEnvironmentInput(captured.processIncarnation),
-        documentLifetime: canonicalEnvironmentInput(captured.openDocumentLifetime),
-        sortedKeyInput: captured.normalizedInput,
-        freshnessGeneration: captured.freshnessGeneration,
-      });
-      // Host identity stays host-owned; only this exact D instance gains nominal authority.
-      return own(newGeometry(key, output, route, token, request, captured));
-    },
-    mintNative: (submit: import("./work-journal-door.ts").WorkJournalDoor["submit"]) =>
-      own(mintNative(submit)),
-  });
-}
-export type RouteEnvironmentIssuer = ReturnType<typeof createRouteEnvironmentIssuer>;
-
-export type WorkReadCapability = Pick<
+type WorkReadCapability = Pick<
   import("./work-journal-door.ts").WorkJournalDoor,
   "lifetime" | "open" | "receipts"
 >;
-export type WorkSubmitCapability = Pick<
+type WorkSubmitCapability = Pick<
   import("./work-journal-door.ts").WorkJournalDoor,
   "submitWork" | "submit" | "accepted"
 >;
-export interface ClockCapability {
+interface ClockCapability {
   readonly lifetime: "read";
   now(): number;
 }
@@ -403,8 +212,8 @@ export type KernelServices = Pick<
   readonly submitNative?: import("./work-journal-door.ts").WorkJournalDoor["submit"];
 };
 /** Application effects stay outside pure route bodies and the native action journal. */
-export type LocalCommandCall = Readonly<{ verb: string; entry: string; input: unknown }>;
-export type LocalCommandPort = (call: LocalCommandCall, signal: AbortSignal) => Promise<unknown>;
+type LocalCommandCall = Readonly<{ verb: string; entry: string; input: unknown }>;
+type LocalCommandPort = (call: LocalCommandCall, signal: AbortSignal) => Promise<unknown>;
 type GroupFor<
   D extends Pick<RouteGraphJson, "capabilities">,
   C extends RouteGraphJson["capabilities"][number],

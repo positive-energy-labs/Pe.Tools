@@ -29,7 +29,7 @@ import {
   unsavedOf,
   PHASE_TONE,
 } from "./session";
-import { outcomeOf, useOpenKernel } from "./context";
+import { outcomeOf, useOpenOwner } from "./context";
 
 /** The kit's reading of one census row, derived here once for both densities. */
 export const factsOf = (session: MachineSession): SessionFacts => {
@@ -87,7 +87,7 @@ export function useLifecycle({
   const ownershipRefusal = executionRefusal(row);
   const blocked = refusal ?? ownershipRefusal;
   const unsaved = unsavedOf(session);
-  const owner = useOpenKernel();
+  const owner = useOpenOwner();
   const busy = owner.busy() !== null;
   const run = async (command: Command, policy?: "keep" | "discard") => {
     try {

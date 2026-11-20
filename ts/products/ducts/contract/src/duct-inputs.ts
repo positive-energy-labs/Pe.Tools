@@ -3,7 +3,7 @@ import { decode, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import {
   VALUE_SOURCES,
   validValueSchema,
-  valueResolutionSchema,
+  sourcedValueSchema as resolved,
   type ValueResolution,
 } from "@pe/agent-contracts/work-value";
 import type { Author } from "@pe/agent-contracts/draft";
@@ -46,7 +46,6 @@ export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
  * A resolved input is the kernel resolution itself (`ValueResolution`, work-value.ts): the wire schema
  * is the kernel's schema, so neither can admit a shape the other refuses (P-041).
  */
-const resolved = valueResolutionSchema;
 export type Resolved<T> = ValueResolution<T>;
 /** A value some tier always states (a criterion, a typed table): only the kernel's valid member. */
 const stated = validValueSchema;
