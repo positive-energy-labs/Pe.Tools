@@ -1,6 +1,7 @@
 import type { PlanPicture } from "@pe/agent-contracts/slots";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
-import { paneLayout, route, scrollBody } from "@pe/web-kernel/route";
+import { paneLayout, scrollBody } from "@pe/web-kernel/route";
+import { screen } from "@pe/web-kernel/route/screen";
 
 export const planRoom = subjectCode({ keyKind: "region", key: "room" });
 export const planHall = subjectCode({ keyKind: "region", key: "hall" });
@@ -52,34 +53,39 @@ const plan: PlanPicture = {
 };
 
 export function declaredPlan(raster: "ready" | "absent" | "pending" | "refused" = "ready") {
-  return route({
-    key: "plan-fixture",
-    name: "Plan fixture",
-    directory: {
-      group: "Pods",
-      summary: "See the registered plan",
-      label: "Plan",
-      icon: "Boxes",
-      exposure: "Main",
-      surfaces: { web: "full", pwa: "full", tray: false },
-      aliases: [],
-      runtimeNeed: "Revit",
-      listed: true,
-      satellites: [],
-    },
-    fields: {},
-    picture: {
-      mode: "plan",
-      plan: () => ({ ...plan, raster: raster === "ready" ? plan.raster : null }),
-    },
-    panes: {
-      main: {
-        title: "Plan fixture",
-        purpose: "Host the picture pane",
-        body: "scroll",
-        draw: () => scrollBody(null),
+  return screen(
+    {
+      key: "plan-fixture",
+      name: "Plan fixture",
+      directory: {
+        group: "Pods",
+        summary: "See the registered plan",
+        label: "Plan",
+        icon: "Boxes",
+        exposure: "Main",
+        surfaces: { web: "full", pwa: "full", tray: false },
+        aliases: [],
+        runtimeNeed: "Revit",
+        listed: true,
+        satellites: [],
+      },
+      fields: {},
+      panes: ["main"],
+      picture: {
+        mode: "plan",
+        plan: () => ({ ...plan, raster: raster === "ready" ? plan.raster : null }),
       },
     },
-    layout: paneLayout("picture"),
-  });
+    {
+      panes: {
+        main: {
+          title: "Plan fixture",
+          purpose: "Host the picture pane",
+          body: "scroll",
+          draw: () => scrollBody(null),
+        },
+      },
+      layout: paneLayout("picture"),
+    },
+  );
 }

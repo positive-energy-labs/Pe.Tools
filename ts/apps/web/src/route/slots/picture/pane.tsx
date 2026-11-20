@@ -122,7 +122,7 @@ function KernelPicture({
   parts,
 }: {
   ctx: PicturePaneContext;
-  slot: ModelPictureSlot<any>;
+  slot: ModelPictureSlot<PicturePaneContext["draw"]>;
   scope: PictureScope;
   subject: readonly SubjectRefCode[];
   parts: PictureParts;
