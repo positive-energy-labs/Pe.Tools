@@ -82,6 +82,7 @@ import { DUCTS_MULTI } from "@pe/ducts-web/selection";
 import type { EditMeta } from "@pe/ducts-web/calc/input-history.neutral";
 import { EMPTY_SNAPSHOT } from "@pe/ducts-web/calc/scoped-snapshot";
 import { noRunParts, subjectNamer } from "@pe/ducts-web/subject-text";
+import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { systemList } from "../system-list.ts";
 import type { SystemNote } from "../system-list-search.ts";
 import { systemReadCoverage } from "@pe/ducts-domain/system-reads";
@@ -131,7 +132,7 @@ function useNetworkData(ctx: NetworkContext) {
     [priced],
   );
   const edit = useMemo(() => stagedValues(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
-  const seen = held?.effectiveDesign ?? null;
+  const seen = held ? withStoredRulings(workDoc, held.network.store, held.network) : null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
     () =>
