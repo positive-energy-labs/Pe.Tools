@@ -87,6 +87,7 @@ it("a value retired into the model store reads live from its parameter; the rece
     segments: [],
     slots: { ...TEST_SLOTS, terminalDrop: "PE_Drop" },
   } as unknown as CalcSnapshot;
+  const id = native.nodes[0]!.uniqueId;
   const drop = (
     work: object | undefined,
     store: Partial<NonNullable<CalcSnapshot["store"]>> | undefined,
@@ -103,7 +104,7 @@ it("a value retired into the model store reads live from its parameter; the rece
     ),
   ).toMatchObject({ value: 0.2, source: "Work" });
   // The receipt retires the staged cell: Work is cleared, and a hand edit in Revit since (0.5) is the value.
-  const retired = drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } });
+  const retired = drop(undefined, { terminals: { [id]: { inWg: 0.2, appliedAt: "t" } } });
   expect(retired).toMatchObject({
     value: 0.5,
     source: "model",
@@ -116,14 +117,14 @@ it("a value retired into the model store reads live from its parameter; the rece
   expect(
     drop(
       { terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } },
-      { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } },
+      { terminals: { [id]: { inWg: 0.2, appliedAt: "t" } } },
     ),
   ).toMatchObject({
     value: 0.3,
     source: "Work",
   });
   // A receipt never prices, whatever it holds: the live parameter answers.
-  expect(drop(undefined, { terminals: { "1": { inWg: -1, appliedAt: "t" } } })).toMatchObject({
+  expect(drop(undefined, { terminals: { [id]: { inWg: -1, appliedAt: "t" } } })).toMatchObject({
     value: 0.5,
     source: "model",
     status: "valid",
@@ -131,7 +132,7 @@ it("a value retired into the model store reads live from its parameter; the rece
   expect(drop(undefined, undefined)).toMatchObject({ value: 0.5, source: "model" });
   // D3: the written parameter no longer reads, so the value is missing, never the receipt or the firm default.
   native.nodes[0]!.terminalDrop = {} as never;
-  expect(drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({
+  expect(drop(undefined, { terminals: { [id]: { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({
     value: null,
     status: "missing",
   });

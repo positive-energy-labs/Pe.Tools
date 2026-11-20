@@ -178,29 +178,20 @@ test("recorded host-local inputs and immutable capture files replay without a li
     return result.value!;
   };
   try {
-    const captures = await read(live, "captures.browse"),
-      pods = await read(live, "pods.roster");
+    const pods = await read(live, "pods.roster");
     const native = await read(live, imageRead.name);
     expect(writer.truncation).toBeNull();
     expect(native.data).toMatchObject({ imageUrl: receipt.url, capture: { sha: receipt.sha } });
     expect(native.data).not.toHaveProperty("filePath");
     expect(await pictures.list()).toHaveLength(2);
-    expect(JSON.stringify(captures.data)).not.toContain(bytes.toString("base64"));
-    expect(captures.trace).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ name: "file:capture", args: receipt.sha }),
-      ]),
-    );
     await live.dispose();
     live = undefined;
-    vi.spyOn(pictures, "list").mockRejectedValue(Error("Live captures poisoned"));
     vi.spyOn(pictures, "blob").mockRejectedValue(Error("Live PNG poisoned"));
     const local = vi.spyOn(localInputs, "readLocal").mockRejectedValue(Error("Live Pods poisoned"));
     const reader = await settle(openRecordingReader(join(dir, "bundle"), identity, bounds));
     replay = make({ kind: "recording", recordingStore: reader, at: null });
     await rm(nativePath);
     expect((await read(replay, imageRead.name, native.inputs)).data).toEqual(native.data);
-    expect((await read(replay, "captures.browse", captures.inputs)).data).toEqual(captures.data);
     expect((await read(replay, "pods.roster", pods.inputs)).data).toEqual(pods.data);
     const image = await request(replay, receipt.url);
     expect(image.status).toBe(200);

@@ -3,7 +3,7 @@ import { ductFirmLineSchema } from "@pe/ducts-contract/duct-inputs";
 import { inferenceReadSchema, effectiveDuctsReadSchema } from "./ducts-pricing-read.ts";
 import { z } from "zod";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { nativeResponseSchema } from "@pe/host-contracts/native-schemas";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import { ductsDocumentSchema, ductSlotSourcesSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";

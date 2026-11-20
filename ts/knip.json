@@ -47,7 +47,13 @@
       "entry": ["scripts/*.ts", "src/generated/native-effect-direction.typecheck.ts"]
     },
     "packages/host-internal": {
-      "entry": ["src/request-contracts.typecheck.ts"]
+      "entry": ["src/request-contracts.typecheck.ts", "src/tests/*.typecheck.ts"]
+    },
+    "packages/web-kernel": {
+      "entry": ["src/route/tests/*.typecheck.ts"]
+    },
+    "products/*/contract": {
+      "entry": ["src/tests/*.typecheck.ts"]
     },
     "packages/kit": {
       "entry": ["tests/browser.mjs"]

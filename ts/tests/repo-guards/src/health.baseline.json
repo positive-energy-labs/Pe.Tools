@@ -124,7 +124,6 @@
     "ts/apps/web/src/families/parameter-metadata.tsx": 1,
     "ts/apps/web/src/families/patch-overlay.ts": 4,
     "ts/apps/web/src/families/pivot-grid.tsx": 2,
-    "ts/apps/web/src/grounded-doc/engine.ts": 1,
     "ts/apps/web/src/host/catalog-client.ts": 4,
     "ts/apps/web/src/host/client.ts": 1,
     "ts/apps/web/src/host/diagnostics.ts": 2,

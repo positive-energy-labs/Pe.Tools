@@ -130,6 +130,8 @@ test("S6 the route publishes its roster while a declared alone image is held", a
     },
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
     {
+      timeline: fixtureTimeline(),
+      readings: { subscribe: () => () => {} },
       sources: {
         [roster.key]: {
           kind: "use",

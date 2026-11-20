@@ -685,10 +685,10 @@ public static class Rooms
     private static IEnumerable<RoomsWriteCell> WriteCells(RoomsWriteRegion patch)
     {
         var values = TakeoffJson.Object(patch);
-        foreach (var field in Enum.GetValues<RoomField>())
+        foreach (RoomField field in Enum.GetValues(typeof(RoomField)))
         {
             if (values[field.ToString()] is not Newtonsoft.Json.Linq.JValue { Value: { } value }) continue;
-            if (value is double number && !double.IsFinite(number))
+            if (value is double number && (double.IsNaN(number) || double.IsInfinity(number)))
                 throw new InvalidOperationException($"rooms.write needs a finite '{field}'");
             yield return new(patch.UniqueId, field, value);
         }

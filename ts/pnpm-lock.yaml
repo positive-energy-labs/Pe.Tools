@@ -210,9 +210,6 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 'catalog:'
         version: 2.4.0
-      '@pe/web-kernel':
-        specifier: workspace:*
-        version: link:../../packages/web-kernel
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -1452,9 +1449,6 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../packages/agent-contracts
-      effect:
-        specifier: 4.0.2
-        version: 4.0.2
     devDependencies:
       '@pe/host-contracts':
         specifier: workspace:*

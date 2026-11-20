@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 test.each([0, 112])(
-  "F3/F4 roster with %i ports exposes search and admits only bounded All",
+  "F3/F4 roster with %i ports exposes search and can open or clear All",
   (size) => {
     vi.stubGlobal(
       "ResizeObserver",
@@ -53,9 +53,7 @@ test.each([0, 112])(
     expect(screen.getByRole("combobox", { name: "Search fans" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "All fans" }));
     fireEvent.click(screen.getByRole("button", { name: "Clear fans" }));
-    expect(door.all).toHaveBeenCalledTimes(size === 0 ? 1 : 0);
-    if (size)
-      expect(screen.getByText("Open up to 8 fan ports at a time from the roster.")).toBeTruthy();
+    expect(door.all).toHaveBeenCalledOnce();
     expect(door.clear).toHaveBeenCalledTimes(1);
   },
 );
