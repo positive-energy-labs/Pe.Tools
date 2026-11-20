@@ -126,6 +126,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 }, agent: { policy: "Choose member through member, using the module's local identities." }, module: "pods" },
 "rooms": { path: "/rooms" as const, title: "Rooms", fields: {
 "view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"level": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "room": field(subjectSchema(512).default({"kind":"ids","ids":[]}), "push"),
 "stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"partition","type":"string","enum":["partition","review","history"]}) as z.ZodType<Immutable<"partition" | "review" | "history">>).default("partition"), "push"),
 "layers": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":[],"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"all"}]}) as z.ZodType<Immutable<Array<string> | "all">>).default([]), "replace"),

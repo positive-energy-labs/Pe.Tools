@@ -20,6 +20,7 @@ import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
 import { peRoutes } from "@pe/mcps/product-catalog";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
+import { BridgeError } from "@pe/host-internal/bridge";
 
 const contracts = [
   ...Object.entries(
@@ -73,6 +74,43 @@ test("the browser door binds the target in the host contract's shape", () => {
   expect(rooms.request?.(rooms.input.parse({ view: "" }), { kind: "document", ref })).toMatchObject(
     { args: { target: { kind: "document", ref } } },
   );
+});
+
+test("Rooms recovers the chosen document's roster when a linked plan no longer exists", async () => {
+  const levels = [{ name: "Snowdon level", elevation: 0, views: ["Snowdon plan"] }];
+  const operations: string[] = [];
+  const read = await evaluate(
+    bodyOf(roomsWorkspace),
+    { target: { kind: "document", ref: { session: "s", openId: "snowdon" } }, view: "Chadds plan" },
+    port(async (name, args) => {
+      if (name === "document-mark") return { observedSince: 1, changedAt: null, generation: 0 };
+      if (name === "work-scope")
+        return { binding: "open", route: "rooms", target: null, open: args };
+      if (name === "work") return null;
+      if (name !== "native" || !args || typeof args !== "object" || !("key" in args))
+        throw Error(`Unexpected input: ${name}`);
+      operations.push(String(args.key));
+      if (args.key === "rooms.snapshot")
+        throw new BridgeError("That view is not in this document.", 400, {
+          dispatched: true,
+          issues: [
+            {
+              instancePath: "$.view",
+              code: "RoomsViewMissing",
+              message: "That view is not in this document.",
+              severity: "error",
+            },
+          ],
+        });
+      if (args.key === "rooms.roster") return { body: { levels, regions: [] }, version: null };
+      throw Error(`Unexpected native read: ${args.key}`);
+    }),
+  );
+  expect(operations).toEqual(["rooms.snapshot", "rooms.roster"]);
+  expect(read.data).toMatchObject({
+    snapshot: { levels, regions: [] },
+    unresolved: [{ id: "view", says: "Choose a level and a plan view", resolver: "person" }],
+  });
 });
 
 test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {

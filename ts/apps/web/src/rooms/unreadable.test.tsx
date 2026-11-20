@@ -28,7 +28,7 @@ test("rooms lists unreadable blobs as can't read, kept with owner and reason", (
   try {
     const view = render(
       <RoomsProvider ctx={ctx}>
-        <ScopeBody ctx={ctx} page={page} verbs={() => null} />
+        <ScopeBody />
       </RoomsProvider>,
     );
     expect(view.container.textContent).toContain("can't read, kept");

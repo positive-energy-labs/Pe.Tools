@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { nativeRequestSchema } from "@pe/host-contracts/decoders";
+import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
@@ -237,11 +237,15 @@ export function takeoffExecutors(
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),
-      bind: (ctx) => bindCarrier(ctx, () => selectRooms(ctx, () => [])),
+      bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          return value(ctx, native, "rooms.draw", nativeRequestInput(ctx.admission.input));
-        }),
+        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
+          value(ctx, native, "rooms.draw", nativeRequestInput(ctx.admission.input)),
+        ),
+      retires: (result) => {
+        z.object({ value: nativeResponseSchema("rooms.draw") }).parse(result);
+        return [["writeIntent", "rooms.draw"]];
+      },
     }),
     // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
     "rooms.write": command(

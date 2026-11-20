@@ -225,6 +225,7 @@ internal static class PeRoutes {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
             public const string View = "view";
+            public const string Level = "level";
             public const string Room = "room";
             public const string Stage = "stage";
             public const string Layers = "layers";
