@@ -7,6 +7,7 @@ import {
   sameAddress,
   type Machine,
   type Address,
+  type DocumentRef,
   type DocumentRequest,
   type ExecutionTarget,
   type Reading,
@@ -44,6 +45,26 @@ const openTitles = (inventory: Reading<unknown>) => {
       ),
     ),
   );
+};
+
+/**
+ * Target-owned state. The Page (every field and the selection), the Place memory, the readings and
+ * the Work binding are state of the resolved target: a change of this key, by any path (the picker,
+ * a `?target` pin, a reopened binding, a new sole document, Back and Forward), drops them in the
+ * shell before the next mount. A route lists nothing. The key is the exact document lifetime, so a
+ * reopened document is a new owner. A document that is not open is owned by its Address, so a
+ * `?target` Address of a closed file never shows the last document's Page; a binding lost to a
+ * close therefore resets too. A recorded point owns nothing (null), and the shell gives a fixture
+ * no owner.
+ * Default taken: the whole Page resets, because no field role says "survives a document".
+ */
+export const targetOwner = (input: {
+  readonly target: ExecutionTarget | null;
+  readonly work: { readonly open: DocumentRef | null; readonly address: string | null };
+  readonly history?: unknown;
+}): string | null => {
+  const owner = input.work.open ?? input.work.address ?? input.target;
+  return input.history || !owner ? null : JSON.stringify(owner);
 };
 
 export { parseTarget } from "./target-codec";

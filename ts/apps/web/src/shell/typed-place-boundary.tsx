@@ -13,7 +13,7 @@ export function admittedRouterAddress(history: {
   };
   push(href: string, state?: unknown): void;
   replace(href: string, state?: unknown): void;
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: (event?: { action?: { type: string } }) => void): () => void;
 }): AdmittedAddressPort {
   return {
     read: () => new URLSearchParams(history.location.search),
@@ -25,7 +25,10 @@ export function admittedRouterAddress(history: {
         history.location.state,
       );
     },
-    subscribe: (listener) => history.subscribe(listener),
+    subscribe: (listener) =>
+      history.subscribe((event) =>
+        listener(/^(BACK|FORWARD|GO)$/.test(event?.action?.type ?? "")),
+      ),
   };
 }
 

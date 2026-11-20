@@ -43,7 +43,6 @@ export const module = screen(
     ...declared,
     needs: "project",
     host: "@pe/rooms-host/product",
-    documentFields: ["views"],
     edits: {
       work: takeoffsWork,
       seed: () => takeoffsWork.schema.parse({}),

@@ -54,7 +54,6 @@ export const module = screen(
   {
     ...declared,
     host: "@pe/rooms-host/product",
-    documentFields: ["view"],
     edits: {
       work: roomsWork,
       seed: () => roomsWork.schema.parse({}),

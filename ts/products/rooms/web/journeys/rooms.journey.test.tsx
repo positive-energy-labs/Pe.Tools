@@ -2,59 +2,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 import { BridgeError } from "@pe/host-internal/bridge";
-import { address } from "@pe/agent-contracts";
-import { otherRef, switchDocument } from "../../../../tests/e2e/document-switch.test-support.tsx";
-import { module as rooms } from "../routes/rooms/route.ts";
 import { RosterBody } from "../src/rooms.tsx";
 import { CEILING, FLOOR, GONE, code, levels, region, zone, journey } from "./fixtures.ts";
 import { Pane, Sheet, planned, type Native } from "../../../../tests/e2e/mounted.test-support.tsx";
-
-test("Rooms: changing document clears the chosen room and lets the next document pick its own plan", async () => {
-  const { native } = model();
-  const a = await journey("rooms", native, new URLSearchParams({ view: JSON.stringify(FLOOR) }));
-  let search: URLSearchParams;
-  try {
-    render(<Screen mount={a.mount} />);
-    fireEvent.click(await screen.findByRole("option", { name: /^Room Office/ }));
-    expect(await screen.findByRole("textbox", { name: "Name of Office" })).toBeTruthy();
-    expect(a.search().get("room")).toContain(code(1));
-    search = await switchDocument(rooms.spec, a.search);
-  } finally {
-    await a.close();
-  }
-  const b = await journey(
-    "rooms",
-    (key, input) => {
-      if (key === "rooms.roster")
-        return {
-          levels: [{ ...levels[0], views: [levels[0]!.views[1]] }],
-          regions: [],
-          trackedRegionIds: [region(3).uniqueId],
-        };
-      return native(key, input);
-    },
-    search,
-    { ref: otherRef, path: address("C:/Models/Snowdon.rvt") },
-  );
-  try {
-    render(<Screen mount={b.mount} />);
-    expect(plan()).toHaveProperty("value", "");
-    expect(
-      await within(plan()).findByRole("option", {
-        name: "Snowdon level \u00b7 L2 \u00b7 CeilingPlan",
-      }),
-    ).toBeTruthy();
-    expect(within(plan()).queryByRole("option", { name: /FloorPlan/ })).toBeNull();
-    expect(screen.queryByRole("textbox", { name: "Name of Office" })).toBeNull();
-    expect(b.search().get("room")).toBe(JSON.stringify({ kind: "ids", ids: [] }));
-    choose(CEILING);
-    expect(await screen.findByRole("option", { name: /^Room Plenum/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("option", { name: /^Room Plenum/ }));
-    expect(await screen.findByRole("textbox", { name: "Name of Plenum" })).toBeTruthy();
-  } finally {
-    await b.close();
-  }
-});
 
 /** A model of two plans. Each plan holds its own regions, so a wrong plan key shows at once. */
 function model() {

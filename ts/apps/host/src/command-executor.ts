@@ -25,7 +25,8 @@ export interface CommandResources {
     moment?: string,
     pass?: object,
   ): Promise<unknown>;
-  target?(target: ExecutionTarget, needs: ActionNeed): Promise<void>;
+  /** Confirms the target against the command contract; answers a document's Address, null when unsaved. */
+  target?(target: ExecutionTarget, needs: ActionNeed): Promise<string | null | void>;
   effectPath?(effect: Extract<RouteEffect, { kind: "member" }>): Promise<string | undefined>;
 }
 export interface CommandEnvironment extends CommandResources {

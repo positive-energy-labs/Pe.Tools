@@ -3,8 +3,6 @@ import { ListPopup } from "@pe/kit/lang/list-popup";
 import { inventoryOf, previousOf, useInventory } from "../host/resource-state";
 import type { AdmittedAddressPort } from "./typed-address";
 import type { PlaceInput } from "./typed-place";
-import { resetDocumentFields } from "@pe/web-kernel/route/field-codec";
-import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 
 /** A choice pins this Place to an exact open lifetime; it never changes the chat's targets. */
 export function DocumentPicker({
@@ -12,13 +10,11 @@ export function DocumentPicker({
   target,
   needs,
   enabled,
-  page,
 }: {
   place: { address: AdmittedAddressPort };
   target: PlaceInput["target"];
   needs: string;
   enabled: boolean;
-  page?: Pick<TypedRoute["spec"], "documentFields" | "fields">;
 }) {
   const inventory = useInventory(enabled);
   if (!enabled) return null;
@@ -67,7 +63,6 @@ export function DocumentPicker({
       row: (option) => ({ label: option.label, sub: option.session }),
       onPick: (option) => {
         const search = place.address.read();
-        if (page && key(option.ref) !== selected) resetDocumentFields(page, search);
         search.set("target", JSON.stringify({ kind: "open", ref: option.ref }));
         place.address.write(search, "push");
       },

@@ -4,5 +4,6 @@ type AddressHistory = "push" | "replace";
 export interface AdmittedAddressPort {
   read(): URLSearchParams;
   write(search: URLSearchParams, history: AddressHistory): void;
-  subscribe(listener: () => void): () => void;
+  /** `traversed`: the address was reached by Back or Forward, so the entry is not ours to rewrite. */
+  subscribe(listener: (traversed?: boolean) => void): () => void;
 }

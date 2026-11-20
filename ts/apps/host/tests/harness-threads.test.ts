@@ -405,6 +405,8 @@ test.each([
       work: routes.workspace,
       resolve,
       probe: async () => true,
+      // The one open document's Address: the kernel fences Address-keyed Work against it.
+      target: async () => address,
     });
     let base = "";
     let located: WorkHandle;

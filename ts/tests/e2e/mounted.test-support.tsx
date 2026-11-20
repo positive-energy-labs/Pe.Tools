@@ -9,8 +9,22 @@ import { SheetPane } from "../../apps/web/src/route/slots/sheet/pane";
 import { typedSubjectDoor, type TypedMount } from "../../apps/web/src/shell/typed-mount";
 import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 
-export { mounted, path, ref, type Native } from "../../apps/web/src/shell/mounted-journey.test-support";
-export { planned } from "../../apps/web/src/shell/typed-mount";
+export {
+  mounted,
+  path,
+  ref,
+  type Native,
+} from "../../apps/web/src/shell/mounted-journey.test-support";
+export { planned, typedSubjectDoor } from "../../apps/web/src/shell/typed-mount";
+// The recorded Chadds duct walk the fixture host answers duct reads with.
+export { roster, snapshot } from "../../apps/host/tests/host-read-graph.test-support";
+export {
+  targetChange,
+  backRestores,
+  targetPaths,
+  type JourneyDoc,
+  type TargetProduct,
+} from "../../apps/web/src/shell/target-journey.test-support";
 
 /** One pane of the mounted route, drawn again on every change of the mount. */
 export function Pane({

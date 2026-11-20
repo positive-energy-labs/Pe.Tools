@@ -26,16 +26,16 @@ import { createWorkFeedClient } from "./work-feed-client";
 
 export { path, ref };
 export type Native = (key: string, input: any) => unknown;
+export type JourneyDocument = { ref: typeof ref; path: typeof path; title?: string };
 
-export async function mounted(
-  module: { spec: { key: string } },
+/** One document's fixture host and the ports a typed mount takes from it. */
+export async function hosted(
+  route: string,
   /** The host reads this route's panes open. */
   reads: string[],
   native: Native,
-  { search = new URLSearchParams(), start = true, document = { ref, path } } = {},
+  { ref, path, title = "Snowdon" }: JourneyDocument,
 ) {
-  const { ref, path } = document;
-  const route = module.spec.key;
   const nativeCalls: { key: string; input: unknown }[] = [];
   const actions: { key: string; input: Record<string, unknown> }[] = [];
   bindControl({ runs: testRegistry(), acquired: () => null });
@@ -50,7 +50,7 @@ export async function mounted(
           openDocuments: [
             {
               ...ref,
-              title: "Snowdon",
+              title,
               address: path,
               isActive: true,
               isFamilyDocument: false,
@@ -198,6 +198,39 @@ export async function mounted(
       };
     },
   };
+  return {
+    host,
+    actions,
+    nativeCalls,
+    reread,
+    ports: {
+      work,
+      timeline: fixtureTimeline(host.workspace),
+      sources: Object.fromEntries(reads.map((read) => [read, source(read)])),
+    },
+    async close() {
+      stopWork();
+      await Promise.allSettled([...pending]);
+      for (const stop of streams) stop();
+      await host.close();
+    },
+  };
+}
+
+export async function mounted(
+  module: { spec: { key: string } },
+  reads: string[],
+  native: Native,
+  { search = new URLSearchParams(), start = true, document = { ref, path } } = {},
+) {
+  const { ref, path } = document;
+  const route = module.spec.key;
+  const { host, actions, nativeCalls, reread, ports, close } = await hosted(
+    route,
+    reads,
+    native,
+    document,
+  );
   const writes: { search: string; history: unknown }[] = [];
   const mount = mountTypedRoute(
     module as never,
@@ -217,11 +250,7 @@ export async function mounted(
       },
     } as never,
     routeRegistry[route]!.fingerprint,
-    {
-      work,
-      timeline: fixtureTimeline(host.workspace),
-      sources: Object.fromEntries(reads.map((read) => [read, source(read)])),
-    },
+    ports,
   ) as TypedMount;
   const stop = mount.subscribe(() => {});
   await waitFor(() => expect(mount.startAction()).not.toBeNull());
@@ -240,7 +269,9 @@ export async function mounted(
       waitFor(
         () => {
           const value = mount.value();
-          expect(value.state, value.state === "ready" ? "" : (refusalOf(value) ?? "")).toBe("ready");
+          expect(value.state, value.state === "ready" ? "" : (refusalOf(value) ?? "")).toBe(
+            "ready",
+          );
           expect(mount.workBasis()).toBeTruthy();
         },
         { timeout: 20000 },
@@ -249,10 +280,7 @@ export async function mounted(
       cleanup();
       stop();
       mount.dispose();
-      stopWork();
-      await Promise.allSettled([...pending]);
-      for (const stop of streams) stop();
-      await host.close();
+      await close();
     },
   };
 }
