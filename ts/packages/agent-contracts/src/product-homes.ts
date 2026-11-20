@@ -190,3 +190,21 @@ export const machineFile = (declared: NativeHome<"machine-file">): Home<never> =
     seenInRevit: "Nothing",
   },
 });
+
+/** Beside the ladder: a file whose path the command's input names. */
+export const externalFile = (name: string): Home<"name"> => ({
+  [made]: "home",
+  kind: "external-file",
+  rung: null,
+  key: `external-file:${name}`,
+  takes: ["name"],
+  place: () => ({ at: "store", store: `external-file:${name}` }),
+  cost: {
+    readsPerCommand: "One named file",
+    placesThatCanDisagree: "One per file",
+    setupBeforeFirstUse: "Supply the file path",
+    writeBorrows: "The file",
+    sizeLimit: "File format limit",
+    seenInRevit: "Nothing",
+  },
+});

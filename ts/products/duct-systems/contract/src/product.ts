@@ -118,7 +118,7 @@ export const product = define({
   },
   homes: { settings: base.homes.settings, catalogs: base.homes.catalogs, losses },
   cells: ductSystemCells,
-  sheetWrites: { losses: ["rules", "assumptions"] },
+  sheetWrites: { route: "duct-systems", writes: { losses: ["rules", "assumptions"] } },
   readings: {
     overview: {
       handle: reads.overview,

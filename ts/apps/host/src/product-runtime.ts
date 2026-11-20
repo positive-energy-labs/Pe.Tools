@@ -5,10 +5,7 @@ import type { CommandBody, implement } from "@pe/host-internal/product";
 import type { FamilyActionDependencies } from "./family-actions.ts";
 
 type Deps = FamilyActionDependencies & Parameters<CommandBody>[1];
-type SheetOwner = {
-  id: string;
-  executors: Record<string, CommandExecutor>;
-};
+type SheetOwner = Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], CommandExecutor>;
 export type SheetExecutors = ReadonlyMap<string, SheetOwner>;
 
 /** Work selects the admitted product's sheet body. */
@@ -28,13 +25,11 @@ export function bindProducts(hosts: readonly ReturnType<typeof implement>[]) {
           if (Object.hasOwn(executors, key)) throw Error(`Duplicate product executor ${key}`);
           executors[key] = executor;
         }
-        if (!product.sheetWrites) continue;
-        if (!plan || !apply || sheets.has(product.id))
-          throw Error(`Product ${product.id} needs both sheet bodies and a unique Work owner`);
-        sheets.set(product.id, {
-          id: product.id,
-          executors: { [SHEET_COMMANDS.plan]: plan, [SHEET_COMMANDS.apply]: apply },
-        });
+        const sheet = product.sheetWrites;
+        if (!sheet) continue;
+        if (!plan || !apply || sheets.has(sheet.route))
+          throw Error(`Work route ${sheet.route} needs both sheet bodies from one product`);
+        sheets.set(sheet.route, { [SHEET_COMMANDS.plan]: plan, [SHEET_COMMANDS.apply]: apply });
       }
       return { executors, sheets };
     },

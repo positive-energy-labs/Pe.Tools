@@ -9,6 +9,7 @@ import { contract } from "@pe/agent-contracts/handle";
 import {
   cell,
   documentRecord,
+  externalFile,
   machineFile,
   machineFileHandle,
   ownerBlob,
@@ -260,6 +261,7 @@ export const product = define({
     registry: documentRecord(ownerBlob("takeoffRegistry")),
     /** One solve's evidence per zone, kept by the native partition. */
     traces: machineFile(machineFileHandle("runTraces")),
+    r10: externalFile(".r10"),
   },
   cells: {
     name: cell(text, "subject", { label: "Name" }),
@@ -433,12 +435,12 @@ export const product = define({
         "takeoffs.rhvac-links.preflight",
         "takeoffs.rhvac-links",
       ],
-      writes: { regions: [] },
+      writes: { regions: [], r10: ["edits"] },
     }),
   },
   // The staged room fields reach the region record through the platform's sheet pair
   // (`sheet.plan`, `sheet.apply`); the host body answers for each cell (ruling 7).
-  sheetWrites: { regions: ROOM_FIELDS },
+  sheetWrites: { route: "rooms", writes: { regions: ROOM_FIELDS } },
   routes: {
     rooms: {
       name: "Rooms",

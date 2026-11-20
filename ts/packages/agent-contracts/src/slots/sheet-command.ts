@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { sheetNativeOperations } from "@pe/host-contracts/operation-types";
 import type { Command } from "../command.ts";
-import type { ProductDeclaration } from "../product.ts";
+import type { ProductCommand } from "../product.ts";
 import { ANY_ROUTE, workWriteCommands } from "../write-intent.ts";
 import { SHEET_COMMANDS } from "./sheet.ts";
 
@@ -45,6 +45,6 @@ declare module "../handle.ts" {
 
 /** The plan writes nothing. Apply's footprint comes from the product owning the admitted Work. */
 export const sheetWritesFor = (
-  writes: ProductDeclaration["sheetWrites"],
-): Readonly<Record<string, NonNullable<ProductDeclaration["sheetWrites"]>>> =>
+  writes: ProductCommand["writes"] | undefined,
+): Readonly<Record<string, ProductCommand["writes"]>> =>
   writes === undefined ? {} : { [SHEET_COMMANDS.plan]: {}, [SHEET_COMMANDS.apply]: writes };

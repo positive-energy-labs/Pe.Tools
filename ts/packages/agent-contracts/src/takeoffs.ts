@@ -1,10 +1,7 @@
 import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 import type { TakeoffsSnapshot } from "@pe/host-contracts/generated";
-import { writeIntentSchema } from "./write-intent.ts";
 import { z } from "zod";
 
-import { type RouteStatePatch, type RouteStateSpec } from "./route-state.ts";
-import { cellPatches, draftCellSchema, type CellLike } from "./draft.ts";
 import { observationSchema } from "./reading.ts";
 import { addressSchema } from "./target.ts";
 import { documentRefSchema } from "./target.ts";
@@ -48,7 +45,6 @@ const modelViewSchema = z.object({
   replayPath: z.string().nullable(),
 });
 
-export type ModelView = z.infer<typeof modelViewSchema>;
 
 const roomDataSchema = z.object({
   people: z.number(),
@@ -96,8 +92,6 @@ const modelRoomSchema = z.object({
 });
 
 export type ModelRoom = z.infer<typeof modelRoomSchema>;
-export type RoomType = ModelRoom["type"];
-export type RoomData = NonNullable<ModelRoom["data"]>;
 
 export const partitionReviewSchema = z.object({
   source: z.object({
@@ -214,11 +208,6 @@ const viewFactsSchema = z.object({
 });
 export type ViewFacts = z.infer<typeof viewFactsSchema>;
 
-const modelStatusSchema = z.object({
-  systems: z.array(z.object({ guid: z.string(), tag: z.string() })),
-});
-export type RegistrySystem = z.infer<typeof modelStatusSchema>["systems"][number];
-
 export const takeoffCarrierPreflightSchema = z.object({
   stage: z.enum(["Adoption", "Materialization"]),
   status: z.enum(["ready", "needs-initialization"]),
@@ -235,7 +224,6 @@ const detectedRoomSchema = z.object({
   flags: z.array(z.string()),
   outer: z.array(pointSchema),
 });
-export type DetectedRoom = z.infer<typeof detectedRoomSchema>;
 
 const detectedResidueSchema = z.object({
   id: z.string(),
@@ -267,7 +255,6 @@ export const partitionRunSchema = z.object({
   residues: z.array(detectedResidueSchema),
   regions: z.array(liveRegionSchema),
 });
-export type PartitionRun = z.infer<typeof partitionRunSchema>;
 
 const takeoffModelSchema = z.object({
   docName: z.string(),
@@ -285,7 +272,6 @@ const takeoffModelSchema = z.object({
   ),
 });
 export type TakeoffModel = z.infer<typeof takeoffModelSchema>;
-export type ModelSystem = TakeoffModel["systems"][number];
 
 export const takeoffUnreadableBlobSchema =
   nativeResponseDefinitionSchema<TakeoffsSnapshot.Res.TakeoffUnreadableBlob>(
@@ -359,197 +345,64 @@ export const takeoffObservationStatusSchema = z.discriminatedUnion("kind", [
     previousId: z.string().optional(),
   }),
 ]);
-export type TakeoffObservationStatus = z.infer<typeof takeoffObservationStatusSchema>;
 
-/** A room's current edit as the host consumes it: the baseline beside, edited values as `next`. */
+/** A room's current edit as the host consumes it. */
 export const stagedRoomEditSchema = z.object({
   roomId: z.string(),
-  base: roomEditSchema,
   next: roomEditSchema,
 });
 export type StagedRoomEdit = z.infer<typeof stagedRoomEditSchema>;
 export type RoomEdit = z.infer<typeof roomEditSchema>;
 export type RoomEditField = keyof RoomEdit;
-const ROOM_EDIT_FIELDS = Object.keys(roomEditSchema.shape) as RoomEditField[];
 
 /** One canonical JSON tuple per cell address, the Families encoding rule. */
 const tupleKey = (parts: readonly string[]) => JSON.stringify(parts);
-const tupleOf = (key: string, length: number): string[] | null => {
-  try {
-    const parts = JSON.parse(key) as unknown;
-    return Array.isArray(parts) &&
-      parts.length === length &&
-      parts.every((part) => typeof part === "string") &&
-      tupleKey(parts) === key
-      ? parts
-      : null;
-  } catch (error) {
-    console.warn("ts/packages/agent-contracts/src/takeoffs.ts: fallback after failure", error);
-    return null;
-  }
+const tupleSchema = z.tuple([z.string(), z.string()]);
+const tupleOf = (key: string) => {
+  const parts = tupleSchema.parse(JSON.parse(key));
+  if (tupleKey(parts) !== key) throw Error("Expected a canonical Takeoffs cell key");
+  return parts;
 };
-const keyed = (length: number, what: string) =>
-  z.string().refine((key) => tupleOf(key, length) !== null, {
-    error: `a takeoffs ${what} cell key must be a canonical JSON tuple`,
-  });
-
 /** A room field's edit: `[roomId, field]`, its value that field's next value. */
 export const takeoffEditKey = (roomId: string, field: RoomEditField) => tupleKey([roomId, field]);
 export const takeoffEditAddress = (key: string) => {
-  const [roomId, field] = tupleOf(key, 2)!;
-  return { roomId: roomId!, field: field as RoomEditField };
+  const [roomId, field] = tupleOf(key);
+  if (!Object.hasOwn(roomEditSchema.shape, field)) throw Error(`Unknown Takeoffs room field ${field}`);
+  return { roomId, field: field as RoomEditField };
 };
 /** A person's verdict on a solver flag: `[roomGuid, flag]`. */
 export const takeoffDecisionKey = (roomGuid: string, flag: string) => tupleKey([roomGuid, flag]);
 export const takeoffDecisionAddress = (key: string) => {
-  const [roomGuid, flag] = tupleOf(key, 2)!;
-  return { roomGuid: roomGuid!, flag: flag! };
+  const [roomGuid, flag] = tupleOf(key);
+  return { roomGuid, flag };
 };
 /** A review flag on one shape of a zone's saved partition review: `[zoneKey, shapeKey]`. */
 export const takeoffFlagKey = (zoneKey: string, shapeKey: string) => tupleKey([zoneKey, shapeKey]);
 
-const editCellSchema = draftCellSchema(z.union([z.string(), z.number()]));
-const adoptChoiceSchema = z.object({
-  checked: z.boolean().optional(),
-  name: z.string().optional(),
-  systemTag: z.string().optional(),
-});
-export type AdoptChoice = z.infer<typeof adoptChoiceSchema>;
-const verdictSchema = z.enum(["accept", "dismiss"]);
+type StagedCells<V> = Record<string, { edit?: { value?: V } | null }>;
 
-/**
- * Every authored takeoff judgment is a shared cell: either author edits or suggests,
- * and hosts consume the current `edit`. `bases` holds each edited room's immutable baseline beside the
- * cells, never inside a value. Strict, so pre-cells Work fails closed rather than lose its values.
- */
-const takeoffsDocumentSchema = z
-  .strictObject({
-    writeIntent: writeIntentSchema.optional().meta({ title: "Write scope", internal: true }),
-    edits: z.record(keyed(2, "edit"), editCellSchema).default({}).meta({ title: "Room edits" }),
-    bases: z.record(z.string(), roomEditSchema).default({}).meta({ title: "Baseline room values" }),
-    /** Keyed by candidate (`<view>:<elementId>`). */
-    adopt: z
-      .record(z.string(), draftCellSchema(adoptChoiceSchema))
-      .default({})
-      .meta({ title: "Adoption choices" }),
-    decisions: z
-      .record(keyed(2, "decision"), draftCellSchema(verdictSchema))
-      .default({})
-      .meta({ title: "Flag decisions" }),
-    /** A flag has no commit verb: the edited set is the durable judgment and the export. */
-    reviewFlags: z
-      .record(keyed(2, "review flag"), draftCellSchema(z.literal(true)))
-      .default({})
-      .meta({ title: "Review flags" }),
-  })
-  .superRefine((doc, ctx) => {
-    // Each edit's rungs hold a value that field accepts.
-    for (const [key, cell] of Object.entries(doc.edits)) {
-      const { field } = takeoffEditAddress(key);
-      const schema = (roomEditSchema.shape as Record<string, z.ZodOptional<z.ZodType>>)[field];
-      if (!schema) {
-        ctx.addIssue({ code: "custom", path: ["edits", key], message: `no room field '${field}'` });
-        continue;
-      }
-      const value = cell.edit?.value;
-      if (value !== undefined && !schema.unwrap().safeParse(value).success)
-        ctx.addIssue({
-          code: "custom",
-          path: ["edits", key, "edit", "value"],
-          message: `not a ${field} value`,
-        });
-    }
-  });
-export type TakeoffsRouteDocument = z.infer<typeof takeoffsDocumentSchema>;
-
-const stagedOf = <V>(cells: Record<string, CellLike>) =>
+const stagedOf = <V>(cells: StagedCells<V>) =>
   Object.entries(cells).flatMap(([key, cell]) =>
-    cell.edit?.value !== undefined ? [[key, cell.edit.value as V] as const] : [],
+    cell.edit?.value !== undefined ? [[key, cell.edit.value] as const] : [],
   );
 
 /** Current room edits, one per room: what sync consumes. Optional suggestions never appear. */
-export function stagedTakeoffEdits(
-  // The product's Work holds only cells, so it has no `bases`; no reader of a staged edit uses one.
-  doc: Pick<TakeoffsRouteDocument, "edits"> & Partial<Pick<TakeoffsRouteDocument, "bases">>,
-): Record<string, StagedRoomEdit> {
-  const edits: Record<string, StagedRoomEdit> = {};
-  for (const [key, value] of stagedOf<string | number>(doc.edits)) {
+export function stagedTakeoffEdits(doc: {
+  edits: StagedCells<string | number>;
+}): Record<string, StagedRoomEdit> {
+  const edits = new Map<string, StagedRoomEdit>();
+  for (const [key, value] of stagedOf(doc.edits)) {
     const { roomId, field } = takeoffEditAddress(key);
-    const edit = (edits[roomId] ??= { roomId, base: doc.bases?.[roomId] ?? {}, next: {} });
+    if (!roomEditSchema.shape[field].safeParse(value).success)
+      throw Error(`Invalid Takeoffs room edit for ${field}`);
+    const edit = edits.get(roomId) ?? { roomId, next: {} };
     (edit.next as Record<string, unknown>)[field] = value;
+    edits.set(roomId, edit);
   }
-  return edits;
+  return Object.fromEntries(edits);
 }
-export const stagedAdoptChoices = (doc: Pick<TakeoffsRouteDocument, "adopt">): Record<string, AdoptChoice> =>
-  Object.fromEntries(stagedOf<AdoptChoice>(doc.adopt));
+export const stagedAdoptChoices = <V>(doc: { adopt: StagedCells<V> }) =>
+  Object.fromEntries(stagedOf(doc.adopt));
 /** Current flag verdict edits, keyed by `takeoffDecisionKey`. */
-export const stagedDecisions = (doc: Pick<TakeoffsRouteDocument, "decisions">): Record<string, "accept" | "dismiss"> =>
-  Object.fromEntries(stagedOf<"accept" | "dismiss">(doc.decisions));
-/** Current review flag edits per zone. */
-export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, string[]> {
-  const zones: Record<string, string[]> = {};
-  for (const [key] of stagedOf<true>(doc.reviewFlags)) {
-    const [zoneKey, shapeKey] = tupleOf(key, 2)!;
-    (zones[zoneKey!] ??= []).push(shapeKey!);
-  }
-  return zones;
-}
-
-/** Either author clears every current room edit; optional suggestions stay. */
-export const takeoffDiscardEdits = (doc: TakeoffsRouteDocument): RouteStatePatch[] =>
-  Object.entries(doc.edits).flatMap(([key, cell]) =>
-    cell.edit ? cellPatches(["edits"], key, cell, { kind: "clear" }) : [],
-  );
-
-/** Either author flags or unflags a review shape; unflag clears the shape's current edit. */
-export function takeoffFlagToggle(
-  doc: TakeoffsRouteDocument,
-  zoneKey: string,
-  shapeKey: string,
-): RouteStatePatch[] {
-  const key = takeoffFlagKey(zoneKey, shapeKey);
-  const cell = doc.reviewFlags[key] ?? {};
-  return cellPatches(
-    ["reviewFlags"],
-    key,
-    cell,
-    cell.edit ? { kind: "clear" } : { kind: "set", rung: { value: true } },
-  );
-}
-
-/**
- * Either author edits a room's next values against its baseline. A field equal to the baseline
- * has no edit, and an omitted field clears its current edit. The baseline is
- * recorded beside the cells the first time the room is edited.
- */
-export function takeoffEditPatches(
-  doc: TakeoffsRouteDocument,
-  roomId: string,
-  base: RoomEdit,
-  next: RoomEdit,
-): RouteStatePatch[] {
-  const baseline = doc.bases[roomId] ?? base;
-  return [
-    ...(doc.bases[roomId] ? [] : [{ path: ["bases", roomId], value: base }]),
-    ...ROOM_EDIT_FIELDS.flatMap((field) => {
-      const key = takeoffEditKey(roomId, field);
-      const cell = doc.edits[key] ?? {};
-      const value = next[field];
-      if (value === undefined)
-        return cell.edit ? cellPatches(["edits"], key, cell, { kind: "clear" }) : [];
-      return cellPatches(["edits"], key, cell, {
-        kind: "set",
-        rung: { value },
-        ...(baseline[field] === undefined ? {} : { baseline: { value: baseline[field] } }),
-      });
-    }),
-  ];
-}
-
-export const takeoffsRouteState = {
-  route: "takeoffs",
-  title: "Takeoffs",
-  description:
-    "Shared edited room values, adoption choices, flag verdicts and review flags, each one cell. Either author edits or suggests; sync consumes the current edits. Model geometry is read from takeoffs.snapshot; durable saved observations are at /takeoffs/observations.",
-  schema: takeoffsDocumentSchema,
-} satisfies RouteStateSpec<typeof takeoffsDocumentSchema>;
+export const stagedDecisions = (doc: { decisions: StagedCells<"accept" | "dismiss"> }) =>
+  Object.fromEntries(stagedOf(doc.decisions));

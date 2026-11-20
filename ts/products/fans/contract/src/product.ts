@@ -230,7 +230,7 @@ const declaration = declare({
   homes: ducts.homes,
   cells: fanCells,
   commands: {},
-  sheetWrites: writes,
+  sheetWrites: { route: "fans", writes },
   readings: {
     calc: {
       handle: calc,

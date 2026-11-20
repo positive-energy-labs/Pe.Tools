@@ -6,13 +6,13 @@ import {
   address,
   routeBindingsSchema,
   workWriteSchema,
-  takeoffsRouteState,
   threadHeadSchema,
   bindWork,
   workKey,
   type ThreadHead,
 } from "@pe/agent-contracts";
 import { tools } from "@pe/mcps/product-actions";
+import { takeoffsWork } from "@pe/rooms-contract/product";
 import type { Caller } from "@pe/agent-contracts";
 
 import { peRoutes } from "@pe/mcps/product-catalog";
@@ -271,7 +271,7 @@ const registrations = [
       route: "test",
       title: "Test",
       description: "Lifetime proof",
-      schema: takeoffsRouteState.schema.extend({
+      schema: takeoffsWork.schema.extend({
         count: threadHeadSchema.shape.revision.default(0),
       }),
     },

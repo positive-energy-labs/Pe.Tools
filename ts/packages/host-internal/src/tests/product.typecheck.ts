@@ -47,7 +47,7 @@ cell({ kind: "text", shape: z.string() }, "route");
 // @ts-expect-error text is not an enum with an empty static choice list
 cell({ kind: "enum", shape: z.string(), choices: [] }, "route");
 
-const withSheet = product({ ...tiny, sheetWrites: {} });
+const withSheet = product({ ...tiny, sheetWrites: { route: "tiny", writes: {} } });
 implement(withSheet, {
   readings,
   commands: { ...commands, "sheet.plan": executor, "sheet.apply": executor },

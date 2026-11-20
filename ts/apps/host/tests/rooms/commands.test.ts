@@ -8,7 +8,14 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, takeoffObservationSchema } from "@pe/agent-contracts";
+import {
+  address,
+  demoSeedCodec,
+  stagedTakeoffEdits,
+  takeoffEditKey,
+  takeoffObservationSchema,
+} from "@pe/agent-contracts";
+import { landings } from "@pe/agent-contracts/product";
 import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract/product";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
 import { bindCommandRuntime } from "../../src/command-registry.ts";
@@ -29,6 +36,35 @@ import syncSeed from "./fixtures/sync-seed.json" with { type: "json" };
 
 const { commands } = product;
 const works = { rooms: roomsWork, takeoffs: takeoffsWork };
+test("Takeoffs demo seeds round-trip edits through the declared Work", () => {
+  const observation = takeoffObservationSchema.parse(syncSeed.snapshot);
+  if (observation.kind !== "ready") throw Error("Expected a saved snapshot seed");
+  const at = address("C:/model.rvt");
+  const codec = demoSeedCodec(takeoffsWork);
+  const edit = takeoffEditKey("room-1", "name");
+  const seed = codec.importSeed(
+    codec.exportSeed({
+      version: 1,
+      namespace: "isolated-demo",
+      route: "takeoffs",
+      seedAddress: at,
+      failure: { kind: "none" },
+      originalEvidence: null,
+      work: {
+        key: { binding: "address", route: takeoffsWork.route, target: at },
+        revision: 0,
+        candidate: { edits: { [edit]: { edit: { by: "human", value: "Reviewed room" } } } },
+      },
+      readings: { snapshot: observation.capture.snapshot, candidates: [] },
+      page: { views: [], zones: [], dir: "", r10: "", stage: "sync" },
+      files: [],
+    }),
+  );
+  if (seed.route !== "takeoffs") throw Error("Expected a Takeoffs seed");
+  expect(stagedTakeoffEdits(seed.work.candidate)).toEqual({
+    "room-1": { roomId: "room-1", next: { name: "Reviewed room" } },
+  });
+});
 const recordedInput = (name: string) =>
   Object.fromEntries(
     Object.entries(nativeRecordingRequest(name)).filter(([, value]) => value !== null),
@@ -194,6 +230,7 @@ test.each([
         rooms: [],
       }),
       syncFile: async (input) => {
+        expect(input.inserts?.map(({ name }) => name)).toEqual(["Reviewed room"]);
         synced = true;
         return {
           targetPath: input.targetPath,
@@ -226,6 +263,7 @@ test.each([
     };
     try {
       let authored: Record<string, unknown> = intent;
+      let editKey: string | undefined;
       if (commandKey === "takeoffs.sync") {
         const recorded = takeoffObservationSchema.parse(syncSeed.snapshot);
         if (recorded.kind !== "ready") throw Error("Expected a saved snapshot seed");
@@ -233,6 +271,7 @@ test.each([
         snapshot.reading.at = path;
         const zone = snapshot.world.zones[0]!;
         const room = zone.rooms.find((room) => room.data !== null)!;
+        editKey = takeoffEditKey(room.guid, "name");
         zone.rooms = [room];
         zone.tags = ["SA1"];
         zone.driftSqft = 0;
@@ -266,7 +305,12 @@ test.each([
         route,
         commandKey === "sheet.apply"
           ? edits
-          : [{ path: ["writeIntent", commandKey], value: { edit: { value: authored } } }],
+          : [
+              { path: ["writeIntent", commandKey], value: { edit: { value: authored } } },
+              ...(editKey
+                ? [{ path: ["edits", editKey], value: { edit: { value: "Reviewed room" } } }]
+                : []),
+            ],
         0,
       );
       const work = { key, revision: (await workspace.read(key, route))!.revision };
@@ -284,6 +328,9 @@ test.each([
       await invoke(commandKey, { work });
       if (commandKey === "takeoffs.sync") {
         expect(synced).toBe(true);
+        expect(landings(product).edits).toBe("r10");
+        const current = takeoffsWork.schema.parse((await workspace.read(key, route))!.doc);
+        expect(stagedTakeoffEdits(current)).toEqual({});
         const write = (link: object) => ({
           action: commandKey,
           input: {
