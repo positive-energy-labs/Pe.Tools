@@ -549,7 +549,7 @@ function admitWorkTarget(
 ) {
   if (target.kind !== "document" || (key.binding !== "open" && key.binding !== "address")) return;
   if (key.binding === "address" && address === undefined) return;
-  if (!workBinding(key).admits(target.ref, address))
+  if (!workBinding(key).admits(target.ref, address ?? null))
     throw refused(
       key.binding === "address" && address === null
         ? "Work belongs to a saved document, and the target document is unsaved"

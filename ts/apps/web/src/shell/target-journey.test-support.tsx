@@ -214,11 +214,22 @@ const repin = (j: Journey, doc: JourneyDoc) => {
 /** Every path that changes the resolved target. `from` holds a selection; `to` must start clean. */
 const paths: Record<
   string,
-  { open: JourneyDoc[]; pinned?: false; from: JourneyDoc; to: JourneyDoc; change(j: Journey): Promise<void> }
+  {
+    open: JourneyDoc[];
+    pinned?: false;
+    from: JourneyDoc;
+    to: JourneyDoc;
+    change(j: Journey): Promise<void> | void;
+  }
 > = {
   "the picker": { open: both, from: "chadds", to: "snowdon", change: (j) => j.pick("snowdon") },
   // Pea or a shared link replaces the pin and leaves the other fields of the address as they were.
-  "a pinned ?target": { open: both, from: "chadds", to: "snowdon", change: (j) => repin(j, "snowdon") },
+  "a pinned ?target": {
+    open: both,
+    from: "chadds",
+    to: "snowdon",
+    change: (j) => repin(j, "snowdon"),
+  },
   "a lost binding reopened": {
     open: ["chadds"],
     from: "chadds",
@@ -239,7 +250,7 @@ const paths: Record<
     change: (j) => j.open(["snowdon"]),
   },
   // Chadds's history entry names no field, so only Place memory could fill it: with Snowdon's.
-  "Back": {
+  Back: {
     open: both,
     from: "snowdon",
     to: "chadds",
@@ -282,7 +293,8 @@ export async function targetChange(product: TargetProduct, path: keyof typeof pa
     const { subject, core } = product.module.spec;
     const seen = () =>
       document.body.textContent + JSON.stringify(live.value(subject?.read ?? core));
-    if (documents[from].path !== documents[to].path) expect(seen()).not.toMatch(product.shows(from));
+    if (documents[from].path !== documents[to].path)
+      expect(seen()).not.toMatch(product.shows(from));
     // The new target's own controls work.
     await product.use(to, j);
     expect(seen()).toMatch(product.shows(to));

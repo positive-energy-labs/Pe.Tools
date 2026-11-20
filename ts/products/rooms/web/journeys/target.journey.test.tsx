@@ -12,7 +12,12 @@ import {
 } from "../../../../tests/e2e/mounted.test-support.tsx";
 
 // Each file holds one plan and its own rooms, so a plan or a room of the other file cannot resolve.
-const chadds = { view: FLOOR, room: 1, name: "Office", regions: [zone, region(1, { name: "Office" })] };
+const chadds = {
+  view: FLOOR,
+  room: 1,
+  name: "Office",
+  regions: [zone, region(1, { name: "Office" })],
+};
 const models = {
   chadds,
   again: chadds,
@@ -41,11 +46,12 @@ const rooms: TargetProduct = {
     const { view, room, name } = models[doc];
     const slow = { timeout: 20000 };
     // The plan is a choice only once this document's roster has answered.
-    await waitFor(() => expect(document.querySelector(`option[value="${view}"]`)).toBeTruthy(), slow);
-    fireEvent.change(screen.getByRole("combobox", { name: "Plan" }), { target: { value: view } });
-    fireEvent.click(
-      await screen.findByRole("option", { name: new RegExp(`^Room ${name}`) }, slow),
+    await waitFor(
+      () => expect(document.querySelector(`option[value="${view}"]`)).toBeTruthy(),
+      slow,
     );
+    fireEvent.change(screen.getByRole("combobox", { name: "Plan" }), { target: { value: view } });
+    fireEvent.click(await screen.findByRole("option", { name: new RegExp(`^Room ${name}`) }, slow));
     expect(await screen.findByRole("textbox", { name: `Name of ${name}` }, slow)).toBeTruthy();
     await waitFor(() => expect(j.search().get("room")).toContain(code(room)));
     expect(j.search().get("view")).toContain(view);

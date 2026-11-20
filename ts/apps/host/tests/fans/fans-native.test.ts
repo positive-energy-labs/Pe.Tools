@@ -30,8 +30,7 @@ test.each(["fans", "duct-systems"] as const)(
     const f = await nativeFixture("test", scenario, address("C:/other.rvt"));
     closes.push(() => f.close());
     const fans = await stage(f);
-    const work =
-      route === "fans" ? fans : (await f.saved.view(f.key, "duct-systems"))!.handle;
+    const work = route === "fans" ? fans : (await f.saved.view(f.key, "duct-systems"))!.handle;
     for (const key of ["sheet.plan", "sheet.apply"]) {
       await f.post("/actions", { id: key, key, target: f.target, input: { work } });
       expect(await f.journal.wait(key)).toMatchObject({
@@ -49,7 +48,11 @@ test("Duct Systems Work of another document beside this document's Fans Work is 
   const f = await nativeFixture("test", scenario, address("C:/model.rvt"));
   closes.push(() => f.close());
   const work = await stage(f);
-  const elsewhere = { binding: "address" as const, route: "duct-systems", target: address("C:/other.rvt") };
+  const elsewhere = {
+    binding: "address" as const,
+    route: "duct-systems",
+    target: address("C:/other.rvt"),
+  };
   const staged = await f.saved.apply(
     elsewhere,
     "duct-systems",

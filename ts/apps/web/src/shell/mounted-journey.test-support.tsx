@@ -269,7 +269,9 @@ export async function mounted(
       waitFor(
         () => {
           const value = mount.value();
-          expect(value.state, value.state === "ready" ? "" : (refusalOf(value) ?? "")).toBe("ready");
+          expect(value.state, value.state === "ready" ? "" : (refusalOf(value) ?? "")).toBe(
+            "ready",
+          );
           expect(mount.workBasis()).toBeTruthy();
         },
         { timeout: 20000 },

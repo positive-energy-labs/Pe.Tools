@@ -14,7 +14,10 @@ import {
 } from "../../../../tests/e2e/mounted.test-support.tsx";
 
 // The recorded Chadds walk, and the same walk under another fan mark standing in for Snowdon.
-const marks = { chadds: "MUAS-1", again: "MUAS-1", snowdon: "SNOW-1" } satisfies Record<JourneyDoc, string>;
+const marks = { chadds: "MUAS-1", again: "MUAS-1", snowdon: "SNOW-1" } satisfies Record<
+  JourneyDoc,
+  string
+>;
 const fans: TargetProduct = {
   module,
   reads: Object.values(product.readings).map(({ handle }) => handle.key),
@@ -31,7 +34,9 @@ const fans: TargetProduct = {
       const read = mount.value(module.spec.subject!.read);
       const found =
         "value" in read &&
-        module.spec.subject!.options(read.value as never).find((row) => row.label.includes(marks[doc]));
+        module.spec
+          .subject!.options(read.value as never)
+          .find((row) => row.label.includes(marks[doc]));
       expect(found).toBeTruthy();
       return found as { id: string };
     }, slow);
