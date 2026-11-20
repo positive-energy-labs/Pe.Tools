@@ -192,7 +192,8 @@ public static class Rooms
     public static RoomsSnapshotData Roster(Document doc)
     {
         var read = RoomsRegionRecord.Read(doc);
-        return new(Levels(doc), [], TrackedRegionIds: read.Refusal is null
+        return new(Levels(doc), [], read.Refusal is { } reason ? [new(null, RoomsRegionRecord.Owner.Name, reason)] : [],
+            TrackedRegionIds: read.Refusal is null
             ? read.Value?.Regions.Keys.Where(id => doc.GetElement(id) is FilledRegion).ToList() ?? []
             : null);
     }
