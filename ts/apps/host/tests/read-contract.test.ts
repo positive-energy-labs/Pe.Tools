@@ -107,10 +107,10 @@ test("Rooms recovers the chosen document's roster when a linked plan no longer e
     }),
   );
   expect(operations).toEqual(["rooms.snapshot", "rooms.roster"]);
-  expect(read.data.snapshot).toEqual({ levels, regions: [] });
-  expect(read.data.unresolved).toEqual([
-    { id: "view", says: "Choose a level and a plan view", resolver: "person" },
-  ]);
+  expect(read.data).toMatchObject({
+    snapshot: { levels, regions: [] },
+    unresolved: [{ id: "view", says: "Choose a level and a plan view", resolver: "person" }],
+  });
 });
 
 test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {
