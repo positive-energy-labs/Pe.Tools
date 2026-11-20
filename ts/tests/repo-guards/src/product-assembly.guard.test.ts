@@ -81,43 +81,83 @@ const fixtureFiles = {
   "web/route.ts": 'export const module = { data: { key: "proof", address: "/proof" } };',
 };
 
-test("an authored product folder feeds Host, web and Pea without editing their sources", async () => {
-  const root = mkdtempSync(join(tmpdir(), "pe-product-assembly-"));
-  const product = "ts/products/proof/";
+const product = "ts/products/proof/";
+function writeAssemblyFixture(
+  root: string,
+  registration = fixtureFiles["contract/registration.ts"],
+) {
   const authored = Object.keys(fixtureFiles).map((path) => product + path);
   function write(file: string, source: string) {
     mkdirSync(dirname(join(root, file)), { recursive: true });
     writeFileSync(join(root, file), source);
   }
-  try {
-    for (const [file, source] of Object.entries(fixtureFiles)) write(product + file, source);
-    console.log("Fixture authored only " + authored.join(", "));
-    const assembly = renderProductAssembly(root);
-    for (const [file, source] of Object.entries(assembly.outputs)) write(file, source);
-    const helper = "ts/packages/mcps/src/pea/assembly-checks.ts";
-    copyFileSync(join(checkout, helper), join(root, helper));
+  for (const [file, source] of Object.entries(fixtureFiles))
+    write(product + file, file === "contract/registration.ts" ? registration : source);
+  const assembly = renderProductAssembly(root);
+  for (const [file, source] of Object.entries(assembly.outputs)) write(file, source);
+  const helper = "ts/packages/mcps/src/pea/assembly-checks.ts";
+  copyFileSync(join(checkout, helper), join(root, helper));
+  return { assembly, authored, write };
+}
 
-    const modules = [
-      "@pe/agent-contracts/semantic-actions",
-      "@pe/agent-contracts/pe-api",
-      "@pe/agent-contracts",
-      "@pe/host-contracts/pe-api",
-      "effect/http",
-      "effect",
-    ];
-    const jiti = createJiti(import.meta.url, {
-      alias: {
-        ...Object.fromEntries(
-          modules.map((name) => [name, fileURLToPath(import.meta.resolve(name))]),
-        ),
-        zod: createRequire(new URL("../../../apps/web/package.json", import.meta.url)).resolve(
-          "zod",
-        ),
-        "@pe/proof-contract/registration": join(root, product, "contract/registration.ts"),
-        "@pe/proof-host/registration": join(root, product, "host/registration.ts"),
-      },
-    });
-    const load = <T>(file: string) => jiti.import<T>(join(root, file));
+function loadFixtureModules(root: string) {
+  const modules = [
+    "@pe/agent-contracts/semantic-actions",
+    "@pe/agent-contracts/pe-api",
+    "@pe/agent-contracts",
+    "@pe/host-contracts/pe-api",
+    "effect/http",
+    "effect",
+  ];
+  const jiti = createJiti(import.meta.url, {
+    alias: {
+      ...Object.fromEntries(
+        modules.map((name) => [name, fileURLToPath(import.meta.resolve(name))]),
+      ),
+      zod: createRequire(new URL("../../../apps/web/package.json", import.meta.url)).resolve("zod"),
+      "@pe/proof-contract/registration": join(root, product, "contract/registration.ts"),
+      "@pe/proof-host/registration": join(root, product, "host/registration.ts"),
+    },
+  });
+  return { jiti, load: <T>(file: string) => jiti.import<T>(join(root, file)) };
+}
+
+test.each([
+  {
+    table: "policies",
+    declaration: '"host.ops.catalog": {}',
+    reason: "built-in call policy 'host.ops.catalog'",
+  },
+  { table: "axes", declaration: '"reads.value": {}', reason: "built-in route axes 'reads.value'" },
+  {
+    table: "policies",
+    declaration: '"proof.stats": { admission: "intrinsic" }',
+    reason: "intrinsic admission for 'proof.stats'",
+  },
+])("product assembly refuses $reason", async ({ table, declaration, reason }) => {
+  const root = mkdtempSync(join(tmpdir(), "pe-product-collision-"));
+  try {
+    const registration = fixtureFiles["contract/registration.ts"].replace(
+      new RegExp(`^export const ${table} = \\{ (.*) \\};$`, "m"),
+      `export const ${table} = { $1, ${declaration} };`,
+    );
+    writeAssemblyFixture(root, registration);
+    await expect(
+      loadFixtureModules(root)
+        .load(productAssemblyPaths.actions)
+        .then(() => undefined),
+    ).rejects.toThrow(`Product @pe/proof-contract cannot declare ${reason}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("an authored product folder feeds Host, web and Pea without editing their sources", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pe-product-assembly-"));
+  try {
+    const { assembly, authored, write } = writeAssemblyFixture(root);
+    console.log("Fixture authored only " + authored.join(", "));
+    const { jiti, load } = loadFixtureModules(root);
     const actions = await load<typeof import("@pe/mcps/product-actions")>(
       productAssemblyPaths.actions,
     );

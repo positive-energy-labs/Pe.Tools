@@ -69,6 +69,27 @@ const routeSchemas: RouteSchemas = {
 type Routes = PeRouteTable<typeof routeSchemas>;
 const api: PeApi<Routes> = definePeApi(routeSchemas);
 export const httpRoutes: Routes = api.peRoutes;
+
+export function assertProductCatalogKeys(
+  product: string,
+  kind: "call policy" | "route axes",
+  rows: Readonly<Record<string, unknown>>,
+) {
+  const builtins = kind === "call policy" ? callPolicies : httpRoutes;
+  for (const [key, row] of Object.entries(rows)) {
+    if (Object.hasOwn(builtins, key))
+      throw Error(`Product ${product} cannot declare built-in ${kind} '${key}'`);
+    if (
+      kind === "call policy" &&
+      row &&
+      typeof row === "object" &&
+      "admission" in row &&
+      row.admission === "intrinsic"
+    )
+      throw Error(`Product ${product} cannot declare intrinsic admission for '${key}'`);
+  }
+}
+
 export type PeCatalog<T extends Record<string, ReturnType<typeof route>>> = PeApi<T> & {
   peRoutes: { [K in keyof T]: T[K] & { catalog: CatalogRow } };
   linkedCatalog(): LinkedCatalog<CatalogRow>;
