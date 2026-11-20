@@ -3,9 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {},
+  "exports": {
+    "./product": "./src/product.ts"
+  },
   "scripts": {
-    "check": "vp exec tsc --noEmit"
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",

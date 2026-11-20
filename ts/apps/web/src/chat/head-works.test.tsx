@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { address, roomEditKey, roomsRouteState } from "@pe/agent-contracts";
+import { address } from "@pe/agent-contracts";
+import { regionCode, roomsWork } from "@pe/rooms-contract/product";
 import { publicRoutes } from "../route/builtin-routes";
 import { useHeadWorks } from "./head-works";
 
@@ -31,9 +32,9 @@ afterEach(cleanup);
 
 test("the chat head reads executable graph Work and cell families for addressed and unsaved documents", () => {
   reads.route = "rooms";
-  const key = roomEditKey("room-a", "name");
-  reads.doc = roomsRouteState.schema.parse({
-    edits: { [key]: { edit: { value: "Pantry", by: "human" } } },
+  const key = regionCode("room-a");
+  reads.doc = roomsWork.schema.parse({
+    name: { [key]: { edit: { value: "Pantry", by: "human" } } },
   });
   const doc = { session: "session-one", openId: "unsaved-one" };
   const exits = { open: vi.fn(), planIn: vi.fn() };
@@ -43,7 +44,7 @@ test("the chat head reads executable graph Work and cell families for addressed 
     },
   });
   expect(reads.entries.find((entry) => entry.work.route === "rooms")).toMatchObject({
-    work: { schema: roomsRouteState.schema },
+    work: { schema: roomsWork.schema },
     key: { binding: "address", route: "rooms", target: "C:/Models/Building.rvt", from: doc },
   });
   expect(

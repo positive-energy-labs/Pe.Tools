@@ -19,8 +19,8 @@ import * as fanContracts from "@pe/fans-contract/contract";
 import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
 import { peRoutes } from "@pe/mcps/product-catalog";
-import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
-import { BridgeError } from "@pe/host-internal/bridge";
+import { picker } from "../../web/src/pages-bind/contract.ts";
+import { product as roomsProduct } from "@pe/rooms-contract/product";
 
 const contracts = [
   ...Object.entries(
@@ -28,6 +28,12 @@ const contracts = [
   ),
   ["fans", fanContracts],
   ["duct-systems", systemContracts],
+  [
+    "rooms",
+    Object.fromEntries(
+      Object.entries(roomsProduct.readings).map(([name, reading]) => [name, reading.handle]),
+    ),
+  ],
 ] as const;
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
 test("every guide calc read resolves through pe-api and the registered host read", () => {
@@ -70,81 +76,35 @@ test("the browser door binds the target in the host contract's shape", () => {
   expect(fans.request?.({ fan: [], calcPath: "" }, { kind: "document", ref })).toMatchObject({
     args: { target: ref },
   });
-  const rooms = hostRead(roomsWorkspace);
-  expect(
-    rooms.request?.(rooms.input.parse({ view: null }), { kind: "document", ref }),
-  ).toMatchObject({ args: { target: { kind: "document", ref } } });
-});
-
-test("Rooms recovers the chosen document's roster when a linked plan no longer exists", async () => {
-  const levels = [
-    {
-      name: "Snowdon level",
-      elevation: 0,
-      views: [
-        { id: 9948, name: "L2", type: "FloorPlan" },
-        { id: 1371629, name: "L2", type: "CeilingPlan" },
-      ],
-    },
-  ];
-  const operations: string[] = [];
-  const read = await evaluate(
-    bodyOf(roomsWorkspace),
-    { target: { kind: "document", ref: { session: "s", openId: "snowdon" } }, view: 7426391 },
-    port(async (name, args) => {
-      if (name === "document-mark") return { observedSince: 1, changedAt: null, generation: 0 };
-      if (name === "work-scope")
-        return { binding: "open", route: "rooms", target: null, open: args };
-      if (name === "work") return null;
-      if (name !== "native" || !args || typeof args !== "object" || !("key" in args))
-        throw Error(`Unexpected input: ${name}`);
-      operations.push(String(args.key));
-      if (args.key === "rooms.snapshot")
-        throw new BridgeError("That view is not in this document.", 400, {
-          dispatched: true,
-          issues: [
-            {
-              instancePath: "$.view",
-              code: "RoomsViewMissing",
-              message: "That view is not in this document.",
-              severity: "error",
-            },
-          ],
-        });
-      if (args.key === "rooms.roster") return { body: { levels, regions: [] }, version: null };
-      throw Error(`Unexpected native read: ${args.key}`);
-    }),
-  );
-  expect(operations).toEqual(["rooms.snapshot", "rooms.roster"]);
-  expect(read.data).toMatchObject({
-    snapshot: { levels, regions: [] },
-    unresolved: [{ id: "view", says: "Choose a level and a plan view", resolver: "person" }],
+  const bind = hostRead(picker);
+  expect(bind.request?.(bind.input.parse({}), { kind: "document", ref })).toMatchObject({
+    args: { target: { kind: "document", ref } },
   });
 });
 
 test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {
   const handles = contracts.flatMap(([, module]) => Object.values(module));
-  expect(contracts).toHaveLength(15);
+  expect(contracts).toHaveLength(11);
   expect(handles.map((h) => h.key).sort()).toEqual([
     "bind.picker",
-    "captures.browse",
     "chat.context",
     "duct-loss.result",
     "ducts.network",
     "ducts.pricing",
     "ducts.roster",
     "families.view",
-    "family.workspace",
     "fans.calc",
     "open.documents",
     "ops.workspace",
     "pods.author",
     "pods.roster",
-    "rooms.workspace",
-    "schedules.view",
+    "rooms.evidence",
+    "rooms.plan-image",
+    "rooms.plans",
+    "rooms.regions",
     "settings.machine",
     "takeoffs.adoption",
-    "takeoffs.views",
+    "takeoffs.captures",
   ]);
   // Mutant: register read(name, ...) with copied schemas instead of body(handle, ...).
   for (const h of handles) {

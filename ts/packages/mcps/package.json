@@ -51,16 +51,17 @@
     "@modelcontextprotocol/server": "catalog:",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
-    "@pe/duct-systems-contract": "workspace:*",
-    "@pe/ducts-contract": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/runtime": "workspace:*",
     "effect": "4.0.2",
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",
     "pngjs": "catalog:",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/rooms-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -74,7 +75,8 @@
     "generatedProductDependencies": [
       "@pe/duct-systems-contract",
       "@pe/ducts-contract",
-      "@pe/fans-contract"
+      "@pe/fans-contract",
+      "@pe/rooms-contract"
     ]
   }
 }

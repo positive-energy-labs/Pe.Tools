@@ -127,7 +127,9 @@ export function readRegistry(
     const incoming = Object.values(definitions),
       names = new Set<string>();
     for (const definition of incoming) {
-      if (reads.has(definition.name) || names.has(definition.name))
+      // Two routes of one product share one host module, so the same definition arrives twice.
+      const held = reads.get(definition.name);
+      if ((held && held !== definition) || names.has(definition.name))
         throw Error(`Duplicate host read ${definition.name}`);
       names.add(definition.name);
       // A composition joins here, not at its first read: every key its contract uses has a body

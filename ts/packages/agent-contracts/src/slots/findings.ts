@@ -113,7 +113,7 @@ export const findingsGuide: Readonly<
   [FINDINGS_DOORS.retract]:
     "Retract a finding. Either author may retract it; Timeline can undo the step.",
   [FINDINGS_DOORS.list]:
-    "Read this document's findings, optionally on one subject. Notes live in findings Work, never rooms Work.",
+    "Read this document's findings, optionally on one subject. Notes live in findings Work, never a route's own Work.",
 };
 
 /**

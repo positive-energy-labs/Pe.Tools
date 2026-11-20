@@ -16,7 +16,7 @@ const captures = captureListSchema.parse({
       id: "capture-plan",
       sha: "a".repeat(64),
       at,
-      origin: "web:/rooms",
+      origin: "web:/takeoffs",
       document: { title: "Clinic", openId: "clinic" },
       view: { id: 101, name: "Level 1 mechanical plan" },
       focus: null,

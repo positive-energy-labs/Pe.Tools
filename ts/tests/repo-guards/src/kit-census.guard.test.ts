@@ -268,7 +268,6 @@ const RULES: Rule[] = [
     roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], select: "classes",
     allow: [
       { glob: "products/ducts/web/src/annotations.tsx", selector: ".absolute.left-0.top-0", reason: "SVG marks stay registered to the picture origin." },
-      { glob: W + "rooms/sketch.tsx", selector: ".absolute.left-0.top-0", reason: "SVG sketch shares the picture origin." },
       { glob: W + "grounded-doc/view/page-pane.tsx", selector: ".absolute.left-0.5.top-0.5", reason: "Block-kind glyph marks its document rectangle." },
     ], cannotSee: "Computed classes or browser geometry." },
   { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,

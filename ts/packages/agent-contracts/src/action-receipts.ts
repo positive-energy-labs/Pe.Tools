@@ -181,14 +181,14 @@ export const timelineSnapshotSchema = z.strictObject({
 });
 export type TimelineSnapshot = z.infer<typeof timelineSnapshotSchema>;
 
-export const roomsPartitionProgressSchema = z
+export const nativeProgressSchema = z
   .strictObject({
     phase: z.enum(["Prepare", "Capture", "Designation", "Solve", "Materialization", "Commit"]),
     zonesDone: z.int().nonnegative(),
     zonesTotal: z.int().nonnegative().nullable().default(null),
   })
   .refine(({ zonesDone, zonesTotal }) => zonesDone <= (zonesTotal ?? 0));
-export type RoomsPartitionProgress = z.output<typeof roomsPartitionProgressSchema>;
+export type NativeProgress = z.output<typeof nativeProgressSchema>;
 
 const actionAttempt = z.object({
   snapshots: z.array(timelineSnapshotSchema).optional(),
@@ -202,7 +202,7 @@ const actionAttempt = z.object({
   claims: z.array(claimSchema).default([]),
   refusal: commandRefusalSchema.optional(),
   cancellationRequested: z.boolean().optional(),
-  progress: roomsPartitionProgressSchema.optional(),
+  progress: nativeProgressSchema.optional(),
   /** Why the crossing was admitted; null for a host leaf that crosses into no Revit document. */
   basis: basisSchema.nullable(),
   target: executionTargetSchema,

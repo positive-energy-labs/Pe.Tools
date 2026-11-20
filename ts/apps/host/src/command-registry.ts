@@ -16,7 +16,8 @@ import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
-import { takeoffExecutors } from "./takeoff-actions.ts";
+import { applyStaged, buildRhvacInsert, rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
+import { io } from "@pe/host-internal/command-executor";
 import { lifetime } from "./document-lifetime.ts";
 import { productExecutors } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
@@ -45,6 +46,7 @@ export function commandRegistry(
   local: GatewayLocal,
   origin?: () => string,
 ): CommandRegistry {
+  const { openFile, syncFile } = deps;
   const implementations: Record<string, CommandExecutor> = {
     "work.start": workStartExecutor(deps.workspace),
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
@@ -65,6 +67,18 @@ export function commandRegistry(
     ...deps,
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
+    captures,
+    // The RHVAC file lane, with the test seams a recorded journey supplies.
+    rhvac: {
+      open: (path) =>
+        openFile ? io(() => openFile(path)) : rhvacOpen({ path }),
+      sync: (request, expectedVersion) =>
+        syncFile
+          ? io(() => syncFile(request, expectedVersion))
+          : rhvacSync(request, expectedVersion),
+      applyStaged,
+      buildInsert: buildRhvacInsert,
+    },
   });
   const productsWithoutSheet = Object.fromEntries(
     Object.entries(products.executors).filter(
@@ -74,7 +88,6 @@ export function commandRegistry(
   for (const group of [
     familyExecutors(captures, bridge, deps),
     instancesExecutors(deps),
-    takeoffExecutors(captures, bridge, deps),
     productsWithoutSheet,
     sheetExecutors(bridge, deps, products.executors, products.sheetRoutes),
     catalogWorkExecutors(bridge, deps),

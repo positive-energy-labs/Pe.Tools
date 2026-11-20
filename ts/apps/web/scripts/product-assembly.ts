@@ -328,12 +328,11 @@ export function renderProductAssembly(checkout: string) {
     ),
     [productAssemblyPaths.executors]: source(
       'import type { RevitBridge } from "@pe/host-internal/bridge";',
-      'import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";',
-      'import type { HostNativeRead } from "@pe/host-internal/native-read";',
+      'import type { CommandBody } from "@pe/host-internal/product";',
       'import type { FamilyActionDependencies } from "./family-actions.ts";',
       'import type { CommandExecutor } from "@pe/host-internal/command-executor";',
       ...lines(executors, implemented),
-      'export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & { nativeRead?: HostNativeRead["Service"]; projectLifetime?: (target: DocumentRef) => Promise<NativeProcess> } = {}) {',
+      'export function productExecutors(bridge: RevitBridge["Service"], deps: FamilyActionDependencies & Parameters<CommandBody>[1] = {}) {',
       "  const result: Record<string, CommandExecutor> = {};",
       ...executors.map(
         (row) =>

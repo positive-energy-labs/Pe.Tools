@@ -6,11 +6,7 @@ import { host as placesHost, seedPlaces } from "../workbench/places.test-support
 // @vitest-environment jsdom
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { useState, useSyncExternalStore } from "react";
-import {
-  journey as takeoffJourney,
-  Drawing as TakeoffDrawing,
-} from "../takeoff/adoption.test.fixture";
-import { adoptionData } from "@pe/agent-contracts/takeoff-read";
+import { mounted } from "../shell/mounted-journey.test-support";
 import { createPortal } from "react-dom";
 import {
   act,
@@ -64,6 +60,39 @@ import { contract } from "@pe/agent-contracts/handle";
 import { z } from "zod";
 
 const render = (node: import("react").ReactNode) => renderView(node, { wrapper: StandaloneBand });
+/** Families mounted on a document with one loaded family; `hold` keeps its catalogue read open. */
+const familiesJourney = (options: { hold?: Promise<void>; start?: boolean } = {}) =>
+  mounted(
+    families,
+    ["families.view"],
+    async (key) => {
+      if (key !== "revit.catalog.loaded-families") throw Error(`Unexpected native read ${key}`);
+      await options.hold;
+      return {
+        summary: {
+          totalFamilies: 1,
+          placedFamilies: 0,
+          unplacedFamilies: 1,
+          totalTypes: 1,
+          totalPlacedInstances: 0,
+          truncated: false,
+        },
+        families: [
+          {
+            familyId: 1,
+            familyUniqueId: "air-tag",
+            familyName: "Air Terminal Tag",
+            categoryName: "Air Terminal Tags",
+            typeCount: 1,
+            placedInstanceCount: 0,
+            types: [{ typeName: "Standard" }],
+          },
+        ],
+        issues: [],
+      };
+    },
+    options,
+  );
 
 test("S6 the route publishes its roster while a separately demanded image is held", async () => {
   const independent = { alone: true } as const;
@@ -178,7 +207,8 @@ test("S6 the route publishes its roster while a separately demanded image is hel
 test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
   const browserHref = window.location.href;
   window.history.replaceState({}, "", "/families");
-  const j = await takeoffJourney({ route: "families" });
+  const j = await familiesJourney();
+  await j.ready();
   const fetchHttp = globalThis.fetch;
   const server = createServer(async (req, res) => {
     try {
@@ -499,7 +529,6 @@ test("JZ Families History offers published values and marks ambiguous publicatio
 }, 60000);
 
 test("JZ numeric cells refuse bounds and fractional integers without changing Work, then commit exactly", async () => {
-  const { TakeoffEditCell } = await import("../takeoff/proposals");
   const { NumberCell } = await import("@pe/kit/table/cells");
   const f = await createWitness(closes);
   // Velocity limit supply is /ducts design data (ruling 2026-11-10): its sheet draws on the /ducts mount.
@@ -513,22 +542,7 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
       <>
         {f.owner.read("design") as import("react").ReactNode}
         <section aria-label="Takeoff occupants">
-          <TakeoffEditCell
-            roomId="numeric-entry-room"
-            field="people"
-            value={people}
-            digits={0}
-            integer
-            cell={undefined}
-            wire={{
-              segment: "edits",
-              revision: null,
-              write: async () => {
-                throw Error("No transition requested");
-              },
-            }}
-            onPatch={setPeople}
-          />
+          <NumberCell value={people} digits={0} integer onCommit={setPeople} />
           <output aria-label="Committed occupants">{people}</output>
         </section>
         <section aria-label="Bounded number">
@@ -1699,76 +1713,20 @@ async function pendingFamiliesChoice() {
     await Promise.all(tasks);
   }
 }
-test("JZ H01 H17 saved takeoff choice preserves authored Work and live Initialize while History captures", async () => {
-  const j = await takeoffJourney();
-  try {
-    await j.ready();
-    expect(
-      (await j.host.journal.list()).some(
-        (row) => row.key === "work.start" && row.state === "succeeded",
-      ),
-      "ordinary Start crossed the real /actions handler",
-    ).toBe(true);
-    const originalWork = j.mount.owner()!.handle;
-    expect(originalWork).toBeTruthy();
-    render(<TakeoffDrawing mount={j.mount} />);
-    fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
-    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
-    await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
-    expect(
-      j.mount.owner()!.handle,
-      "H01: view choice cannot select another Work through serialized Page fields",
-    ).toEqual(originalWork);
-    await j.ready();
-    const capture = adoptionData.parse(valueOf(j.mount.value())).captures[0]!;
-    fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
-    const option = (await screen.findAllByRole("option")).find((row) =>
-      row.textContent?.includes(capture.capturedAt),
-    );
-    expect(option, "choose this exact saved capture").toBeTruthy();
-    fireEvent.click(option!);
-    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
-    await waitFor(() => expect(j.mount.owner()?.ready || j.mount.owner()?.absent).toBe(true));
-    expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
-    expect(j.mount.owner()!.handle, "H01: a saved-evidence id cannot select another Work").toEqual(
-      originalWork,
-    );
-    expect(j.host.inputs.source).toMatchObject({ capturing: true });
-    fireEvent.click(screen.getByRole("button", { name: "live" }));
-    await j.ready();
-    await screen.findByRole("checkbox", { name: "Select Office zone in Zoning plan" });
-    expect(j.mount.owner()!.handle).toEqual(originalWork);
-    expect(
-      (screen.getByRole("button", { name: "initialize" }) as HTMLButtonElement).disabled,
-      "H17: live readiness uses the current document and its original Work",
-    ).toBe(false);
-    expect(valueOf(j.mount.value()).initialize.refusal).toBeNull();
-    expect(j.host.inputs.source).toMatchObject({ capturing: true });
-    expect(j.host.inputs.lane.kind).toBe("live");
-    if (j.host.inputs.lane.kind === "live")
-      expect(j.host.inputs.lane.captureStore!.capture.truncated(), "zero capture stops").toBeNull();
-  } finally {
-    await j.close();
-  }
-}, 60000);
 // Only the conversation/reading boundaries are recorded. RouteDock, Activity, typed Family,
 // Work feeds, file persistence and the Host view HTTP handler remain production owners.
 const conversation = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock("../workbench/provider", () => ({ useWorkbench: () => conversation.value }));
 vi.mock("../chat/chat-shell", () => ({ ChatShell: () => null }));
 
-test.each(["takeoffs", "families"] as const)(
-  "JZ kernel Start on %s after read release settles while Reading or after it",
-  async (route) => {
-    const { gate } = await import("../../../host/tests/host-read-graph.test-support");
+// Start is the kernel's: one route proves it. Takeoffs starts in its own journeys.
+test(
+  "JZ kernel Start on families after read release settles while Reading or after it",
+  async () => {
+    const route = "families";
     for (const phase of ["settled", "reading"] as const) {
-      const catalogue = phase === "reading" ? gate() : undefined;
-      const j = await takeoffJourney({
-        catalogue,
-        start: false,
-        ...(route === "families" ? { route } : {}),
-      });
+      const catalogue = phase === "reading" ? Promise.withResolvers<void>() : undefined;
+      const j = await familiesJourney({ hold: catalogue?.promise, start: false });
       function Journey() {
         useSyncExternalStore(j.mount.subscribe, j.mount.revision, j.mount.revision);
         return (
@@ -1800,7 +1758,7 @@ test.each(["takeoffs", "families"] as const)(
         });
         expect(j.mount.available()).toBe(true);
         fireEvent.click(start);
-        catalogue?.release.resolve();
+        catalogue?.resolve();
         await waitFor(() => expect(j.mount.owner()?.ready).toBe(true));
         await act(async () => {
           const stop = j.mount.subscribe(() => {});
@@ -1811,18 +1769,13 @@ test.each(["takeoffs", "families"] as const)(
         expect(receipts).toHaveLength(1);
         expect(receipts[0]!.state).toBe("succeeded");
         expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
-        if (route === "takeoffs") expect(valueOf(j.mount.value()).initialize.refusal).toBeNull();
-        else {
-          const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
-          expect(category.getAttribute("aria-disabled")).toBeNull();
-          fireEvent.click(category);
-          await j.ready();
-          await waitFor(() =>
-            expect(j.mount.owner()?.doc.scope.edit?.value.categoryNames).toEqual([
-              "Air Terminal Tags",
-            ]),
-          );
-        }
+        const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
+        expect(category.getAttribute("aria-disabled")).toBeNull();
+        fireEvent.click(category);
+        await j.ready();
+        await waitFor(() =>
+          expect(j.mount.owner()?.doc.scope.edit?.value.categoryNames).toEqual(["Air Terminal Tags"]),
+        );
         j.mount.dispose();
         await expect(retainedStart.run()).rejects.toThrow("Place is not writable");
         expect(retainedStart.failure).toBe("Place is not writable");
@@ -1830,6 +1783,7 @@ test.each(["takeoffs", "families"] as const)(
           (await j.host.journal.list()).filter((row) => row.key === "work.start"),
         ).toHaveLength(1);
       } finally {
+        catalogue?.resolve();
         await j.close();
       }
     }
@@ -1837,32 +1791,6 @@ test.each(["takeoffs", "families"] as const)(
   60000,
 );
 
-test("JZ saved Takeoffs capture explains its empty snapshot and returns to live candidates", async () => {
-  const j = await takeoffJourney();
-  try {
-    await j.ready();
-    render(<TakeoffDrawing mount={j.mount} />);
-    const capture = adoptionData.parse(valueOf(j.mount.value())).captures[0]!;
-    fireEvent.click(screen.getByRole("button", { name: "Choose capture" }));
-    const option = (await screen.findAllByRole("option")).find((row) =>
-      row.textContent?.includes(capture.capturedAt),
-    );
-    fireEvent.click(option!);
-    await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), { timeout: 20000 });
-    expect(screen.getByText(/Archived takeoff/)).toBeTruthy();
-    expect(screen.getByText("No adopted zones in this saved takeoff")).toBeTruthy();
-    expect(screen.getByText(/This capture stores takeoff data, not a view image/)).toBeTruthy();
-    expect(screen.queryByRole("img")).toBeNull();
-    expect(screen.queryByRole("button", { name: "initialize" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "live" }));
-    await j.ready();
-    fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
-    fireEvent.click(await screen.findByRole("option", { name: "Zoning plan" }));
-    await screen.findByRole("checkbox", { name: "Select Office zone in Zoning plan" });
-  } finally {
-    await j.close();
-  }
-}, 60000);
 test("JZ E8-12 close Home clears a capacity refusal and permits another Place", async () => {
   const [
     { createRoute },

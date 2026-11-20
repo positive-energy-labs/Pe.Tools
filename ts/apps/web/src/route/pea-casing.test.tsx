@@ -10,7 +10,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { emptyThreadHead, roomsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
+import { emptyThreadHead, workFingerprintSchema } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { RouteViewStore } from "@pe/runtime";
 import { route, namesOf, type TypedRoute } from "@pe/web-kernel/route/typed-route";
@@ -26,9 +26,8 @@ import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fi
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { fixture, ref } from "../../../host/tests/host-read-graph.test-support";
 import { peClient } from "../host/pe-client";
-import { module as rooms } from "../rooms/route";
-import { DEMO_ROOMS, DEMO_VIEW } from "../rooms/demo";
-import { roomsGoal } from "../rooms/goal";
+import { module as rooms } from "@pe/rooms-web/routes/rooms";
+import { regionCode } from "@pe/rooms-contract/product";
 
 afterEach(() => {
   cleanup();
@@ -37,6 +36,9 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+// A plan and a room by Revit UniqueId: the keys the address and the roster carry.
+const PLAN = "8a0c1e3f-0000-4000-8000-000000000001-000026dc";
+const PLAN_ROOM = "8a0c1e3f-0000-4000-8000-000000000001-00001001";
 test.each([
   ["duct-systems", "names"],
   ["fans", "names"],
@@ -71,9 +73,9 @@ test.each([
     key === "duct-systems"
       ? route({ ...ducts.spec, ...options, core: ducts.spec.subject!.read! })
       : key === "rooms"
-        ? route({ ...rooms.spec, ...options })
+        ? route({ ...rooms.spec, ...options, verbs: {}, band: undefined })
         : route({ ...fans.spec, ...options, core: fans.spec.subject!.read! });
-  const roster = module.spec.subject!.read!;
+  const roster = module.spec.subject!.read ?? module.spec.core!;
   const field = module.spec.subject!.field;
   let search = new URLSearchParams();
   const host = await fixture(true);
@@ -95,14 +97,36 @@ test.each([
   else rosterData.rows = [{ ...rosterData.rows[0], mark: "MUAS-1" }];
   if (key === "rooms")
     rosterData = {
-      ...roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, null),
-      snapshot: DEMO_ROOMS,
-      roomsWork: roomsRouteState.schema.parse({}),
-      handle: null,
-      trace: null,
-      traceError: null,
-      plan: null,
-      planError: null,
+      missing: null,
+      unreadable: [],
+      regions: [
+        {
+          subject: regionCode(PLAN_ROOM),
+          role: "room",
+          zone: null,
+          name: "Office",
+          type: "",
+          ceilingFt: null,
+          people: null,
+          lightingW: null,
+          equipSensible: null,
+          equipLatent: null,
+          ventilationCfm: null,
+          sqft: 100,
+          outer: [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+          ],
+          holes: [],
+          label: [5, 5],
+          runId: "run-1",
+          reason: null,
+          touched: false,
+          locked: false,
+          stale: false,
+        },
+      ],
     };
   const fanIdentity = key === "fans" ? stableFanKey(rosterData.rows[0]) : "";
   const fanPort = key === "fans" ? rosterData.rows[0].portIndex : 0;
@@ -246,7 +270,7 @@ test.each([
       const id = module.spec.subject!.options(rosterData)[0]!.id;
       deliverRoster = false;
       const result = await call(JSON.stringify({ kind: "ids", ids: [id] }), {
-        view: JSON.stringify(DEMO_VIEW),
+        view: JSON.stringify(PLAN),
       });
       expect(result, JSON.stringify(result)).toMatchObject({
         ok: true,

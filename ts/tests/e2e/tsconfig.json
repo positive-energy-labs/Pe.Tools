@@ -1,6 +1,12 @@
 {
   "extends": "../../apps/web/tsconfig.json",
-  "include": ["products/**/*.ts", "products/**/*.tsx", "../../apps/web/src/router.tsx"],
+  "include": [
+    "products/**/*.ts",
+    "products/**/*.tsx",
+    "mounted.test-support.tsx",
+    "../../products/*/web/journeys/*.journey.test.tsx",
+    "../../apps/web/src/router.tsx"
+  ],
   "exclude": ["node_modules"],
   "compilerOptions": {
     "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],

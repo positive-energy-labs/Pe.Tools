@@ -25,7 +25,11 @@ import { documentRefSchema } from "@pe/agent-contracts/target";
 
 const target = documentRefSchema;
 /** A plan view's `UniqueId`. The native boundary resolves it; a name is display only. */
-const view = z.string().min(1, "Choose a plan view.");
+const view = z
+  .string()
+  // ADR 0028: an ElementId is no route identity. A name cannot be told from a UniqueId here; the
+  // native resolver refuses whatever is not a plan of this document.
+  .refine((value) => value.length > 0 && !/^[+-]?\d+$/.test(value), "Choose a plan view.");
 /** A Filled Region's `UniqueId` SubjectRef: the key of the region record (ruling 14). */
 const region = subjectRefCodeSchema;
 /** Model XY in feet, on the view's generating level. */
@@ -54,8 +58,11 @@ const plans = contract("rooms.plans", {
   uses: ["rooms.roster"],
 });
 const regions = contract("rooms.regions", {
-  input: z.object({ target, view }),
+  // An empty view is the screen before a plan is chosen: it reads nothing and lists nothing.
+  input: z.object({ target, view: z.string() }),
   data: z.object({
+    /** Why the chosen plan cannot be read from this document. The plan chooser stays usable. */
+    missing: z.string().nullable(),
     regions: z.array(
       z.object({
         subject: region,
@@ -88,7 +95,7 @@ const regions = contract("rooms.regions", {
 });
 // Not `rooms.trace`: that key is the native operation this reading uses.
 const evidence = contract("rooms.evidence", {
-  input: z.object({ target, view, runId: z.string().optional() }),
+  input: z.object({ target, view: z.string(), runId: z.string().optional() }),
   data: z.object({
     runId: z.string(),
     zones: z.array(
@@ -119,7 +126,7 @@ const evidence = contract("rooms.evidence", {
   uses: ["rooms.trace"],
 });
 const planImage = contract("rooms.plan-image", {
-  input: z.object({ target, view }),
+  input: z.object({ target, view: z.string() }),
   // The raster of the 2D picture (S7). Three pixel corners tie it to model XY in feet.
   data: z.object({
     raster: z
@@ -417,7 +424,6 @@ export const product = define({
         field: "room",
         noun: "room",
         pane: "roster",
-        read: ["regions", onPlan],
         options: (data: z.output<typeof regions.data>) =>
           data.regions.map((row) => ({ id: row.subject as SubjectRefCode, label: row.name })),
       },
@@ -448,3 +454,7 @@ export const product = define({
     },
   },
 });
+
+/** Each Work by name: a route declaration imports it, and the host registry binds the same value. */
+export const roomsWork = product.works.rooms;
+export const takeoffsWork = product.works.takeoffs;

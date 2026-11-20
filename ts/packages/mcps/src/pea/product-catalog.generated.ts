@@ -6,16 +6,17 @@ import { fansReadDiscovery as reads2 } from "@pe/fans-contract/read-discovery";
 import { ductCatalogRoutes as routes1 } from "@pe/ducts-contract/duct-catalog";
 import { ductCatalogRouteAxes as axes1 } from "@pe/ducts-contract/duct-catalog";
 import { ductsReadingCallPolicies as policies1 } from "@pe/ducts-contract/reading";
+import { product as product0 } from "@pe/rooms-contract/product";
 const routes = { ...routes1 };
 const axes = { ...axes1 };
 const callPolicies = { ...policies1 };
 assertUniqueProductKeys("HTTP route", [httpRoutes, routes1]);
 assertUniqueProductKeys("call policy", [policies1]);
-assertUniqueProductKeys("named read", [reads2.inputs]);
+assertUniqueProductKeys("named read", [reads2.inputs, product0.reads.inputs]);
 type ProductCatalog = PeCatalog<typeof httpRoutes & typeof routes>;
 const catalog: ProductCatalog = createPeCatalog(hostActions, {
-  inputs: { ...reads2.inputs },
-  help: [reads2.help].filter(Boolean).join(" "),
+  inputs: { ...reads2.inputs, ...product0.reads.inputs },
+  help: [reads2.help, product0.reads.help].filter(Boolean).join(" "),
 }, { routes, axes, callPolicies, resourceReads: [...new Set([...Object.keys(callPolicies), ...[]])] });
 export const peRoutes: ProductCatalog["peRoutes"] = catalog.peRoutes;
 export const linkedCatalog: ProductCatalog["linkedCatalog"] = catalog.linkedCatalog;

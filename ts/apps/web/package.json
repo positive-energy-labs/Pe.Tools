@@ -28,13 +28,11 @@
     "@pe/browser": "workspace:*",
     "@pe/duct-systems-domain": "workspace:*",
     "@pe/duct-systems-host": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
     "@pe/ducts-web": "workspace:*",
     "@pe/fans-domain": "workspace:*",
     "@pe/fans-host": "workspace:*",
-    "@pe/fans-web": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/host-internal": "workspace:*",
     "@pe/kit": "workspace:*",
@@ -61,12 +59,16 @@
     "tailwindcss": "^4.1.18",
     "three": "catalog:",
     "tw-animate-css": "^1.3.6",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/duct-systems-web": "workspace:*",
+    "@pe/fans-web": "workspace:*",
+    "@pe/rooms-web": "workspace:*"
   },
   "devDependencies": {
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
     "@pe/fans-contract": "workspace:*",
+    "@pe/rooms-contract": "workspace:*",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/devtools-vite": "0.8.4",
@@ -93,7 +95,8 @@
   "pe": {
     "generatedProductDependencies": [
       "@pe/duct-systems-web",
-      "@pe/fans-web"
+      "@pe/fans-web",
+      "@pe/rooms-web"
     ]
   }
 }

@@ -24,7 +24,7 @@ export async function projectWork(
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      node.expression.text === "route"
+      (node.expression.text === "route" || node.expression.text === "screen")
     ) {
       const spec = node.arguments[0];
       const edits =

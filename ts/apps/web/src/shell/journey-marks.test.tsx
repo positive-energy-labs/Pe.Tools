@@ -9,10 +9,9 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { roomsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
-import { module } from "../rooms/route";
-import { DEMO_ROOMS } from "../rooms/demo";
-import { roomsGoal } from "../rooms/goal";
+import { workFingerprintSchema } from "@pe/agent-contracts";
+import { roomsWork } from "@pe/rooms-contract/product";
+import { module } from "@pe/rooms-web/routes/rooms";
 import { scrollBody } from "@pe/web-kernel/route/body";
 import { mountTypedRoute } from "./typed-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
@@ -20,26 +19,29 @@ import { TypedChrome } from "./typed-shell";
 import { settled } from "../test-journey";
 import type { UseSource } from "@pe/agent-contracts/route";
 import { route } from "@pe/web-kernel/route/typed-route";
+import { paneLayout } from "@pe/web-kernel/route";
 import { RouteVisibility } from "@pe/web-kernel/route/activity";
 
 const call = vi.hoisted(() =>
   vi.fn(async (door: unknown, ..._: unknown[]) => (door === "view.publish" ? { revision: 1 } : {})),
 );
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
-// The core read is the route's Goal (slice 10): a rooms packet carries its fields.
-const GOAL = roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, null);
+// A declared product route is the probe: one pane over its core read, without its picture.
+const DATA = { missing: null, regions: [], unreadable: [] };
+const { picture: _picture, reads: _reads, ...base } = module.spec;
 const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
 const roomsProbe = (spec: Partial<typeof module.spec> = {}) =>
   route({
-    ...module.spec,
+    ...base,
     ...spec,
     panes: {
-      main: {
-        ...module.spec.panes.main,
+      roster: {
+        ...module.spec.panes.roster,
         body: "scroll" as const,
         draw: () => scrollBody(<p>Rooms body</p>),
       },
     },
+    layout: paneLayout("roster"),
   });
 /** A Place's mount over a held rooms read: `frames` collects each read's deliver. */
 function held(
@@ -59,9 +61,9 @@ function held(
     },
     fingerprint,
     {
-      work: createFixtureWorkDoor(roomsRouteState, roomsRouteState.schema.parse({})),
+      work: createFixtureWorkDoor(roomsWork, roomsWork.schema.parse({})),
       sources: {
-        "rooms.workspace": {
+        "rooms.regions": {
           kind: "use",
           open: (_ctx, deliver) => {
             frames.push(deliver);
@@ -82,16 +84,7 @@ const complete = (deliver: Parameters<UseSource["open"]>[1]) =>
       version: 1,
       state: "current",
       value: {
-        data: {
-          ...GOAL,
-          roomsWork: roomsRouteState.schema.parse({}),
-          handle: null,
-          snapshot: DEMO_ROOMS,
-          trace: null,
-          traceError: null,
-          plan: null,
-          planError: null,
-        },
+        data: DATA,
         evaluation: "busy",
         inputs: "busy",
         origin: { kind: "fixture" },
@@ -111,20 +104,7 @@ const router = (component: () => React.ReactNode) =>
 test("6.1 a pane whose reading is pending says aria-busy, and clears it when the reading settles", async () => {
   const frames: Parameters<UseSource["open"]>[1][] = [];
   const mount = mountTypedRoute(
-    {
-      ...module,
-      spec: {
-        ...module.spec,
-        panes: {
-          ...module.spec.panes,
-          main: {
-            ...module.spec.panes.main,
-            body: "scroll" as const,
-            draw: () => scrollBody(<p>Rooms body</p>),
-          },
-        },
-      },
-    },
+    roomsProbe(),
     {
       address: { read: () => new URLSearchParams(), write: () => {}, subscribe: () => () => {} },
       fixture: null,
@@ -135,9 +115,9 @@ test("6.1 a pane whose reading is pending says aria-busy, and clears it when the
     },
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
     {
-      work: createFixtureWorkDoor(roomsRouteState, roomsRouteState.schema.parse({})),
+      work: createFixtureWorkDoor(roomsWork, roomsWork.schema.parse({})),
       sources: {
-        "rooms.workspace": {
+        "rooms.regions": {
           kind: "use",
           open: (_ctx, deliver) => {
             frames.push(deliver);
@@ -165,16 +145,7 @@ test("6.1 a pane whose reading is pending says aria-busy, and clears it when the
           version: 1,
           state: "current",
           value: {
-            data: {
-              ...GOAL,
-              roomsWork: roomsRouteState.schema.parse({}),
-              handle: null,
-              snapshot: DEMO_ROOMS,
-              trace: null,
-              traceError: null,
-              plan: null,
-              planError: null,
-            },
+            data: DATA,
             evaluation: "busy",
             inputs: "busy",
             origin: { kind: "fixture" },
