@@ -47,8 +47,7 @@
     "@pe/web": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
     "@pe/fans-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*",
-    "@pe/web-kernel": "workspace:*"
+    "@pe/fans-domain": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -56,7 +55,8 @@
     "typescript": "^6.0.3",
     "vite-plus": "catalog:",
     "@modelcontextprotocol/client": "catalog:",
-    "gunshi": "^0.29.5"
+    "gunshi": "^0.29.5",
+    "@pe/web-kernel": "workspace:*"
   },
   "config": {
     "windowsBinaries": {

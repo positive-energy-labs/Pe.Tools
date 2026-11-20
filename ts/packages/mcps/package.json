@@ -54,7 +54,6 @@
     "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
     "@pe/browser": "workspace:*",
-    "@pe/ducts-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/runtime": "workspace:*",
     "effect": "4.0.2",
@@ -62,9 +61,7 @@
     "parse5": "^8.0.1",
     "pngjs": "catalog:",
     "zod": "4.3.6",
-    "@pe/ducts-host": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
-    "@pe/fans-host": "workspace:*"
+    "@pe/fans-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

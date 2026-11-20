@@ -26,14 +26,12 @@
     "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6",
     "@pe/host-internal": "workspace:*",
-    "effect": "4.0.2",
     "@pe/runtime": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
-    "@effect/platform-node": "4.0.2"
+    "vite-plus": "catalog:"
   },
   "pe": {
     "executors": {

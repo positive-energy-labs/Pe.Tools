@@ -57,12 +57,10 @@
     "check": "vp exec tsc --noEmit"
   },
   "dependencies": {
-    "@base-ui/react": "catalog:",
     "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/kit": "workspace:*",
-    "@pe/runtime": "workspace:*",
     "effect": "4.0.2",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",

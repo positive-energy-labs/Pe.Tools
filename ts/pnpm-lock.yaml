@@ -200,9 +200,6 @@ importers:
       '@pe/web':
         specifier: workspace:*
         version: link:../web
-      '@pe/web-kernel':
-        specifier: workspace:*
-        version: link:../../packages/web-kernel
       '@posthog/mcp':
         specifier: 0.22.3
         version: 0.22.3(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@modelcontextprotocol/server@2.4.0)(posthog-node@5.55.2)
@@ -228,6 +225,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 'catalog:'
         version: 2.4.0
+      '@pe/web-kernel':
+        specifier: workspace:*
+        version: link:../../packages/web-kernel
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
@@ -685,18 +685,9 @@ importers:
       '@pe/ducts-contract':
         specifier: workspace:*
         version: link:../../products/ducts/contract
-      '@pe/ducts-domain':
-        specifier: workspace:*
-        version: link:../../products/ducts/domain
-      '@pe/ducts-host':
-        specifier: workspace:*
-        version: link:../../products/ducts/host
       '@pe/fans-contract':
         specifier: workspace:*
         version: link:../../products/fans/contract
-      '@pe/fans-host':
-        specifier: workspace:*
-        version: link:../../products/fans/host
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../host-contracts
@@ -786,9 +777,6 @@ importers:
 
   packages/web-kernel:
     dependencies:
-      '@base-ui/react':
-        specifier: 'catalog:'
-        version: 1.6.0(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@effect/atom-react':
         specifier: 4.0.2
         version: 4.0.2(effect@4.0.2)(react@19.2.7)(scheduler@0.27.0)
@@ -801,9 +789,6 @@ importers:
       '@pe/kit':
         specifier: workspace:*
         version: link:../kit
-      '@pe/runtime':
-        specifier: workspace:*
-        version: link:../runtime
       '@tanstack/react-router':
         specifier: 1.170.31
         version: 1.170.31(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1102,9 +1087,6 @@ importers:
       '@pe/host-internal':
         specifier: workspace:*
         version: link:../../../packages/host-internal
-      '@pe/runtime':
-        specifier: workspace:*
-        version: link:../../../packages/runtime
       effect:
         specifier: 4.0.2
         version: 4.0.2
@@ -1283,16 +1265,10 @@ importers:
       '@pe/runtime':
         specifier: workspace:*
         version: link:../../../packages/runtime
-      effect:
-        specifier: 4.0.2
-        version: 4.0.2
       zod:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@effect/platform-node':
-        specifier: 4.0.2
-        version: 4.0.2(bufferutil@4.1.0)(effect@4.0.2)(redis@6.3.1(@opentelemetry/api@1.9.1))
       '@types/node':
         specifier: ^25.6.2
         version: 25.9.2
