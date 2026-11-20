@@ -4,17 +4,17 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
+import { address } from "@pe/agent-contracts";
 import {
-  address,
   stagedTakeoffEdits,
   takeoffEditKey,
   takeoffObservationSchema,
-} from "@pe/agent-contracts";
+} from "@pe/rooms-contract/takeoffs";
 import { product, takeoffsWork } from "@pe/rooms-contract/product";
 import { RouteWorkspace } from "@pe/runtime";
 import { checkoutRoot } from "../../../web/checkout-paths.ts";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
-import { fileVersion } from "../../src/rhvac-ops.ts";
+import { fileVersion } from "@pe/rooms-host/rhvac";
 import { captureStore, settle, testDocumentMarks } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
 import { readRhvacFixture, sdkSessions } from "../native-receipt-fixture.ts";

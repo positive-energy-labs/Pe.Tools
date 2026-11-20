@@ -8,7 +8,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { takeoffCaptureSchema, takeoffSnapshotInput } from "@pe/agent-contracts";
+import { takeoffCaptureSchema, takeoffSnapshotInput } from "@pe/rooms-contract/takeoffs";
 
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { historyPointSchema } from "@pe/agent-contracts";

@@ -102,7 +102,7 @@
     "packages/kit/tests/legend.test.tsx": 1,
     "packages/kit/tests/live-orbit.test.ts": 2,
     "packages/kit/tests/query-workbench.test.tsx": 1,
-    "packages/mcps/tests/takeoffs-commands.test.ts": 2,
+    "products/rooms/host/src/takeoffs-commands.test.ts": 2,
     "packages/runtime/src/recording-diff.test.ts": 5,
     "packages/runtime/tests/work-handle.test.ts": 1,
     "packages/runtime/tests/work-journal.test.ts": 1,

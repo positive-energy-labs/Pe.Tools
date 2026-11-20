@@ -2,16 +2,15 @@ import { nativeResponseDefinitionSchema } from "@pe/host-contracts/decoders";
 import type { TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { z } from "zod";
 
-import { observationSchema } from "./reading.ts";
-import { addressSchema } from "./target.ts";
-import { documentRefSchema } from "./target.ts";
-import { nativeOutputSchema } from "./native-output-read.ts";
+import { observationSchema } from "@pe/agent-contracts";
+import { addressSchema, documentRefSchema } from "@pe/agent-contracts/target";
+import { nativeOutputSchema } from "@pe/agent-contracts/native-output-read";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
 const worldLoopsSchema = z
   .array(z.array(z.tuple([z.number(), z.number()]).readonly()).readonly())
   .readonly();
-export const roomEditSchema = z.object({
+const roomEditSchema = z.object({
   name: z.string().optional(),
   type: z
     .enum([
@@ -44,7 +43,6 @@ const modelViewSchema = z.object({
   label: z.string(),
   replayPath: z.string().nullable(),
 });
-
 
 const roomDataSchema = z.object({
   people: z.number(),
@@ -170,7 +168,6 @@ const modelZoneSchema = z.object({
 });
 
 export type ModelZone = z.infer<typeof modelZoneSchema>;
-export type Phase = ModelZone["stage"];
 
 export const candidateRegionSchema = z.object({
   elementId: z.number(),
@@ -183,8 +180,6 @@ export const candidateRegionSchema = z.object({
   blob: z.string(),
   loops: z.array(z.array(pointSchema)),
 });
-
-export type CandidateRegion = z.infer<typeof candidateRegionSchema>;
 
 const liveRegionSchema = z.object({
   analysis: modelRoomSchema.shape.analysis,
@@ -273,7 +268,7 @@ const takeoffModelSchema = z.object({
 });
 export type TakeoffModel = z.infer<typeof takeoffModelSchema>;
 
-export const takeoffUnreadableBlobSchema =
+const takeoffUnreadableBlobSchema =
   nativeResponseDefinitionSchema<TakeoffsSnapshot.Res.TakeoffUnreadableBlob>(
     "takeoffs.snapshot",
     "TakeoffUnreadableBlob",
@@ -329,31 +324,14 @@ export const takeoffObservationSchema = z.discriminatedUnion("kind", [
 ]);
 export type TakeoffObservation = z.infer<typeof takeoffObservationSchema>;
 
-/** Lightweight wire projection. Geometry is fetched once by immutable identity. */
-export const takeoffObservationStatusSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("empty"), target: documentRefSchema }),
-  z.strictObject({
-    kind: z.literal("reading"),
-    target: documentRefSchema,
-    previousId: z.string().optional(),
-  }),
-  z.strictObject({ kind: z.literal("ready"), target: documentRefSchema, captureId: z.string() }),
-  z.strictObject({
-    kind: z.literal("failed"),
-    target: documentRefSchema,
-    error: z.string(),
-    previousId: z.string().optional(),
-  }),
-]);
-
 /** A room's current edit as the host consumes it. */
 export const stagedRoomEditSchema = z.object({
   roomId: z.string(),
   next: roomEditSchema,
 });
 export type StagedRoomEdit = z.infer<typeof stagedRoomEditSchema>;
-export type RoomEdit = z.infer<typeof roomEditSchema>;
-export type RoomEditField = keyof RoomEdit;
+type RoomEdit = z.infer<typeof roomEditSchema>;
+type RoomEditField = keyof RoomEdit;
 
 /** One canonical JSON tuple per cell address, the Families encoding rule. */
 const tupleKey = (parts: readonly string[]) => JSON.stringify(parts);
@@ -367,7 +345,8 @@ const tupleOf = (key: string) => {
 export const takeoffEditKey = (roomId: string, field: RoomEditField) => tupleKey([roomId, field]);
 export const takeoffEditAddress = (key: string) => {
   const [roomId, field] = tupleOf(key);
-  if (!Object.hasOwn(roomEditSchema.shape, field)) throw Error(`Unknown Takeoffs room field ${field}`);
+  if (!Object.hasOwn(roomEditSchema.shape, field))
+    throw Error(`Unknown Takeoffs room field ${field}`);
   return { roomId, field: field as RoomEditField };
 };
 /** A person's verdict on a solver flag: `[roomGuid, flag]`. */
@@ -377,7 +356,6 @@ export const takeoffDecisionAddress = (key: string) => {
   return { roomGuid, flag };
 };
 /** A review flag on one shape of a zone's saved partition review: `[zoneKey, shapeKey]`. */
-export const takeoffFlagKey = (zoneKey: string, shapeKey: string) => tupleKey([zoneKey, shapeKey]);
 
 type StagedCells<V> = Record<string, { edit?: { value?: V } | null }>;
 

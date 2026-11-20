@@ -1,4 +1,4 @@
-import type { ModelRoom, StagedRoomEdit } from "@pe/agent-contracts";
+import type { ModelRoom, StagedRoomEdit } from "@pe/rooms-contract/takeoffs";
 import { refused } from "@pe/host-internal/command-executor";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -23,10 +23,9 @@ import {
   readDirectoryEntriesOrEmpty,
   readFileStringBomAwareOrEmpty,
   statOrNull,
-} from "./files/index.ts";
-import { hostOwnership } from "./host-ownership.ts";
-import { LocalOpError } from "./local-error.ts";
-import { runHostChild } from "./host-child.ts";
+} from "@pe/host-internal/local-files";
+import { LocalOpError } from "@pe/host-internal/local-error";
+import { runHostChild } from "@pe/host-internal/host-child";
 
 /**
  * RHVAC .r10 local ops. An .r10 file is an Access 97 Jet database only the
@@ -34,7 +33,7 @@ import { runHostChild } from "./host-child.ts";
  * scripts (dotnet/Pe.Revit.Takeoff/Rhvac/*.ps1) under SysWOW64 PowerShell and
  * exchange JSON through temp files. Pure file/process ops — no Revit session.
  *
- * Script paths resolve from the checkout root (hostOwnership.sourceRoot), so the lane exists on
+ * Script paths resolve from the checkout root (sourceRoot), so the lane exists on
  * dev hosts only;
  * the installed lane reports a clear "unavailable" error instead of guessing.
  */
@@ -45,10 +44,10 @@ const PS32_EXE = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe
 const EXTRACT_TIMEOUT_MS = 120_000;
 const SAVE_TIMEOUT_MS = 300_000;
 
-function rhvacScriptDirectory(): string | null {
-  return hostOwnership.sourceRoot === null
+function rhvacScriptDirectory(sourceRoot: string | null): string | null {
+  return sourceRoot === null
     ? null
-    : resolve(hostOwnership.sourceRoot, checkoutLayout.dotnet, "Pe.Revit.Takeoff", "Rhvac");
+    : resolve(sourceRoot, checkoutLayout.dotnet, "Pe.Revit.Takeoff", "Rhvac");
 }
 
 export const fileVersion = async (path: string) =>
@@ -56,35 +55,41 @@ export const fileVersion = async (path: string) =>
     .update(await readFile(path))
     .digest("hex");
 /** Test seams of the RHVAC file lane and the Work reads every command family shares. */
-export type TakeoffActionDependencies = {
-  workspace?: import("@pe/runtime").RouteWorkspace;
-  workReads?: import("./command-executor.ts").CommandResources["workReads"];
-  sdk?: import("./native-receipts.ts").SdkReceiptReader;
+type RhvacRoots = { sourceRoot: string | null; rootPath: string };
+export type RhvacOverrides = {
   fileVersion?: typeof fileVersion;
   openFile?: (path: string) => Promise<RhvacExtractData>;
   syncFile?: (input: RhvacSyncRequest, expectedVersion: string) => Promise<RhvacSyncResult>;
 };
 
-export const rhvacOpen = Effect.fnUntraced(function* (input: RhvacPathRequest) {
+export const rhvacOpen = Effect.fnUntraced(function* (roots: RhvacRoots, input: RhvacPathRequest) {
   const key = "rhvac.open";
   yield* assertR10File(key, input.path);
-  const outputPath = tempJsonPath("open");
+  const outputPath = tempJsonPath(roots.rootPath, "open");
   return yield* Effect.ensuring(
     Effect.gen(function* () {
-      yield* runRhvacScript(key, "extract-rhvac.ps1", ["-Path", input.path, "-Output", outputPath]);
+      yield* runRhvacScript(roots.sourceRoot, key, "extract-rhvac.ps1", [
+        "-Path",
+        input.path,
+        "-Output",
+        outputPath,
+      ]);
       return (yield* readJsonOutput(key, outputPath)) as RhvacExtractData;
     }),
     removeQuietly(outputPath),
   );
 });
 
-export const rhvacAssemblies = Effect.fnUntraced(function* (input: RhvacPathRequest) {
+export const rhvacAssemblies = Effect.fnUntraced(function* (
+  roots: RhvacRoots,
+  input: RhvacPathRequest,
+) {
   const key = "rhvac.assemblies";
   yield* assertR10File(key, input.path);
-  const outputPath = tempJsonPath("assemblies");
+  const outputPath = tempJsonPath(roots.rootPath, "assemblies");
   return yield* Effect.ensuring(
     Effect.gen(function* () {
-      yield* runRhvacScript(key, "extract-rhvac.ps1", [
+      yield* runRhvacScript(roots.sourceRoot, key, "extract-rhvac.ps1", [
         "-Path",
         input.path,
         "-Output",
@@ -107,6 +112,7 @@ export const rhvacAssemblies = Effect.fnUntraced(function* (input: RhvacPathRequ
  * home for this data, and a sync that leaves a copy behind moves the truth question onto the user.
  */
 export const rhvacSync = Effect.fnUntraced(function* (
+  roots: RhvacRoots,
   input: RhvacSyncRequest,
   expectedVersion?: string,
 ) {
@@ -142,8 +148,8 @@ export const rhvacSync = Effect.fnUntraced(function* (
   });
 
   const fs = yield* FileSystem.FileSystem;
-  const syncPath = tempJsonPath("sync");
-  const resultPath = tempJsonPath("sync-result");
+  const syncPath = tempJsonPath(roots.rootPath, "sync");
+  const resultPath = tempJsonPath(roots.rootPath, "sync-result");
   yield* fs
     .writeFileString(syncPath, JSON.stringify(payload))
     .pipe(Effect.mapError((error) => new LocalOpError(key, describeError(error))));
@@ -151,6 +157,7 @@ export const rhvacSync = Effect.fnUntraced(function* (
   return yield* Effect.ensuring(
     Effect.gen(function* () {
       const log = yield* runRhvacScript(
+        roots.sourceRoot,
         key,
         "sync-rhvac.ps1",
         [
@@ -344,12 +351,13 @@ function toLaneRoom(key: string, room: RhvacInsertRoomData) {
 // --- 32-bit lane plumbing ------------------------------------------------------
 
 const runRhvacScript = Effect.fnUntraced(function* (
+  sourceRoot: string | null,
   key: string,
   scriptName: string,
   scriptArgs: readonly string[],
   timeoutMs: number = EXTRACT_TIMEOUT_MS,
 ) {
-  const scriptDirectory = rhvacScriptDirectory();
+  const scriptDirectory = rhvacScriptDirectory(sourceRoot);
   if (scriptDirectory === null)
     return yield* Effect.fail(
       new LocalOpError(
@@ -423,8 +431,8 @@ const parseJson = Effect.fnUntraced(function* (key: string, text: string, label:
   });
 });
 
-function tempJsonPath(purpose: string): string {
-  const scratch = productScratchPath(hostOwnership.rootPath);
+function tempJsonPath(rootPath: string, purpose: string): string {
+  const scratch = productScratchPath(rootPath);
   mkdirSync(scratch, { recursive: true });
   return join(scratch, `pe-rhvac-${purpose}-${randomUUID()}.json`);
 }

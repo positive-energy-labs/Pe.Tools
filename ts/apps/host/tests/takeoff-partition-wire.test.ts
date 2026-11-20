@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { partitionRunSchema } from "@pe/agent-contracts";
+import { partitionRunSchema } from "@pe/rooms-contract/takeoffs";
 import type { TakeoffsPartition } from "@pe/host-contracts/generated";
 
 // The generated type is the C# wire; the hand-written reader must accept exactly what it sends.

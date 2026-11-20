@@ -1,14 +1,14 @@
 import type { ObservedActive, Resolved } from "@pe/host-contracts/pe-revit-contract";
 import { Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
-import { rhvacOpen } from "../src/rhvac-ops.ts";
+import { rhvacOpen } from "@pe/rooms-host/rhvac";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay, sdkBinary, sdkCommand } from "./sdk-replay.ts";
 
 /** Explicit real-Jet integration helper; the owning host supplies its existing platform layer. */
 export const readRhvacFixture = (path: string) =>
   // effect-edge: island, phase 5
-  Effect.runPromise(rhvacOpen({ path }).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise(rhvacOpen(hostOwnership, { path }).pipe(Effect.provide(NodeServices.layer)));
 
 export const originalProcess = {
   pid: 42,

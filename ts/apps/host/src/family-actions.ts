@@ -78,7 +78,7 @@ import {
 } from "@pe/host-internal/command-executor";
 import { z } from "zod";
 import type { Consumed as Dependency, WorkHandle } from "@pe/agent-contracts";
-import { type TakeoffActionDependencies } from "./rhvac-ops.ts";
+import type { RhvacOverrides } from "@pe/rooms-host/rhvac";
 import type { NativeProcess } from "./native-receipts.ts";
 import {
   composedSpec,
@@ -91,7 +91,7 @@ import {
   type PodContext,
 } from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import { LocalOpError } from "./local-error.ts";
+import { LocalOpError } from "@pe/host-internal/local-error";
 import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
 
@@ -114,8 +114,11 @@ export type PodDependencies = {
   podsRoot?: string;
   runPods?: RunPods;
 };
-export type FamilyActionDependencies = TakeoffActionDependencies &
+export type FamilyActionDependencies = RhvacOverrides &
   PodDependencies & {
+    workspace?: import("@pe/runtime").RouteWorkspace;
+    workReads?: import("./command-executor.ts").CommandResources["workReads"];
+    sdk?: import("./native-receipts.ts").SdkReceiptReader;
     marks?: DocumentMarks;
     files?: import("@pe/ducts-host/ducts-files").DuctFiles["Service"];
     pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];

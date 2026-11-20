@@ -4,12 +4,14 @@ import {
   applyPatches,
   bindWork,
   message,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
+import {
   stagedDecisions,
   stagedTakeoffEdits,
   takeoffDecisionKey,
   takeoffEditKey,
-  type RouteStatePatch,
-} from "@pe/agent-contracts";
+} from "./takeoffs.ts";
 import { product, roomsWork, takeoffsWork } from "./product.ts";
 
 const FLOOR = "8a0c1e3f-0000-4000-8000-000000000001-000026dc";
@@ -25,7 +27,9 @@ it("a mark names its plan by UniqueId: both authors are refused an ElementId, an
   const envelope = { version: 1 as const, revision: 0, doc: roomsWork.schema.parse({}) };
   const patch = (value: RouteStatePatch["value"], by: "pea" | "human", from = envelope) =>
     applyPatches(roomsWork, from, by, [{ path: ["marks", "m1"], value }], from.revision);
-  const mark = (view: string) => ({ edit: { value: { kind: "reject", view, polygon, runId: "prior" } } });
+  const mark = (view: string) => ({
+    edit: { value: { kind: "reject", view, polygon, runId: "prior" } },
+  });
   for (const by of ["pea", "human"] as const) {
     const refused = patch(mark("9948"), by);
     expect(refused).toMatchObject({ ok: false });
@@ -37,7 +41,9 @@ it("a mark names its plan by UniqueId: both authors are refused an ElementId, an
     envelope: { doc: { marks: { m1: { edit: { value: { view: FLOOR } } } } } },
   });
   if (!kept.ok) throw Error("unreachable");
-  expect(patch({ edit: null }, "pea", kept.envelope as typeof envelope)).toMatchObject({ ok: true });
+  expect(patch({ edit: null }, "pea", kept.envelope as typeof envelope)).toMatchObject({
+    ok: true,
+  });
 });
 
 it("a partition intent without a plan key stays in Work and is refused before dispatch; two plans of one name are two keys", () => {
@@ -66,14 +72,24 @@ it("the declared Takeoffs Work shares staged decisions and edits between authors
   const decision = takeoffDecisionKey("room-1", "seedless");
   const edit = takeoffEditKey("room-1", "name");
   const doc = takeoffsWork.schema.parse({});
-  const staged = applyPatches(takeoffsWork, { version: 1, revision: 0, doc }, "pea", [
-    { path: ["decisions", decision], value: { edit: { value: "dismiss" } } },
-    { path: ["edits", edit], value: { edit: { value: "Pea's name" } } },
-  ], 0);
+  const staged = applyPatches(
+    takeoffsWork,
+    { version: 1, revision: 0, doc },
+    "pea",
+    [
+      { path: ["decisions", decision], value: { edit: { value: "dismiss" } } },
+      { path: ["edits", edit], value: { edit: { value: "Pea's name" } } },
+    ],
+    0,
+  );
   if (!staged.ok) throw Error(JSON.stringify(staged));
-  const edited = applyPatches(takeoffsWork, staged.envelope, "human", [
-    { path: ["edits", edit], value: { edit: { value: "Reviewed room" } } },
-  ], staged.envelope.revision);
+  const edited = applyPatches(
+    takeoffsWork,
+    staged.envelope,
+    "human",
+    [{ path: ["edits", edit], value: { edit: { value: "Reviewed room" } } }],
+    staged.envelope.revision,
+  );
   if (!edited.ok) throw Error(JSON.stringify(edited));
   const current = takeoffsWork.schema.parse(edited.envelope.doc);
   expect(stagedDecisions(current)).toEqual({ [decision]: "dismiss" });

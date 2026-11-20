@@ -1,16 +1,15 @@
 /** One body per declared reading. Each maps a native read to the shape the declaration gives it. */
 import { z } from "zod";
+import { readingRequestSchema, type DocumentRef } from "@pe/agent-contracts";
 import {
-  readingRequestSchema,
   stagedAdoptChoices,
   takeoffCaptureSchema,
   takeoffCaptureSummarySchema,
   takeoffSnapshotInput,
-  type DocumentRef,
-} from "@pe/agent-contracts";
+} from "@pe/rooms-contract/takeoffs";
 import { native } from "@pe/agent-contracts/handle";
 import type { HostBodies } from "@pe/agent-contracts/product";
-import { readZoneMeta } from "@pe/agent-contracts/takeoff-adoption";
+import { readZoneMeta } from "./takeoff-adoption.ts";
 import { BridgeError } from "@pe/host-internal/bridge";
 import { leaf, type ReadContext } from "@pe/host-internal/read-graph";
 import { workBinding, workRead } from "@pe/host-internal/reads/work";
