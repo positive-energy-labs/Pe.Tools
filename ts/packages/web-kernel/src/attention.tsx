@@ -1,7 +1,12 @@
 import * as Atom from "effect/reactivity/Atom";
 import { RegistryContext, useAtomValue } from "@effect/atom-react";
 import { useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { ElementIndexContext, elementIndex, useElementIndex, type ElementIndex } from "./element-index.ts";
+import {
+  ElementIndexContext,
+  elementIndex,
+  useElementIndex,
+  type ElementIndex,
+} from "./element-index.ts";
 import {
   AttentionDocument,
   hovered,

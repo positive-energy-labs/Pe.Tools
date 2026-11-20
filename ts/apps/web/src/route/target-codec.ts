@@ -1,4 +1,9 @@
-import {documentRequestSchema,addressSchema,type Address,type DocumentRequest} from "@pe/agent-contracts";
+import {
+  documentRequestSchema,
+  addressSchema,
+  type Address,
+  type DocumentRequest,
+} from "@pe/agent-contracts";
 /**
  * `?target` accepts a schema-validated JSON DocumentRequest for exact picker selections.
  * A document Address (path or cloud GUID) names the document in whichever
@@ -28,4 +33,3 @@ export function parseTarget(
     ? { kind: "address", address: parsed.data }
     : { kind: "session", session: target };
 }
-

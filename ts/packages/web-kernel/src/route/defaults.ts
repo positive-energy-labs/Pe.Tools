@@ -70,4 +70,3 @@ export function route<
   ) as typeof spec.panes;
   return declareRoute({ ...spec, panes });
 }
-

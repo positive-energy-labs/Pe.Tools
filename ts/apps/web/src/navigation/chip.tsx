@@ -1,9 +1,5 @@
 import { useEffect, useState } from "react";
-import {
-  pageTargetReadingSchema,
-  routeAddress,
-  type PageTargetReading,
-} from "@pe/agent-contracts";
+import { pageTargetReadingSchema, routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { useRouteSearch } from "@pe/web-kernel/route/activity";
 import { oneName } from "@pe/web-kernel/route/typed-route";
 import { peReadings } from "../host/resource-stream";

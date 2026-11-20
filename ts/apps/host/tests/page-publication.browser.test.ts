@@ -112,7 +112,10 @@ it("captures through real Edge, publishes only on success, and preserves authore
   );
   try {
     // The handler reads the store per request, so it comes in the request context, as in captures.test.ts.
-    const image = await assets.handler(new Request(result.capture.url), Context.make(PictureCaptureStore, captures));
+    const image = await assets.handler(
+      new Request(result.capture.url),
+      Context.make(PictureCaptureStore, captures),
+    );
     expect(image.status).toBe(200);
     expect(image.headers.get("content-type")).toContain("image/png");
     expect(Buffer.from(await image.arrayBuffer())).toEqual(expected);

@@ -19,7 +19,10 @@ export type CatalogReading = z.infer<typeof ductCatalogReadingSchema>;
  * creation on a missing root. A table id is unique across every catalog in every home: an id
  * claimed twice admits no table, with a finding. Nothing shadows. Each table carries its home's tier as the home list (`list`: user, project, firm) gave it, the only source of a tier (D8), and its file.
  */
-export async function readDuctCatalogs(list: readonly Home[], bindHome: (home: Home) => HomeRoot): Promise<CatalogReading> {
+export async function readDuctCatalogs(
+  list: readonly Home[],
+  bindHome: (home: Home) => HomeRoot,
+): Promise<CatalogReading> {
   const tables: Record<string, CatalogTable> = Object.create(null);
   const findings: string[] = [];
   const duplicates = new Set<string>();
@@ -48,7 +51,8 @@ async function readCatalogsFolder(
       const read = readStoredFile(
         catalogKind.in(home, productPathNames.catalogsDirectoryName, folder.name),
       );
-      if (read.kind !== "ok") throw Error(read.kind === "missing" ? "catalog.json is missing" : read.reason);
+      if (read.kind !== "ok")
+        throw Error(read.kind === "missing" ? "catalog.json is missing" : read.reason);
       const catalog = read.value;
       for (const table of catalog.tables) {
         const file = await realpath(resolve(dir, table.source.file));
@@ -61,7 +65,11 @@ async function readCatalogsFolder(
           delete tables[table.id];
           duplicates.add(table.id);
           findings.push(`Duplicate catalog table ${table.id}; no table with this id is admitted`);
-        } else tables[table.id] = { ...table, home: { tier: home.tier, file: join(dir, "catalog.json") } };
+        } else
+          tables[table.id] = {
+            ...table,
+            home: { tier: home.tier, file: join(dir, "catalog.json") },
+          };
       }
     } catch (error) {
       findings.push(`${folder.name}: ${String(error)}`);

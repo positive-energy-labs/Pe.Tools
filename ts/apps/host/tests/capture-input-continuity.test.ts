@@ -11,10 +11,7 @@ import { Effect, Layer, Schema } from "effect";
 import { HttpRouter } from "effect/http";
 import { expect, test, vi } from "vite-plus/test";
 import { HostNativeRead, canonicalJson } from "@pe/host-internal/native-read";
-import {
-  NATIVE_BODY_VERSION_HEADER,
-  address,
-} from "@pe/agent-contracts";
+import { NATIVE_BODY_VERSION_HEADER, address } from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -51,7 +48,8 @@ const snapshot = Schema.decodeUnknownSync(Schema.Json)(snapshotRaw.result ?? sna
 async function setup(mode = "normal") {
   const dir = await mkdtemp(join(tmpdir(), "pe-capture-continuity-"));
   await mkdir(join(dir, "Catalogs"));
-  await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
+  await mkdir(join(dir, "Settings"), { recursive: true });
+  await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
   const writer = await settle(
     openRecordingWriter(stateFixture(join(dir, "bundle")), identity, {
       maxBytes: 64 * 1024 * 1024,
@@ -89,14 +87,16 @@ async function setup(mode = "normal") {
       admitNativeCaller(input.key).pipe(
         Effect.map(() => ({
           value:
-            input.key === "revit.catalog.field-options" ? unavailableFieldOptions : input.key === "ducts.tables"
-              ? {
-                  folder: "test",
-                  tables: {},
-                  missing: (input.input as { ids: string[] }).ids,
-                  unsupported: {},
-                }
-              : snapshot,
+            input.key === "revit.catalog.field-options"
+              ? unavailableFieldOptions
+              : input.key === "ducts.tables"
+                ? {
+                    folder: "test",
+                    tables: {},
+                    missing: (input.input as { ids: string[] }).ids,
+                    unsupported: {},
+                  }
+                : snapshot,
           nativeRequestId: `receipt-native-${++nativeCount}`,
           actualTarget:
             input.key === "ducts.tables"
@@ -111,7 +111,10 @@ async function setup(mode = "normal") {
   const live = {
     owner: new DuctsReadings(),
     native,
-    files: DuctFiles.layer(hostState().home, { firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
+    files: DuctFiles.layer(hostState().home, {
+      firm: join(dir, "Settings"),
+      catalogs: [{ tier: "firm", root: dir }],
+    }),
     marks: Layer.succeed(
       HostDocumentMarks,
       hostMarks({ observedSince: 1, changedAt: () => 2, subscribe: () => () => {} }),
@@ -155,7 +158,7 @@ async function setup(mode = "normal") {
           [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
           [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
           "content-type": "application/json",
-        ...extraHeaders,
+          ...extraHeaders,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
@@ -181,8 +184,12 @@ test.each(["metadata", "full", "io"])(
       expect(response.status, await response.clone().text()).toBe(200);
       expect(JSON.stringify(await response.json())).toBe(JSON.stringify(snapshot));
       expect(owner.writer.capture.truncated()).not.toBeNull();
-    const refused = await owner.send("/call", { key: "ducts.snapshot.roster", request: {} }, { [NATIVE_BODY_VERSION_HEADER]: "missing-version" });
-    expect(refused.status, await refused.clone().text()).toBe(409);
+      const refused = await owner.send(
+        "/call",
+        { key: "ducts.snapshot.roster", request: {} },
+        { [NATIVE_BODY_VERSION_HEADER]: "missing-version" },
+      );
+      expect(refused.status, await refused.clone().text()).toBe(409);
     } finally {
       await owner.close();
     }

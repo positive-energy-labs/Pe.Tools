@@ -9,13 +9,30 @@ test("old Fans Page fields and stage are refused with a visible reason, without 
     const f = await createWitness(closes);
     const input = f.places.get("fans")!;
     const route = f.admitted.presenter;
-    for (const search of [new URLSearchParams({ stage: "sheet" }), new URLSearchParams({ sheetPath: "old-path" })]) {
-      expect(() => mountTypedRoute(route.typed, { ...input, memory: () => ({}),
-        address: { ...input.address, read: () => search } }, route.workFingerprint))
-        .toThrow("retired. Open a new Place.");
+    for (const search of [
+      new URLSearchParams({ stage: "sheet" }),
+      new URLSearchParams({ sheetPath: "old-path" }),
+    ]) {
+      expect(() =>
+        mountTypedRoute(
+          route.typed,
+          { ...input, memory: () => ({}), address: { ...input.address, read: () => search } },
+          route.workFingerprint,
+        ),
+      ).toThrow("retired. Open a new Place.");
     }
-    expect(() => mountTypedRoute(route.typed, { ...input, memory: () => ({ sheetPath: "old-path" }),
-      address: { ...input.address, read: () => new URLSearchParams() } }, route.workFingerprint))
-      .toThrow("retired. Open a new Place.");
-  } finally { closes.reverse().forEach(close => close()); }
+    expect(() =>
+      mountTypedRoute(
+        route.typed,
+        {
+          ...input,
+          memory: () => ({ sheetPath: "old-path" }),
+          address: { ...input.address, read: () => new URLSearchParams() },
+        },
+        route.workFingerprint,
+      ),
+    ).toThrow("retired. Open a new Place.");
+  } finally {
+    closes.reverse().forEach((close) => close());
+  }
 });

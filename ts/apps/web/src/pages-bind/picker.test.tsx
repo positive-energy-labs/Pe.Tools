@@ -20,16 +20,27 @@ import { BindPicker } from "./bind-picker";
 
 afterEach(cleanup);
 
-test.each(["Chadds_detached.rvt", null])("a detached inventory row (%s) can be picked by lifetime", (address) => {
-  const onBind = vi.fn();
-  const ref = { session: "S", openId: "detached" };
-  const screen = render(<BindPicker slug="pdrop--tour" back="/bind" reading={null}
-    threads={[]} documents={[{ title: "Chadds detached", address, ref, revit: "Revit 2025" }]}
-    outcome={null} onBind={onBind} />);
-  fireEvent.click(screen.getByText("Chadds detached"));
-  expect(onBind).toHaveBeenCalledOnce();
-  expect(pageChoiceSchema.parse(onBind.mock.calls[0]![0])).toEqual({ kind: "pinned", ref });
-});
+test.each(["Chadds_detached.rvt", null])(
+  "a detached inventory row (%s) can be picked by lifetime",
+  (address) => {
+    const onBind = vi.fn();
+    const ref = { session: "S", openId: "detached" };
+    const screen = render(
+      <BindPicker
+        slug="pdrop--tour"
+        back="/bind"
+        reading={null}
+        threads={[]}
+        documents={[{ title: "Chadds detached", address, ref, revit: "Revit 2025" }]}
+        outcome={null}
+        onBind={onBind}
+      />,
+    );
+    fireEvent.click(screen.getByText("Chadds detached"));
+    expect(onBind).toHaveBeenCalledOnce();
+    expect(pageChoiceSchema.parse(onBind.mock.calls[0]![0])).toEqual({ kind: "pinned", ref });
+  },
+);
 
 const MODEL = "C:\\Jobs\\Project A MEP.rvt";
 const reading: PageTargetReading = {

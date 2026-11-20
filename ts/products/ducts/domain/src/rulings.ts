@@ -47,14 +47,15 @@ export function withStoredRulings(
 ): DuctsDesign | null {
   const verdicts = Object.entries(store?.verdicts ?? {});
   const roles = Object.entries(store?.roles ?? {}).flatMap(([id, value]) => {
-    const node = snapshot.nodes.find(n => n.id === Number(id));
+    const node = snapshot.nodes.find((n) => n.id === Number(id));
     return node ? [[elementSubject(node), value] as const] : [];
   });
   const deletes = Object.values(doc?.assumptions ?? {}).some((cell) => cell.edit?.delete);
   if (!verdicts.length && !roles.length && !deletes) return doc;
   const base = doc ?? EMPTY;
   const bySnapshot = memo.get(base) ?? memo.set(base, new WeakMap()).get(base)!;
-  const byStore = bySnapshot.get(snapshot) ?? bySnapshot.set(snapshot, new WeakMap()).get(snapshot)!;
+  const byStore =
+    bySnapshot.get(snapshot) ?? bySnapshot.set(snapshot, new WeakMap()).get(snapshot)!;
   const hit = byStore.get(store ?? NO_STORE);
   if (hit) return hit;
   const assumptions = Object.fromEntries(
@@ -65,21 +66,43 @@ export function withStoredRulings(
   );
   // Model-store rulings are calculation inputs, never persisted Work edits. They have no caller
   // stamp: retain that absence rather than inventing an author for evidence read from the model.
-  const storedAssumptions = Object.fromEntries(verdicts.filter(([key, { verdict }]) =>
-    keeps(verdict) && !base.assumptions[key]?.edit).map(([key, { verdict }]) => [key, {
-      ...base.assumptions[key], edit: { value: { kind: "verdict", verdict: verdict as "ignore" } },
-    }]));
-  const storedRoles = Object.fromEntries(roles.filter(([id, { role }]) =>
-    isRole(role) && !base.roles[id]?.edit).map(([id, { role }]) => [id, {
-      ...base.roles[id], edit: { value: { role } },
-    }]));
-  const effective = { ...base, assumptions: { ...assumptions, ...storedAssumptions }, roles: { ...base.roles, ...storedRoles } } as DuctsDesign;
+  const storedAssumptions = Object.fromEntries(
+    verdicts
+      .filter(([key, { verdict }]) => keeps(verdict) && !base.assumptions[key]?.edit)
+      .map(([key, { verdict }]) => [
+        key,
+        {
+          ...base.assumptions[key],
+          edit: { value: { kind: "verdict", verdict: verdict as "ignore" } },
+        },
+      ]),
+  );
+  const storedRoles = Object.fromEntries(
+    roles
+      .filter(([id, { role }]) => isRole(role) && !base.roles[id]?.edit)
+      .map(([id, { role }]) => [
+        id,
+        {
+          ...base.roles[id],
+          edit: { value: { role } },
+        },
+      ]),
+  );
+  const effective = {
+    ...base,
+    assumptions: { ...assumptions, ...storedAssumptions },
+    roles: { ...base.roles, ...storedRoles },
+  } as DuctsDesign;
   byStore.set(store ?? NO_STORE, effective);
   return effective;
 }
 
 /** What a write would change in the store's rulings: Work's edit deltas that differ from it. */
-export function pendingRulings(doc: DuctsDesign | null, store: Store, snapshot: Pick<DuctSnapshot, "nodes" | "segments">): RulingDelta[] {
+export function pendingRulings(
+  doc: DuctsDesign | null,
+  store: Store,
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
+): RulingDelta[] {
   const out: RulingDelta[] = [];
   for (const [key, cell] of Object.entries(doc?.assumptions ?? {})) {
     if (!cell.edit) continue;
@@ -133,19 +156,21 @@ export function storeRulings(
     ),
   );
   const roles = Object.fromEntries(
-    Object.entries(edit.roles).map(([key, value]) => [String(workElementId(snapshot, key)), value] as const).flatMap(([id, { role }]) =>
-      isRole(role)
-        ? [
-            [
-              id,
-              {
-                role,
-                ruledAt: store?.roles?.[id]?.role === role ? store.roles[id]!.ruledAt : at,
-              },
-            ] as const,
-          ]
-        : [],
-    ),
+    Object.entries(edit.roles)
+      .map(([key, value]) => [String(workElementId(snapshot, key)), value] as const)
+      .flatMap(([id, { role }]) =>
+        isRole(role)
+          ? [
+              [
+                id,
+                {
+                  role,
+                  ruledAt: store?.roles?.[id]?.role === role ? store.roles[id]!.ruledAt : at,
+                },
+              ] as const,
+            ]
+          : [],
+      ),
   );
   return { verdicts, roles };
 }
@@ -171,23 +196,42 @@ export function rulingRung(
  * element row. `cells` are the Work cells this write lands. A verdict the store does not keep stays Work's; fan
  * roles are the /fans apply's and are neither read nor sent here.
  */
-export function rulingsRequest(design: DuctsDesign, snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store" | "slots">, appliedAt: string) {
-  const store = snapshot.store, own = { ...design, roles: {} };
-  const { verdicts } = storeRulings(stagedValues(withStoredRulings(own, store, snapshot), own), store, appliedAt, snapshot);
+export function rulingsRequest(
+  design: DuctsDesign,
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments" | "store" | "slots">,
+  appliedAt: string,
+) {
+  const store = snapshot.store,
+    own = { ...design, roles: {} };
+  const { verdicts } = storeRulings(
+    stagedValues(withStoredRulings(own, store, snapshot), own),
+    store,
+    appliedAt,
+    snapshot,
+  );
   const rules = stagedValues(own, own).rules;
   const deltas = pendingRulings(own, store, snapshot);
   const input: DuctsApplyInput = {
     slots: { ...snapshot.slots, requiredEsp: snapshot.slots.requiredEsp ?? "" },
-    fittings: [], terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [],
+    fittings: [],
+    terminals: [],
+    components: [],
+    equipment: [],
+    terminalFlows: [],
+    equipmentFlows: [],
     store: { version: 2, workRevision: store?.workRevision ?? 0, appliedAt, rules, verdicts },
     // The native store overlays per key (K3): a verdict Work takes back is removed only by naming it here.
-    storeDeletes: { verdicts: Object.keys(store?.verdicts ?? {}).filter((key) => !(key in verdicts)) },
+    storeDeletes: {
+      verdicts: Object.keys(store?.verdicts ?? {}).filter((key) => !(key in verdicts)),
+    },
   };
   return {
     input,
     cells: [
       ...Object.keys(rules).map((key) => ["rules", key] as const),
-      ...deltas.filter((delta) => delta.to !== null || design.assumptions[delta.key]?.edit?.delete).map((delta) => ["assumptions", delta.key] as const),
+      ...deltas
+        .filter((delta) => delta.to !== null || design.assumptions[delta.key]?.edit?.delete)
+        .map((delta) => ["assumptions", delta.key] as const),
     ],
     nothingToWrite: !Object.keys(rules).length && !deltas.length,
   };

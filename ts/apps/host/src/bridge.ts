@@ -7,7 +7,13 @@ import {
 } from "@pe/host-internal/dispatch";
 export { RevitProcessAlive, CANCEL_OPERATION_KEY } from "@pe/host-internal/dispatch";
 export type { BridgeRequest } from "@pe/host-internal/dispatch";
-import { BridgeError, NoRevitSession, RevitBridge, type BridgeSessionView, type HostBridgeEvent } from "@pe/host-internal/bridge";
+import {
+  BridgeError,
+  NoRevitSession,
+  RevitBridge,
+  type BridgeSessionView,
+  type HostBridgeEvent,
+} from "@pe/host-internal/bridge";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 
 import { admittedRouteEntries, addressSchema } from "@pe/agent-contracts";
@@ -18,7 +24,13 @@ import { Deferred, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest } from "effect/http";
 import { Socket } from "effect/socket";
 import { HttpServerResponse as Response } from "effect/http";
-import { dispatchRefusal, markDispatched, validateDispatch, recordNativeTerminal, recordNativeUncertainty } from "./action-dispatch.ts";
+import {
+  dispatchRefusal,
+  markDispatched,
+  validateDispatch,
+  recordNativeTerminal,
+  recordNativeUncertainty,
+} from "./action-dispatch.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
@@ -184,20 +196,20 @@ export const RevitBridgeLive = Layer.effect(
     const { sessions, attached, settleLoss, endIncarnation, settleTerminal } = dispatcher;
     // Transitional legacy failure projection; B/C/I retire this with existing consumers.
     const invoke = (...args: Parameters<typeof dispatcher.invoke>) =>
-      dispatcher
-        .invoke(...args)
-        .pipe(
-          Effect.tapError((error) => {
-            const id = args[4];
-            const reason = error._tag === "BridgeError" ? error.evidence.uncertainty : undefined;
-            return id && reason ? Effect.promise(() => recordNativeUncertainty(id, reason)) : Effect.void;
-          }),
-          Effect.mapError((error) =>
-            error._tag === "BridgeError"
-              ? new BridgeError(error.message, error.statusCode, error.evidence)
-              : new NoRevitSession({ asked: error.asked, attached: error.attached }),
-          ),
-        );
+      dispatcher.invoke(...args).pipe(
+        Effect.tapError((error) => {
+          const id = args[4];
+          const reason = error._tag === "BridgeError" ? error.evidence.uncertainty : undefined;
+          return id && reason
+            ? Effect.promise(() => recordNativeUncertainty(id, reason))
+            : Effect.void;
+        }),
+        Effect.mapError((error) =>
+          error._tag === "BridgeError"
+            ? new BridgeError(error.message, error.statusCode, error.evidence)
+            : new NoRevitSession({ asked: error.asked, attached: error.attached }),
+        ),
+      );
     // Temporary facade for unit C's revoke caller; I removes this with that caller.
     const cancelQueued = (ids: Promise<readonly string[]>) =>
       runCompatibility(
@@ -314,7 +326,10 @@ export const RevitBridgeLive = Layer.effect(
               return;
             }
             // Registration admitted a valid process incarnation before assigning its broker id.
-            const registration = { ...frame.registration, state: decodeInventoryState(frame.registration.state) };
+            const registration = {
+              ...frame.registration,
+              state: decodeInventoryState(frame.registration.state),
+            };
             const sessionId = (yield* Effect.promise(() => computeBridgeSessionId(registration)))!;
             // inFlight is captured from one process handle. Evidence tagged with another
             // incarnation than the registration's cannot vouch for this session's old jobs.
@@ -376,8 +391,12 @@ export const RevitBridgeLive = Layer.effect(
             // Re-adoption: a request inFlight lists is still held, because the carried-over session
             // keeps it dispatched and its worker reconciling. Only replayed terminals act here.
             for (const terminal of inFlight?.terminals ?? []) {
-              if ((yield* Ref.get(session.requests)).get(terminal.requestId)?.phase === "dispatched")
-                yield* Effect.promise(() => recordNativeTerminal(terminal.requestId, terminal.touched));
+              if (
+                (yield* Ref.get(session.requests)).get(terminal.requestId)?.phase === "dispatched"
+              )
+                yield* Effect.promise(() =>
+                  recordNativeTerminal(terminal.requestId, terminal.touched),
+                );
               yield* settleTerminal(session, terminal);
             }
             return;
@@ -390,8 +409,12 @@ export const RevitBridgeLive = Layer.effect(
             // Like a Response, it is matched by request id from any socket of the session.
             if (session) {
               const terminal = frame.terminal;
-              if ((yield* Ref.get(session.requests)).get(terminal.requestId)?.phase === "dispatched")
-                yield* Effect.promise(() => recordNativeTerminal(terminal.requestId, terminal.touched));
+              if (
+                (yield* Ref.get(session.requests)).get(terminal.requestId)?.phase === "dispatched"
+              )
+                yield* Effect.promise(() =>
+                  recordNativeTerminal(terminal.requestId, terminal.touched),
+                );
               yield* settleTerminal(session, terminal);
             }
             return;
@@ -425,8 +448,12 @@ export const RevitBridgeLive = Layer.effect(
             // socket settles its request instead of being dropped as unknown.
             if (session && connection) {
               const response = frame.response;
-              if ((yield* Ref.get(session.requests)).get(response.requestId)?.phase === "dispatched")
-                yield* Effect.promise(() => recordNativeTerminal(response.requestId, response.touched, response.evidenceJson));
+              if (
+                (yield* Ref.get(session.requests)).get(response.requestId)?.phase === "dispatched"
+              )
+                yield* Effect.promise(() =>
+                  recordNativeTerminal(response.requestId, response.touched, response.evidenceJson),
+                );
               yield* completeBridgeRequest(session.requests, frame.response, connection.epoch);
             }
             return;

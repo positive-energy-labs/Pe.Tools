@@ -19,7 +19,12 @@ export function EndpointError({
       <OutcomeLine kind="error" label={message} />
       {detail ? (
         <>
-          <Button kind="quiet" label="Raw error" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Button
+            kind="quiet"
+            label="Raw error"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
             {open ? "Hide raw error" : "Raw error"}
           </Button>
           {open ? (

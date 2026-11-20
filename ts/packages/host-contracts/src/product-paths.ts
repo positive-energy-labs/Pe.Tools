@@ -16,7 +16,12 @@ import { dirname, join, relative, resolve, isAbsolute } from "node:path";
 import { z } from "zod";
 import { productIdentity, productPathNames } from "./contracts/product.ts";
 import { homesConfigSchema, type HomesConfig } from "./homes-config.ts";
-export { homesConfigSchema, homesStatusSchema, type HomesConfig, type HomesStatus } from "./homes-config.ts";
+export {
+  homesConfigSchema,
+  homesStatusSchema,
+  type HomesConfig,
+  type HomesStatus,
+} from "./homes-config.ts";
 
 const userShellFolders =
   "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders";
@@ -66,21 +71,29 @@ export function readHomesConfig(): { config: HomesConfig; error: string | null }
   try {
     text = readFileSync(insideTestRoot(homesConfigFile), "utf8");
   } catch (error) {
-    return missingHomePath(error) ? { config: {}, error: null } : { config: {}, error: String(error) };
+    return missingHomePath(error)
+      ? { config: {}, error: null }
+      : { config: {}, error: String(error) };
   }
   try {
     const parsed = homesConfigSchema.safeParse(JSON.parse(text.replace(/^\uFEFF/, "")));
     return parsed.success
       ? { config: parsed.data, error: null }
-      : { config: {}, error: `${homesConfigFile} is not {"firm"?: path, "user"?: path}: ${parsed.error.message}` };
+      : {
+          config: {},
+          error: `${homesConfigFile} is not {"firm"?: path, "user"?: path}: ${parsed.error.message}`,
+        };
   } catch (error) {
     return { config: {}, error: `${homesConfigFile} is not JSON: ${String(error)}` };
   }
 }
 
 /** The path a dev run or a person named for a tier, and how: the override, then homes.json. Null: use the default. */
-export function toldHome(tier: "user" | "firm"): { path: string; found: "override" | "config" } | null {
-  const variable = tier === "user" ? productPathNames.productHomeVariable : productPathNames.sharedRootVariable;
+export function toldHome(
+  tier: "user" | "firm",
+): { path: string; found: "override" | "config" } | null {
+  const variable =
+    tier === "user" ? productPathNames.productHomeVariable : productPathNames.sharedRootVariable;
   const env = process.env[variable]?.trim();
   if (env) return { path: resolve(env), found: "override" };
   const chosen = readHomesConfig().config[tier];
@@ -97,7 +110,8 @@ export function knownUserRoot(): string | undefined {
   const root = toldHome("user")?.path ?? (cached && join(cached, productIdentity.productName));
   if (root && process.env[testHomeRootVariable]) {
     const away = relative(resolve(tmpdir()), root);
-    if (away.startsWith("..") || isAbsolute(away)) throw Error(`Test isolation: '${root}' is outside the temp directory.`);
+    if (away.startsWith("..") || isAbsolute(away))
+      throw Error(`Test isolation: '${root}' is outside the temp directory.`);
   }
   return root;
 }
@@ -133,11 +147,18 @@ export const machineFacts = (): HomeFacts => ({
   exists: (folder) => {
     // Test runs never read the person's firm default. Inject facts to exercise that branch.
     if (process.env[testHomeRootVariable] && folder === defaultFirmHome) return false;
-    try { return statSync(folder).isDirectory(); } catch { return false; }
+    try {
+      return statSync(folder).isDirectory();
+    } catch {
+      return false;
+    }
   },
   marker: (folder) => {
-    try { return readFileSync(join(folder, productPathNames.homeMarkerFileName), "utf8"); }
-    catch { return null; }
+    try {
+      return readFileSync(join(folder, productPathNames.homeMarkerFileName), "utf8");
+    } catch {
+      return null;
+    }
   },
 });
 
@@ -150,7 +171,8 @@ export function firmHome(facts: HomeFacts = machineFacts()): FirmHome {
   return { root: facts.exists(root) ? insideTestRoot(root) : null, looked: [root] };
 }
 
-export const noFirmHomeText = (_firm: Pick<FirmHome, "looked">): string => "Set your firm home in Settings";
+export const noFirmHomeText = (_firm: Pick<FirmHome, "looked">): string =>
+  "Set your firm home in Settings";
 
 /**
  * The shared drive root, the base a project pointer is relative to (homes freeze shape 4): the
@@ -171,7 +193,9 @@ export function sharedDriveRoot(facts?: HomeFacts): string | null {
  */
 export function projectHome(pointer: string | null | undefined, facts?: HomeFacts): string | null {
   const root = projectCandidate(pointer, firmHome(facts).root);
-  return root && markerTier((facts ?? machineFacts()).marker(insideTestRoot(root))) === "project" ? root : null;
+  return root && markerTier((facts ?? machineFacts()).marker(insideTestRoot(root))) === "project"
+    ? root
+    : null;
 }
 
 function projectCandidate(pointer: string | null | undefined, firm: string | null): string | null {
@@ -179,16 +203,24 @@ function projectCandidate(pointer: string | null | undefined, firm: string | nul
   const base = parent && dirname(parent) !== parent ? dirname(parent) : null;
   const segments = pointer?.split("/") ?? [];
   if (!base || !pointer || /[\\:]/.test(pointer)) return null;
-  if (segments.some((segment) => !segment.trim() || segment === "." || segment === "..")) return null;
+  if (segments.some((segment) => !segment.trim() || segment === "." || segment === ".."))
+    return null;
   return join(base, ...segments, productIdentity.productName);
 }
 
 /** Cold document binding uses the already resolved firm home; it never probes drives. */
-export async function resolveProjectHome(pointer: string, firm: string | null, signal?: AbortSignal): Promise<string | null> {
+export async function resolveProjectHome(
+  pointer: string,
+  firm: string | null,
+  signal?: AbortSignal,
+): Promise<string | null> {
   signal?.throwIfAborted();
   const root = projectCandidate(pointer, firm);
   if (!root) return null;
-  const text = await readFile(join(root, productPathNames.homeMarkerFileName), { encoding: "utf8", signal }).catch(error => {
+  const text = await readFile(join(root, productPathNames.homeMarkerFileName), {
+    encoding: "utf8",
+    signal,
+  }).catch((error) => {
     if (missingHomePath(error)) return null;
     throw error;
   });
@@ -238,7 +270,9 @@ export function homesFound(input: HomesInput = {}): {
   firmNotice: string | null;
 } {
   const found = (tier: HomeTier): HomeFound =>
-    tier === "project" ? "pointer" : toldHome(tier)?.found ?? (tier === "user" ? "documents" : "default");
+    tier === "project"
+      ? "pointer"
+      : (toldHome(tier)?.found ?? (tier === "user" ? "documents" : "default"));
   const firm = firmHome(input.facts);
   return {
     homes: homes(input).map((home) => ({ ...home, found: found(home.tier) })),
@@ -263,65 +297,103 @@ export type ResolveHomesOptions = {
   onFirm?: (firm: FirmHome) => void;
   onPending?: (paths: readonly string[]) => void;
 };
-const missingHomePath = (error: unknown) => error instanceof Error && "code" in error &&
+const missingHomePath = (error: unknown) =>
+  error instanceof Error &&
+  "code" in error &&
   (error.code === "ENOENT" || error.code === "ENOTDIR");
 
-export async function resolveHomes(pointers: readonly string[] = [], options: ResolveHomesOptions = {}): Promise<Map<string, Home[]>> {
+export async function resolveHomes(
+  pointers: readonly string[] = [],
+  options: ResolveHomesOptions = {},
+): Promise<Map<string, Home[]>> {
   const pending = new Set<string>();
   const track = async <T>(path: string, read: () => Promise<T>): Promise<T> => {
     options.signal?.throwIfAborted();
-    pending.add(path); options.onPending?.([...pending]);
+    pending.add(path);
+    options.onPending?.([...pending]);
     try {
       const value = await read();
       options.signal?.throwIfAborted();
       return value;
-    } finally { pending.delete(path); options.onPending?.([...pending]); }
+    } finally {
+      pending.delete(path);
+      options.onPending?.([...pending]);
+    }
   };
-  const optional = async <T>(read: Promise<T>, absent: T): Promise<T> => read.catch(error => {
-    if (missingHomePath(error)) return absent;
-    throw error;
-  });
+  const optional = async <T>(read: Promise<T>, absent: T): Promise<T> =>
+    read.catch((error) => {
+      if (missingHomePath(error)) return absent;
+      throw error;
+    });
   const check = async (path: string) => {
     if (process.env[testHomeRootVariable]) {
       const temp = await realpath(tmpdir());
-      if (![tmpdir(), temp].some(root => {
-        const away = relative(resolve(root), resolve(path));
-        return !away.startsWith("..") && !isAbsolute(away);
-      })) throw Error(`Test isolation: '${path}' is outside the temp directory.`);
+      if (
+        ![tmpdir(), temp].some((root) => {
+          const away = relative(resolve(root), resolve(path));
+          return !away.startsWith("..") && !isAbsolute(away);
+        })
+      )
+        throw Error(`Test isolation: '${path}' is outside the temp directory.`);
     }
     return path;
   };
   const marker = async (root: string) => {
     const path = join(await check(root), productPathNames.homeMarkerFileName);
-    return optional(track(path, () => readFile(path, { encoding: "utf8", signal: options.signal })), null);
+    return optional(
+      track(path, () => readFile(path, { encoding: "utf8", signal: options.signal })),
+      null,
+    );
   };
   const override = toldHome("user")?.path;
   if (!override && !cached) {
-    cached = process.platform === "win32"
-      ? parseDocumentsKnownFolder((await track("Documents known folder (reg.exe)", () => promisify(execFile)("reg.exe", ["query", userShellFolders, "/v", "Personal"], { encoding: "utf8", windowsHide: true, signal: options.signal }))).stdout, process.env)
-      : join(homedir(), "Documents");
+    cached =
+      process.platform === "win32"
+        ? parseDocumentsKnownFolder(
+            (
+              await track("Documents known folder (reg.exe)", () =>
+                promisify(execFile)("reg.exe", ["query", userShellFolders, "/v", "Personal"], {
+                  encoding: "utf8",
+                  windowsHide: true,
+                  signal: options.signal,
+                }),
+              )
+            ).stdout,
+            process.env,
+          )
+        : join(homedir(), "Documents");
   }
   const userPath = override ?? (cached && join(cached, productIdentity.productName));
   if (!userPath) throw Error("Documents known folder unreadable");
   const user = await check(userPath);
   options.onUser?.(user);
   const root = toldHome("firm")?.path ?? defaultFirmHome;
-  const present = process.env[testHomeRootVariable] && root === defaultFirmHome ? false :
-    // Any stat failure is "no firm home", as in the sync resolver and the C# twin: a drive that errors is not a firm home.
-    await track(root, () => stat(root).then(info => info.isDirectory(), () => false));
+  const present =
+    process.env[testHomeRootVariable] && root === defaultFirmHome
+      ? false
+      : // Any stat failure is "no firm home", as in the sync resolver and the C# twin: a drive that errors is not a firm home.
+        await track(root, () =>
+          stat(root).then(
+            (info) => info.isDirectory(),
+            () => false,
+          ),
+        );
   const firm = present ? await check(root) : null;
   const firmReport: FirmHome = { root: firm, looked: [root] };
   options.onFirm?.(firmReport);
   const result = new Map<string, Home[]>();
-  await Promise.all(["", ...pointers].map(async pointer => {
-    const candidate = projectCandidate(pointer, firm);
-    const project = candidate && markerTier(await marker(candidate)) === "project" ? candidate : null;
-    result.set(pointer, [
-      { tier: "user", root: user },
-      ...(project ? [{ tier: "project" as const, root: project }] : []),
-      ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
-    ]);
-  }));
+  await Promise.all(
+    ["", ...pointers].map(async (pointer) => {
+      const candidate = projectCandidate(pointer, firm);
+      const project =
+        candidate && markerTier(await marker(candidate)) === "project" ? candidate : null;
+      result.set(pointer, [
+        { tier: "user", root: user },
+        ...(project ? [{ tier: "project" as const, root: project }] : []),
+        ...(firm ? [{ tier: "firm" as const, root: firm }] : []),
+      ]);
+    }),
+  );
   return result;
 }
 

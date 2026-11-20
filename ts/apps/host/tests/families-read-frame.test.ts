@@ -11,11 +11,21 @@ import { familiesReadResult } from "../src/family-actions.ts";
  * carried the whole observation as its result (2,954,532 bytes against a 2 MiB frame). This is the
  * drive's own capture (ev/families-capture.json), gzipped.
  */
-const capture = JSON.parse(gunzipSync(readFileSync(new URL("./native-recordings/families-air-terminals.observation.json.gz", import.meta.url))).toString("utf8"));
+const capture = JSON.parse(
+  gunzipSync(
+    readFileSync(
+      new URL("./native-recordings/families-air-terminals.observation.json.gz", import.meta.url),
+    ),
+  ).toString("utf8"),
+);
 
 test("the families.read receipt for gate-ef940d36's Air Terminals read fits one reading frame, as its contract says", () => {
   const result = familiesReadResult(capture, 3);
   expect(familyActions["families.read"].result.parse(result)).toEqual(result);
-  const frame = JSON.stringify({ kind: "snapshot", key: "receipts", value: [{ id: "r", key: "families.read", state: "succeeded", result }] });
+  const frame = JSON.stringify({
+    kind: "snapshot",
+    key: "receipts",
+    value: [{ id: "r", key: "families.read", state: "succeeded", result }],
+  });
   expect(Buffer.byteLength(frame)).toBeLessThanOrEqual(READING_MAX_FRAME_BYTES);
 });

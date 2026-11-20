@@ -116,7 +116,10 @@ export function HomesSettings({ refusal }: { refusal: string | null }) {
     startTransition(async () => {
       setSaid(null);
       try {
-        const body = { ...(firm.trim() ? { firm: firm.trim() } : {}), ...(user.trim() ? { user: user.trim() } : {}) };
+        const body = {
+          ...(firm.trim() ? { firm: firm.trim() } : {}),
+          ...(user.trim() ? { user: user.trim() } : {}),
+        };
         show(await peClient.call("homes.put", { body }));
         setSaid("Homes saved.");
       } catch (error) {
@@ -153,9 +156,7 @@ export function HomesSettings({ refusal }: { refusal: string | null }) {
           onChange={(event) => setUser(event.target.value)}
         />
       </Label>
-      <p className="text-ink-2">
-        Absolute folders that exist. Blank uses the default.
-      </p>
+      <p className="text-ink-2">Absolute folders that exist. Blank uses the default.</p>
       <div className="flex flex-wrap gap-2">
         <Button
           label="save homes"

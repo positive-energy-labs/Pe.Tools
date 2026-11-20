@@ -1,4 +1,10 @@
-import { CELL_STATE_ORDER, StateCell, cellStateLabel, handleCellProps, type StateCellProps } from "../lang/cell";
+import {
+  CELL_STATE_ORDER,
+  StateCell,
+  cellStateLabel,
+  handleCellProps,
+  type StateCellProps,
+} from "../lang/cell";
 import { VerdictCell } from "./cells";
 import type { Column, ValueColumn, Verdict } from "./model";
 import type { QueryRead } from "./view";

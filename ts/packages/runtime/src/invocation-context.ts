@@ -43,9 +43,7 @@ function capturedContextHash() {
 function outboxFile(slot: string) {
   // The caller's slot already includes the host base. A new root must find old pending intent.
   const hash = createHash("sha256").update(slot).digest("hex");
-  return outboxKind.in(stateTree(
-    runtimeRoot()),
-    resolveLaneAndRoot().serviceName, hash);
+  return outboxKind.in(stateTree(runtimeRoot()), resolveLaneAndRoot().serviceName, hash);
 }
 const outboxSchema = z.looseObject({
   id: z.string(),
@@ -56,9 +54,7 @@ const outboxSchema = z.looseObject({
 const outboxKind = keptStateKind({
   schema: outboxSchema,
   place: (_service: string, _hash: string) => "Pending action",
-  segments: (service: string, hash: string) => [service,
-    "invocation-outbox",
-    `${hash}.json`],
+  segments: (service: string, hash: string) => [service, "invocation-outbox", `${hash}.json`],
 });
 /**
  * Pending intent holds a caller's causal authority, so it is `keep` (ADR 0039): an outbox that does

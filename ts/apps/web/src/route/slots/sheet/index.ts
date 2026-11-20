@@ -21,7 +21,12 @@ export interface CalcCell extends StateCell {
   readonly setting?: {
     readonly owner: string;
     readonly path: readonly string[];
-    readonly tiers: readonly { tier: import("@pe/agent-contracts/tiered-setting").SettingTier; home: string | null; sha256: string | null; notFound?: string }[];
+    readonly tiers: readonly {
+      tier: import("@pe/agent-contracts/tiered-setting").SettingTier;
+      home: string | null;
+      sha256: string | null;
+      notFound?: string;
+    }[];
   };
 }
 /** A dotted binding names its existing nested Work cell, without a second writable copy. */
@@ -29,11 +34,28 @@ export const bindingPath = (binding: string, row?: string): [string, ...string[]
   const [first = binding, ...rest] = binding.split(".");
   return [first, ...rest, ...(row === undefined ? [] : [row])];
 };
-export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<CalcCell, "unit" | "numeric" | "field" | "choices"> {
-  if (domain.kind === "number") return { unit: domain.unit, numeric: { min: domain.min ?? domain.exclusiveMin, max: domain.max, digits: domain.digits } };
+export function domainDraw(
+  domain: Domain,
+  read: unknown,
+  row?: string,
+): Pick<CalcCell, "unit" | "numeric" | "field" | "choices"> {
+  if (domain.kind === "number")
+    return {
+      unit: domain.unit,
+      numeric: { min: domain.min ?? domain.exclusiveMin, max: domain.max, digits: domain.digits },
+    };
   if (domain.kind === "enum") {
-    const choices = typeof domain.choices === "function" ? domain.choices(read, row) : domain.choices;
-    return choices.length ? { choices: choices.map(c => ({ ...c, key: typeof c.value === "string" ? c.value : JSON.stringify(c.value), ...(c.value === null ? { clear: true } : {}) })) } : {};
+    const choices =
+      typeof domain.choices === "function" ? domain.choices(read, row) : domain.choices;
+    return choices.length
+      ? {
+          choices: choices.map((c) => ({
+            ...c,
+            key: typeof c.value === "string" ? c.value : JSON.stringify(c.value),
+            ...(c.value === null ? { clear: true } : {}),
+          })),
+        }
+      : {};
   }
   if (domain.kind === "object") {
     const fields = Object.entries(domain.fields);
@@ -42,64 +64,140 @@ export function domainDraw(domain: Domain, read: unknown, row?: string): Pick<Ca
     if (!first) return {};
     const [field, child] = first;
     const draw = domainDraw(child, read, row);
-    return { ...draw, field, ...(draw.choices ? { choices: draw.choices.map(c => ({ ...c, value: { [field]: c.value ?? c.key } })) } : {}) };
+    return {
+      ...draw,
+      field,
+      ...(draw.choices
+        ? { choices: draw.choices.map((c) => ({ ...c, value: { [field]: c.value ?? c.key } })) }
+        : {}),
+    };
   }
   return {};
 }
 export function sheetCells(slot: SheetSlot, input: SheetInput): readonly CalcCell[] {
   const read = input.read;
   return Object.entries(slot.bindings).flatMap(([binding, b]) =>
-    (b.per === "subject" ? (read !== undefined && b.rows?.(read)) || input.rows : [undefined]).map(row => {
-      const home = b.home;
-      const tiers = home.at === "setting" ? (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)?.settings?.[home.owner] : undefined;
-      const held = bindingPath(binding, row).reduce<any>((doc, key) => doc?.[key], input.work);
-      const edit = slot.draft ? held?.edit : undefined;
-      const staged = home.at === "setting" ? undefined : slot.draft ? edit?.value : held;
-      const layer = read !== undefined ? b.model?.(read, row) : undefined;
-      const model = layer?.value ?? null;
-      const fallback = home.at === "setting" ? undefined : b.default;
-      const value = staged ?? model ?? fallback ?? null;
-      return {
-        binding, ...(row === undefined ? {} : { row }), home, domain: b.domain,
-        value, model, pending: edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
-        // One drift signal: Work that differs from the model, or a model layer whose receipt disagrees (ADR 0053).
-        drift: (home.at !== "local" && home.at !== "setting" && JSON.stringify(value) !== JSON.stringify(model)) || (!!layer && "drift" in layer && layer.drift === true),
-        freshness: home.at === "setting" ? tiers ? "fresh" : "never" : layer && "freshness" in layer ? layer.freshness ?? "fresh" : layer || home.at === "local" ? "fresh" : "never",
-        source: staged !== undefined ? "work" : layer?.source ?? (layer?.value != null ? "model" : fallback !== undefined ? "default" : "model"),
-        label: (row !== undefined && read !== undefined && b.rowLabel?.(read, row)) || b.label || binding,
-        ...domainDraw(b.domain, read, row),
-        ...(layer && "unit" in layer && layer.unit ? { unit: layer.unit } : {}),
-        ...(layer && "ref" in layer ? { ref: layer.ref } : {}),
-        ...(layer && "note" in layer ? { note: layer.note } : {}),
-        ...(layer && "refusal" in layer ? { refusal: layer.refusal } : {}),
-        ...(home.at === "setting" ? { setting: { owner: home.owner, path: home.path, tiers: home.tiers.map(tier => {
-          const at = tiers?.find(candidate => candidate.tier === tier);
-          return { tier, home: at?.home ?? null, sha256: at?.sha256 ?? null, ...(at?.home ? {} : { notFound: at?.notFound ?? `No ${tier} home was read` }) };
-        }) } } : {}),
-      } satisfies CalcCell;
-    }));
+    (b.per === "subject" ? (read !== undefined && b.rows?.(read)) || input.rows : [undefined]).map(
+      (row) => {
+        const home = b.home;
+        const tiers =
+          home.at === "setting"
+            ? (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)
+                ?.settings?.[home.owner]
+            : undefined;
+        const held = bindingPath(binding, row).reduce<any>((doc, key) => doc?.[key], input.work);
+        const edit = slot.draft ? held?.edit : undefined;
+        const staged = home.at === "setting" ? undefined : slot.draft ? edit?.value : held;
+        const layer = read !== undefined ? b.model?.(read, row) : undefined;
+        const model = layer?.value ?? null;
+        const fallback = home.at === "setting" ? undefined : b.default;
+        const value = staged ?? model ?? fallback ?? null;
+        return {
+          binding,
+          ...(row === undefined ? {} : { row }),
+          home,
+          domain: b.domain,
+          value,
+          model,
+          pending:
+            edit && staged !== undefined ? { by: edit.by, value: staged, at: edit.at ?? "" } : null,
+          // One drift signal: Work that differs from the model, or a model layer whose receipt disagrees (ADR 0053).
+          drift:
+            (home.at !== "local" &&
+              home.at !== "setting" &&
+              JSON.stringify(value) !== JSON.stringify(model)) ||
+            (!!layer && "drift" in layer && layer.drift === true),
+          freshness:
+            home.at === "setting"
+              ? tiers
+                ? "fresh"
+                : "never"
+              : layer && "freshness" in layer
+                ? (layer.freshness ?? "fresh")
+                : layer || home.at === "local"
+                  ? "fresh"
+                  : "never",
+          source:
+            staged !== undefined
+              ? "work"
+              : (layer?.source ??
+                (layer?.value != null ? "model" : fallback !== undefined ? "default" : "model")),
+          label:
+            (row !== undefined && read !== undefined && b.rowLabel?.(read, row)) ||
+            b.label ||
+            binding,
+          ...domainDraw(b.domain, read, row),
+          ...(layer && "unit" in layer && layer.unit ? { unit: layer.unit } : {}),
+          ...(layer && "ref" in layer ? { ref: layer.ref } : {}),
+          ...(layer && "note" in layer ? { note: layer.note } : {}),
+          ...(layer && "refusal" in layer ? { refusal: layer.refusal } : {}),
+          ...(home.at === "setting"
+            ? {
+                setting: {
+                  owner: home.owner,
+                  path: home.path,
+                  tiers: home.tiers.map((tier) => {
+                    const at = tiers?.find((candidate) => candidate.tier === tier);
+                    return {
+                      tier,
+                      home: at?.home ?? null,
+                      sha256: at?.sha256 ?? null,
+                      ...(at?.home ? {} : { notFound: at?.notFound ?? `No ${tier} home was read` }),
+                    };
+                  }),
+                },
+              }
+            : {}),
+        } satisfies CalcCell;
+      },
+    ),
+  );
 }
-export const typedCells = (cells: readonly CalcCell[]) => cells.filter(c => c.source === "work");
+export const typedCells = (cells: readonly CalcCell[]) => cells.filter((c) => c.source === "work");
 
 /** Settings use the same structural kit handle; the mount owns custody and command transport. */
-export function homeHandle(path: readonly string[], read: unknown, send: (request: {
-  owner: string; tier: import("@pe/agent-contracts/tiered-setting").SettingTier; path: string[]; value: unknown; expectedSha256: string | null;
-}) => Promise<void>) {
+export function homeHandle(
+  path: readonly string[],
+  read: unknown,
+  send: (request: {
+    owner: string;
+    tier: import("@pe/agent-contracts/tiered-setting").SettingTier;
+    path: string[];
+    value: unknown;
+    expectedSha256: string | null;
+  }) => Promise<void>,
+) {
   const [, owner = "", tierName, ...settingPath] = path;
-  const tier = SETTING_TIERS.find(t => t === tierName);
+  const tier = SETTING_TIERS.find((t) => t === tierName);
   const registry = Object.hasOwn(settingOwners, owner) ? settingOwners[owner] : undefined;
   const declared = registry?.at(settingPath);
-  const at = (read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined)?.settings?.[owner]?.find(at => at.tier === tier);
+  const at = (
+    read as { settings?: Record<string, readonly SettingTierRead[]> } | undefined
+  )?.settings?.[owner]?.find((at) => at.tier === tier);
   const save = async (value: unknown) => {
-    if (!registry || !tier || !declared || !registry.accepts(settingPath, value, tier)) return { code: "invalid", message: "No declared setting accepts this value at that tier" };
-    if (!at?.home) return { code: "unavailable", message: at?.notFound ?? `No ${tier} home was read` };
+    if (!registry || !tier || !declared || !registry.accepts(settingPath, value, tier))
+      return { code: "invalid", message: "No declared setting accepts this value at that tier" };
+    if (!at?.home)
+      return { code: "unavailable", message: at?.notFound ?? `No ${tier} home was read` };
     try {
       await send({ owner, tier, path: settingPath, value, expectedSha256: at.sha256 });
       return null;
-    } catch (error) { return { code: "refused", message: error instanceof Error ? error.message : String(error) }; }
+    } catch (error) {
+      return { code: "refused", message: error instanceof Error ? error.message : String(error) };
+    }
   };
-  return { owner: { route: owner, label: `${tier} home` }, value: {}, facts: {}, freshness: "current" as const,
-    refusal: declared ? null : "No declared setting", stage: save, clear: () => save(null),
-    accept: async () => null, deny: () => save(null), undo: async () => ({ code: "no-undo", message: "Use the Timeline" }),
-    delete: () => save(null), transitions: () => [] };
+  return {
+    owner: { route: owner, label: `${tier} home` },
+    value: {},
+    facts: {},
+    freshness: "current" as const,
+    refusal: declared ? null : "No declared setting",
+    stage: save,
+    clear: () => save(null),
+    accept: async () => null,
+    deny: () => save(null),
+    undo: async () => ({ code: "no-undo", message: "Use the Timeline" }),
+    delete: () => save(null),
+    transitions: () => [],
+  };
 }

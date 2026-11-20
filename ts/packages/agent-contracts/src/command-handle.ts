@@ -56,9 +56,10 @@ export type CommandOutput<K extends CommandKey> = K extends keyof Commands
       : unknown;
 export type CommandEffect<K extends CommandKey> = Extract<Row<K>["effect"], Effect>;
 /** A sealed write's plan is required on its handle, so a verb declaration can demand `present`. */
-type Planned<K extends CommandKey, I> = Row<K> extends { plan: string }
-  ? { readonly plan: CommandHandle<string, I, unknown, "Read" | "TransactRead"> }
-  : unknown;
+type Planned<K extends CommandKey, I> =
+  Row<K> extends { plan: string }
+    ? { readonly plan: CommandHandle<string, I, unknown, "Read" | "TransactRead"> }
+    : unknown;
 
 export const effects = ["Read", "TransactRead", "SessionWrite", "WorkWrite", "ModelWrite"] as const;
 export function mint<S extends object>(shape: S) {
@@ -66,7 +67,9 @@ export function mint<S extends object>(shape: S) {
   return Object.freeze(branded);
 }
 const commandHandles = new Map<string, CommandHandle>();
-const isPlan = (command: CommandHandle): command is CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> =>
+const isPlan = (
+  command: CommandHandle,
+): command is CommandHandle<string, unknown, unknown, "Read" | "TransactRead"> =>
   command.effect === "Read" || command.effect === "TransactRead";
 export function handle<K extends CommandKey>(
   key: K,

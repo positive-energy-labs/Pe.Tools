@@ -11,7 +11,14 @@ const work = { binding: "host", route: "ducts", target: null } as const;
 /** Never executed. tsc fails this file if either refusal starts to compile. */
 export function timelineTypeRefusals(): void {
   // @ts-expect-error an edit row names its Work: row identity is `work` plus `revision`.
-  const row: TimelineRow = { kind: "edit", revision: 1, by: "human", label: "x", state: "applied", at: 0 };
+  const row: TimelineRow = {
+    kind: "edit",
+    revision: 1,
+    by: "human",
+    label: "x",
+    state: "applied",
+    at: 0,
+  };
   // @ts-expect-error a step request sends back the step it was shown.
   const request: WorkStepRequest = { direction: "undo", works: [work] };
   const ok: WorkTimeline = {

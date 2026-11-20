@@ -11,10 +11,17 @@ test("F16 metadata-only roster exposes system information before network pricing
   const snapshot = syntheticSnapshot();
   snapshot.groups = [];
   snapshot.segments = [];
-  snapshot.systems[0]!.baseEquipmentId = snapshot.nodes.find((node) => node.kind === "equipment")!.id;
+  snapshot.systems[0]!.baseEquipmentId = snapshot.nodes.find(
+    (node) => node.kind === "equipment",
+  )!.id;
   const rows = systemList(snapshot, null);
   expect(rows).toHaveLength(snapshot.systems.length);
-  expect(rows[0]).toMatchObject({ name: snapshot.systems[0]!.name, total: null, rating: null, groups: [] });
+  expect(rows[0]).toMatchObject({
+    name: snapshot.systems[0]!.name,
+    total: null,
+    rating: null,
+    groups: [],
+  });
   expect(rows[0]!.sub).toMatch(/Supply/);
   expect(rows[0]!.sub).toMatch(/terminal/);
   expect(rows[0]!.sub).not.toContain("no fan");
@@ -45,7 +52,12 @@ test("two systems sharing a fan retain their own worst run and breakdown termina
     nodes: [...snapshot.nodes, { ...grille, id: 99, uniqueId: "stranded-99", connectors: [] }],
   };
   expect([...systemScope(stranded, "SA 2").terminals].sort()).toEqual([31, 99]);
-  expect(systemList(stranded, calcs)[1]).toMatchObject({ key: "SA 2", fanless: false, total: null, split: null });
+  expect(systemList(stranded, calcs)[1]).toMatchObject({
+    key: "SA 2",
+    fanless: false,
+    total: null,
+    split: null,
+  });
   const scope = systemScope(snapshot, "SA 2");
   const facts = fanFacts({ calcs } as never, scope);
   // The fan's calc is not complete on this capture (it has no return path), so no ESP is claimed.
@@ -68,7 +80,11 @@ test("a system with one unknown path is unpriced, never priced at its worst know
     [31, false],
     [30, true],
   ]);
-  expect(systemList(snapshot, calcs)[0]).toMatchObject({ fanless: false, total: null, split: null });
+  expect(systemList(snapshot, calcs)[0]).toMatchObject({
+    fanless: false,
+    total: null,
+    split: null,
+  });
 });
 
 test("a system no fan calc reaches is fanless and its tree says to rule a fan (L2-4)", () => {

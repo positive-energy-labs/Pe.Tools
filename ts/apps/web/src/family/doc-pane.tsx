@@ -156,7 +156,7 @@ export function ProposalCard({
   register,
 }: {
   suggestion: ProtoProposal;
-  owned:OwnedCell;
+  owned: OwnedCell;
   wire: CellWire;
   /** The Work field the suggestion stands on. */
   cell: SettingsFieldState;
@@ -174,7 +174,12 @@ export function ProposalCard({
   const locked =
     wire.lockOf?.(suggestion.id) ??
     (wire.revision === null ? "Read the current Work before reviewing cells" : null);
-  const decide=(keep:boolean)=>locked?Promise.resolve({message:locked}):keep?owned.accept({label:"Keep family proposal"}):owned.deny({label:"Revert family proposal"});
+  const decide = (keep: boolean) =>
+    locked
+      ? Promise.resolve({ message: locked })
+      : keep
+        ? owned.accept({ label: "Keep family proposal" })
+        : owned.deny({ label: "Revert family proposal" });
   const target = suggestion.constituent
     ? `${suggestion.constituent.section} · ${suggestion.constituent.slug}${
         suggestion.constituent.property ? ` · ${suggestion.constituent.property}` : ""
@@ -251,7 +256,12 @@ export function ProposalCard({
             : "Citation unavailable"}
         </Button>
         {suggestion.param && (
-          <Button kind="quiet" label={`Pin ${suggestion.param} evidence`} pressed={pinned} onClick={onPin}>
+          <Button
+            kind="quiet"
+            label={`Pin ${suggestion.param} evidence`}
+            pressed={pinned}
+            onClick={onPin}
+          >
             {pinned ? "Unpin" : "Pin"}
           </Button>
         )}

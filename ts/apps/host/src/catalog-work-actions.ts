@@ -15,7 +15,12 @@ import {
   type Command,
 } from "@pe/agent-contracts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import { command, nativeStep, refused, type CommandExecutor } from "@pe/host-internal/command-executor";
+import {
+  command,
+  nativeStep,
+  refused,
+  type CommandExecutor,
+} from "@pe/host-internal/command-executor";
 import { projectReader, type FamilyActionDependencies } from "./family-actions.ts";
 
 type Owner = keyof typeof catalogWorks;
@@ -32,8 +37,10 @@ const prepared = z.object({
 export function catalogWorkExecutors(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies = {},
-  definitions: Record<string, Command & { work: { route: string }; writeBoundary: { phase: string } }> =
-    catalogWorkCommands as never,
+  definitions: Record<
+    string,
+    Command & { work: { route: string }; writeBoundary: { phase: string } }
+  > = catalogWorkCommands as never,
 ): Record<string, CommandExecutor> {
   return Object.fromEntries(
     Object.entries(definitions)
@@ -55,15 +62,28 @@ export function catalogWorkExecutors(
                 // falsifier (keyed-write-coverage.test.ts) and the fresh DataTableKeyedApplyTests. The keyed derive
                 // below is complete; this line is the only gate.
                 if (owner === "data-tables")
-                  throw refused("Data-table apply stays refused until its keyed falsifier is accepted", "catalog.table-base-required");
+                  throw refused(
+                    "Data-table apply stays refused until its keyed falsifier is accepted",
+                    "catalog.table-base-required",
+                  );
                 try {
                   // The owner's declared base, through the one fenced project Read owner (no capture).
                   const reader = await projectReader(bridge, target, deps);
-                  const before = work.base.project(await reader.read(work.base.op, work.base.input(doc)), doc);
+                  const before = work.base.project(
+                    await reader.read(work.base.op, work.base.input(doc)),
+                    doc,
+                  );
                   const { request, touched } = work.derive(doc, before);
-                  return { target, process: reader.process, request, before, touched: [...touched] };
+                  return {
+                    target,
+                    process: reader.process,
+                    request,
+                    before,
+                    touched: [...touched],
+                  };
                 } catch (error) {
-                  if (error instanceof CatalogWorkRefused) throw refused(error.message, "catalog.refused");
+                  if (error instanceof CatalogWorkRefused)
+                    throw refused(error.message, "catalog.refused");
                   throw error;
                 }
               },
@@ -71,7 +91,13 @@ export function catalogWorkExecutors(
           },
           run: (_ctx, execution) => {
             const { target, request } = execution.prepared;
-            return execution.step("native", work.op, request, (id) => nativeStep(bridge, target, work.op, request, id), { process: execution.prepared.process });
+            return execution.step(
+              "native",
+              work.op,
+              request,
+              (id) => nativeStep(bridge, target, work.op, request, id),
+              { process: execution.prepared.process },
+            );
           },
         });
         return [key, executor];

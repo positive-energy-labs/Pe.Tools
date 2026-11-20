@@ -260,11 +260,35 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
   });
   /** Public HTTP transport authority. Domain schemas stay with their domain owners. */
   const peRoutes = {
-    "places.get": route("GET", "/pe/places", none, schemas.placesFileSchema as S["placesFileSchema"], "read", "pe", "read"),
-    "places.put": route("PUT", "/pe/places", schemas.placesFileSchema as S["placesFileSchema"], schemas.placesFileSchema as S["placesFileSchema"], "human", "pe", "human"),
+    "places.get": route(
+      "GET",
+      "/pe/places",
+      none,
+      schemas.placesFileSchema as S["placesFileSchema"],
+      "read",
+      "pe",
+      "read",
+    ),
+    "places.put": route(
+      "PUT",
+      "/pe/places",
+      schemas.placesFileSchema as S["placesFileSchema"],
+      schemas.placesFileSchema as S["placesFileSchema"],
+      "human",
+      "pe",
+      "human",
+    ),
     // This machine's chosen firm and user homes (`state\homes.json`) and the homes they resolve to.
     "homes.get": route("GET", "/pe/homes", none, homesStatusSchema, "read", "pe", "read"),
-    "homes.put": route("PUT", "/pe/homes", homesConfigSchema, homesStatusSchema, "human", "pe", "human"),
+    "homes.put": route(
+      "PUT",
+      "/pe/homes",
+      homesConfigSchema,
+      homesStatusSchema,
+      "human",
+      "pe",
+      "human",
+    ),
     "families.readings": route(
       "GET",
       "/families/readings",
@@ -291,8 +315,24 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "read",
     ),
-    "family.readings": route("POST", "/family/readings", object, z.unknown(), "read", "gateway", "read"),
-    "schedules.readings": route("POST", "/schedules/readings", object, z.unknown(), "read", "gateway", "read"),
+    "family.readings": route(
+      "POST",
+      "/family/readings",
+      object,
+      z.unknown(),
+      "read",
+      "gateway",
+      "read",
+    ),
+    "schedules.readings": route(
+      "POST",
+      "/schedules/readings",
+      object,
+      z.unknown(),
+      "read",
+      "gateway",
+      "read",
+    ),
     "captures.list": route(
       "GET",
       "/captures",
@@ -331,7 +371,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "gateway",
       "operation",
     ),
-    "blobs.put": route("POST", "/actions/blobs", schemas.blobUploadSchema as S["blobUploadSchema"], schemas.blobRefSchema as S["blobRefSchema"], "human-or-pea", "gateway", "human-or-pea"),
+    "blobs.put": route(
+      "POST",
+      "/actions/blobs",
+      schemas.blobUploadSchema as S["blobUploadSchema"],
+      schemas.blobRefSchema as S["blobRefSchema"],
+      "human-or-pea",
+      "gateway",
+      "human-or-pea",
+    ),
     "actions.admit": route(
       "POST",
       "/actions",
@@ -742,7 +790,15 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "pe",
       "human-or-pea",
     ),
-      "reads.value": route("POST", "/pe/reads/value", schemas.valueReadRequest as S["valueReadRequest"], schemas.valueReadResponse as S["valueReadResponse"], "read", "pe", "read"),
+    "reads.value": route(
+      "POST",
+      "/pe/reads/value",
+      schemas.valueReadRequest as S["valueReadRequest"],
+      schemas.valueReadResponse as S["valueReadResponse"],
+      "read",
+      "pe",
+      "read",
+    ),
     "space.scene-artifact": route(
       "GET",
       "/pe/space/scenes/:id/artifact",
@@ -1020,7 +1076,9 @@ export function definePeApi<S extends PeApiSchemas>(schemas: S): PeApi<PeRouteTa
   return definePeRouteApi(peRouteTable(schemas));
 }
 
-export function definePeRouteApi<const T extends Record<string, ReturnType<typeof route>>>(peRoutes: T): PeApi<T> {
+export function definePeRouteApi<const T extends Record<string, ReturnType<typeof route>>>(
+  peRoutes: T,
+): PeApi<T> {
   type PeRouteId = keyof T & string;
   type PeInput<K extends PeRouteId> = PeRouteInput<typeof peRoutes, K>;
   type PeOutput<K extends PeRouteId> = PeRouteOutput<typeof peRoutes, K>;

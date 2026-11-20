@@ -5,7 +5,13 @@ import { fields as openFields, loaded } from "../machine/open-fields";
 import { module as open } from "../open/route";
 import { draw } from "@pe/web-kernel/route/draw";
 export const fields = { ...openFields, session: field(z.string(), "", "pose", "push") };
-export type SessionContext = ContextOf<typeof fields, typeof loaded, never, never, Verbs<"start" | "stop" | "restart">>;
+export type SessionContext = ContextOf<
+  typeof fields,
+  typeof loaded,
+  never,
+  never,
+  Verbs<"start" | "stop" | "restart">
+>;
 export const module = route({
   key: "session-admin",
   name: "Sessions",

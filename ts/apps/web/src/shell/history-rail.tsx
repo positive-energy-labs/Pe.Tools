@@ -4,28 +4,53 @@ import { historyPointSchema, historyListSchema, type Address } from "@pe/agent-c
 import { Button } from "@pe/kit/lang/button";
 import { ListView } from "@pe/kit/lang/list-view";
 import { useList } from "@pe/kit/lang/collection";
-import { historyRequest, historySnapshotSchema, pointHref, type HistorySnapshot } from "./history.ts";
+import {
+  historyRequest,
+  historySnapshotSchema,
+  pointHref,
+  type HistorySnapshot,
+} from "./history.ts";
 import type { AdmittedAddressPort } from "./typed-address.ts";
 
 /** Both shells resolve the recorded point before acquiring any live resources. */
-export function HistoryBoundary({ address, children }: {
+export function HistoryBoundary({
+  address,
+  children,
+}: {
   address: AdmittedAddressPort;
   children(snapshot?: HistorySnapshot): ReactNode;
 }) {
-  const search = useSyncExternalStore(address.subscribe, () => address.read().toString(), () => "");
+  const search = useSyncExternalStore(
+    address.subscribe,
+    () => address.read().toString(),
+    () => "",
+  );
   const at = new URLSearchParams(search).get("at");
-  const [loaded, setLoaded] = useState<{ id: string; snapshot?: HistorySnapshot; error?: string } | null>(null);
+  const [loaded, setLoaded] = useState<{
+    id: string;
+    snapshot?: HistorySnapshot;
+    error?: string;
+  } | null>(null);
   useEffect(() => {
     if (!at) return;
     let closed = false;
-    void historyRequest(`?at=${encodeURIComponent(at)}`).then(raw => {
-      if (!closed) setLoaded({ id: at, snapshot: historySnapshotSchema.parse(raw) });
-    }).catch(error => { if (!closed) setLoaded({ id: at, error: String(error) }); });
-    return () => { closed = true; };
+    void historyRequest(`?at=${encodeURIComponent(at)}`)
+      .then((raw) => {
+        if (!closed) setLoaded({ id: at, snapshot: historySnapshotSchema.parse(raw) });
+      })
+      .catch((error) => {
+        if (!closed) setLoaded({ id: at, error: String(error) });
+      });
+    return () => {
+      closed = true;
+    };
   }, [at]);
-  if (at && (loaded?.id !== at || !loaded.snapshot)) return <div role="status" data-tone="caution">
-    {loaded?.id === at ? loaded.error : "Opening recorded point?"}
-  </div>;
+  if (at && (loaded?.id !== at || !loaded.snapshot))
+    return (
+      <div role="status" data-tone="caution">
+        {loaded?.id === at ? loaded.error : "Opening recorded point?"}
+      </div>
+    );
   return children(at ? loaded!.snapshot : undefined);
 }
 
@@ -47,7 +72,9 @@ export function RecordedPoints({
 }) {
   const [rows, setRows] = useState<z.infer<typeof historyPointSchema>[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
-  const [unavailable, setUnavailable] = useState<z.infer<typeof historyListSchema>["unavailable"]>([]);
+  const [unavailable, setUnavailable] = useState<z.infer<typeof historyListSchema>["unavailable"]>(
+    [],
+  );
   useEffect(() => {
     if (!document) return;
     let closed = false;
@@ -98,26 +125,51 @@ export function RecordedPoints({
     return (poses.length ? poses : [undefined]).map((pose) => ({
       point,
       pose,
-      refusal: pose ? unavailable.find(item => item.point === point.id && item.instance === pose.instance)?.reason : "This route was never published at this point",
+      refusal: pose
+        ? unavailable.find((item) => item.point === point.id && item.instance === pose.instance)
+            ?.reason
+        : "This route was never published at this point",
       label,
       id: `${point.id}:${pose?.instance ?? "unavailable"}`,
     }));
   });
-  const list = useList({ items, keyOf: item => item.id, search: item => ({ text: [item.label] }), select: "none" });
+  const list = useList({
+    items,
+    keyOf: (item) => item.id,
+    search: (item) => ({ text: [item.label] }),
+    select: "none",
+  });
   return (
     <div>
-      <ListView list={list} aria-label="Recorded points" maxHeight="min(24rem, 60vh)"
-        row={item => ({ label: <a data-point={item.id} href={item.pose && !item.refusal ? pointHref(item.point, item.pose.instance) : undefined}
-          aria-disabled={!!item.refusal}>{item.label}</a>, meta: new Date(item.point.at).toLocaleString(),
-          sub: item.refusal ? `Unavailable: ${item.refusal}` : undefined })}
-        empty={{ message: "No recorded points", exit: "Capture a point" }} />
+      <ListView
+        list={list}
+        aria-label="Recorded points"
+        maxHeight="min(24rem, 60vh)"
+        row={(item) => ({
+          label: (
+            <a
+              data-point={item.id}
+              href={
+                item.pose && !item.refusal ? pointHref(item.point, item.pose.instance) : undefined
+              }
+              aria-disabled={!!item.refusal}
+            >
+              {item.label}
+            </a>
+          ),
+          meta: new Date(item.point.at).toLocaleString(),
+          sub: item.refusal ? `Unavailable: ${item.refusal}` : undefined,
+        })}
+        empty={{ message: "No recorded points", exit: "Capture a point" }}
+      />
       {snapshot ? (
         <>
           <span data-tone="caution">
             {compare ? "Now · comparing to" : "Recorded"}{" "}
             {new Date(snapshot.point.at).toLocaleString()}
           </span>
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label="Compare to now"
             pressed={compare}
             onClick={() => {
@@ -134,7 +186,8 @@ export function RecordedPoints({
           </Button>
         </>
       ) : (
-        <Button kind="quiet"
+        <Button
+          kind="quiet"
           label="Capture point"
           refusal={document ? null : "Choose a document"}
           onClick={() => void capture()}

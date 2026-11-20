@@ -510,11 +510,7 @@ export function inferJoints(
   return value;
 }
 
-function infer(
-  snapshot: DuctSnapshot,
-  tolIn = 1,
-  work: DuctsDesign | null = null,
-): Inference {
+function infer(snapshot: DuctSnapshot, tolIn = 1, work: DuctsDesign | null = null): Inference {
   const tol = tolIn / 12;
   const elements: Element[] = [...snapshot.nodes, ...snapshot.segments];
   const equipment = new Set(snapshot.nodes.filter((n) => n.kind === "equipment").map((n) => n.id));

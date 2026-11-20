@@ -4,11 +4,7 @@
  * and what the document is, and answers "held" at once: nothing here waits on a person. They cover
  * Pea's own doors only; a shell command gets past them, so they catch mistakes, not adversaries.
  */
-import {
-  held,
-  type Caller,
-  type GuardedAct,
-} from "@pe/agent-contracts";
+import { held, type Caller, type GuardedAct } from "@pe/agent-contracts";
 import { CommandRejected } from "@pe/host-internal/command-executor";
 
 /**
@@ -21,7 +17,8 @@ export const guards = (caller: Caller) => caller.kind !== "human";
 export type GuardedDocument = { title?: string | null; isFamily?: unknown; isModified?: unknown };
 /** Guards 1 and 2 cover project documents only: a family document is never held (rule 3). */
 const isProject = (doc: GuardedDocument) => doc.isFamily !== true;
-const name = (doc: GuardedDocument | undefined) => `project document '${doc?.title ?? "(unnamed)"}'`;
+const name = (doc: GuardedDocument | undefined) =>
+  `project document '${doc?.title ?? "(unnamed)"}'`;
 
 /** The door's answer for a held act: thrown from `bind`, so nothing is dispatched. */
 const hold = (act: GuardedAct, subject: string, how: string) =>

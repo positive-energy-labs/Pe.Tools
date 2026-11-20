@@ -14,7 +14,10 @@ const serviceName: string = import.meta.env.PE_RUNTIME_SERVICE;
 
 // A door answers `{ error }`; the admission layer, ahead of every door, answers `{ refusal }`.
 const contextCode = z.object({ code: z.literal("context.missing") });
-const contextRefusal = z.union([z.object({ error: contextCode }), z.object({ refusal: contextCode })]);
+const contextRefusal = z.union([
+  z.object({ error: contextCode }),
+  z.object({ refusal: contextCode }),
+]);
 const contextReloadKey = "pe.context-reload-at";
 const refusedForContext = async (response: Response) =>
   response.status === 403 &&
@@ -22,7 +25,10 @@ const refusedForContext = async (response: Response) =>
     await response
       .clone()
       .json()
-      .catch((error) => { console.error("runtime: asynchronous operation failed", error); return null; }),
+      .catch((error) => {
+        console.error("runtime: asynchronous operation failed", error);
+        return null;
+      }),
   ).success;
 
 let readmitting: Promise<void> | undefined;
@@ -85,7 +91,8 @@ export async function hostFetch(url: string, init?: RequestInit): Promise<Respon
         sessionStorage.setItem(contextReloadKey, String(now));
         window.location.reload();
       }
-    } catch (error) { console.warn("ts/packages/web-kernel/src/host/runtime.ts: fallback after failure", error);
+    } catch (error) {
+      console.warn("ts/packages/web-kernel/src/host/runtime.ts: fallback after failure", error);
       // Without persistent throttling, leave the refusal for the caller rather than loop.
     }
   }

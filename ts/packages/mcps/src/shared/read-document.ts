@@ -161,14 +161,17 @@ ${full.slice(0, MAX_TEXT_CHARS)}`,
   if (!kept) {
     if (hosted) {
       const result = await parseWithLlamaCloud({
-        apiKey: requireLlamaCloudKey(), sent: noteLlamaSend(runtimeMachine()),
+        apiKey: requireLlamaCloudKey(),
+        sent: noteLlamaSend(runtimeMachine()),
         file: new File([new Uint8Array(bytes)], path.basename(file)),
-        targetPages: input.pages, expand: ["markdown"],
+        targetPages: input.pages,
+        expand: ["markdown"],
       });
       kept = {
         totalPages: null,
-        pages: (result.markdown?.pages ?? []).map(page => ({
-          pageNum: page.page_number, text: "markdown" in page ? page.markdown : "",
+        pages: (result.markdown?.pages ?? []).map((page) => ({
+          pageNum: page.page_number,
+          text: "markdown" in page ? page.markdown : "",
         })),
       };
     } else {

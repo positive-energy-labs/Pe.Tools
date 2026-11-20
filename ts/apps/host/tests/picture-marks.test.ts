@@ -5,8 +5,14 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 
 test("an unboxed lens carries per-element refusals without inventing a view", () => {
   const response = {
-    viewId: null, viewName: null, created: false, boxed: 0, note: "No model bounds",
-    lens: null, hidden: [], refused: true,
+    viewId: null,
+    viewName: null,
+    created: false,
+    boxed: 0,
+    note: "No model bounds",
+    lens: null,
+    hidden: [],
+    refused: true,
     notDrawn: [
       { elementId: 6956140, reasons: ["NoBoundingBox"] },
       { elementId: 13006707, reasons: ["ElementMissing"] },
@@ -33,12 +39,17 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
   const notDrawn = [{ elementId: 8, reasons: ["PhaseHidden"] }];
   const pe = window.pe as {
     do: ReturnType<typeof vi.fn>;
-    picture: (ids: number[]) => Promise<{ marks: typeof marks; url: string; notDrawn: typeof notDrawn }>;
+    picture: (
+      ids: number[],
+    ) => Promise<{ marks: typeof marks; url: string; notDrawn: typeof notDrawn }>;
   };
-  pe.do = vi
-    .fn()
-    .mockResolvedValueOnce({ viewId: 42, viewName: "Lens" })
-    .mockResolvedValueOnce({ imageUrl: "/captures/picture.png", marks, notDrawn, width: 1500, height: 1441 });
+  pe.do = vi.fn().mockResolvedValueOnce({ viewId: 42, viewName: "Lens" }).mockResolvedValueOnce({
+    imageUrl: "/captures/picture.png",
+    marks,
+    notDrawn,
+    width: 1500,
+    height: 1441,
+  });
   const answer = await pe.picture([7]);
   expect(answer.marks).toEqual(marks);
   // An <img> sends no header, so the URL carries the runtime owner the dev proxy requires (D47).
@@ -51,10 +62,13 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
     pixelSize: undefined,
     marginPercent: 200,
   });
-  pe.do = vi.fn().mockResolvedValueOnce({ viewId: 42, viewName: "Lens" })
+  pe.do = vi
+    .fn()
+    .mockResolvedValueOnce({ viewId: 42, viewName: "Lens" })
     .mockResolvedValueOnce({ refused: true, notDrawn });
   await expect(pe.picture([8])).rejects.toMatchObject({
-    message: "Picture refused: 8: PhaseHidden", notDrawn,
+    message: "Picture refused: 8: PhaseHidden",
+    notDrawn,
   });
   const unboxed = [
     { elementId: 6956140, reasons: ["NoBoundingBox"] },
@@ -63,7 +77,8 @@ test("pe.picture answers pixel marks and asks for surrounding context", async ()
   pe.do = vi.fn().mockResolvedValueOnce({ refused: true, notDrawn: unboxed });
   await expect(pe.picture([6956140, 13006707])).rejects.toMatchObject({
     message: "Picture refused: 6956140: NoBoundingBox; 13006707: ElementMissing",
-    refused: true, notDrawn: unboxed,
+    refused: true,
+    notDrawn: unboxed,
   });
   expect(pe.do).toHaveBeenCalledTimes(1);
 });

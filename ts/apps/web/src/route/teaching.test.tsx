@@ -20,8 +20,8 @@ import { TeachPage, TeachReference, TeachTarget, useTeaching } from "@pe/kit/lan
 import { referenceTeaching } from "./teaching";
 const DUCTS_TEACHING = referenceTeaching("/duct-systems");
 test("route teaching names the declared design pane and never the retired e-inputs pane", () => {
-  expect(DUCTS_TEACHING.some(fact => fact.kind === "region" && fact.id === "design")).toBe(true);
-  expect(DUCTS_TEACHING.some(fact => fact.id === "e-inputs")).toBe(false);
+  expect(DUCTS_TEACHING.some((fact) => fact.kind === "region" && fact.id === "design")).toBe(true);
+  expect(DUCTS_TEACHING.some((fact) => fact.id === "e-inputs")).toBe(false);
   expect(referenceTeaching("/family")).not.toEqual(STARTUP_TEACHING);
 });
 import { STAGE_ACTIONS } from "#/scene/stage-teaching";

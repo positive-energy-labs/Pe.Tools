@@ -42,7 +42,14 @@ import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { mountViewport, ATTRS } from "./scene-viewport";
 import { SceneController } from "./scene-controller";
 import { scenePlan } from "./scene-plan";
-import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, Pick } from "@pe/web-kernel/scene/types";
+import type {
+  Bounds,
+  IssueTarget,
+  Kinds,
+  Layer3D,
+  PaintOf,
+  Pick,
+} from "@pe/web-kernel/scene/types";
 
 export type Scene3DProps = {
   /** Fixed picture state; null explicitly shares a parent readout in an inset. */
@@ -262,9 +269,10 @@ export function Scene3D(props: Scene3DProps): ReactNode {
     (focusCurrent ? core.current : null)?.paint(selected, props.hidden, props.isolated, lit);
   }, [selected, props.hidden, props.isolated, lit, meshes, commitVersion]);
   useEffect(() => {
-    const key = hovered == null
-      ? null
-      : (props.meshes?.instances.find((i) => i.revitId === hovered)?.key ?? null);
+    const key =
+      hovered == null
+        ? null
+        : (props.meshes?.instances.find((i) => i.revitId === hovered)?.key ?? null);
     (focusCurrent ? core.current : null)?.hoverElement(key);
   }, [hovered, props.meshes, meshes, commitVersion]);
   useEffect(() => {

@@ -41,43 +41,47 @@ export function ScopeBody({ page }: Body) {
   return (
     <>
       {snapshot?.unreadable?.map((blob, index) => (
-        <OutcomeLine key={index} kind="refused" label="can't read, kept"
-          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`} />
+        <OutcomeLine
+          key={index}
+          kind="refused"
+          label="can't read, kept"
+          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`}
+        />
       ))}
-    <Ladder
-      disabled={!snapshot || !document}
-      levels={[
-        {
-          key: "level",
-          label: level?.name ?? null,
-          placeholder: "choose a level",
-          options: snapshot
-            ? levels.map((item) => ({
-                id: item.name,
-                label: item.name,
-                sub: `${item.views.length} view${item.views.length === 1 ? "" : "s"}`,
-              }))
-            : null,
-          note,
-          picked: (id) => id === level?.name,
-          pick: (id) =>
-            setPage({
-              view: levels.find((item) => item.name === id)?.views[0] ?? "",
-              selected: [],
-              viewport: null,
-            }),
-        },
-        {
-          key: "view",
-          label: view || null,
-          placeholder: "choose a plan view",
-          options: level ? level.views.map((id) => ({ id, label: id })) : null,
-          note: level ? "this level has no plan views" : "choose a level first",
-          picked: (id) => id === page.view,
-          pick: (id) => setPage({ view: id, selected: [], viewport: null }),
-        },
-      ]}
-    />
+      <Ladder
+        disabled={!snapshot || !document}
+        levels={[
+          {
+            key: "level",
+            label: level?.name ?? null,
+            placeholder: "choose a level",
+            options: snapshot
+              ? levels.map((item) => ({
+                  id: item.name,
+                  label: item.name,
+                  sub: `${item.views.length} view${item.views.length === 1 ? "" : "s"}`,
+                }))
+              : null,
+            note,
+            picked: (id) => id === level?.name,
+            pick: (id) =>
+              setPage({
+                view: levels.find((item) => item.name === id)?.views[0] ?? "",
+                selected: [],
+                viewport: null,
+              }),
+          },
+          {
+            key: "view",
+            label: view || null,
+            placeholder: "choose a plan view",
+            options: level ? level.views.map((id) => ({ id, label: id })) : null,
+            note: level ? "this level has no plan views" : "choose a level first",
+            picked: (id) => id === page.view,
+            pick: (id) => setPage({ view: id, selected: [], viewport: null }),
+          },
+        ]}
+      />
     </>
   );
 }
@@ -101,8 +105,22 @@ function RegionsBody({ ctx }: Body) {
 }
 
 function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: TeachingPaneRender }) {
-  const { onView, regions, snapshot, empty, cards, labels, view, plan, planError, trace, setPage, selected, pinned, pin: setPinned } =
-    useRoomsWorkspace();
+  const {
+    onView,
+    regions,
+    snapshot,
+    empty,
+    cards,
+    labels,
+    view,
+    plan,
+    planError,
+    trace,
+    setPage,
+    selected,
+    pinned,
+    pin: setPinned,
+  } = useRoomsWorkspace();
   const level = snapshot?.levels.find((item) => item.views.includes(view))?.name ?? "";
   const onDrop = async (drop: Drop) => {
     if (!snapshot) return "the snapshot is not read yet";

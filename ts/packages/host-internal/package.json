@@ -32,8 +32,8 @@
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
-    "effect": "4.0.2",
     "@pe/runtime": "workspace:*",
+    "effect": "4.0.2",
     "zod": "catalog:"
   },
   "devDependencies": {

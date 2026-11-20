@@ -6,6 +6,10 @@
   "imports": {
     "#/*": "./src/*"
   },
+  "exports": {
+    "./vite.config": "./vite.config.ts",
+    "./route-startup": "./route-startup.ts"
+  },
   "scripts": {
     "dev": "vp dev",
     "codegen:routes": "node scripts/route-graphs.ts",
@@ -21,18 +25,30 @@
     "@base-ui/react": "catalog:",
     "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/browser": "workspace:*",
+    "@pe/duct-systems-domain": "workspace:*",
+    "@pe/duct-systems-host": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/fans-domain": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "@pe/fans-web": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "@pe/host-internal": "workspace:*",
     "@pe/kit": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/schema-core": "workspace:*",
+    "@pe/web-kernel": "workspace:*",
     "@tanstack/react-devtools": "0.10.11",
     "@tanstack/react-router": "1.170.31",
     "@tanstack/react-router-devtools": "1.167.1",
     "@tanstack/react-start": "1.168.48",
     "@tanstack/react-table": "9.1.2",
     "effect": "4.0.2",
+    "jiti": "^2.7.0",
     "lucide-react": "1.21.0",
     "mermaid": "catalog:",
     "modern-screenshot": "catalog:",
@@ -45,23 +61,11 @@
     "tailwindcss": "^4.1.18",
     "three": "catalog:",
     "tw-animate-css": "^1.3.6",
-    "zod": "4.3.6",
-    "@pe/duct-systems-domain": "workspace:*",
-    "@pe/duct-systems-host": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
-    "@pe/ducts-host": "workspace:*",
-    "@pe/ducts-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*",
-    "@pe/fans-host": "workspace:*",
-    "@pe/fans-web": "workspace:*",
-    "jiti": "^2.7.0",
-    "@pe/browser": "workspace:*",
-    "@pe/host-internal": "workspace:*",
-    "@pe/web-kernel": "workspace:*"
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "@pe/ducts-contract": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
@@ -85,10 +89,6 @@
       "esbuild",
       "lightningcss"
     ]
-  },
-  "exports": {
-    "./vite.config": "./vite.config.ts",
-    "./route-startup": "./route-startup.ts"
   },
   "pe": {
     "generatedProductDependencies": [

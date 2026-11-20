@@ -82,7 +82,7 @@ export const RulesTree = memo(function RulesTree({
     if (focus && ruleByKey(focus) && !ids.has(focus)) ids.set(focus, new Set());
     const overrides = [
       ...new Set([
-        ...Object.keys(priced.effective.componentDrops).map(key => workElementId(snapshot, key)),
+        ...Object.keys(priced.effective.componentDrops).map((key) => workElementId(snapshot, key)),
         // A restored selection lands on its fitting's drop even where no fan calc reaches it yet.
         ...(landing ? [landing.id] : []),
       ]),
@@ -118,7 +118,9 @@ export const RulesTree = memo(function RulesTree({
         [...ruleOf].flatMap(([id, rule]) => (rule === key ? (groupOf.get(id) ?? []) : [])),
       ).size,
     });
-    return new Map(roots.flatMap((n) => (n.kind === "rule" ? [[n.key, count(n.key)] as const] : [])));
+    return new Map(
+      roots.flatMap((n) => (n.kind === "rule" ? [[n.key, count(n.key)] as const] : [])),
+    );
   }, [roots, priced, ruleOf, groupOf]);
 
   // Fittings no rule prices, by family, plus the families a person has assigned a rule to.
@@ -200,7 +202,7 @@ export const RulesTree = memo(function RulesTree({
                 <DropCell
                   segment="componentDrops"
                   id={n.id}
-                  subject={elementSubject(snapshot.nodes.find(x => x.id === n.id)!)}
+                  subject={elementSubject(snapshot.nodes.find((x) => x.id === n.id)!)}
                   land={landing?.id === n.id ? landing.key : undefined}
                   held={snapshot.nodes.find((x) => x.id === n.id)?.loss?.revitPressureDropInWg}
                   work={work}
@@ -257,7 +259,7 @@ export const RulesTree = memo(function RulesTree({
                       <DropCell
                         segment="componentDrops"
                         id={first}
-                        subject={elementSubject(snapshot.nodes.find(x => x.id === first)!)}
+                        subject={elementSubject(snapshot.nodes.find((x) => x.id === first)!)}
                         land={landing?.id === first ? landing.key : undefined}
                         held={
                           snapshot.nodes.find((x) => x.id === first)?.loss?.revitPressureDropInWg

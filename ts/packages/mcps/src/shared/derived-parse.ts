@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { derivedFor } from "@pe/host-contracts/service-identity";
-import {
-  refuseDerived,
-  readDerivedIn,
-  type DerivedDir,
-} from "@pe/host-contracts/kinds";
+import { refuseDerived, readDerivedIn, type DerivedDir } from "@pe/host-contracts/kinds";
 import { runtimeRoot } from "@pe/runtime/runtime-owner";
 import { LLAMA_TIER } from "./llama-parse.ts";
 
@@ -35,4 +31,3 @@ export function readDerivedJson<T>(store: DerivedDir, key: string, schema: z.Zod
     return null;
   }
 }
-

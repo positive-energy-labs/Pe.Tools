@@ -10,7 +10,10 @@ import { AttentionScope, useHoveredIssue } from "@pe/web-kernel/attention";
 import * as Atom from "effect/reactivity/Atom";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { BlockerRow } from "../../../../../../../products/fans/web/src/calc/blocker-row.tsx";
-import { describeCloser, type Closer } from "../../../../../../../products/fans/web/src/calc/closer.ts";
+import {
+  describeCloser,
+  type Closer,
+} from "../../../../../../../products/fans/web/src/calc/closer.ts";
 import type { CalcBlocker } from "../../../../../../../products/fans/web/src/calc/tiers.ts";
 import { eKey } from "../../../../test-attention.tsx";
 

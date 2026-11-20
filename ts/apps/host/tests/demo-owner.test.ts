@@ -26,7 +26,9 @@ test("demo tenancy serves catalog examples, retires, and never simulates a nativ
       body: JSON.stringify({ key: "revit.catalog.loaded-families" }),
     });
   try {
-    expect(await (await owner.fetch(call())).json()).toEqual(seed.responses["revit.catalog.loaded-families"]);
+    expect(await (await owner.fetch(call())).json()).toEqual(
+      seed.responses["revit.catalog.loaded-families"],
+    );
     expect(
       (await owner.fetch(new Request("http://fixture/actions", { method: "POST" }))).status,
     ).toBe(404);

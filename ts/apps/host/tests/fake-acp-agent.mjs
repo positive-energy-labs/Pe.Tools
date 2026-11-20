@@ -402,8 +402,16 @@ new AgentSideConnection(
           message: {
             type: "system",
             subtype: "init",
-            tools: ["Bash", "Read", "mcp__pea__pe_find", ...(leak ? ["CronCreate", "mcp__claude_ai_Gmail__send_message"] : [])],
-            mcp_servers: [{ name: "pea", status: "connected" }, ...(leak ? [{ name: "claude.ai Gmail", status: "connected" }] : [])],
+            tools: [
+              "Bash",
+              "Read",
+              "mcp__pea__pe_find",
+              ...(leak ? ["CronCreate", "mcp__claude_ai_Gmail__send_message"] : []),
+            ],
+            mcp_servers: [
+              { name: "pea", status: "connected" },
+              ...(leak ? [{ name: "claude.ai Gmail", status: "connected" }] : []),
+            ],
           },
         });
         await say("init sent");
@@ -461,7 +469,12 @@ new AgentSideConnection(
           "switch_mode",
           "other",
         ]) {
-          const call = { toolCallId: `kind-${kind}`, title: `native ${kind}`, kind, status: "pending" };
+          const call = {
+            toolCallId: `kind-${kind}`,
+            title: `native ${kind}`,
+            kind,
+            status: "pending",
+          };
           await conn.sessionUpdate({ sessionId, update: { sessionUpdate: "tool_call", ...call } });
           const answer = await conn.requestPermission({
             sessionId,
@@ -472,7 +485,9 @@ new AgentSideConnection(
             ],
           });
           record[kind] =
-            answer.outcome.outcome === "selected" ? answer.outcome.optionId : answer.outcome.outcome;
+            answer.outcome.outcome === "selected"
+              ? answer.outcome.optionId
+              : answer.outcome.outcome;
         }
         await say(`permission-record ${JSON.stringify(record)}`);
         return { stopReason: "end_turn" };

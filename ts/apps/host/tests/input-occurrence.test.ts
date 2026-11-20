@@ -15,8 +15,18 @@ import { effectTest } from "./effect-test.ts";
 import { CurrentInputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
 import { HostInputReadSets, type InputReadSetLimits } from "../src/input-occurrence.ts";
 import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
-import { captureInput, replayInput, type HostInputLane, type InputReadSetRecord, type Taking } from "@pe/host-internal/input-recording";
-import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
+import {
+  captureInput,
+  replayInput,
+  type HostInputLane,
+  type InputReadSetRecord,
+  type Taking,
+} from "@pe/host-internal/input-recording";
+import {
+  nativeCatalogIdentity,
+  openRecordingReader,
+  openRecordingWriter,
+} from "../src/native-recording.ts";
 
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
@@ -27,38 +37,49 @@ const recipe: ConsumerRecipe = {
   scope: '["bridge-1","A"]',
 };
 const codec = Schema.Unknown;
-effectTest("recording export metadata comes from the registered product contract", () => Effect.gen(function* () {
-  const dir = yield* bundle;
-  const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
-  const owner = yield* readSets({ kind: "live", captureStore: writer });
-  const context = yield* owner.open(recipe, null);
-  const contract = { key: "registered.calc" };
-  yield* context.exportBasis(contract, "basis");
-  yield* context.seal;
-  yield* context.close;
-  const reader = yield* openRecordingReader(dir, identity, bounds);
-  expect((yield* reader.readSets.get(context.id)).exports).toEqual([{ kind: contract.key, basis: "basis" }]);
-  const replay = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
-  const historical = yield* replay.open(recipe, context.id);
-  yield* historical.exportBasis(contract, "basis");
-  expect(yield* problem(historical.exportBasis({ key: "another.calc" }, "basis"))).toBe("recording.mismatch");
-}));
+effectTest("recording export metadata comes from the registered product contract", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+    const owner = yield* readSets({ kind: "live", captureStore: writer });
+    const context = yield* owner.open(recipe, null);
+    const contract = { key: "registered.calc" };
+    yield* context.exportBasis(contract, "basis");
+    yield* context.seal;
+    yield* context.close;
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    expect((yield* reader.readSets.get(context.id)).exports).toEqual([
+      { kind: contract.key, basis: "basis" },
+    ]);
+    const replay = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
+    const historical = yield* replay.open(recipe, context.id);
+    yield* historical.exportBasis(contract, "basis");
+    expect(yield* problem(historical.exportBasis({ key: "another.calc" }, "basis"))).toBe(
+      "recording.mismatch",
+    );
+  }),
+);
 
-effectTest("retired recording read sets are refused with a notice and unchanged bytes", () => Effect.gen(function* () {
-  const dir = yield* bundle;
-  const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
-  const id = randomUUID();
-  yield* writer.readSets.keep(record({ id, recipe }));
-  const path = join(dir, "read-sets", `${id}.json`);
-  const bytes = JSON.stringify({ ...record({ id, recipe }), version: 1,
-    exports: [{ kind: "ducts.sheet", basis: "sheet/4" }] });
-  yield* Effect.promise(() => writeFile(path, bytes));
-  const reader = yield* openRecordingReader(dir, identity, bounds);
-  const refusal = yield* Effect.flip(reader.readSets.get(id));
-  expect(refusal.message).toContain("retired");
-  expect(refusal.message).toContain("bytes were not changed");
-  expect(yield* Effect.promise(() => readFile(path, "utf8"))).toBe(bytes);
-}));
+effectTest("retired recording read sets are refused with a notice and unchanged bytes", () =>
+  Effect.gen(function* () {
+    const dir = yield* bundle;
+    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+    const id = randomUUID();
+    yield* writer.readSets.keep(record({ id, recipe }));
+    const path = join(dir, "read-sets", `${id}.json`);
+    const bytes = JSON.stringify({
+      ...record({ id, recipe }),
+      version: 1,
+      exports: [{ kind: "ducts.sheet", basis: "sheet/4" }],
+    });
+    yield* Effect.promise(() => writeFile(path, bytes));
+    const reader = yield* openRecordingReader(dir, identity, bounds);
+    const refusal = yield* Effect.flip(reader.readSets.get(id));
+    expect(refusal.message).toContain("retired");
+    expect(refusal.message).toContain("bytes were not changed");
+    expect(yield* Effect.promise(() => readFile(path, "utf8"))).toBe(bytes);
+  }),
+);
 const bundle = Effect.promise(() => mkdtemp(join(tmpdir(), "pe-occurrence-")));
 const readSets = (lane: HostInputLane, limits?: InputReadSetLimits) =>
   Effect.map(Layer.build(HostInputReadSets.layer(lane, limits)), (context) =>
@@ -94,7 +115,10 @@ effectTest(
 
       const reader = yield* openRecordingReader(dir, identity, bounds);
       const historical = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
-      const replayed = yield* historical.open({ ...recipe, input: { mode: "sheet", fan: "F-1" } }, null);
+      const replayed = yield* historical.open(
+        { ...recipe, input: { mode: "sheet", fan: "F-1" } },
+        null,
+      );
       expect(replayed.id).toBe(consumption.id);
       const again = (effect: Effect.Effect<unknown, unknown>) =>
         effect.pipe(Effect.provideService(CurrentInputConsumption, replayed));
@@ -165,7 +189,13 @@ effectTest("live context loss truncates capture and keeps the live answer unchan
       );
     expect(yield* read("one")).toBe("one");
     expect(yield* read("two")).toBe("two");
-    expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: "occurrence", op: "files.firm", reason: "unsupported" });
+    expect(writer.capture.truncated()).toEqual({
+      at: 2,
+      stoppedAt: expect.any(Number),
+      site: "occurrence",
+      op: "files.firm",
+      reason: "unsupported",
+    });
     yield* consumption.seal;
     // A truncated capture never publishes a complete read set.
     const reader = yield* openRecordingReader(dir, identity, bounds);
@@ -235,7 +265,9 @@ effectTest("no mutation after seal or close, and a dependency never rebinds", ()
     expect(yield* problem(attempt.observed(late))).toBe("recording.context");
     expect(yield* problem(root.linkTaking("native", "t1"))).toBe("recording.context");
     expect(yield* problem(root.linkReadSet("other", first))).toBe("recording.context");
-    expect(yield* problem(root.exportBasis({ key: "test.calc" }, "basis"))).toBe("recording.context");
+    expect(yield* problem(root.exportBasis({ key: "test.calc" }, "basis"))).toBe(
+      "recording.context",
+    );
     expect(failed(root.start(FIRM, "{}"))).toBe("recording.context");
     const closed = yield* live.open(recipe, null);
     yield* closed.close;
@@ -257,68 +289,79 @@ const record = (
   ...fields,
 });
 
-effectTest("an interrupted read-set save preserves committed ids and still consumes its byte budget", () =>
-  Effect.gen(function* () {
-    const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
-    const committed = record({ id: randomUUID(), recipe });
-    yield* writer.readSets.keep(committed);
-    const pending = join(dir, "read-sets", `${randomUUID()}.json.tmp`);
-    yield* Effect.promise(() => writeFile(pending, "unfinished{"));
-    const reader = yield* openRecordingReader(dir, identity, bounds);
-    expect(reader.readSets.ids()).toEqual([committed.id]);
-    const reopened = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
-    expect(reopened.readSets.ids()).toEqual([committed.id]);
-    yield* Effect.promise(() => writeFile(pending, "x".repeat(bounds.maxBytes)));
-    expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.full");
-  }),
+effectTest(
+  "an interrupted read-set save preserves committed ids and still consumes its byte budget",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+      const committed = record({ id: randomUUID(), recipe });
+      yield* writer.readSets.keep(committed);
+      const pending = join(dir, "read-sets", `${randomUUID()}.json.tmp`);
+      yield* Effect.promise(() => writeFile(pending, "unfinished{"));
+      const reader = yield* openRecordingReader(dir, identity, bounds);
+      expect(reader.readSets.ids()).toEqual([committed.id]);
+      const reopened = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+      expect(reopened.readSets.ids()).toEqual([committed.id]);
+      yield* Effect.promise(() => writeFile(pending, "x".repeat(bounds.maxBytes)));
+      expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.full");
+    }),
 );
 
-effectTest("unbound admission counts incomplete matches, validates every record and writes nothing", () =>
-  Effect.gen(function* () {
-    const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
-    const complete = record({ id: randomUUID(), recipe });
-    const partial = record({ id: randomUUID(), recipe, state: "incomplete" });
-    expect(writer.readSets.ids()).toEqual([]);
-    yield* writer.readSets.keep(partial);
-    expect(writer.readSets.ids()).toEqual([partial.id]);
-    const historical = yield* readSets({ kind: "recording", recordingStore: writer, at: null });
-    expect(yield* problem(historical.open(recipe, null))).toBe("recording.context");
-    for (const different of [
-      { ...recipe, key: "ducts.roster" },
-      { ...recipe, input: { fan: "F-2" } },
-      { ...recipe, scope: "another-document" },
-    ]) expect(yield* problem(historical.open(different, null))).toBe("recording.miss");
-    yield* writer.readSets.keep(complete);
-    yield* writer.readSets.keep(complete);
-    expect(
-      yield* problem(writer.readSets.keep({ ...complete, identity: { ...identity, build: "foreign" } })),
-    ).toBe("recording.mismatch");
-    expect(writer.readSets.ids().slice().sort()).toEqual([partial.id, complete.id].sort());
-    const admission = historical.open(recipe, null);
-    yield* writer.readSets.keep({ ...partial, recipe: child("unrelated") });
-    expect((yield* admission).id).toBe(complete.id);
-    yield* writer.readSets.keep(partial);
-    expect(yield* problem(admission)).toBe("recording.ambiguous");
-    const before = yield* Effect.promise(() => readdir(dir, { recursive: true }));
-    const files = ["manifest.json", ...writer.readSets.ids().map((id) => `read-sets/${id}.json`)];
-    const contents = () => Promise.all(files.map((file) => readFile(join(dir, file), "utf8")));
-    const original = yield* Effect.promise(contents);
-    const bytes = yield* Effect.promise(() => readFile(join(dir, "read-sets", `${complete.id}.json`), "utf8"));
-    const reader = yield* openRecordingReader(dir, identity, bounds);
-    expect(reader.readSets.ids().slice().sort()).toEqual([partial.id, complete.id].sort());
-    const reopened = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
-    expect(yield* problem(reopened.open(recipe, null))).toBe("recording.ambiguous");
-    expect((yield* reopened.open(recipe, complete.id as ReadSetId)).id).toBe(complete.id);
-    expect(yield* Effect.promise(() => readdir(dir, { recursive: true }))).toEqual(before);
-    expect(yield* Effect.promise(contents)).toEqual(original);
-    // Even an unrelated consumer must pass get's existing validator before it can be excluded.
-    yield* Effect.promise(() => writeFile(join(dir, "read-sets", `${partial.id}.json`), "{}"));
-    expect(yield* problem(reopened.open({ ...recipe, key: "missing" }, null))).toBe("recording.tamper");
-    yield* Effect.promise(() => writeFile(join(dir, "read-sets", "foreign.json"), bytes));
-    expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.tamper");
-  }),
+effectTest(
+  "unbound admission counts incomplete matches, validates every record and writes nothing",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+      const complete = record({ id: randomUUID(), recipe });
+      const partial = record({ id: randomUUID(), recipe, state: "incomplete" });
+      expect(writer.readSets.ids()).toEqual([]);
+      yield* writer.readSets.keep(partial);
+      expect(writer.readSets.ids()).toEqual([partial.id]);
+      const historical = yield* readSets({ kind: "recording", recordingStore: writer, at: null });
+      expect(yield* problem(historical.open(recipe, null))).toBe("recording.context");
+      for (const different of [
+        { ...recipe, key: "ducts.roster" },
+        { ...recipe, input: { fan: "F-2" } },
+        { ...recipe, scope: "another-document" },
+      ])
+        expect(yield* problem(historical.open(different, null))).toBe("recording.miss");
+      yield* writer.readSets.keep(complete);
+      yield* writer.readSets.keep(complete);
+      expect(
+        yield* problem(
+          writer.readSets.keep({ ...complete, identity: { ...identity, build: "foreign" } }),
+        ),
+      ).toBe("recording.mismatch");
+      expect(writer.readSets.ids().slice().sort()).toEqual([partial.id, complete.id].sort());
+      const admission = historical.open(recipe, null);
+      yield* writer.readSets.keep({ ...partial, recipe: child("unrelated") });
+      expect((yield* admission).id).toBe(complete.id);
+      yield* writer.readSets.keep(partial);
+      expect(yield* problem(admission)).toBe("recording.ambiguous");
+      const before = yield* Effect.promise(() => readdir(dir, { recursive: true }));
+      const files = ["manifest.json", ...writer.readSets.ids().map((id) => `read-sets/${id}.json`)];
+      const contents = () => Promise.all(files.map((file) => readFile(join(dir, file), "utf8")));
+      const original = yield* Effect.promise(contents);
+      const bytes = yield* Effect.promise(() =>
+        readFile(join(dir, "read-sets", `${complete.id}.json`), "utf8"),
+      );
+      const reader = yield* openRecordingReader(dir, identity, bounds);
+      expect(reader.readSets.ids().slice().sort()).toEqual([partial.id, complete.id].sort());
+      const reopened = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
+      expect(yield* problem(reopened.open(recipe, null))).toBe("recording.ambiguous");
+      expect((yield* reopened.open(recipe, complete.id as ReadSetId)).id).toBe(complete.id);
+      expect(yield* Effect.promise(() => readdir(dir, { recursive: true }))).toEqual(before);
+      expect(yield* Effect.promise(contents)).toEqual(original);
+      // Even an unrelated consumer must pass get's existing validator before it can be excluded.
+      yield* Effect.promise(() => writeFile(join(dir, "read-sets", `${partial.id}.json`), "{}"));
+      expect(yield* problem(reopened.open({ ...recipe, key: "missing" }, null))).toBe(
+        "recording.tamper",
+      );
+      yield* Effect.promise(() => writeFile(join(dir, "read-sets", "foreign.json"), bytes));
+      expect(yield* problem(openRecordingReader(dir, identity, bounds))).toBe("recording.tamper");
+    }),
 );
 
 effectTest(
@@ -369,36 +412,38 @@ const limits: InputReadSetLimits = {
   dependencyDepth: 4,
 };
 
-effectTest("a live root or child over its capture budget truncates capture and the live read still answers", () =>
-  Effect.gen(function* () {
-    const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
-    const capped = { ...limits, openRoots: 1, childrenPerRoot: 1 };
-    const live = yield* readSets({ kind: "live", captureStore: writer }, capped);
-    const first = yield* live.open(recipe, null); // stays open
-    const second = yield* live.open(recipe, null);
-    expect(writer.capture.truncated()).toMatchObject({ reason: "full" });
-    const read = (consumption: typeof first, value: string) =>
-      captureInput(writer, FIRM, "{}", codec, Effect.succeed(value)).pipe(
-        Effect.provideService(CurrentInputConsumption, consumption),
-      );
-    expect(yield* read(second, "second")).toBe("second");
-    ok(first.child(child("ducts.retained")));
-    const over = ok(first.child(child("ducts.retained")));
-    expect(yield* read(over, "child")).toBe("child");
-    yield* second.seal;
-    yield* first.seal;
-    // A truncated capture publishes no read set at all, complete or otherwise.
-    const reader = yield* openRecordingReader(dir, identity, bounds);
-    expect(yield* problem(reader.readSets.get(second.id))).toBe("recording.context");
-    expect(yield* problem(reader.readSets.get(first.id))).toBe("recording.context");
-    // A closed context stays fenced; capture-off live never fails on the budget.
-    yield* first.close;
-    expect(failed(first.child(child("ducts.retained")))).toBe("recording.context");
-    const off = yield* readSets({ kind: "live" }, capped);
-    yield* off.open(recipe, null);
-    const again = yield* off.open(recipe, null);
-    ok(again.child(child("ducts.retained")));
-    expect(failed(again.child(child("ducts.retained")))).toBe("ok");
-  }),
+effectTest(
+  "a live root or child over its capture budget truncates capture and the live read still answers",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
+      const capped = { ...limits, openRoots: 1, childrenPerRoot: 1 };
+      const live = yield* readSets({ kind: "live", captureStore: writer }, capped);
+      const first = yield* live.open(recipe, null); // stays open
+      const second = yield* live.open(recipe, null);
+      expect(writer.capture.truncated()).toMatchObject({ reason: "full" });
+      const read = (consumption: typeof first, value: string) =>
+        captureInput(writer, FIRM, "{}", codec, Effect.succeed(value)).pipe(
+          Effect.provideService(CurrentInputConsumption, consumption),
+        );
+      expect(yield* read(second, "second")).toBe("second");
+      ok(first.child(child("ducts.retained")));
+      const over = ok(first.child(child("ducts.retained")));
+      expect(yield* read(over, "child")).toBe("child");
+      yield* second.seal;
+      yield* first.seal;
+      // A truncated capture publishes no read set at all, complete or otherwise.
+      const reader = yield* openRecordingReader(dir, identity, bounds);
+      expect(yield* problem(reader.readSets.get(second.id))).toBe("recording.context");
+      expect(yield* problem(reader.readSets.get(first.id))).toBe("recording.context");
+      // A closed context stays fenced; capture-off live never fails on the budget.
+      yield* first.close;
+      expect(failed(first.child(child("ducts.retained")))).toBe("recording.context");
+      const off = yield* readSets({ kind: "live" }, capped);
+      yield* off.open(recipe, null);
+      const again = yield* off.open(recipe, null);
+      ok(again.child(child("ducts.retained")));
+      expect(failed(again.child(child("ducts.retained")))).toBe("ok");
+    }),
 );

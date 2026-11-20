@@ -4,7 +4,10 @@ import { Context, Effect, Layer, Schema } from "effect";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { InvalidRead } from "@pe/host-internal/read-errors";
 
-export class ResourceConnectionOwner extends Context.Service<ResourceConnectionOwner, string | null>()("pe/ResourceConnectionOwner") {}
+export class ResourceConnectionOwner extends Context.Service<
+  ResourceConnectionOwner,
+  string | null
+>()("pe/ResourceConnectionOwner") {}
 
 /** One host generation, conservatively advanced by journal and native change observations. */
 export class ReadFreshness extends Context.Service<
@@ -44,15 +47,13 @@ export const readSchemas = Effect.fn("ReadAdmission.schemas")(function* (key: st
         const ajv = new Ajv({ strict: false, allErrors: false, addUsedSchema: false });
         const validate = ajv.compile(raw);
         return Schema.Json.check(
-          Schema.makeFilter(
-            (value) => {
-              if (validate(value)) return true;
-              const issue = validate.errors?.[0];
-              return issue
-                ? `Value violates the generated native contract at ${issue.instancePath || "/"} (${issue.keyword}): ${issue.message}`
-                : "Value violates the generated native contract";
-            },
-          ),
+          Schema.makeFilter((value) => {
+            if (validate(value)) return true;
+            const issue = validate.errors?.[0];
+            return issue
+              ? `Value violates the generated native contract at ${issue.instancePath || "/"} (${issue.keyword}): ${issue.message}`
+              : "Value violates the generated native contract";
+          }),
         );
       };
       return {

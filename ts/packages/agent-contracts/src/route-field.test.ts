@@ -1,15 +1,26 @@
 import { expect, test } from "vite-plus/test";
 import { INVALID, modeKey } from "./page-keys.ts";
 import { z } from "zod";
-import { field, manyField, decodePageField, sortField, keyedSetField, orderedListField, jsonCodec, type ScalarSchema } from "./route-field.ts";
+import {
+  field,
+  manyField,
+  decodePageField,
+  sortField,
+  keyedSetField,
+  orderedListField,
+  jsonCodec,
+  type ScalarSchema,
+} from "./route-field.ts";
 import { routeAddress } from "./route-address.ts";
 
 const forwardScalar = <S extends z.ZodType>(schema: ScalarSchema<S>) =>
   field(schema, {}, { encode: JSON.stringify, decode: JSON.parse });
 
 // Generic enum outputs are scalar even while their literal keys are still parameters.
-const forwardMode = <const M extends readonly [string, ...string[]]>(modes: M, initial: M[number]) =>
-  field(modeKey(modes, initial), {});
+const forwardMode = <const M extends readonly [string, ...string[]]>(
+  modes: M,
+  initial: M[number],
+) => field(modeKey(modes, initial), {});
 void forwardMode;
 
 const typeProof = () => {
@@ -58,32 +69,67 @@ test("many round trips all and exact ids; cap refusal never truncates", () => {
   const f = manyField("name", { cap: 2 });
   for (const value of ["all", [], ["all", "a,b%~"]] as const) {
     const ids = typeof value === "string" ? value : [...value];
-    expect(decodePageField(f, { pick: f.codec.encode(ids) }, "pick").decoded).toMatchObject({ success: true, data: ids });
+    expect(decodePageField(f, { pick: f.codec.encode(ids) }, "pick").decoded).toMatchObject({
+      success: true,
+      data: ids,
+    });
   }
   expect(f.schema.safeParse(["a", "b", "c"]).success).toBe(false);
   expect(f.schema.safeParse([1]).success).toBe(false);
 });
 test("formerly narrowed routes preserve all through URL and Pea", () => {
-  for (const [route, key] of [["rooms", "layers"], ["space", "hidden"], ["space", "isolated"], ["space", "layers"]] as const) {
+  for (const [route, key] of [
+    ["rooms", "layers"],
+    ["space", "hidden"],
+    ["space", "isolated"],
+    ["space", "layers"],
+  ] as const) {
     const address = routeAddress(route);
-    expect(address.read({ [key]: route === "rooms" ? JSON.stringify("all") : "all" }).page).toHaveProperty(key, "all");
+    expect(
+      address.read({ [key]: route === "rooms" ? JSON.stringify("all") : "all" }).page,
+    ).toHaveProperty(key, "all");
   }
   // Slice 10: the open rooms are the subject, so every room is the subject's own `all`.
-  expect(routeAddress("rooms").read({ room: JSON.stringify({ kind: "all" }) }).page).toHaveProperty("room", { kind: "all" });
+  expect(routeAddress("rooms").read({ room: JSON.stringify({ kind: "all" }) }).page).toHaveProperty(
+    "room",
+    { kind: "all" },
+  );
   // Slice 8: a picture route's layers are the kernel pose; `default` is the picture's own set and there is no `all`.
-  expect(routeAddress("duct-systems").read({ layers: JSON.stringify("default") }).page).toHaveProperty("layers", "default");
-  expect(routeAddress("duct-systems").read({ layers: JSON.stringify("all") }).page).toHaveProperty("layers", "default");
+  expect(
+    routeAddress("duct-systems").read({ layers: JSON.stringify("default") }).page,
+  ).toHaveProperty("layers", "default");
+  expect(routeAddress("duct-systems").read({ layers: JSON.stringify("all") }).page).toHaveProperty(
+    "layers",
+    "default",
+  );
 });
 
 test("sort and keyed set constructors own lossless codecs and reject malformed values", () => {
   const sort = sortField({ url: "replace" });
   const hidden = keyedSetField({ agent: "set" });
-  for (const [f, value] of [[sort, { columns: [{ key: "a,b", dir: "desc" }, { key: "-x", dir: "asc" }] }], [hidden, { "a,b": true, "-x": true }]] as const) {
-    expect(decodePageField(f, { x: f.codec.encode(value as never) }, "x").decoded).toMatchObject({ success: true, data: value });
+  for (const [f, value] of [
+    [
+      sort,
+      {
+        columns: [
+          { key: "a,b", dir: "desc" },
+          { key: "-x", dir: "asc" },
+        ],
+      },
+    ],
+    [hidden, { "a,b": true, "-x": true }],
+  ] as const) {
+    expect(decodePageField(f, { x: f.codec.encode(value as never) }, "x").decoded).toMatchObject({
+      success: true,
+      data: value,
+    });
     expect(f.codec.decode("invalid")).toBe(INVALID);
   }
   expect(sort.schema.safeParse({ columns: [{ key: "a", dir: "up" }] }).success).toBe(false);
-  expect(sort.schema.safeParse({ columns: Array.from({ length: 9 }, () => ({ key: "a", dir: "asc" })) }).success).toBe(false);
+  expect(
+    sort.schema.safeParse({ columns: Array.from({ length: 9 }, () => ({ key: "a", dir: "asc" })) })
+      .success,
+  ).toBe(false);
   expect(hidden.schema.safeParse({ a: false }).success).toBe(false);
   expect(routeAddress("space").agent.keys).not.toContain("ids");
 });
@@ -116,8 +162,11 @@ test("open-picture ordered lists preserve order, repeats and explicit empty thro
 test("structured scalar fields may contain arrays without acquiring collection cardinality", () => {
   const schema = z.object({ columns: z.array(z.string()) }).default({ columns: [] });
   const scalar = field(schema, { url: "replace" }, jsonCodec(schema));
-  expect(decodePageField(scalar, { scalar: '{"columns":["name","flow"]}' }, "scalar").decoded).toMatchObject({
-    success: true, data: { columns: ["name", "flow"] },
+  expect(
+    decodePageField(scalar, { scalar: '{"columns":["name","flow"]}' }, "scalar").decoded,
+  ).toMatchObject({
+    success: true,
+    data: { columns: ["name", "flow"] },
   });
   expect(scalar).not.toHaveProperty("cardinality");
 });

@@ -14,7 +14,11 @@ import {
 } from "@pe/agent-contracts";
 import { BridgeError } from "@pe/host-internal/dispatch";
 import { canonicalJson } from "@pe/host-internal/native-read";
-import { bridgeSessionsListSchema, type BridgeSessionsListData, type HostSessionScope } from "@pe/host-contracts/operation-types";
+import {
+  bridgeSessionsListSchema,
+  type BridgeSessionsListData,
+  type HostSessionScope,
+} from "@pe/host-contracts/operation-types";
 import { listBridgeSessions } from "./local-ops.ts";
 import type { DoorFailure, RequestIdentity } from "@pe/host-internal/request-contracts";
 import { RevitBridge } from "@pe/host-internal/bridge";
@@ -50,7 +54,10 @@ interface Inventory {
 }
 
 const sessionCodec = Schema.Struct({ sessionId: Schema.String });
-const documentRow = documentRefSchema.extend({ address: addressSchema.nullable(), projectHome: z.string().nullable().optional() });
+const documentRow = documentRefSchema.extend({
+  address: addressSchema.nullable(),
+  projectHome: z.string().nullable().optional(),
+});
 const rowCodec = Schema.declare((u): u is DocumentRow => documentRow.safeParse(u).success);
 /** One selector's input and its fence: the selector with its exact arguments. */
 const selector = (name: Exclude<keyof Inventory, "subscribe">, args: Schema.Json) => {
@@ -137,7 +144,11 @@ export class HostSessionInventory extends Context.Service<HostSessionInventory, 
     reader: RecordingReader,
     bindings: ReadonlyMap<string, string> = new Map(),
   ) => {
-    const replay = <A, I>(name: Exclude<keyof Inventory, "subscribe">, args: Schema.Json, codec: Schema.Codec<A, I>) => {
+    const replay = <A, I>(
+      name: Exclude<keyof Inventory, "subscribe">,
+      args: Schema.Json,
+      codec: Schema.Codec<A, I>,
+    ) => {
       const { input, scope } = selector(name, args);
       return replayInput(reader, input, scope, codec, bindings.get(inputBindingKey(input, scope)));
     };

@@ -12,7 +12,12 @@ import {
   type Cut,
   type Point,
 } from "@pe/web-kernel/scene/cuts";
-import { clipContains, rebaseClip, sectionContains, sectionVolume } from "@pe/web-kernel/scene/section";
+import {
+  clipContains,
+  rebaseClip,
+  sectionContains,
+  sectionVolume,
+} from "@pe/web-kernel/scene/section";
 import { sectionProject } from "@pe/web-kernel/scene/projection";
 
 const bounds = { minX: -10, minY: -10, minZ: -10, maxX: 10, maxY: 10, maxZ: 10 };

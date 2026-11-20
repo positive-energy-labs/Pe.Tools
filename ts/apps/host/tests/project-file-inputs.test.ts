@@ -22,7 +22,9 @@ import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/requ
 import { settle } from "./effect-test.ts";
 
 const closes: (() => Promise<unknown>)[] = [];
-afterEach(async () => { for (const close of closes.splice(0).reverse()) await close(); });
+afterEach(async () => {
+  for (const close of closes.splice(0).reverse()) await close();
+});
 
 test("file inputs retain the target pointer for project Catalogs and family spec evidence", async () => {
   const f = await projectFixture(false);
@@ -30,29 +32,77 @@ test("file inputs retain the target pointer for project Catalogs and family spec
   await writeFile(join(f.project, "Catalogs", "site", "bad.json"), "{");
   // A broken saved evidence link is a project-owned finding, distinct from an absent link.
   await mkdir(join(f.pod, "settings", "family"), { recursive: true });
-  await writeFile(join(f.pod, "settings", "family", "fixture.json.spec.json"), JSON.stringify({ path: "settings/family/missing.json" }));
-  const definition = read("test.project-inputs", { input: z.object({ name: z.string(), args: z.unknown() }), output: z.unknown(),
-    run: (ctx, args) => ctx.read(leaf(`file:${args.name}`, z.unknown(), z.unknown()), args.args) });
-  const unregister = registeredReads.register({ witness: definition }); closes.push(async () => unregister());
-  const inputs = await settle(HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" }))));
-  const web = HttpRouter.toWebHandler(readInputRoutes(inputs, { store: fileRouteDocumentStore(stateFixture(join(f.dir, "file-work"))), live: {
-    owner: new DuctsReadings(), files: DuctFiles.layer(hostState().home),
-    native: Layer.succeed(HostNativeRead, { resolve: () => Effect.die("Unexpected native read"), read: () => Effect.die("Unexpected native read") }),
-    marks: Layer.succeed(HostDocumentMarks, hostMarks({ changedAt: () => null, subscribe: () => () => {} })),
-    inventory: Layer.succeed(HostSessionInventory, { document: () => Effect.succeed({ ...f.target.ref, address: null, projectHome: "Projects/Example" }),
-      list: () => Effect.die("Unexpected list"), session: () => Effect.die("Unexpected session"), attachment: () => Effect.die("Unexpected attachment"), subscribe: () => () => {} }),
-  } }).pipe(Layer.provide(NodeServices.layer)), { disableLogger: true });
+  await writeFile(
+    join(f.pod, "settings", "family", "fixture.json.spec.json"),
+    JSON.stringify({ path: "settings/family/missing.json" }),
+  );
+  const definition = read("test.project-inputs", {
+    input: z.object({ name: z.string(), args: z.unknown() }),
+    output: z.unknown(),
+    run: (ctx, args) => ctx.read(leaf(`file:${args.name}`, z.unknown(), z.unknown()), args.args),
+  });
+  const unregister = registeredReads.register({ witness: definition });
+  closes.push(async () => unregister());
+  const inputs = await settle(
+    HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live" }))),
+  );
+  const web = HttpRouter.toWebHandler(
+    readInputRoutes(inputs, {
+      store: fileRouteDocumentStore(stateFixture(join(f.dir, "file-work"))),
+      live: {
+        owner: new DuctsReadings(),
+        files: DuctFiles.layer(hostState().home),
+        native: Layer.succeed(HostNativeRead, {
+          resolve: () => Effect.die("Unexpected native read"),
+          read: () => Effect.die("Unexpected native read"),
+        }),
+        marks: Layer.succeed(
+          HostDocumentMarks,
+          hostMarks({ changedAt: () => null, subscribe: () => () => {} }),
+        ),
+        inventory: Layer.succeed(HostSessionInventory, {
+          document: () =>
+            Effect.succeed({ ...f.target.ref, address: null, projectHome: "Projects/Example" }),
+          list: () => Effect.die("Unexpected list"),
+          session: () => Effect.die("Unexpected session"),
+          attachment: () => Effect.die("Unexpected attachment"),
+          subscribe: () => () => {},
+        }),
+      },
+    }).pipe(Layer.provide(NodeServices.layer)),
+    { disableLogger: true },
+  );
   closes.push(() => web.dispose());
   const take = async (name: string, args: unknown) => {
-    const response = await web.handler(new Request("http://fixture/pe/reads/value", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ read: definition.name, args: { name, args }, subscription: crypto.randomUUID(), generation: 0 }) }),
-      Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})));
+    const response = await web.handler(
+      new Request("http://fixture/pe/reads/value", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          read: definition.name,
+          args: { name, args },
+          subscription: crypto.randomUUID(),
+          generation: 0,
+        }),
+      }),
+      Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})),
+    );
     expect(response.status, await response.clone().text()).toBe(200);
     const value = await response.json();
     expect(value.value, JSON.stringify(value)).toBeTruthy();
     return value.value.data;
   };
-  expect(await take("catalogs", f.target.ref)).toMatchObject({ findings: [expect.stringContaining("site")] });
-  expect(await take("family-spec", { pod: "project-only", path: "settings/family/fixture.json", target: f.target.ref }))
-    .toMatchObject({ doc: null, error: expect.stringContaining("Saved PDF evidence is unavailable") });
+  expect(await take("catalogs", f.target.ref)).toMatchObject({
+    findings: [expect.stringContaining("site")],
+  });
+  expect(
+    await take("family-spec", {
+      pod: "project-only",
+      path: "settings/family/fixture.json",
+      target: f.target.ref,
+    }),
+  ).toMatchObject({
+    doc: null,
+    error: expect.stringContaining("Saved PDF evidence is unavailable"),
+  });
 });

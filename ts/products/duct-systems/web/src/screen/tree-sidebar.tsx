@@ -173,7 +173,9 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
     subjectOf: useCallback(
       (node: TreeNode) => {
         const key =
-          node.kind === "element" ? elements.keyOf(node.id!) : (`${node.kind}:${node.key}` as const);
+          node.kind === "element"
+            ? elements.keyOf(node.id!)
+            : (`${node.kind}:${node.key}` as const);
         return doc && key ? { doc, key } : undefined;
       },
       [doc, elements],
@@ -268,7 +270,9 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
           />
         ) : undefined,
         // What the row cannot say with a number: "Rule a fan to price this system", a shared network, a subtotal.
-        ...(n.message ? { sub: <span data-e-message="">{n.message}</span>, lines: 2 as const } : {}),
+        ...(n.message
+          ? { sub: <span data-e-message="">{n.message}</span>, lines: 2 as const }
+          : {}),
         revit: target.ids,
         revitRefs: target.refs,
       };

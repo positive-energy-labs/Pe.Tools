@@ -75,7 +75,11 @@ const host = (over: Partial<HostCalc> = {}): HostCalc => ({
 });
 
 it("ENCOUNTERS keeps verdict and static apart: only a supply meeting a discharge is backflow with host static", () => {
-  expect(ENCOUNTERS["supply>discharge"]).toEqual({ verdict: "unruled", static: "host-calc", backflow: true });
+  expect(ENCOUNTERS["supply>discharge"]).toEqual({
+    verdict: "unruled",
+    static: "host-calc",
+    backflow: true,
+  });
   for (const key of ["supply>inlet", "return>inlet", "return>discharge"] as const)
     expect(ENCOUNTERS[key]).toEqual({ verdict: "accepted", static: "none", backflow: false });
   expect(ENCOUNTERS["return>unknown"].verdict).toBe("unruled");
@@ -109,14 +113,27 @@ it("an unruled encounter never reads complete: backflow is a boundary with its e
 it("H5 clause 1: rated pressure remaining at N", () => {
   const e = encountersOf(SELF, paths, legs)[0]!.encounter;
   // Clause 1: rated 1.2 - upstream 0.3 = 0.9 (old 0.3).
-  expect(hostStatic(host({ esp: { rated: resolveValue({ model: { value: 1.2, author: null, ref: "rated" } }) } }), e, "n"))
-    .toMatchObject({ inWg: expect.closeTo(0.9), basis: "hb", source: "host rated ESP minus loss to tie-in" });
+  expect(
+    hostStatic(
+      host({ esp: { rated: resolveValue({ model: { value: 1.2, author: null, ref: "rated" } }) } }),
+      e,
+      "n",
+    ),
+  ).toMatchObject({
+    inWg: expect.closeTo(0.9),
+    basis: "hb",
+    source: "host rated ESP minus loss to tie-in",
+  });
 });
 
 it("H5 clause 2: missing rating assumes the host is balanced", () => {
   const e = encountersOf(SELF, paths, legs)[0]!.encounter;
   // Clause 2: required 1.0 - upstream 0.3 = 0.7 (old 0.3); warning, never a coverage gap.
-  expect(hostStatic(host(), e, "n")).toEqual({ inWg: 0.7, basis: "hb", source: "host required ESP minus loss to tie-in; assumes the host is balanced" });
+  expect(hostStatic(host(), e, "n")).toEqual({
+    inWg: 0.7,
+    basis: "hb",
+    source: "host required ESP minus loss to tie-in; assumes the host is balanced",
+  });
 });
 
 it.each([
@@ -128,18 +145,28 @@ it.each([
   const valid = resolveValue({ model: { value: 1.2, author: null, ref: "rated" } });
   if (valid.status !== "valid") throw Error("Expected a valid fixture rating");
   // Inject at hostStatic's boundary without normalizing malformed ratings through resolveValue.
-  const rated = value === "invalid" ? { ...valid, status: "invalid" as const, value: null } : { ...valid, value };
+  const rated =
+    value === "invalid"
+      ? { ...valid, status: "invalid" as const, value: null }
+      : { ...valid, value };
   const e = encountersOf(SELF, paths, legs)[0]!.encounter;
   expect(hostStatic(host({ esp: { rated } }), e, "n")).toEqual({
-    kind: "host-calc", elementId: 20, ref: "host 200:0 rated ESP is invalid",
+    kind: "host-calc",
+    elementId: 20,
+    ref: "host 200:0 rated ESP is invalid",
   });
 });
 
 it("H5 clause 5: a rating below required ESP is backflow/deadhead", () => {
   const e = encountersOf(SELF, paths, legs)[0]!.encounter;
   // Clause 5: rated 0.8 < required 1.0, so no pressure can authorize a write.
-  expect(hostStatic(host({ esp: { rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }) } }), e, "n"))
-    .toMatchObject({ kind: "backflow", detail: expect.stringContaining("backflow/deadhead") });
+  expect(
+    hostStatic(
+      host({ esp: { rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }) } }),
+      e,
+      "n",
+    ),
+  ).toMatchObject({ kind: "backflow", detail: expect.stringContaining("backflow/deadhead") });
 });
 
 it("H5: only a complete host at this basis answers", () => {
@@ -147,16 +174,25 @@ it("H5: only a complete host at this basis answers", () => {
   const gap = (h: Parameters<typeof hostStatic>[0]) => hostStatic(h, e, "n");
   expect(gap("absent")).toMatchObject({ kind: "host-calc", elementId: 20 });
   expect(gap("cycle")).toMatchObject({ kind: "cycle" });
-  expect(gap(host({ network: "older" }))).toMatchObject({ kind: "host-calc", ref: expect.stringContaining("stale") });
+  expect(gap(host({ network: "older" }))).toMatchObject({
+    kind: "host-calc",
+    ref: expect.stringContaining("stale"),
+  });
   expect(
-    gap(host({ claim: { kind: "incomplete", basis: "hb", knownInWg: 0, coverage: [], blockingIds: ["x"] } })),
+    gap(
+      host({
+        claim: { kind: "incomplete", basis: "hb", knownInWg: 0, coverage: [], blockingIds: ["x"] },
+      }),
+    ),
   ).toMatchObject({ kind: "host-calc", ref: expect.stringContaining("incomplete") });
   expect(gap(host({ paths: [path("supply", ["h1"], 0.3)] }))).toMatchObject({ kind: "host-calc" });
 });
 
 it("a positive tie-in static is added once, on its own path; an accepted tie-in with no host number is a gap", () => {
   const accepted = () =>
-    encountersOf(SELF, paths, legs, [{ at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" }]);
+    encountersOf(SELF, paths, legs, [
+      { at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" },
+    ]);
   // Accepted, but no host calc answered: never complete.
   expect(claimOf(facts({ met: accepted() }))).toMatchObject({
     kind: "incomplete",
@@ -186,22 +222,44 @@ it("H5 clause 3: a priced run beyond N pays the downstream loss once", () => {
   ]);
   met[0]!.encounter.static = { kind: "host-calc", basis: "hb", inWg: 0.7, source: "host" };
   // 0.55 full supply + 0.2 return + 0.03 allowances = 0.78; no extra 0.7 at N.
-  expect(claimOf(facts({ paths: sharedPaths, legs: sharedLegs, met })))
-    .toMatchObject({ kind: "complete", requiredEspInWg: 0.78 });
+  expect(claimOf(facts({ paths: sharedPaths, legs: sharedLegs, met }))).toMatchObject({
+    kind: "complete",
+    requiredEspInWg: 0.78,
+  });
   // An unpriced onward run or a different branch is not evidence that N onward was paid.
-  expect(pricesBeyond(met[0]!, sharedPaths, { ...sharedLegs, downstream: leg("downstream", 50, null) })).toBe(false);
-  expect(pricesBeyond(met[0]!, [{ ...sharedPaths[0]!, legIds: ["r", "tie", "downstream"] }, ...sharedPaths.slice(1)], sharedLegs)).toBe(false);
+  expect(
+    pricesBeyond(met[0]!, sharedPaths, { ...sharedLegs, downstream: leg("downstream", 50, null) }),
+  ).toBe(false);
+  expect(
+    pricesBeyond(
+      met[0]!,
+      [{ ...sharedPaths[0]!, legIds: ["r", "tie", "downstream"] }, ...sharedPaths.slice(1)],
+      sharedLegs,
+    ),
+  ).toBe(false);
 });
 
 it("a return tie-in takes no credit and adds nothing", () => {
   const onReturn = [
     path("supply", ["a"], 0.1),
-    path("return", ["r"], 0.2, { kind: "sibling-fan", elementId: 200, fan: HOST, reached: "inlet" }),
+    path("return", ["r"], 0.2, {
+      kind: "sibling-fan",
+      elementId: 200,
+      fan: HOST,
+      reached: "inlet",
+    }),
   ];
   const met = encountersOf(SELF, onReturn, legs);
-  expect(met[0]!.encounter).toMatchObject({ side: "return", verdict: "accepted", static: { kind: "none" } });
+  expect(met[0]!.encounter).toMatchObject({
+    side: "return",
+    verdict: "accepted",
+    static: { kind: "none" },
+  });
   // Clause 4: 0.1 supply + 0.2 return + 0.03 allowances + 0 host pressure = 0.33.
-  expect(claimOf(facts({ paths: onReturn, met }))).toMatchObject({ kind: "complete", requiredEspInWg: 0.33 });
+  expect(claimOf(facts({ paths: onReturn, met }))).toMatchObject({
+    kind: "complete",
+    requiredEspInWg: 0.33,
+  });
 });
 
 it("an unpriced leg with no blocker is a pricing gap, and a side with no path is never complete", () => {
@@ -233,20 +291,48 @@ it("coverage: every way a read can fail withholds `complete`, and only a fully r
     "absent walk and reach": {},
     "null walk and reach": { walk: null, reach: null },
     "a merged part with no evidence, beside a walk": mergeCoverage([{ walk: TEST_WALK }, {}]),
-    "a merged part with no evidence, beside a reach": mergeCoverage([{ walk: null, reach: null }, { reach }]),
-    "a merged part with no evidence, beside a reach that names only another fan's peer (P-047)": mergeCoverage([{}, { reach: { complete: false, unreadPeers: [peer(99)] } }]),
-    "a walk that does not say whether it was truncated (P-047)": { walk: JSON.parse(JSON.stringify({ ...TEST_WALK, truncated: undefined })) }, // off the wire: the key is gone
+    "a merged part with no evidence, beside a reach": mergeCoverage([
+      { walk: null, reach: null },
+      { reach },
+    ]),
+    "a merged part with no evidence, beside a reach that names only another fan's peer (P-047)":
+      mergeCoverage([{}, { reach: { complete: false, unreadPeers: [peer(99)] } }]),
+    "a walk that does not say whether it was truncated (P-047)": {
+      walk: JSON.parse(JSON.stringify({ ...TEST_WALK, truncated: undefined })),
+    }, // off the wire: the key is gone
     "a walk's unread peer on a walked element": { walk: { ...TEST_WALK, unreadPeers: [peer(30)] } },
-    "a reach's unread peer on a walked element": { reach: { complete: false, unreadPeers: [peer(30)] } },
-    "a failed system seed read (connector -1)": { walk: TEST_WALK, reach: { complete: false, unreadPeers: [peer(555, -1)] } },
-    "a failed system seed read on a reach that calls itself complete": { reach: { complete: true, unreadPeers: [peer(555, -1)] } },
-    "an incomplete reach that names no peer": { walk: TEST_WALK, reach: { complete: false, unreadPeers: [] } },
-    "a walk from before the native read listed unread peers": { walk: { ...TEST_WALK, unreadPeers: undefined } as never },
+    "a reach's unread peer on a walked element": {
+      reach: { complete: false, unreadPeers: [peer(30)] },
+    },
+    "a failed system seed read (connector -1)": {
+      walk: TEST_WALK,
+      reach: { complete: false, unreadPeers: [peer(555, -1)] },
+    },
+    "a failed system seed read on a reach that calls itself complete": {
+      reach: { complete: true, unreadPeers: [peer(555, -1)] },
+    },
+    "an incomplete reach that names no peer": {
+      walk: TEST_WALK,
+      reach: { complete: false, unreadPeers: [] },
+    },
+    "a walk from before the native read listed unread peers": {
+      walk: { ...TEST_WALK, unreadPeers: undefined } as never,
+    },
     "a truncated walk": { walk: { ...TEST_WALK, truncated: true } },
-    "a truncated walk whose only unread peer is another fan's": { walk: { ...TEST_WALK, truncated: true, unreadPeers: [peer(99)] } },
-    "an unread peer on an element no read holds": { reach: { complete: false, unreadPeers: [peer(12345)] } },
-    "a merge whose second walk was truncated": mergeCoverage([{ walk: TEST_WALK }, { walk: { ...TEST_WALK, truncated: true } }]),
-    "a merge whose first reach lost a peer": mergeCoverage([{ reach: { complete: false, unreadPeers: [peer(30)] } }, { reach }]),
+    "a truncated walk whose only unread peer is another fan's": {
+      walk: { ...TEST_WALK, truncated: true, unreadPeers: [peer(99)] },
+    },
+    "an unread peer on an element no read holds": {
+      reach: { complete: false, unreadPeers: [peer(12345)] },
+    },
+    "a merge whose second walk was truncated": mergeCoverage([
+      { walk: TEST_WALK },
+      { walk: { ...TEST_WALK, truncated: true } },
+    ]),
+    "a merge whose first reach lost a peer": mergeCoverage([
+      { reach: { complete: false, unreadPeers: [peer(30)] } },
+      { reach },
+    ]),
   };
   for (const [name, evidence] of Object.entries(failures)) {
     const got = claim(evidence);
@@ -257,7 +343,10 @@ it("coverage: every way a read can fail withholds `complete`, and only a fully r
   const wholes: Record<string, Pick<DuctSnapshot, "walk" | "reach">> = {
     "a walk that read every peer": { walk: TEST_WALK },
     "a walk and a reach that read every peer": { walk: TEST_WALK, reach },
-    "a reach incomplete only by another fan's peer": { reach: { complete: false, unreadPeers: [peer(99)] } },
+    "a reach incomplete only by another fan's peer": {
+      reach: { complete: false, unreadPeers: [peer(99)] },
+    },
   };
-  for (const [name, evidence] of Object.entries(wholes)) expect(claim(evidence).claim.kind, name).toBe("complete");
+  for (const [name, evidence] of Object.entries(wholes))
+    expect(claim(evidence).claim.kind, name).toBe("complete");
 });

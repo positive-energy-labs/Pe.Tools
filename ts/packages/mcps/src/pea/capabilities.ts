@@ -129,7 +129,10 @@ export function createCapabilityCatalogSource(options: {
         readScoped(scope),
         recents(),
         options.machine(),
-        options.pages?.(scope).catch((error) => { console.error("capabilities: asynchronous operation failed", error); return undefined; }),
+        options.pages?.(scope).catch((error) => {
+          console.error("capabilities: asynchronous operation failed", error);
+          return undefined;
+        }),
       ]);
       const catalog = pages
         ? {
@@ -159,7 +162,10 @@ export function createCapabilityCatalogSource(options: {
 
   async function readScoped(scope: HostSessionScope): Promise<Omit<CapabilityCatalog, "machine">> {
     // Live registrations key the cache, so a trusted, replaced or withdrawn route is never served stale.
-    const cacheKey = JSON.stringify([scope, (options.admittedRoutes?.() ?? []).map(({ work: _work, ...view }) => view)]);
+    const cacheKey = JSON.stringify([
+      scope,
+      (options.admittedRoutes?.() ?? []).map(({ work: _work, ...view }) => view),
+    ]);
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 

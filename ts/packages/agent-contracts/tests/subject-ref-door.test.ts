@@ -7,6 +7,9 @@ test("the SubjectRef codec has a zod-only subpath door a Pod can bundle", () => 
   const key = uniqueIdSchema.parse("abc-123");
   const code = subjectCode({ keyKind: "UniqueId", key });
   expect(decode(code)).toEqual({ ok: true, value: { keyKind: "UniqueId", key } });
-  const imports = readFileSync(new URL("../src/subject-ref.ts", import.meta.url), "utf8").match(/^import .* from "([^"]+)";$/gm) ?? [];
+  const imports =
+    readFileSync(new URL("../src/subject-ref.ts", import.meta.url), "utf8").match(
+      /^import .* from "([^"]+)";$/gm,
+    ) ?? [];
   expect(imports.map((line) => line.replace(/^.* from "([^"]+)";$/, "$1"))).toEqual(["zod"]);
 });

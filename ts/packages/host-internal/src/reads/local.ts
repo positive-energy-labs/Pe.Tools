@@ -1,5 +1,9 @@
 import type { z } from "zod";
-import { tsOnlyOperationSchemas, type OpRequestOf, type OpResponseOf } from "@pe/host-contracts/operation-types";
+import {
+  tsOnlyOperationSchemas,
+  type OpRequestOf,
+  type OpResponseOf,
+} from "@pe/host-contracts/operation-types";
 import { effectDecoder } from "@pe/host-contracts/decoders";
 import { leaf } from "./door.ts";
 

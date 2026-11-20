@@ -46,8 +46,8 @@ const openTitles = (inventory: Reading<unknown>) => {
   );
 };
 
-export {parseTarget} from "./target-codec";
-import {parseTarget} from "./target-codec";
+export { parseTarget } from "./target-codec";
+import { parseTarget } from "./target-codec";
 
 export type TargetProvenance =
   | { source: "url-pin"; raw: string }

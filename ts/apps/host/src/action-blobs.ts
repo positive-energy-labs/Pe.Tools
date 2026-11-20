@@ -12,9 +12,15 @@ export async function get(ref: BlobRef): Promise<Buffer> {
   blobRefSchema.parse(ref);
   const found = rested(hostState(), ref.digest);
   if (found.kind !== "ok")
-    throw refused(`Stored bytes are ${found.kind === "kept" ? `unreadable: ${found.reason}` : found.kind} for ${ref.fileName} (${ref.digest})`, `blob.${found.kind === "kept" ? "unreadable" : found.kind}`);
+    throw refused(
+      `Stored bytes are ${found.kind === "kept" ? `unreadable: ${found.reason}` : found.kind} for ${ref.fileName} (${ref.digest})`,
+      `blob.${found.kind === "kept" ? "unreadable" : found.kind}`,
+    );
   const bytes = found.bytes;
   if (bytes.length !== ref.size)
-    throw refused(`Stored bytes failed integrity for ${ref.fileName} (${ref.digest})`, "blob.corrupt");
+    throw refused(
+      `Stored bytes failed integrity for ${ref.fileName} (${ref.digest})`,
+      "blob.corrupt",
+    );
   return bytes;
 }

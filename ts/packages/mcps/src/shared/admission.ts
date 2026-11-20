@@ -16,7 +16,11 @@ import {
   type ExecutionTarget,
   type ActionNeed,
 } from "@pe/agent-contracts";
-import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.generated.ts";
+import {
+  commands,
+  commandTarget,
+  type SemanticActionKey,
+} from "../pea/product-actions.generated.ts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
@@ -187,19 +191,27 @@ export async function runCapability(
     const read = async (key: WorkHandle["key"]) => {
       const response = await createPeClient(context.hostBaseUrl, fetch).response("work.get", {
         params: { route: key.route },
-        query: key.binding === "address"
-          ? { target: key.target, ...(key.from ? { open: `${key.from.session}/${key.from.openId}` } : {}) }
-          : key.binding === "open"
-            ? { open: `${key.open.session}/${key.open.openId}` }
-            : key.binding === "workspace" ? { work: key.work } : {},
+        query:
+          key.binding === "address"
+            ? {
+                target: key.target,
+                ...(key.from ? { open: `${key.from.session}/${key.from.openId}` } : {}),
+              }
+            : key.binding === "open"
+              ? { open: `${key.open.session}/${key.open.openId}` }
+              : key.binding === "workspace"
+                ? { work: key.work }
+                : {},
       });
-      if (!response.ok) throw Error(`Read route:${key.route} Work before preview (${response.status})`);
+      if (!response.ok)
+        throw Error(`Read route:${key.route} Work before preview (${response.status})`);
       // The read returns the stored Work's one handle; compare it, never a handle rebuilt from key and revision.
-      const view = await response.json() as { doc: unknown; handle: unknown };
+      const view = (await response.json()) as { doc: unknown; handle: unknown };
       return { doc: view.doc, handle: workHandleSchema.parse(view.handle) };
     };
     for (const preflight of productAdmissionPreflights)
-      if (preflight.routes.includes(asked.data.key.route)) await preflight.run(input, asked.data, read);
+      if (preflight.routes.includes(asked.data.key.route))
+        await preflight.run(input, asked.data, read);
   }
   const id = context.actionId ?? crypto.randomUUID();
   await context.beforeAdmission?.(id);

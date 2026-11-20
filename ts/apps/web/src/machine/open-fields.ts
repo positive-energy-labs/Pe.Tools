@@ -29,4 +29,10 @@ export const fields = {
   ),
 };
 export const loaded = read(hostRead(contracts.documents));
-export type OpenContext = ContextOf<typeof fields, typeof loaded, never, never, Verbs<"start" | "open" | "close" | "stop" | "restart">>;
+export type OpenContext = ContextOf<
+  typeof fields,
+  typeof loaded,
+  never,
+  never,
+  Verbs<"start" | "open" | "close" | "stop" | "restart">
+>;

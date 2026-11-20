@@ -42,7 +42,10 @@ export const uniqueIdSchema = z.custom<UniqueId>(
 /** The one door for `DocumentKey`; it refuses the `doc:<session>/<openId>` capability row (session state, not identity). */
 export const documentKeySchema = z.custom<DocumentKey>(
   (v) => typeof v === "string" && v.length > 0 && !/^doc:[^/]*\/./.test(v),
-  { message: "a document key is the stable address key, never a session `doc:<session>/<openId>` row" },
+  {
+    message:
+      "a document key is the stable address key, never a session `doc:<session>/<openId>` row",
+  },
 );
 /** Mints a `DocumentKey` from trusted address text; a refusal is a programming error. */
 export const documentKeyOf = (text: string): DocumentKey => documentKeySchema.parse(text);
@@ -76,18 +79,28 @@ export type SubjectRef = z.output<typeof subjectRefSchema>;
 /** One family/type spelling for subjects and domain readouts. */
 export function familyTypeName(node: { family?: string | null; type?: string | null }): string {
   const family = node.family?.includes("_") && node.type?.trim() ? null : node.family;
-  return [...new Set([family, node.type].map(v => v?.trim()).filter(Boolean))].join(" · ");
+  return [...new Set([family, node.type].map((v) => v?.trim()).filter(Boolean))].join(" · ");
 }
 
 /** Names come from the current roster, then the subject itself; unknown elements never expose a raw code. */
-export function subjectName(code: string, roster: readonly { id: string; label: string }[] = []): string {
+export function subjectName(
+  code: string,
+  roster: readonly { id: string; label: string }[] = [],
+): string {
   const parsed = decode(code);
   if (!parsed.ok) return "subject";
   const ref = parsed.value;
   const base = subjectCode({ ...ref, sub: undefined });
-  const known = roster.find(row => row.id === base)?.label;
-  const name = known ?? (ref.keyKind === "name" ? ref.key.length === 2 ? familyTypeName({ family: ref.key[0], type: ref.key[1] }) : ref.key.join(" · ")
-    : ref.keyKind === "UniqueId" ? `element ${ref.key.slice(0, 8)}` : ref.key);
+  const known = roster.find((row) => row.id === base)?.label;
+  const name =
+    known ??
+    (ref.keyKind === "name"
+      ? ref.key.length === 2
+        ? familyTypeName({ family: ref.key[0], type: ref.key[1] })
+        : ref.key.join(" · ")
+      : ref.keyKind === "UniqueId"
+        ? `element ${ref.key.slice(0, 8)}`
+        : ref.key);
   return ref.sub ? `${name} · ${"port" in ref.sub ? `port ${ref.sub.port}` : ref.sub.field}` : name;
 }
 export type SubjectPlacement = z.output<typeof placementSchema>;
@@ -219,12 +232,9 @@ export const decode = (code: string): SubjectRefResult<SubjectRef> => {
 
 /** The one Zod door for a SubjectRefCode: it admits exactly what `decode` admits. */
 // The brand is type-only: a transform would make every Work schema unrepresentable in JSON Schema.
-export const subjectRefCodeSchema = z
-  .string()
-  .refine((v) => decode(v).ok, { message: "not a canonical SubjectRef code" }) as unknown as z.ZodType<
-  SubjectRefCode,
-  string
->;
+export const subjectRefCodeSchema = z.string().refine((v) => decode(v).ok, {
+  message: "not a canonical SubjectRef code",
+}) as unknown as z.ZodType<SubjectRefCode, string>;
 /** Mints a code from refs the caller built from trusted data; a refusal is a programming error. */
 export const subjectCode = (ref: SubjectRef): SubjectRefCode => {
   const code = encode(ref);
@@ -240,10 +250,16 @@ export const subjectOf = (code: SubjectRefCode): SubjectRef => {
 
 /** ADR 0035 rule 3: a `parameter` binding keys by UniqueId with no sub and no placement. */
 /** A one-name subject set (`name:["<key>"]`) for a route whose subject is one named thing (an op, a Page). */
-export const oneName = (key: string) =>
-  ({ kind: "ids" as const, ids: key ? [subjectCode({ keyKind: "name", key: [key] })] : [] });
+export const oneName = (key: string) => ({
+  kind: "ids" as const,
+  ids: key ? [subjectCode({ keyKind: "name", key: [key] })] : [],
+});
 /** The first name key of a subject set, or "" with none chosen; a non-name ref is not one. */
-export const nameOf = (value: { readonly kind: "all" } | { readonly kind: "ids"; readonly ids: readonly SubjectRefCode[] }): string => {
+export const nameOf = (
+  value:
+    | { readonly kind: "all" }
+    | { readonly kind: "ids"; readonly ids: readonly SubjectRefCode[] },
+): string => {
   const ref = value.kind === "ids" && value.ids[0] ? subjectOf(value.ids[0]) : null;
   return ref?.keyKind === "name" ? (ref.key[0] ?? "") : "";
 };

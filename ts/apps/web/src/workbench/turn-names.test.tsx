@@ -133,5 +133,7 @@ test("old persisted low-id names cannot rewrite dimensions or equipment tags", a
     "30×30 end cap (Standard1). FA 43 → DH-20 inlet → FC-23.",
   );
   const links = [...view.container.querySelectorAll(".subject-ref")];
-  expect(links.map((link) => link.getAttribute("data-subject"))).toEqual([elementKey("u-14107111")]);
+  expect(links.map((link) => link.getAttribute("data-subject"))).toEqual([
+    elementKey("u-14107111"),
+  ]);
 });

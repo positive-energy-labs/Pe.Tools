@@ -8,11 +8,56 @@ import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 
 const operations: HostOperationDefinition[] = [
-  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "scripting.execute", intent: "Mutate", needs: "document" },
-  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "scripting.workspace.bootstrap", intent: "Mutate", needs: "nothing" },
-  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "pod.import", intent: "Mutate", needs: "nothing" },
-  {subject:"None",touches:"Metadata",effect:"ModelWrite",cardinality:"One",costTier:"Cheap", key: "pod.export", intent: "Mutate", needs: "nothing" },
-  {subject:"None",touches:"Metadata",effect:"Read",cardinality:"One",costTier:"Cheap", key: "revit.context.summary", intent: "Read", needs: "document" },
+  {
+    subject: "None",
+    touches: "Metadata",
+    effect: "ModelWrite",
+    cardinality: "One",
+    costTier: "Cheap",
+    key: "scripting.execute",
+    intent: "Mutate",
+    needs: "document",
+  },
+  {
+    subject: "None",
+    touches: "Metadata",
+    effect: "ModelWrite",
+    cardinality: "One",
+    costTier: "Cheap",
+    key: "scripting.workspace.bootstrap",
+    intent: "Mutate",
+    needs: "nothing",
+  },
+  {
+    subject: "None",
+    touches: "Metadata",
+    effect: "ModelWrite",
+    cardinality: "One",
+    costTier: "Cheap",
+    key: "pod.import",
+    intent: "Mutate",
+    needs: "nothing",
+  },
+  {
+    subject: "None",
+    touches: "Metadata",
+    effect: "ModelWrite",
+    cardinality: "One",
+    costTier: "Cheap",
+    key: "pod.export",
+    intent: "Mutate",
+    needs: "nothing",
+  },
+  {
+    subject: "None",
+    touches: "Metadata",
+    effect: "Read",
+    cardinality: "One",
+    costTier: "Cheap",
+    key: "revit.context.summary",
+    intent: "Read",
+    needs: "document",
+  },
 ];
 const target = { kind: "open", ref: { session: "A", openId: "open-A" } } as const;
 const destination = { kind: "document", ref: target.ref };
@@ -240,7 +285,10 @@ test("pe_do replays the original receipt without catalog or target discovery and
   expect(posts).toEqual([]);
   expect(
     await call(peDo, { key: "op:scripting.execute", input: { scriptContent: "changed" } }),
-  ).toMatchObject({ isError: true, content: expect.stringContaining("different intent or target") });
+  ).toMatchObject({
+    isError: true,
+    content: expect.stringContaining("different intent or target"),
+  });
   expect(
     await call(peDo, {
       key: "op:scripting.execute",
@@ -366,56 +414,113 @@ test("a direct RPC caller recovers its original command before consulting a miss
   expect(reads).toEqual(["/actions"]);
 });
 
-
 import { runCapability } from "../src/shared/admission.ts";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { workHandle } from "@pe/agent-contracts";
-test.each(["open", "address", "workspace", "host"] as const)("loss preview reads exact %s Work and refuses groups without a fan walk", async binding => {
- for (const scoped of [false, true]) {
-  const posts: unknown[] = [];
-  const key = binding === "address" ? {route: "duct-systems", binding, target: "C:/Models/A.rvt"}
-    : binding === "open" ? {route: "duct-systems", binding, target: null, open: target.ref}
-    : binding === "workspace" ? {route: "duct-systems", binding, target: null, work: "draft"}
-    : {route: "duct-systems", binding, target: null};
-  const work = { key, revision: 3 };
-  vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    if (url.pathname === "/pe/route-state/duct-systems" || url.pathname === "/pe/route-state/fans") {
-      const expected = binding === "address" ? {target: "C:/Models/A.rvt"}
-        : binding === "open" ? {open: "A/open-A"}
-        : binding === "workspace" ? {work: "draft"} : {};
-      expect(Object.fromEntries(url.searchParams)).toEqual(expected);
-      // The fan walk lives in fans Work at the same document key (the host derive reads it there).
-      return Response.json(url.pathname.endsWith("/fans")
-        ? {revision: 5, handle: workHandle({...key, route: "fans"} as never, 5), doc: fansDocumentSchema.parse(scoped ? {writeIntent: {edit: {value: {walk: {unitId: 14577391, portIndex: 0}}, by: "human"}}} : {})}
-        : {revision: 3, handle: workHandle(key as never, 3), doc: ductsDocumentSchema.parse({writeIntent: {edit: {value: {groups: ["group:g1"]}, by: "human"}}})});
+test.each(["open", "address", "workspace", "host"] as const)(
+  "loss preview reads exact %s Work and refuses groups without a fan walk",
+  async (binding) => {
+    for (const scoped of [false, true]) {
+      const posts: unknown[] = [];
+      const key =
+        binding === "address"
+          ? { route: "duct-systems", binding, target: "C:/Models/A.rvt" }
+          : binding === "open"
+            ? { route: "duct-systems", binding, target: null, open: target.ref }
+            : binding === "workspace"
+              ? { route: "duct-systems", binding, target: null, work: "draft" }
+              : { route: "duct-systems", binding, target: null };
+      const work = { key, revision: 3 };
+      vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        if (
+          url.pathname === "/pe/route-state/duct-systems" ||
+          url.pathname === "/pe/route-state/fans"
+        ) {
+          const expected =
+            binding === "address"
+              ? { target: "C:/Models/A.rvt" }
+              : binding === "open"
+                ? { open: "A/open-A" }
+                : binding === "workspace"
+                  ? { work: "draft" }
+                  : {};
+          expect(Object.fromEntries(url.searchParams)).toEqual(expected);
+          // The fan walk lives in fans Work at the same document key (the host derive reads it there).
+          return Response.json(
+            url.pathname.endsWith("/fans")
+              ? {
+                  revision: 5,
+                  handle: workHandle({ ...key, route: "fans" } as never, 5),
+                  doc: fansDocumentSchema.parse(
+                    scoped
+                      ? {
+                          writeIntent: {
+                            edit: {
+                              value: { walk: { unitId: 14577391, portIndex: 0 } },
+                              by: "human",
+                            },
+                          },
+                        }
+                      : {},
+                  ),
+                }
+              : {
+                  revision: 3,
+                  handle: workHandle(key as never, 3),
+                  doc: ductsDocumentSchema.parse({
+                    writeIntent: { edit: { value: { groups: ["group:g1"] }, by: "human" } },
+                  }),
+                },
+          );
+        }
+        if (url.pathname === "/actions" && init?.method === "POST") {
+          const body = JSON.parse(String(init.body));
+          posts.push(body);
+          return Response.json(receipt(body));
+        }
+        throw Error(`Unexpected ${url.pathname}`);
+      });
+      const run = () =>
+        runCapability(
+          "sheet.plan",
+          { work },
+          {
+            hostBaseUrl: "http://preflight.test",
+            receipt: true,
+            bridgeSessionId: "A",
+            openDocumentId: "open-A",
+          },
+          { door: "command", mutates: false, needs: "project-document" },
+        );
+      if (scoped) {
+        expect(await run()).toMatchObject({ state: "succeeded" });
+        expect(posts).toHaveLength(1);
+      } else {
+        await expect(run()).rejects.toThrow(
+          "Preview needs a fan walk. Read route:reads.value (read fans.roster)",
+        );
+        expect(posts).toEqual([]);
+      }
     }
-    if (url.pathname === "/actions" && init?.method === "POST") {
-      const body = JSON.parse(String(init.body)); posts.push(body);
-      return Response.json(receipt(body));
-    }
-    throw Error(`Unexpected ${url.pathname}`);
-  });
-  const run = () => runCapability("sheet.plan", {work}, {hostBaseUrl: "http://preflight.test", receipt: true, bridgeSessionId: "A", openDocumentId: "open-A"}, {door: "command", mutates: false, needs: "project-document"});
-  if (scoped) {
-    expect(await run()).toMatchObject({state: "succeeded"});
-    expect(posts).toHaveLength(1);
-  } else {
-    await expect(run()).rejects.toThrow("Preview needs a fan walk. Read route:reads.value (read fans.roster)");
-    expect(posts).toEqual([]);
-  }
- }
-});
+  },
+);
 test("a fans handle runs the losses preflight: it reads both Works at its document before any submission", async () => {
   const seen: string[] = [];
   vi.stubGlobal("fetch", async (input: Request | string | URL) => {
     seen.push(new URL(input instanceof Request ? input.url : String(input)).pathname);
     return new Response("unavailable", { status: 503 });
   });
-  const work = { key: {route: "fans", binding: "host", target: null}, revision: 1 };
-  await expect(runCapability("sheet.plan", {work}, {hostBaseUrl: "http://preflight.test", receipt: true}, {door: "command", mutates: false, needs: "project-document"}))
-    .rejects.toThrow("before preview (503)");
+  const work = { key: { route: "fans", binding: "host", target: null }, revision: 1 };
+  await expect(
+    runCapability(
+      "sheet.plan",
+      { work },
+      { hostBaseUrl: "http://preflight.test", receipt: true },
+      { door: "command", mutates: false, needs: "project-document" },
+    ),
+  ).rejects.toThrow("before preview (503)");
   expect(seen.some((path) => path.endsWith("/duct-systems"))).toBe(true);
   expect(seen.some((path) => path.endsWith("/fans"))).toBe(true);
 });
@@ -426,13 +531,24 @@ test("an unregistered sheet route submits through the generic path without produ
   vi.stubGlobal("fetch", async (input: Request | string | URL, init?: RequestInit) => {
     const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
     seen.push(path);
-    if (path === "/actions" && init?.method === "POST") return Response.json(receipt(JSON.parse(String(init.body))));
+    if (path === "/actions" && init?.method === "POST")
+      return Response.json(receipt(JSON.parse(String(init.body))));
     throw Error(`Unexpected ${path}`);
   });
   const work = { key: { route: "pod.other", binding: "host", target: null }, revision: 1 };
-  expect(await runCapability("sheet.plan", { work }, { hostBaseUrl: "http://preflight.test", receipt: true,
-    bridgeSessionId: "A", openDocumentId: "open-A" }, { door: "command", mutates: false, needs: "project-document" }))
-    .toMatchObject({ state: "succeeded" });
+  expect(
+    await runCapability(
+      "sheet.plan",
+      { work },
+      {
+        hostBaseUrl: "http://preflight.test",
+        receipt: true,
+        bridgeSessionId: "A",
+        openDocumentId: "open-A",
+      },
+      { door: "command", mutates: false, needs: "project-document" },
+    ),
+  ).toMatchObject({ state: "succeeded" });
   expect(seen).toEqual(["/actions"]);
 });
 import { hostOpCatalog } from "@pe/host-contracts/catalog";

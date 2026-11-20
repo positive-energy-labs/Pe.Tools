@@ -391,9 +391,7 @@ export const ServiceFileLive = Layer.effectDiscard(
     const acquireClaim = Effect.acquireRelease(
       Effect.promise(() => claimServiceHost(appBase, buildHostDescriptor(port))).pipe(
         Effect.flatMap((result) =>
-          result.claimed
-            ? Effect.succeed(result.handle)
-            : Effect.fail(result.reason),
+          result.claimed ? Effect.succeed(result.handle) : Effect.fail(result.reason),
         ),
       ),
       (handle) => Effect.promise(() => handle.release()),
@@ -408,7 +406,9 @@ export const ServiceFileLive = Layer.effectDiscard(
           // a disappearing lock can look unreadable at the boundary of an attempt.
           const busy =
             hostOwnership.lane === "dev" &&
-            reason.startsWith(`service '${hostOwnership.serviceName}' is busy in another supervisor (`);
+            reason.startsWith(
+              `service '${hostOwnership.serviceName}' is busy in another supervisor (`,
+            );
           if (busy) console.warn(`Dev host waiting to claim its service: ${reason}`);
           return busy;
         },

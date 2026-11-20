@@ -112,79 +112,87 @@ test("a schema that names no settings library is written as authored", async () 
 test.each([
   "/schemas/settings/FamilyFoundry/models.json",
   "http://127.0.0.1:5180/schemas/settings/FamilyFoundry/models.json",
-])("with a session, a draft whose $schema is %s composes natively, then schema and semantic checks run", async (written) => {
-  const calls: [string, unknown][] = [];
-  const schemaUrl = "/schemas/settings/FamilyFoundry/models.json";
-  const draft = JSON.stringify({ $schema: written, $preset: "@local/base.json" });
-  const withBridge: PodContext = {
-    podsRoot: root,
-    invokeBridge: (key, payload) => {
-      calls.push([key, payload]);
-      if (key === "pod.member.compose")
+])(
+  "with a session, a draft whose $schema is %s composes natively, then schema and semantic checks run",
+  async (written) => {
+    const calls: [string, unknown][] = [];
+    const schemaUrl = "/schemas/settings/FamilyFoundry/models.json";
+    const draft = JSON.stringify({ $schema: written, $preset: "@local/base.json" });
+    const withBridge: PodContext = {
+      podsRoot: root,
+      invokeBridge: (key, payload) => {
+        calls.push([key, payload]);
+        if (key === "pod.member.compose")
+          return Effect.succeed({
+            composed: '{"width":3}',
+            source: (
+              payload as {
+                source: unknown;
+              }
+            ).source,
+            diagnostics: [
+              {
+                stage: "Shadowed",
+                message: "a preset key is shadowed",
+                severity: "Warning",
+                source: "settings/base.json",
+              },
+            ],
+            dependencies: [
+              {
+                id: "sample",
+                path: "settings/base.json",
+                sha256: "b".repeat(64),
+                bytesBase64: Buffer.from("{}").toString("base64"),
+              },
+            ],
+          });
+        if (key === "settings.schema") return Effect.succeed({ schemaJson: schema });
         return Effect.succeed({
-          composed: '{"width":3}',
-          source: (
-            payload as {
-              source: unknown;
-            }
-          ).source,
-          diagnostics: [
+          isConfigured: true,
+          issues: [
             {
-              stage: "Shadowed",
-              message: "a preset key is shadowed",
-              severity: "Warning",
-              source: "settings/base.json",
-            },
-          ],
-          dependencies: [
-            {
-              id: "sample",
-              path: "settings/base.json",
-              sha256: "b".repeat(64),
-              bytesBase64: Buffer.from("{}").toString("base64"),
+              instancePath: "/width",
+              code: "Unknown",
+              severity: "Error",
+              message: "no such family",
             },
           ],
         });
-      if (key === "settings.schema") return Effect.succeed({ schemaJson: schema });
-      return Effect.succeed({
-        isConfigured: true,
-        issues: [
-          { instancePath: "/width", code: "Unknown", severity: "Error", message: "no such family" },
-        ],
-      });
-    },
-  };
-  const result = await run(composeMember({ ...member, content: draft }, withBridge));
-  expect(calls.map(([key]) => key)).toEqual([
-    "pod.member.compose",
-    "settings.schema",
-    "settings.validate",
-  ]);
-  expect(calls[0]![1]).toEqual({
-    ...member,
-    content: draft,
-    source: {
-      id: "sample",
-      path: member.path,
-      sha256: digest(draft),
-      bytesBase64: Buffer.from(draft).toString("base64"),
-      origin: "SuppliedDraft",
-    },
-  });
-  expect(calls[1]![1]).toEqual({ schemaUrl });
-  expect(calls[2]![1]).toMatchObject({
-    schemaUrl,
-    rawContent: draft,
-  });
-  expect(JSON.parse(result.composed!)).toEqual({ width: 3 });
-  expect(result.dependencies).toHaveLength(1);
-  expect(result.diagnostics.map((d) => [d.code, d.path, d.severity])).toEqual([
-    ["Shadowed", "settings/base.json", "warning"],
-    ["Unknown", "/width", "error"],
-  ]);
-  expect(result.schemaJson).toBe(schema);
-  expect(result).toMatchObject({ schemaValidation: "passed", semanticValidation: "failed" });
-});
+      },
+    };
+    const result = await run(composeMember({ ...member, content: draft }, withBridge));
+    expect(calls.map(([key]) => key)).toEqual([
+      "pod.member.compose",
+      "settings.schema",
+      "settings.validate",
+    ]);
+    expect(calls[0]![1]).toEqual({
+      ...member,
+      content: draft,
+      source: {
+        id: "sample",
+        path: member.path,
+        sha256: digest(draft),
+        bytesBase64: Buffer.from(draft).toString("base64"),
+        origin: "SuppliedDraft",
+      },
+    });
+    expect(calls[1]![1]).toEqual({ schemaUrl });
+    expect(calls[2]![1]).toMatchObject({
+      schemaUrl,
+      rawContent: draft,
+    });
+    expect(JSON.parse(result.composed!)).toEqual({ width: 3 });
+    expect(result.dependencies).toHaveLength(1);
+    expect(result.diagnostics.map((d) => [d.code, d.path, d.severity])).toEqual([
+      ["Shadowed", "settings/base.json", "warning"],
+      ["Unknown", "/width", "error"],
+    ]);
+    expect(result.schemaJson).toBe(schema);
+    expect(result).toMatchObject({ schemaValidation: "passed", semanticValidation: "failed" });
+  },
+);
 /** The `settings.write` action door over one member's Work, as the host binds it. */
 function settingsDoor() {
   const scope = {
@@ -194,7 +202,8 @@ function settingsDoor() {
     work: memberWork(member),
   };
   const rows = new Map<string, unknown>();
-  const work = new RouteWorkspace({ publicationAuthor: () => "human",
+  const work = new RouteWorkspace({
+    publicationAuthor: () => "human",
     registrations: [{ spec: settingsRouteState }],
     store: {
       getState: async ({ targetKey, route }) => rows.get(targetKey + route),

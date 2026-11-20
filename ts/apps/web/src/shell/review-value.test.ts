@@ -20,10 +20,7 @@ test("nested plans retain exact scalar, structured, empty and null changes", () 
         ],
       },
     }),
-  ).toEqual([
-    'Update current: 1.01 A \u2192 1.1 Amperes',
-    "Clear text:  \u2192 null",
-  ]);
+  ).toEqual(["Update current: 1.01 A \u2192 1.1 Amperes", "Clear text:  \u2192 null"]);
 });
 
 test("Pea and human units render identically in cells and generic review", () => {
@@ -34,6 +31,8 @@ test("Pea and human units render identically in cells and generic review", () =>
     expect(reviewValue(value)).toBe("1.1 Amperes");
     expect(reviewValue({ value: "1.1", unit })).toBe("1.1 Amperes");
   }
-  expect(reviewValue({ value: "1.6666666666666665", unit: "Feet", display: "1' - 8\"" })).toBe("1' - 8\"");
+  expect(reviewValue({ value: "1.6666666666666665", unit: "Feet", display: "1' - 8\"" })).toBe(
+    "1' - 8\"",
+  );
   expect(reviewValue({ arbitrary: [1, 2] })).toBe('{"arbitrary":[1,2]}');
 });

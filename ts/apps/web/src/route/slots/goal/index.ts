@@ -12,7 +12,11 @@ export interface GoalView<R = unknown> {
   readonly assumed: readonly Closer[];
   readonly next: Closer | null;
   /** The answer, greyed while anything is unresolved; an estimate names its sources. */
-  readonly answer: { readonly value: R | null; readonly greyed: boolean; readonly sources: readonly string[] };
+  readonly answer: {
+    readonly value: R | null;
+    readonly greyed: boolean;
+    readonly sources: readonly string[];
+  };
 }
 
 export function goalView<R>(goal: Goal<R>): GoalView<R> {

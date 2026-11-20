@@ -13,11 +13,18 @@ import type { FansDocument } from "@pe/fans-contract/fans";
 import { type RouteStateSpec } from "@pe/agent-contracts/route-state";
 
 /** A deadhead has no encounter closer, so neither button nor staging can accept it. */
-export function encounterPatches(issue: FanIssue, choice: "connect" | "ignore", doc: DuctsRouteDocument | null) {
+export function encounterPatches(
+  issue: FanIssue,
+  choice: "connect" | "ignore",
+  doc: DuctsRouteDocument | null,
+) {
   if (issue.closer.kind !== "encounter") throw Error("This encounter cannot be ruled");
-  const e = issue.closer.encounter, key = `encounter:${e.elementId}:${e.connector}`;
-  return cellPatches(["assumptions"], key, doc?.assumptions[key] ?? {},
-    { kind: "set", rung: { value: { kind: "verdict", verdict: choice } } });
+  const e = issue.closer.encounter,
+    key = `encounter:${e.elementId}:${e.connector}`;
+  return cellPatches(["assumptions"], key, doc?.assumptions[key] ?? {}, {
+    kind: "set",
+    rung: { value: { kind: "verdict", verdict: choice } },
+  });
 }
 
 /** What pricing reads: both Works' cells side by side (FANSPLIT Q4); ducts owns `writeIntent`. */
@@ -36,13 +43,31 @@ export const ductsDesign = (ducts: DuctsRouteDocument | null, fans: FansDocument
 export type StagedCell<V> = { value: V; by: "human" | "pea"; ref: string } | InvalidStagedCell;
 /** A stored cell the host could not read (`{ invalid: reason }`), at its Work location: handed on so the resolver blocks fallback (P-040). */
 export type InvalidStagedCell = { invalid: string; ref: string };
-const stagedOf = <V>(work: "fans" | "duct-systems", segment: string, cells: Record<string, { invalid?: string; edit?: { value?: V; by?: Author; ref?: string } | null } | undefined>) =>
+const stagedOf = <V>(
+  work: "fans" | "duct-systems",
+  segment: string,
+  cells: Record<
+    string,
+    { invalid?: string; edit?: { value?: V; by?: Author; ref?: string } | null } | undefined
+  >,
+) =>
   Object.fromEntries<StagedCell<V>>(
     Object.entries(cells).flatMap(([key, cell]): [string, StagedCell<V>][] => {
-      if (cell?.invalid) return [[key, { invalid: cell.invalid, ref: `work:${work}/${segment}/${key}` }]];
+      if (cell?.invalid)
+        return [[key, { invalid: cell.invalid, ref: `work:${work}/${segment}/${key}` }]];
       const edit = cell?.edit;
-      return edit?.value === undefined || (edit.by !== "human" && edit.by !== "pea") ? []
-        : [[key, { value: edit.value, by: edit.by, ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}` }]];
+      return edit?.value === undefined || (edit.by !== "human" && edit.by !== "pea")
+        ? []
+        : [
+            [
+              key,
+              {
+                value: edit.value,
+                by: edit.by,
+                ref: edit.ref?.trim() ? edit.ref : `work:${work}/${segment}/${key}`,
+              },
+            ],
+          ];
     }),
   );
 
@@ -79,11 +104,26 @@ export function stagedValues(doc: DuctsRouteDocument | null, fans: FansDocument)
   // Every staged value, stamped or not: the model's stored rulings are laid under Work as cells no
   // caller wrote (`withStoredRulings`), and this reader prices them without naming anyone.
   const bare = <V>(cells: Record<string, { edit?: { value?: V } | null } | undefined>) =>
-    Object.fromEntries(Object.entries(cells).flatMap(([key, cell]) => (cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]]))) as Record<string, V>;
-  return { ...stagedDucts(doc, fans), rules: bare(doc?.rules ?? {}), kinds: bare(doc?.kinds ?? {}),
-    assumptions: bare(doc?.assumptions ?? {}), catalogs: bare(doc?.catalogs ?? {}), ruleAssignments: bare(doc?.ruleAssignments ?? {}),
-    terminalDrops: bare(fans.terminalDrops), componentDrops: bare(fans.componentDrops), ratedEsp: bare(fans.ratedEsp),
-    equipmentFlows: bare(fans.equipmentFlows), roles: bare(fans.roles), flows: bare(fans.flows), subject: bare(doc?.subject ?? {}) };
+    Object.fromEntries(
+      Object.entries(cells).flatMap(([key, cell]) =>
+        cell?.edit?.value === undefined ? [] : [[key, cell.edit.value]],
+      ),
+    ) as Record<string, V>;
+  return {
+    ...stagedDucts(doc, fans),
+    rules: bare(doc?.rules ?? {}),
+    kinds: bare(doc?.kinds ?? {}),
+    assumptions: bare(doc?.assumptions ?? {}),
+    catalogs: bare(doc?.catalogs ?? {}),
+    ruleAssignments: bare(doc?.ruleAssignments ?? {}),
+    terminalDrops: bare(fans.terminalDrops),
+    componentDrops: bare(fans.componentDrops),
+    ratedEsp: bare(fans.ratedEsp),
+    equipmentFlows: bare(fans.equipmentFlows),
+    roles: bare(fans.roles),
+    flows: bare(fans.flows),
+    subject: bare(doc?.subject ?? {}),
+  };
 }
 
 /**
@@ -102,12 +142,17 @@ export const workingPhaseOf = (doc: DuctsRouteDocument | null) =>
  * terminal flows (`terminalFlow` slot) and edited `equipmentFlows` (`fanFlow` slot).
  */
 const optionalText = z.string().nullable().optional();
-const flowReceipts = z.record(z.string(), z.strictObject({
-  cfm: z.number().nonnegative(),
-  source: optionalText,
-  appliedAt: z.string(),
-  parameter: optionalText,
-})).optional();
+const flowReceipts = z
+  .record(
+    z.string(),
+    z.strictObject({
+      cfm: z.number().nonnegative(),
+      source: optionalText,
+      appliedAt: z.string(),
+      parameter: optionalText,
+    }),
+  )
+  .optional();
 const writeDrop = z.strictObject({
   id: z.number().int(),
   inWg: z.number().nonnegative(),
@@ -119,21 +164,26 @@ const writeFlow = z.strictObject({
   cfm: z.number().nonnegative(),
   source: optionalText,
 });
-const slotsSchema = z.strictObject({
-  /** R3: absent/null inherits; empty string is explicit none; otherwise the parameter name. */
-  requiredEsp: z.string().trim().nullable().optional(),
-  ratedEsp: z.string().trim().min(1).nullable().optional(),
-  fanFlow: z.string().min(1).nullable().optional(),
-  componentDrop: z.string().min(1).nullable().optional(),
-  terminalDrop: optionalText,
-  /** The fitting family's own coefficient parameter the Pe loss server reads (default Pe_C). */
-  fittingCoefficient: z.string().min(1).nullable().optional(),
-  /**
-   * The terminal's design CFM parameter the snapshot reads and apply writes (default
-   * PE_M_Grd_AirFlow); the built-in `Flow` is the connector's own flow.
-   */
-  terminalFlow: z.string().min(1).nullable().optional(),
-}).refine(s => !s.requiredEsp || s.requiredEsp.toLowerCase() !== s.ratedEsp?.toLowerCase(), "requiredEsp and ratedEsp name the same parameter");
+const slotsSchema = z
+  .strictObject({
+    /** R3: absent/null inherits; empty string is explicit none; otherwise the parameter name. */
+    requiredEsp: z.string().trim().nullable().optional(),
+    ratedEsp: z.string().trim().min(1).nullable().optional(),
+    fanFlow: z.string().min(1).nullable().optional(),
+    componentDrop: z.string().min(1).nullable().optional(),
+    terminalDrop: optionalText,
+    /** The fitting family's own coefficient parameter the Pe loss server reads (default Pe_C). */
+    fittingCoefficient: z.string().min(1).nullable().optional(),
+    /**
+     * The terminal's design CFM parameter the snapshot reads and apply writes (default
+     * PE_M_Grd_AirFlow); the built-in `Flow` is the connector's own flow.
+     */
+    terminalFlow: z.string().min(1).nullable().optional(),
+  })
+  .refine(
+    (s) => !s.requiredEsp || s.requiredEsp.toLowerCase() !== s.ratedEsp?.toLowerCase(),
+    "requiredEsp and ratedEsp name the same parameter",
+  );
 /** Pe server consumes host-priced leg results; Specific Coefficient freezes one export coefficient. */
 export const DUCT_FITTING_METHODS = ["pe-server", "specific-coefficient"] as const;
 export type DuctFittingMethod = (typeof DUCT_FITTING_METHODS)[number];

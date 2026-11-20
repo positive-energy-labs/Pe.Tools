@@ -82,7 +82,13 @@ async function world() {
   await mkdir(join(source, "example", "pages", "tour"), { recursive: true });
   await writeFile(
     join(source, "example", "pod.json"),
-    JSON.stringify({ schemaVersion: 2, id: "example", name: "Example", version: "1.0.0", entrypoints: [] }),
+    JSON.stringify({
+      schemaVersion: 2,
+      id: "example",
+      name: "Example",
+      version: "1.0.0",
+      entrypoints: [],
+    }),
   );
   await writeFile(join(source, "example", "pages", "tour", "index.html"), "<title>Tour</title>");
   const archive = join(machines[0].install, "pods", "example.zip");
@@ -129,7 +135,13 @@ async function bootstrap(machine: Machine, home: string) {
   });
   const pages = asCaller(
     human,
-    createPagesHandler(join(home, "Pages"), pods, undefined, undefined, stateFixture(join(machine.state, "Pages"))),
+    createPagesHandler(
+      join(home, "Pages"),
+      pods,
+      undefined,
+      undefined,
+      stateFixture(join(machine.state, "Pages")),
+    ),
   );
   const send = async (method: string, path: string, body: unknown) => {
     const response = await pages(
@@ -209,10 +221,12 @@ test("M1: two machines bootstrap one home and leave it byte-identical apart from
     ])
       expect(held, `${machine.name} holds ${path}`).toContain(path);
     expect(held.filter((path) => path.startsWith(`Work${sep}`))).toHaveLength(1);
-    expect(held.filter((path) => path.startsWith(join("Pages", "todo", "exports") + sep))).toHaveLength(1);
-    expect(await readFile(join(agentOf(machine), ".agents", "skills", "office", "SKILL.md"), "utf8")).toBe(
-      SENTINEL_BYTES,
-    );
+    expect(
+      held.filter((path) => path.startsWith(join("Pages", "todo", "exports") + sep)),
+    ).toHaveLength(1);
+    expect(
+      await readFile(join(agentOf(machine), ".agents", "skills", "office", "SKILL.md"), "utf8"),
+    ).toBe(SENTINEL_BYTES);
   }
 });
 

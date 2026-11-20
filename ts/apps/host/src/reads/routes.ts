@@ -2,7 +2,13 @@ import { routeRegistry } from "../routes.generated.ts";
 import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
 import { usesOf } from "@pe/agent-contracts/handle";
-import { bodyOf, evaluate, fingerprint, type InputPort, type Read } from "@pe/host-internal/reads/evaluator";
+import {
+  bodyOf,
+  evaluate,
+  fingerprint,
+  type InputPort,
+  type Read,
+} from "@pe/host-internal/reads/evaluator";
 import type { Publication, Publications } from "./publications.ts";
 import { withTimelineCaller, workTimelineRead } from "./work-timeline.ts";
 import { WORK_TIMELINE_READ, admittedRouteEntries, type WorkAuthor } from "@pe/agent-contracts";
@@ -19,10 +25,20 @@ export function projectRouteRead(module: Pick<HostRouteModule, "data" | "schemas
   return {
     ...data,
     // Kernel doors are available on every route, never declared or placed by the route.
-    findings: Object.fromEntries(Object.values(FINDINGS_DOORS).map(entry => {
-      const command = findingsCommands[entry];
-      return [entry, { entry, description: findingsGuide[entry], input: z.toJSONSchema(command.input), effect: command.catalogEffect }];
-    })),
+    findings: Object.fromEntries(
+      Object.values(FINDINGS_DOORS).map((entry) => {
+        const command = findingsCommands[entry];
+        return [
+          entry,
+          {
+            entry,
+            description: findingsGuide[entry],
+            input: z.toJSONSchema(command.input),
+            effect: command.catalogEffect,
+          },
+        ];
+      }),
+    ),
     fields: Object.fromEntries(
       Object.entries(data.fields).map(([id, field]) => {
         if (!("schema" in field)) return [id, field];

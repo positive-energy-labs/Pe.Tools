@@ -140,7 +140,10 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
   );
   const wellConnected = new Map<string, boolean>();
   for (const system of snapshot.systems)
-    wellConnected.set(system.name, !wellConnected.has(system.name) && system.isWellConnected === true);
+    wellConnected.set(
+      system.name,
+      !wellConnected.has(system.name) && system.isWellConnected === true,
+    );
   const tapped = new Set([
     ...tolerated.taps.map((t) => t.a),
     ...tolerated.inline.flatMap((x) => x.ports),
@@ -205,14 +208,22 @@ function build(snapshot: DuctSnapshot, raw: DuctsDesign | null): HealPlan {
     }
     if (!near && flow != null && flow !== 0) {
       const cfm = Math.abs(flow);
-      say(x, `${named(x)} carries ${Math.round(cfm) || cfm} cfm in Revit; a cap would block its air`);
+      say(
+        x,
+        `${named(x)} carries ${Math.round(cfm) || cfm} cfm in Revit; a cap would block its air`,
+      );
       continue;
     }
     if (!near) {
       if (straightDuct(x.e) || x.e.kind === "fitting") {
         const system = x.e.systemName;
         if (!system || wellConnected.get(system) !== true) {
-          say(x, system ? `flow unknown: Revit has no confirmed well-connected system for ${system}` : "flow unknown: this end has no Revit system");
+          say(
+            x,
+            system
+              ? `flow unknown: Revit has no confirmed well-connected system for ${system}`
+              : "flow unknown: this end has no Revit system",
+          );
           continue;
         }
         if (flow !== 0) {
@@ -349,12 +360,20 @@ export const healRequestGroup = (group: HealGroup, only?: ReadonlySet<string>) =
 });
 
 /** Fold one repair's ends and join before either the inbox or picture numbers findings. */
-export function healFindings(findings: readonly DuctFinding[], plan: HealPlan | import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"] | null = null) {
-  const hard: [string,{ids:number[];covers:string[];note:string}][]=!plan?[]:plan.hard instanceof Map?[...plan.hard]:Object.entries(plan.hard);
+export function healFindings(
+  findings: readonly DuctFinding[],
+  plan:
+    | HealPlan
+    | import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"]
+    | null = null,
+) {
+  const hard: [string, { ids: number[]; covers: string[]; note: string }][] = !plan
+    ? []
+    : plan.hard instanceof Map
+      ? [...plan.hard]
+      : Object.entries(plan.hard);
   const repairs = new Map(
-    hard.flatMap(([id, repair]) =>
-      repair.covers.map((key) => [key, { id, ...repair }] as const),
-    ),
+    hard.flatMap(([id, repair]) => repair.covers.map((key) => [key, { id, ...repair }] as const)),
   );
   const seen = new Set<string>();
   return findings.flatMap((f) => {
@@ -377,4 +396,3 @@ export function healFindings(findings: readonly DuctFinding[], plan: HealPlan | 
     ];
   });
 }
-

@@ -12,8 +12,8 @@ export function SettingsDrawing({ ctx }: { ctx: SettingsContext }) {
     ctx.value.state === "ready" && machine
       ? { state: "ready", observation: machine }
       : machine
-          ? { state: "stale", reason: "disconnected", previous: machine }
-          : { state: "absent" };
+        ? { state: "stale", reason: "disconnected", previous: machine }
+        : { state: "absent" };
   return (
     <main
       data-surface="page"

@@ -55,7 +55,9 @@ test("host preparation continues after an instructions write failure and posts o
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     expect(composeHost).not.toThrow();
-    const notices = store.notices(stateMachine(storedParent(hostState().notices))).filter(n => n.path === instructions());
+    const notices = store
+      .notices(stateMachine(storedParent(hostState().notices)))
+      .filter((n) => n.path === instructions());
     expect(notices).toHaveLength(1);
     expect(notices[0]!.reason).toContain("locked file");
     expect(log).toHaveBeenCalledOnce();
@@ -104,10 +106,13 @@ test("instructions replacement uses the atomic write door", () => {
   const write = vi.spyOn(store, "writeState");
   try {
     prepareAgentDirectory();
-    expect(write).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+    expect(write).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
         path: instructions(),
         kind: expect.objectContaining({ at: "state" }),
-      }), peaAgentInstructions);
+      }),
+      peaAgentInstructions,
+    );
     expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
   } finally {
     write.mockRestore();
@@ -123,7 +128,7 @@ test("host starts under a plain temporary override home and writes instructions 
     expect(response.status).toBe(200);
     await response.arrayBuffer();
     expect(existsSync(hostState().agent)).toBe(true);
-  expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
+    expect(readFileSync(instructions(), "utf8")).toBe(peaAgentInstructions);
   } finally {
     await host.close();
   }

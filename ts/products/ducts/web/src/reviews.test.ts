@@ -3,9 +3,14 @@ import { expect, test } from "vite-plus/test";
 import { presentHeal, presentFan, presentLosses } from "./reviews.ts";
 import { ra23Snapshot, twoHealNetworksSnapshot } from "./heal.fixture.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
-const scope = (ducts = structuredClone(snapshot)) => ({ heal: healPlan(ducts, null), readings: { ducts: { value: ducts } } });
+const scope = (ducts = structuredClone(snapshot)) => ({
+  heal: healPlan(ducts, null),
+  readings: { ducts: { value: ducts } },
+});
 test("review discloses Required ESP writes nowhere", () => {
-  expect(presentLosses({ writes: [], derivedRequest: { slots: { requiredEsp: "" } } }, scope()).sentence).toContain("Required ESP writes nowhere");
+  expect(
+    presentLosses({ writes: [], derivedRequest: { slots: { requiredEsp: "" } } }, scope()).sentence,
+  ).toContain("Required ESP writes nowhere");
 });
 test("fan review names targets from the Place sheet snapshot even when network scope is empty", () => {
   const review = presentLosses(
@@ -42,16 +47,18 @@ test("two RA 37 caps name their ends' system instead of the shared group's other
   const review = presentHeal(
     {
       previewOnly: true,
-      derivedRequest: { groups: [
-        {
-          group: "g6953999",
-          items: [14663504, 14663546].map((id) => ({
-            key: `cap:${id}:1`,
-            kind: "cap",
-            end: `${id}:1`,
-          })),
-        },
-      ] },
+      derivedRequest: {
+        groups: [
+          {
+            group: "g6953999",
+            items: [14663504, 14663546].map((id) => ({
+              key: `cap:${id}:1`,
+              kind: "cap",
+              end: `${id}:1`,
+            })),
+          },
+        ],
+      },
       evidence: ducts,
       authoredIntent: { writeIntent: { edit: { value: { groups: ["group:g6953999"] } } } },
       seal: { requestHash: "trimmed" },
@@ -65,14 +72,14 @@ test("RA 23's preview names the element and connector size without a numeric ide
   const review = presentHeal(
     {
       previewOnly: true,
-      derivedRequest: { groups: [
+      derivedRequest: {
+        groups: [
           {
             group: "g10002953",
-            items: [
-              { key: "cap:10002955:9", kind: "cap", end: "10002955:9" },
-            ],
+            items: [{ key: "cap:10002955:9", kind: "cap", end: "10002955:9" }],
           },
-        ] },
+        ],
+      },
       evidence: ducts,
       authoredIntent: { writeIntent: { edit: { value: { groups: ["group:g10002953"] } } } },
       seal: { requestHash: "trimmed" },
@@ -88,15 +95,28 @@ test("recorded Plan Heal sealed receipt renders its planned cap", () => {
   // Trimmed body[0].result from the w5-write-0859 heal receipt.
   const result = {
     previewOnly: true,
-    derivedRequest: { groups: [{ group: "g14122436", items: [
-      { key: "cap:14122436:1", kind: "cap", end: "14122436:1" },
-    ] }] },
-    evidence: { nodes: [], segments: [{
-      id: 14122436, kind: "duct", shape: "round", diameterIn: 10,
-      groupId: "g14122436", systemName: "FA 43",
-      connectors: [{ index: 1, shape: "round", diameterIn: 10 }],
-    }] },
-    authoredIntent: { writeIntent: { edit: { value: { groups: ["group:g14122436"] }, by: "human" } } },
+    derivedRequest: {
+      groups: [
+        { group: "g14122436", items: [{ key: "cap:14122436:1", kind: "cap", end: "14122436:1" }] },
+      ],
+    },
+    evidence: {
+      nodes: [],
+      segments: [
+        {
+          id: 14122436,
+          kind: "duct",
+          shape: "round",
+          diameterIn: 10,
+          groupId: "g14122436",
+          systemName: "FA 43",
+          connectors: [{ index: 1, shape: "round", diameterIn: 10 }],
+        },
+      ],
+    },
+    authoredIntent: {
+      writeIntent: { edit: { value: { groups: ["group:g14122436"] }, by: "human" } },
+    },
     seal: { dependencies: "1eed1a919e4e947c2ddd887132224e315aa413035df33c47a12fe9f661d89b43" },
   };
   const review = presentHeal(result, { readings: { ducts: { value: result.evidence } } });
@@ -131,16 +151,24 @@ test("refused native repairs remain readable in the shared review", () => {
   expect(review.rows[0]).toContain("A cap would block its air");
 });
 test("fan sealed preview names the requested system and unit as planned", () => {
-  const review = presentFan({
-    previewOnly: true,
-    derivedRequest: { systemId: 900, unitId: 100 },
-    evidence: snapshot,
-    authoredIntent: { fan: { systemId: 900, unitId: 100 } },
-    seal: { requestHash: "trimmed" },
-  }, scope());
+  const review = presentFan(
+    {
+      previewOnly: true,
+      derivedRequest: { systemId: 900, unitId: 100 },
+      evidence: snapshot,
+      authoredIntent: { fan: { systemId: 900, unitId: 100 } },
+      seal: { requestHash: "trimmed" },
+    },
+    scope(),
+  );
   expect(review.sentence).toBe("SA: planned");
   expect(review.rows).toEqual(["Make FC-1 the fan of SA: planned"]);
-  expect(review.cells[0]).toMatchObject({ key: "fan:900", label: "SA fan", before: null, after: "FC-1 · planned" });
+  expect(review.cells[0]).toMatchObject({
+    key: "fan:900",
+    label: "SA fan",
+    before: null,
+    after: "FC-1 · planned",
+  });
 });
 
 test("fan review uses system, unit and native read-back words", () => {

@@ -12,9 +12,13 @@ export interface HostRead {
   fixtures?: FixtureProviders<any, unknown>;
   endpoint?: PeRouteId;
   request?(args: any, target?: import("@pe/agent-contracts").ExecutionTarget): object;
-  source: Omit<UseSource,"open"> & { provide?(name: string, args: unknown): Publication | Promise<Publication> };
+  source: Omit<UseSource, "open"> & {
+    provide?(name: string, args: unknown): Publication | Promise<Publication>;
+  };
 }
-type FixtureTable<I, D> = Readonly<Record<string, (args: I) => FixtureValue<z.ZodType<Publication<D>>>>>;
+type FixtureTable<I, D> = Readonly<
+  Record<string, (args: I) => FixtureValue<z.ZodType<Publication<D>>>>
+>;
 type FixtureProviders<I, D> = FixtureTable<I, D> | (() => Promise<FixtureTable<I, D>>);
 type FixtureValue<O extends z.ZodType<Publication>> = Pick<
   NonNullable<z.output<O>["value"]>,
@@ -48,9 +52,21 @@ export function hostRead<K extends string, D>(
       const shape = contract.input instanceof z.ZodObject ? contract.input.shape.target : undefined;
       const bound = target ?? { kind: "host" as const };
       const direct = shape instanceof z.ZodType ? shape.safeParse(bound) : undefined;
-      return { read: key, args: contract.input.parse(shape && typeof args === "object" && args !== null
-        ? { ...args, target: direct?.success ? direct.data : bound.kind === "document" ? bound.ref : bound }
-        : args) };
+      return {
+        read: key,
+        args: contract.input.parse(
+          shape && typeof args === "object" && args !== null
+            ? {
+                ...args,
+                target: direct?.success
+                  ? direct.data
+                  : bound.kind === "document"
+                    ? bound.ref
+                    : bound,
+              }
+            : args,
+        ),
+      };
     },
     fixtures,
     source: {
@@ -75,7 +91,8 @@ export function hostRead<K extends string, D>(
                     evaluation: id,
                     inputs: id,
                     origin: { kind: "fixture", name },
-                    works: [], trace: [],
+                    works: [],
+                    trace: [],
                     freshness: "current",
                   },
                 } satisfies Publication;

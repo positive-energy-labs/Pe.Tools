@@ -17,12 +17,19 @@ afterEach(() => {
 test("rules panes settle when the selected system has nothing to price, never 'Loading rules'", async () => {
   const refusal = Error("EX 1 has no terminal; nothing to price");
   const f = await createWitness(closes, new Map(), {
-    [pricing.key]: { kind: "use", open: (_ctx, deliver) => deliver({ kind: "failure", error: refusal }) },
+    [pricing.key]: {
+      kind: "use",
+      open: (_ctx, deliver) => deliver({ kind: "failure", error: refusal }),
+    },
   });
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() =>
+    expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true),
+  );
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() =>
-    expect(f.owner.readingStatus("value").snapshot).toMatchObject({ state: expect.stringMatching(/^(stale|refused)$/) }),
+    expect(f.owner.readingStatus("value").snapshot).toMatchObject({
+      state: expect.stringMatching(/^(stale|refused)$/),
+    }),
   );
   const registry = makeAtomRegistry();
   closes.push(() => registry.dispose());

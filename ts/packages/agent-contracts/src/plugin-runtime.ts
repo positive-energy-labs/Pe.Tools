@@ -9,7 +9,11 @@ export function createPluginRuntime<T>(
   const contributions = new Map<string, { owner: string; value: T }>();
   let tail: Promise<unknown> = Promise.resolve();
   const serial = <R>(work: () => Promise<R>): Promise<R> => {
-    const next = tail.catch((error) => { console.error("plugin-runtime: asynchronous operation failed", error); }).then(work);
+    const next = tail
+      .catch((error) => {
+        console.error("plugin-runtime: asynchronous operation failed", error);
+      })
+      .then(work);
     tail = next;
     return next;
   };

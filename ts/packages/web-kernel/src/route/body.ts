@@ -25,8 +25,7 @@ export type Body<K extends BodyKind = BodyKind> = {
 export type ScrollBody = Body<"scroll">;
 export type FillBody = Body<"fill">;
 
-const body = <K extends BodyKind>(kind: K, node: ReactNode): Body<K> =>
-  ({ kind, node }) as Body<K>;
+const body = <K extends BodyKind>(kind: K, node: ReactNode): Body<K> => ({ kind, node }) as Body<K>;
 /** The pane scrolls this body. */
 export const scrollBody = (node: ReactNode): ScrollBody => body("scroll", node);
 /** This body fills the pane and scrolls itself. */

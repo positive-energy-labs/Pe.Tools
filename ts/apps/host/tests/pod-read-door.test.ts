@@ -74,7 +74,11 @@ const port = (firm: { path: string; json?: unknown }, calls: string[]) => {
 
 test("a Pod read calls a catalog Read through the tracked native door and gets the typed body", async () => {
   const calls: string[] = [];
-  const value = await evaluate(pod, { acquisitionId: "a1", writes: false }, port({ path: "firm/hydronic.sizing.json" }, calls));
+  const value = await evaluate(
+    pod,
+    { acquisitionId: "a1", writes: false },
+    port({ path: "firm/hydronic.sizing.json" }, calls),
+  );
   expect(value.data).toEqual({ status: "open", maxFriction: 400, source: "default" });
   // The firm file is re-read before publication (a validated input); the native body is fenced by marks.
   expect(calls).toEqual([
@@ -113,7 +117,12 @@ test("a hand-built native leaf cannot reach a ModelWrite either: the port refuse
     run: (ctx: ReadContext) =>
       ctx.read(
         { name: "native", input: z.unknown(), output: z.unknown(), leaf: true, validate: false },
-        { key: "ducts.apply", request: {}, target: { kind: "session", session: "s1" }, role: "none" },
+        {
+          key: "ducts.apply",
+          request: {},
+          target: { kind: "session", session: "s1" },
+          role: "none",
+        },
       ),
   };
   await expect(evaluate(forged, null, port({ path: "f" }, calls))).rejects.toThrow(
@@ -128,11 +137,18 @@ test("ctx.read takes a handle and runs the body registered under its key; a hand
   const inner = body(doubled, (_ctx, n) => ({ doubled: n * 2 }));
   expect(inner.name).toBe("probe.doubled");
   expect(() => body(doubled, () => ({ doubled: 0 }))).toThrow("already has a body");
-  const outer = body(contract("probe.outer", { input: z.number(), data, uses: [doubled] }), (ctx, n) => ctx.read(doubled, n));
+  const outer = body(
+    contract("probe.outer", { input: z.number(), data, uses: [doubled] }),
+    (ctx, n) => ctx.read(doubled, n),
+  );
   expect((await evaluate(outer, 4, port({ path: "f" }, []))).data).toEqual({ doubled: 8 });
   const orphan = contract("probe.orphan", { input: z.number(), data, uses: [] });
-  const asks = body(contract("probe.asks", { input: z.number(), data, uses: [orphan] }), (ctx, n) => ctx.read(orphan, n));
-  await expect(evaluate(asks, 1, port({ path: "f" }, []))).rejects.toThrow("Read 'probe.orphan' has no body on this host");
+  const asks = body(contract("probe.asks", { input: z.number(), data, uses: [orphan] }), (ctx, n) =>
+    ctx.read(orphan, n),
+  );
+  await expect(evaluate(asks, 1, port({ path: "f" }, []))).rejects.toThrow(
+    "Read 'probe.orphan' has no body on this host",
+  );
 });
 
 test("the two file doors live on ctx.files only (storage ST6)", () => {

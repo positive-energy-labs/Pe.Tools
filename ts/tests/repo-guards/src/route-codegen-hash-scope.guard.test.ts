@@ -20,7 +20,10 @@ test("closure-only preparation never rewrites tracked route projections", () => 
     "ts/packages/agent-contracts/src/routes/table.generated.ts",
     "ts/apps/host/src/routes.generated.ts",
   ].map((path) => resolve(repo, path));
-  const before = paths.map((path) => ({ bytes: readFileSync(path), modified: statSync(path).mtimeMs }));
+  const before = paths.map((path) => ({
+    bytes: readFileSync(path),
+    modified: statSync(path).mtimeMs,
+  }));
   const run = spawnSync(process.execPath, ["scripts/route-graphs.ts", "--builtin-closure-only"], {
     cwd: resolve(repo, "ts/apps/web"),
     encoding: "utf8",
@@ -60,7 +63,9 @@ test("codegen:routes owns the C# launch rows: its check goes red when only they 
     expect(run.status, stderr).not.toBe(0);
     expect(stderr).toContain("PeRoutes.generated.cs is stale");
     // Nothing else drifted: the C# rows alone reddened the one step.
-    expect(stderr).toContain("run codegen:routes:\ndotnet/Pe.App/Host/PeRoutes.generated.cs (route-links-cs.ts)\n");
+    expect(stderr).toContain(
+      "run codegen:routes:\ndotnet/Pe.App/Host/PeRoutes.generated.cs (route-links-cs.ts)\n",
+    );
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }

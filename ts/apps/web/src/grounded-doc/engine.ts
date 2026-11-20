@@ -10,9 +10,7 @@ interface BlockFocus {
   origin: FocusOrigin;
 }
 
-type GroundedDocStatus =
-  | { phase: "empty" }
-  | { phase: "ready" };
+type GroundedDocStatus = { phase: "empty" } | { phase: "ready" };
 
 export interface GroundedDocEngine {
   doc: ParsedDocView | null;

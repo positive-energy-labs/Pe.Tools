@@ -20,7 +20,10 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   const { presenter } = await admit();
   const history = createMemoryHistory({ initialEntries: ["/fans?fixture=layout"] });
   const input = placeInput(admittedRouterAddress(history));
-  const mount = nativeTestAdapter(mountTypedRoute(presenter.typed,input,presenter.workFingerprint),createWorkFeedClient());
+  const mount = nativeTestAdapter(
+    mountTypedRoute(presenter.typed, input, presenter.workFingerprint),
+    createWorkFeedClient(),
+  );
   mounts.push(mount);
   await waitFor(() => expect(mount.readingStatus("value").snapshot.state === "ready").toBe(true));
   const options = z
@@ -60,7 +63,10 @@ test("admitted Fans uses its actual picker labels and decoded subject; foreign a
   expect(
     mount.subjectState({
       ...search(),
-      fan: JSON.stringify({ kind: "ids", ids: [stableFanKey({ uniqueId: "unknown-unit", portIndex: 0 })] }),
+      fan: JSON.stringify({
+        kind: "ids",
+        ids: [stableFanKey({ uniqueId: "unknown-unit", portIndex: 0 })],
+      }),
     }),
   ).toMatchObject({ ready: false, refusal: expect.stringContaining("not in this model") });
   expect(mount.subjectState({ ...search(), target: "another-model" })).toBeNull();

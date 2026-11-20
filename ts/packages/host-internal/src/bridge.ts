@@ -128,10 +128,7 @@ export class RevitBridge extends Context.Service<
       bridgeSessionId?: string,
       openDocumentId?: string | null,
       requestId?: string,
-    ) => Effect.Effect<
-      NativeDispatchHandle,
-      DoorFailure
-    >;
+    ) => Effect.Effect<NativeDispatchHandle, DoorFailure>;
     /** Retire only a host-queued request; never send op.cancel to Revit. */
     readonly cancelQueued: (requestIds: Promise<readonly string[]>) => Promise<void>;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;

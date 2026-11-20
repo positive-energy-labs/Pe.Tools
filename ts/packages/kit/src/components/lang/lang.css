@@ -1273,7 +1273,11 @@ tr.dl-row[data-active] {
   transition: outline-color var(--motion-control);
 }
 /* Reach is indirect; a local pointer is stronger; selection always keeps its rung. */
-:where([data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref)):is([data-reach="reach"], [data-reach="hover"], [data-reach="cited"]) {
+:where([data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref)):is(
+  [data-reach="reach"],
+  [data-reach="hover"],
+  [data-reach="cited"]
+) {
   background-color: var(--pe-indirect);
 }
 :where([data-reach]:not(:disabled, [aria-disabled="true"], .subject-ref)):hover,
@@ -1387,7 +1391,13 @@ tr.dl-row[data-active] {
 [data-subject-text]:is(:hover, [data-lit]) .subject-ref {
   text-decoration-color: var(--pe-ink-2);
 }
-.subject-ref:is(:hover, :focus-visible, [data-reach="reach"], [data-reach="hover"], [data-reach="cited"]) {
+.subject-ref:is(
+  :hover,
+  :focus-visible,
+  [data-reach="reach"],
+  [data-reach="hover"],
+  [data-reach="cited"]
+) {
   text-decoration-color: var(--pe-ink);
 }
 [data-subject-text]:is(:hover, [data-lit]) .subject-mark {
@@ -1609,7 +1619,8 @@ tr.dl-row[data-active] {
 }
 
 /* A selected control cannot climb above selection when the pointer enters it. */
-[data-pe] :is([aria-selected="true"], [aria-pressed="true"], [data-selected], [data-reach="selected"]) {
+[data-pe]
+  :is([aria-selected="true"], [aria-pressed="true"], [data-selected], [data-reach="selected"]) {
   background-color: var(--pe-select);
   background-image: none;
 }

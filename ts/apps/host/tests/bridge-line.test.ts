@@ -92,72 +92,104 @@ const harness = Effect.gen(function* () {
 });
 
 for (const change of ["unpin", "same-session repin"] as const)
-effectTest(`a Page ${change} fences a dispatch whose pin read already returned consent`, () =>
-  Effect.gen(function* () {
-    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-pin-fence-")));
-    const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
-    yield* Effect.addFinalizer(() =>
-      Effect.promise(async () => {
-        await journal.close();
-        await rm(directory, { recursive: true, force: true });
-      }),
-    );
-    const h = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
-    yield* Effect.addFinalizer(() => Scope.close(h.bridgeScope, Exit.void));
-    const stop = bindRevoke(journal, h.bridge);
-    yield* Effect.addFinalizer(() => Effect.sync(stop));
-    yield* Effect.promise(async () => {
-      await mkdir(join(directory, "Pages", "pin"), { recursive: true });
-      await writeFile(join(directory, "Pages", "pin", "index.html"), "<title>Pin</title>");
-    });
-    const handle = createPagesHandler(join(directory, "Pages"), undefined, {
-      sessions: async () => [{ session: h.target.session, documents: [
-        { openId: h.target.openId, title: "A", isActive: false, isFamilyDocument: false },
-        { openId: "other-open", title: "B", isActive: true, isFamilyDocument: false },
-      ] }],
-      forward: async () => { throw Error("Binding must not forward an operation"); },
-    }, undefined,
-      stateFixture(join(directory, "state")));
-    const bind = (choice: unknown) => asCaller(human, handle)(new Request("http://host/pe/pages/pin/binding", {
-      method: "PUT", body: JSON.stringify(choice),
-    }));
-    expect((yield* Effect.promise(() => bind({ kind: "pinned", ref: h.target }))).status).toBe(200);
-    let reads = 0;
-    let readEntered!: () => void;
-    const reading = new Promise<void>((resolve) => { readEntered = resolve; });
-    let returnConsent!: (value: null) => void;
-    const release = bindActionDispatch("pin-race", {
-      refusal: () => {
-        if (++reads === 1) {
-          return new Promise<null>((resolve) => {
-            returnConsent = resolve;
-            readEntered();
-          });
-        }
-        return { kind: "refused", message: "Page pin removed" };
-      },
-      validate: async () => null,
-      dispatched: async () => {},
-    });
-    yield* Effect.addFinalizer(() => Effect.sync(release));
-    const pending = yield* h.call("test.pin", {}, "pin-race");
-    yield* Effect.promise(() => reading);
-    // The pin read holds its old consent while the binding write fences dispatch.
-    expect((yield* Effect.promise(() => bind(change === "unpin" ? { kind: "none" } : {
-      kind: "pinned", ref: { ...h.target, openId: "other-open" },
-    }))).status).toBe(200);
-    returnConsent(null);
-    yield* turns();
-    const escaped = (yield* Queue.size(h.outgoing)) > 0 ? yield* Queue.takeAll(h.outgoing) : [];
-    // Answer an escaped request so a broken fence fails an assertion rather than hanging teardown.
-    for (const frame of escaped) yield* h.answer(frame.request!.requestId);
-    const result = yield* Fiber.await(pending);
-    expect(escaped).toHaveLength(0);
-    expect(failure(result)).toMatchObject({ outcome: "refused", message: "Page pin removed" });
-    expect(reads).toBe(2);
-    expect(yield* Queue.size(h.outgoing)).toBe(0);
-  }),
-);
+  effectTest(`a Page ${change} fences a dispatch whose pin read already returned consent`, () =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-pin-fence-")));
+      const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(async () => {
+          await journal.close();
+          await rm(directory, { recursive: true, force: true });
+        }),
+      );
+      const h = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+      yield* Effect.addFinalizer(() => Scope.close(h.bridgeScope, Exit.void));
+      const stop = bindRevoke(journal, h.bridge);
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      yield* Effect.promise(async () => {
+        await mkdir(join(directory, "Pages", "pin"), { recursive: true });
+        await writeFile(join(directory, "Pages", "pin", "index.html"), "<title>Pin</title>");
+      });
+      const handle = createPagesHandler(
+        join(directory, "Pages"),
+        undefined,
+        {
+          sessions: async () => [
+            {
+              session: h.target.session,
+              documents: [
+                { openId: h.target.openId, title: "A", isActive: false, isFamilyDocument: false },
+                { openId: "other-open", title: "B", isActive: true, isFamilyDocument: false },
+              ],
+            },
+          ],
+          forward: async () => {
+            throw Error("Binding must not forward an operation");
+          },
+        },
+        undefined,
+        stateFixture(join(directory, "state")),
+      );
+      const bind = (choice: unknown) =>
+        asCaller(
+          human,
+          handle,
+        )(
+          new Request("http://host/pe/pages/pin/binding", {
+            method: "PUT",
+            body: JSON.stringify(choice),
+          }),
+        );
+      expect((yield* Effect.promise(() => bind({ kind: "pinned", ref: h.target }))).status).toBe(
+        200,
+      );
+      let reads = 0;
+      let readEntered!: () => void;
+      const reading = new Promise<void>((resolve) => {
+        readEntered = resolve;
+      });
+      let returnConsent!: (value: null) => void;
+      const release = bindActionDispatch("pin-race", {
+        refusal: () => {
+          if (++reads === 1) {
+            return new Promise<null>((resolve) => {
+              returnConsent = resolve;
+              readEntered();
+            });
+          }
+          return { kind: "refused", message: "Page pin removed" };
+        },
+        validate: async () => null,
+        dispatched: async () => {},
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(release));
+      const pending = yield* h.call("test.pin", {}, "pin-race");
+      yield* Effect.promise(() => reading);
+      // The pin read holds its old consent while the binding write fences dispatch.
+      expect(
+        (yield* Effect.promise(() =>
+          bind(
+            change === "unpin"
+              ? { kind: "none" }
+              : {
+                  kind: "pinned",
+                  ref: { ...h.target, openId: "other-open" },
+                },
+          ),
+        )).status,
+      ).toBe(200);
+      returnConsent(null);
+      yield* turns();
+      const escaped = (yield* Queue.size(h.outgoing)) > 0 ? yield* Queue.takeAll(h.outgoing) : [];
+      // Answer an escaped request so a broken fence fails an assertion rather than hanging teardown.
+      for (const frame of escaped) yield* h.answer(frame.request!.requestId);
+      const result = yield* Fiber.await(pending);
+      expect(escaped).toHaveLength(0);
+      expect(failure(result)).toMatchObject({ outcome: "refused", message: "Page pin removed" });
+      expect(reads).toBe(2);
+      expect(yield* Queue.size(h.outgoing)).toBe(0);
+    }),
+  );
 
 effectTest("interrupting a waiter never lets the one behind it overtake the running op", () =>
   Effect.gen(function* () {
@@ -487,102 +519,194 @@ const terminal = (requestId: string, outcome = "Succeeded") => ({
 const terminalFrame = (requestId: string, outcome?: string) =>
   JSON.stringify({ kind: "Terminal", terminal: terminal(requestId, outcome) });
 
-for (const mode of ["reported-unknown", "process-exit", "missing-touched", "restored-after-loss"] as const)
-effectTest(`a dispatched bridge request preserves its evidence: ${mode}`, () =>
-  Effect.gen(function* () {
-    const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-bridge-unknown-")));
-    yield* Effect.addFinalizer(() => Effect.promise(() => rm(directory, { recursive: true, force: true })));
-    const services = yield* Layer.build(ActionJournalService.live(null, stateFixture(directory)));
-    const journal = Context.get(services, ActionJournalService);
-    const { bridge, bridgeScope, target, sent, frame, close, life, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
-    yield* Effect.addFinalizer(() => Scope.close(bridgeScope, Exit.void));
-    journal.bindCommands({ probe: async () => null, resolve: () => command(
-      { says: "Read bridge evidence", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
-      z.null(), { bind: async () => ({ effects: [] }), run: (_ctx, execution) => execution.step(
-        "native", "test.bridge-unknown", {}, (id) => bridge.invoke("test.bridge-unknown", {}, target.session, target.openId, id)
-          .pipe(Effect.map(({ value }) => value)),
-      ) },
-    ) });
-    yield* Effect.promise(() => journal.invoke({ id: "bridge-unknown", key: "test.bridge-unknown", target: { kind: "host" }, input: {} },
-      { caller: { kind: "human", via: "local" }, basis: null }));
-    const request = yield* sent;
-    const touched = mode === "restored-after-loss" ? { kind: "restored", views: [] }
-      : { kind: "unknown", reason: mode === "process-exit" ? "process-exit" : "lost-response" };
-    if (mode === "process-exit") {
-      yield* close;
-      const pending = yield* Effect.promise(() => journal.list(undefined, "bridge-unknown"));
-      expect(pending[0]?.steps[0]).toMatchObject({ transport: "bridge", touched: { kind: "unknown", reason: "lost-response" } });
-      life.alive = false;
-      yield* TestClock.adjust("2 seconds");
-    } else {
-      let deliver = frame;
-      if (mode === "missing-touched" || mode === "restored-after-loss") {
+for (const mode of [
+  "reported-unknown",
+  "process-exit",
+  "missing-touched",
+  "restored-after-loss",
+] as const)
+  effectTest(`a dispatched bridge request preserves its evidence: ${mode}`, () =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-bridge-unknown-")));
+      yield* Effect.addFinalizer(() =>
+        Effect.promise(() => rm(directory, { recursive: true, force: true })),
+      );
+      const services = yield* Layer.build(ActionJournalService.live(null, stateFixture(directory)));
+      const journal = Context.get(services, ActionJournalService);
+      const { bridge, bridgeScope, target, sent, frame, close, life, socketOf } =
+        yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+      yield* Effect.addFinalizer(() => Scope.close(bridgeScope, Exit.void));
+      journal.bindCommands({
+        probe: async () => null,
+        resolve: () =>
+          command(
+            {
+              says: "Read bridge evidence",
+              needs: "nothing",
+              effect: "command",
+              dirties: [],
+              input: z.record(z.string(), z.unknown()),
+            },
+            z.null(),
+            {
+              bind: async () => ({ effects: [] }),
+              run: (_ctx, execution) =>
+                execution.step("native", "test.bridge-unknown", {}, (id) =>
+                  bridge
+                    .invoke("test.bridge-unknown", {}, target.session, target.openId, id)
+                    .pipe(Effect.map(({ value }) => value)),
+                ),
+            },
+          ),
+      });
+      yield* Effect.promise(() =>
+        journal.invoke(
+          { id: "bridge-unknown", key: "test.bridge-unknown", target: { kind: "host" }, input: {} },
+          { caller: { kind: "human", via: "local" }, basis: null },
+        ),
+      );
+      const request = yield* sent;
+      const touched =
+        mode === "restored-after-loss"
+          ? { kind: "restored", views: [] }
+          : { kind: "unknown", reason: mode === "process-exit" ? "process-exit" : "lost-response" };
+      if (mode === "process-exit") {
         yield* close;
-        deliver = (yield* socketOf()).frame;
+        const pending = yield* Effect.promise(() => journal.list(undefined, "bridge-unknown"));
+        expect(pending[0]?.steps[0]).toMatchObject({
+          transport: "bridge",
+          touched: { kind: "unknown", reason: "lost-response" },
+        });
+        life.alive = false;
+        yield* TestClock.adjust("2 seconds");
+      } else {
+        let deliver = frame;
+        if (mode === "missing-touched" || mode === "restored-after-loss") {
+          yield* close;
+          deliver = (yield* socketOf()).frame;
+        }
+        const reply = JSON.parse(response(request.requestId));
+        if (mode !== "missing-touched") reply.response.touched = touched;
+        yield* deliver(JSON.stringify(reply));
       }
-      const reply = JSON.parse(response(request.requestId));
-      if (mode !== "missing-touched") reply.response.touched = touched;
-      yield* deliver(JSON.stringify(reply));
-    }
-    const action = yield* Effect.promise(() => journal.wait("bridge-unknown"));
-    const rows = noticeRows({ threads: [], receipts: [{ revision: 1, action }], works: [], machine: null, stored: [], }, 0);
-    if (mode === "missing-touched") {
-      expect(action.steps[0]).not.toHaveProperty("touched");
-      expect(rows).toMatchObject([{ verb: "missing-touched", says: expect.stringContaining("answered without a touched value") }]);
-    } else if (mode === "restored-after-loss") {
-      expect(action.steps[0]).toMatchObject({ transport: "bridge", touched });
-      expect(rows).toEqual([]);
-    } else {
-      expect(action.steps[0]).toMatchObject({ transport: "bridge", touched });
-      expect(rows.filter((row) => row.key === `native:${request.requestId}`))
-        .toMatchObject([{ verb: "unknown", detail: JSON.stringify(touched) }]);
-      if (mode === "process-exit") expect(rows.find((row) => row.key === `native:${request.requestId}`)?.says).toContain("Revit exited");
-    }
-  }),
-);
+      const action = yield* Effect.promise(() => journal.wait("bridge-unknown"));
+      const rows = noticeRows(
+        { threads: [], receipts: [{ revision: 1, action }], works: [], machine: null, stored: [] },
+        0,
+      );
+      if (mode === "missing-touched") {
+        expect(action.steps[0]).not.toHaveProperty("touched");
+        expect(rows).toMatchObject([
+          {
+            verb: "missing-touched",
+            says: expect.stringContaining("answered without a touched value"),
+          },
+        ]);
+      } else if (mode === "restored-after-loss") {
+        expect(action.steps[0]).toMatchObject({ transport: "bridge", touched });
+        expect(rows).toEqual([]);
+      } else {
+        expect(action.steps[0]).toMatchObject({ transport: "bridge", touched });
+        expect(rows.filter((row) => row.key === `native:${request.requestId}`)).toMatchObject([
+          { verb: "unknown", detail: JSON.stringify(touched) },
+        ]);
+        if (mode === "process-exit")
+          expect(rows.find((row) => row.key === `native:${request.requestId}`)?.says).toContain(
+            "Revit exited",
+          );
+      }
+    }),
+  );
 
 effectTest("socket killed during focused capture recovers restoreFailed and one notice", () =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "pe-focused-socket-")));
     const journal = journalAt(join(directory, "receipts.jsonl"), Date.now);
-    yield* Effect.addFinalizer(() => Effect.promise(async () => {
-      await journal.close();
-      await rm(directory, { recursive: true, force: true });
-    }));
-    const { call, sent, close, socketOf } = yield* harness.pipe(Effect.provideService(ActionJournalService, journal));
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(async () => {
+        await journal.close();
+        await rm(directory, { recursive: true, force: true });
+      }),
+    );
+    const { call, sent, close, socketOf } = yield* harness.pipe(
+      Effect.provideService(ActionJournalService, journal),
+    );
     let terminalTouched: unknown;
     const release = bindActionDispatch("focused-socket", {
-      refusal: () => null, validate: async () => null, dispatched: async () => {},
-      terminal: async (touched) => { terminalTouched = touched; },
+      refusal: () => null,
+      validate: async () => null,
+      dispatched: async () => {},
+      terminal: async (touched) => {
+        terminalTouched = touched;
+      },
     });
     yield* Effect.addFinalizer(() => Effect.sync(release));
-    const capture = yield* call("revit.context.view-image", { focus: { elementIds: [42] } }, "focused-socket");
+    const capture = yield* call(
+      "revit.context.view-image",
+      { focus: { elementIds: [42] } },
+      "focused-socket",
+    );
     const request = yield* sent;
     yield* close;
-    const touched = { kind: "restoreFailed", views: [{
-      view: { documentKey: "model", uniqueId: "focus-view", id: 42 }, left: ["crop"],
-    }] };
+    const touched = {
+      kind: "restoreFailed",
+      views: [
+        {
+          view: { documentKey: "model", uniqueId: "focus-view", id: 42 },
+          left: ["crop"],
+        },
+      ],
+    };
     yield* socketOf(inFlight({ terminals: [{ ...terminal(request.requestId), touched }] }));
     yield* Fiber.await(capture);
     expect(terminalTouched).toEqual(touched);
-    const recovered = yield* Effect.promise(() => readNativeReceipt({
-      id: request.requestId, key: request.operationKey, kind: "native", input: {},
-      state: "unknown", error: "socket lost", status: 503,
-    }, originalProcess, async () => sdkEnvelope({
-      requestId: request.requestId, state: "ok",
-      receipt: { ...originalProcess, requestId: request.requestId, key: request.operationKey, verdict: "ok" },
-      response: { payload: { image: "focus.png" }, touched },
-    })));
+    const recovered = yield* Effect.promise(() =>
+      readNativeReceipt(
+        {
+          id: request.requestId,
+          key: request.operationKey,
+          kind: "native",
+          input: {},
+          state: "unknown",
+          error: "socket lost",
+          status: 503,
+        },
+        originalProcess,
+        async () =>
+          sdkEnvelope({
+            requestId: request.requestId,
+            state: "ok",
+            receipt: {
+              ...originalProcess,
+              requestId: request.requestId,
+              key: request.operationKey,
+              verdict: "ok",
+            },
+            response: { payload: { image: "focus.png" }, touched },
+          }),
+      ),
+    );
     expect(recovered.step).toMatchObject({ state: "succeeded", touched });
     const action = actionReceiptSchema.parse({
-      id: "focused-capture", key: request.operationKey, state: "succeeded", result: {},
-      caller: { kind: "human", via: "local" }, basis: null, target: { kind: "host" },
-      input: {}, steps: [recovered.step], prepared: { state: "ready", value: null },
-      recovery: [], startedAt: "2026-11-12T00:00:00Z",
+      id: "focused-capture",
+      key: request.operationKey,
+      state: "succeeded",
+      result: {},
+      caller: { kind: "human", via: "local" },
+      basis: null,
+      target: { kind: "host" },
+      input: {},
+      steps: [recovered.step],
+      prepared: { state: "ready", value: null },
+      recovery: [],
+      startedAt: "2026-11-12T00:00:00Z",
     });
-    expect(noticeRows({ threads: [], works: [], machine: null, stored: [],
-      receipts: [{ revision: 1, action }] }, 0))
-      .toMatchObject([{ key: `native:${request.requestId}`, verb: "restoreFailed" }]);
+    expect(
+      noticeRows(
+        { threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action }] },
+        0,
+      ),
+    ).toMatchObject([{ key: `native:${request.requestId}`, verb: "restoreFailed" }]);
   }),
 );
 
@@ -607,7 +731,8 @@ effectTest("a failed dispatch journal mark stays typed and holds B until A Termi
       .soft(failure(result))
       .toMatchObject({ _tag: "BridgeError", evidence: { dispatched: true } });
     expect(Exit.findErrorOption(result)).toMatchObject({
-      _tag: "Some", value: { _tag: "BridgeError", evidence: { dispatched: true } },
+      _tag: "Some",
+      value: { _tag: "BridgeError", evidence: { dispatched: true } },
     });
     expect(yield* Queue.size(h.outgoing)).toBe(0);
     yield* h.frame(terminalFrame(runningA.requestId));

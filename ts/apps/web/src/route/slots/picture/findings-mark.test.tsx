@@ -33,53 +33,96 @@ import { elementOf } from "@pe/web-kernel/route/slots/picture";
 const io = vi.hoisted(() => ({ call: vi.fn(() => new Promise(() => {})) }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
 vi.mock("#/scene/artifact", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
-const seen = vi.hoisted((): { model: Parameters<typeof ModelPicture>[0] | null } => ({ model: null }));
+const seen = vi.hoisted((): { model: Parameters<typeof ModelPicture>[0] | null } => ({
+  model: null,
+}));
 vi.mock("#/scene/picture/model", async (original) => ({
   ...(await original<typeof import("#/scene/picture/model")>()),
-  ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => { seen.model = props; return <div data-model-picture="" />; },
+  ModelPicture: (props: Parameters<typeof ModelPicture>[0]) => {
+    seen.model = props;
+    return <div data-model-picture="" />;
+  },
 }));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); seen.model = null; });
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  seen.model = null;
+});
 
 test("a person's finding on a fan port draws one mark on the port's geometry in the /fans picture pane, from the findings Work", async () => {
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(private callback: ResizeObserverCallback) {}
-    observe(target: Element) { this.callback([{ target, contentRect: new DOMRectReadOnly(0, 0, 640, 480) } as ResizeObserverEntry], this as never); }
-    unobserve() {}
-    disconnect() {}
-  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.callback(
+          [{ target, contentRect: new DOMRectReadOnly(0, 0, 640, 480) } as ResizeObserverEntry],
+          this as never,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   const dir = await mkdtemp(join(tmpdir(), "pe-findings-mark-"));
   const native = await fixtureNative(join(dir, "state", "native"));
   const socket = await native.connect();
   let saved: unknown = null;
   const host = new RouteWorkspace({
     registrations: [{ spec: findingsWork }],
-    store: { getState: async () => structuredClone(saved), setState: async ({ value }) => void (saved = structuredClone(value)) },
+    store: {
+      getState: async () => structuredClone(saved),
+      setState: async ({ value }) => void (saved = structuredClone(value)),
+    },
   });
   const post = native.actions({ workspace: host });
-  const routes = createPeRoutes({ workspace: host, journal: native.journal, registrations: [{ spec: findingsWork }] });
+  const routes = createPeRoutes({
+    workspace: host,
+    journal: native.journal,
+    registrations: [{ spec: findingsWork }],
+  });
   // The browser's Pe client, answered by the host's own route door as the person.
   const browser = createPeClient("http://host", (url, init) =>
-    withInvocationContext({ caller: human }, () => routes.fetch(new Request(url, init))));
+    withInvocationContext({ caller: human }, () => routes.fetch(new Request(url, init))),
+  );
   const submitted: { key: string; input: { work?: { key: WorkKey } } }[] = [];
   const closes: (() => void)[] = [];
   try {
-    const f = await createWitness(closes, new Map(), {}, { address: address("C:/model.rvt"), open: socket.target }, undefined,
+    const f = await createWitness(
+      closes,
+      new Map(),
+      {},
+      { address: address("C:/model.rvt"), open: socket.target },
+      undefined,
       async (command) => {
         submitted.push(command as never);
         const response = await post(command, human);
         expect(response.status, await response.clone().text()).toBeLessThan(400);
         return actionReceiptSchema.parse(await native.journal.wait(command.id));
-      }, browser, workReadings(host));
+      },
+      browser,
+      workReadings(host),
+    );
     await waitFor(() => expect(f.typed.owner()?.ready).toBe(true));
     // The shell's own drawing of each pane, redrawn when the mount publishes.
     const Shown = ({ id, children }: { id: string; children?: (ctx: never) => ReactNode }) => {
       useSyncExternalStore(f.typed.subscribe, f.typed.revision, f.typed.revision);
-      return <>{f.typed.draw(id, (ctx) => children ? children(ctx as never) : <TypedPane mount={f.typed} id={id} ctx={ctx} />) as ReactNode}</>;
+      return (
+        <>
+          {
+            f.typed.draw(id, (ctx) =>
+              children ? children(ctx as never) : <TypedPane mount={f.typed} id={id} ctx={ctx} />,
+            ) as ReactNode
+          }
+        </>
+      );
     };
-    render(<RegistryContext value={makeAtomRegistry()}>
-      <Notes mount={f.typed} />
-      <Shown id="calc-picture" />
-    </RegistryContext>);
+    render(
+      <RegistryContext value={makeAtomRegistry()}>
+        <Notes mount={f.typed} />
+        <Shown id="calc-picture" />
+      </RegistryContext>,
+    );
 
     // The person writes through the shell on the first fan port in the declared roster.
     const subject = f.typed.spec.subject;
@@ -88,29 +131,66 @@ test("a person's finding on a fan port draws one mark on the port's geometry in 
     if (!("value" in roster)) throw Error("Read the fan roster first");
     const first = subject.options(roster.value)[0];
     if (!first) throw Error("The fixture must have a fan port");
-    fireEvent(document, new CustomEvent("pe:findings", { detail: { route: "fans", code: first.id } }));
+    fireEvent(
+      document,
+      new CustomEvent("pe:findings", { detail: { route: "fans", code: first.id } }),
+    );
     const pop = await screen.findByRole("dialog");
-    fireEvent.change(within(pop).getByLabelText("finding text"), { target: { value: "port static reads low" } });
+    fireEvent.change(within(pop).getByLabelText("finding text"), {
+      target: { value: "port static reads low" },
+    });
     fireEvent.click(within(pop).getByRole("button", { name: "Write finding" }));
-    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), { timeout: 20_000 });
+    await waitFor(() => expect(submitted.map((c) => c.key)).toEqual(["findings.say"]), {
+      timeout: 20_000,
+    });
     const key: WorkKey = { ...submitted[0]!.input.work!.key, route: "findings" };
-    const written = async () => Object.values(findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings);
+    const written = async () =>
+      Object.values(
+        findingsWorkSchema.parse((await host.view(key, "findings"))?.doc ?? {}).findings,
+      );
     await waitFor(async () => expect(await written()).toHaveLength(1), { timeout: 20_000 });
     const port = (await written())[0]!.subject;
     expect(port).toMatch(/^UniqueId:.+#port:\d+$/);
 
     // That fan is opened: its walk is the picture, drawn by the kernel pane.
     f.typed.page.subject({ kind: "ids", ids: [port] });
-    await waitFor(() => expect(seen.model?.drawn.map((layer) => layer.key)).toContain("findings"), { timeout: 20_000 });
+    await waitFor(() => expect(seen.model?.drawn.map((layer) => layer.key)).toContain("findings"), {
+      timeout: 20_000,
+    });
     // The capture holds the fan unit, not its port: the ring lands on the unit's geometry.
-    const meshes = new SceneMeshes(new Float32Array([0, 0, 0, 2, 0, 0, 0, 2, 2]), { minX: 0, minY: 0, minZ: 0, maxX: 2, maxY: 2, maxZ: 2 },
-      [{ key: elementOf(port), revitId: 1, documentKey: "host", linkInstanceId: null, uniqueId: "fan", categoryId: null, category: "Mechanical Equipment", focus: true, firstVertex: 0, vertexCount: 3 }]);
-    await waitFor(() => {
-      const marks = seen.model!.drawn.find((layer) => layer.key === "findings")!.draw({ meshes, paintOf: undefined });
-      expect(marks.map((layer) => JSON.parse(layer.key.slice(layer.key.indexOf("{"))))).toEqual([{ kind: "ring", at: { point: [1, 1, 1] } }]);
-    }, { timeout: 20_000 });
+    const meshes = new SceneMeshes(
+      new Float32Array([0, 0, 0, 2, 0, 0, 0, 2, 2]),
+      { minX: 0, minY: 0, minZ: 0, maxX: 2, maxY: 2, maxZ: 2 },
+      [
+        {
+          key: elementOf(port),
+          revitId: 1,
+          documentKey: "host",
+          linkInstanceId: null,
+          uniqueId: "fan",
+          categoryId: null,
+          category: "Mechanical Equipment",
+          focus: true,
+          firstVertex: 0,
+          vertexCount: 3,
+        },
+      ],
+    );
+    await waitFor(
+      () => {
+        const marks = seen
+          .model!.drawn.find((layer) => layer.key === "findings")!
+          .draw({ meshes, paintOf: undefined });
+        expect(marks.map((layer) => JSON.parse(layer.key.slice(layer.key.indexOf("{"))))).toEqual([
+          { kind: "ring", at: { point: [1, 1, 1] } },
+        ]);
+      },
+      { timeout: 20_000 },
+    );
     // The sheet's computed blockers are their own layer: `findings` toggles the findings Work only.
-    expect(seen.model!.drawn.filter((layer) => layer.toggle === "findings").map((layer) => layer.key)).toEqual(["findings"]);
+    expect(
+      seen.model!.drawn.filter((layer) => layer.toggle === "findings").map((layer) => layer.key),
+    ).toEqual(["findings"]);
   } finally {
     cleanup();
     closes.reverse().forEach((close) => close());

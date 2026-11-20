@@ -24,7 +24,11 @@ import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
-import { openRecordingReader, openRecordingWriter, nativeCatalogIdentity } from "../src/native-recording.ts";
+import {
+  openRecordingReader,
+  openRecordingWriter,
+  nativeCatalogIdentity,
+} from "../src/native-recording.ts";
 import { type HostInputLane } from "@pe/host-internal/input-recording";
 import * as localInputs from "../src/local-inputs.ts";
 import { settle } from "./effect-test.ts";
@@ -58,7 +62,9 @@ test("recorded host-local inputs and immutable capture files replay without a li
       ).body,
   });
   const unregister = registeredReads.register({ image: imageRead });
-  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "bundle")), identity, bounds));
+  const writer = await settle(
+    openRecordingWriter(stateFixture(join(dir, "bundle")), identity, bounds),
+  );
   const who = { kind: "human" as const, via: "local" as const };
   const make = (lane: HostInputLane) => {
     const inputs = Effect.runSync(

@@ -32,11 +32,7 @@ const config = defineConfig(({ mode, command }) => {
   // VITE_-prefixed vars to import.meta.env, so lift the ones our API route
   // handlers read into process.env for the dev/SSR server process.
   const rootEnv = loadEnv(mode, `${import.meta.dirname}/../..`, "");
-  const serverKeys = [
-    "LLAMA_CLOUD_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "PE_PDF_AUDIT_MODEL",
-  ];
+  const serverKeys = ["LLAMA_CLOUD_API_KEY", "ANTHROPIC_API_KEY", "PE_PDF_AUDIT_MODEL"];
   for (const key of serverKeys) {
     if (rootEnv[key] && !process.env[key]) process.env[key] = rootEnv[key];
   }
@@ -184,7 +180,10 @@ const config = defineConfig(({ mode, command }) => {
     // Vitest's 5 s default fails honest tests when this box runs several suites at once (a 1.2 s grid
     // test took 5 s). 15 s still fails a hang within the minute.
     test: {
-      setupFiles: ["../../tests/isolated-home/setup.ts", fileURLToPath(import.meta.resolve("@pe/web-kernel/test-setup"))],
+      setupFiles: [
+        "../../tests/isolated-home/setup.ts",
+        fileURLToPath(import.meta.resolve("@pe/web-kernel/test-setup")),
+      ],
       testTimeout: 15_000,
       globalSetup: ["../../tests/isolated-home/global-setup.ts"],
     },

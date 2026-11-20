@@ -133,7 +133,18 @@ function project(doc: unknown, patches: RouteStatePatch[]): unknown {
 /** In-memory history for exactly one Work. Call accept for local acks AND accepted host deltas. */
 export function createWorkJournal(key: WorkKey) {
   const identity = workKey(key);
-  const intents = new Map<string, { id:string; owner:WorkKey; input:WorkWrite; label:string; at:number; status:"pending"|"refused"; reason?:string }>();
+  const intents = new Map<
+    string,
+    {
+      id: string;
+      owner: WorkKey;
+      input: WorkWrite;
+      label: string;
+      at: number;
+      status: "pending" | "refused";
+      reason?: string;
+    }
+  >();
   let revision: number | null = null;
   let from = 0;
   let current: { revision: number; doc: unknown } | null = null;
@@ -183,7 +194,11 @@ export function createWorkJournal(key: WorkKey) {
     if (!barrier) {
       // The same receipt, now terminal without a write (failed, cancelled, refused), lets go.
       for (const step of [...undo, ...redo])
-        if (entry.receiptId && step.barrier?.receiptId === entry.receiptId && step.barrier.outcome?.state === "running")
+        if (
+          entry.receiptId &&
+          step.barrier?.receiptId === entry.receiptId &&
+          step.barrier.outcome?.state === "running"
+        )
           delete step.barrier;
       return;
     }
@@ -214,7 +229,8 @@ export function createWorkJournal(key: WorkKey) {
   };
   const applyAcknowledgement = (acknowledged: WorkWriteAck, detail?: JournalDetail): void => {
     if (workKey(acknowledged.key) !== identity) return;
-    for (const [id,intent] of intents) if (intent.input.press && intent.input.press === acknowledged.press) intents.delete(id);
+    for (const [id, intent] of intents)
+      if (intent.input.press && intent.input.press === acknowledged.press) intents.delete(id);
     const ack = structuredClone(acknowledged);
     // Local callbacks and the host stream can deliver the same acknowledgement twice.
     if (revision !== null && ack.revision <= revision) return;
@@ -231,7 +247,9 @@ export function createWorkJournal(key: WorkKey) {
     // step moves across exactly as if this mount had replayed it. A per-author undo restores that
     // author's last step, which need not be the top one, so the step is found by its revision.
     if (ack.kind === "restore" && !pending) {
-      const undone = undo.findLast((step) => step.transitions[step.cursor - 1]?.revision === ack.restoreOf);
+      const undone = undo.findLast(
+        (step) => step.transitions[step.cursor - 1]?.revision === ack.restoreOf,
+      );
       const back = undone?.transitions[undone.cursor - 1];
       if (undone && back && !undone.superseded) {
         back.forward = ack.inverse;
@@ -242,7 +260,9 @@ export function createWorkJournal(key: WorkKey) {
         }
         return;
       }
-      const redone = redo.findLast((step) => step.transitions[step.cursor]?.revision === ack.restoreOf);
+      const redone = redo.findLast(
+        (step) => step.transitions[step.cursor]?.revision === ack.restoreOf,
+      );
       const ahead = redone?.transitions[redone.cursor];
       if (redone && ahead && !redone.superseded) {
         ahead.inverse = ack.inverse;
@@ -373,7 +393,8 @@ export function createWorkJournal(key: WorkKey) {
       };
     if (held) return { ok: false, code: "barrier", message: "Work changed; review and retry" };
     const source = direction === "undo" ? undo : redo;
-    const step = pending?.step ?? (author ? source.findLast((entry) => entry.by === author) : source.at(-1));
+    const step =
+      pending?.step ?? (author ? source.findLast((entry) => entry.by === author) : source.at(-1));
     if (!step || revision === null)
       return { ok: false, code: "empty", message: `Nothing to ${direction}` };
     if (press !== undefined && step.press !== press)
@@ -525,16 +546,32 @@ export function createWorkJournal(key: WorkKey) {
   return {
     key: structuredClone(key),
     retainIntent(input: WorkWrite, label: string) {
-      if (intents.size >= 32) throw Error("Discard a retained edit in History before editing again (32 retained edits)");
+      if (intents.size >= 32)
+        throw Error("Discard a retained edit in History before editing again (32 retained edits)");
       const id = crypto.randomUUID();
-      intents.set(id, structuredClone({id, owner:key, input, label, at:Date.now(), status:"pending" as const}));
+      intents.set(
+        id,
+        structuredClone({
+          id,
+          owner: key,
+          input,
+          label,
+          at: Date.now(),
+          status: "pending" as const,
+        }),
+      );
       return id;
     },
     refuseIntent(id: string, reason: string) {
       const intent = intents.get(id);
-      if (intent) { intent.status="refused"; intent.reason=reason; }
+      if (intent) {
+        intent.status = "refused";
+        intent.reason = reason;
+      }
     },
-    discardIntent(id: string) { intents.delete(id); },
+    discardIntent(id: string) {
+      intents.delete(id);
+    },
     accept,
     reconcile,
     /** Rebuild only the journal view from the host's canonical acquisition. Never publish Work. */
@@ -614,8 +651,10 @@ export function createWorkJournal(key: WorkKey) {
     hold(on: boolean) {
       held = on;
     },
-    undo: (write: JournalWriter, press?: string, author?: Step["by"]) => replay("undo", write, press, author),
-    redo: (write: JournalWriter, press?: string, author?: Step["by"]) => replay("redo", write, press, author),
+    undo: (write: JournalWriter, press?: string, author?: Step["by"]) =>
+      replay("undo", write, press, author),
+    redo: (write: JournalWriter, press?: string, author?: Step["by"]) =>
+      replay("redo", write, press, author),
     read: () => {
       for (const step of [...undo, ...redo]) {
         delete step.notWritten;

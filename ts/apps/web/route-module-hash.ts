@@ -1,7 +1,4 @@
-import {
-  currentRouteStartupProjection,
-  readRouteStartupReceipt,
-} from "./route-startup.ts";
+import { currentRouteStartupProjection, readRouteStartupReceipt } from "./route-startup.ts";
 import type { RouteStartupProjection } from "./route-startup.ts";
 import { readFileSync } from "node:fs";
 import { execFile } from "node:child_process";

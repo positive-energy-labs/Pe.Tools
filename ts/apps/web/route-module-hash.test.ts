@@ -1,8 +1,6 @@
-import {
-readFileSync
-} from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect,test,vi } from "vite-plus/test";
+import { expect, test, vi } from "vite-plus/test";
 import { routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 

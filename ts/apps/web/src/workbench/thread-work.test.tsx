@@ -175,7 +175,13 @@ test("outside demo the sidebar subscribes to one thread-work Reading and draws o
               threadId: "fixture-local",
               documents: [{ id: "d", name: "Live Plant.rvt", availability: "open" }],
               works: [
-                { id: "w", documentId: "d", route: "duct-systems", intent: "live intent", unfinished: 7 },
+                {
+                  id: "w",
+                  documentId: "d",
+                  route: "duct-systems",
+                  intent: "live intent",
+                  unfinished: 7,
+                },
               ],
             },
           ],
@@ -291,7 +297,13 @@ test("a thread whose old documents have no remembered name keeps its conversatio
               threadId: "fixture-local",
               documents: [],
               works: [
-                { id: "w", documentId: "gone", route: "duct-systems", intent: "old work", unfinished: 2 },
+                {
+                  id: "w",
+                  documentId: "gone",
+                  route: "duct-systems",
+                  intent: "old work",
+                  unfinished: 2,
+                },
               ],
             },
           ],

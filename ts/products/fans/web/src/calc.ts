@@ -5,7 +5,17 @@ import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 import { FAN_CELLS } from "@pe/fans-contract/fans-inputs";
 import { routeAddress, subjectCode, type Immutable } from "@pe/agent-contracts";
 import { type fansCalcData } from "@pe/fans-contract/fans-read";
-import { cellSource, local, parameter, store, type BindingDraw, type CellLayer, type Domain, type EnumChoice, type SheetSlot } from "@pe/agent-contracts/slots";
+import {
+  cellSource,
+  local,
+  parameter,
+  store,
+  type BindingDraw,
+  type CellLayer,
+  type Domain,
+  type EnumChoice,
+  type SheetSlot,
+} from "@pe/agent-contracts/slots";
 import type { ValueSource } from "@pe/agent-contracts/work-value";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
 import { suggestKind, suggestRole } from "@pe/ducts-domain/roster";
@@ -32,7 +42,8 @@ const snapshotOf = (read: Read): Snapshot | null => {
 const inputsOf = (read: Read) => read?.calcView.inputs ?? null;
 /** The Work key of an element on the walk (its UniqueId SubjectRef), or null off the snapshot. */
 const subjectOf = (snapshot: Snapshot | null, id: string | number) => {
-  const element = snapshot && [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === Number(id));
+  const element =
+    snapshot && [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === Number(id));
   return element ? elementSubject(element) : null;
 };
 const idOf = (read: Read, row: string | undefined) => {
@@ -40,29 +51,60 @@ const idOf = (read: Read, row: string | undefined) => {
   return snapshot && row != null ? workElementId(snapshot, row) : null;
 };
 const nameOf = (read: Read, row: string, word: string) => {
-  const snapshot = snapshotOf(read), id = idOf(read, row);
+  const snapshot = snapshotOf(read),
+    id = idOf(read, row);
   return snapshot && id != null ? `${elementLabeler(snapshot)(id)} · ${word}` : word;
 };
 const rowsOf = (read: Read, ids: readonly string[]) =>
-  ids.flatMap((id) => { const s = subjectOf(snapshotOf(read), id); return s ? [s] : []; });
+  ids.flatMap((id) => {
+    const s = subjectOf(snapshotOf(read), id);
+    return s ? [s] : [];
+  });
 
 /**
  * A resolved input as a model layer under Work, in the cell's shape (`{ inWg }`, a plain cfm). The
  * source is the tier the host served: `project` or `firm` only when that home's file states the
  * value; a criterion no home states is `default`, and says so when the firm home was not found.
  */
-const layer = (resolved: { readonly value: unknown; readonly source: ValueSource | "none"; readonly units?: string | null; readonly ref?: string | null } | undefined, wrap: (v: unknown) => unknown, read?: Read): CellLayer | null => {
+const layer = (
+  resolved:
+    | {
+        readonly value: unknown;
+        readonly source: ValueSource | "none";
+        readonly units?: string | null;
+        readonly ref?: string | null;
+      }
+    | undefined,
+  wrap: (v: unknown) => unknown,
+  read?: Read,
+): CellLayer | null => {
   if (!resolved || resolved.value == null || resolved.source === "none") return null;
   const source = cellSource(resolved.source);
   const firm = read?.calcView.firm;
   // The evidence the resolver named rides with the value; only a refused firm home replaces it.
-  return { value: wrap(resolved.value), source, ...(resolved.units ? { unit: resolved.units } : {}),
-    ...(source === "default" && firm && "refused" in firm ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT } : resolved.ref ? { ref: resolved.ref } : {}) };
+  return {
+    value: wrap(resolved.value),
+    source,
+    ...(resolved.units ? { unit: resolved.units } : {}),
+    ...(source === "default" && firm && "refused" in firm
+      ? { ref: ENGINE_DEFAULT_NO_SHARED_ROOT }
+      : resolved.ref
+        ? { ref: resolved.ref }
+        : {}),
+  };
 };
 
 /** A design value's model layer with its drift: what Revit holds now, and `drift` with a note where that is not what Pe last wrote. */
-const live = (read: Read, segment: Parameters<typeof receiptDrift>[1], row: string | undefined, resolved: Parameters<typeof layer>[0], wrap: (v: unknown) => unknown): CellLayer | null => {
-  const snapshot = snapshotOf(read), id = idOf(read, row), base = layer(resolved, wrap, read);
+const live = (
+  read: Read,
+  segment: Parameters<typeof receiptDrift>[1],
+  row: string | undefined,
+  resolved: Parameters<typeof layer>[0],
+  wrap: (v: unknown) => unknown,
+): CellLayer | null => {
+  const snapshot = snapshotOf(read),
+    id = idOf(read, row),
+    base = layer(resolved, wrap, read);
   const note = snapshot && id != null ? receiptDrift(snapshot, segment, id) : null;
   return note ? { ...(base ?? { value: null }), note, drift: true } : base;
 };
@@ -72,12 +114,31 @@ const fanUnit = (read: Read) => read?.open?.overview.fan?.unitId ?? null;
 /** The write scope offered from the open fan, with how many staged cells it writes; a standing scope on another fan stays listed. */
 const scopeChoices = (read: Read): readonly EnumChoice[] => {
   const snapshot = snapshotOf(read);
-  const fan = read?.open?.overview.fan, standing = read?.fansWork.writeIntent.edit?.value?.walk;
-  const mine = (walk: { unitId: number; portIndex: number }) => !!fan && walk.unitId === fan.unitId && walk.portIndex === (fan as { portIndex?: number }).portIndex;
+  const fan = read?.open?.overview.fan,
+    standing = read?.fansWork.writeIntent.edit?.value?.walk;
+  const mine = (walk: { unitId: number; portIndex: number }) =>
+    !!fan &&
+    walk.unitId === fan.unitId &&
+    walk.portIndex === (fan as { portIndex?: number }).portIndex;
   return [
-    ...(fan && "portIndex" in fan ? [{ label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`, value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
-      description: "Write this fan's walk and its staged cells" }] : []),
-    ...(standing && !mine(standing) ? [{ label: `unit ${standing.unitId}`, value: { walk: standing }, description: "Another fan's scope, still standing" }] : []),
+    ...(fan && "portIndex" in fan
+      ? [
+          {
+            label: `${fan.mark || `unit ${fan.unitId}`} · ${snapshot ? fanWriteCells(read!.fansWork, snapshot).length : 0} staged`,
+            value: { walk: { unitId: fan.unitId, portIndex: fan.portIndex } },
+            description: "Write this fan's walk and its staged cells",
+          },
+        ]
+      : []),
+    ...(standing && !mine(standing)
+      ? [
+          {
+            label: `unit ${standing.unitId}`,
+            value: { walk: standing },
+            description: "Another fan's scope, still standing",
+          },
+        ]
+      : []),
     { value: null, label: "None", description: "Clear the write scope" },
   ];
 };
@@ -87,10 +148,20 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
  */
 const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
 const drawn = (domain: Domain): Domain =>
-  domain.kind === "number" && domain.unit && domain.unit in DIGITS ? { ...domain, digits: DIGITS[domain.unit] }
-  : domain.kind === "object" ? { ...domain, fields: Object.fromEntries(Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)])) }
-  : domain;
-const input = (row: { readonly parameter: string | null; readonly domain: Domain; readonly name: string }, draw: BindingDraw) => {
+  domain.kind === "number" && domain.unit && domain.unit in DIGITS
+    ? { ...domain, digits: DIGITS[domain.unit] }
+    : domain.kind === "object"
+      ? {
+          ...domain,
+          fields: Object.fromEntries(
+            Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)]),
+          ),
+        }
+      : domain;
+const input = (
+  row: { readonly parameter: string | null; readonly domain: Domain; readonly name: string },
+  draw: BindingDraw,
+) => {
   if (!row.parameter) throw Error(`${row.name} is not a writable fan input`);
   return parameter(row.parameter, drawn(row.domain), draw);
 };
@@ -106,48 +177,145 @@ export const fansCalc = {
     const snapshot = snapshotOf(read);
     const systems = snapshot ? calcSystems(snapshot) : [];
     return {
-      says: `Priced with the /ducts design, Work r${read.ductSystemsRevision}${!firm ? "" : "refused" in firm
-        ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
-        : !firm.present ? " over defaults where no home states a value"
-        : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`}`,
-      href: routeAddress("duct-systems").link(systems.length ? {
-        system: { kind: "ids", ids: systems.map(name => subjectCode({ keyKind: "system-name", key: name })) },
-      } : {}, Object.fromEntries(["target", "fixture", "thread"].flatMap(key => typeof search[key] === "string" ? [[key, search[key]]] : []))),
+      says: `Priced with the /ducts design, Work r${read.ductSystemsRevision}${
+        !firm
+          ? ""
+          : "refused" in firm
+            ? `: ${ENGINE_DEFAULT_NO_SHARED_ROOT}. ${NO_SHARED_ROOT}`
+            : !firm.present
+              ? " over defaults where no home states a value"
+              : ` over firm ${firm.version} · ${firm.path.split(/[\\/]/).at(-1)}`
+      }`,
+      href: routeAddress("duct-systems").link(
+        systems.length
+          ? {
+              system: {
+                kind: "ids",
+                ids: systems.map((name) => subjectCode({ keyKind: "system-name", key: name })),
+              },
+            }
+          : {},
+        Object.fromEntries(
+          ["target", "fixture", "thread"].flatMap((key) =>
+            typeof search[key] === "string" ? [[key, search[key]]] : [],
+          ),
+        ),
+      ),
     };
   },
   bindings: {
     // Design friction stays /ducts design data (ducts ledger Q2a), so Fans omits it.
-    ...Object.fromEntries(Object.entries(ductsSettings).filter(([key]) => key !== "setting.ducts.designFriction").map(([key, b]) => [key, { ...b, model: (read: Read) => {
-      if (b.home.at !== "setting") return null;
-      const [, name] = b.home.path;
-      if (b.home.path[0] === "parameters") return slotLayer(read?.calcSnapshot && !("kind" in read.calcSnapshot) ? read.calcSnapshot : null, name ?? "");
-      const declared = Object.entries(DUCTS_CRITERIA_CELLS).find(([cell]) => key === `setting.ducts.${cell}`)?.[1];
-      const criteria = inputsOf(read)?.criteria;
-      const resolved = declared && criteria?.[declared.layer[0]], side = declared?.layer[1];
-      return layer(resolved && "supply" in resolved ? side ? resolved[side] : undefined : resolved, v => v, read);
-    } }])),
-    writeIntent: local({ kind: "enum", shape: z.strictObject({ walk: z.strictObject({ unitId: z.number().int().positive(), portIndex: z.number().int().nonnegative() }) }), choices: scopeChoices }, "route", { label: "Write scope" }),
-    roles: store("_PE_DuctLosses", { kind: "object", fields: { role: { kind: "enum", shape: z.enum(DUCT_UNIT_ROLES), choices: DUCT_UNIT_ROLES.map(role => ({ value: role, label: role === "fan" ? "Fan" : "Passive" })) } } }, "subject", {
-      rows: (read: Read) => rowsOf(read, (snapshotOf(read)?.nodes ?? []).filter((n) => n.kind === "equipment").map((n) => String(n.id))),
-      rowLabel: (read, row) => nameOf(read, row, "Unit role"),
-      model: (read: Read, row) => {
-        const id = idOf(read, row), resolved = id == null ? undefined : inputsOf(read)?.units[String(id)]?.role;
-        if (resolved?.value != null) return layer(resolved, (role) => ({ role }));
-        const node = snapshotOf(read)?.nodes.find((n) => n.id === id);
-        return node ? { value: { role: suggestRole(node, suggestKind(node).kind) }, source: "default" } : null;
+    ...Object.fromEntries(
+      Object.entries(ductsSettings)
+        .filter(([key]) => key !== "setting.ducts.designFriction")
+        .map(([key, b]) => [
+          key,
+          {
+            ...b,
+            model: (read: Read) => {
+              if (b.home.at !== "setting") return null;
+              const [, name] = b.home.path;
+              if (b.home.path[0] === "parameters")
+                return slotLayer(
+                  read?.calcSnapshot && !("kind" in read.calcSnapshot) ? read.calcSnapshot : null,
+                  name ?? "",
+                );
+              const declared = Object.entries(DUCTS_CRITERIA_CELLS).find(
+                ([cell]) => key === `setting.ducts.${cell}`,
+              )?.[1];
+              const criteria = inputsOf(read)?.criteria;
+              const resolved = declared && criteria?.[declared.layer[0]],
+                side = declared?.layer[1];
+              return layer(
+                resolved && "supply" in resolved ? (side ? resolved[side] : undefined) : resolved,
+                (v) => v,
+                read,
+              );
+            },
+          },
+        ]),
+    ),
+    writeIntent: local(
+      {
+        kind: "enum",
+        shape: z.strictObject({
+          walk: z.strictObject({
+            unitId: z.number().int().positive(),
+            portIndex: z.number().int().nonnegative(),
+          }),
+        }),
+        choices: scopeChoices,
       },
-    }),
+      "route",
+      { label: "Write scope" },
+    ),
+    roles: store(
+      "_PE_DuctLosses",
+      {
+        kind: "object",
+        fields: {
+          role: {
+            kind: "enum",
+            shape: z.enum(DUCT_UNIT_ROLES),
+            choices: DUCT_UNIT_ROLES.map((role) => ({
+              value: role,
+              label: role === "fan" ? "Fan" : "Passive",
+            })),
+          },
+        },
+      },
+      "subject",
+      {
+        rows: (read: Read) =>
+          rowsOf(
+            read,
+            (snapshotOf(read)?.nodes ?? [])
+              .filter((n) => n.kind === "equipment")
+              .map((n) => String(n.id)),
+          ),
+        rowLabel: (read, row) => nameOf(read, row, "Unit role"),
+        model: (read: Read, row) => {
+          const id = idOf(read, row),
+            resolved = id == null ? undefined : inputsOf(read)?.units[String(id)]?.role;
+          if (resolved?.value != null) return layer(resolved, (role) => ({ role }));
+          const node = snapshotOf(read)?.nodes.find((n) => n.id === id);
+          return node
+            ? { value: { role: suggestRole(node, suggestKind(node).kind) }, source: "default" }
+            : null;
+        },
+      },
+    ),
     equipmentFlows: input(FAN_CELLS.equipmentFlows, {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
       model: (read: Read, row) => {
-        const id = idOf(read, row), node = snapshotOf(read)?.nodes.find((n) => n.id === id);
-        const conflict = id === fanUnit(read) ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text : undefined;
-        const base = live(read, "equipmentFlows", row, inputsOf(read)?.units[String(id)]?.cfm, (v) => v) ?? { value: null };
+        const id = idOf(read, row),
+          node = snapshotOf(read)?.nodes.find((n) => n.id === id);
+        const conflict =
+          id === fanUnit(read)
+            ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text
+            : undefined;
+        const base = live(
+          read,
+          "equipmentFlows",
+          row,
+          inputsOf(read)?.units[String(id)]?.cfm,
+          (v) => v,
+        ) ?? { value: null };
         return {
           ...base,
-          ...(conflict ? { note: [conflict.replace(/^fan \d+: /, "Conflict: "), base.note].filter(Boolean).join(". ") } : {}),
-          ...(node && node.flowParameter === null ? { refusal: `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${snapshotOf(read)?.slots.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter` } : {}),
+          ...(conflict
+            ? {
+                note: [conflict.replace(/^fan \d+: /, "Conflict: "), base.note]
+                  .filter(Boolean)
+                  .join(". "),
+              }
+            : {}),
+          ...(node && node.flowParameter === null
+            ? {
+                refusal: `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${snapshotOf(read)?.slots.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter`,
+              }
+            : {}),
         };
       },
     }),
@@ -155,22 +323,32 @@ export const fansCalc = {
     ratedEsp: local(drawn(FAN_CELLS.ratedEsp.domain), "subject", {
       rows: (read: Read) => rowsOf(read, units(read)),
       rowLabel: (read, row) => nameOf(read, row, "Unit rated ESP"),
-      model: (read: Read, row) => layer(inputsOf(read)?.units[String(idOf(read, row))]?.esp, (v) => ({ inWg: v })),
+      model: (read: Read, row) =>
+        layer(inputsOf(read)?.units[String(idOf(read, row))]?.esp, (v) => ({ inWg: v })),
     }),
     flows: input(FAN_CELLS.flows, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
-      model: (read: Read, row) => live(read, "flows", row, inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm, (v) => v),
+      model: (read: Read, row) =>
+        live(read, "flows", row, inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm, (v) => v),
     }),
     terminalDrops: input(FAN_CELLS.terminalDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
-      model: (read: Read, row) => live(read, "terminalDrops", row, inputsOf(read)?.terminals[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
+      model: (read: Read, row) =>
+        live(
+          read,
+          "terminalDrops",
+          row,
+          inputsOf(read)?.terminals[String(idOf(read, row))]?.drop,
+          (v) => ({ inWg: v }),
+        ),
     }),
     componentDrops: input(FAN_CELLS.componentDrops, {
       rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
       rowLabel: (read, row) => nameOf(read, row, "Part drop"),
-      model: (read: Read, row) => layer(inputsOf(read)?.components[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
+      model: (read: Read, row) =>
+        layer(inputsOf(read)?.components[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
     }),
   },
 } as const satisfies SheetSlot;

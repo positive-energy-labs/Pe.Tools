@@ -8,7 +8,11 @@ import { useTakeoffKernel } from "./kernel-context";
 import type { TakeoffCellControls } from "./kernel-context";
 import type { CellTransition } from "@pe/kit/lang/cell";
 
-const transitions = (owner: TakeoffCellControls, segment: string | null, key: string): CellTransition[] =>
+const transitions = (
+  owner: TakeoffCellControls,
+  segment: string | null,
+  key: string,
+): CellTransition[] =>
   ([["clear", "clear"]] as const).map(([kind, verb]) => {
     const control = owner.control(`cell:${segment}.${verb}`, { segment, key });
     return {

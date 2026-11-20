@@ -3,7 +3,13 @@ import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { lifetime } from "./document-lifetime.ts";
-import { command, io, nativeStep, refused, type CommandContext } from "@pe/host-internal/command-executor";
+import {
+  command,
+  io,
+  nativeStep,
+  refused,
+  type CommandContext,
+} from "@pe/host-internal/command-executor";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
 import { createHash } from "node:crypto";
@@ -144,12 +150,17 @@ export function takeoffExecutors(
     const action = ctx.admission.key.replace(/\.preview$/, "");
     const input = nativeRequestInput(ctx.admission.input);
     const leaf = action === "takeoffs.initialize" ? "takeoffs.initialize-carrier" : action;
-    const requests = action === "takeoffs.adopt" ? z.array(z.unknown()).parse(input.views) : [
-      action.endsWith(".partition") ? { ...input, runId: ctx.admission.id } : input,
-    ];
+    const requests =
+      action === "takeoffs.adopt"
+        ? z.array(z.unknown()).parse(input.views)
+        : [action.endsWith(".partition") ? { ...input, runId: ctx.admission.id } : input];
     for (const request of requests) {
       const checked = nativeRequestSchema(leaf as HostOperationKey).safeParse(request);
-      if (!checked.success) throw refused(`Invalid native input for '${leaf}': ${checked.error.message}`, "native.input");
+      if (!checked.success)
+        throw refused(
+          `Invalid native input for '${leaf}': ${checked.error.message}`,
+          "native.input",
+        );
     }
     const { target, process } = await bindModel(ctx, bridge, deps);
     await select?.();
@@ -218,7 +229,10 @@ export function takeoffExecutors(
         ),
       run: (ctx, execution) =>
         runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          return value(ctx, native, "rooms.partition", { ...nativeRequestInput(ctx.admission.input), runId: ctx.admission.id });
+          return value(ctx, native, "rooms.partition", {
+            ...nativeRequestInput(ctx.admission.input),
+            runId: ctx.admission.id,
+          });
         }),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
@@ -280,7 +294,14 @@ export function takeoffExecutors(
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
-      seal: (p) => ({ request: { process: p.process, edits: p.edits, decisions: p.decisions, capture: p.capture.id } }),
+      seal: (p) => ({
+        request: {
+          process: p.process,
+          edits: p.edits,
+          decisions: p.decisions,
+          capture: p.capture.id,
+        },
+      }),
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, bridge, deps);
         const { input } = ctx.admission;

@@ -56,7 +56,6 @@ test("missing subject and duplicate selection refuse admission", () => {
   expect(messages({ ...good, fields: { ...good.fields, other: good.fields.selected! } })).toContain(
     "exactly one kernel-owned selection",
   );
-
 });
 test("Pod admission links axes and refuses missing declarations", () => {
   const axes = {
@@ -87,12 +86,25 @@ test("Pod admission links axes and refuses missing declarations", () => {
   };
   expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).not.toThrow();
   const selected = module.graph.fields.selected;
-  module.graph.fields.selected = { schema: z.array(z.string()).default([]), codec: { encode: JSON.stringify, decode: JSON.parse }, role: "selection" };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow("kernel manyField");
+  module.graph.fields.selected = {
+    schema: z.array(z.string()).default([]),
+    codec: { encode: JSON.stringify, decode: JSON.parse },
+    role: "selection",
+  };
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
+    "kernel manyField",
+  );
   module.graph.fields.selected = { ...selected, schema: z.array(z.string()).default([]) };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow("kernel manyField");
-  module.graph.fields.selected = { ...selected, codec: { encode: JSON.stringify, decode: JSON.parse } };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow("kernel manyField");
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
+    "kernel manyField",
+  );
+  module.graph.fields.selected = {
+    ...selected,
+    codec: { encode: JSON.stringify, decode: JSON.parse },
+  };
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
+    "kernel manyField",
+  );
   module.graph.fields.selected = selected;
   delete module.entries["pod.test.read"].axes;
   expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(

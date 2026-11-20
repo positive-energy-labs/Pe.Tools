@@ -55,7 +55,10 @@ export function renderRouteRegistry(rows: readonly RouteRegistryInput[]): string
     }
     // The projected properties name `data` and `work`; default parameters bind them per row.
     const projectedSchemas = Object.entries(row.schemas ?? {})
-      .map(([id, schema]) => `${JSON.stringify(id)}: z.fromJSONSchema(${JSON.stringify(schema)}).meta(${JSON.stringify(schema)})`)
+      .map(
+        ([id, schema]) =>
+          `${JSON.stringify(id)}: z.fromJSONSchema(${JSON.stringify(schema)}).meta(${JSON.stringify(schema)})`,
+      )
       .join(",");
     const module = [
       row.work

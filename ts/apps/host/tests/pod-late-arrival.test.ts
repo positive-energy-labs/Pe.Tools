@@ -5,23 +5,23 @@ import { writeMember, saveMember } from "../src/settings.ts";
 import { createServer } from "node:http";
 import * as filesystem from "node:fs/promises";
 import * as store from "@pe/host-contracts/kinds";
-import { mkdir,rm,writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { clearTimeout as realClearTimeout,setTimeout as realSetTimeout } from "node:timers";
-import { afterEach,beforeEach,expect,test,vi } from "vite-plus/test";
-import { mkdtemp,stateFixture,stateMachine } from "../../../tests/isolated-home/storage.ts";
+import { clearTimeout as realClearTimeout, setTimeout as realSetTimeout } from "node:timers";
+import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { mkdtemp, stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
 import {
-bindPackageLifecycle,
-createPackageLifecycle,
-requirePackageEnabled,
+  bindPackageLifecycle,
+  createPackageLifecycle,
+  requirePackageEnabled,
 } from "../src/package-lifecycle.ts";
 import * as packages from "../src/packages.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
 import { contentRootsRefreshMs } from "../src/content-roots.ts";
-import { exportPod,installArchive,writeZip } from "../src/pod-transfer.ts";
+import { exportPod, installArchive, writeZip } from "../src/pod-transfer.ts";
 
 test("a detached initial census can fail after close without an unhandled rejection", async () => {
   const entered = Promise.withResolvers<void>();
@@ -212,9 +212,7 @@ async function put(home: string, path: string, bytes: string) {
   await writeFile(target, bytes);
 }
 async function inventory() {
-  const response = await createPluginsHandler(
-    content,
-  )(new Request("http://host/pe/plugins"));
+  const response = await createPluginsHandler(content)(new Request("http://host/pe/plugins"));
   expect(response.status).toBe(200);
   return response.json();
 }
@@ -261,7 +259,9 @@ test("an unknown Pod waits at most five seconds for a stalled refresh", async ()
   bindPackageLifecycle(lifecycle);
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   try {
-    const refusal = expect(requirePackageEnabled("missing")).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
+    const refusal = expect(requirePackageEnabled("missing")).rejects.toMatchObject({
+      code: "pod.discovery.exceeded",
+    });
     await entered.promise;
     await vi.advanceTimersByTimeAsync(5000);
     await refusal;
@@ -295,8 +295,13 @@ test("a known Page answers while an unrelated late Pod waits for discovery", asy
   const scan = lifecycle.refresh();
   await entered.promise;
   await put(join(root, "user"), "late/pod.json", '{"id":"late"}');
-  const handle = createPagesHandler(join(root, "user/Pages"), packages.productPodsRoots(),
-    undefined, undefined, stateFixture(join(root, "page-state")));
+  const handle = createPagesHandler(
+    join(root, "user/Pages"),
+    packages.productPodsRoots(),
+    undefined,
+    undefined,
+    stateFixture(join(root, "page-state")),
+  );
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   let timer: ReturnType<typeof realSetTimeout> | undefined;
   const opening = handle(new Request("http://host/pages/existing--tour/"));
@@ -304,7 +309,10 @@ test("a known Page answers while an unrelated late Pod waits for discovery", asy
     const response = await Promise.race([
       opening,
       new Promise<never>((_, reject) => {
-        timer = realSetTimeout(() => reject(Error("Known Page waited for unrelated discovery")), 1000);
+        timer = realSetTimeout(
+          () => reject(Error("Known Page waited for unrelated discovery")),
+          1000,
+        );
       }),
     ]);
     expect(response.status).toBe(200);
@@ -357,12 +365,16 @@ test("a missed door queues fresh discovery behind a scan captured before arrival
 
 test("unchanged refreshes reuse the full listing", async () => {
   const scans: string[] = [];
-  packages.bindPackageScanLogger(line => { if (line.startsWith("Pod folder scan start ")) scans.push(line); });
+  packages.bindPackageScanLogger((line) => {
+    if (line.startsWith("Pod folder scan start ")) scans.push(line);
+  });
   try {
     await content.lifecycle.refresh();
     await content.lifecycle.refresh();
     expect(scans).toEqual([]);
-  } finally { packages.bindPackageScanLogger(() => {}); }
+  } finally {
+    packages.bindPackageScanLogger(() => {});
+  }
 });
 
 test("an action after discovery captures bytes gets its own fresh reconciliation", async () => {
@@ -462,7 +474,6 @@ for (const tier of ["user", "firm"] as const) {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("Late tour");
   });
-
 }
 test("inventory cadence refreshes member bytes in a Pod present at startup", async () => {
   await put(join(root, "user"), "existing/README.md", "after");
@@ -567,7 +578,9 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
     expect(result[0]).not.toContainEqual(expect.objectContaining({ id: "pod:late" }));
     expect(result[1]).toEqual(result[0]);
     expect(result[2]).toEqual({ status: "ok" });
-    expect(scan.mock.calls.map(([path]) => String(path)).sort()).toEqual([...packages.productPodsRoots()].sort());
+    expect(scan.mock.calls.map(([path]) => String(path)).sort()).toEqual(
+      [...packages.productPodsRoots()].sort(),
+    );
     await expect(requirePackageEnabled("existing")).resolves.toBeUndefined();
     let answered = false;
     const opening = requirePackageEnabled("late").then(() => {
@@ -575,7 +588,9 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
     });
     await new Promise((resolve) => setImmediate(resolve));
     expect(answered).toBe(false);
-    expect(scan.mock.calls.map(([path]) => String(path)).sort()).toEqual([...packages.productPodsRoots()].sort());
+    expect(scan.mock.calls.map(([path]) => String(path)).sort()).toEqual(
+      [...packages.productPodsRoots()].sort(),
+    );
     release.resolve();
     await expect(opening).resolves.toBeUndefined();
   } finally {

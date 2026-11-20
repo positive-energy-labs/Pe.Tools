@@ -162,7 +162,9 @@ async function readFamiliesProgressively(
     }
   };
   const costsFile = stateKind({
-    schema: z.object({ startupMs: z.number().min(1_000), families: z.record(z.string(), z.object({ ms: z.number(), types: z.number() })),
+    schema: z.object({
+      startupMs: z.number().min(1_000),
+      families: z.record(z.string(), z.object({ ms: z.number(), types: z.number() })),
     }),
     place: () => "Family read timings",
     segments: () => ["families", "read-costs.json"],

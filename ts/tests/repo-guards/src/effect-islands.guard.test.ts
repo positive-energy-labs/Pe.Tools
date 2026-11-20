@@ -78,7 +78,11 @@ beforeAll(() => {
       { branch: "raised", from: "base", files: { [baselinePath]: json({ [oldFile]: 2 }) } },
       { branch: "ratified", from: "raised", files: { [baselinePath]: json({ [oldFile]: 2 }, 2) } },
       // A rename committed after the newest baseline: HEAD differs from the baseline's commit.
-      { branch: "renamed-later", from: "base", files: { [`ts/${oldFile}`]: null, [`ts/${newFile}`]: source } },
+      {
+        branch: "renamed-later",
+        from: "base",
+        files: { [`ts/${oldFile}`]: null, [`ts/${newFile}`]: source },
+      },
     ]),
   );
 });

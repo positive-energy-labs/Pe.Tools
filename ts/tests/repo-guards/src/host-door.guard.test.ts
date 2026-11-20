@@ -45,10 +45,12 @@ const INFRASTRUCTURE = new Set(
     "scene/scene-data.ts",
     // Typed harness-thread HTTP/SSE transport used by shared chat sources and owners.
     "workbench/provider/harness-client.ts",
-  ].map((path) => WEB + path).concat(
-    // Native family read adapter preserves response provenance for subsequent admission.
-    WEB_KERNEL + "revit/observation.tsx",
-  ),
+  ]
+    .map((path) => WEB + path)
+    .concat(
+      // Native family read adapter preserves response provenance for subsequent admission.
+      WEB_KERNEL + "revit/observation.tsx",
+    ),
 );
 const HOST_CLIENT = modulePath(WEB + "index.ts", "#/host/client");
 const HOST_RUNTIME = modulePath(WEB_KERNEL + "index.ts", "./host/runtime");
@@ -81,9 +83,10 @@ const bypasses = (file: string, entries: Import[]) =>
   entries.some((entry) => hostImport(file, entry));
 
 it("host door bypasses can only shrink (ADR 0026)", () => {
-  const actual = [...productionFiles("apps/web/src"), ...productionFiles("packages/web-kernel/src")].filter((file) =>
-    bypasses(file, readImports(file)),
-  );
+  const actual = [
+    ...productionFiles("apps/web/src"),
+    ...productionFiles("packages/web-kernel/src"),
+  ].filter((file) => bypasses(file, readImports(file)));
   expect(
     ratchet(actual, baseline),
     "ADR 0026: use the kernel host door; never add host-door.baseline.json entries. " +
@@ -94,9 +97,12 @@ it("host door bypasses can only shrink (ADR 0026)", () => {
 // RATCHET-GREEN replaces the obsolete zero-debt assertions with an audited migration floor.
 it("committed host-door allowances only shrink after the identity migration", () => {
   const path = "ts/tests/repo-guards/src/host-door.baseline.json";
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: resolve(ROOT, ".."), encoding: "utf8" }).trim();
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: resolve(ROOT, ".."), encoding: "utf8" }).trim();
   // Include the first approved baseline after the identity migration.
-  const snapshots = git("log", "--format=%H", "a5daa82f^..HEAD", "--", path).split(/\s+/).filter(Boolean);
+  const snapshots = git("log", "--format=%H", "a5daa82f^..HEAD", "--", path)
+    .split(/\s+/)
+    .filter(Boolean);
   for (const sha of snapshots) {
     const floor = JSON.parse(git("show", `${sha}:${path}`));
     expect(ratchet(Object.keys(baseline), floor).violations).toEqual([]);
@@ -116,14 +122,18 @@ it("exempts only named infrastructure, never neighboring UI or a directory", () 
     ).toBe(true);
   }
   expect(
-    bypasses(WEB + "host/client.ts", [{ module: "@pe/web-kernel/host/runtime", names: ["hostFetch"] }]),
+    bypasses(WEB + "host/client.ts", [
+      { module: "@pe/web-kernel/host/runtime", names: ["hostFetch"] },
+    ]),
   ).toBe(false);
-  expect(bypasses(WEB_KERNEL + "revit/observation.tsx", [
-    { module: "../host/runtime", names: ["hostFetch"] },
-  ])).toBe(false);
-  expect(bypasses(WEB_KERNEL + "revit/another-reader.tsx", [
-    { module: "../host/runtime", names: null },
-  ])).toBe(true);
+  expect(
+    bypasses(WEB_KERNEL + "revit/observation.tsx", [
+      { module: "../host/runtime", names: ["hostFetch"] },
+    ]),
+  ).toBe(false);
+  expect(
+    bypasses(WEB_KERNEL + "revit/another-reader.tsx", [{ module: "../host/runtime", names: null }]),
+  ).toBe(true);
 });
 
 it("does not mistake inert evidence or a detached receipt type for an effect", () => {

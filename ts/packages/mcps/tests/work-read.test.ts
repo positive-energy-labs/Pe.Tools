@@ -32,8 +32,12 @@ test("Driver C14: Pea stages the fan walk and passes the fan Work handle before 
   const text = renderDuctsSkill();
   expect(text).toContain("writeIntent.walk");
   expect(text).toContain("Send only target and work: { key, revision }");
-  expect(text).toContain("Write targets derive from that walk and current fan Work, never from the open Page");
+  expect(text).toContain(
+    "Write targets derive from that walk and current fan Work, never from the open Page",
+  );
   expect(text).not.toContain("key, expectedRevision");
   expect(text).toContain("Required ESP is a computed result, never staged");
-  expect(text).toContain("Stage rated ESP and other fan inputs through route:fans at expectedRevision");
+  expect(text).toContain(
+    "Stage rated ESP and other fan inputs through route:fans at expectedRevision",
+  );
 });

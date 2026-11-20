@@ -64,7 +64,9 @@ test("the chat head reads executable graph Work and cell families for addressed 
 
 test("admitted Families contributes a head row with its typed focus and exact recorded target", () => {
   reads.route = "families";
-  reads.doc = { cells: { 'name:["Family","Type"]#field:Parameter': { edit: { value: "changed" } } } };
+  reads.doc = {
+    cells: { 'name:["Family","Type"]#field:Parameter': { edit: { value: "changed" } } },
+  };
   const document = { session: "original-session", openId: "original-open" };
   const exits = { open: vi.fn(), planIn: vi.fn() };
   const { result } = renderHook(() => useHeadWorks(null, "Building", exits, document));

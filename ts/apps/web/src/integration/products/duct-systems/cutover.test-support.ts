@@ -10,9 +10,16 @@ import { pricingValue } from "@pe/duct-systems-domain/pricing-value";
 import * as bodies from "../../../../../../products/duct-systems/web/src/screen/screen.tsx";
 export const createWitness = witnessFactory({
   admit: () => admitModules(ducts, contractOwner(fansRouteState, ducts.data.directory)),
-  systemList, pricingValue, calcState: publishedCalcView, networkCalcs: () => publishedPricing().calcs,
-  nativeTestAdapter: (mount, door) => nativeTestAdapter(mount, door, {
-    "e-systems": bodies.SystemsPane, "e-sidebar": bodies.TreePane, "e-rules-all": bodies.AllRulesBody,
-    "e-rules": bodies.RulesBody, "e-inbox": bodies.InboxBody,
-  }),
+  systemList,
+  pricingValue,
+  calcState: publishedCalcView,
+  networkCalcs: () => publishedPricing().calcs,
+  nativeTestAdapter: (mount, door) =>
+    nativeTestAdapter(mount, door, {
+      "e-systems": bodies.SystemsPane,
+      "e-sidebar": bodies.TreePane,
+      "e-rules-all": bodies.AllRulesBody,
+      "e-rules": bodies.RulesBody,
+      "e-inbox": bodies.InboxBody,
+    }),
 });

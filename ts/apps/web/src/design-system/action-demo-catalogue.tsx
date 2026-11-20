@@ -6,7 +6,9 @@ import { retainedFixtureCatalogue } from "./retained-fixture-catalogue";
 
 export function ActionDemoCatalogue() {
   useSyncExternalStore(publicRoutes.subscribe, publicRoutes.revision, publicRoutes.revision);
-  const SEED_CATALOGUE = retainedFixtureCatalogue.filter(row => publicRoutes.typed(row.route) !== null);
+  const SEED_CATALOGUE = retainedFixtureCatalogue.filter(
+    (row) => publicRoutes.typed(row.route) !== null,
+  );
   return (
     <Demo
       label="Seed catalogue"

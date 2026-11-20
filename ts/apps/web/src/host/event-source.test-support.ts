@@ -5,7 +5,8 @@ export function hostEventSource(request: (request: Request) => Promise<Response>
     const url = input instanceof Request ? input.url : input.toString();
     // The subscription POST and stream GET must reach the same host, even in jsdom's origin.
     return new URL(url, "http://host").pathname === "/pe/resource-subscriptions"
-      ? request(new Request(input, init)) : fallback(input, init);
+      ? request(new Request(input, init))
+      : fallback(input, init);
   };
   const streams = new Set<{ close(): void }>();
   class Stream {
@@ -30,16 +31,23 @@ export function hostEventSource(request: (request: Request) => Promise<Response>
           buffer += decoder.decode(frame.value, { stream: true });
           let end: number;
           while ((end = buffer.indexOf("\n\n")) >= 0) {
-            const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+            const event = buffer.slice(0, end);
+            buffer = buffer.slice(end + 2);
             for (const line of event.split("\n"))
               if (line.startsWith("data: ")) this.onmessage?.({ data: line.slice(6) });
           }
         }
-      })().catch(() => { if (!this.closed) this.onerror?.(); });
+      })().catch(() => {
+        if (!this.closed) this.onerror?.();
+      });
     }
     addEventListener() {}
     removeEventListener() {}
-    close() { this.closed = true; void this.reader?.cancel(); streams.delete(this); }
+    close() {
+      this.closed = true;
+      void this.reader?.cancel();
+      streams.delete(this);
+    }
   }
   return { Stream, streams, fetch };
 }

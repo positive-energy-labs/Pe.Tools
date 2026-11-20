@@ -25,14 +25,19 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
-import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "../route-startup.ts";
+import {
+  routeFolderCandidates,
+  routeStartupSourceHash,
+  writeRouteStartupReceipt,
+} from "../route-startup.ts";
 import { buildBuiltinClosures, writeBuiltinClosurePin } from "../route-source-hash.ts";
 const check = process.argv.includes("--check");
 // Write every builtin closure (untracked build output) without rewriting tracked projections.
 const closureOnly = process.argv.includes("--builtin-closure-only");
 const runtime = process.argv.includes("--runtime");
 const productsOnly = process.argv.includes("--products-only");
-if (productsOnly && (check || runtime || closureOnly)) throw Error("--products-only writes the product assembly and workspace links");
+if (productsOnly && (check || runtime || closureOnly))
+  throw Error("--products-only writes the product assembly and workspace links");
 if (check && runtime) throw Error("--check is read-only and cannot use runtime projection flags");
 // JSON Schema is the runtime codec projection; retain its field type in generated addresses too.
 const schemaType = (schema: any): string => {
@@ -116,9 +121,14 @@ if (!closureOnly) {
 }
 if (productsOnly) process.exit(0);
 if (!closureOnly && !runtime && stale.length === 0)
-  execFileSync(process.execPath,
-    [fileURLToPath(new URL("../../../scripts/refresh-command-table.ts", import.meta.url)), ...(check ? ["--check"] : [])],
-    { stdio: "inherit" });
+  execFileSync(
+    process.execPath,
+    [
+      fileURLToPath(new URL("../../../scripts/refresh-command-table.ts", import.meta.url)),
+      ...(check ? ["--check"] : []),
+    ],
+    { stdio: "inherit" },
+  );
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
@@ -134,14 +144,20 @@ const jiti = createJiti(import.meta.url, {
       new URL("./route-projection-runtime.ts", import.meta.url),
     ),
     "./build-stamp": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
-    "@pe/web-kernel/host/runtime": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
+    "@pe/web-kernel/host/runtime": fileURLToPath(
+      new URL("./route-projection-runtime.ts", import.meta.url),
+    ),
     "#/": fileURLToPath(new URL("../src/", import.meta.url)),
   },
 });
 const { canonicalRouteJson, projectKernelDirectory } =
   await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
-const { textCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/route-field.ts")>("../../../packages/agent-contracts/src/route-field.ts");
-const { listSearchCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/list-search.ts")>("../../../packages/agent-contracts/src/list-search.ts");
+const { textCodec } = await jiti.import<
+  typeof import("../../../packages/agent-contracts/src/route-field.ts")
+>("../../../packages/agent-contracts/src/route-field.ts");
+const { listSearchCodec } = await jiti.import<
+  typeof import("../../../packages/agent-contracts/src/list-search.ts")
+>("../../../packages/agent-contracts/src/list-search.ts");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
 // `folder` is the route directory relative to `apps/web/src/`: one segment for a web route, and
@@ -194,8 +210,14 @@ for (const key of keys) {
           : field.role === "subject"
             ? `subjectSchema(${(json.oneOf as { properties?: { ids?: { maxItems?: number } } }[]).find((part) => part.properties?.ids)?.properties!.ids!.maxItems})`
             : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
-      const codecName = field.codec === listSearchCodec ? "listSearchCodec" : field.codec === textCodec ? "textCodec" : null;
-      if (field.codec && !codecName) throw Error(`${key}: the declared field codec has no address projection`);
+      const codecName =
+        field.codec === listSearchCodec
+          ? "listSearchCodec"
+          : field.codec === textCodec
+            ? "textCodec"
+            : null;
+      if (field.codec && !codecName)
+        throw Error(`${key}: the declared field codec has no address projection`);
       const codec = codecName ? `, codec: ${codecName}` : "";
       const projected = `${agent ? "field" : "personField"}(${schema}${field.initial === undefined ? ".optional()" : `.default(${JSON.stringify(field.initial)})`}, ${JSON.stringify(field.url)})`;
       return `${JSON.stringify(key)}: ${field.share === false || codec ? `{ ...${projected}${field.share === false ? ", share: false" : ""}${codec} }` : projected}`;

@@ -1,14 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { fanCandidates } from "./fan-assignment.ts";
-import {
-  connOf,
-  groupOf,
-  nodeOf,
-  snapshotOf,
-  systemOf,
-  type System,
-} from "./test-snapshot.ts";
+import { connOf, groupOf, nodeOf, snapshotOf, systemOf, type System } from "./test-snapshot.ts";
 
 const unit = (id: number, ...classes: string[]) =>
   nodeOf(id, "equipment", {

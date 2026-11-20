@@ -18,7 +18,8 @@ export function bindRevoke(owner: ActionJournal, bridge: RevitBridge["Service"])
       active
         ? rows.flatMap((row) => {
             const basis = row.basis;
-            const matches = basis?.kind === "grant" &&
+            const matches =
+              basis?.kind === "grant" &&
               basis.thread === ownerKey &&
               basis.lifetime.session === lifetime.session &&
               basis.lifetime.openId === lifetime.openId;

@@ -24,10 +24,7 @@ export const admitted = <A>(check: () => A) =>
 export const admitNativeCaller = Effect.fn("NativeReadPolicy.caller")(function* (key: string) {
   const { caller } = yield* RequestIdentity;
   const definition = hostOpCatalog.find((entry) => entry.key === key);
-  if (
-    !definition ||
-    (definition.effect !== "Read" && definition.effect !== "TransactRead")
-  )
+  if (!definition || (definition.effect !== "Read" && definition.effect !== "TransactRead"))
     return yield* readRefusal("Only declared native Reads can be admitted", "read.intent");
   yield* admitted(() => {
     admitAnonymousCall(caller, key);

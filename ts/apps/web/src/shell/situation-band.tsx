@@ -57,33 +57,83 @@ export function SituationBand({
   );
 }
 
-export type TimelineOwner = Pick<TypedMount, "subscribe" | "revision" | "timeline" | "stepTimeline" | "timelineRefusal" | "pendingEdits" | "discardIntent" | "stopCommand" | "reviewProblem">;
+export type TimelineOwner = Pick<
+  TypedMount,
+  | "subscribe"
+  | "revision"
+  | "timeline"
+  | "stepTimeline"
+  | "timelineRefusal"
+  | "pendingEdits"
+  | "discardIntent"
+  | "stopCommand"
+  | "reviewProblem"
+>;
 
 export function TimelineButtons({ owner }: { owner: TimelineOwner }) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
   const timeline = owner.timeline();
-  return <>{(["undo", "redo"] as const).map(direction => {
-    const message = owner.reviewProblem(`work.${direction}`);
-    return <ButtonOutcome.Provider key={direction} value={message ? { kind: "refused", label: message } : null}>
-    <Button kind="quiet"
-    icon={direction === "undo" ? Undo2 : Redo2}
-    label={timeline?.[direction] ? `${direction === "undo" ? "Undo" : "Redo"} ${timeline[direction]!.label}` : direction === "undo" ? "Undo" : "Redo"}
-    refusal={owner.timelineRefusal() ?? timeline?.refusal[direction] ?? (timeline?.[direction] ? null : `Nothing to ${direction}`)}
-    onPress={async () => { await owner.stepTimeline(direction); }} /></ButtonOutcome.Provider>;
-  })}</>;
+  return (
+    <>
+      {(["undo", "redo"] as const).map((direction) => {
+        const message = owner.reviewProblem(`work.${direction}`);
+        return (
+          <ButtonOutcome.Provider
+            key={direction}
+            value={message ? { kind: "refused", label: message } : null}
+          >
+            <Button
+              kind="quiet"
+              icon={direction === "undo" ? Undo2 : Redo2}
+              label={
+                timeline?.[direction]
+                  ? `${direction === "undo" ? "Undo" : "Redo"} ${timeline[direction]!.label}`
+                  : direction === "undo"
+                    ? "Undo"
+                    : "Redo"
+              }
+              refusal={
+                owner.timelineRefusal() ??
+                timeline?.refusal[direction] ??
+                (timeline?.[direction] ? null : `Nothing to ${direction}`)
+              }
+              onPress={async () => {
+                await owner.stepTimeline(direction);
+              }}
+            />
+          </ButtonOutcome.Provider>
+        );
+      })}
+    </>
+  );
 }
 
 export function TimelineHead({ owner, history }: { owner: TimelineOwner; history: ReactNode }) {
   useSyncExternalStore(owner.subscribe, owner.revision, owner.revision);
   const last = owner.timeline()?.rows.at(-1);
-  return <span data-slot="timeline-head" role="group" aria-label="Timeline">
-    <Popover>
-      <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
-        <span>{last ? last.kind === "home-write" ? last.place : last.kind === "point" ? last.reason : last.label : owner.timelineRefusal() ?? "No activity yet"}</span>
-        {last && <span data-slot="timeline-state">{activityTime(last.at)}</span>}
-      </PopoverTrigger>
-      <SubjectPopoverContent aria-label="Timeline" className="max-h-(--available-height) overflow-y-auto p-(--gutter)">{history}</SubjectPopoverContent>
-    </Popover>
-    <TimelineButtons owner={owner} />
-  </span>;
+  return (
+    <span data-slot="timeline-head" role="group" aria-label="Timeline">
+      <Popover>
+        <PopoverTrigger aria-label="Open the Timeline" data-slot="timeline-trigger">
+          <span>
+            {last
+              ? last.kind === "home-write"
+                ? last.place
+                : last.kind === "point"
+                  ? last.reason
+                  : last.label
+              : (owner.timelineRefusal() ?? "No activity yet")}
+          </span>
+          {last && <span data-slot="timeline-state">{activityTime(last.at)}</span>}
+        </PopoverTrigger>
+        <SubjectPopoverContent
+          aria-label="Timeline"
+          className="max-h-(--available-height) overflow-y-auto p-(--gutter)"
+        >
+          {history}
+        </SubjectPopoverContent>
+      </Popover>
+      <TimelineButtons owner={owner} />
+    </span>
+  );
 }

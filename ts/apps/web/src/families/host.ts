@@ -4,37 +4,38 @@ import { body } from "@pe/host-internal/read-graph";
 import { workRead } from "@pe/host-internal/reads/work";
 import { familyObservation, familyReceipts } from "@pe/host-internal/builtin-read-handles";
 import { z } from "zod";
-import { familiesRouteState, canonicalRouteInput, actionReceiptSchema, type FamiliesObservation } from "@pe/agent-contracts";
-import { familiesViewData, } from "../../../../packages/agent-contracts/src/families-read.ts";
+import {
+  familiesRouteState,
+  canonicalRouteInput,
+  actionReceiptSchema,
+  type FamiliesObservation,
+} from "@pe/agent-contracts";
+import { familiesViewData } from "../../../../packages/agent-contracts/src/families-read.ts";
 import { workScope, documentMark } from "@pe/host-internal/read-graph";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
-export const familiesView = body(contracts.view, async function(ctx, args) {
-    await ctx.read(documentMark, args.target);
-    const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
-    const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
-    const work = familiesRouteState.schema.parse(view?.doc ?? {});
-    const { body: catalog } = await ctx.read(native("revit.catalog.loaded-families"), {
-      request: { filter: {}, budget: { maxEntries: 5000 } },
-      target: { kind: "document", ref: args.target },
-    });
-    const observed = await ctx.read(familyObservation, { kind: "families-reading", work: scope });
-    const filter = work.scope.edit?.value;
-    const observation =
-      observed &&
-      canonicalRouteInput(observed.document) === canonicalRouteInput(args.target) &&
-      canonicalRouteInput(observed.filter) === canonicalRouteInput(filter)
-        ? observed
-        : null;
-    const receipts = await ctx.read(familyReceipts, { kind: "receipts", work: scope });
-    return ctx.compute(
-      familiesViewData,
-      { work, catalog, observation, receipts },
-      familiesValue,
-    );
+export const familiesView = body(contracts.view, async function (ctx, args) {
+  await ctx.read(documentMark, args.target);
+  const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
+  const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
+  const work = familiesRouteState.schema.parse(view?.doc ?? {});
+  const { body: catalog } = await ctx.read(native("revit.catalog.loaded-families"), {
+    request: { filter: {}, budget: { maxEntries: 5000 } },
+    target: { kind: "document", ref: args.target },
   });
+  const observed = await ctx.read(familyObservation, { kind: "families-reading", work: scope });
+  const filter = work.scope.edit?.value;
+  const observation =
+    observed &&
+    canonicalRouteInput(observed.document) === canonicalRouteInput(args.target) &&
+    canonicalRouteInput(observed.filter) === canonicalRouteInput(filter)
+      ? observed
+      : null;
+  const receipts = await ctx.read(familyReceipts, { kind: "receipts", work: scope });
+  return ctx.compute(familiesViewData, { work, catalog, observation, receipts }, familiesValue);
+});
 
 type ViewInputs = {
   work: z.output<typeof familiesRouteState.schema>;
@@ -68,8 +69,7 @@ export function familiesValue({ work, catalog, observation, receipts }: ViewInpu
           actionReceiptSchema.parse(r),
           work.scope.edit?.value.familyNames ?? [],
         );
-        const tally =
-          r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
+        const tally = r.state === "succeeded" ? applyTally(actionReceiptSchema.parse(r)) : null;
         return {
           id: r.id,
           kind: outcome ? ("error" as const) : ("advisory" as const),

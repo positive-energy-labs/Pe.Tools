@@ -1,4 +1,12 @@
-import { canonicalRouteInput, documentRefSchema, keptMachineLegAt, machineLegSchema, machineSchema, workKey, workKeySchema } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput,
+  documentRefSchema,
+  keptMachineLegAt,
+  machineLegSchema,
+  machineSchema,
+  workKey,
+  workKeySchema,
+} from "@pe/agent-contracts";
 import { subscribePlaces } from "../places.ts";
 import type { ResourceObserver, RouteWorkspace } from "@pe/runtime";
 import { z } from "zod";
@@ -13,7 +21,11 @@ const yearEvidence = z.object({
 });
 const publishedMachine = z.object({ machine: yearEvidence });
 const yearsKey = ({ revit, legs }: z.infer<typeof yearEvidence>) =>
-  canonicalRouteInput([revit.years?.slice().sort((a, b) => a - b) ?? null, legs.years?.error != null, keptMachineLegAt(legs.years)]);
+  canonicalRouteInput([
+    revit.years?.slice().sort((a, b) => a - b) ?? null,
+    legs.years?.error != null,
+    keptMachineLegAt(legs.years),
+  ]);
 
 export function readInvalidations(
   workspace: RouteWorkspace,
@@ -40,7 +52,9 @@ export function readInvalidations(
   const identity = (scope: unknown) => workKey(workKeySchema.parse(scope));
   const workMatches = (args: unknown, owner: string, scope: unknown) => {
     const input = workInput.input.safeParse(args);
-    return input.success && input.data.owner === owner && identity(input.data.scope) === identity(scope);
+    return (
+      input.success && input.data.owner === owner && identity(input.data.scope) === identity(scope)
+    );
   };
   let stopWork = () => {},
     stopMarks = () => {};
@@ -69,10 +83,13 @@ export function readInvalidations(
       const stopWrites = workspace.subscribeUncaptured((event) =>
         changed(
           (name, args) =>
-            name === "work-timeline" || (name === "work" && workMatches(args, event.route, event.scope)),
+            name === "work-timeline" ||
+            (name === "work" && workMatches(args, event.route, event.scope)),
         ),
       );
-      const stopReceipts = recorded ? undefined : subscribeReceipts?.(() => changed((name) => name === "work-timeline"));
+      const stopReceipts = recorded
+        ? undefined
+        : subscribeReceipts?.(() => changed((name) => name === "work-timeline"));
       stopWork = () => {
         stopWrites();
         stopReceipts?.();
@@ -97,8 +114,16 @@ export function readInvalidations(
   };
   const stopFiles = recorded
     ? undefined
-    : subscribeFiles?.((name) => changed((input) => input === `file:${name}` || (`file:${name}` === settingsFile.name && input === "work-timeline")));
-  const stopPlaces = recorded ? undefined : subscribePlaces(() => changed((name) => name === "places"));
+    : subscribeFiles?.((name) =>
+        changed(
+          (input) =>
+            input === `file:${name}` ||
+            (`file:${name}` === settingsFile.name && input === "work-timeline"),
+        ),
+      );
+  const stopPlaces = recorded
+    ? undefined
+    : subscribePlaces(() => changed((name) => name === "places"));
   const observePublication = (
     subscription: string,
     generation: number,
@@ -109,8 +134,13 @@ export function readInvalidations(
     let stopMachine: (() => void) | undefined;
     const compare = () => {
       const current = publications.publication(subscription);
-      if (publishedYears !== undefined && observedYears !== undefined && publishedYears !== observedYears &&
-          current?.generation === generation && current.state === "current")
+      if (
+        publishedYears !== undefined &&
+        observedYears !== undefined &&
+        publishedYears !== observedYears &&
+        current?.generation === generation &&
+        current.state === "current"
+      )
         publications.invalidate((trace) => trace.name === machineYears.recipe, subscription);
     };
     const stop = publications.observe(subscription, (publication) => {

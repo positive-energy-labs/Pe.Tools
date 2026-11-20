@@ -56,10 +56,7 @@ test("build-pod is the one home of what a Pod is, and no text teaches a retired 
 // a cold Pea read host source for pe.reading and for whether one Page reads another's log).
 // Red break: add a `await pe.<door>(` line to the pe.js header that neither skill names.
 test("the Page skills name every door in the pe.js header", async () => {
-  const pe = await readFile(
-    join(import.meta.dirname, "../../src/pages/pe.js"),
-    "utf8",
-  );
+  const pe = await readFile(join(import.meta.dirname, "../../src/pages/pe.js"), "utf8");
   const header = pe.slice(0, pe.indexOf("*/"));
   const doors = [...new Set([...header.matchAll(/\bpe\.([a-z]+)\(/g)].map((m) => m[1]))];
   expect(doors).toContain("reading");
@@ -71,10 +68,7 @@ test("the Page skills name every door in the pe.js header", async () => {
 // Documentation is bundled without a host-source dependency. Compare its words with the owning
 // comments here instead of adding a runtime loader or a second document for installed Pea.
 test("Page skills carry the source contract, not just door names", async () => {
-  const pe = await readFile(
-    join(import.meta.dirname, "../../src/pages/pe.js"),
-    "utf8",
-  );
+  const pe = await readFile(join(import.meta.dirname, "../../src/pages/pe.js"), "utf8");
   const plain = (text: string) => text.replace(/`/g, "").replace(/\s+/g, " ").trim();
   const taught = plain(skill("make-page") + skill("build-pod"));
   // Mutants: an exported pe.untaught = async () => {}, or a changed script option/default.

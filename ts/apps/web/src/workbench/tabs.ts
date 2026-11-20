@@ -165,7 +165,7 @@ export function useRouteTabs() {
   const commit = (next: ThreadTab[]) => {
     places.save(next);
     if (next.length < THREAD_TABS_MAX)
-      setFailure(prior => prior === PLACE_LIMIT ? null : prior);
+      setFailure((prior) => (prior === PLACE_LIMIT ? null : prior));
     return next;
   };
   const put = (id: string, tabRoute: string, tabLink: string) => {
@@ -173,8 +173,7 @@ export function useRouteTabs() {
     if (!checked.ok) throw Error(checked.error);
     const prior = read();
     const existing = prior.some((tab) => tab.id === id);
-    if (!existing && prior.length >= THREAD_TABS_MAX)
-      throw Error(PLACE_LIMIT);
+    if (!existing && prior.length >= THREAD_TABS_MAX) throw Error(PLACE_LIMIT);
     const next = { id, route: tabRoute, link: tabLink, at: new Date().toISOString() };
     return commit(existing ? prior.map((tab) => (tab.id === id ? next : tab)) : [...prior, next]);
   };
@@ -446,15 +445,16 @@ export function useRouteTabs() {
     route,
     tabs,
     // Addressed identity survives subject-reading gaps; active also requires a usable Page.
-    placeId: tagged?.route === route && tabs.some((tab) => tab.id === tagged.id)
-      ? tagged.id
-      : active?.id ?? null,
+    placeId:
+      tagged?.route === route && tabs.some((tab) => tab.id === tagged.id)
+        ? tagged.id
+        : (active?.id ?? null),
     active: active?.id ? { thread, id: active.id, route: active.route, link: active.link } : null,
     ready,
     target: carry.target,
     failure: legacy
       ? "This old workspace group link is unavailable; open a route and choose its exact subject."
-      : failure ?? error,
+      : (failure ?? error),
     select: (tab: ThreadTab) => select(tab).catch(fail),
     /** Expand the collapsed tools on the Place this window last showed. */
     resume: () => {

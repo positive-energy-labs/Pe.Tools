@@ -176,7 +176,8 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
       link = h.linkInstanceId ?? null;
     // ADR 0035 rule 2: identity is the UniqueId seen through the link's UniqueId; `documentKey`
     // stays on the instance as observation basis (the element menu's document scope), not identity.
-    if (link !== null && !h.linkInstanceUniqueId) throw Error("Linked scene element has no link UniqueId");
+    if (link !== null && !h.linkInstanceUniqueId)
+      throw Error("Linked scene element has no link UniqueId");
     return {
       key: spaceElementKey({
         uniqueId: h.uniqueId,

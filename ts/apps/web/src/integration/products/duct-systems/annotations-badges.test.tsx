@@ -5,7 +5,10 @@ import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
 import { connOf, ductOf, issueOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
 import { healPlan } from "@pe/ducts-domain/heal";
 import { subjectDocument } from "@pe/kit/lang/subject-text";
-import { inboxRows, annotatedFindings } from "../../../../../../products/duct-systems/web/src/inbox-rows.ts";
+import {
+  inboxRows,
+  annotatedFindings,
+} from "../../../../../../products/duct-systems/web/src/inbox-rows.ts";
 import { useMarks } from "../../../../../../products/duct-systems/web/src/screen/rulings.tsx";
 import { ElementMenu } from "@pe/web-kernel/revit/element-menu";
 import { NativeObservationScope } from "@pe/web-kernel/revit/observation";

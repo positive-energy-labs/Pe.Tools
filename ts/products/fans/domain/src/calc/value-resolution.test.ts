@@ -11,16 +11,32 @@ import { calcBreakdown } from "./calc-breakdown.ts";
 import type { Calc } from "./types.ts";
 const snapshot = {
   slots: { ...TEST_SLOTS, terminalFlow: "terminalFlow" },
-  nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [{ key: "flow", value: 200 }], connectors: [] }],
+  nodes: [
+    {
+      uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,
+      id: 1,
+      kind: "terminal",
+      facts: [{ key: "flow", value: 200 }],
+      connectors: [],
+    },
+  ],
   segments: [],
 } as unknown as CalcSnapshot;
 const bare = { ...snapshot, nodes: [{ ...snapshot.nodes[0]!, facts: [] }] };
 it("P-048: a stored invalid marker crosses stagedDucts and blocks model fallback", () => {
-  const work = stagedDucts(null, fansDocumentSchema.parse({
-    flows: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": { invalid: "unstamped stored cell" } },
-  }));
-  expect(resolveInputs({ snapshot, work: { flows: work.flows }, firm: TEST_FIRM })
-    .terminals["1"]?.cfm).toMatchObject({ status: "invalid", value: null, source: "Work" });
+  const work = stagedDucts(
+    null,
+    fansDocumentSchema.parse({
+      flows: {
+        "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": {
+          invalid: "unstamped stored cell",
+        },
+      },
+    }),
+  );
+  expect(
+    resolveInputs({ snapshot, work: { flows: work.flows }, firm: TEST_FIRM }).terminals["1"]?.cfm,
+  ).toMatchObject({ status: "invalid", value: null, source: "Work" });
 });
 it("duct readings expose run, Work, model and firm provenance with units", () => {
   const layers = {
@@ -43,42 +59,82 @@ it("duct readings expose run, Work, model and firm provenance with units", () =>
   expect(
     resolveInputs({ ...layers, run: undefined, work: undefined }).terminals["1"]!.cfm,
   ).toMatchObject({ value: 200, source: "model", ref: "model:1/terminalFlow" });
-  expect(resolveInputs({ snapshot: bare, firm: TEST_FIRM }).terminals["1"]!.cfm.status).toBe("missing");
+  expect(resolveInputs({ snapshot: bare, firm: TEST_FIRM }).terminals["1"]!.cfm.status).toBe(
+    "missing",
+  );
   expect(resolveInputs({ snapshot: bare, firm: TEST_FIRM }).terminals["1"]!.drop).toMatchObject({
     source: "firm",
     version: "test",
     units: "in-wg",
   });
   expect(
-    resolveCriteria(stamped({ allowanceInWg: { return: 0.2 } }), TEST_FIRM)
-      .allowanceInWg,
+    resolveCriteria(stamped({ allowanceInWg: { return: 0.2 } }), TEST_FIRM).allowanceInWg,
   ).toMatchObject({ supply: { source: "firm" }, return: { source: "Work", value: 0.2 } });
 });
 it("a value retired into the model store reads live from its parameter; the receipt is never a rung (ADR 0053)", () => {
   // Terminal 1 states 0.5 in-wg on its TerminalDrop slot parameter; the firm default disagrees too.
   const native = {
-    nodes: [{ uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,  id: 1, kind: "terminal", facts: [], connectors: [], terminalDrop: { catalogDropInWg: 0.5 } }],
+    nodes: [
+      {
+        uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(1).toString(16).padStart(8, "0")}`,
+        id: 1,
+        kind: "terminal",
+        facts: [],
+        connectors: [],
+        terminalDrop: { catalogDropInWg: 0.5 },
+      },
+    ],
     segments: [],
     slots: { ...TEST_SLOTS, terminalDrop: "PE_Drop" },
   } as unknown as CalcSnapshot;
-  const drop = (work: object | undefined, store: Partial<NonNullable<CalcSnapshot["store"]>> | undefined) =>
-    resolveInputs({ snapshot: { ...native, store: store && storeOf(store) }, firm: TEST_FIRM, work }).terminals["1"]!.drop;
-  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.2) } }, undefined)).toMatchObject({ value: 0.2, source: "Work" });
+  const drop = (
+    work: object | undefined,
+    store: Partial<NonNullable<CalcSnapshot["store"]>> | undefined,
+  ) =>
+    resolveInputs({
+      snapshot: { ...native, store: store && storeOf(store) },
+      firm: TEST_FIRM,
+      work,
+    }).terminals["1"]!.drop;
+  expect(
+    drop(
+      { terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.2) } },
+      undefined,
+    ),
+  ).toMatchObject({ value: 0.2, source: "Work" });
   // The receipt retires the staged cell: Work is cleared, and a hand edit in Revit since (0.5) is the value.
   const retired = drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } });
-  expect(retired).toMatchObject({ value: 0.5, source: "model", ref: "model:1/PE_Drop", author: null, units: "in-wg" });
+  expect(retired).toMatchObject({
+    value: 0.5,
+    source: "model",
+    ref: "model:1/PE_Drop",
+    author: null,
+    units: "in-wg",
+  });
   expect(retired.version).toBeNull();
   // A pending Work edit wins over the older stored value.
-  expect(drop({ terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } }, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({
+  expect(
+    drop(
+      { terminalDrops: { "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000001": cell(0.3) } },
+      { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } },
+    ),
+  ).toMatchObject({
     value: 0.3,
     source: "Work",
   });
   // A receipt never prices, whatever it holds: the live parameter answers.
-  expect(drop(undefined, { terminals: { "1": { inWg: -1, appliedAt: "t" } } })).toMatchObject({ value: 0.5, source: "model", status: "valid" });
+  expect(drop(undefined, { terminals: { "1": { inWg: -1, appliedAt: "t" } } })).toMatchObject({
+    value: 0.5,
+    source: "model",
+    status: "valid",
+  });
   expect(drop(undefined, undefined)).toMatchObject({ value: 0.5, source: "model" });
   // D3: the written parameter no longer reads, so the value is missing, never the receipt or the firm default.
   native.nodes[0]!.terminalDrop = {} as never;
-  expect(drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({ value: null, status: "missing" });
+  expect(drop(undefined, { terminals: { "1": { inWg: 0.2, appliedAt: "t" } } })).toMatchObject({
+    value: null,
+    status: "missing",
+  });
   expect(drop(undefined, undefined)).toMatchObject({ source: "firm" });
 });
 it("unknown inflow creates a missing leg and cannot certify worksheet totals", () => {
@@ -138,13 +194,22 @@ it("P-030: rated ESP is stated or read from its own named slot, never the parame
   const layers = { snapshot: fan, firm: TEST_FIRM, work: {} };
   // P-030: the `externalStatic` fact is what a Pe write of required ESP leaves in `requiredEsp`. Rated stays
   // unknown over it, and a stated rated value is the stated one, never the written 0.5.
-  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ status: "missing", value: null, source: "none" });
+  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({
+    status: "missing",
+    value: null,
+    source: "none",
+  });
   fan.nodes[0]!.facts.push(factOf("ratedStatic", 0.65));
   expect(resolveInputs(layers).units["2"]!.esp.status).toBe("missing");
   fan.slots = { ...fan.slots, ratedEsp: "Rated ESP" };
-  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({ value: 0.65, source: "model", author: null });
+  expect(resolveInputs(layers).units["2"]!.esp).toMatchObject({
+    value: 0.65,
+    source: "model",
+    author: null,
+  });
   const rated = (ratedEsp: unknown) =>
-    resolveInputs({ ...layers, work: { ...layers.work, ratedEsp: { [key]: ratedEsp as never } } }).units["2"]!.esp;
+    resolveInputs({ ...layers, work: { ...layers.work, ratedEsp: { [key]: ratedEsp as never } } })
+      .units["2"]!.esp;
   expect(rated(cell(0.75, "human", "work:fans/ratedEsp/2"))).toMatchObject({
     status: "valid",
     value: 0.75,
@@ -152,14 +217,29 @@ it("P-030: rated ESP is stated or read from its own named slot, never the parame
     author: "human",
   });
   // P-032: a Work cell with no `by` resolves invalid through the engine's inputs, never as a person's.
-  expect(rated({ value: 0.75, ref: "work:test" })).toMatchObject({ status: "invalid", value: null, author: null });
+  expect(rated({ value: 0.75, ref: "work:test" })).toMatchObject({
+    status: "invalid",
+    value: null,
+    author: null,
+  });
   // P-029: a ruling no known caller stamped is invalid and rules nothing.
   expect(
     encounterRulings({
-      work: { assumptions: { "encounter:20:2": { value: { kind: "verdict", verdict: "connect" }, ref: "work:test" } as never } },
+      work: {
+        assumptions: {
+          "encounter:20:2": {
+            value: { kind: "verdict", verdict: "connect" },
+            ref: "work:test",
+          } as never,
+        },
+      },
     }),
   ).toEqual([]);
   expect(
-    encounterRulings({ work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "connect" }) } } }),
-  ).toEqual([{ at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" }]);
+    encounterRulings({
+      work: { assumptions: { "encounter:20:2": cell({ kind: "verdict", verdict: "connect" }) } },
+    }),
+  ).toEqual([
+    { at: { elementId: 20, connector: 2 }, verdict: "accepted", by: "human", ref: "work:test" },
+  ]);
 });

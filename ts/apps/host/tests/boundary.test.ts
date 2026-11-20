@@ -58,7 +58,7 @@ test("host boundary: service file, status, static SPA, /pe routes, graceful shut
   const program = Effect.scoped(
     Effect.gen(function* () {
       const HttpLive = makeHttpLive({
-          inputs: testInputContext(),
+        inputs: testInputContext(),
         capabilities: { revit: true },
         port: 0,
         lifecycle: { latch, handle },

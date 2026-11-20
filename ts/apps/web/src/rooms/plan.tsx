@@ -21,12 +21,21 @@ import { Legend, legendWord } from "@pe/kit/lang/legend";
 // The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { revitTarget } from "@pe/kit/lang/revit-target";
-import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "@pe/web-kernel/scene/use-plane-viewport";
+import {
+  PLAN_CLICK_PX as CLICK_PX,
+  usePlaneViewport,
+} from "@pe/web-kernel/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "@pe/web-kernel/lib/affine-frame";
+import {
+  boundsOf,
+  contentViewport,
+  fitFrame,
+  type Bounds2,
+  type Point2,
+} from "@pe/web-kernel/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, planCorners } from "#/scene/plan-image";
 import { pathD, PLAN_REFUSAL } from "./plan-drawing";
@@ -35,7 +44,6 @@ import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
 import { LAYER_SAYS, TraceFaces, TraceLayers, type Layer, type TraceRead } from "./layers";
 import { CALLOUT_FONT_PX, holdsPin, PIN_R, placeCallouts, type CalloutItem } from "./callouts";
 import type { PlanGeo } from "./sketch";
-
 
 /** A wire point as model XY in feet; anything else is not a point, and says so. */
 const xy = (point: readonly number[]): Point2 => {
@@ -374,11 +382,7 @@ export function RoomsPlan({
   const notice = (
     <>
       {!trace.data && trace.none ? (
-        <OutcomeLine
-          kind="advisory"
-          label={trace.none}
-          says="run partition first"
-        />
+        <OutcomeLine kind="advisory" label={trace.none} says="run partition first" />
       ) : null}
       {trace.data && layers.includes("faces") ? <TraceFaces trace={trace.data} /> : null}
       {planRefusal ? (

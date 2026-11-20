@@ -4,5 +4,4 @@ export type HostOperationCatalogEntry = HostOperationDefinition & {
   requestSchemaJson?: string;
   responseSchemaJson?: string;
 };
-export const isMutation = (op?: HostOperationCatalogEntry) =>
-  !!op && !isReadEffect(op.effect);
+export const isMutation = (op?: HostOperationCatalogEntry) => !!op && !isReadEffect(op.effect);

@@ -84,7 +84,11 @@ export function capturedPlace(
   };
   if (key === "pods" && !podMemberSchema.safeParse({ pod: input.pod, path: input.path }).success)
     return { ok: false, refusal: "This reading did not record an exact pod member." };
-  if (subject && key === "duct-systems" && (typeof input.system !== "string" || !input.system.trim()))
+  if (
+    subject &&
+    key === "duct-systems" &&
+    (typeof input.system !== "string" || !input.system.trim())
+  )
     return {
       ok: false,
       refusal:
@@ -117,7 +121,11 @@ export function capturedPlace(
     search.system = { kind: "ids", ids: [id.value] };
   }
   // The Pods subject is the member as a `name` SubjectRef `[pod, path]` (ADR 0035 rule 2).
-  if (key === "pods") search.member = { kind: "ids", ids: [podMemberCode({ pod: String(input.pod), path: String(input.path) })] };
+  if (key === "pods")
+    search.member = {
+      kind: "ids",
+      ids: [podMemberCode({ pod: String(input.pod), path: String(input.path) })],
+    };
   if (key === "schedules" && scope.binding === "workspace") {
     const id = encode({ keyKind: "workspace", key: scope.work });
     if (!id.ok) return { ok: false, refusal: id.reason };
@@ -247,7 +255,10 @@ export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes
  * The route a receipt ran in: the route whose Work it consumed (a row verb on /fans binds Fans'),
  * else the one route that declares the action. Work no route draws (the findings Work) names none.
  */
-export function receiptRoute(key: string, receipt: ActionReceipt | undefined): ChatPluginRoute | null {
+export function receiptRoute(
+  key: string,
+  receipt: ActionReceipt | undefined,
+): ChatPluginRoute | null {
   const work = receipt?.consumes.find((entry) => entry.kind === "work");
   if (work?.kind !== "work") return actionRoute(key);
   const route = work.probe.handle.key.route;

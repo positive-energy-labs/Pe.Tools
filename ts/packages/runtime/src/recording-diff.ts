@@ -86,7 +86,10 @@ export function diffKeyed(
     if (!decoded.has(id)) {
       const r = decode(id);
       const at = r.ok ? (r.value.placement?.host ?? r.value.source) : null;
-      decoded.set(id, r.ok && r.value.keyKind === "UniqueId" && (at === undefined || at === document));
+      decoded.set(
+        id,
+        r.ok && r.value.keyKind === "UniqueId" && (at === undefined || at === document),
+      );
     }
     return decoded.get(id)!;
   };

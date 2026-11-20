@@ -27,11 +27,7 @@ import {
   type DetachedAction,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
-import {
-  receiptForModel,
-  recoverAction,
-  submitAction,
-} from "../shared/takeoff-action-client.ts";
+import { receiptForModel, recoverAction, submitAction } from "../shared/takeoff-action-client.ts";
 import { runCapability, readCapabilityIntent, type CapabilityIntent } from "../shared/admission.ts";
 /**
  * The three doors plus the one Scope door.
@@ -308,7 +304,11 @@ const runInputSchema = z.object({
     ),
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
-  page: pageKeySchema.optional().describe("When running a script for a Page, default to this Page's binding target. An unresolved binding refuses."),
+  page: pageKeySchema
+    .optional()
+    .describe(
+      "When running a script for a Page, default to this Page's binding target. An unresolved binding refuses.",
+    ),
   target: z
     .union([sdkSessionSelectionSchema, documentRequestSchema.options[0]])
     .optional()
@@ -550,11 +550,7 @@ async function executeTool(
     } catch (error) {
       const refusal = refusalSchema.safeParse((error as { refusal?: unknown })?.refusal).data;
       return {
-        ...refuse(
-          input.key,
-          revision,
-          refusal ? JSON.stringify({ refusal }) : message(error),
-        ),
+        ...refuse(input.key, revision, refusal ? JSON.stringify({ refusal }) : message(error)),
         ...(refusal ? { refusal } : {}),
       };
     }
@@ -579,10 +575,7 @@ async function executeTool(
         key: input.key,
         kind: "op",
         recovered: true,
-        target:
-          recovered.state === "detached"
-            ? { session: null }
-            : receiptTarget(recovered),
+        target: recovered.state === "detached" ? { session: null } : receiptTarget(recovered),
         result:
           input.key === "op:scripting.execute" || contribution?.kind === "script"
             ? scriptResultForModel(
@@ -619,11 +612,7 @@ async function executeTool(
       "Legacy or malformed contribution key; obtain a canonical key with pe_find.",
     );
   if (contribution?.kind === "member" && replayOperations)
-    return refuse(
-      input.key,
-      revision,
-      "Members are read/mention-only and cannot execute.",
-    );
+    return refuse(input.key, revision, "Members are read/mention-only and cannot execute.");
   const catalog = await readCatalog(
     defaultTarget,
     undefined,
@@ -675,11 +664,7 @@ async function executeTool(
       .strictObject({ after: z.number().int().nonnegative().optional() })
       .safeParse(coerceJsonObject(input.input)).success
   )
-    return refuse(
-      row.key,
-      revision,
-      "pe_read reads a Page; use pe_do for an event or binding.",
-    );
+    return refuse(row.key, revision, "pe_read reads a Page; use pe_do for an event or binding.");
   const refusal = gate(row);
   if (refusal) return refuse(row.key, revision, refusal);
   // TODO: docs/features/routes/LEDGER.md#s7-eaaaf0f792 a temporary document needs an owner that releases it when the harness turn ends.
@@ -712,8 +697,7 @@ async function executeTool(
     };
   } catch (error) {
     const refusal = refusalSchema.safeParse((error as { refusal?: unknown } | null)?.refusal).data;
-    if (refusal)
-      return { ...refuse(row.key, revision, JSON.stringify({ refusal })), refusal };
+    if (refusal) return { ...refuse(row.key, revision, JSON.stringify({ refusal })), refusal };
     return refuse(row.key, revision, message(error));
   }
 }
@@ -816,7 +800,10 @@ async function dispatch(
           ? await client.response("page.bind", { params, body: action.binding })
           : await client.response("page.append", { params, body: action.event }),
       );
-      return { ...answer, target: bound ? { session: bound.session, openId: bound.openId } : { session: null } };
+      return {
+        ...answer,
+        target: bound ? { session: bound.session, openId: bound.openId } : { session: null },
+      };
     }
     case "skill":
     case "member": {
@@ -839,7 +826,10 @@ async function dispatch(
         throw Error("Frozen admitted script input unavailable");
       const callerContext = invocationContext()?.caller;
       const page = input.page ?? (callerContext?.kind === "page" ? callerContext.page : undefined);
-      const pageTarget = !input.target && page ? { kind: "open" as const, ref: await pageRunTarget(page) } : undefined;
+      const pageTarget =
+        !input.target && page
+          ? { kind: "open" as const, ref: await pageRunTarget(page) }
+          : undefined;
       const target = await operationTarget(
         { ...row, needs: "document" },
         input.target ?? pageTarget,
@@ -860,9 +850,13 @@ async function dispatch(
       });
       return {
         ok: result.ok,
-        target: result.action && result.action.state !== "detached"
-          ? receiptTarget(result.action)
-          : { session: target.bridgeSessionId ?? null, openId: target.openDocumentId ?? undefined },
+        target:
+          result.action && result.action.state !== "detached"
+            ? receiptTarget(result.action)
+            : {
+                session: target.bridgeSessionId ?? null,
+                openId: target.openDocumentId ?? undefined,
+              },
         result: scriptResultForModel(result),
       };
     }
@@ -896,8 +890,7 @@ async function dispatch(
             // An explicit open is delivered only to a browser showing this conversation.
             // Acquisition names that command, so an older mounted document cannot satisfy it.
             const opened = await openToolTab(client, viewThread, route, read, defaultTarget);
-            if (!opened.mounted)
-              return { ok: true, target: { session: null }, result: opened };
+            if (!opened.mounted) return { ok: true, target: { session: null }, result: opened };
             ({ instance, revision } = opened);
           }
           const builtin = builtinViewRoute(route);
@@ -1166,7 +1159,10 @@ async function contributionRead(row: Capability) {
   // Named runs follow edits even while the inventory row is cached. Explicit HTTP pins
   // and sealed Work keep their revision; a named run validates the current whole bundle.
   const script = row.kind === "script";
-  const query = new URLSearchParams({ key: row.key, ...(!script ? { sha256: row.package.sha256 } : {}) });
+  const query = new URLSearchParams({
+    key: row.key,
+    ...(!script ? { sha256: row.package.sha256 } : {}),
+  });
   const response = await createPeClient(base(), fetch).response("contributions.read", {
     query: Object.fromEntries(query),
   });
@@ -1237,7 +1233,9 @@ async function pageRunTarget(page: string, required: false): Promise<DocumentRef
 async function pageRunTarget(page: string, required = true): Promise<DocumentRef | null> {
   const slug = pageSlugOf(page);
   if (!slug) throw Error("Expected a canonical Page key");
-  const response = await createPeClient(base(), fetch).response("page.target", { params: { slug } });
+  const response = await createPeClient(base(), fetch).response("page.target", {
+    params: { slug },
+  });
   if (!response.ok) throw Error(`Page target unavailable: ${await response.text()}`);
   const reading = pageTargetReadingSchema.parse(await response.json());
   const resolution = reading.resolution;
@@ -1267,10 +1265,17 @@ async function operationTarget(
     "bridge.sessions.list",
   );
   if (row.kind === "script" && !override) {
-    const open = sessions.filter((session) => session.connected).flatMap((session) =>
-      (session.openDocuments ?? []).map((doc) => `${doc.title} (doc:${session.sessionId}/${doc.openId})`));
+    const open = sessions
+      .filter((session) => session.connected)
+      .flatMap((session) =>
+        (session.openDocuments ?? []).map(
+          (doc) => `${doc.title} (doc:${session.sessionId}/${doc.openId})`,
+        ),
+      );
     if (open.length !== 1 || targets.length !== 1)
-      throw Error(`Name one exact document target for this script with target {kind: open, ref: {session, openId}}. Open documents: ${open.join(", ") || "none"}.`);
+      throw Error(
+        `Name one exact document target for this script with target {kind: open, ref: {session, openId}}. Open documents: ${open.join(", ") || "none"}.`,
+      );
   }
   const inventory: TargetInventory = {
     kind: "ready",
@@ -1291,9 +1296,13 @@ async function operationTarget(
     ),
   };
   // pe_do skips bridgeTarget, so an SDK session id (as op results print it) maps here, as in routeWorkScope.
-  const named = override && "kind" in override
-    ? { ...override, ref: { ...override.ref, session: bridgeSessionFor(override.ref.session, sessions) } }
-    : override;
+  const named =
+    override && "kind" in override
+      ? {
+          ...override,
+          ref: { ...override.ref, session: bridgeSessionFor(override.ref.session, sessions) },
+        }
+      : override;
   const resolution = resolveCallTarget({ needs: row.needs, target: named }, targets, inventory);
   if (resolution.kind === "choose" && resolution.reason === "several-targets")
     throw Error(
@@ -1393,17 +1402,19 @@ async function timelineStep(
   // As in the browser, a read with no current publication adds no member: the owner still steps.
   const read =
     place && target.session && target.openId
-      ? z.array(workKeySchema).safeParse(
-          (await valueOnce(place, { target: { session: target.session, openId: target.openId } })
-            .catch(() => null))?.value?.works,
-        ).data ?? []
+      ? (z.array(workKeySchema).safeParse(
+          (
+            await valueOnce(place, {
+              target: { session: target.session, openId: target.openId },
+            }).catch(() => null)
+          )?.value?.works,
+        ).data ?? [])
       : [];
   // The owner first: a duplicate read key must not replace it.
   const works = [...new Map([key, ...read].map((member) => [workKey(member), member])).values()];
   const { status, value } = await valueOnce(WORK_TIMELINE_READ, { works });
   const timeline = workTimelineSchema.safeParse(value?.data).data;
-  if (!timeline)
-    throw new Error(`The Timeline for route:${route} could not be read (${status}).`);
+  if (!timeline) throw new Error(`The Timeline for route:${route} could not be read (${status}).`);
   const expected = timeline[direction];
   if (!expected)
     throw new Error(

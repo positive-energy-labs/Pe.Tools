@@ -44,23 +44,48 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (imp
     }),
   );
   return {
-    ...(await importOriginal<typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")>()),
-    readActionStatuses: vi.fn(), runSemanticAction: run,
-    submitAction: ({ key, input, target }: { key: string; input: unknown; target: unknown }) => run(key, input, target, undefined),
+    ...(await importOriginal<
+      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
+    >()),
+    readActionStatuses: vi.fn(),
+    runSemanticAction: run,
+    submitAction: ({ key, input, target }: { key: string; input: unknown; target: unknown }) =>
+      run(key, input, target, undefined),
   };
 });
 vi.mock("../shell/host-read-source", async () => {
   const { MACHINE_SEEDS, BAY_RECENTS, BAY_THREADS } = await import("../machine/open-examples");
-  return { hostReadSource: () => ({ kind: "use", open: (_: unknown, deliver: (event: unknown) => void) => {
-    deliver({ kind: "complete", revision: 1, value: {
-      key: "open", generation: 0, version: 1, state: "current", value: {
-        data: { machine: (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation,
-          recents: BAY_RECENTS, threads: BAY_THREADS },
-        evaluation: "open-test", inputs: "open-test", coverage: { requested: [], covered: [], refused: [], unknown: [] },
-        origin: {}, works: [], trace: [], freshness: "current",
+  return {
+    hostReadSource: () => ({
+      kind: "use",
+      open: (_: unknown, deliver: (event: unknown) => void) => {
+        deliver({
+          kind: "complete",
+          revision: 1,
+          value: {
+            key: "open",
+            generation: 0,
+            version: 1,
+            state: "current",
+            value: {
+              data: {
+                machine: (MACHINE_SEEDS["patch-bay"] as { observation: Machine }).observation,
+                recents: BAY_RECENTS,
+                threads: BAY_THREADS,
+              },
+              evaluation: "open-test",
+              inputs: "open-test",
+              coverage: { requested: [], covered: [], refused: [], unknown: [] },
+              origin: {},
+              works: [],
+              trace: [],
+              freshness: "current",
+            },
+          },
+        });
       },
-    } });
-  } }) };
+    }),
+  };
 });
 HTMLElement.prototype.scrollIntoView = vi.fn();
 beforeEach(() => {
@@ -272,36 +297,57 @@ test.each([
   [null, "Pe is finding the installed Revit versions."],
   ["years leg timed out", "The Revit version check failed. Pe is trying again."],
 ])("the new Revit card explains an unknown year list with error %s", (error, message) => {
-  render(<Bay machine={{
-    ...world,
-    revit: { ...world.revit, years: null },
-    legs: { ...world.legs, years: { observedAtUtc: null, attemptedAtUtc: null, error } },
-  }} />);
+  render(
+    <Bay
+      machine={{
+        ...world,
+        revit: { ...world.revit, years: null },
+        legs: { ...world.legs, years: { observedAtUtc: null, attemptedAtUtc: null, error } },
+      }}
+    />,
+  );
   expect(within(screen.getByRole("group", { name: "new Revit" })).getByText(message)).toBeTruthy();
 });
 
 test("the new Revit card reports a completed check that found no installations", () => {
   render(<Bay machine={{ ...world, revit: { ...world.revit, years: [] } }} />);
-  expect(within(screen.getByRole("group", { name: "new Revit" }))
-    .getByText("No installed Revit versions were found.")).toBeTruthy();
+  expect(
+    within(screen.getByRole("group", { name: "new Revit" })).getByText(
+      "No installed Revit versions were found.",
+    ),
+  ).toBeTruthy();
 });
 
 test("the new Revit year picker uses the last confirmed years while Pe checks again", () => {
-  render(<Bay machine={{
-    ...world,
-    revit: { ...world.revit, years: [2025] },
-    legs: { ...world.legs, years: { observedAtUtc: "2026-11-19T00:00:00Z", attemptedAtUtc: null, error: null } },
-  }} />);
+  render(
+    <Bay
+      machine={{
+        ...world,
+        revit: { ...world.revit, years: [2025] },
+        legs: {
+          ...world.legs,
+          years: { observedAtUtc: "2026-11-19T00:00:00Z", attemptedAtUtc: null, error: null },
+        },
+      }}
+    />,
+  );
   const card = within(screen.getByRole("group", { name: "new Revit" }));
   expect(card.getByText(/Using Revit versions last checked/)).toBeTruthy();
   expect(card.getByRole("button", { name: "2025" }).getAttribute("aria-disabled")).toBeNull();
 });
 
 test("Open distinguishes a starting Revit from a real document-details failure", () => {
-  render(<Bay machine={withSessions([
-    BACKGROUND_BOOTING,
-    { ...OBSERVED_ICON, holdingsLeg: { ...OBSERVED_ICON.holdingsLeg, error: "SDK read failed" } },
-  ])} />);
+  render(
+    <Bay
+      machine={withSessions([
+        BACKGROUND_BOOTING,
+        {
+          ...OBSERVED_ICON,
+          holdingsLeg: { ...OBSERVED_ICON.holdingsLeg, error: "SDK read failed" },
+        },
+      ])}
+    />,
+  );
   expect(screen.getByText("starting")).toBeTruthy();
   expect(screen.getByText("document details unavailable")).toBeTruthy();
 });

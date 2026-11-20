@@ -2,7 +2,12 @@
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ElementActionSubmission, ElementMenu, SelectionBoxButton, showInRevit } from "@pe/web-kernel/revit/element-menu";
+import {
+  ElementActionSubmission,
+  ElementMenu,
+  SelectionBoxButton,
+  showInRevit,
+} from "@pe/web-kernel/revit/element-menu";
 import {
   elementTargetOf,
   prepareElements,
@@ -145,7 +150,9 @@ test("BX needs both keys, targets pointer or focus, leaves double-click and typi
   submit.mockResolvedValue({ id: "action-1", state: "running" });
   const view = render(
     <RevitTarget scope={scope}>
-      <ElementActionSubmission value={submit}><ElementMenu /></ElementActionSubmission>
+      <ElementActionSubmission value={submit}>
+        <ElementMenu />
+      </ElementActionSubmission>
       <button {...revitTarget([42])}>target</button>
       <input aria-label="edit" />
     </RevitTarget>,
@@ -173,7 +180,9 @@ test("right-click Select uses the same exact observation and never invokes a box
   submit.mockResolvedValue({ id: "action-select", state: "running" });
   const view = render(
     <RevitTarget scope={scope}>
-      <ElementActionSubmission value={submit}><ElementMenu /></ElementActionSubmission>
+      <ElementActionSubmission value={submit}>
+        <ElementMenu />
+      </ElementActionSubmission>
       <button {...revitTarget([42])}>target</button>
     </RevitTarget>,
   );
@@ -194,7 +203,11 @@ test("right-click Select uses the same exact observation and never invokes a box
 
 test("the visible Selection Box door is only the kit BX key and still boxes the captured target", async () => {
   submit.mockResolvedValue({ id: "action-box", state: "running" });
-  const view = render(<ElementActionSubmission value={submit}><SelectionBoxButton target={{ ids: [42], scope }} /></ElementActionSubmission>);
+  const view = render(
+    <ElementActionSubmission value={submit}>
+      <SelectionBoxButton target={{ ids: [42], scope }} />
+    </ElementActionSubmission>,
+  );
   const box = view.getByRole("button", { name: "Selection Box in Revit" });
   expect(box.textContent).toBe("BX");
   expect(box.querySelector("kbd")).not.toBeNull();

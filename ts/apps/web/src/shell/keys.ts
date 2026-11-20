@@ -21,11 +21,14 @@ const chordKey = (chord: string) =>
     .sort()
     .join("+");
 // Explicit platform spellings must not bypass reservations of the same physical keys.
-const RESERVED = new Set(
-  [chordKey("Alt+/"), ...["Mod", "Ctrl", "Meta"].flatMap((mod) =>
-    ["Z", "Shift+Z", "Y", "K", "Shift+K", "Shift+Period", "Shift+."].map((key) => chordKey(`${mod}+${key}`)),
-  )],
-);
+const RESERVED = new Set([
+  chordKey("Alt+/"),
+  ...["Mod", "Ctrl", "Meta"].flatMap((mod) =>
+    ["Z", "Shift+Z", "Y", "K", "Shift+K", "Shift+Period", "Shift+."].map((key) =>
+      chordKey(`${mod}+${key}`),
+    ),
+  ),
+]);
 
 /** Bare and Shift-only keys belong to text controls. Modified commands remain available there. */
 export const chordIgnoresInputs = (chord: string): boolean =>
@@ -51,7 +54,9 @@ function paneChords(
 }
 
 /** Admission checks all declarations, including panes that are currently gated or folded. */
-export function validateGraphChords(graph: Pick<RouteGraph, "verbs" | "panes">): GraphChordRefusal[] {
+export function validateGraphChords(
+  graph: Pick<RouteGraph, "verbs" | "panes">,
+): GraphChordRefusal[] {
   const refusals: GraphChordRefusal[] = [];
   const reserved = (chord: string, path: string) => {
     if (RESERVED.has(chordKey(chord)))

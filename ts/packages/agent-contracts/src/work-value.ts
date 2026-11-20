@@ -7,7 +7,16 @@
 import type { Author } from "./draft.ts";
 import { authorSchema } from "./draft.ts";
 import { z } from "zod";
-export const VALUE_SOURCES = ["run", "Work", "model-store", "model", "user", "project", "firm", "default"] as const;
+export const VALUE_SOURCES = [
+  "run",
+  "Work",
+  "model-store",
+  "model",
+  "user",
+  "project",
+  "firm",
+  "default",
+] as const;
 export type ValueSource = (typeof VALUE_SOURCES)[number];
 export interface ValueCell<T> {
   value: T | null | undefined;
@@ -19,30 +28,90 @@ export interface ValueCell<T> {
 }
 export type ValueLayers<T> = Partial<Record<ValueSource, ValueCell<T>>>;
 export type ValueResolution<T> =
-  | { status: "valid"; value: T; source: ValueSource; author: Author | null;
-      ref: string; version: string | number | null; units: string | null }
-  | { status: "missing"; value: null; source: "none"; author: null;
-      ref: null; version: null; units: string | null }
-  | { status: "invalid"; value: null; source: ValueSource; author: Author | null;
-      ref: string; version: string | number | null; units: string | null };
+  | {
+      status: "valid";
+      value: T;
+      source: ValueSource;
+      author: Author | null;
+      ref: string;
+      version: string | number | null;
+      units: string | null;
+    }
+  | {
+      status: "missing";
+      value: null;
+      source: "none";
+      author: null;
+      ref: null;
+      version: null;
+      units: string | null;
+    }
+  | {
+      status: "invalid";
+      value: null;
+      source: ValueSource;
+      author: Author | null;
+      ref: string;
+      version: string | number | null;
+      units: string | null;
+    };
 export type SourcedValue<T> = ValueResolution<T>;
-export type AuthoredValue<T> = Pick<Extract<ValueResolution<T>, { status: "valid" }>, "value" | "source" | "ref" | "version"> & { author: Author };
+export type AuthoredValue<T> = Pick<
+  Extract<ValueResolution<T>, { status: "valid" }>,
+  "value" | "source" | "ref" | "version"
+> & { author: Author };
 
-const ref = z.string().min(1).refine(value => value.trim().length > 0, "evidence identity must be nonempty");
+const ref = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, "evidence identity must be nonempty");
 const version = z.union([z.string(), z.number().finite()]).nullable();
 const provenance = { source: z.enum(VALUE_SOURCES), author: authorSchema.nullable(), ref, version };
 /** Work/run valid values require a known caller; invalid winning layers never become fallback. */
 export const validValueSchema = <T extends z.ZodType>(value: T) =>
-  z.strictObject({ status: z.literal("valid"), value, ...provenance, units: z.string().nullable() });
-export const valueResolutionSchema = <T extends z.ZodType>(value: T) => z.discriminatedUnion("status", [
-  validValueSchema(value),
-  z.strictObject({ status: z.literal("invalid"), value: z.null(), ...provenance, units: z.string().nullable() }),
-  z.strictObject({ status: z.literal("missing"), value: z.null(), source: z.literal("none"), author: z.null(), ref: z.null(), version: z.null(), units: z.string().nullable() }),
-]).refine(v => v.status !== "valid" || (v.source !== "Work" && v.source !== "run") || v.author === "human" || v.author === "pea", "valid Work/run values require a known caller");
+  z.strictObject({
+    status: z.literal("valid"),
+    value,
+    ...provenance,
+    units: z.string().nullable(),
+  });
+export const valueResolutionSchema = <T extends z.ZodType>(value: T) =>
+  z
+    .discriminatedUnion("status", [
+      validValueSchema(value),
+      z.strictObject({
+        status: z.literal("invalid"),
+        value: z.null(),
+        ...provenance,
+        units: z.string().nullable(),
+      }),
+      z.strictObject({
+        status: z.literal("missing"),
+        value: z.null(),
+        source: z.literal("none"),
+        author: z.null(),
+        ref: z.null(),
+        version: z.null(),
+        units: z.string().nullable(),
+      }),
+    ])
+    .refine(
+      (v) =>
+        v.status !== "valid" ||
+        (v.source !== "Work" && v.source !== "run") ||
+        v.author === "human" ||
+        v.author === "pea",
+      "valid Work/run values require a known caller",
+    );
 export const sourcedValueSchema = valueResolutionSchema;
-export const authoredValueSchema = <T extends z.ZodType>(value: T) => z.strictObject({
-  value, source: z.enum(VALUE_SOURCES), author: authorSchema, ref, version,
-});
+export const authoredValueSchema = <T extends z.ZodType>(value: T) =>
+  z.strictObject({
+    value,
+    source: z.enum(VALUE_SOURCES),
+    author: authorSchema,
+    ref,
+    version,
+  });
 export function resolveValue<T>(
   layers: ValueLayers<T>,
   units: string | null = null,
@@ -52,10 +121,21 @@ export function resolveValue<T>(
     const cell = layers[source];
     // An unreadable stored cell blocks fallback: the row is invalid at its own ref, never the model or firm value beneath it.
     if (cell?.invalid)
-      return { status: "invalid", value: null, units, source, version: cell.version ?? null, ref: cell.ref?.trim() ? cell.ref : cell.invalid, author: null };
+      return {
+        status: "invalid",
+        value: null,
+        units,
+        source,
+        version: cell.version ?? null,
+        ref: cell.ref?.trim() ? cell.ref : cell.invalid,
+        author: null,
+      };
     if (cell?.value == null) continue;
-    if (!cell.ref?.trim()) throw new Error("A stated value layer must cite a nonempty evidence ref");
-    const accepted = valid(cell.value) && ((source !== "Work" && source !== "run") || cell.author === "human" || cell.author === "pea");
+    if (!cell.ref?.trim())
+      throw new Error("A stated value layer must cite a nonempty evidence ref");
+    const accepted =
+      valid(cell.value) &&
+      ((source !== "Work" && source !== "run") || cell.author === "human" || cell.author === "pea");
     const evidence = {
       units,
       source,
@@ -63,8 +143,17 @@ export function resolveValue<T>(
       ref: cell.ref,
       author: cell.author ?? null,
     };
-    return accepted ? { ...evidence, status: "valid", value: cell.value }
+    return accepted
+      ? { ...evidence, status: "valid", value: cell.value }
       : { ...evidence, status: "invalid", value: null };
   }
-  return { value: null, units, source: "none", version: null, status: "missing", author: null, ref: null };
+  return {
+    value: null,
+    units,
+    source: "none",
+    version: null,
+    status: "missing",
+    author: null,
+    ref: null,
+  };
 }

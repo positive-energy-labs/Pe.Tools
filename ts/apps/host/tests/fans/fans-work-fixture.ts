@@ -14,7 +14,12 @@ import { NodeCrypto, NodeServices, NodeHttpClient } from "@effect/platform-node"
 import { Context, Effect, Exit, Layer, Queue, Scope } from "effect";
 import { HttpRouter } from "effect/http";
 import { TestClock } from "effect/testing";
-import { bindWork, NATIVE_BODY_VERSION_HEADER, type Address, type Caller } from "@pe/agent-contracts";
+import {
+  bindWork,
+  NATIVE_BODY_VERSION_HEADER,
+  type Address,
+  type Caller,
+} from "@pe/agent-contracts";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -53,7 +58,18 @@ export async function nativeFixture(
     state?: Parameters<typeof connectTestBridge>[2];
     deps?: Parameters<typeof callRouteOver>[2];
     native?: (key: string, input: Record<string, any>) => unknown;
-    routes?: Layer.Layer<never, never, RevitBridge | ActionJournalService | HttpRouter.HttpRouter | HttpRouter.Request<"Requires", import("@pe/host-internal/request-contracts").RequestIdentity> | HttpRouter.Request<"Error", unknown>>;
+    routes?: Layer.Layer<
+      never,
+      never,
+      | RevitBridge
+      | ActionJournalService
+      | HttpRouter.HttpRouter
+      | HttpRouter.Request<
+          "Requires",
+          import("@pe/host-internal/request-contracts").RequestIdentity
+        >
+      | HttpRouter.Request<"Error", unknown>
+    >;
   } = {},
 ) {
   const scope = Scope.makeUnsafe();
@@ -71,7 +87,11 @@ export async function nativeFixture(
         Layer.mergeAll(
           admittedBuiltinsLayer(saved),
           RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer)),
-          RevitBridgeLive.pipe(Layer.provide(ActionJournalService.live(null, stateFixture(join(dir, "bridge-receipts"))))),
+          RevitBridgeLive.pipe(
+            Layer.provide(
+              ActionJournalService.live(null, stateFixture(join(dir, "bridge-receipts"))),
+            ),
+          ),
           CaptureStore.layer(stateFixture(join(dir, "captures"))),
         ),
         scope,
@@ -87,12 +107,14 @@ export async function nativeFixture(
     const nativeCallers: RequestIdentityData[] = [];
     const bridge: RevitBridge["Service"] = {
       ...actualBridge,
-      invokeHandle: (...args) => Effect.gen(function* () {
-        const identity = yield* Effect.serviceOption(RequestIdentity);
-        if (identity._tag === "None") throw Error("Native dispatch lost its actual caller identity");
-        nativeCallers.push(identity.value);
-        return yield* actualBridge.invokeHandle(...args);
-      }),
+      invokeHandle: (...args) =>
+        Effect.gen(function* () {
+          const identity = yield* Effect.serviceOption(RequestIdentity);
+          if (identity._tag === "None")
+            throw Error("Native dispatch lost its actual caller identity");
+          nativeCallers.push(identity.value);
+          return yield* actualBridge.invokeHandle(...args);
+        }),
     };
     const connection = await settle(
       connectTestBridge(42, {}, options.state).pipe(
@@ -106,24 +128,38 @@ export async function nativeFixture(
     const rootReads: { native?: HostNativeRead["Service"]; shared?: NativeReads["Service"] } = {};
     const sdkInput = { read: sdkSessions };
     const web = HttpRouter.toWebHandler(
-      Layer.mergeAll(callRouteOver(
-        journal,
-        Context.get(context, CaptureStore),
-        { sdk: sdkSessions, workspace: saved, ...options.deps },
-        {
-        },
-      ), (options.routes ?? Layer.empty).pipe(Layer.provide(Layer.succeed(ActionJournalService, journal))), Layer.effectDiscard(Effect.gen(function* () {
-        rootReads.native = yield* HostNativeRead;
-        rootReads.shared = yield* NativeReads;
-      }))).pipe(nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkInput.read(args))))).pipe(Layer.provide(testHostInputs)).pipe(
-        Layer.provideMerge(
-          Layer.mergeAll(
-            Layer.succeed(RevitBridge, bridge),
-            NodeServices.layer,
-            NodeHttpClient.layerUndici,
+      Layer.mergeAll(
+        callRouteOver(
+          journal,
+          Context.get(context, CaptureStore),
+          { sdk: sdkSessions, workspace: saved, ...options.deps },
+          {},
+        ),
+        (options.routes ?? Layer.empty).pipe(
+          Layer.provide(Layer.succeed(ActionJournalService, journal)),
+        ),
+        Layer.effectDiscard(
+          Effect.gen(function* () {
+            rootReads.native = yield* HostNativeRead;
+            rootReads.shared = yield* NativeReads;
+          }),
+        ),
+      )
+        .pipe(
+          nativeReadRoot(
+            Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkInput.read(args))),
+          ),
+        )
+        .pipe(Layer.provide(testHostInputs))
+        .pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(
+              Layer.succeed(RevitBridge, bridge),
+              NodeServices.layer,
+              NodeHttpClient.layerUndici,
+            ),
           ),
         ),
-      ),
       { disableLogger: true },
     );
     const request = (request: Request, caller: Caller = { kind: "human", via: "local" }) =>
@@ -330,8 +366,8 @@ export async function nativeFixture(
         ),
     );
     const readDucts: ReadSources["call"] = (op, input, raw, version) => {
-      const ref="kind" in raw ? raw.kind === "document"?raw.ref:null : raw;
-      if(!ref) throw Error("Fixture requires a document target");
+      const ref = "kind" in raw ? (raw.kind === "document" ? raw.ref : null) : raw;
+      if (!ref) throw Error("Fixture requires a document target");
       return request(
         new Request("http://fixture/call", {
           method: "POST",
@@ -356,11 +392,23 @@ export async function nativeFixture(
         threads: async () => [],
         documents: async () => [{ ...target.ref, address }],
       },
-      readGraph: async raw => {
-        const port = calcPort({ firm: (owner) => settle(testDuctFiles().firm(owner)), catalogs: () => settle(testDuctFiles().catalogsFor(undefined)), call: readDucts,
-          workKey: async ref => bindWork("duct-systems", address, undefined, ref) }, saved);
+      readGraph: async (raw) => {
+        const port = calcPort(
+          {
+            firm: (owner) => settle(testDuctFiles().firm(owner)),
+            catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+            call: readDucts,
+            workKey: async (ref) => bindWork("duct-systems", address, undefined, ref),
+          },
+          saved,
+        );
         const graph = graphRoute("reads.value", raw);
-        return graph.publish(publications, graph.publication!.subscription, graph.publication!.generation, port);
+        return graph.publish(
+          publications,
+          graph.publication!.subscription,
+          graph.publication!.generation,
+          port,
+        );
       },
       observeHostResource,
     });

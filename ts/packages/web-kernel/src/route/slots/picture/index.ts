@@ -65,29 +65,41 @@ export function resolveMark(mark: Mark, captured: readonly Captured[]): Mark | n
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const per = (f: (i: 0 | 1 | 2) => number): Vec3 => [f(0), f(1), f(2)];
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const cross = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
 
 /** Whether a model point lies in a scope; a subjects scope holds its refs, never a region. */
 function within(scope: PictureScope, c: Captured): boolean {
   if (scope.kind === "subjects") return scope.refs.includes(c.ref);
-  if (scope.kind === "box") return c.point.every((v, i) => v >= scope.min[i]! && v <= scope.max[i]!);
+  if (scope.kind === "box")
+    return c.point.every((v, i) => v >= scope.min[i]! && v <= scope.max[i]!);
   const local = sub(c.point, scope.frame.origin);
-  const [u, v, w] = [dot(local, scope.frame.x), dot(local, scope.frame.y), dot(local, cross(scope.frame.x, scope.frame.y))];
+  const [u, v, w] = [
+    dot(local, scope.frame.x),
+    dot(local, scope.frame.y),
+    dot(local, cross(scope.frame.x, scope.frame.y)),
+  ];
   if (w < scope.depth[0] || w > scope.depth[1]) return false;
   // Even-odd ray cast in the frame's plane.
   let inside = false;
   const ring = scope.polygon;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!, [xj, yj] = ring[j]!;
+    const [xi, yi] = ring[i]!,
+      [xj, yj] = ring[j]!;
     if (yi > v !== yj > v && u < ((xj - xi) * (v - yi)) / (yj - yi) + xi) inside = !inside;
   }
   return inside;
 }
 
 export function pictureSlot<C>(slot: PictureSlot<C>, ctx: C, input: PictureInput): PictureHandle {
-  const scope: PictureScope = slot.scope === "subject" ? { kind: "subjects", refs: input.subject } : slot.scope.derive(ctx);
+  const scope: PictureScope =
+    slot.scope === "subject" ? { kind: "subjects", refs: input.subject } : slot.scope.derive(ctx);
   let state: PictureState = { scope, pointed: [], selected: [], viewport: null };
-  const pointsOf = (refs: readonly SubjectRefCode[]) => input.captured.filter((c) => refs.includes(c.ref)).map((c) => c.point);
+  const pointsOf = (refs: readonly SubjectRefCode[]) =>
+    input.captured.filter((c) => refs.includes(c.ref)).map((c) => c.point);
   return {
     read: () => state,
     point: (ref) => void (state = { ...state, pointed: [ref] }),
@@ -99,11 +111,18 @@ export function pictureSlot<C>(slot: PictureSlot<C>, ctx: C, input: PictureInput
       const max = per((i) => Math.max(...points.map((p) => p[i])));
       const center = per((i) => (min[i] + max[i]) / 2);
       // A single point still frames: a foot of radius, never zero.
-      state = { ...state, viewport: { center, radius: Math.max(1, Math.hypot(...sub(max, min)) / 2) } };
+      state = {
+        ...state,
+        viewport: { center, radius: Math.max(1, Math.hypot(...sub(max, min)) / 2) },
+      };
     },
-    inspect: (region) => ({ members: input.captured.filter((c) => within(region, c)).map((c) => c.ref) }),
+    inspect: (region) => ({
+      members: input.captured.filter((c) => within(region, c)).map((c) => c.ref),
+    }),
     marks: () =>
-      [...(slot.marks?.(ctx) ?? []), ...state.pointed.map((ref): Mark => ({ kind: "ring", at: ref }))]
-        .flatMap((mark) => resolveMark(mark, input.captured) ?? []),
+      [
+        ...(slot.marks?.(ctx) ?? []),
+        ...state.pointed.map((ref): Mark => ({ kind: "ring", at: ref })),
+      ].flatMap((mark) => resolveMark(mark, input.captured) ?? []),
   };
 }

@@ -88,6 +88,9 @@ test("R7 Schedule HTTP applies atomically reserve one Plan", async () => {
     f.command("second-apply", turn.token),
   ]);
   expect(rows.map((row) => row.state).sort()).toEqual(["failed", "succeeded"]);
-  expect(rows.find((row) => row.state === "failed")).toMatchObject({ notDispatched: true, steps: [] });
+  expect(rows.find((row) => row.state === "failed")).toMatchObject({
+    notDispatched: true,
+    steps: [],
+  });
   expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toHaveLength(1);
 });

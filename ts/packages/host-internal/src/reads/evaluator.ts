@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { canonicalRouteInput as canonicalJson, workKey, workKeySchema, type WorkKey } from "@pe/agent-contracts";
+import {
+  canonicalRouteInput as canonicalJson,
+  workKey,
+  workKeySchema,
+  type WorkKey,
+} from "@pe/agent-contracts";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import type { ReadHandle } from "@pe/agent-contracts/handle";
@@ -111,7 +116,12 @@ export interface InputPort {
   readonly evaluation: string;
   readonly origin: unknown;
   /** `signal` is the read's own lifetime: aborted when its last subscriber released. Never a write's or a restoration's. */
-  readonly take: (name: string, args: unknown, context?:ReadContext, signal?: AbortSignal) => Promise<unknown>;
+  readonly take: (
+    name: string,
+    args: unknown,
+    context?: ReadContext,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
   /** Synchronous event revision: also fences a change while final validation is awaiting I/O. */
   readonly revision: (name: string, args: unknown) => number;
 }
@@ -133,7 +143,10 @@ export interface ReadContext {
     /** The firm file layer (ADR 0026): the firm's per-owner `<owner>.json` decoded by `schema`, else `seed` with why. */
     firm<T>(owner: string, schema: z.ZodType<T>, seed: T): Promise<FirmValue<T>>;
     /** Every home tier's per-owner settings file for the target model (ADR 0037 rule 8), most specific first. */
-    tiers(owner: string, target: z.output<typeof documentRefSchema> | null): Promise<SettingTierRead[]>;
+    tiers(
+      owner: string,
+      target: z.output<typeof documentRefSchema> | null,
+    ): Promise<SettingTierRead[]>;
   };
   collect<K, I, O>(
     keys: readonly K[],
@@ -172,7 +185,10 @@ export async function evaluate<I, O>(
     refused: { keys: string[]; reason: string }[] = [];
   const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
   const ctx: ReadContext = {
-    read: <A, B>(named: Read<A, B> | Leaf<A, B> | ReadHandle<string, A, B>, input: A): Promise<B> => {
+    read: <A, B>(
+      named: Read<A, B> | Leaf<A, B> | ReadHandle<string, A, B>,
+      input: A,
+    ): Promise<B> => {
       if (closed) return Promise.reject(Error("This evaluation is closed"));
       let definition: Read<A, B> | Leaf<A, B>;
       try {
@@ -201,10 +217,12 @@ export async function evaluate<I, O>(
         try {
           const raw =
             "leaf" in definition
-              ? await port.take(definition.name, args,ctx)
+              ? await port.take(definition.name, args, ctx)
               : await definition.run(ctx, args);
           const data = immutable(wireValue(definition.output.parse(raw)));
-          const hash = fingerprint("leaf" in definition && definition.content ? definition.content(data, args) : data);
+          const hash = fingerprint(
+            "leaf" in definition && definition.content ? definition.content(data, args) : data,
+          );
           trace.push({ recipe, name: definition.name, args, outcome: "answered", hash });
           if ("leaf" in definition) {
             if (port.revision(definition.name, args) !== revision)
@@ -228,7 +246,9 @@ export async function evaluate<I, O>(
     },
     work: async (owner, scope) => {
       const document = documentRefSchema.safeParse(scope);
-      const key = document.success ? { ...(await ctx.read(workScope, document.data)), route: owner } : scope;
+      const key = document.success
+        ? { ...(await ctx.read(workScope, document.data)), route: owner }
+        : scope;
       const member = workKeySchema.parse({ ...workKeySchema.parse(key), route: owner });
       return ctx.read(workInput, { owner, scope: member });
     },
@@ -293,7 +313,9 @@ export async function evaluate<I, O>(
     const current = check.definition.output.parse(
       await port.take(check.definition.name, check.args),
     );
-    const hash = fingerprint(check.definition.content ? check.definition.content(current, check.args) : current);
+    const hash = fingerprint(
+      check.definition.content ? check.definition.content(current, check.args) : current,
+    );
     trace.push({
       recipe: fingerprint([check.definition.name, check.args, "validation"]),
       name: check.definition.name,
@@ -301,12 +323,13 @@ export async function evaluate<I, O>(
       outcome: "answered",
       hash,
     });
-    if (hash !== check.hash)
-      throw new RefreshNeeded(moved(check.definition.name, check.args));
+    if (hash !== check.hash) throw new RefreshNeeded(moved(check.definition.name, check.args));
   }
   for (const check of checks.values())
     if (port.revision(check.definition.name, check.args) !== check.revision)
-      throw new RefreshNeeded(moved(check.definition.name, check.args, "before this could be shown"));
+      throw new RefreshNeeded(
+        moved(check.definition.name, check.args, "before this could be shown"),
+      );
   const dependencies = trace.sort(
     (a, b) => a.recipe.localeCompare(b.recipe) || a.outcome.localeCompare(b.outcome),
   );

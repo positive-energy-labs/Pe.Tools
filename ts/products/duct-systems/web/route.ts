@@ -31,7 +31,7 @@ import { designCalc } from "./src/design-calc.ts";
 import { lazyFixtures } from "@pe/ducts-web/registry";
 const fixtures = lazyFixtures(() => import("./src/value-fixtures.ts"));
 let drawingModule: Promise<typeof import("./src/screen/screen.tsx")> | undefined;
-const drawings = () => drawingModule ??= import("./src/screen/screen.tsx");
+const drawings = () => (drawingModule ??= import("./src/screen/screen.tsx"));
 
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 export const fields = {
@@ -52,14 +52,26 @@ const args = (page: {
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
 }) => ({ system: namesOf(page.system), fan: page.fan });
-export const roster = read(hostRead(reads.roster, () => fixtures().then(m => m.rosterFixtures)));
-export const network = read(hostRead(reads.network, () => fixtures().then(m => m.networkValueFixtures)), args);
-export const pricing = read(hostRead(reads.pricing, () => fixtures().then(m => m.pricingFixtures)), args);
-export type DuctsDrawContext = ContextOf<typeof fields, typeof pricing, typeof import("@pe/duct-systems-contract/ducts").ductsRouteState, typeof import("@pe/ducts-contract/duct-inputs").ductsCalcEditsSchema>;
+export const roster = read(hostRead(reads.roster, () => fixtures().then((m) => m.rosterFixtures)));
+export const network = read(
+  hostRead(reads.network, () => fixtures().then((m) => m.networkValueFixtures)),
+  args,
+);
+export const pricing = read(
+  hostRead(reads.pricing, () => fixtures().then((m) => m.pricingFixtures)),
+  args,
+);
+export type DuctsDrawContext = ContextOf<
+  typeof fields,
+  typeof pricing,
+  typeof import("@pe/duct-systems-contract/ducts").ductsRouteState,
+  typeof import("@pe/ducts-contract/duct-inputs").ductsCalcEditsSchema
+>;
 /** What every ducts pane shares, whichever read it names: the pane's own `value` is not part of it. */
 export type DuctsReads = Omit<DuctsDrawContext, "value">;
 /** The systems pane draws the roster, so it still lists systems while pricing is read or refused. */
-export type DuctsSystemsContext = DuctsReads & Pick<ContextOf<typeof fields, typeof roster>, "value">;
+export type DuctsSystemsContext = DuctsReads &
+  Pick<ContextOf<typeof fields, typeof roster>, "value">;
 const evidence = (
   data: DuctsDrawContext["value"]["value"],
   work: DuctsDrawContext["cells"]["doc"],
@@ -199,11 +211,18 @@ export const module = route({
             size: 240,
             sized: "start",
           }),
-          split("v", [split("v", ["e-rules-all", whenSubject("e-rules")], {
-            id: "scope-lower",
-            size: 176,
-            sized: "start",
-          }), "design"], { id: "design-lower", size: 220, sized: "end" }),
+          split(
+            "v",
+            [
+              split("v", ["e-rules-all", whenSubject("e-rules")], {
+                id: "scope-lower",
+                size: 176,
+                sized: "start",
+              }),
+              "design",
+            ],
+            { id: "design-lower", size: 220, sized: "end" },
+          ),
         ],
         { id: "stack", size: 300, sized: "end" },
       ),

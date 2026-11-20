@@ -19,26 +19,57 @@ import { mergeTimeline } from "../../../../packages/runtime/src/work-timeline";
 import type { TimelineClient } from "./work-feed-client";
 
 /** Deterministic host fixture: exercise the workspace's real Timeline and step implementation. */
-export function fixtureTimeline(workspace = new RouteWorkspace({ registrations: [], store: {
-  getState: async () => undefined, setState: async () => {},
-} }), receipts: () => Promise<import("@pe/agent-contracts").ActionStatus[]> | import("@pe/agent-contracts").ActionStatus[] = () => [], subscribeReceipts?: (changed: () => void) => () => void): TimelineClient {
+export function fixtureTimeline(
+  workspace = new RouteWorkspace({
+    registrations: [],
+    store: {
+      getState: async () => undefined,
+      setState: async () => {},
+    },
+  }),
+  receipts: () =>
+    | Promise<import("@pe/agent-contracts").ActionStatus[]>
+    | import("@pe/agent-contracts").ActionStatus[] = () => [],
+  subscribeReceipts?: (changed: () => void) => () => void,
+): TimelineClient {
   return {
     open(works, deliver) {
-      let closed = false, generation = 0;
+      let closed = false,
+        generation = 0;
       const refresh = async () => {
         deliver(null, "Refreshing Timeline");
         const turn = ++generation;
-        try { const part = await workspace.timeline(works, "human", await receipts());
+        try {
+          const part = await workspace.timeline(works, "human", await receipts());
           if (!closed && turn === generation) deliver(mergeTimeline([part]).timeline);
-        } catch (error) { if (!closed && turn === generation) deliver(null, String(error)); }
+        } catch (error) {
+          if (!closed && turn === generation) deliver(null, String(error));
+        }
       };
-      const stop = workspace.subscribeUncaptured(() => { void refresh(); });
-      const stopReceipts = subscribeReceipts?.(() => { void refresh(); });
-      void refresh(); return () => { closed = true; stop(); stopReceipts?.(); };
+      const stop = workspace.subscribeUncaptured(() => {
+        void refresh();
+      });
+      const stopReceipts = subscribeReceipts?.(() => {
+        void refresh();
+      });
+      void refresh();
+      return () => {
+        closed = true;
+        stop();
+        stopReceipts?.();
+      };
     },
     async step(request) {
-      const result = await workspace.step(request.works, "human", request.direction, request.expected, async () => receipts());
-      return result.ok ? null : { message: "error" in result ? result.error : JSON.stringify(result) };
+      const result = await workspace.step(
+        request.works,
+        "human",
+        request.direction,
+        request.expected,
+        async () => receipts(),
+      );
+      return result.ok
+        ? null
+        : { message: "error" in result ? result.error : JSON.stringify(result) };
     },
   };
 }
@@ -174,7 +205,9 @@ export function createFixtureWorkDoor(
           initialize(scope.key);
           // A fixture runs no command, so no Revit write exists to hold a step; a restore still meets
           // the Timeline's own-step admission in the workspace.
-          return workOutcome(await workspace.write(scope.key, scope.key.route, "human", write, async () => []));
+          return workOutcome(
+            await workspace.write(scope.key, scope.key.route, "human", write, async () => []),
+          );
         } catch (error) {
           return failedWrite(error);
         }

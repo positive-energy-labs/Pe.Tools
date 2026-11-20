@@ -95,11 +95,18 @@ it("a leg merging back into a run starts a new section", () => {
   ).toEqual([["x1"], ["y2"], ["z3"]]);
   // P-033(d): only a `complete` claim certifies a critical run or a residual; `to-boundary` does not.
   const certified = (kind: string) =>
-    calcBreakdown({ ...s, claim: { kind } } as unknown as Calc, { maxFpm: { supply: 900, return: 700 } }).supply.runs.map(
-      (r) => [r.critical, r.residualInWg],
-    );
-  expect(certified("complete")).toEqual([[true, 0], [true, 0]]);
-  for (const kind of ["to-boundary", "incomplete"]) expect(certified(kind)).toEqual([[false, null], [false, null]]);
+    calcBreakdown({ ...s, claim: { kind } } as unknown as Calc, {
+      maxFpm: { supply: 900, return: 700 },
+    }).supply.runs.map((r) => [r.critical, r.residualInWg]);
+  expect(certified("complete")).toEqual([
+    [true, 0],
+    [true, 0],
+  ]);
+  for (const kind of ["to-boundary", "incomplete"])
+    expect(certified(kind)).toEqual([
+      [false, null],
+      [false, null],
+    ]);
 });
 
 it("a side with no terminal: other fans' ports and streams it delivers to set the worst (UI5, MUAS-1 supply)", () => {

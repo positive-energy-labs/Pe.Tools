@@ -108,10 +108,7 @@ function Workspace({ ctx }: { ctx: FamilyContext }) {
             >
               Stage save to pod
             </Button>
-            <Button
-              label="Inspect current family draft"
-              onClick={() => subject?.clear()}
-            >
+            <Button label="Inspect current family draft" onClick={() => subject?.clear()}>
               Current draft
             </Button>
           </div>

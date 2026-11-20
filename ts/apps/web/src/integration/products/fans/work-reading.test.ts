@@ -48,7 +48,7 @@ test("the host refuses cross-route patches, /fans admits no /ducts feed, and rea
     fingerprint: f.admitted.presenter.workFingerprint,
   };
   expect(await f.ws.admitFeed(ductKey, admission)).toMatchObject({ code: "WorkRouteMismatch" });
-  expect(await f.ws.admitFeed({...ductKey,route:"rooms"}, admission)).toMatchObject({
+  expect(await f.ws.admitFeed({ ...ductKey, route: "rooms" }, admission)).toMatchObject({
     code: "WorkRouteMismatch",
   });
   expect(
@@ -58,7 +58,12 @@ test("the host refuses cross-route patches, /fans admits no /ducts feed, and rea
     ductKey,
     "duct-systems",
     "human",
-    [{ path: ["flows", elementSubject(workSnapshot.nodes.find(node => node.id === 4)!)], value: {} }],
+    [
+      {
+        path: ["flows", elementSubject(workSnapshot.nodes.find((node) => node.id === 4)!)],
+        value: {},
+      },
+    ],
     0,
   );
   expect(badDuct.ok).toBe(false);

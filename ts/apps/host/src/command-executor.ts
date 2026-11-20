@@ -2,7 +2,13 @@ import { z } from "zod";
 import { instancesStartSchema, type Claim, type ActionReceipt } from "@pe/agent-contracts";
 import { CommandRejected } from "@pe/host-internal/command-executor";
 import type { RouteWorkspace } from "@pe/runtime";
-import type { Consumed, Effect as RouteEffect, ExecutionTarget, ActionNeed, ActionAdmission } from "@pe/agent-contracts";
+import type {
+  Consumed,
+  Effect as RouteEffect,
+  ExecutionTarget,
+  ActionNeed,
+  ActionAdmission,
+} from "@pe/agent-contracts";
 import type { CommandRegistry, CommandWorkReads } from "@pe/host-internal/command-executor";
 
 /** Resource I/O only. Control hooks belong to the stable registry entries. */
@@ -39,7 +45,9 @@ function describeClaim(claim: Claim, holder: ActionReceipt): string {
       const year = slotYear.safeParse(claim.selector);
       const revit = year.success ? `Revit ${year.data.year}` : "This Revit";
       const verb = lifecycleVerb.get(holder.key);
-      const held = verb ? `${revit} is already being ${verb}.` : `Another action is using ${revit}.`;
+      const held = verb
+        ? `${revit} is already being ${verb}.`
+        : `Another action is using ${revit}.`;
       return `${held} Try again when that action finishes.`;
     }
     case "receipt":

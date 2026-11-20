@@ -46,7 +46,9 @@ export type Caller = z.infer<typeof callerSchema>;
 
 /** Stable plan/journal ownership; turn credentials remain evidence and require separate run admission. */
 export const sameCaller = (a: Caller | null | undefined, b: Caller | null | undefined): boolean =>
-  !!a && !!b && a.kind === b.kind &&
+  !!a &&
+  !!b &&
+  a.kind === b.kind &&
   (a.kind === "pea" && b.kind === "pea"
     ? a.thread === b.thread
     : a.kind === "human" && b.kind === "human"
@@ -171,15 +173,34 @@ export type PageWrite =
   | { kind: "read"; refusal: Refusal };
 /** `GET /pages/<slug>/target`: one slot, resolved against the live Revits. Never a guess. */
 export const pageTargetReadingSchema = z.object({
-  page: z.string(), slot: z.literal("default"), binding: pageChoiceSchema,
+  page: z.string(),
+  slot: z.literal("default"),
+  binding: pageChoiceSchema,
   resolution: z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("refused"), reason: z.literal("wrong-model"), message: z.string() }),
     z.object({ kind: z.literal("resolved"), target: executionTargetSchema }),
-    z.object({ kind: z.literal("checking") }), z.object({ kind: z.literal("failed"), message: z.string() }),
-    z.object({ kind: z.literal("choose"), reason: z.enum(["missing", "several-targets", "session-gone", "document-closed", "wrong-document-kind", "ambiguous"]) }),
+    z.object({ kind: z.literal("checking") }),
+    z.object({ kind: z.literal("failed"), message: z.string() }),
+    z.object({
+      kind: z.literal("choose"),
+      reason: z.enum([
+        "missing",
+        "several-targets",
+        "session-gone",
+        "document-closed",
+        "wrong-document-kind",
+        "ambiguous",
+      ]),
+    }),
   ]),
   document: z.object({ session: z.string(), openId: z.string(), title: z.string() }).nullable(),
-  write: z.discriminatedUnion("kind", [z.object({ kind: z.literal("human") }), z.object({ kind: z.literal("pea") }), z.object({ kind: z.literal("thread"), thread: z.string() }), z.object({ kind: z.literal("read"), refusal: refusalSchema })]).nullable(),
+  write: z
+    .discriminatedUnion("kind", [
+      z.object({ kind: z.literal("human") }),
+      z.object({ kind: z.literal("pea") }),
+      z.object({ kind: z.literal("thread"), thread: z.string() }),
+      z.object({ kind: z.literal("read"), refusal: refusalSchema }),
+    ])
+    .nullable(),
 });
 export type PageTargetReading = z.output<typeof pageTargetReadingSchema>;
-

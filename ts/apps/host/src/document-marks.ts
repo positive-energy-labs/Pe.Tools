@@ -157,7 +157,8 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
             for (const session of marks.keys())
               if (!alive.has(session)) {
                 changed = marks.delete(session) || changed;
-                for (const key of generations.keys()) if (JSON.parse(key)[0] === session) generations.delete(key);
+                for (const key of generations.keys())
+                  if (JSON.parse(key)[0] === session) generations.delete(key);
               }
             const current = sessions.find((session) => session.sessionId === event.sessionId);
             const openIds: unknown =
@@ -195,7 +196,11 @@ export class HostDocumentMarks extends Context.Service<HostDocumentMarks, HostMa
             marks.get(ref.session)?.get(ref.openId) ?? 0,
             marks.get(ref.session)?.get("") ?? 0,
           ) || null,
-        generation: ref => Math.max(generations.get(JSON.stringify([ref.session, ref.openId])) ?? 0, generations.get(JSON.stringify([ref.session, ""])) ?? 0),
+        generation: (ref) =>
+          Math.max(
+            generations.get(JSON.stringify([ref.session, ref.openId])) ?? 0,
+            generations.get(JSON.stringify([ref.session, ""])) ?? 0,
+          ),
         subscribe: (listener) => {
           listeners.add(listener);
           return () => {

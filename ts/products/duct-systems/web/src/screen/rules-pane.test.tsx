@@ -25,13 +25,30 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
     [{ terminal: 99, legIds: ["20:1>2", "40:1>2"] }],
   );
   calc.fittings = [
-    { key: "20", elementId: 20, family: "Elbow", rule: "elbow-mitered", ruleSource: "matched", lossInWg: 0.1 },
-    { key: "40", elementId: 40, family: "Unassigned", rule: null, ruleSource: "none", lossInWg: null },
+    {
+      key: "20",
+      elementId: 20,
+      family: "Elbow",
+      rule: "elbow-mitered",
+      ruleSource: "matched",
+      lossInWg: 0.1,
+    },
+    {
+      key: "40",
+      elementId: 40,
+      family: "Unassigned",
+      rule: null,
+      ruleSource: "none",
+      lossInWg: null,
+    },
   ] as never;
   const priced = {
     snapshot,
     calcs: [calc],
-    effective: { componentDrops: { [elementSubject(snapshot.nodes.find(node => node.id === 30)!)]: {} }, ruleAssignments: {} },
+    effective: {
+      componentDrops: { [elementSubject(snapshot.nodes.find((node) => node.id === 30)!)]: {} },
+      ruleAssignments: {},
+    },
   } as unknown as Priced;
   render(
     <RulesTree
@@ -48,7 +65,9 @@ test("rule rows keep native ids and editable cells keep their arrow and Enter ke
   const row = document.querySelector('[data-key="elbow-mitered"]')!;
   expect(row.getAttribute("data-revit-ids")).toBe("20");
   // The fan-out is counted from the fan calcs' paths: one grille's path carries the elbow.
-  expect(document.querySelector('[data-e-fanout="elbow-mitered"]')?.textContent).toContain("moves 1 grille");
+  expect(document.querySelector('[data-e-fanout="elbow-mitered"]')?.textContent).toContain(
+    "moves 1 grille",
+  );
   const input = screen.getByRole("textbox", { name: "table cell" });
   input.focus();
   fireEvent.keyDown(input, { key: "ArrowDown" });

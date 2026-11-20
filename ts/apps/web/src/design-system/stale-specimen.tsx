@@ -57,7 +57,10 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
       for (const { path, value } of patches) {
         const key = String(path[1]);
         const { edit: _, ...rest } = cells[key] ?? {};
-        cells[key] = value == null ? rest : { ...rest, edit: { ...(value as { value: string }), by: "human" } };
+        cells[key] =
+          value == null
+            ? rest
+            : { ...rest, edit: { ...(value as { value: string }), by: "human" } };
       }
       const stale = (current.basis?.stale ?? []).filter((c) => !keys.includes(c.key));
       return {

@@ -39,29 +39,39 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
       return {
         resolve: live.resolve,
         read: (request) =>
-          captured(store, request.key, live.read(request), (exit) =>
-            Effect.gen(function* () {
-              const outcome: Outcome | null = Exit.isSuccess(exit)
-                ? {
-                    kind: "answered",
-                    value: exit.value.value,
-                    answer: {
-                      nativeRequestId: exit.value.nativeRequestId,
-                      actualTarget: exit.value.actualTarget,
-                      freshness: { freshnessGeneration: exit.value.freshness.freshnessGeneration },
-                      cost: exit.value.cost,
-                      nativeOutcome: exit.value.outcome,
-                    },
-                  }
-                : yield* failedOutcome(exit);
-              if (outcome === null) return null;
-              const input = {
-                input: { kind: "native" as const, key: request.key, args: yield* recordedNativeArgs(request) },
-                scope: yield* scopeOf(request),
-                outputVersion: yield* versionOf(request.key),
-              };
-              return { input, outcome };
-            }),
+          captured(
+            store,
+            request.key,
+            live.read(request),
+            (exit) =>
+              Effect.gen(function* () {
+                const outcome: Outcome | null = Exit.isSuccess(exit)
+                  ? {
+                      kind: "answered",
+                      value: exit.value.value,
+                      answer: {
+                        nativeRequestId: exit.value.nativeRequestId,
+                        actualTarget: exit.value.actualTarget,
+                        freshness: {
+                          freshnessGeneration: exit.value.freshness.freshnessGeneration,
+                        },
+                        cost: exit.value.cost,
+                        nativeOutcome: exit.value.outcome,
+                      },
+                    }
+                  : yield* failedOutcome(exit);
+                if (outcome === null) return null;
+                const input = {
+                  input: {
+                    kind: "native" as const,
+                    key: request.key,
+                    args: yield* recordedNativeArgs(request),
+                  },
+                  scope: yield* scopeOf(request),
+                  outputVersion: yield* versionOf(request.key),
+                };
+                return { input, outcome };
+              }),
             observed,
             nativeOccurrence(request),
           ),
@@ -71,14 +81,20 @@ const capturing = (store: RecordingWriter, observed: TakingObserver) =>
 /** A native read's occurrence, when its input and scope are JSON; otherwise it has none to reserve. */
 const nativeOccurrence = (request: NativeReadInput): Effect.Effect<Occurrence | undefined> =>
   Effect.all([recordedNativeArgs(request), scopeOf(request)]).pipe(
-    Effect.map(([args, scope]) => ({ input: { kind: "native" as const, key: request.key, args }, scope })),
+    Effect.map(([args, scope]) => ({
+      input: { kind: "native" as const, key: request.key, args },
+      scope,
+    })),
     Effect.orElseSucceed(() => undefined),
   );
 
 /** Recorded reads only: no live layer is built, and a miss is a typed refusal. */
 const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string> = new Map()) => {
   // `consume` is a read; resolve validates the descriptor and reserves no occurrence.
-  const select = Effect.fn("Recording.select")(function* (request: NativeReadInput, consume: boolean) {
+  const select = Effect.fn("Recording.select")(function* (
+    request: NativeReadInput,
+    consume: boolean,
+  ) {
     yield* admitNativeCaller(request.key);
     const args = yield* recordedNativeArgs(request);
     const input = { kind: "native" as const, key: request.key, args };
@@ -128,8 +144,12 @@ const replaying = (store: RecordingReader, bindings: ReadonlyMap<string, string>
         const { taking, answer } = yield* select(request, true);
         const raw = yield* store.observation(taking);
         const value = yield* Effect.try({
-          try:()=>Schema.decodeUnknownSync(Schema.Json)(nativeOutputSchema(request.key as HostOperationKey).parse(raw)),
-          catch:()=>refuse("mismatch", `Recorded ${request.key} no longer satisfies its contract`),
+          try: () =>
+            Schema.decodeUnknownSync(Schema.Json)(
+              nativeOutputSchema(request.key as HostOperationKey).parse(raw),
+            ),
+          catch: () =>
+            refuse("mismatch", `Recorded ${request.key} no longer satisfies its contract`),
         });
         return {
           value,

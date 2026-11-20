@@ -37,13 +37,19 @@ import {
   resolvePackageIdentity,
   type AdmittedPackage,
 } from "./packages.ts";
-import { requirePackageEnabled, activePackages, projectPodIds, reconcilePackageChanges } from "./package-lifecycle.ts";
+import {
+  requirePackageEnabled,
+  activePackages,
+  projectPodIds,
+  reconcilePackageChanges,
+} from "./package-lifecycle.ts";
 import { shippedPodsSettled } from "./installed-pods.ts";
 import { LocalOpError } from "./local-error.ts";
 import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 import { hostState } from "./host-ownership.ts";
-import { sha256Hex,
+import {
+  sha256Hex,
   writeHome,
   writeState,
   homeKind,
@@ -58,10 +64,7 @@ export const podMemberKind = homeKind({
 });
 import { runFileKind } from "./run-files.ts";
 import { z } from "zod";
-import {
-  localOpFileError,
-  makeDirectory,
-  readDirectoryEntriesOrEmpty } from "./files/index.ts";
+import { localOpFileError, makeDirectory, readDirectoryEntriesOrEmpty } from "./files/index.ts";
 
 /**
  * Pod members are host-native file I/O under `Pods/<folder>/` in the home that holds the pod; a pod
@@ -92,15 +95,21 @@ export type PodContext = {
 export function deleteHomeIfSha(file: StoredFile<unknown, "home">, expectSha256: string): boolean {
   const path = file.path;
   let bytes: Buffer;
-  try { bytes = readFileSync(path); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+  try {
+    bytes = readFileSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
   if (sha256Hex(bytes) !== expectSha256) return false;
   unlinkSync(path);
   return true;
 }
 
 export type HomeMemberUndo = {
-  file: StoredFile<unknown, "home">; sha256: string; prior: Uint8Array | null;
+  file: StoredFile<unknown, "home">;
+  sha256: string;
+  prior: Uint8Array | null;
 };
 
 /** Undo only this publication's writes, newest first; one conflict must not prevent other undos. */
@@ -108,9 +117,10 @@ export function rollbackHomeMembers(writes: readonly HomeMemberUndo[]): string[]
   const kept: string[] = [];
   for (const write of [...writes].reverse()) {
     try {
-      const undone = write.prior === null
-        ? deleteHomeIfSha(write.file, write.sha256)
-        : writeHome(write.file, write.prior, write.sha256).ok;
+      const undone =
+        write.prior === null
+          ? deleteHomeIfSha(write.file, write.sha256)
+          : writeHome(write.file, write.prior, write.sha256).ok;
       if (!undone) kept.push(`${write.file.path} (changed after publication)`);
     } catch (error) {
       kept.push(`${write.file.path} (${String(error)})`);
@@ -129,7 +139,9 @@ export const runsDirectory = (
   ctx: Pick<PodContext, "machine" | "podsRoot"> = {},
 ) => {
   const machine = ctx.machine ?? hostState();
-  return pod ? stateDirectory(stateScope(machine, machine.runs), pod) : stateScope(machine, machine.podlessRuns);
+  return pod
+    ? stateDirectory(stateScope(machine, machine.runs), pod)
+    : stateScope(machine, machine.podlessRuns);
 };
 
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
@@ -156,29 +168,33 @@ const projectPodsNote = (ctx: PodContext) =>
   ctx.podsRoot !== undefined
     ? {}
     : projectPodsRoot(ctx.pointer)
-    ? {
-        // Only the user and firm homes are censused at start, so a project Pod's entrypoints and
-        // contributions are served by no door. Say so, or Pea calls one and meets a bare not-found.
-        projectPods:
-          "Project-home Pods list, read, write and compose here. They serve no Pages, skills or entrypoints and do not run, because only the user and firm homes are censused at start.",
-      }
-    : {
-        projectPods:
-          ctx.pointer === undefined
-            ? "No document is targeted, so only the user and firm homes are listed. A project home's Pods appear when the call targets a document."
-            : ctx.pointer === null
-              ? "The targeted document names no project home, so only the user and firm homes are listed."
-              : `The targeted document names the project home '${ctx.pointer}', which was not found on this computer, so only the user and firm homes are listed.`,
-      };
+      ? {
+          // Only the user and firm homes are censused at start, so a project Pod's entrypoints and
+          // contributions are served by no door. Say so, or Pea calls one and meets a bare not-found.
+          projectPods:
+            "Project-home Pods list, read, write and compose here. They serve no Pages, skills or entrypoints and do not run, because only the user and firm homes are censused at start.",
+        }
+      : {
+          projectPods:
+            ctx.pointer === undefined
+              ? "No document is targeted, so only the user and firm homes are listed. A project home's Pods appear when the call targets a document."
+              : ctx.pointer === null
+                ? "The targeted document names no project home, so only the user and firm homes are listed."
+                : `The targeted document names the project home '${ctx.pointer}', which was not found on this computer, so only the user and firm homes are listed.`,
+        };
 
 const podContentReady = (ctx: PodContext) =>
-  ctx.podsRoot === undefined ? Effect.tryPromise({
-    try: async () => {
-      await shippedPodsSettled(); await contentRootsReady(ctx.pointer);
-      if (!contentHomes().some(home => home.tier === "user")) throw new ContentHomeUnavailable();
-    },
-    catch: error => new LocalOpError("pod.content", errorMessage(error), 503),
-  }) : Effect.void;
+  ctx.podsRoot === undefined
+    ? Effect.tryPromise({
+        try: async () => {
+          await shippedPodsSettled();
+          await contentRootsReady(ctx.pointer);
+          if (!contentHomes().some((home) => home.tier === "user"))
+            throw new ContentHomeUnavailable();
+        },
+        catch: (error) => new LocalOpError("pod.content", errorMessage(error), 503),
+      })
+    : Effect.void;
 
 export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   yield* podContentReady(ctx);
@@ -189,17 +205,19 @@ export const listPods = Effect.fnUntraced(function* (ctx: PodContext = {}) {
   });
   const project = yield* Effect.promise(() => projectPodIds(ctx.pointer));
   return {
-    pods: (yield* Effect.promise(() => activePackages(found.packages, root, project))).map((pod) => ({
-      id: pod.id,
-      name: pod.name,
-      version: pod.version,
-      folder: pod.folder,
-      ...withHome(pod.directory, ctx),
-      entrypoints: pod.entrypoints,
-      contributions: pod.contributions,
-      members: pod.members.map(({ path, sha256, schema }) => ({ path, sha256, schema })),
-      diagnostics: pod.diagnostics,
-    })),
+    pods: (yield* Effect.promise(() => activePackages(found.packages, root, project))).map(
+      (pod) => ({
+        id: pod.id,
+        name: pod.name,
+        version: pod.version,
+        folder: pod.folder,
+        ...withHome(pod.directory, ctx),
+        entrypoints: pod.entrypoints,
+        contributions: pod.contributions,
+        members: pod.members.map(({ path, sha256, schema }) => ({ path, sha256, schema })),
+        diagnostics: pod.diagnostics,
+      }),
+    ),
     ...projectPodsNote(ctx),
     unreadable: found.unreadable,
   } satisfies PodList;
@@ -282,7 +300,8 @@ function writtenMemberPath(content: string): string | undefined {
   try {
     const value: unknown = JSON.parse(content.replace(/^﻿/, ""));
     return isRecord(value) && typeof value.path === "string" ? value.path : undefined;
-  } catch (error) { console.warn("ts/apps/host/src/settings.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/settings.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -305,7 +324,8 @@ function parseRunSource(content: string): PodRunSource | undefined {
       ...field("sha256"),
       ...field("name"),
     };
-  } catch (error) { console.warn("ts/apps/host/src/settings.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/settings.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -390,7 +410,9 @@ export const readMemberPod = Effect.fnUntraced(function* (
           // differs from one taken after the ask arrives (`choose` in `discoverPackages`,
           // pod-capture.ts). Both paths share podsDiskSignature's recent-member byte witness;
           // only older files deliberately rewritten with identical metadata escape it.
-          capturePackage(pod, ctx.podsRoot).catch(() => readPackage(pod, { podsRoots: podsRoots(ctx) }))
+          capturePackage(pod, ctx.podsRoot).catch(() =>
+            readPackage(pod, { podsRoots: podsRoots(ctx) }),
+          )
         : readPackage(pod, { podsRoots: podsRoots(ctx) }),
     catch: (error) =>
       new LocalOpError(
@@ -844,14 +866,17 @@ function issue(code: string, message: string, severity: MemberIssue["severity"] 
 
 /** Member text with every library `$schema` stored as its path. Other bytes, and other schemas, are untouched. */
 export const storedSchemaPaths = (content: string): string =>
-  content.replace(/("\$schema"\s*:\s*)("(?:[^"\\]|\\.)*")/g, (whole, key: string, literal: string) => {
-    try {
-      const path = settingsSchemaPath(JSON.parse(literal) as string);
-      return path ? `${key}${JSON.stringify(path)}` : whole;
-    } catch {
-      return whole;
-    }
-  });
+  content.replace(
+    /("\$schema"\s*:\s*)("(?:[^"\\]|\\.)*")/g,
+    (whole, key: string, literal: string) => {
+      try {
+        const path = settingsSchemaPath(JSON.parse(literal) as string);
+        return path ? `${key}${JSON.stringify(path)}` : whole;
+      } catch {
+        return whole;
+      }
+    },
+  );
 
 function hasDirectives(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(hasDirectives);

@@ -21,16 +21,22 @@ export const snapshotInputs = (settings: readonly SettingTierRead[], snapshot: D
   // A derived input view; the retained native body and its parameter facts stay unchanged.
   return { snapshot: { ...snapshot, slots: { ...snapshot.slots, ...flow.slots } }, flow };
 };
-export const acquireSnapshotInputs = async (settings: readonly SettingTierRead[], read: (slots: ReturnType<typeof ductSlotRequest>) => Promise<DuctSnapshot>) => snapshotInputs(settings, await read(ductSlotRequest(settings)));
+export const acquireSnapshotInputs = async (
+  settings: readonly SettingTierRead[],
+  read: (slots: ReturnType<typeof ductSlotRequest>) => Promise<DuctSnapshot>,
+) => snapshotInputs(settings, await read(ductSlotRequest(settings)));
 
 /** One project choice, measured before the fan walk when no setting serves a name. */
 export function terminalFlowSlot(settings: readonly SettingTierRead[], snapshot: DuctSnapshot) {
-  const slots = ductSlotRequest(settings), named = slots.terminalFlow;
-  const coverage = slotCoverage(snapshot.nodes, [named ?? "PE_M_Grd_AirFlow"]).filter(row => row.slot === (named ?? "PE_M_Grd_AirFlow") || row.slot === REVIT_FLOW_SLOT);
-  const chosen = coverage.find(row => row.slot === (named ?? coverage[0]?.slot));
+  const slots = ductSlotRequest(settings),
+    named = slots.terminalFlow;
+  const coverage = slotCoverage(snapshot.nodes, [named ?? "PE_M_Grd_AirFlow"]).filter(
+    (row) => row.slot === (named ?? "PE_M_Grd_AirFlow") || row.slot === REVIT_FLOW_SLOT,
+  );
+  const chosen = coverage.find((row) => row.slot === (named ?? coverage[0]?.slot));
   if (!chosen) throw Error("Terminal airflow coverage returned no candidate");
-  const better = coverage.find(row => row.covered > chosen.covered);
-  const label = (slot: string) => slot === REVIT_FLOW_SLOT ? "Revit Flow" : slot;
+  const better = coverage.find((row) => row.covered > chosen.covered);
+  const label = (slot: string) => (slot === REVIT_FLOW_SLOT ? "Revit Flow" : slot);
   const slotSources = ductParameterSlots(settings);
   const terminal = slotSources.terminalFlow;
   const ref = `${terminal.source} · ${chosen.slot}${named ? "" : " chosen by coverage"} ${chosen.covered}/${chosen.total}`;
@@ -39,7 +45,10 @@ export function terminalFlowSlot(settings: readonly SettingTierRead[], snapshot:
     coverage,
     slotSources: { ...slotSources, terminalFlow: { ...terminal, note: terminal.note ?? ref } },
     terminalFlow: { slot: chosen.slot, ref },
-    terminalFlowNote: named && better ? `${chosen.covered}/${chosen.total} terminals have ${label(chosen.slot)}; ${label(better.slot)} covers ${better.covered}. Save terminalFlow = ${label(better.slot)} at project` : undefined,
+    terminalFlowNote:
+      named && better
+        ? `${chosen.covered}/${chosen.total} terminals have ${label(chosen.slot)}; ${label(better.slot)} covers ${better.covered}. Save terminalFlow = ${label(better.slot)} at project`
+        : undefined,
   };
 }
 
@@ -60,13 +69,22 @@ export function firmLayer(reading: FirmReading, settings: readonly SettingTierRe
   const served: Record<string, "project" | "firm" | "default"> = {};
   for (const [cell, declared] of Object.entries(DUCTS_CRITERIA_CELLS)) {
     const [key, side] = declared.layer;
-    const { value, tier } = serveSetting<number | string>(settings, ["project", "firm"], ["criteria", ...declared.layer], declared.value);
+    const { value, tier } = serveSetting<number | string>(
+      settings,
+      ["project", "firm"],
+      ["criteria", ...declared.layer],
+      declared.value,
+    );
     served[cell as DuctsCriteriaCell] = tier as "project" | "firm" | "default";
     if (value == null) continue;
     if (side) (criteria[key] as Record<string, unknown>)[side] = value;
     else criteria[key] = value;
   }
-  return { version: firmFile?.version ?? (firmFile ? "firm" : FIRM_SEED.version), criteria: criteria as DuctsFirm["criteria"], served };
+  return {
+    version: firmFile?.version ?? (firmFile ? "firm" : FIRM_SEED.version),
+    criteria: criteria as DuctsFirm["criteria"],
+    served,
+  };
 }
 
 export { editPatches } from "@pe/ducts-domain/calc/edits";

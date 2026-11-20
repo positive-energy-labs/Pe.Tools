@@ -43,11 +43,7 @@ export const workWord = ({
  * A Work's standing lines, none of them cells: what is unresolved (a lost write, a conflicting
  * writer, the last refusal).
  */
-export function WorkStanding({
-  conflict,
-  unresolved = [],
-  reload,
-}: WorkStandingProps) {
+export function WorkStanding({ conflict, unresolved = [], reload }: WorkStandingProps) {
   return (
     <>
       {unresolved.length ? (

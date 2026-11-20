@@ -37,7 +37,13 @@ export const edit = z.object({
   current: z.string(),
 });
 export const view = read(hostRead(reads.view));
-export type FamiliesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").familiesRouteState, typeof edit, Verbs<"read" | "stop", "apply">>;
+export type FamiliesDrawContext = ContextOf<
+  typeof fields,
+  typeof view,
+  typeof import("@pe/agent-contracts").familiesRouteState,
+  typeof edit,
+  Verbs<"read" | "stop", "apply">
+>;
 export const module = route({
   key: "families",
   name: "Families",

@@ -298,8 +298,11 @@ export const builtinTools = {
 export const builtinCommandHead = {
   "work.start": {
     catalogEffect: "SessionWrite",
-    says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
-    input:z.object({key:workKeySchema,seed:z.json()}),
+    says: "Start this Work",
+    needs: "nothing",
+    effect: "command",
+    dirties: [],
+    input: z.object({ key: workKeySchema, seed: z.json() }),
   } as const,
   ...catalogWorkCommands,
 };
@@ -366,16 +369,30 @@ export const preparedTakeoffSchema = z.strictObject({
 const hostActionHead = {
   "ops.read": {
     via: { route: "operation.call" },
-    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => isReadEffect(op.effect)).map((op) => op.key),
+    native: [...hostOpCatalog, ...tsOnlyOperationCatalog]
+      .filter((op) => isReadEffect(op.effect))
+      .map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
-    needs: "nothing", effect: "query", dirties: [],
-    input: z.object({ op: z.object({ key: z.string(), effect: z.string().refine(isReadEffect, "ops.read requires a native Read") }).passthrough(), request: z.unknown() }),
+    needs: "nothing",
+    effect: "query",
+    dirties: [],
+    input: z.object({
+      op: z
+        .object({
+          key: z.string(),
+          effect: z.string().refine(isReadEffect, "ops.read requires a native Read"),
+        })
+        .passthrough(),
+      request: z.unknown(),
+    }),
   } as const,
   "page.bind": {
     via: { route: "page.bind" },
     catalogEffect: "SessionWrite",
     says: "Bind a Page to its exact execution target.",
-    needs: "nothing", effect: "command", dirties: [],
+    needs: "nothing",
+    effect: "command",
+    dirties: [],
     input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
   } as const,
 } satisfies Record<string, Command>;
@@ -398,6 +415,8 @@ export const withHostActions = <const C extends Record<string, Command>>(registe
 export const builtinHostActions = withHostActions(builtinCommands);
 type PlannedRow = Extract<(typeof commandTable)[keyof typeof commandTable], { plan: string }>;
 export type SemanticPreviewKey = PlannedRow["plan"];
-const previews = new Set<string>(Object.values(commandTable).flatMap(row => "plan" in row ? [row.plan] : []));
+const previews = new Set<string>(
+  Object.values(commandTable).flatMap((row) => ("plan" in row ? [row.plan] : [])),
+);
 /** The plan half of a Work write: its receipt is review evidence, never a commit. */
 export const isWritePreviewKey = (key: string): boolean => previews.has(key);

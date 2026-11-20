@@ -17,7 +17,8 @@ export function bindActionDispatch(id: string, owner: Owner) {
 }
 export const dispatchRefusal = (id: string) => Promise.resolve(owners.get(id)?.refusal() ?? null);
 export const validateDispatch = (id: string) => owners.get(id)?.validate() ?? Promise.resolve(null);
-export const markDispatched = (id: string, transport: "bridge" | "sdk") => owners.get(id)?.dispatched(transport) ?? Promise.resolve();
+export const markDispatched = (id: string, transport: "bridge" | "sdk") =>
+  owners.get(id)?.dispatched(transport) ?? Promise.resolve();
 export const recordNativeTerminal = (id: string, touched: unknown, evidenceJson?: string | null) =>
   owners.get(id)?.terminal?.(touched, evidenceJson) ?? Promise.resolve();
 export const recordNativeUncertainty = (id: string, reason: "lost-response" | "process-exit") =>

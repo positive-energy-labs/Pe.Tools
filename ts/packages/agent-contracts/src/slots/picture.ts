@@ -24,7 +24,12 @@ export type PictureScope =
   | { readonly kind: "subjects"; readonly refs: readonly SubjectRefCode[] }
   | { readonly kind: "box"; readonly min: Vec3; readonly max: Vec3 }
   /** A polygon in the frame's plane, extruded along the frame's `z` between `depth[0]` and `depth[1]`. */
-  | { readonly kind: "prism"; readonly frame: Frame; readonly polygon: readonly Vec2[]; readonly depth: Vec2 };
+  | {
+      readonly kind: "prism";
+      readonly frame: Frame;
+      readonly polygon: readonly Vec2[];
+      readonly depth: Vec2;
+    };
 
 /** Closed set of illustration forms: ring, outline, bar, volume, plus a label. */
 export const MARK_KINDS = ["ring", "outline", "bar", "volume", "label"] as const;
@@ -100,7 +105,9 @@ export const picturePoseSchemas = {
   sceneView: sceneViewSchema.default({ preset: "all", section: null }),
   viewport: viewportKey(viewportSchema),
   context: z.enum(PICTURE_CONTEXT).default("glass"),
-  layers: z.union([z.array(z.string().min(1).max(200)).max(64), z.literal("default")]).default("default"),
+  layers: z
+    .union([z.array(z.string().min(1).max(200)).max(64), z.literal("default")])
+    .default("default"),
   encoding: z.string().max(200).default(""),
   picture: z.string().min(1).max(200).default("model"),
 };

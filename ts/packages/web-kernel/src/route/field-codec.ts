@@ -5,7 +5,10 @@ export type FieldCodec = Codec<unknown>;
 type Field = { schema: z.ZodType; initial: unknown; codec?: FieldCodec };
 
 /** The kernel Page and generated address must write the same declared URL codec. */
-export function encodeField(field: Pick<Field, "schema" | "codec"> | undefined, value: unknown): string {
+export function encodeField(
+  field: Pick<Field, "schema" | "codec"> | undefined,
+  value: unknown,
+): string {
   if (field?.codec) return field.codec.encode(field.schema.parse(value));
   return JSON.stringify(value);
 }

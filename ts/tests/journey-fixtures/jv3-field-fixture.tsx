@@ -8,20 +8,40 @@ import type { DrawContext, Fields } from "@pe/web-kernel/route/typed-route";
 
 const { read, work } = await (await fetch("/jv3-inputs")).json();
 // Read-only fixture handles: this journey neither stages nor applies anything.
-const refuse = () => { throw Error("Read-only journey"); };
+const refuse = () => {
+  throw Error("Read-only journey");
+};
 const ctx: DrawContext<unknown, Fields, Record<string, unknown>, unknown> = {
-  target: null, read: refuse, absent: () => null, refresh: refuse, verb: refuse,
+  target: null,
+  read: refuse,
+  absent: () => null,
+  refresh: refuse,
+  verb: refuse,
   selection: { read: () => [], set: refuse },
   page: { read: () => ({ selected: [] }), pose: refuse, query: refuse, select: refuse },
   value: { state: "ready", value: read, publication: null },
-  cells: { doc: work, basis: null, state: { state: "ready", value: work },
-    owner: () => ({ route: "duct-systems", label: "Work" }), label: refuse, edit: refuse, patch: refuse,
+  cells: {
+    doc: work,
+    basis: null,
+    state: { state: "ready", value: work },
+    owner: () => ({ route: "duct-systems", label: "Work" }),
+    label: refuse,
+    edit: refuse,
+    patch: refuse,
     at: (path) => ({
-    owner: { route: "duct-systems", label: "Work" },
-    facts: { readOnly: true }, freshness: "current", accept: refuse, deny: refuse, delete: refuse,
-    value: path.reduce((v, key) => v?.[key], work) ?? {}, refusal: null,
-    transitions: () => [], clear: refuse, stage: refuse,
-  }) },
+      owner: { route: "duct-systems", label: "Work" },
+      facts: { readOnly: true },
+      freshness: "current",
+      accept: refuse,
+      deny: refuse,
+      delete: refuse,
+      value: path.reduce((v, key) => v?.[key], work) ?? {},
+      refusal: null,
+      transitions: () => [],
+      clear: refuse,
+      stage: refuse,
+    }),
+  },
 };
 const root = document.getElementById("root");
 if (!root) throw Error("Fixture root missing");

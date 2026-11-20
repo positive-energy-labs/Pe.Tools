@@ -101,7 +101,11 @@ describe("PSC1 decode", () => {
         vertexCount: 3,
       },
       expect.objectContaining({
-        key: spaceElementKey({ uniqueId: "u-2", hostDocumentKey: "doc-host", linkInstanceUniqueId: "link-7" }),
+        key: spaceElementKey({
+          uniqueId: "u-2",
+          hostDocumentKey: "doc-host",
+          linkInstanceUniqueId: "link-7",
+        }),
         revitId: null,
         linkInstanceId: 7,
         categoryId: CATEGORY_IDS.walls,
@@ -355,7 +359,7 @@ describe("PSC1 decode", () => {
 // u2-gate-0475a118/browser3, re-captured unedited at f47a7d7c so its space-scene-v5 link UniqueIds are real. Never hand-edit it.
 it("refuses the retired v5 native capture and requires recapture", () => {
   const bytes = readFileSync(new URL("./fixtures/browser-overview.psc1", import.meta.url));
-  expect(() => decodeScene(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
-  )).toThrow("outdated");
+  expect(() =>
+    decodeScene(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)),
+  ).toThrow("outdated");
 });

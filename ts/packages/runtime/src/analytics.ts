@@ -23,9 +23,11 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
   const config =
     lane === "dev"
       ? undefined
-      : (readJson(join(runtimeRoot(), "product.payloads.json")) as
-          | { telemetry?: { posthog?: AnalyticsConfig } }
-          | undefined)?.telemetry?.posthog;
+      : (
+          readJson(join(runtimeRoot(), "product.payloads.json")) as
+            | { telemetry?: { posthog?: AnalyticsConfig } }
+            | undefined
+        )?.telemetry?.posthog;
   const key =
     lane === "dev"
       ? resolveKey(null, "posthog.api-key", stateTree(runtimeRoot()))
@@ -36,7 +38,8 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
   const host = typeof config?.host === "string" ? config.host : "https://us.i.posthog.com";
   try {
     if (new URL(host).protocol !== "https:") return null;
-  } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return null;
   }
   return { apiKey: key.value, host: host.replace(/\/$/, "") };
@@ -45,7 +48,8 @@ export function analyticsConfig(lane: "dev" | "installed"): AnalyticsConfig | nu
 function readJson(path: string): unknown {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return undefined;
   }
 }
@@ -74,7 +78,8 @@ export function readOrCreateInstallId(): string | null {
     writeState(file, JSON.stringify({ installId: id }));
     const written = read();
     return written.kind === "ok" ? written.value.installId : id;
-  } catch (error) { console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/packages/runtime/src/analytics.ts: fallback after failure", error);
     return null;
   }
 }

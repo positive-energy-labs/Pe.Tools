@@ -17,7 +17,10 @@ import { fields } from "@pe/duct-systems-web/route";
  * fixes, that opens /ducts with that subject selected. Nothing on /fans stages /ducts Work.
  */
 const closes: (() => void)[] = [];
-afterEach(() => { cleanup(); for (const close of closes.splice(0).reverse()) close(); });
+afterEach(() => {
+  cleanup();
+  for (const close of closes.splice(0).reverse()) close();
+});
 
 /** The recorded blocker, re-pointed for one test and restored after it. */
 function pointBlocker(at: { elementId: number; subject?: string }) {
@@ -25,12 +28,17 @@ function pointBlocker(at: { elementId: number; subject?: string }) {
   const recorded = { ...fixture };
   Object.assign(fixture, at);
   if (at.subject === undefined) delete fixture.subject;
-  closes.push(() => { delete fixture.subject; Object.assign(fixture, recorded); });
+  closes.push(() => {
+    delete fixture.subject;
+    Object.assign(fixture, recorded);
+  });
 }
 
 async function ledgerLink() {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.fans.readingStatus("sheet").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() =>
+    expect(f.fans.readingStatus("sheet").snapshot.state === "ready").toBe(true),
+  );
   const ducts0 = f.owner.work()?.revision ?? 0;
   const registry = makeAtomRegistry();
   closes.push(() => registry.dispose());
@@ -43,7 +51,10 @@ async function ledgerLink() {
   expect(screen.queryByRole("button", { name: /for inferred-join$/ })).toBeNull();
   const href = new URL(link.getAttribute("href")!, "http://pe.local");
   expect(href.pathname).toBe("/duct-systems");
-  const selected = JSON.parse(href.searchParams.get("selected") ?? "[]") as { kind: string; id: string }[];
+  const selected = JSON.parse(href.searchParams.get("selected") ?? "[]") as {
+    kind: string;
+    id: string;
+  }[];
   return { f, href, selected, ducts0 };
 }
 
@@ -83,22 +94,32 @@ test("a blocker with no UniqueId opens /ducts on its systems, never a raw Elemen
 test("the 369-system handoff names the fan port and resolves only its systems", async () => {
   const recorded = snapshot.systems;
   snapshot.systems = Array.from({ length: 369 }, (_, id) => ({
-    ...recorded[0]!, id, name: `System ${id} with a long model-specific name`,
+    ...recorded[0]!,
+    id,
+    name: `System ${id} with a long model-specific name`,
   }));
-  closes.push(() => { snapshot.systems = recorded; });
+  closes.push(() => {
+    snapshot.systems = recorded;
+  });
   const { href } = await ledgerLink();
   expect(href.href.length).toBeLessThan(2048);
   const fan = fields.fan.schema.parse(JSON.parse(href.searchParams.get("fan")!));
-  expect(fan).toEqual({ unitId: sheetFixture.overview.fan!.unitId, portIndex: sheetFixture.overview.fan!.portIndex });
+  expect(fan).toEqual({
+    unitId: sheetFixture.overview.fan!.unitId,
+    portIndex: sheetFixture.overview.fan!.portIndex,
+  });
   expect(href.searchParams.has("system")).toBe(false);
-  const walk = { segments: [
-    { systemName: snapshot.systems[7]!.name, reason: "walked" },
-    { systemName: snapshot.systems[8]!.name, reason: "open-end-candidate" },
-  ] };
+  const walk = {
+    segments: [
+      { systemName: snapshot.systems[7]!.name, reason: "walked" },
+      { systemName: snapshot.systems[8]!.name, reason: "open-end-candidate" },
+    ],
+  };
   expect(fanSystems(walk, snapshot.systems)).toEqual([snapshot.systems[7]!.name]);
   const named = new URL(ductsLink([snapshot.systems[0]!.name], {}), "http://pe.local");
-  expect(namesOf(fields.system.schema.parse(JSON.parse(named.searchParams.get("system")!))))
-    .toEqual([snapshot.systems[0]!.name]);
+  expect(
+    namesOf(fields.system.schema.parse(JSON.parse(named.searchParams.get("system")!))),
+  ).toEqual([snapshot.systems[0]!.name]);
 });
 
 test("without an open fan the handoff retains the default scope", () => {

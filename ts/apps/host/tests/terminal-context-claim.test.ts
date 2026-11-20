@@ -26,7 +26,7 @@ test("a host whose service claim is refused leaves the claim holder's terminal c
       Effect.scoped(
         Layer.launch(
           makeHttpLive({
-          inputs: testInputContext(),
+            inputs: testInputContext(),
             capabilities: { revit: true },
             port: 0,
             lifecycle: {

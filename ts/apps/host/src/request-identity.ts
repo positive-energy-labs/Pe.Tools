@@ -22,7 +22,14 @@ import {
   type ReceiptFact,
 } from "@pe/agent-contracts";
 import { matchPeRoute } from "@pe/mcps/product-catalog";
-import { admitRequest, callerOf, browserContextHeaders, mintBrowserContext, REFUSAL_HEADER, type RoutePermission } from "./control.ts";
+import {
+  admitRequest,
+  callerOf,
+  browserContextHeaders,
+  mintBrowserContext,
+  REFUSAL_HEADER,
+  type RoutePermission,
+} from "./control.ts";
 import { Refused } from "@pe/host-internal/refused";
 import { recordHostFact, type ReceiptExporter } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
@@ -436,10 +443,19 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
             !isTsOnlyOperationKey(call.key));
         const services = yield* Effect.context<never>();
         const run = Effect.provideService(handler, RequestIdentity, admitted).pipe(
-          Effect.provideService(ResourceConnectionOwner,
-            identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER]
-              ? createHash("sha256").update(JSON.stringify([identity.principal, identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER]])).digest("hex")
-              : null),
+          Effect.provideService(
+            ResourceConnectionOwner,
+            (identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER])
+              ? createHash("sha256")
+                  .update(
+                    JSON.stringify([
+                      identity.principal,
+                      identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER],
+                    ]),
+                  )
+                  .digest("hex")
+              : null,
+          ),
         );
         const exit = native
           ? yield* Effect.exit(run)
@@ -464,7 +480,11 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
         // No other site frames a host page; a response that names its own policy keeps it.
         const framed = response.headers["content-security-policy"]
           ? response
-          : HttpServerResponse.setHeader(response, "content-security-policy", "frame-ancestors 'self'");
+          : HttpServerResponse.setHeader(
+              response,
+              "content-security-policy",
+              "frame-ancestors 'self'",
+            );
         return identity.setCookie
           ? HttpServerResponse.setHeader(framed, "set-cookie", identity.setCookie)
           : framed;

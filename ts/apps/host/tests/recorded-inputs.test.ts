@@ -19,7 +19,11 @@ import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { InvalidRead } from "@pe/host-internal/read-errors";
 import { inputBindingKey, replayInput, type Taking } from "@pe/host-internal/input-recording";
 import { inputIdentity } from "@pe/host-internal/input-occurrence";
-import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
+import {
+  nativeCatalogIdentity,
+  openRecordingReader,
+  openRecordingWriter,
+} from "../src/native-recording.ts";
 import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 
@@ -47,20 +51,28 @@ const liveFiles = Layer.succeed(DuctFiles, {
   catalogsFor: () => Effect.succeed(catalogs),
 });
 
-effectTest("S5: replay the frozen base catalog scope without recapturing", () => Effect.gen(function* () {
-  // Frozen with the base adapter's literal scope and output version, independently of catalogsFor.
-  const open = yield* openRecordingReader(fileURLToPath(new URL("./fixtures/catalog-scope-990bbfd9/", import.meta.url)), { build: "990bbfd9", catalog: "legacy-catalog-fixture" }, bounds);
-  const files = yield* service(DuctFiles, DuctFiles.recorded(open));
-  expect(yield* files.catalogsFor(undefined)).toEqual(catalogs);
-  expect(yield* files.catalogsFor(null)).toEqual(catalogs);
-  expect(yield* problem(files.catalogsFor("Projects/Other"))).toBe("recording.scope");
-}));
+effectTest("S5: replay the frozen base catalog scope without recapturing", () =>
+  Effect.gen(function* () {
+    // Frozen with the base adapter's literal scope and output version, independently of catalogsFor.
+    const open = yield* openRecordingReader(
+      fileURLToPath(new URL("./fixtures/catalog-scope-990bbfd9/", import.meta.url)),
+      { build: "990bbfd9", catalog: "legacy-catalog-fixture" },
+      bounds,
+    );
+    const files = yield* service(DuctFiles, DuctFiles.recorded(open));
+    expect(yield* files.catalogsFor(undefined)).toEqual(catalogs);
+    expect(yield* files.catalogsFor(null)).toEqual(catalogs);
+    expect(yield* problem(files.catalogsFor("Projects/Other"))).toBe("recording.scope");
+  }),
+);
 
-effectTest("S5: the host catalog reading still refuses unknown fields", () => Effect.sync(() => {
-  expect(catalogReading.safeParse({ ...catalogs, extra: true }).success).toBe(false);
-  expect(catalogReading.safeParse({ ...catalogs, tables: [] }).success).toBe(false);
-  expect(catalogReading.safeParse({ ...catalogs, findings: [1] }).success).toBe(false);
-}));
+effectTest("S5: the host catalog reading still refuses unknown fields", () =>
+  Effect.sync(() => {
+    expect(catalogReading.safeParse({ ...catalogs, extra: true }).success).toBe(false);
+    expect(catalogReading.safeParse({ ...catalogs, tables: [] }).success).toBe(false);
+    expect(catalogReading.safeParse({ ...catalogs, findings: [1] }).success).toBe(false);
+  }),
+);
 
 effectTest("format 1 and 2 bundles refuse explicitly and are never migrated", () =>
   Effect.gen(function* () {
@@ -68,7 +80,9 @@ effectTest("format 1 and 2 bundles refuse explicitly and are never migrated", ()
     const v1 = { version: 1, ...identity, coverage: { kind: "partial", inputs: ["native-read"] } };
     yield* Effect.promise(() => writeFile(join(dir, "manifest.json"), JSON.stringify(v1)));
     expect(yield* problem(reader(dir))).toBe("recording.mismatch");
-    expect(yield* problem(openRecordingWriter(stateFixture(dir), identity, bounds))).toBe("recording.mismatch");
+    expect(yield* problem(openRecordingWriter(stateFixture(dir), identity, bounds))).toBe(
+      "recording.mismatch",
+    );
     const v2 = { version: 2, ...identity };
     yield* Effect.promise(() => writeFile(join(dir, "manifest.json"), JSON.stringify(v2)));
     expect(yield* problem(reader(dir))).toBe("recording.mismatch");
@@ -148,7 +162,8 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
       problem: "target.closed",
     });
     const live = Layer.succeed(HostSessionInventory, {
-      list: () => Effect.fail(closed), subscribe: () => () => {},
+      list: () => Effect.fail(closed),
+      subscribe: () => () => {},
       attachment: () => Effect.succeed({ sessionId: "bridge-1" }),
       session: () => Effect.succeed({ sessionId: "bridge-1" }),
       document: () => Effect.fail(closed),
@@ -180,33 +195,53 @@ effectTest("inventory replays recorded answers and refusal classes without an SD
   }),
 );
 
-effectTest("an unrebuildable failure or a full bundle stops capture, keeps no taking and returns the live result", () =>
-  Effect.gen(function* () {
-    const dir = yield* bundle;
-    const writer = yield* openRecordingWriter(stateFixture(dir), identity, {
-      maxBytes: 1_000_000,
-      maxTakings: 1,
-    });
-    const broken = Layer.succeed(DuctFiles, {
-      firm: () => Effect.fail(new Error("disk") as never),
-      catalogsFor: () => Effect.succeed(catalogs),
-    });
-    const files = yield* service(
-      DuctFiles,
-      DuctFiles.capturing(writer).pipe(Layer.provide(broken)),
-    );
-    // K4: the live failure is returned as it was; capture stops instead of failing the read.
-    expect((yield* Effect.flip(files.firm("ducts"))) as unknown).toEqual(new Error("disk"));
-    expect(writer.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: "failure", op: "files.firm", reason: "unsupported" });
-    expect(writer.coverage()).toEqual([]);
-    const fullDir = yield* bundle;
-    const full = yield* openRecordingWriter(stateFixture(fullDir), identity, { maxBytes: 1_000_000, maxTakings: 1 });
-    const kept = yield* service(DuctFiles, DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)));
-    yield* kept.catalogsFor(undefined);
-    expect(yield* kept.catalogsFor(undefined)).toEqual(catalogs);
-    expect(full.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
-    expect((yield* reader(fullDir)).coverage()).toEqual(["files"]);
-  }),
+effectTest(
+  "an unrebuildable failure or a full bundle stops capture, keeps no taking and returns the live result",
+  () =>
+    Effect.gen(function* () {
+      const dir = yield* bundle;
+      const writer = yield* openRecordingWriter(stateFixture(dir), identity, {
+        maxBytes: 1_000_000,
+        maxTakings: 1,
+      });
+      const broken = Layer.succeed(DuctFiles, {
+        firm: () => Effect.fail(new Error("disk") as never),
+        catalogsFor: () => Effect.succeed(catalogs),
+      });
+      const files = yield* service(
+        DuctFiles,
+        DuctFiles.capturing(writer).pipe(Layer.provide(broken)),
+      );
+      // K4: the live failure is returned as it was; capture stops instead of failing the read.
+      expect((yield* Effect.flip(files.firm("ducts"))) as unknown).toEqual(new Error("disk"));
+      expect(writer.capture.truncated()).toEqual({
+        at: 1,
+        stoppedAt: expect.any(Number),
+        site: "failure",
+        op: "files.firm",
+        reason: "unsupported",
+      });
+      expect(writer.coverage()).toEqual([]);
+      const fullDir = yield* bundle;
+      const full = yield* openRecordingWriter(stateFixture(fullDir), identity, {
+        maxBytes: 1_000_000,
+        maxTakings: 1,
+      });
+      const kept = yield* service(
+        DuctFiles,
+        DuctFiles.capturing(full).pipe(Layer.provide(liveFiles)),
+      );
+      yield* kept.catalogsFor(undefined);
+      expect(yield* kept.catalogsFor(undefined)).toEqual(catalogs);
+      expect(full.capture.truncated()).toEqual({
+        at: 2,
+        stoppedAt: expect.any(Number),
+        site: expect.any(String),
+        op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/),
+        reason: "full",
+      });
+      expect((yield* reader(fullDir)).coverage()).toEqual(["files"]);
+    }),
 );
 
 const FIRM = { kind: "files", file: "firm" } as const;
@@ -232,7 +267,9 @@ effectTest(
       const open = yield* reader(dir);
       const recorded = (bindings: ReadonlyMap<string, string>) =>
         service(DuctFiles, DuctFiles.recorded(open, bindings));
-      expect(yield* problem((yield* recorded(new Map())).firm("ducts"))).toBe("recording.ambiguous");
+      expect(yield* problem((yield* recorded(new Map())).firm("ducts"))).toBe(
+        "recording.ambiguous",
+      );
       const key = inputBindingKey(FIRM, JSON.stringify({ owner: "ducts" }));
       expect(yield* (yield* recorded(new Map([[key, second!.id]]))).firm("ducts")).toEqual(firm);
       // Another input's taking, another scope, another version: each refuses, none falls back.
@@ -270,7 +307,13 @@ effectTest(
       );
       yield* files.firm("ducts");
       expect(yield* files.firm("ducts")).toEqual(firm);
-      expect(writer.capture.truncated()).toEqual({ at: 2, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "full" });
+      expect(writer.capture.truncated()).toEqual({
+        at: 2,
+        stoppedAt: expect.any(Number),
+        site: expect.any(String),
+        op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/),
+        reason: "full",
+      });
       expect(seen).toEqual([(yield* reader(dir)).candidates(inputIdentity(FIRM))[0]!.id]);
       const broken = new InvalidRead({
         message: "read set closed",
@@ -283,7 +326,13 @@ effectTest(
         DuctFiles.capturing(other, () => Effect.fail(broken)).pipe(Layer.provide(liveFiles)),
       );
       expect(yield* refusing.firm("ducts")).toEqual(firm);
-      expect(other.capture.truncated()).toEqual({ at: 1, stoppedAt: expect.any(Number), site: expect.any(String), op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/), reason: "observer" });
+      expect(other.capture.truncated()).toEqual({
+        at: 1,
+        stoppedAt: expect.any(Number),
+        site: expect.any(String),
+        op: expect.stringMatching(/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/),
+        reason: "observer",
+      });
     }),
 );
 

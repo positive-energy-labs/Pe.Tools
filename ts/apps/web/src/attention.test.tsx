@@ -21,7 +21,12 @@ import { SubjectText } from "@pe/kit/lang/subject-text";
 import { Row } from "@pe/kit/lang/row";
 import { makeAtomRegistry } from "#/shell/owner";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
-import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "@pe/web-kernel/attention";
+import {
+  AttentionScope,
+  AttentionRoot,
+  useElementAttention,
+  useHoveredIssue,
+} from "@pe/web-kernel/attention";
 import { Annotations } from "@pe/ducts-web/annotations";
 import { eKey, testElements, uid } from "#/test-attention";
 
@@ -40,7 +45,9 @@ vi.mock("@pe/kit/lib/token", () => ({
 it("expands runs and issues, isolates documents, reads Page selection and dedupes string rungs", () => {
   const registry = makeAtomRegistry();
   const page = Atom.make({ selected: [] as string[] });
-  const selected = Atom.make((get) => new Set<SubjectKey>(get(page).selected.map((id) => eKey(Number(id)))));
+  const selected = Atom.make(
+    (get) => new Set<SubjectKey>(get(page).selected.map((id) => eKey(Number(id)))),
+  );
   registry.set(selection("doc"), selected);
   declareMembers(
     registry,
@@ -217,7 +224,9 @@ it("SubjectText in another React root lights the ducts picture set and projected
   const prose = render(
     <RegistryContext value={registry}>
       <AttentionRoot doc="same-doc">
-        <SubjectTextContext value={{ doc: "same-doc", nameOf: () => "outside duct", uniqueIdOf: uid }}>
+        <SubjectTextContext
+          value={{ doc: "same-doc", nameOf: () => "outside duct", uniqueIdOf: uid }}
+        >
           <SubjectText text={[{ id: 42 }]} owner="outside" />
         </SubjectTextContext>
       </AttentionRoot>

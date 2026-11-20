@@ -16,8 +16,9 @@ const { stages: _stages, stageOrder: _order, predicates: _predicates, ...wireDat
 const base: HostRouteModule = {
   data: {
     ...wireData,
-    verbs: {}, band: [],
-    work: { route: builtinData.key, schema: "work", version: 2, },
+    verbs: {},
+    band: [],
+    work: { route: builtinData.key, schema: "work", version: 2 },
   },
   schemas: { work: z.object({ amount: z.number() }) },
 };
@@ -72,9 +73,7 @@ test("neutral data cannot differ from the full web closure", async () => {
   );
 });
 test("missing host schemas refuse", async () => {
-  const candidates: HostRouteModule[] = [
-    { ...neutral, schemas: {} },
-  ];
+  const candidates: HostRouteModule[] = [{ ...neutral, schemas: {} }];
   for (const candidate of candidates)
     expect((await prepare(candidate)).admitHost(candidate).ok).toBe(false);
 });
@@ -129,6 +128,6 @@ test("host write admission is callable, owner-only and captured before prepare y
     ...module,
     data: { ...data, capabilities: [] },
     workState: undefined,
-    };
+  };
   expect((await prepare(noWork)).admitHost(noWork).ok).toBe(false);
 });

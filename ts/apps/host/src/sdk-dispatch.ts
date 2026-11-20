@@ -55,15 +55,13 @@ const NOT_DISPATCHED = new Set([
 export async function namedSdkSession(id: string, read: SdkReceiptReader) {
   const args = sessionListArgv({ all: true });
   const envelope = await sdkEnvelope(args, read);
-  if (envelope.diagnostics.length)
-    throw refused(`The SDK does not name one session '${id}'`);
+  if (envelope.diagnostics.length) throw refused(`The SDK does not name one session '${id}'`);
   const result = decodePeRevitPayload("SessionListResult", envelope.result);
   const rows = result.sessions.filter(
     (row): row is Exclude<SessionObservation, { case: "observed-active" }> =>
       "id" in row && row.id === id,
   );
-  if (rows.length > 1)
-    throw refused(`The SDK does not name one session '${id}'`);
+  if (rows.length > 1) throw refused(`The SDK does not name one session '${id}'`);
   return rows[0] ?? null;
 }
 
@@ -91,7 +89,8 @@ export async function dispatchSdk(
   // K1c: no claim holds a live Revit's year, so a start that expected no session row and met one is
   // the SDK's refusal; its detail names the session. An adoption or a recorded-session expectation is not.
   const said =
-    input.expectSession === "absent" && envelope.diagnostics.some((d) => d.code === "op.stale-expectation")
+    input.expectSession === "absent" &&
+    envelope.diagnostics.some((d) => d.code === "op.stale-expectation")
       ? `Revit${args.includes("--year") ? ` ${args[args.indexOf("--year") + 1]}` : ""} already has a session, so nothing was started. Use that session or stop it first. (${sdkSaid})`
       : sdkSaid;
   if (args[0] === "bootstrap") {

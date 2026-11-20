@@ -53,7 +53,8 @@ export function admittedDestination(destination: string, origin: string): string
       (appRouteByPath(url.pathname) || publicRoutes.byAddress(url.pathname))
       ? `${url.pathname}${url.search}${url.hash}`
       : null;
-  } catch (error) { console.warn("ts/apps/web/src/navigation/model.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/navigation/model.ts: fallback after failure", error);
     return null;
   }
 }

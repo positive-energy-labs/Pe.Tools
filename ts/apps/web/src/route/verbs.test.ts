@@ -40,10 +40,18 @@ const declare = (placed: { band?: readonly "read"[]; pane?: readonly "read"[] })
   });
 
 test("a verb is in the band or in exactly one pane, or route() throws", () => {
-  expect(declare({ band: ["read"] }).data).toMatchObject({ band: ["read"], panes: { main: { verbs: [] } } });
-  expect(declare({ pane: ["read"] }).data).toMatchObject({ band: [], panes: { main: { verbs: ["read"] } } });
+  expect(declare({ band: ["read"] }).data).toMatchObject({
+    band: ["read"],
+    panes: { main: { verbs: [] } },
+  });
+  expect(declare({ pane: ["read"] }).data).toMatchObject({
+    band: [],
+    panes: { main: { verbs: ["read"] } },
+  });
   expect(() => declare({})).toThrow('verb "read" is in neither the band nor a pane');
-  expect(() => declare({ band: ["read"], pane: ["read"] })).toThrow('verb "read" is placed more than once');
+  expect(() => declare({ band: ["read"], pane: ["read"] })).toThrow(
+    'verb "read" is placed more than once',
+  );
 });
 
 test("a verb's handle is a catalog key, and a planned handle says how its review reads", () => {
@@ -61,7 +69,9 @@ test("a verb's handle is a catalog key, and a planned handle says how its review
         apply: { handle: handle("sheet.apply"), label: "Apply" },
       },
       band: ["push", "apply"],
-      panes: { main: { title: "Typo", purpose: "Typo", body: "scroll", draw: () => scrollBody(null) } },
+      panes: {
+        main: { title: "Typo", purpose: "Typo", body: "scroll", draw: () => scrollBody(null) },
+      },
       layout: paneLayout("main"),
     });
   expect(typo).toThrow("No command or route: schedule.grid.pus");
@@ -71,11 +81,24 @@ test("the wire says who draws each verb, its effect, and whether it is reviewed"
   // `/schedules`: the grid draws `push`, so the band does not.
   expect(schedules.data.band).toEqual([]);
   expect(schedules.data.panes.grid!.verbs).toEqual(["read", "bind", "push"]);
-  expect(schedules.data.verbs.push).toMatchObject({ entry: "schedule.grid.push", effect: "ModelWrite", review: "shown" });
+  expect(schedules.data.verbs.push).toMatchObject({
+    entry: "schedule.grid.push",
+    effect: "ModelWrite",
+    review: "shown",
+  });
   expect(schedules.data.verbs.read).toMatchObject({ entry: "schedule.grid.read", review: "none" });
   // `/ops`: a receipt control carries its own effect, never a Read's.
-  expect(ops.data.verbs["action.cancel"]).toMatchObject({ entry: "action.cancel", effect: "SessionWrite", review: "none" });
-  expect(ops.data.verbs.run).toMatchObject({ entry: "ops.read", effect: handle("ops.read").effect });
+  expect(ops.data.verbs["action.cancel"]).toMatchObject({
+    entry: "action.cancel",
+    effect: "SessionWrite",
+    review: "none",
+  });
+  expect(ops.data.verbs.run).toMatchObject({
+    entry: "ops.read",
+    effect: handle("ops.read").effect,
+  });
   // No command schema rides a route module: a verb's entry is its axes and nothing it could parse with.
-  expect(schedules.entries["schedule.grid.push"]!.input.safeParse({ anything: 1 }).success).toBe(true);
+  expect(schedules.entries["schedule.grid.push"]!.input.safeParse({ anything: 1 }).success).toBe(
+    true,
+  );
 });

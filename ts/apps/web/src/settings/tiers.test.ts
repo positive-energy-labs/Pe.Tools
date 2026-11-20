@@ -30,7 +30,6 @@ import { writeSettingTier, watchSettingTiers } from "../../../host/src/tiered-se
 import { settingsSheet } from "./route.ts";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 
-
 import { fansCalc } from "@pe/fans-web/calc";
 
 const pointer = "Projects/2026-014 Chadds Ford";
@@ -62,9 +61,17 @@ const PATHS: Partial<Record<DuctsCriteriaCell, readonly string[]>> = {
 /** The census, from the disk alone: the most specific mounted home whose file states the value. */
 const servedBy = (cell: DuctsCriteriaCell, mounted: boolean) => {
   if (mounted)
-    for (const [tier, root] of [["project", project], ["firm", firm]] as const) {
+    for (const [tier, root] of [
+      ["project", project],
+      ["firm", firm],
+    ] as const) {
       const file = join(root, "Settings", "ducts.json");
-      const stated = existsSync(file) ? PATHS[cell]!.reduce<unknown>((at, key) => (at !== null && typeof at === "object" ? Reflect.get(at, key) : undefined), JSON.parse(readFileSync(file, "utf8"))) : undefined;
+      const stated = existsSync(file)
+        ? PATHS[cell]!.reduce<unknown>(
+            (at, key) => (at !== null && typeof at === "object" ? Reflect.get(at, key) : undefined),
+            JSON.parse(readFileSync(file, "utf8")),
+          )
+        : undefined;
       if (stated != null) return { tier, home: root, value: stated };
     }
   return { tier: "default" as const, home: null };
@@ -72,38 +79,66 @@ const servedBy = (cell: DuctsCriteriaCell, mounted: boolean) => {
 /** What the host serves and what the sheet draws from it: the setting cells, the criteria and a terminal's row. */
 const sheet = async () => {
   const tiers = readSettingTiers("ducts", pointer);
-  const files = await Effect.runPromise(Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))));
-  const base = firmLayer(resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, {}), tiers);
-  const cells = sheetCells(settingsSheet, { rows: [], work: null, read: { settings: { ducts: tiers } } });
+  const files = await Effect.runPromise(
+    Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))),
+  );
+  const base = firmLayer(
+    resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, {}),
+    tiers,
+  );
+  const cells = sheetCells(settingsSheet, {
+    rows: [],
+    work: null,
+    read: { settings: { ducts: tiers } },
+  });
   return {
     tiers,
-    cell: (name: DuctsCriteriaCell) => cells.find((cell) => cell.binding === `setting.ducts.${name}`)!,
+    cell: (name: DuctsCriteriaCell) =>
+      cells.find((cell) => cell.binding === `setting.ducts.${name}`)!,
     criteria: resolveCriteria(null, base),
     terminalDrop: resolveInputs({ snapshot: terminal, firm: base }).terminals["1"]!.drop,
   };
 };
-const sha = (tiers: Awaited<ReturnType<typeof sheet>>["tiers"], tier: "project" | "firm") => tiers.find((read) => read.tier === tier)!.sha256;
+const sha = (tiers: Awaited<ReturnType<typeof sheet>>["tiers"], tier: "project" | "firm") =>
+  tiers.find((read) => read.tier === tier)!.sha256;
 
-test.each(["firm", "project"] as const)("%s serves valid cells despite invalid siblings or unknown keys", async (tier) => {
-  const root = tier === "firm" ? firm : project;
-  expect(writeSettingTier({ owner: "ducts", tier, path: PATHS.velocitySupplyFpm!, value: 800, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
-  // The original witness writes through the door; after validation lands, hand edits can still be invalid.
-  writeSettingTier({ owner: "ducts", tier, path: PATHS.terminalDropInWg!, value: -1, expectedSha256: sha(readSettingTiers("ducts", pointer), tier) }, { pointer });
-  const file = join(root, "Settings", "ducts.json");
-  const json = JSON.parse(readFileSync(file, "utf8"));
-  json.criteria.terminalDropInWg = -1;
-  writeFileSync(file, JSON.stringify(json));
-  for (const unknownKey of [false, true]) {
-    if (unknownKey) {
-      delete json.criteria.terminalDropInWg;
-      writeFileSync(file, JSON.stringify({ ...json, handEdited: true }));
+test.each(["firm", "project"] as const)(
+  "%s serves valid cells despite invalid siblings or unknown keys",
+  async (tier) => {
+    const root = tier === "firm" ? firm : project;
+    expect(
+      writeSettingTier(
+        { owner: "ducts", tier, path: PATHS.velocitySupplyFpm!, value: 800, expectedSha256: null },
+        { pointer },
+      ),
+    ).toMatchObject({ ok: true });
+    // The original witness writes through the door; after validation lands, hand edits can still be invalid.
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier,
+        path: PATHS.terminalDropInWg!,
+        value: -1,
+        expectedSha256: sha(readSettingTiers("ducts", pointer), tier),
+      },
+      { pointer },
+    );
+    const file = join(root, "Settings", "ducts.json");
+    const json = JSON.parse(readFileSync(file, "utf8"));
+    json.criteria.terminalDropInWg = -1;
+    writeFileSync(file, JSON.stringify(json));
+    for (const unknownKey of [false, true]) {
+      if (unknownKey) {
+        delete json.criteria.terminalDropInWg;
+        writeFileSync(file, JSON.stringify({ ...json, handEdited: true }));
+      }
+      const at = await sheet();
+      expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 800, source: tier });
+      expect(at.criteria.velocityLimitFpm.supply).toMatchObject({ value: 800, source: tier });
+      expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
     }
-    const at = await sheet();
-    expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 800, source: tier });
-    expect(at.criteria.velocityLimitFpm.supply).toMatchObject({ value: 800, source: tier });
-    expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
-  }
-});
+  },
+);
 
 test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served, and an unmounted firm home is never firm", async () => {
   // Before any write no home states a value: every label is the engine default.
@@ -112,10 +147,28 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(at.terminalDrop).toMatchObject({ value: 0.03, source: "default" });
 
   // Step 1: A sets terminal drop 0.03 to 0.05 at the firm tier. One notice names file, writer and receipt.
-  const first = writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value: 0.05, expectedSha256: sha(at.tiers, "firm") }, { pointer, writer: "A" });
-  expect(first).toMatchObject({ ok: true, path: join(firm, "Settings", "ducts.json"), priorSha256: null, by: "A" });
+  const first = writeSettingTier(
+    {
+      owner: "ducts",
+      tier: "firm",
+      path: PATHS.terminalDropInWg!,
+      value: 0.05,
+      expectedSha256: sha(at.tiers, "firm"),
+    },
+    { pointer, writer: "A" },
+  );
+  expect(first).toMatchObject({
+    ok: true,
+    path: join(firm, "Settings", "ducts.json"),
+    priorSha256: null,
+    by: "A",
+  });
   at = await sheet();
-  expect(servedBy("terminalDropInWg", true)).toMatchObject({ tier: "firm", home: firm, value: 0.05 });
+  expect(servedBy("terminalDropInWg", true)).toMatchObject({
+    tier: "firm",
+    home: firm,
+    value: 0.05,
+  });
   expect(at.cell("terminalDropInWg")).toMatchObject({ value: 0.05, source: "firm" });
   expect(at.cell("terminalDropInWg").ref).toContain(`${basename(drive)} · A · `);
   expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.05, source: "firm" });
@@ -125,28 +178,90 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(at.criteria.autoJoinGapIn).toMatchObject({ value: 3, source: "default" });
 
   // Step 2: A overrides the supply velocity limit 900 to 800 at the project tier, over a firm 900.
-  const firm900 = writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.velocitySupplyFpm!, value: 900, expectedSha256: sha(at.tiers, "firm") }, { pointer, writer: "A" });
+  const firm900 = writeSettingTier(
+    {
+      owner: "ducts",
+      tier: "firm",
+      path: PATHS.velocitySupplyFpm!,
+      value: 900,
+      expectedSha256: sha(at.tiers, "firm"),
+    },
+    { pointer, writer: "A" },
+  );
   expect(firm900).toMatchObject({ ok: true, priorSha256: sha(at.tiers, "firm") });
-  expect(writeSettingTier({ owner: "ducts", tier: "project", path: PATHS.velocitySupplyFpm!, value: 800, expectedSha256: null }, { pointer, writer: "A" })).toMatchObject({ ok: true, path: join(project, "Settings", "ducts.json") });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "project",
+        path: PATHS.velocitySupplyFpm!,
+        value: 800,
+        expectedSha256: null,
+      },
+      { pointer, writer: "A" },
+    ),
+  ).toMatchObject({ ok: true, path: join(project, "Settings", "ducts.json") });
   at = await sheet();
-  expect(servedBy("velocitySupplyFpm", true)).toMatchObject({ tier: "project", home: project, value: 800 });
-  expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 800, source: "project", note: "overrides firm 900" });
+  expect(servedBy("velocitySupplyFpm", true)).toMatchObject({
+    tier: "project",
+    home: project,
+    value: 800,
+  });
+  expect(at.cell("velocitySupplyFpm")).toMatchObject({
+    value: 800,
+    source: "project",
+    note: "overrides firm 900",
+  });
   expect(at.cell("velocitySupplyFpm").ref).toContain("2026-014 Chadds Ford · A · ");
   expect(at.criteria.velocityLimitFpm.supply).toMatchObject({ value: 800, source: "project" });
   expect(at.criteria.velocityLimitFpm.return).toMatchObject({ value: 700, source: "default" });
 
   // Step 6: B changes the project value to 850. A stale hash is a conflict; the prior bytes stay recoverable.
   const before = readFileSync(join(project, "Settings", "ducts.json"));
-  expect(writeSettingTier({ owner: "ducts", tier: "project", path: PATHS.velocitySupplyFpm!, value: 850, expectedSha256: null }, { pointer, writer: "B" })).toMatchObject({ ok: false, status: 409 });
-  const second = writeSettingTier({ owner: "ducts", tier: "project", path: PATHS.velocitySupplyFpm!, value: 850, expectedSha256: sha(at.tiers, "project") }, { pointer, writer: "B" });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "project",
+        path: PATHS.velocitySupplyFpm!,
+        value: 850,
+        expectedSha256: null,
+      },
+      { pointer, writer: "B" },
+    ),
+  ).toMatchObject({ ok: false, status: 409 });
+  const second = writeSettingTier(
+    {
+      owner: "ducts",
+      tier: "project",
+      path: PATHS.velocitySupplyFpm!,
+      value: 850,
+      expectedSha256: sha(at.tiers, "project"),
+    },
+    { pointer, writer: "B" },
+  );
   expect(second).toMatchObject({ ok: true, by: "B", priorSha256: sha(at.tiers, "project") });
-  expect(readFileSync(join(hostState().blobs, "sha256", sha(at.tiers, "project")!))).toEqual(before);
+  expect(readFileSync(join(hostState().blobs, "sha256", sha(at.tiers, "project")!))).toEqual(
+    before,
+  );
   at = await sheet();
   expect(at.cell("velocitySupplyFpm")).toMatchObject({ value: 850, source: "project" });
   expect(at.cell("velocitySupplyFpm").ref).toContain(" · B · ");
-  const notices = storedNotices(hostState()).filter((notice) => notice.place === SETTING_WRITE_PLACE && [join(firm, "Settings", "ducts.json"), join(project, "Settings", "ducts.json")].includes(notice.path ?? ""));
-  expect(notices.map((notice) => notice.path)).toEqual([first, firm900, { path: join(project, "Settings", "ducts.json") }, second].map((wrote) => "path" in wrote ? wrote.path : undefined));
-  expect(notices.at(-1)!.reason).toContain(`B set 850 at ducts criteria.velocityLimitFpm.supply in the project home`);
+  const notices = storedNotices(hostState()).filter(
+    (notice) =>
+      notice.place === SETTING_WRITE_PLACE &&
+      [join(firm, "Settings", "ducts.json"), join(project, "Settings", "ducts.json")].includes(
+        notice.path ?? "",
+      ),
+  );
+  expect(notices.map((notice) => notice.path)).toEqual(
+    [first, firm900, { path: join(project, "Settings", "ducts.json") }, second].map((wrote) =>
+      "path" in wrote ? wrote.path : undefined,
+    ),
+  );
+  expect(notices.at(-1)!.reason).toContain(
+    `B set 850 at ducts criteria.velocityLimitFpm.supply in the project home`,
+  );
   expect(notices.at(-1)!.reason).toContain(`sha256 ${second.ok && second.priorSha256}`);
 
   // Step 7: the named firm folder is absent, so neither it nor the relative project home is served.
@@ -154,7 +269,18 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(existsSync(firm)).toBe(false);
   expect(existsSync(join(project, "pe-home.json"))).toBe(true);
   at = await sheet();
-  const labels = JSON.stringify([at.cell("terminalDropInWg"), at.cell("velocitySupplyFpm"), at.criteria, at.terminalDrop].map((value) => JSON.parse(JSON.stringify(value, (key, inner) => (key === "setting" || key === "home" || key === "domain" || key === "ref" ? undefined : inner)))));
+  const labels = JSON.stringify(
+    [at.cell("terminalDropInWg"), at.cell("velocitySupplyFpm"), at.criteria, at.terminalDrop].map(
+      (value) =>
+        JSON.parse(
+          JSON.stringify(value, (key, inner) =>
+            key === "setting" || key === "home" || key === "domain" || key === "ref"
+              ? undefined
+              : inner,
+          ),
+        ),
+    ),
+  );
   expect(labels).not.toContain('"firm"');
   expect(labels).not.toContain('"project"');
   for (const cell of ["terminalDropInWg", "velocitySupplyFpm", "autoJoinGapIn"] as const)
@@ -163,58 +289,172 @@ test("FS steps 1, 2, 6 and 7: the sheet's tier label is the home the host served
   expect(at.terminalDrop).toMatchObject({ value: 0.03, source: "default" });
   expect(at.tiers.find((read) => read.tier === "firm")).toMatchObject({ home: null });
   // A write at a home that was not found is refused, never written somewhere else.
-  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value: 0.07, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 404 });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "firm",
+        path: PATHS.terminalDropInWg!,
+        value: 0.07,
+        expectedSha256: null,
+      },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: false, status: 404 });
 });
 
-test.each([-1, "0.05", {}, false])("the write door refuses invalid terminal drop %j without changing bytes or notices", (value) => {
-  const before = readSettingTiers("ducts", pointer);
-  const notices = storedNotices(hostState());
-  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: PATHS.terminalDropInWg!, value, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
-  expect(readSettingTiers("ducts", pointer)).toEqual(before);
-  expect(storedNotices(hostState())).toEqual(notices);
-});
+test.each([-1, "0.05", {}, false])(
+  "the write door refuses invalid terminal drop %j without changing bytes or notices",
+  (value) => {
+    const before = readSettingTiers("ducts", pointer);
+    const notices = storedNotices(hostState());
+    expect(
+      writeSettingTier(
+        {
+          owner: "ducts",
+          tier: "firm",
+          path: PATHS.terminalDropInWg!,
+          value,
+          expectedSha256: null,
+        },
+        { pointer },
+      ),
+    ).toMatchObject({ ok: false, status: 422 });
+    expect(readSettingTiers("ducts", pointer)).toEqual(before);
+    expect(storedNotices(hostState())).toEqual(notices);
+  },
+);
 
 test("a declared cell can be cleared, but an undeclared owner or path cannot be written", async () => {
-  const request = { owner: "ducts", tier: "firm" as const, path: PATHS.terminalDropInWg!, value: 0.05, expectedSha256: null };
+  const request = {
+    owner: "ducts",
+    tier: "firm" as const,
+    path: PATHS.terminalDropInWg!,
+    value: 0.05,
+    expectedSha256: null,
+  };
   expect(writeSettingTier(request, { pointer })).toMatchObject({ ok: true });
   const expectedSha256 = sha(readSettingTiers("ducts", pointer), "firm");
-  expect(writeSettingTier({ ...request, path: ["criteria", "unknown"], expectedSha256 }, { pointer })).toMatchObject({ ok: false, status: 422 });
-  expect(writeSettingTier({ ...request, owner: "unknown" }, { pointer })).toMatchObject({ ok: false, status: 422 });
-  expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({ ok: true });
+  expect(
+    writeSettingTier({ ...request, path: ["criteria", "unknown"], expectedSha256 }, { pointer }),
+  ).toMatchObject({ ok: false, status: 422 });
+  expect(writeSettingTier({ ...request, owner: "unknown" }, { pointer })).toMatchObject({
+    ok: false,
+    status: 422,
+  });
+  expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({
+    ok: true,
+  });
   const at = await sheet();
   expect(at.cell("terminalDropInWg")).toMatchObject({ value: 0.03, source: "default" });
   expect(at.criteria.terminalDropInWg).toMatchObject({ value: 0.03, source: "default" });
 });
 
-test.each(["written", "__proto__", "constructor", "prototype"])("the write door refuses reserved path key %s", (key) => {
-  for (const path of [[key], ["criteria", key], [key, "terminalDropInWg"], ["parameters", key]]) {
-    const before = readSettingTiers("ducts", pointer);
-    const notices = storedNotices(hostState());
-    expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value: 1, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422, message: expect.stringContaining("reserved") });
-    expect(readSettingTiers("ducts", pointer)).toEqual(before);
-    expect(storedNotices(hostState())).toEqual(notices);
-  }
-});
+test.each(["written", "__proto__", "constructor", "prototype"])(
+  "the write door refuses reserved path key %s",
+  (key) => {
+    for (const path of [[key], ["criteria", key], [key, "terminalDropInWg"], ["parameters", key]]) {
+      const before = readSettingTiers("ducts", pointer);
+      const notices = storedNotices(hostState());
+      expect(
+        writeSettingTier(
+          { owner: "ducts", tier: "firm", path, value: 1, expectedSha256: null },
+          { pointer },
+        ),
+      ).toMatchObject({ ok: false, status: 422, message: expect.stringContaining("reserved") });
+      expect(readSettingTiers("ducts", pointer)).toEqual(before);
+      expect(storedNotices(hostState())).toEqual(notices);
+    }
+  },
+);
 
 // Mutant: force the engine default 0.08 instead of the project friction 0.12.
 test("design friction comes from the project home, never Work", async () => {
-  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["designFriction"], value: 0.08, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
-  expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["designFriction"], value: 0.12, expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
+  expect(
+    writeSettingTier(
+      { owner: "ducts", tier: "firm", path: ["designFriction"], value: 0.08, expectedSha256: null },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: true });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "project",
+        path: ["designFriction"],
+        value: 0.12,
+        expectedSha256: null,
+      },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: true });
   const tiers = readSettingTiers("ducts", pointer);
-  const cells = sheetCells(settingsSheet, { rows: [], work: null, read: { settings: { ducts: tiers } } });
-  expect(cells.find(cell => cell.binding === "setting.ducts.designFriction")).toMatchObject({ value: 0.12, source: "project" });
+  const cells = sheetCells(settingsSheet, {
+    rows: [],
+    work: null,
+    read: { settings: { ducts: tiers } },
+  });
+  expect(cells.find((cell) => cell.binding === "setting.ducts.designFriction")).toMatchObject({
+    value: 0.12,
+    source: "project",
+  });
   expect(ductsDocumentSchema.parse({})).not.toHaveProperty("designFriction");
   expect(ductsDocumentSchema.safeParse({ designFriction: {} }).success).toBe(false);
 });
 
 // Mutant: ignore the project tier and serve firm slot names.
 test("snapshot slot names come from the project home, never Fans Work", () => {
-  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "fanFlow"], value: "Firm flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
-  expect(writeSettingTier({ owner: "ducts", tier: "project", path: ["parameters", "fanFlow"], value: "Project flow", expectedSha256: null }, { pointer })).toMatchObject({ ok: true });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "firm",
+        path: ["parameters", "fanFlow"],
+        value: "Firm flow",
+        expectedSha256: null,
+      },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: true });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "project",
+        path: ["parameters", "fanFlow"],
+        value: "Project flow",
+        expectedSha256: null,
+      },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: true });
   const tiers = readSettingTiers("ducts", pointer);
-  const cells = sheetCells({ bindings: Object.fromEntries(Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting."))) }, { rows: [], work: null, read: { settings: { ducts: tiers }, calcView: { inputs: null }, calcSnapshot: { slots: { fanFlow: ductParameterSlots(tiers).fanFlow!.name }, slotSources: ductParameterSlots(tiers) } } });
-  expect(cells.find(cell => cell.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({ value: "Project flow", source: "project" });
-  expect(ductParameterSlots(tiers)).toMatchObject({ fanFlow: { name: "Project flow", source: "project" } });
+  const cells = sheetCells(
+    {
+      bindings: Object.fromEntries(
+        Object.entries(fansCalc.bindings).filter(([key]) => key.startsWith("setting.")),
+      ),
+    },
+    {
+      rows: [],
+      work: null,
+      read: {
+        settings: { ducts: tiers },
+        calcView: { inputs: null },
+        calcSnapshot: {
+          slots: { fanFlow: ductParameterSlots(tiers).fanFlow!.name },
+          slotSources: ductParameterSlots(tiers),
+        },
+      },
+    },
+  );
+  expect(cells.find((cell) => cell.binding === "setting.ducts.parameters.fanFlow")).toMatchObject({
+    value: "Project flow",
+    source: "project",
+  });
+  expect(ductParameterSlots(tiers)).toMatchObject({
+    fanFlow: { name: "Project flow", source: "project" },
+  });
   expect(fansDocumentSchema.parse({})).not.toHaveProperty("parameters");
   expect(fansDocumentSchema.safeParse({ parameters: {} }).success).toBe(false);
 });
@@ -222,11 +462,23 @@ test("snapshot slot names come from the project home, never Fans Work", () => {
 // Mutant H5-caption: claim a missing firm file supplied the seed.
 test("the pricing caption calls an absent firm file defaults, never firm seed", () => {
   const read = fansCalcData.parse({
-    open: null, rows: [], progress: null, ductSystemsRevision: 0, ductSystemsWork: {}, fansWork: {}, design: {}, settings: {},
+    open: null,
+    rows: [],
+    progress: null,
+    ductSystemsRevision: 0,
+    ductSystemsWork: {},
+    fansWork: {},
+    design: {},
+    settings: {},
     calcSnapshot: { kind: "absent" },
     fans: { target: { session: "test", openId: "doc" }, slots: [], activeSlot: "", rows: [] },
-    calcView: { blockers: [], tiers: { taken: 0, accept: 0, preview: 0 }, taken: [], inputs: null,
-      firm: { version: "seed", path: "Settings/ducts.json", present: false } },
+    calcView: {
+      blockers: [],
+      tiers: { taken: 0, accept: 0, preview: 0 },
+      taken: [],
+      inputs: null,
+      firm: { version: "seed", path: "Settings/ducts.json", present: false },
+    },
   });
   const caption = fansCalc.from(read, {})!.says;
   expect(caption).toContain("defaults");
@@ -237,7 +489,16 @@ test("the pricing caption calls an absent firm file defaults, never firm seed", 
 test("all eight criteria display the engine defaults when the firm folder is gone", async () => {
   rmSync(firm, { recursive: true });
   const at = await sheet();
-  const expected = { velocitySupplyFpm: 900, velocityReturnFpm: 700, terminalDropInWg: 0.03, autoJoinGapIn: 3, healBoxIn: 36, splitPolicy: "even", allowanceSupplyInWg: 0, allowanceReturnInWg: 0 };
+  const expected = {
+    velocitySupplyFpm: 900,
+    velocityReturnFpm: 700,
+    terminalDropInWg: 0.03,
+    autoJoinGapIn: 3,
+    healBoxIn: 36,
+    splitPolicy: "even",
+    allowanceSupplyInWg: 0,
+    allowanceReturnInWg: 0,
+  };
   for (const cell of ductsDocumentSchema.shape.criteria.unwrap().keyof().options)
     expect(at.cell(cell)).toMatchObject({ value: expected[cell], source: "default" });
 });
@@ -247,7 +508,9 @@ test("a present project marker is not blamed when the firm home cannot anchor it
   rmSync(firm, { recursive: true });
   expect(existsSync(firm)).toBe(false);
   expect(existsSync(join(project, "pe-home.json"))).toBe(true);
-  const reason = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!.notFound!;
+  const reason = readSettingTiers("ducts", pointer).find(
+    (read) => read.tier === "project",
+  )!.notFound!;
   expect(reason).toContain(pointer);
   expect(reason).toContain("relative to the shared drive root");
   expect(reason).toContain("no firm home");
@@ -257,7 +520,18 @@ test("a present project marker is not blamed when the firm home cannot anchor it
 test("the write door refuses an unknown parameter slot", () => {
   const before = readSettingTiers("ducts", pointer);
   const notices = storedNotices(hostState());
-  expect(writeSettingTier({ owner: "ducts", tier: "firm", path: ["parameters", "bogusSlot"], value: "X", expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
+  expect(
+    writeSettingTier(
+      {
+        owner: "ducts",
+        tier: "firm",
+        path: ["parameters", "bogusSlot"],
+        value: "X",
+        expectedSha256: null,
+      },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: false, status: 422 });
   expect(readSettingTiers("ducts", pointer)).toEqual(before);
   expect(storedNotices(hostState())).toEqual(notices);
 });
@@ -267,20 +541,36 @@ test.each([
   [["designFriction"], 0],
   [["parameters", "fanFlow", "extra"], "Flow"],
   [["parameters", "fanFlow"], ""],
-] as const)("the settings door refuses invalid %j = %j without writes or notices", (path, value) => {
-  const before = readSettingTiers("ducts", pointer);
-  const notices = storedNotices(hostState());
-  expect(writeSettingTier({ owner: "ducts", tier: "firm", path, value, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
-  expect(readSettingTiers("ducts", pointer)).toEqual(before);
-  expect(storedNotices(hostState())).toEqual(notices);
-});
+] as const)(
+  "the settings door refuses invalid %j = %j without writes or notices",
+  (path, value) => {
+    const before = readSettingTiers("ducts", pointer);
+    const notices = storedNotices(hostState());
+    expect(
+      writeSettingTier(
+        { owner: "ducts", tier: "firm", path, value, expectedSha256: null },
+        { pointer },
+      ),
+    ).toMatchObject({ ok: false, status: 422 });
+    expect(readSettingTiers("ducts", pointer)).toEqual(before);
+    expect(storedNotices(hostState())).toEqual(notices);
+  },
+);
 
 test("design friction can be cleared with null", () => {
-  const request = { owner: "ducts", tier: "project" as const, path: ["designFriction"], value: 0.12, expectedSha256: null };
+  const request = {
+    owner: "ducts",
+    tier: "project" as const,
+    path: ["designFriction"],
+    value: 0.12,
+    expectedSha256: null,
+  };
   expect(writeSettingTier(request, { pointer })).toMatchObject({ ok: true });
   const expectedSha256 = sha(readSettingTiers("ducts", pointer), "project");
-  expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({ ok: true });
-  const read = readSettingTiers("ducts", pointer).find(read => read.tier === "project")!;
+  expect(writeSettingTier({ ...request, value: null, expectedSha256 }, { pointer })).toMatchObject({
+    ok: true,
+  });
+  const read = readSettingTiers("ducts", pointer).find((read) => read.tier === "project")!;
   expect(read.json).not.toHaveProperty("designFriction");
 });
 
@@ -290,7 +580,8 @@ test("an outside project rewrite invalidates once and the sheet reads its value 
   const root = project;
   mkdirSync(join(root, "Settings"), { recursive: true });
   const path = join(root, "Settings", "ducts.json");
-  const bytes = (value: number) => JSON.stringify({ criteria: { velocityLimitFpm: { supply: value } } });
+  const bytes = (value: number) =>
+    JSON.stringify({ criteria: { velocityLimitFpm: { supply: value } } });
   writeFileSync(path, bytes(800));
   let changes = 0;
   const watching = watchSettingTiers(() => changes++);
@@ -302,7 +593,7 @@ test("an outside project rewrite invalidates once and the sheet reads its value 
     expect((await sheet()).cell("velocitySupplyFpm")).toMatchObject({ value: 850, source: tier });
     // Repeated hints with identical bytes must not publish another change.
     writeFileSync(path, bytes(850));
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise((resolve) => setTimeout(resolve, 150));
     expect(changes).toBe(1);
   } finally {
     watching.close();
@@ -310,9 +601,21 @@ test("an outside project rewrite invalidates once and the sheet reads its value 
 });
 
 test("an unregistered owner is invalid even before a home can be resolved", () => {
-  expect(writeSettingTier({ owner: "not-declared", tier: "firm", path: ["x"], value: 1, expectedSha256: null }, { pointer }))
-    .toMatchObject({ ok: false, status: 422 });
+  expect(
+    writeSettingTier(
+      { owner: "not-declared", tier: "firm", path: ["x"], value: 1, expectedSha256: null },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: false, status: 422 });
 });
-test.each([["user", ["designFriction"]], ["project", ["criteria"]]] as const)("an owner cannot write undeclared tier/path %s %j", (tier, path) => {
-  expect(writeSettingTier({ owner: "ducts", tier, path, value: null, expectedSha256: null }, { pointer })).toMatchObject({ ok: false, status: 422 });
+test.each([
+  ["user", ["designFriction"]],
+  ["project", ["criteria"]],
+] as const)("an owner cannot write undeclared tier/path %s %j", (tier, path) => {
+  expect(
+    writeSettingTier(
+      { owner: "ducts", tier, path, value: null, expectedSha256: null },
+      { pointer },
+    ),
+  ).toMatchObject({ ok: false, status: 422 });
 });

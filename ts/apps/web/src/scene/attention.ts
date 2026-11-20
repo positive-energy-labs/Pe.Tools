@@ -12,5 +12,8 @@ export function attentionColours(mount: Element) {
   };
 }
 
-export const attentionMark = (selected: boolean, hovered: boolean, lit: boolean): AttentionMark | null =>
-  selected ? "selected" : hovered ? "hover" : lit ? "lit" : null;
+export const attentionMark = (
+  selected: boolean,
+  hovered: boolean,
+  lit: boolean,
+): AttentionMark | null => (selected ? "selected" : hovered ? "hover" : lit ? "lit" : null);

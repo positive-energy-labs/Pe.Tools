@@ -32,58 +32,58 @@ const axisSchema = z.strictObject({
  * Inputs use snapshot US units; scale and divideBy are explicit, never executable expressions.
  * Each grid shares one page citation; split a multi-page table into separate table ids.
  */
-const fileTableSchema = z
-  .strictObject({
-    id: z.string().min(1),
-    title: z.string().min(1),
-    source: sourceSchema,
-    rows: axisSchema,
-    columns: axisSchema,
-    cells: z.strictObject({
-      quantity: z.string().min(1),
-      unit: z.string().min(1),
-      input: inputSchema.optional(),
-      values: z.array(z.array(z.number().finite()).min(2)).min(2),
-    }),
-    result: z.strictObject({
-      from: z.enum(["cells", "columns"]),
-      quantity: z.enum(["static-pressure", "total-pressure", "coefficient"]),
-      unit: z.enum(["in-wg", "Pa", "1"]),
-      toInWg: z.number().positive(),
-      velocityBasis: z.literal("connector"),
-      note: z.string().min(1),
-      /** Return/exhaust static multiplier and the page that states it. */
-      returnAir: z
-        .strictObject({ factor: z.number().positive(), page: z.number().int().positive() })
-        .optional(),
-      /** The page that says total = static + velocity pressure. */
-      totalPage: z.number().int().positive().optional(),
-    }),
-  });
+const fileTableSchema = z.strictObject({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  source: sourceSchema,
+  rows: axisSchema,
+  columns: axisSchema,
+  cells: z.strictObject({
+    quantity: z.string().min(1),
+    unit: z.string().min(1),
+    input: inputSchema.optional(),
+    values: z.array(z.array(z.number().finite()).min(2)).min(2),
+  }),
+  result: z.strictObject({
+    from: z.enum(["cells", "columns"]),
+    quantity: z.enum(["static-pressure", "total-pressure", "coefficient"]),
+    unit: z.enum(["in-wg", "Pa", "1"]),
+    toInWg: z.number().positive(),
+    velocityBasis: z.literal("connector"),
+    note: z.string().min(1),
+    /** Return/exhaust static multiplier and the page that states it. */
+    returnAir: z
+      .strictObject({ factor: z.number().positive(), page: z.number().int().positive() })
+      .optional(),
+    /** The page that says total = static + velocity pressure. */
+    totalPage: z.number().int().positive().optional(),
+  }),
+});
 type FileTable = z.infer<typeof fileTableSchema>;
 const grid = (t: FileTable, ctx: z.RefinementCtx) => {
-    const increasing = (xs: number[]) => xs.every((n, i) => i === 0 || n > xs[i - 1]!);
-    const valid =
-      increasing(t.rows.values) &&
-      increasing(t.columns.values) &&
-      t.cells.values.length === t.rows.values.length &&
-      t.cells.values.every(
-        (r) =>
-          r.length === t.columns.values.length && (t.result.from !== "columns" || increasing(r)),
-      ) &&
-      !!t.rows.input &&
-      (t.result.from === "cells" ? !!t.columns.input : !!t.cells.input) &&
-      (t.result.quantity === "coefficient" ? t.result.unit === "1" : t.result.unit !== "1");
-    if (!valid)
-      ctx.addIssue({
-        code: "custom",
-        message: "Invalid grid dimensions, monotonic axes, input mappings or pressure units",
-      });
+  const increasing = (xs: number[]) => xs.every((n, i) => i === 0 || n > xs[i - 1]!);
+  const valid =
+    increasing(t.rows.values) &&
+    increasing(t.columns.values) &&
+    t.cells.values.length === t.rows.values.length &&
+    t.cells.values.every(
+      (r) => r.length === t.columns.values.length && (t.result.from !== "columns" || increasing(r)),
+    ) &&
+    !!t.rows.input &&
+    (t.result.from === "cells" ? !!t.columns.input : !!t.cells.input) &&
+    (t.result.quantity === "coefficient" ? t.result.unit === "1" : t.result.unit !== "1");
+  if (!valid)
+    ctx.addIssue({
+      code: "custom",
+      message: "Invalid grid dimensions, monotonic axes, input mappings or pressure units",
+    });
 };
 /** A served table, the shape pricing consumes: its home is required, so a table recorded before homes were stamped no longer decodes. */
-export const catalogTableSchema = fileTableSchema.extend({
-  home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }),
-}).superRefine(grid);
+export const catalogTableSchema = fileTableSchema
+  .extend({
+    home: z.strictObject({ tier: z.enum(["user", "project", "firm"]), file: z.string().min(1) }),
+  })
+  .superRefine(grid);
 export const catalogSchema = z.strictObject({
   version: z.literal(1),
   tables: z.array(fileTableSchema.superRefine(grid)),
@@ -99,7 +99,13 @@ export const ductCatalogReadingSchema = z.object({
 
 export const ductCatalogRoutes = {
   "ducts.catalogs": route(
-    "GET", "/pe/ducts/catalogs", z.undefined(), ductCatalogReadingSchema, "read", "gateway", "read",
+    "GET",
+    "/pe/ducts/catalogs",
+    z.undefined(),
+    ductCatalogReadingSchema,
+    "read",
+    "gateway",
+    "read",
   ),
 } as const;
 

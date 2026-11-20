@@ -568,7 +568,9 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         }
         // Dispatch is fenced by incarnation (this session object) and connection epoch: the
         // request records the epoch it goes out on, read in the same step that marks it dispatched.
-        const refusal = reserved ? yield* Effect.promise(() => ports.bridgeDispatchRefusal(requestId)) : null;
+        const refusal = reserved
+          ? yield* Effect.promise(() => ports.bridgeDispatchRefusal(requestId))
+          : null;
         const connection = yield* Ref.get(session.connection);
         if (!connection) return yield* Effect.fail(new NoRevitSession());
         const phase = yield* Ref.modify(
@@ -892,7 +894,11 @@ export const makeDispatcher = (ports: DispatchPorts) =>
           for (const live of (yield* Ref.get(sessions)).values())
             if (yield* Ref.get(live.connection))
               return {
-                value: { cancelled: false, requestId: named, message: `Request '${named}' is not in flight; nothing to cancel.` },
+                value: {
+                  cancelled: false,
+                  requestId: named,
+                  message: `Request '${named}' is not in flight; nothing to cancel.`,
+                },
                 target: { session: live.sessionId, document: null },
               };
       }

@@ -36,7 +36,8 @@ test.each(["snowdon-ducts", "snowdon-circuits"])(
         to = join(root, "to");
       await cp(source, join(from, "Renamed"), {
         recursive: true,
-        filter: (path) => path === source || isPackageMember(relative(source, path).replaceAll("\\", "/")),
+        filter: (path) =>
+          path === source || isPackageMember(relative(source, path).replaceAll("\\", "/")),
       });
       const archivePath = join(root, `${id}.zip`);
       const exported = await exportPod({ pod: id, archivePath }, { podsRoot: from });

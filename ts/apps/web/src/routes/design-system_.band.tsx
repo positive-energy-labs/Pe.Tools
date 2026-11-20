@@ -2,7 +2,12 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
-import { clearWord, WorkSentence, workSummary, type ClearOutcome } from "@pe/web-kernel/components/work/band";
+import {
+  clearWord,
+  WorkSentence,
+  workSummary,
+  type ClearOutcome,
+} from "@pe/web-kernel/components/work/band";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Section } from "@pe/kit/lang/section";
@@ -63,7 +68,9 @@ function BandRoute() {
       <header className="sticky z-sticky">
         <div className="flex items-center justify-between py-2.5">
           <div className="flex min-w-0 items-baseline gap-3">
-            <Link to="/$route" params={{ route: "design-system" }}>← design system</Link>
+            <Link to="/$route" params={{ route: "design-system" }}>
+              ← design system
+            </Link>
             <span>band</span>
             <span>approve and deny are the cell&apos;s own transitions, at every scale</span>
             <FactChip

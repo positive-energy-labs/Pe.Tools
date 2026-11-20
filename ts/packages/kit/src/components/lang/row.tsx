@@ -133,9 +133,7 @@ export function Row(props: RowProps) {
     ...reachProps(),
     ...(props.subject
       ? mention(props.subject)
-      : mark(
-          props.uniqueIds?.[0] == null ? null : elementKey(props.uniqueIds[0]),
-        )),
+      : mark(props.uniqueIds?.[0] == null ? null : elementKey(props.uniqueIds[0]))),
     id: props.id,
     role: props.role,
     onClick: refusal ? undefined : props.onClick,

@@ -3,7 +3,14 @@
  * EXCEPTION to SURFACE-PHILOSOPHY P1: native range/colour controls have no kit primitive.
  * The deliberately separate dev skin remains bounded to this floater; production never loads it.
  */
-import { useEffect, useMemo, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { tokenRef } from "@pe/kit/lib/token";
 import {
   changedCount,

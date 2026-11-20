@@ -9,7 +9,10 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { HttpRouter } from "effect/http";
 // Host-only dependency: this HTTP journey lives beside web route journeys.
-import { NodeHttpClient, NodeServices } from "../../../host/node_modules/@effect/platform-node/dist/index.js";
+import {
+  NodeHttpClient,
+  NodeServices,
+} from "../../../host/node_modules/@effect/platform-node/dist/index.js";
 import { expect, test, vi } from "vite-plus/test";
 import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,12 +21,26 @@ import { address, roomEditKey, takeoffObservationSchema } from "@pe/agent-contra
 import { commands, tools } from "@pe/mcps/product-actions";
 import { takeoffSeeds } from "../takeoff/seeds";
 import { fileVersion } from "../../../host/src/takeoff-actions";
-import { captureStore, testDuctFiles, testDocumentMarks, journalAt, callRouteOver, settle } from "../../../host/tests/effect-test";
+import {
+  captureStore,
+  testDuctFiles,
+  testDocumentMarks,
+  journalAt,
+  callRouteOver,
+  settle,
+} from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { bindCommandRuntime } from "../../../host/src/command-registry";
 import { fixtureNative } from "../../../host/tests/fixture-native";
 import { nativeRecordingRequest } from "../../../host/tests/native-recordings";
-import { actionReceiptSchema, workFingerprintSchema, type Caller, type WorkKey, type WorkWrite, type RouteStateWriteResult } from "@pe/agent-contracts";
+import {
+  actionReceiptSchema,
+  workFingerprintSchema,
+  type Caller,
+  type WorkKey,
+  type WorkWrite,
+  type RouteStateWriteResult,
+} from "@pe/agent-contracts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { withInvocationContext } from "@pe/runtime/context";
 import { fixture, ref, path, who, gate } from "../../../host/tests/host-read-graph.test-support";
@@ -47,72 +64,138 @@ import type { Readings } from "../host/resource-stream";
 import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { scrollBody, type DrawContext, type TypedRoute } from "@pe/web-kernel/route/typed-route";
 
-const terminals = workSnapshot.nodes.filter(node => node.kind === "terminal");
+const terminals = workSnapshot.nodes.filter((node) => node.kind === "terminal");
 const terminalA = elementSubject(terminals[0]!);
 const terminalB = elementSubject(terminals[1]!);
 
-const recordedInput = (name: string) => Object.fromEntries(Object.entries(nativeRecordingRequest(name)).filter(([, value]) => value !== null));
-const recordedRoomWrites = nativeRecordingRequest("fresh-rooms.write").regions as { guid: string; name: string }[];
+const recordedInput = (name: string) =>
+  Object.fromEntries(
+    Object.entries(nativeRecordingRequest(name)).filter(([, value]) => value !== null),
+  );
+const recordedRoomWrites = nativeRecordingRequest("fresh-rooms.write").regions as {
+  guid: string;
+  name: string;
+}[];
 test("JZ Initialize declaration must also pass the recording transport leaf admission", async () => {
   const dir = await mkdtemp(join(tmpdir(), "jz-initialize-transport-"));
   const native = await fixtureNative(dir, "fresh-takeoffs.initialize-carrier");
   try {
-    const response = await native.transport.fetch(new Request("http://fixture/call", {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
-        action: "takeoffs.initialize", key: "takeoffs.initialize-carrier", request: { stage: "Rooms" },
+    const response = await native.transport.fetch(
+      new Request("http://fixture/call", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "takeoffs.initialize",
+          key: "takeoffs.initialize-carrier",
+          request: { stage: "Rooms" },
+        }),
       }),
-    }));
+    );
     expect(response.status, await response.clone().text()).toBe(200);
-  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await native.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("JZ fixture HTTP boundary refuses uncataloged, undeclared and invalid native requests", async () => {
   const dir = await mkdtemp(join(tmpdir(), "jz-fixture-admission-"));
   const native = await fixtureNative(dir, "fresh-schedule-02-revit.catalog.schedules");
-  const post = (body: unknown) => native.transport.fetch(new Request("http://fixture/call", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
-  }));
+  const post = (body: unknown) =>
+    native.transport.fetch(
+      new Request("http://fixture/call", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
   try {
     const key = "revit.catalog.schedules";
     expect((await post({ key, action: `native:${key}`, request: {} })).status).toBe(200);
     const undeclared = await post({ key, action: "schedule.grid.read", request: {} });
     expect(undeclared.status).toBe(409);
     expect(await undeclared.text()).toContain("does not declare native leaf");
-    const uncataloged = await post({ key: "fixture.unknown", action: "takeoffs.initialize", request: {} });
+    const uncataloged = await post({
+      key: "fixture.unknown",
+      action: "takeoffs.initialize",
+      request: {},
+    });
     expect(uncataloged.status).toBe(409);
     expect(await uncataloged.text()).toContain("not in the generated catalog");
-    const invalid = await post({ key, action: `native:${key}`, request: { budget: { maxEntries: "invalid" } } });
+    const invalid = await post({
+      key,
+      action: `native:${key}`,
+      request: { budget: { maxEntries: "invalid" } },
+    });
     expect(invalid.status).toBe(409);
     expect(await invalid.text()).toContain("maxEntries");
-  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await native.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("JZ recorded bridge rejects obsolete native DTOs behind actual Adopt admission", async () => {
   const dir = await mkdtemp(join(tmpdir(), "jz-recording-schema-"));
-  const native = await fixtureNative(join(dir, "native"), "fresh-takeoffs.initialize-carrier", "manuella-adopt");
+  const native = await fixtureNative(
+    join(dir, "native"),
+    "fresh-takeoffs.initialize-carrier",
+    "manuella-adopt",
+  );
   const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools.takeoffs.work }], store: {
-    getState: async () => state, setState: async ({ value }) => { state = structuredClone(value); },
-  } });
+  const workspace = new RouteWorkspace({
+    publicationAuthor: () => "human",
+    registrations: [{ spec: tools.takeoffs.work }],
+    store: {
+      getState: async () => state,
+      setState: async ({ value }) => {
+        state = structuredClone(value);
+      },
+    },
+  });
   const key = { binding: "address" as const, route: "takeoffs", target: address("C:/model.rvt") };
   const post = native.actions({ workspace, marks: testDocumentMarks(native.bridge) });
   try {
-    await workspace.publish(key, "takeoffs", [{ path: ["writeIntent", "takeoffs.adopt"], value: { edit: { value: { views: [recordedInput("fresh-takeoffs.adopt")] } } } }], 0);
+    await workspace.publish(
+      key,
+      "takeoffs",
+      [
+        {
+          path: ["writeIntent", "takeoffs.adopt"],
+          value: { edit: { value: { views: [recordedInput("fresh-takeoffs.adopt")] } } },
+        },
+      ],
+      0,
+    );
     const input = { work: { key, revision: 1 } };
-    for (const [id, command] of [["preview", "takeoffs.adopt.preview"], ["apply", "takeoffs.adopt"]]) {
-      const response = await post({ id, key: command, target: { kind: "document", ref: socket.target }, input });
+    for (const [id, command] of [
+      ["preview", "takeoffs.adopt.preview"],
+      ["apply", "takeoffs.adopt"],
+    ]) {
+      const response = await post({
+        id,
+        key: command,
+        target: { kind: "document", ref: socket.target },
+        input,
+      });
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       const receipt = await native.journal.wait(id!);
       if (id === "preview") expect(receipt.state).toBe("succeeded");
       else {
         expect(receipt.state).toBe("incomplete");
-        expect(JSON.stringify(receipt)).toContain('adopted');
+        expect(JSON.stringify(receipt)).toContain("adopted");
         expect(JSON.stringify(receipt)).toContain("array");
       }
     }
-    expect(native.calls.map(call => call.key)).toEqual(["takeoffs.initialize-carrier", "takeoffs.adopt"]);
-  } finally { await native.close(); await rm(dir, { recursive: true, force: true }); }
+    expect(native.calls.map((call) => call.key)).toEqual([
+      "takeoffs.initialize-carrier",
+      "takeoffs.adopt",
+    ]);
+  } finally {
+    await native.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test.each([
@@ -124,103 +207,206 @@ test.each([
   ["rooms.write", {}],
   ["rooms.merge", recordedInput("fresh-rooms.merge")],
   ["takeoffs.sync", {}],
-] as const)("JZ carrier commands run real declarations and guarded native dispatch: %s", async (commandKey, intent) => {
-  const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
-  const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
-  const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
-  let saved: unknown;
-  const workspace = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [{ spec: tools[route].work }], store: {
-    getState: async () => saved, setState: async ({ value }) => { saved = structuredClone(value); },
-  } });
-  const native = await fixtureNative(join(dir, "native"),
-    "fresh-takeoffs.initialize-carrier", "fresh-takeoffs.adopt", "fresh-takeoffs.partition",
-    "fresh-rooms.partition", "fresh-rooms.draw", "fresh-rooms.write", "fresh-rooms.merge", "fresh-takeoffs.rhvac-links",
-  );
-  const socket = await native.connect();
-  const { calls } = native;
-  const ref = socket.target;
-  const path = address("C:/model.rvt");
-  const { bridge, journal } = native;
-  const runs = testRegistry();
-  bindControl({ runs, acquired: () => null });
-  const captures = captureStore(dir);
-  const identity = { fileName: "recorded.r10", projectTitle: "Journey", clientName: "", stamp: "recorded" };
-  let synced = false;
-  const deps: Parameters<typeof bindCommandRuntime>[3] = {
-    workspace, sdk: sdkSessions, files: testDuctFiles(), marks: testDocumentMarks(bridge),
-    openFile: async file => ({ sourceFile: file, fileIdentity: identity, building: {}, systems: [{ number: 1, name: "SA1" }], rooms: [] }),
-    syncFile: async input => {
-      synced = true;
-      return { targetPath: input.targetPath, backupPath: null, swapped: true, fileIdentity: identity,
-        insertedRooms: (input.inserts ?? []).map(room => ({ number: room.number, name: room.name, identifier: room.number + 100 })),
-        updated: 0, systems: [], seedRoom: { identifier: 0, action: "not-requested", reason: "recorded adapter" },
-        assemblyFallbacks: [], roomsBefore: 0, roomsAfter: input.inserts?.length ?? 0, log: "recorded adapter" };
-    },
-  };
-  const post = native.actions(deps, captures);
-  const invoke = async (key: string, input: Record<string, unknown>) => {
-    const id = `${key}-${(await journal.list()).length}`;
-    const response = await post({ id, key, target: { kind: "document", ref }, input });
-    expect([200, 202], await response.clone().text()).toContain(response.status);
-    const receipt = await journal.wait(id);
-    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
-    return receipt;
-  };
-  try {
-    let authored: Record<string, unknown> = intent;
-    if (commandKey === "takeoffs.sync") {
-      const recorded = takeoffObservationSchema.parse(takeoffSeeds.sync.readings.snapshot);
-      if (recorded.kind !== "ready") throw Error("Expected a saved snapshot seed");
-      const snapshot = structuredClone(recorded.capture.snapshot);
-      snapshot.reading.at = path;
-      const zone = snapshot.world.zones[0]!;
-      const room = zone.rooms.find(room => room.data !== null)!;
-      zone.rooms = [room]; zone.tags = ["SA1"]; zone.driftSqft = 0; zone.runs = [];
-      room.r10 = null; room.elementId = 21; room.flags = [];
-      room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
-      snapshot.world.zones = [zone];
-      const retained = await settle(captures.refresh(ref, Effect.succeed({ result: null, snapshot }), Effect.succeed(true)));
-      const file = join(dir, "recorded.r10");
-      await writeFile(file, "recorded RHVAC transport input", "utf8");
-      authored = { path: file, captureId: retained.capture.id, fileVersion: await fileVersion(file), zones: [zone.zone.guid] };
+] as const)(
+  "JZ carrier commands run real declarations and guarded native dispatch: %s",
+  async (commandKey, intent) => {
+    const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
+    const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
+    const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
+    let saved: unknown;
+    const workspace = new RouteWorkspace({
+      publicationAuthor: () => "human",
+      registrations: [{ spec: tools[route].work }],
+      store: {
+        getState: async () => saved,
+        setState: async ({ value }) => {
+          saved = structuredClone(value);
+        },
+      },
+    });
+    const native = await fixtureNative(
+      join(dir, "native"),
+      "fresh-takeoffs.initialize-carrier",
+      "fresh-takeoffs.adopt",
+      "fresh-takeoffs.partition",
+      "fresh-rooms.partition",
+      "fresh-rooms.draw",
+      "fresh-rooms.write",
+      "fresh-rooms.merge",
+      "fresh-takeoffs.rhvac-links",
+    );
+    const socket = await native.connect();
+    const { calls } = native;
+    const ref = socket.target;
+    const path = address("C:/model.rvt");
+    const { bridge, journal } = native;
+    const runs = testRegistry();
+    bindControl({ runs, acquired: () => null });
+    const captures = captureStore(dir);
+    const identity = {
+      fileName: "recorded.r10",
+      projectTitle: "Journey",
+      clientName: "",
+      stamp: "recorded",
+    };
+    let synced = false;
+    const deps: Parameters<typeof bindCommandRuntime>[3] = {
+      workspace,
+      sdk: sdkSessions,
+      files: testDuctFiles(),
+      marks: testDocumentMarks(bridge),
+      openFile: async (file) => ({
+        sourceFile: file,
+        fileIdentity: identity,
+        building: {},
+        systems: [{ number: 1, name: "SA1" }],
+        rooms: [],
+      }),
+      syncFile: async (input) => {
+        synced = true;
+        return {
+          targetPath: input.targetPath,
+          backupPath: null,
+          swapped: true,
+          fileIdentity: identity,
+          insertedRooms: (input.inserts ?? []).map((room) => ({
+            number: room.number,
+            name: room.name,
+            identifier: room.number + 100,
+          })),
+          updated: 0,
+          systems: [],
+          seedRoom: { identifier: 0, action: "not-requested", reason: "recorded adapter" },
+          assemblyFallbacks: [],
+          roomsBefore: 0,
+          roomsAfter: input.inserts?.length ?? 0,
+          log: "recorded adapter",
+        };
+      },
+    };
+    const post = native.actions(deps, captures);
+    const invoke = async (key: string, input: Record<string, unknown>) => {
+      const id = `${key}-${(await journal.list()).length}`;
+      const response = await post({ id, key, target: { kind: "document", ref }, input });
+      expect([200, 202], await response.clone().text()).toContain(response.status);
+      const receipt = await journal.wait(id);
+      expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+      return receipt;
+    };
+    try {
+      let authored: Record<string, unknown> = intent;
+      if (commandKey === "takeoffs.sync") {
+        const recorded = takeoffObservationSchema.parse(takeoffSeeds.sync.readings.snapshot);
+        if (recorded.kind !== "ready") throw Error("Expected a saved snapshot seed");
+        const snapshot = structuredClone(recorded.capture.snapshot);
+        snapshot.reading.at = path;
+        const zone = snapshot.world.zones[0]!;
+        const room = zone.rooms.find((room) => room.data !== null)!;
+        zone.rooms = [room];
+        zone.tags = ["SA1"];
+        zone.driftSqft = 0;
+        zone.runs = [];
+        room.r10 = null;
+        room.elementId = 21;
+        room.flags = [];
+        room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
+        snapshot.world.zones = [zone];
+        const retained = await settle(
+          captures.refresh(ref, Effect.succeed({ result: null, snapshot }), Effect.succeed(true)),
+        );
+        const file = join(dir, "recorded.r10");
+        await writeFile(file, "recorded RHVAC transport input", "utf8");
+        authored = {
+          path: file,
+          captureId: retained.capture.id,
+          fileVersion: await fileVersion(file),
+          zones: [zone.zone.guid],
+        };
+      }
+      const edits =
+        commandKey === "rooms.write"
+          ? recordedRoomWrites.map((room) => ({
+              path: ["edits", roomEditKey(room.guid, "name")],
+              value: { edit: { value: room.name } },
+            }))
+          : [];
+      await workspace.publish(
+        key,
+        route,
+        [{ path: ["writeIntent", commandKey], value: { edit: { value: authored } } }, ...edits],
+        0,
+      );
+      const work = { key, revision: (await workspace.read(key, route))!.revision };
+      const definition = commands[commandKey];
+      if ("writeBoundary" in definition) {
+        const plan = await invoke(definition.writeBoundary.previewKey, { work });
+        expect(plan).toMatchObject({ result: { previewOnly: true } });
+        expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
+      }
+      await invoke(commandKey, { work });
+      if (commandKey === "takeoffs.sync") {
+        expect(synced).toBe(true);
+        expect(calls).toEqual([
+          {
+            key: "takeoffs.rhvac-links",
+            action: commandKey,
+            input: {
+              writes: [
+                {
+                  elementId: 21,
+                  link: expect.objectContaining({
+                    identifier: 101,
+                    fileIdentity: "recorded.r10#recorded",
+                  }),
+                },
+              ],
+            },
+          },
+        ]);
+        return;
+      }
+      expect(calls[0]).toEqual({
+        key: "takeoffs.initialize-carrier",
+        input: {
+          stage:
+            commandKey === "takeoffs.initialize"
+              ? intent.stage
+              : commandKey === "takeoffs.partition"
+                ? "Materialization"
+                : commandKey.startsWith("rooms.")
+                  ? "Rooms"
+                  : "Adoption",
+        },
+        action: commandKey,
+      });
+      expect(calls.map((row) => row.key)).toEqual(
+        commandKey === "takeoffs.initialize"
+          ? ["takeoffs.initialize-carrier"]
+          : ["takeoffs.initialize-carrier", commandKey],
+      );
+      if (commandKey === "rooms.write") {
+        expect(calls[1]).toEqual({
+          key: "rooms.write",
+          action: commandKey,
+          input: { regions: recordedRoomWrites.map(({ guid, name }) => ({ guid, name })) },
+        });
+        expect((await workspace.read(key, route))!.doc).toMatchObject({
+          edits: {
+            [roomEditKey(recordedRoomWrites[1]!.guid, "name")]: {
+              edit: { value: recordedRoomWrites[1]!.name },
+            },
+          },
+        });
+      }
+    } finally {
+      await native.close();
+      runs.closeAll();
+      bindControl({ runs: undefined });
+      await rm(dir, { recursive: true, force: true });
     }
-    const edits = commandKey === "rooms.write" ? recordedRoomWrites.map(room => ({
-      path: ["edits", roomEditKey(room.guid, "name")], value: { edit: { value: room.name } },
-    })) : [];
-    await workspace.publish(key, route, [
-      { path: ["writeIntent", commandKey], value: { edit: { value: authored } } }, ...edits,
-    ], 0);
-    const work = { key, revision: (await workspace.read(key, route))!.revision };
-    const definition = commands[commandKey];
-    if ("writeBoundary" in definition) {
-      const plan = await invoke(definition.writeBoundary.previewKey, { work });
-      expect(plan).toMatchObject({ result: { previewOnly: true } });
-      expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
-    }
-    await invoke(commandKey, { work });
-    if (commandKey === "takeoffs.sync") {
-      expect(synced).toBe(true);
-      expect(calls).toEqual([{ key: "takeoffs.rhvac-links", action: commandKey,
-        input: { writes: [{ elementId: 21, link: expect.objectContaining({ identifier: 101, fileIdentity: "recorded.r10#recorded" }) }] } }]);
-      return;
-    }
-    expect(calls[0]).toEqual({ key: "takeoffs.initialize-carrier", input: {
-      stage: commandKey === "takeoffs.initialize" ? intent.stage : commandKey === "takeoffs.partition" ? "Materialization" : commandKey.startsWith("rooms.") ? "Rooms" : "Adoption",
-    }, action: commandKey });
-    expect(calls.map(row => row.key)).toEqual(commandKey === "takeoffs.initialize"
-      ? ["takeoffs.initialize-carrier"] : ["takeoffs.initialize-carrier", commandKey]);
-    if (commandKey === "rooms.write") {
-      expect(calls[1]).toEqual({ key: "rooms.write", action: commandKey, input: { regions: recordedRoomWrites.map(({ guid, name }) => ({ guid, name })) } });
-      expect((await workspace.read(key, route))!.doc).toMatchObject({ edits: {
-        [roomEditKey(recordedRoomWrites[1]!.guid, "name")]: { edit: { value: recordedRoomWrites[1]!.name } },
-      } });
-    }
-  } finally {
-    await native.close();
-    runs.closeAll(); bindControl({ runs: undefined });
-    await rm(dir, { recursive: true, force: true });
-  }
-}, 60_000);
+  },
+  60_000,
+);
 
 // Only recorded native inputs and the address bar are adapters. Work, HTTP, SSE,
 // the action registry, consent, journal and typed mount all run their production code.
@@ -292,7 +478,8 @@ async function journey(module: TypedRoute = fans) {
             for (const line of frame.split("\n"))
               if (line.startsWith("data: ")) {
                 const frame = JSON.parse(line.slice(6));
-                if (streamHeld) streamQueue.push(() => deliver(frame)); else deliver(frame);
+                if (streamHeld) streamQueue.push(() => deliver(frame));
+                else deliver(frame);
               }
           }
         }
@@ -317,22 +504,45 @@ async function journey(module: TypedRoute = fans) {
   const writes: WorkWrite[] = [];
   const work = createWorkFeedClient(source, {
     write: async (key, body) => {
-      const held = heldWrite; heldWrite = undefined;
+      const held = heldWrite;
+      heldWrite = undefined;
       writes.push(structuredClone(body));
-      const before = beforeWrite; beforeWrite = undefined;
-      if (before) { before.entered.resolve(); await before.release.promise; }
+      const before = beforeWrite;
+      beforeWrite = undefined;
+      if (before) {
+        before.entered.resolve();
+        await before.release.promise;
+      }
       const result = await write(key, body);
-      if (held) { held.entered.resolve(); await held.release.promise; }
+      if (held) {
+        held.entered.resolve();
+        await held.release.promise;
+      }
       return result;
     },
     submit: async (command) => {
       submits.push(command.key);
       if (answered?.key === command.key) {
-        const held = answered.held; answered.held = undefined;
-        if (held) { held.entered.resolve(); await held.release.promise; }
-        return actionReceiptSchema.parse({ state: "succeeded", result: answered.result, id: command.id, key: command.key,
-          caller: who, basis: null, target: command.target, input: command.input, steps: [],
-          prepared: { state: "unprepared" }, recovery: [], startedAt: new Date().toISOString() });
+        const held = answered.held;
+        answered.held = undefined;
+        if (held) {
+          held.entered.resolve();
+          await held.release.promise;
+        }
+        return actionReceiptSchema.parse({
+          state: "succeeded",
+          result: answered.result,
+          id: command.id,
+          key: command.key,
+          caller: who,
+          basis: null,
+          target: command.target,
+          input: command.input,
+          steps: [],
+          prepared: { state: "unprepared" },
+          recovery: [],
+          startedAt: new Date().toISOString(),
+        });
       }
       const response = await request("/actions", command);
       expect([200, 202], await response.clone().text()).toContain(response.status);
@@ -368,14 +578,24 @@ async function journey(module: TypedRoute = fans) {
     address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => current },
     memory: () => ({
-      fan: { kind: "ids", ids: [stableFanKey({ uniqueId: fan.uniqueId, portIndex: fan.portIndex })] },
+      fan: {
+        kind: "ids",
+        ids: [stableFanKey({ uniqueId: fan.uniqueId, portIndex: fan.portIndex })],
+      },
     }),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
-  const mount = (readOnly = false, place: Partial<PlaceInput> = {}, ports: Parameters<typeof mountTypedRoute>[3] = {}, candidate: TypedRoute = module) => {
+  const mount = (
+    readOnly = false,
+    place: Partial<PlaceInput> = {},
+    ports: Parameters<typeof mountTypedRoute>[3] = {},
+    candidate: TypedRoute = module,
+  ) => {
     const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
-      work, timeline: fixtureTimeline(host.workspace),
-      sources: { "fans.calc": read }, ...ports,
+      work,
+      timeline: fixtureTimeline(host.workspace),
+      sources: { "fans.calc": read },
+      ...ports,
     });
     mounts.push(m);
     m.subscribe(() => {});
@@ -411,14 +631,30 @@ async function journey(module: TypedRoute = fans) {
     key,
     writes,
     settle: () => Promise.allSettled([...pending]),
-    holdBeforeWrite() { beforeWrite = gate(); return beforeWrite; },
-    holdStream() { streamHeld = true; },
-    flushStream() { streamHeld = false; streamQueue.splice(0).forEach(deliver => deliver()); },
-    holdWrite() { heldWrite = gate(); return heldWrite; },
+    holdBeforeWrite() {
+      beforeWrite = gate();
+      return beforeWrite;
+    },
+    holdStream() {
+      streamHeld = true;
+    },
+    flushStream() {
+      streamHeld = false;
+      streamQueue.splice(0).forEach((deliver) => deliver());
+    },
+    holdWrite() {
+      heldWrite = gate();
+      return heldWrite;
+    },
     /** The door answers `key` itself with `result`, and never asks the host. */
-    answer(key: string, result: unknown) { answered = { key, result }; },
+    answer(key: string, result: unknown) {
+      answered = { key, result };
+    },
     /** Holds the next answered submit at the door. */
-    holdSubmit() { answered!.held = gate(); return answered!.held; },
+    holdSubmit() {
+      answered!.held = gate();
+      return answered!.held;
+    },
     submits,
     depart() {
       current = false;
@@ -434,7 +670,7 @@ async function journey(module: TypedRoute = fans) {
     },
     async close() {
       // Refused intents outlive a Place in production, but not this disposable host fixture.
-      mounts.forEach(m => m.pendingEdits().forEach(intent => m.discardIntent(intent.id)));
+      mounts.forEach((m) => m.pendingEdits().forEach((intent) => m.discardIntent(intent.id)));
       mounts.forEach((m) => m.dispose());
       streams.forEach((stop) => stop());
       await Promise.allSettled([...pending]);
@@ -450,32 +686,46 @@ test("JZ release reads preserves Work edits until departure or disposal", async 
   const j = await journey();
   try {
     await j.start();
-    const cells = j.cells(), token = cells.basis!;
+    const cells = j.cells(),
+      token = cells.basis!;
     const revision = j.m.owner()!.handle!.revision;
     j.m.release();
     expect(j.m.current(token)).toBe(true);
-    expect(await cells.at(["flows", terminalA]).stage(270, { label: "Edit after read release" })).toBeNull();
+    expect(
+      await cells.at(["flows", terminalA]).stage(270, { label: "Edit after read release" }),
+    ).toBeNull();
     expect(j.m.available()).toBe(true);
     expect(j.m.owner()!.handle!.revision).toBe(revision + 1);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(270);
     // Read release does not relax the captured revision fence.
-    expect(await cells.at(["flows", terminalA]).stage(280, { label: "Old draw" })).toMatchObject({ code: "refused" });
+    expect(await cells.at(["flows", terminalA]).stage(280, { label: "Old draw" })).toMatchObject({
+      code: "refused",
+    });
     const reopened = j.mount(false, { custody: { current: () => true } });
     await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
     expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
     expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual(270);
-    const stop = j.m.subscribe(() => {}); stop();
+    const stop = j.m.subscribe(() => {});
+    stop();
     await j.ready();
     const retained = j.cells().at(["flows", terminalA]);
     j.depart();
-    expect(await retained.stage(290, { label: "After departure" })).toMatchObject({ code: "refused" });
+    expect(await retained.stage(290, { label: "After departure" })).toMatchObject({
+      code: "refused",
+    });
     await vi.waitFor(() => expect(reopened.workBasis()).toBeTruthy());
-    const disposedCell = (reopened.draw("calc-inputs", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"]).at(["flows", terminalA]);
+    const disposedCell = (
+      reopened.draw("calc-inputs", (ctx) => ctx.cells) as DrawContext<any, any, any, any>["cells"]
+    ).at(["flows", terminalA]);
     reopened.dispose();
-    expect(await disposedCell.stage(300, { label: "After disposal" })).toMatchObject({ code: "refused" });
+    expect(await disposedCell.stage(300, { label: "After disposal" })).toMatchObject({
+      code: "refused",
+    });
     expect(reopened.owner()!.handle!.revision).toBe(revision + 1);
     expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual(270);
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JW1 edit typed flows and race two atomic HTTP writes at the accepted revision", async () => {
@@ -547,12 +797,19 @@ test("JM B06 complete an acknowledged HTTP edit after its typed Page is disposed
     const retired = structuredClone(j.m.owner()!.doc);
     held.release.resolve();
     await writing;
-    expect(j.m.owner()!.doc, "B06: a retired pane cannot receive a late Work completion").toEqual(retired);
+    expect(j.m.owner()!.doc, "B06: a retired pane cannot receive a late Work completion").toEqual(
+      retired,
+    );
     const replacement = j.mount();
     await vi.waitFor(() => expect(replacement.owner()?.ready).toBe(true));
-    expect(replacement.owner()!.doc.flows[terminalA].edit.value,
-      "H03: the host acknowledgement stays durable for a new inspection").toEqual(410);
-  } finally { held?.release.resolve(); await j.close(); }
+    expect(
+      replacement.owner()!.doc.flows[terminalA].edit.value,
+      "H03: the host acknowledgement stays durable for a new inspection",
+    ).toEqual(410);
+  } finally {
+    held?.release.resolve();
+    await j.close();
+  }
 }, 60_000);
 
 test("JW2 receive Pea proposals, accept and deny individual cells without changing stored facts", async () => {
@@ -587,7 +844,9 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
     await vi.waitFor(() => expect(j.m.owner()!.handle!.revision).toBeGreaterThan(revision));
     await j.ready();
     const b = structuredClone(j.m.owner()!.doc.flows[terminalB]);
-    expect(j.m.owner()!.doc.flows[terminalA].edit.by, "H20: proposed authorship is Pea").toBe("pea");
+    expect(j.m.owner()!.doc.flows[terminalA].edit.by, "H20: proposed authorship is Pea").toBe(
+      "pea",
+    );
     expect(
       await j.cells().at(["flows", terminalA]).accept({ label: "Take A proposal" }),
       "H20: human takes only A",
@@ -600,7 +859,10 @@ test("JW2 receive Pea proposals, accept and deny individual cells without changi
       "H20: deny removes only pending B",
     ).toBeNull();
     await j.ready();
-    expect(j.m.owner()!.doc.flows[terminalB]?.edit, "H20: deny clears the proposed edit").toBeNull();
+    expect(
+      j.m.owner()!.doc.flows[terminalB]?.edit,
+      "H20: deny clears the proposed edit",
+    ).toBeNull();
     expect(
       valueOf(j.m.value()).calcSnapshot,
       "H20: stored native facts survive proposal transitions",
@@ -615,7 +877,9 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
   const j = await journey();
   try {
     await j.start();
-    expect(await j.cells().at(["flows", terminalA]).stage(240, { label: "Set terminal airflow" })).toBeNull();
+    expect(
+      await j.cells().at(["flows", terminalA]).stage(240, { label: "Set terminal airflow" }),
+    ).toBeNull();
     await j.ready();
     await vi.waitFor(() => expect(j.m.timeline()?.undo).toBeTruthy());
     const step = j.m.timeline()!.undo!;
@@ -623,55 +887,103 @@ test("JM H27 interleave a second writer, refuse the original undo and keep its n
     await j.ready();
     expect(await j.m.stepTimeline("redo"), "H07: host Timeline redoes the offered edit").toBeNull();
     await j.ready();
-    const result = await j.write(j.key(), { kind: "apply", expectedRevision: j.m.owner()!.handle!.revision,
-      press: crypto.randomUUID(), label: "Another designer changes airflow",
-      patches: [{ path: ["flows", terminalA, "edit"], value: { value: 500 } }] });
+    const result = await j.write(j.key(), {
+      kind: "apply",
+      expectedRevision: j.m.owner()!.handle!.revision,
+      press: crypto.randomUUID(),
+      label: "Another designer changes airflow",
+      patches: [{ path: ["flows", terminalA, "edit"], value: { value: 500 } }],
+    });
     expect(result).toMatchObject({ ok: true });
     await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(500));
     await j.ready();
-    const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
+    const before = structuredClone(j.m.owner()!.doc),
+      revision = j.m.owner()!.handle!.revision;
     const undo = await j.host.workspace.step([j.key()], "human", "undo", step, async () => []);
-    expect(undo, "H27: a changed affected path refuses its original inverse").toMatchObject({ ok: false });
+    expect(undo, "H27: a changed affected path refuses its original inverse").toMatchObject({
+      ok: false,
+    });
     expect(j.m.owner()!.doc, "H27: conflicting undo changes no path").toEqual(before);
-    expect(j.m.owner()!.handle!.revision, "H27: no inverse retry writes a new revision").toBe(revision);
-    expect(j.m.timeline()!.rows.some(entry => "work" in entry && entry.kind === "edit" && entry.revision === ("revision" in step ? step.revision : -1)), "H27: the named entry survives refusal").toBe(true);
-  } finally { await j.close(); }
+    expect(j.m.owner()!.handle!.revision, "H27: no inverse retry writes a new revision").toBe(
+      revision,
+    );
+    expect(
+      j.m
+        .timeline()!
+        .rows.some(
+          (entry) =>
+            "work" in entry &&
+            entry.kind === "edit" &&
+            entry.revision === ("revision" in step ? step.revision : -1),
+        ),
+      "H27: the named entry survives refusal",
+    ).toBe(true);
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JM H01/H13 hide one document, inspect another and reopen the first named Work history", async () => {
   const j = await journey();
   try {
     await j.start();
-    expect(await j.cells().at(["flows", terminalA]).stage(240, { label: "Terminal A design airflow" })).toBeNull();
+    expect(
+      await j.cells().at(["flows", terminalA]).stage(240, { label: "Terminal A design airflow" }),
+    ).toBeNull();
     await j.ready();
     const firstKey = j.m.owner()!.scope.key;
     j.m.release();
-    const other = j.mount(false, { work: { address: path.replace("Chadds", "Other") as typeof path, open: ref } });
+    const other = j.mount(false, {
+      work: { address: path.replace("Chadds", "Other") as typeof path, open: ref },
+    });
     await vi.waitFor(() => expect(other.owner()?.absent).toBe(true));
-    expect(other.owner()!.scope.key, "H01: a second document acquires its own Work").not.toEqual(firstKey);
-    expect(j.m.owner()!.scope.key, "H01: a hidden Place cannot acquire the active document's Work").toEqual(firstKey);
+    expect(other.owner()!.scope.key, "H01: a second document acquires its own Work").not.toEqual(
+      firstKey,
+    );
+    expect(
+      j.m.owner()!.scope.key,
+      "H01: a hidden Place cannot acquire the active document's Work",
+    ).toEqual(firstKey);
     other.dispose();
     const reopened = j.mount();
     await vi.waitFor(() => expect(reopened.owner()?.ready).toBe(true));
     expect(reopened.owner()!.scope.key).toEqual(firstKey);
     expect(reopened.owner()!.doc.flows[terminalA].edit.value).toEqual(240);
-    await vi.waitFor(() => expect(JSON.stringify(reopened.timeline()), "H13: cold reopening retains the human action label").toContain("Terminal A design airflow"));
-  } finally { await j.close(); }
+    await vi.waitFor(() =>
+      expect(
+        JSON.stringify(reopened.timeline()),
+        "H13: cold reopening retains the human action label",
+      ).toContain("Terminal A design airflow"),
+    );
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JM H12 leave a Page with drawn cells, inspect it, and refuse both old edits and native planning", async () => {
   const j = await journey();
   try {
     await j.start();
-    const cell = j.cells().at(["flows", terminalA]), before = structuredClone(j.m.owner()!.doc);
+    const cell = j.cells().at(["flows", terminalA]),
+      before = structuredClone(j.m.owner()!.doc);
     const receipts = (await j.journal.list()).length;
     j.depart();
     expect(valueOf(j.m.value()), "H12: departure preserves inspection").toBeDefined();
-    expect(await cell.stage(700, { label: "Late airflow" }), "H12: captured cell cannot write after departure").toMatchObject({ code: "refused" });
-    await expect(planned(j.m.verb("losses")).plan(), "H12: departure cannot acquire a new native plan").rejects.toThrow("Place");
+    expect(
+      await cell.stage(700, { label: "Late airflow" }),
+      "H12: captured cell cannot write after departure",
+    ).toMatchObject({ code: "refused" });
+    await expect(
+      planned(j.m.verb("losses")).plan(),
+      "H12: departure cannot acquire a new native plan",
+    ).rejects.toThrow("Place");
     expect(j.m.owner()!.doc).toEqual(before);
-    expect((await j.journal.list()).length, "H12: neither path submits a native action").toBe(receipts);
-  } finally { await j.close(); }
+    expect((await j.journal.list()).length, "H12: neither path submits a native action").toBe(
+      receipts,
+    );
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JM H30 refuse a stale drawn edit and retain its original intent across refresh", async () => {
@@ -679,21 +991,31 @@ test("JM H30 refuse a stale drawn edit and retain its original intent across ref
   try {
     await j.start();
     const old = j.cells().at(["flows", terminalA]);
-    expect(await j.cells().at(["flows", terminalB]).stage(300, { label: "Newer sibling edit" })).toBeNull();
+    expect(
+      await j.cells().at(["flows", terminalB]).stage(300, { label: "Newer sibling edit" }),
+    ).toBeNull();
     await j.ready();
     const before = structuredClone(j.m.owner()!.doc);
-    expect(await old.stage(731, { label: "Keep my original airflow" })).toMatchObject({ code: "refused" });
+    expect(await old.stage(731, { label: "Keep my original airflow" })).toMatchObject({
+      code: "refused",
+    });
     await j.ready();
     expect(j.m.owner()!.doc, "H30: stale intent never recomputes on newer Work").toEqual(before);
-    expect(JSON.stringify(j.m.pendingEdits()), "H30: rejected input remains inspectable until explicit discard").toContain("Keep my original airflow");
-  } finally { await j.close(); }
+    expect(
+      JSON.stringify(j.m.pendingEdits()),
+      "H30: rejected input remains inspectable until explicit discard",
+    ).toContain("Keep my original airflow");
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without recompute or retry", async () => {
   const j = await journey();
   try {
     await j.start();
-    const drawn = j.cells(), old = drawn.basis!;
+    const drawn = j.cells(),
+      old = drawn.basis!;
     expect(j.m.current(old)).toBe(true);
     expect(j.m.current({ ...old } as typeof old)).toBe(false);
     const replacement = j.mount();
@@ -701,22 +1023,32 @@ test("JZ C121/C090 drawn authority rejects copied, foreign and old bases without
     expect(replacement.current(old)).toBe(false);
     expect(await drawn.at(["flows", terminalA]).stage(200)).toBeNull();
     await j.ready();
-    const before = structuredClone(j.m.owner()!.doc), count = j.writes.length;
+    const before = structuredClone(j.m.owner()!.doc),
+      count = j.writes.length;
     const edit = 731;
-    expect(await drawn.patch([{ path: ["flows", terminalA, "edit"], value: { value: edit } }],
-      { label: "Original refused airflow" })).toMatchObject({ code: "refused" });
+    expect(
+      await drawn.patch([{ path: ["flows", terminalA, "edit"], value: { value: edit } }], {
+        label: "Original refused airflow",
+      }),
+    ).toMatchObject({ code: "refused" });
     expect(j.m.current(old)).toBe(false);
-    const intent = j.m.pendingEdits().find(i => i.label === "Original refused airflow")!;
+    const intent = j.m.pendingEdits().find((i) => i.label === "Original refused airflow")!;
     expect(intent.input.expectedRevision).toBe(old.workRevision);
-    expect(intent.input.patches).toEqual([{ path: ["flows", terminalA, "edit"], value: { value: edit } }]);
+    expect(intent.input.patches).toEqual([
+      { path: ["flows", terminalA, "edit"], value: { value: edit } },
+    ]);
     expect(Object.isFrozen(intent.input.patches)).toBe(true);
-    expect(await drawn.patch(intent.input.patches, { label: "Retry original refused airflow" })).toMatchObject({ code: "refused" });
+    expect(
+      await drawn.patch(intent.input.patches, { label: "Retry original refused airflow" }),
+    ).toMatchObject({ code: "refused" });
     expect(j.writes).toHaveLength(count);
     expect(j.m.owner()!.doc).toEqual(before);
     j.m.discardIntent(intent.id);
-    expect(j.m.pendingEdits().some(i => i.id === intent.id)).toBe(false);
+    expect(j.m.pendingEdits().some((i) => i.id === intent.id)).toBe(false);
     expect(await j.cells().at(["flows", terminalA]).stage(201)).toBeNull();
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ C122 delayed mounted submit retains its revision after a newer edit", async () => {
@@ -732,73 +1064,128 @@ test("JZ C122 delayed mounted submit retains its revision after a newer edit", a
     await j.ready();
     held.release.resolve();
     expect(await pending).toMatchObject({ code: "refused" });
-    expect(j.writes.slice(-2).map(w => w.expectedRevision)).toEqual([revision, revision]);
+    expect(j.writes.slice(-2).map((w) => w.expectedRevision)).toEqual([revision, revision]);
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(500);
     expect(j.m.pendingEdits().at(-1)!.input.patches).toEqual([
       { path: ["flows", terminalA, "edit"], value: { value: 200 } },
     ]);
-  } finally { held?.release.resolve(); await j.close(); }
+  } finally {
+    held?.release.resolve();
+    await j.close();
+  }
 }, 60_000);
 
-test.each(["ack-first", "stream-first"])("JZ C086 %s delivery and pending departure recover durable Work", async order => {
-  const j = await journey();
-  let held: ReturnType<typeof gate> | undefined;
-  try {
-    await j.start();
-    if (order === "ack-first") j.holdStream(); else held = j.holdWrite();
-    const pending = j.cells().at(["flows", terminalA]).stage(210);
-    if (held) {
+test.each(["ack-first", "stream-first"])(
+  "JZ C086 %s delivery and pending departure recover durable Work",
+  async (order) => {
+    const j = await journey();
+    let held: ReturnType<typeof gate> | undefined;
+    try {
+      await j.start();
+      if (order === "ack-first") j.holdStream();
+      else held = j.holdWrite();
+      const pending = j.cells().at(["flows", terminalA]).stage(210);
+      if (held) {
+        await held.entered.promise;
+        await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(210));
+        held.release.resolve();
+      }
+      expect(await pending).toBeNull();
+      expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(210);
+      j.flushStream();
+      await j.ready();
+      held = j.holdBeforeWrite();
+      const departing = j.cells().at(["flows", terminalA]).stage(310);
       await held.entered.promise;
-      await vi.waitFor(() => expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(210));
+      j.m.dispose();
+      const retired = structuredClone(j.m.owner()!.doc);
       held.release.resolve();
+      expect(await departing).toBeNull();
+      expect(j.m.owner()!.doc).toEqual(retired);
+      const reopened = j.mount();
+      await vi.waitFor(() =>
+        expect(reopened.owner()?.doc.flows[terminalA]?.edit.value).toEqual(310),
+      );
+    } finally {
+      held?.release.resolve();
+      j.flushStream();
+      await j.close();
     }
-    expect(await pending).toBeNull();
-    expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(210);
-    j.flushStream(); await j.ready();
-    held = j.holdBeforeWrite();
-    const departing = j.cells().at(["flows", terminalA]).stage(310);
-    await held.entered.promise;
-    j.m.dispose();
-    const retired = structuredClone(j.m.owner()!.doc);
-    held.release.resolve();
-    expect(await departing).toBeNull();
-    expect(j.m.owner()!.doc).toEqual(retired);
-    const reopened = j.mount();
-    await vi.waitFor(() => expect(reopened.owner()?.doc.flows[terminalA]?.edit.value).toEqual(310));
-  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
-}, 60_000);
+  },
+  60_000,
+);
 
 test("JZ C718/C675/C676/C730 atomic press, Timeline undo, root addressing and locked deletion", async () => {
   const j = await journey();
   try {
     await j.start();
     const original = structuredClone(j.m.owner()!.doc);
-    expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id, "edit"], value: { value: 240 } })),
-      { label: "Both terminals" })).toBeNull();
+    expect(
+      await j.cells().patch(
+        [terminalA, terminalB].map((id) => ({
+          path: ["flows", id, "edit"],
+          value: { value: 240 },
+        })),
+        { label: "Both terminals" },
+      ),
+    ).toBeNull();
     await j.ready();
     await vi.waitFor(() => expect(j.m.timeline()?.undo?.label).toBe("Both terminals"));
     expect(j.writes.at(-1)!.patches).toHaveLength(2);
     expect(await j.m.stepTimeline("undo")).toBeNull();
-    await j.ready(); expect(j.m.owner()!.doc).toEqual(original);
-    expect(await j.cells().patch([terminalA, terminalB].map(id => ({ path: ["flows", id], value: { edit: { value: 250 } } })))).toBeNull();
     await j.ready();
-    const before = structuredClone(j.m.owner()!.doc), steps = j.m.timeline()!.rows.length;
-    for (const [id, action] of [[terminalA, "clear"], [terminalB, "clear"], [terminalA, "delete"]] as const) {
-      expect(await j.cells().at(["flows", id])[action]({ label: `${action} ${id}` })).toBeNull();
+    expect(j.m.owner()!.doc).toEqual(original);
+    expect(
+      await j.cells().patch(
+        [terminalA, terminalB].map((id) => ({
+          path: ["flows", id],
+          value: { edit: { value: 250 } },
+        })),
+      ),
+    ).toBeNull();
+    await j.ready();
+    const before = structuredClone(j.m.owner()!.doc),
+      steps = j.m.timeline()!.rows.length;
+    for (const [id, action] of [
+      [terminalA, "clear"],
+      [terminalB, "clear"],
+      [terminalA, "delete"],
+    ] as const) {
+      expect(
+        await j
+          .cells()
+          .at(["flows", id])
+          [action]({ label: `${action} ${id}` }),
+      ).toBeNull();
       await j.ready();
     }
     expect(j.m.owner()!.doc.flows[terminalA]).toBeUndefined();
     expect(j.m.timeline()!.rows).toHaveLength(steps + 3);
-    for (let i = 0; i < 3; i++) { expect(await j.m.stepTimeline("undo")).toBeNull(); await j.ready(); }
+    for (let i = 0; i < 3; i++) {
+      expect(await j.m.stepTimeline("undo")).toBeNull();
+      await j.ready();
+    }
     expect(j.m.owner()!.doc).toEqual(before);
-    expect(await j.cells().at(["writeIntent"]).stage({ walk: { unitId: 1, portIndex: 0 } })).toBeNull(); await j.ready();
-    const rootBefore = structuredClone(j.m.owner()!.doc), rootSteps = j.m.timeline()!.rows.length;
+    expect(
+      await j
+        .cells()
+        .at(["writeIntent"])
+        .stage({ walk: { unitId: 1, portIndex: 0 } }),
+    ).toBeNull();
+    await j.ready();
+    const rootBefore = structuredClone(j.m.owner()!.doc),
+      rootSteps = j.m.timeline()!.rows.length;
     expect(() => j.cells().at(["foreignRoot"])).toThrow("No owning Work");
-    expect(await j.cells().at(["writeIntent"]).clear()).toBeNull(); await j.ready();
-    expect(await j.cells().at(["writeIntent"]).delete()).toBeNull(); await j.ready();
+    expect(await j.cells().at(["writeIntent"]).clear()).toBeNull();
+    await j.ready();
+    expect(await j.cells().at(["writeIntent"]).delete()).toBeNull();
+    await j.ready();
     expect(j.m.owner()!.doc.writeIntent).toEqual({});
     expect(j.m.timeline()!.rows).toHaveLength(rootSteps + 2);
-    for (let i = 0; i < 2; i++) { expect(await j.m.stepTimeline("undo")).toBeNull(); await j.ready(); }
+    for (let i = 0; i < 2; i++) {
+      expect(await j.m.stepTimeline("undo")).toBeNull();
+      await j.ready();
+    }
     expect(j.m.owner()!.doc).toEqual(rootBefore);
     const locked = j.cells().at(["flows", terminalA], undefined, { readOnly: true });
     const writes = j.writes.length;
@@ -806,41 +1193,65 @@ test("JZ C718/C675/C676/C730 atomic press, Timeline undo, root addressing and lo
     expect(await locked.clear()).toMatchObject({ code: "read-only" });
     expect(j.writes).toHaveLength(writes);
     expect(j.m.owner()!.doc).toEqual(rootBefore);
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 // A command read cannot publish into a Page generation that did not invoke it.
 test("JZ direct query drops a retired Page reply after A-B-A and discloses the refusal", async () => {
   // A verb whose handle reads: the findings list, through the same door as every command.
-  const module = { ...fans, spec: { ...fans.spec, band: [...fans.spec.band, "audit"], verbs: { ...fans.spec.verbs,
-    audit: { handle: handle("findings.list"), label: "Read fan" },
-  } } };
+  const module = {
+    ...fans,
+    spec: {
+      ...fans.spec,
+      band: [...fans.spec.band, "audit"],
+      verbs: { ...fans.spec.verbs, audit: { handle: handle("findings.list"), label: "Read fan" } },
+    },
+  };
   const j = await journey(module);
   try {
     await j.start();
     j.answer("findings.list", { findings: [] });
-    const pageA = j.m.page.read().fan, tokenA = j.m.workBasis()!;
+    const pageA = j.m.page.read().fan,
+      tokenA = j.m.workBasis()!;
     const held = j.holdSubmit();
-    const pending = direct(j.m.verb("audit")).run({}).then(value => ({ value }), error => ({ error }));
+    const pending = direct(j.m.verb("audit"))
+      .run({})
+      .then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
     await held.entered.promise;
     j.m.page.subject({ kind: "ids", ids: [] });
     j.m.page.subject(pageA);
     expect(j.m.current(tokenA), "A-B-A retires the original generation").toBe(false);
     held.release.resolve();
     const outcome = await pending;
-    expect(outcome, "A retired Page's read never answers as a success").toHaveProperty("error", expect.any(Error));
-    expect(j.m.verb("audit").failure, "The waiting user sees why their read did not land").toMatch(/earlier Page/);
+    expect(outcome, "A retired Page's read never answers as a success").toHaveProperty(
+      "error",
+      expect.any(Error),
+    );
+    expect(j.m.verb("audit").failure, "The waiting user sees why their read did not land").toMatch(
+      /earlier Page/,
+    );
     expect(j.writes).toHaveLength(0);
-    await expect(direct(j.m.verb("audit")).run({}), "A fresh invocation answers normally").resolves.toBeDefined();
+    await expect(
+      direct(j.m.verb("audit")).run({}),
+      "A fresh invocation answers normally",
+    ).resolves.toBeDefined();
     expect(j.m.verb("audit").failure).toBeNull();
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ raw Work patch paths and ambiguous operation fields refuse atomically at HTTP", async () => {
   const j = await journey();
   try {
     await j.start();
-    const before = structuredClone(j.m.owner()!.doc), revision = j.m.owner()!.handle!.revision;
+    const before = structuredClone(j.m.owner()!.doc),
+      revision = j.m.owner()!.handle!.revision;
     const patches = [
       { path: ["flows", terminalA], op: "delete", value: { edit: { value: 220 } } },
       { path: ["missing"], value: {} },
@@ -853,20 +1264,31 @@ test("JZ raw Work patch paths and ambiguous operation fields refuse atomically a
     ];
     const outcomes: Array<{ patch: unknown; accepted: boolean }> = [];
     for (const patch of patches) {
-      const response = await j.request(peRouteUrl("work.apply", routeInput(j.key().route, j.key())), {
-        kind: "apply", expectedRevision: j.m.owner()!.handle!.revision, press: crypto.randomUUID(), patches: [patch],
-      });
+      const response = await j.request(
+        peRouteUrl("work.apply", routeInput(j.key().route, j.key())),
+        {
+          kind: "apply",
+          expectedRevision: j.m.owner()!.handle!.revision,
+          press: crypto.randomUUID(),
+          patches: [patch],
+        },
+      );
       const outcome = await response.json();
       outcomes.push({ patch, accepted: response.ok && outcome.ok === true });
     }
-    expect(outcomes.filter(row => row.accepted), "No ambiguous, unsafe or ill-typed path is admitted").toEqual([]);
+    expect(
+      outcomes.filter((row) => row.accepted),
+      "No ambiguous, unsafe or ill-typed path is admitted",
+    ).toEqual([]);
     await j.ready();
     expect(j.m.owner()!.doc).toEqual(before);
     expect(j.m.owner()!.handle!.revision).toBe(revision);
     expect(await j.cells().at(["flows", terminalA]).stage(240)).toBeNull();
     await j.ready();
     expect(j.m.owner()!.doc.flows[terminalA].edit.value).toEqual(240);
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ a null Place target refuses Work before dispatch but still permits client Page moves", async () => {
@@ -875,114 +1297,226 @@ test("JZ a null Place target refuses Work before dispatch but still permits clie
     await j.start();
     const unbound = j.mount(false, { target: null });
     await vi.waitFor(() => expect(unbound.owner()?.ready).toBe(true));
-    expect(unbound.value().state === "ready", "A targetless Page cannot borrow document Value authority").toBe(false);
-    const before = structuredClone(unbound.owner()!.doc), revision = unbound.owner()!.handle!.revision;
+    expect(
+      unbound.value().state === "ready",
+      "A targetless Page cannot borrow document Value authority",
+    ).toBe(false);
+    const before = structuredClone(unbound.owner()!.doc),
+      revision = unbound.owner()!.handle!.revision;
     const count = j.writes.length;
     // The read is value-less, so the shell draws its line and no body: there is no cell to stage through.
     // The refused stage over a held value keeps its witness in rooms.test.tsx ("Unsafe").
     let drew = false;
-    unbound.draw("calc-inputs", () => { drew = true; return null; });
+    unbound.draw("calc-inputs", () => {
+      drew = true;
+      return null;
+    });
     expect(drew, "No target means no body, so no write authority").toBe(false);
     expect(j.writes).toHaveLength(count);
     expect(unbound.owner()!.doc).toEqual(before);
     expect(unbound.owner()!.handle!.revision).toBe(revision);
     unbound.page.query({ calcPath: "inspection-only" });
     expect(unbound.page.read().calcPath).toBe("inspection-only");
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ released reads resume once after custody returns through an unchanged address", async () => {
   const j = await journey();
-  const tasks = new Set<Promise<unknown>>(), listeners = new Set<() => void>();
-  let current = true, reads = 0;
-  const source: UseSource = { kind: "use", open(ctx, deliver) {
-    const generation = ++reads;
-    const task = j.host.send(generation, (ctx.args as { fan: string[] }).fan, undefined, `lease-${generation}`)
-      .then(value => { if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: generation }); });
-    tasks.add(task); void task.finally(() => tasks.delete(task));
-    return () => {};
-  } };
+  const tasks = new Set<Promise<unknown>>(),
+    listeners = new Set<() => void>();
+  let current = true,
+    reads = 0;
+  const source: UseSource = {
+    kind: "use",
+    open(ctx, deliver) {
+      const generation = ++reads;
+      const task = j.host
+        .send(generation, (ctx.args as { fan: string[] }).fan, undefined, `lease-${generation}`)
+        .then((value) => {
+          if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: generation });
+        });
+      tasks.add(task);
+      void task.finally(() => tasks.delete(task));
+      return () => {};
+    },
+  };
   try {
     await j.start();
-    const m = j.mount(false, { custody: { current: () => current }, address: {
-      read: () => new URLSearchParams(), write() {}, subscribe(notify) { listeners.add(notify); return () => { listeners.delete(notify); }; },
-    } }, { sources: { "fans.calc": source } });
+    const m = j.mount(
+      false,
+      {
+        custody: { current: () => current },
+        address: {
+          read: () => new URLSearchParams(),
+          write() {},
+          subscribe(notify) {
+            listeners.add(notify);
+            return () => {
+              listeners.delete(notify);
+            };
+          },
+        },
+      },
+      { sources: { "fans.calc": source } },
+    );
     await Promise.allSettled([...tasks]);
     expect(m.value().state === "ready").toBe(true);
-    const initial = reads, retained = valueOf(m.value());
+    const initial = reads,
+      retained = valueOf(m.value());
     expect(initial).toBeGreaterThan(0);
-    m.release(); current = false;
+    m.release();
+    current = false;
     const stop = m.subscribe(() => {});
     expect(reads, "A hidden Place cannot acquire another native read").toBe(initial);
     expect(valueOf(m.value())).toEqual(retained);
-    current = true; listeners.forEach(notify => notify());
-    await vi.waitFor(() => expect(reads, "Address notification resumes each declared read once").toBe(initial * 2));
+    current = true;
+    listeners.forEach((notify) => notify());
+    await vi.waitFor(() =>
+      expect(reads, "Address notification resumes each declared read once").toBe(initial * 2),
+    );
     await Promise.allSettled([...tasks]);
     expect(m.value().state === "ready").toBe(true);
-    listeners.forEach(notify => notify());
+    listeners.forEach((notify) => notify());
     expect(reads, "An equal current address cannot duplicate the subscription").toBe(initial * 2);
     stop();
-  } finally { await Promise.allSettled(tasks); await j.close(); }
+  } finally {
+    await Promise.allSettled(tasks);
+    await j.close();
+  }
 }, 60_000);
 
-test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late %s Work outcome out of the replacement", async outcome => {
-  const { z } = await import("zod");
-  const { route, field } = await import("@pe/web-kernel/route/typed-route");
-  const j = await journey();
-  let held: ReturnType<typeof gate> | undefined;
-  try {
-    const module = route({ key: "fans", name: "Member Work", directory: fans.spec.directory,
-      fields: { member: field(z.string(), "a", "query", "push") },
-      edits: { ...fans.spec.edits!, owners: {}, value: undefined, seed: () => fans.spec.edits!.work.schema.parse({}), key: page => page.member },
-      panes: { main: { title: "Member", purpose: "Edit one member Work", body: "scroll", draw: () => scrollBody(null) } },
-      layout: { kind: "pane", id: "main" } });
-    const m = j.mount(false, {}, {}, module);
-    await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
-    await m.startAction()!.run();
-    await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
-    const keyA = m.owner()!.handle!.key, revisionA = m.owner()!.handle!.revision;
-    const inspectorA = j.mount(true, {}, {}, module);
-    await vi.waitFor(() => expect(inspectorA.owner()?.ready).toBe(true));
-    const cells = () => m.draw("main", ctx => ctx.cells) as DrawContext<any, any, any, any>["cells"];
-    held = j.holdBeforeWrite();
-    const pending = cells().at(["flows", terminalA]).stage(210, { label: "Member A delayed edit" });
-    await held.entered.promise;
-    m.page.query({ member: "b" });
-    await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
-    await m.startAction()!.run();
-    await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
-    expect(await cells().at(["flows", terminalA]).stage(520, { label: "Member B edit" })).toBeNull();
-    const before = structuredClone(m.owner()!.doc), handle = m.owner()!.handle!;
-    if (outcome === "refused") expect(await j.write(keyA, { kind: "apply", expectedRevision: revisionA,
-      press: crypto.randomUUID(), patches: [{ path: ["flows", terminalA, "edit"], value: { value: 700 } }] })).toMatchObject({ ok: true });
-    held.release.resolve();
-    const result = await pending;
-    if (outcome === "accepted") expect(result).toBeNull(); else expect(result).toMatchObject({ code: "refused" });
-    expect(m.owner()!.doc, "The replacement never receives the old member's delta").toEqual(before);
-    expect(m.owner()!.handle).toEqual(handle);
-    expect(m.problem()).toBeNull();
-    expect(m.pendingEdits().some(intent => intent.label === "Member A delayed edit")).toBe(false);
-    await vi.waitFor(() => expect(inspectorA.owner()!.doc.flows[terminalA].edit.value).toEqual(outcome === "accepted" ? 210 : 700));
-  } finally { held?.release.resolve(); await j.close(); }
-}, 60_000);
+test.each(["accepted", "refused"] as const)(
+  "JZ audit member switch keeps a late %s Work outcome out of the replacement",
+  async (outcome) => {
+    const { z } = await import("zod");
+    const { route, field } = await import("@pe/web-kernel/route/typed-route");
+    const j = await journey();
+    let held: ReturnType<typeof gate> | undefined;
+    try {
+      const module = route({
+        key: "fans",
+        name: "Member Work",
+        directory: fans.spec.directory,
+        fields: { member: field(z.string(), "a", "query", "push") },
+        edits: {
+          ...fans.spec.edits!,
+          owners: {},
+          value: undefined,
+          seed: () => fans.spec.edits!.work.schema.parse({}),
+          key: (page) => page.member,
+        },
+        panes: {
+          main: {
+            title: "Member",
+            purpose: "Edit one member Work",
+            body: "scroll",
+            draw: () => scrollBody(null),
+          },
+        },
+        layout: { kind: "pane", id: "main" },
+      });
+      const m = j.mount(false, {}, {}, module);
+      await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+      await m.startAction()!.run();
+      await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+      const keyA = m.owner()!.handle!.key,
+        revisionA = m.owner()!.handle!.revision;
+      const inspectorA = j.mount(true, {}, {}, module);
+      await vi.waitFor(() => expect(inspectorA.owner()?.ready).toBe(true));
+      const cells = () =>
+        m.draw("main", (ctx) => ctx.cells) as DrawContext<any, any, any, any>["cells"];
+      held = j.holdBeforeWrite();
+      const pending = cells()
+        .at(["flows", terminalA])
+        .stage(210, { label: "Member A delayed edit" });
+      await held.entered.promise;
+      m.page.query({ member: "b" });
+      await vi.waitFor(() => expect(m.owner()?.absent).toBe(true));
+      await m.startAction()!.run();
+      await vi.waitFor(() => expect(m.owner()?.ready).toBe(true));
+      expect(
+        await cells().at(["flows", terminalA]).stage(520, { label: "Member B edit" }),
+      ).toBeNull();
+      const before = structuredClone(m.owner()!.doc),
+        handle = m.owner()!.handle!;
+      if (outcome === "refused")
+        expect(
+          await j.write(keyA, {
+            kind: "apply",
+            expectedRevision: revisionA,
+            press: crypto.randomUUID(),
+            patches: [{ path: ["flows", terminalA, "edit"], value: { value: 700 } }],
+          }),
+        ).toMatchObject({ ok: true });
+      held.release.resolve();
+      const result = await pending;
+      if (outcome === "accepted") expect(result).toBeNull();
+      else expect(result).toMatchObject({ code: "refused" });
+      expect(m.owner()!.doc, "The replacement never receives the old member's delta").toEqual(
+        before,
+      );
+      expect(m.owner()!.handle).toEqual(handle);
+      expect(m.problem()).toBeNull();
+      expect(m.pendingEdits().some((intent) => intent.label === "Member A delayed edit")).toBe(
+        false,
+      );
+      await vi.waitFor(() =>
+        expect(inspectorA.owner()!.doc.flows[terminalA].edit.value).toEqual(
+          outcome === "accepted" ? 210 : 700,
+        ),
+      );
+    } finally {
+      held?.release.resolve();
+      await j.close();
+    }
+  },
+  60_000,
+);
 
 test("JZ audit a read refuses malformed HTTP Value data and recovers without exposing it", async () => {
   const { route } = await import("@pe/web-kernel/route/typed-route");
-  const j = await journey(), tasks = new Set<Promise<unknown>>();
-  let opened = 0, corrupt = true;
+  const j = await journey(),
+    tasks = new Set<Promise<unknown>>();
+  let opened = 0,
+    corrupt = true;
   const read = { ...fans.spec.core! };
-  const module = route({ ...fans.spec, edits: undefined, verbs: {}, band: [], subject: undefined, reads: {}, core: read,
-    panes: { main: { title: "Explicit Fan read", purpose: "Inspect a demanded Value", read, body: "scroll", draw: () => scrollBody(null) } },
-    layout: { kind: "pane", id: "main" } });
-  const source: UseSource = { kind: "use", open(ctx, deliver) {
-    const id = ++opened;
-    const task = j.host.send(id, (ctx.args as { fan: string[] }).fan, undefined, `explicit-${id}`).then(packet => {
-      const wire = structuredClone(packet);
-      if (corrupt) (wire.value as { data: unknown }).data = 12;
-      if (!ctx.signal.aborted) deliver({ kind: "complete", value: wire, revision: id });
-    });
-    tasks.add(task); void task.finally(() => tasks.delete(task)); return () => {};
-  } };
+  const module = route({
+    ...fans.spec,
+    edits: undefined,
+    verbs: {},
+    band: [],
+    subject: undefined,
+    reads: {},
+    core: read,
+    panes: {
+      main: {
+        title: "Explicit Fan read",
+        purpose: "Inspect a demanded Value",
+        read,
+        body: "scroll",
+        draw: () => scrollBody(null),
+      },
+    },
+    layout: { kind: "pane", id: "main" },
+  });
+  const source: UseSource = {
+    kind: "use",
+    open(ctx, deliver) {
+      const id = ++opened;
+      const task = j.host
+        .send(id, (ctx.args as { fan: string[] }).fan, undefined, `explicit-${id}`)
+        .then((packet) => {
+          const wire = structuredClone(packet);
+          if (corrupt) (wire.value as { data: unknown }).data = 12;
+          if (!ctx.signal.aborted) deliver({ kind: "complete", value: wire, revision: id });
+        });
+      tasks.add(task);
+      void task.finally(() => tasks.delete(task));
+      return () => {};
+    },
+  };
   try {
     const m = j.mount(false, {}, { sources: { "fans.calc": source } }, module);
     await Promise.allSettled([...tasks]);
@@ -993,28 +1527,49 @@ test("JZ audit a read refuses malformed HTTP Value data and recovers without exp
     if (failed.state === "ready") throw Error("Malformed Value became current");
     expect(refusalOf(failed)).toMatch(/reading|contract|unavailable/i);
     expect(refusalOf(failed)).not.toMatch(/ZodError|invalid_type|expected.*object/i);
-    corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
+    corrupt = false;
+    m.refresh(read);
+    await Promise.allSettled([...tasks]);
     expect(m.value().state === "ready").toBe(true);
     const before = valueOf(m.value());
-    corrupt = true; m.refresh(read); await Promise.allSettled([...tasks]);
+    corrupt = true;
+    m.refresh(read);
+    await Promise.allSettled([...tasks]);
     expect(m.value().state === "ready").toBe(false);
-    expect(valueOf(m.value()), "A malformed replacement retains the last decoded Value").toEqual(before);
-    corrupt = false; m.refresh(read); await Promise.allSettled([...tasks]);
+    expect(valueOf(m.value()), "A malformed replacement retains the last decoded Value").toEqual(
+      before,
+    );
+    corrupt = false;
+    m.refresh(read);
+    await Promise.allSettled([...tasks]);
     expect(m.value().state === "ready").toBe(true);
-  } finally { await Promise.allSettled(tasks); await j.close(); }
+  } finally {
+    await Promise.allSettled(tasks);
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ audit validation readiness and per-action busy admission prevent dispatch", async () => {
-  const module = { ...fans, spec: { ...fans.spec, band: [...fans.spec.band, "audit"], verbs: { ...fans.spec.verbs,
-    audit: { handle: handle("findings.list"), label: "Read fan" },
-  } } };
+  const module = {
+    ...fans,
+    spec: {
+      ...fans.spec,
+      band: [...fans.spec.band, "audit"],
+      verbs: { ...fans.spec.verbs, audit: { handle: handle("findings.list"), label: "Read fan" } },
+    },
+  };
   const j = await journey(module);
   const calls = () => j.submits.filter((key) => key === "findings.list").length;
   try {
     await j.ready();
-    expect(await j.cells().at(["flows", terminalA]).stage(220)).toMatchObject({ code: "unavailable" });
+    expect(await j.cells().at(["flows", terminalA]).stage(220)).toMatchObject({
+      code: "unavailable",
+    });
     expect(j.writes).toHaveLength(0);
-    expect(j.m.verb("audit").refusal, "A verb that carries the Work handle refuses before the Work exists").toBe("Start this Work to edit");
+    expect(
+      j.m.verb("audit").refusal,
+      "A verb that carries the Work handle refuses before the Work exists",
+    ).toBe("Start this Work to edit");
     await expect(direct(j.m.verb("audit")).run({})).rejects.toThrow("Start this Work to edit");
     expect(calls(), "A refused press dispatches nothing").toBe(0);
     await j.start();
@@ -1022,19 +1577,27 @@ test("JZ audit validation readiness and per-action busy admission prevent dispat
     const held = j.holdSubmit();
     const first = direct(j.m.verb("audit")).run({});
     await held.entered.promise;
-    const duplicate = direct(j.m.verb("audit")).run({}).then(value => ({ value }), error => ({ error }));
+    const duplicate = direct(j.m.verb("audit"))
+      .run({})
+      .then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
     held.release.resolve();
     await first;
-    expect(await duplicate).toHaveProperty("error", expect.objectContaining({ message: "Action already pending" }));
+    expect(await duplicate).toHaveProperty(
+      "error",
+      expect.objectContaining({ message: "Action already pending" }),
+    );
     expect(calls()).toBe(1);
     expect(j.m.verb("audit").pending).toBe(false);
     await direct(j.m.verb("audit")).run({});
     expect(calls()).toBe(2);
     expect(j.writes).toHaveLength(0);
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
-
-
 
 // Ruling 2026-11-10 (no cross-route write): /fans held /ducts' assumptions as a foreign-owner cell;
 // it no longer does. The foreign-owner seam lives on through /ducts' own `owners.fans`.
@@ -1043,49 +1606,122 @@ test("JZ cut /fans has no foreign /ducts cell: staging one refuses and /ducts Wo
   const j = await journey();
   try {
     await j.start();
-    const cells = j.cells(), key = JOIN_KEY(["10:1", "30:1"]), local = j.m.owner()!.handle;
+    const cells = j.cells(),
+      key = JOIN_KEY(["10:1", "30:1"]),
+      local = j.m.owner()!.handle;
     expect(j.m.owner("duct-systems")).toBeUndefined();
-    expect(() => cells.at(["assumptions", key], "duct-systems")).toThrow("No owning Work for assumptions");
+    expect(() => cells.at(["assumptions", key], "duct-systems")).toThrow(
+      "No owning Work for assumptions",
+    );
     await j.settle();
     expect(j.m.owner()!.handle).toEqual(local);
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JZ cut two Places retain independent Page pose selection Value and inactive URL custody", async () => {
   const { createAdmittedPlace } = await import("../shell/typed-place");
-  const j = await journey(), places: ReturnType<typeof createAdmittedPlace>[] = [];
-  let active = "a", search = new URLSearchParams("target=one"), writes = 0;
+  const j = await journey(),
+    places: ReturnType<typeof createAdmittedPlace>[] = [];
+  let active = "a",
+    search = new URLSearchParams("target=one"),
+    writes = 0;
   const listeners = new Set<() => void>();
-  const address = { read: () => new URLSearchParams(search), write(next: URLSearchParams) { search = new URLSearchParams(next); writes++; listeners.forEach(f => f()); },
-    subscribe(f: () => void) { listeners.add(f); return () => { listeners.delete(f); }; } };
+  const address = {
+    read: () => new URLSearchParams(search),
+    write(next: URLSearchParams) {
+      search = new URLSearchParams(next);
+      writes++;
+      listeners.forEach((f) => f());
+    },
+    subscribe(f: () => void) {
+      listeners.add(f);
+      return () => {
+        listeners.delete(f);
+      };
+    },
+  };
   function place(id: string) {
-    const scope = { pathname: "/fans", search: {}, current: () => active === id, retain() {}, retire(owner: { dispose(): void }) { owner.dispose(); } };
-    const p = createAdmittedPlace<ReturnType<typeof j.mount>>({ scope, address, search: address.read(), visible: true });
+    const scope = {
+      pathname: "/fans",
+      search: {},
+      current: () => active === id,
+      retain() {},
+      retire(owner: { dispose(): void }) {
+        owner.dispose();
+      },
+    };
+    const p = createAdmittedPlace<ReturnType<typeof j.mount>>({
+      scope,
+      address,
+      search: address.read(),
+      visible: true,
+    });
     places.push(p);
-    return { p, m: p.state(() => j.mount(false, { address: p.address, custody: { current: p.current }, memory: p.memory, fixture: p.fixture })) };
+    return {
+      p,
+      m: p.state(() =>
+        j.mount(false, {
+          address: p.address,
+          custody: { current: p.current },
+          memory: p.memory,
+          fixture: p.fixture,
+        }),
+      ),
+    };
   }
   try {
-    const a = place("a"); await j.settle();
-    a.m.page.pose({ contextRadiusFt: 11 }); a.m.page.select([{ kind: "focus", id: "audit:a" }]);
-    await j.settle(); const beforeA = a.m.page.read(), valueA = valueOf(a.m.value()), urlA = address.read();
-    expect(valueA).toBeDefined(); a.p.remember(beforeA); a.p.setVisible(false); a.m.release();
-    active = "b"; address.write(new URLSearchParams("target=two"));
-    const b = place("b"); await j.settle();
-    b.m.page.pose({ contextRadiusFt: 22 }); b.m.page.select([{ kind: "focus", id: "audit:b" }]);
-    await j.settle(); const beforeB = b.m.page.read(), count = writes;
+    const a = place("a");
+    await j.settle();
+    a.m.page.pose({ contextRadiusFt: 11 });
+    a.m.page.select([{ kind: "focus", id: "audit:a" }]);
+    await j.settle();
+    const beforeA = a.m.page.read(),
+      valueA = valueOf(a.m.value()),
+      urlA = address.read();
+    expect(valueA).toBeDefined();
+    a.p.remember(beforeA);
+    a.p.setVisible(false);
+    a.m.release();
+    active = "b";
+    address.write(new URLSearchParams("target=two"));
+    const b = place("b");
+    await j.settle();
+    b.m.page.pose({ contextRadiusFt: 22 });
+    b.m.page.select([{ kind: "focus", id: "audit:b" }]);
+    await j.settle();
+    const beforeB = b.m.page.read(),
+      count = writes;
     a.p.address.write(new URLSearchParams("target=wrong&fixture=changed"), "replace");
     expect(writes, "Inactive callback cannot overwrite the active Place address").toBe(count);
-    expect(a.p.address.read().get("target")).toBe("one"); expect(b.p.address.read().get("target")).toBe("two");
+    expect(a.p.address.read().get("target")).toBe("one");
+    expect(b.p.address.read().get("target")).toBe("two");
     expect(a.p.fixture).toBeNull();
     expect(() => a.m.page.pose({ contextRadiusFt: 99 })).toThrow();
-    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB);
-    expect(valueOf(a.m.value())).toEqual(valueA); expect(a.p.memory()).toEqual(beforeA);
-    active = "none"; address.write(urlA); active = "a"; a.p.setVisible(true);
-    const resumed = a.m.subscribe(() => {}); await j.settle();
-    expect(a.p.state(() => { throw Error("Reveal must retain its typed mount"); })).toBe(a.m);
-    expect(a.m.page.read()).toEqual(beforeA); expect(b.m.page.read()).toEqual(beforeB); expect(a.m.value().state === "ready").toBe(true);
+    expect(a.m.page.read()).toEqual(beforeA);
+    expect(b.m.page.read()).toEqual(beforeB);
+    expect(valueOf(a.m.value())).toEqual(valueA);
+    expect(a.p.memory()).toEqual(beforeA);
+    active = "none";
+    address.write(urlA);
+    active = "a";
+    a.p.setVisible(true);
+    const resumed = a.m.subscribe(() => {});
+    await j.settle();
+    expect(
+      a.p.state(() => {
+        throw Error("Reveal must retain its typed mount");
+      }),
+    ).toBe(a.m);
+    expect(a.m.page.read()).toEqual(beforeA);
+    expect(b.m.page.read()).toEqual(beforeB);
+    expect(a.m.value().state === "ready").toBe(true);
     resumed();
-  } finally { places.forEach(p => p.dispose()); await j.close(); }
+  } finally {
+    places.forEach((p) => p.dispose());
+    await j.close();
+  }
 }, 60_000);
 
 // D17 (fans-reds H1, implementor ruling 2026-11-13): a pick on a drawing the Work has moved past is
@@ -1093,57 +1729,81 @@ test("JZ cut two Places retain independent Page pose selection Value and inactiv
 // redrawn cell takes the same pick. This holds when the move is the mount's own edit, whether or
 // not that edit's reply has landed. Rejected: an own-press rebuild (docs/features/routes/LEDGER.md).
 const picks = (j: Awaited<ReturnType<typeof journey>>) =>
-  j.writes.filter(w => w.kind === "apply" && w.patches.some(p => p.path[0] === "writeIntent"));
-const hostWork = async (j: Awaited<ReturnType<typeof journey>>) => (await j.host.workspace.read(j.key(), "fans"))!;
+  j.writes.filter((w) => w.kind === "apply" && w.patches.some((p) => p.path[0] === "writeIntent"));
+const hostWork = async (j: Awaited<ReturnType<typeof journey>>) =>
+  (await j.host.workspace.read(j.key(), "fans"))!;
 const scope = { walk: { unitId: 1, portIndex: 0 } };
 // The retained input itself, not only its label: an empty or wrong payload must fail.
 const keptPick = (j: Awaited<ReturnType<typeof journey>>) =>
-  j.m.pendingEdits().find(e => e.label === "Write scope")?.input.patches.filter(p => p.path[0] === "writeIntent");
+  j.m
+    .pendingEdits()
+    .find((e) => e.label === "Write scope")
+    ?.input.patches.filter((p) => p.path[0] === "writeIntent");
 const sentPick = (j: Awaited<ReturnType<typeof journey>>) =>
-  picks(j).at(-1)?.patches.filter(p => p.path[0] === "writeIntent");
+  picks(j)
+    .at(-1)
+    ?.patches.filter((p) => p.path[0] === "writeIntent");
 
-test.each(["stream held", "stream free"])("D17 a pick behind the mount's own unacknowledged edit, %s: refused, input retained, and the redrawn cell takes it", async stream => {
-  const j = await journey();
-  let held: ReturnType<typeof gate> | undefined;
-  try {
-    await j.start();
-    if (stream === "stream held") j.holdStream();
-    held = j.holdWrite();
-    const cells = j.cells();
-    const edit = cells.at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" });
-    const pick = cells.at(["writeIntent"]).stage(scope, { label: "Write scope" });
-    await held.entered.promise;
-    held.release.resolve();
-    expect(await edit).toBeNull();
-    expect(await pick).toMatchObject({ code: "refused" });
-    expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ label: "Write scope", status: "refused" })]);
-    const kept = keptPick(j);
-    expect(JSON.stringify(kept)).toContain(JSON.stringify(scope));
-    expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
-    expect(picks(j).length, "the refused pick is never sent again").toBeLessThanOrEqual(1);
-    const sent = picks(j).length;
-    j.flushStream(); await j.ready();
-    // Still not applied after the page followed: only a press on the redrawn cell applies it.
-    expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
-    expect(picks(j)).toHaveLength(sent);
-    expect(await j.cells().at(["writeIntent"]).stage(scope, { label: "Write scope" })).toBeNull();
-    expect((await hostWork(j)).doc).toHaveProperty("writeIntent.edit.value", scope);
-    expect(picks(j)).toHaveLength(sent + 1);
-    expect(sentPick(j), "the retained input is the pick the redrawn press sends").toEqual(kept);
-  } finally { held?.release.resolve(); j.flushStream(); await j.close(); }
-}, 60_000);
+test.each(["stream held", "stream free"])(
+  "D17 a pick behind the mount's own unacknowledged edit, %s: refused, input retained, and the redrawn cell takes it",
+  async (stream) => {
+    const j = await journey();
+    let held: ReturnType<typeof gate> | undefined;
+    try {
+      await j.start();
+      if (stream === "stream held") j.holdStream();
+      held = j.holdWrite();
+      const cells = j.cells();
+      const edit = cells.at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" });
+      const pick = cells.at(["writeIntent"]).stage(scope, { label: "Write scope" });
+      await held.entered.promise;
+      held.release.resolve();
+      expect(await edit).toBeNull();
+      expect(await pick).toMatchObject({ code: "refused" });
+      expect(j.m.pendingEdits()).toEqual([
+        expect.objectContaining({ label: "Write scope", status: "refused" }),
+      ]);
+      const kept = keptPick(j);
+      expect(JSON.stringify(kept)).toContain(JSON.stringify(scope));
+      expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
+      expect(picks(j).length, "the refused pick is never sent again").toBeLessThanOrEqual(1);
+      const sent = picks(j).length;
+      j.flushStream();
+      await j.ready();
+      // Still not applied after the page followed: only a press on the redrawn cell applies it.
+      expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
+      expect(picks(j)).toHaveLength(sent);
+      expect(await j.cells().at(["writeIntent"]).stage(scope, { label: "Write scope" })).toBeNull();
+      expect((await hostWork(j)).doc).toHaveProperty("writeIntent.edit.value", scope);
+      expect(picks(j)).toHaveLength(sent + 1);
+      expect(sentPick(j), "the retained input is the pick the redrawn press sends").toEqual(kept);
+    } finally {
+      held?.release.resolve();
+      j.flushStream();
+      await j.close();
+    }
+  },
+  60_000,
+);
 
 test("D17 a pick after the mount's own edit has landed, on the drawing made before it: refused, input retained, and the redrawn cell takes it", async () => {
   const j = await journey();
   try {
     await j.start();
-    const cells = j.cells(), revision = j.m.owner()!.handle!.revision;
-    expect(await cells.at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" })).toBeNull();
+    const cells = j.cells(),
+      revision = j.m.owner()!.handle!.revision;
+    expect(
+      await cells.at(["flows", terminalA]).stage(240, { label: "Terminal A airflow" }),
+    ).toBeNull();
     await vi.waitFor(async () => expect((await hostWork(j)).revision).toBe(revision + 1));
-    expect(await cells.at(["writeIntent"]).stage(scope, { label: "Write scope" }))
-      .toMatchObject({ code: "refused", message: "Stale accepted Work basis" });
+    expect(await cells.at(["writeIntent"]).stage(scope, { label: "Write scope" })).toMatchObject({
+      code: "refused",
+      message: "Stale accepted Work basis",
+    });
     expect(picks(j), "never sent").toHaveLength(0);
-    expect(j.m.pendingEdits()).toEqual([expect.objectContaining({ label: "Write scope", status: "refused" })]);
+    expect(j.m.pendingEdits()).toEqual([
+      expect.objectContaining({ label: "Write scope", status: "refused" }),
+    ]);
     const kept = keptPick(j);
     expect(JSON.stringify(kept)).toContain(JSON.stringify(scope));
     expect((await hostWork(j)).doc).not.toHaveProperty("writeIntent.edit");
@@ -1151,5 +1811,7 @@ test("D17 a pick after the mount's own edit has landed, on the drawing made befo
     expect(await j.cells().at(["writeIntent"]).stage(scope, { label: "Write scope" })).toBeNull();
     expect((await hostWork(j)).doc).toHaveProperty("writeIntent.edit.value", scope);
     expect(sentPick(j), "the retained input is the pick the redrawn press sends").toEqual(kept);
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 }, 60_000);

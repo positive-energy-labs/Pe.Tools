@@ -65,65 +65,75 @@ test("/captures serves the store only: a navigation is the SPA, a caller path ne
 });
 
 // This replay also needs the immutable captured PNG at its recorded path. No path/body synthesis.
-test.skipIf(!existsSync((nativeRecordings("retained-view-image").responses["revit.context.view-image"] as { filePath: string }).filePath))(
-  "a full picture service refuses recorded /call output without advertising an unkept capture (UNPROVEN if retained asset unavailable)", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-capture-full-"));
-  const native = await fixtureNative(join(dir, "native"), "retained-view-image");
-  const socket = await native.connect();
-  const scope = { bridgeSessionId: socket.target.session, openDocumentId: socket.target.openId };
-  const { bridge, journal } = native;
-  let store!: PictureCaptureStore["Service"];
-  const web = HttpRouter.toWebHandler(
-    Layer.mergeAll(
-      callRouteOver(journal, undefined, { sdk: sdkSessions }),
-      Layer.effectDiscard(
-        Effect.map(PictureCaptureStore, (value) => {
-          store = value;
-        }),
+test.skipIf(
+  !existsSync(
+    (
+      nativeRecordings("retained-view-image").responses["revit.context.view-image"] as {
+        filePath: string;
+      }
+    ).filePath,
+  ),
+)(
+  "a full picture service refuses recorded /call output without advertising an unkept capture (UNPROVEN if retained asset unavailable)",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "pe-capture-full-"));
+    const native = await fixtureNative(join(dir, "native"), "retained-view-image");
+    const socket = await native.connect();
+    const scope = { bridgeSessionId: socket.target.session, openDocumentId: socket.target.openId };
+    const { bridge, journal } = native;
+    let store!: PictureCaptureStore["Service"];
+    const web = HttpRouter.toWebHandler(
+      Layer.mergeAll(
+        callRouteOver(journal, undefined, { sdk: sdkSessions }),
+        Layer.effectDiscard(
+          Effect.map(PictureCaptureStore, (value) => {
+            store = value;
+          }),
+        ),
+      ).pipe(
+        nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
+        Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
+        Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "store")), 0)),
+        HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
+        Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
       ),
-    ).pipe(
-      nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
-      Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "store")), 0)),
-      HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
-      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-    ),
-    { disableLogger: true },
-  );
-  try {
-    const response = await web.handler(
-      new Request("http://host/call", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-pe-bridge-session-id": scope.bridgeSessionId,
-          "x-pe-open-document-id": scope.openDocumentId,
-        },
-        body: JSON.stringify({ key: "revit.context.view-image", request: {} }),
-      }),
-      Context.make(
-        RequestIdentity,
-        admittedRequestIdentity({ kind: "human", via: "local" }, scope),
-      ),
+      { disableLogger: true },
     );
-    expect(response.status, await response.clone().text()).toBe(409);
-    expect(await response.json()).toMatchObject({
-      message: expect.stringContaining("Picture store is full"),
-    });
-    expect(response.headers.get("x-pe-capture-id")).toBeNull();
-    expect(await store.list()).toEqual([]);
-  } finally {
-    await journal.close();
-    await web.dispose();
-    await native.close();
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+    try {
+      const response = await web.handler(
+        new Request("http://host/call", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-pe-bridge-session-id": scope.bridgeSessionId,
+            "x-pe-open-document-id": scope.openDocumentId,
+          },
+          body: JSON.stringify({ key: "revit.context.view-image", request: {} }),
+        }),
+        Context.make(
+          RequestIdentity,
+          admittedRequestIdentity({ kind: "human", via: "local" }, scope),
+        ),
+      );
+      expect(response.status, await response.clone().text()).toBe(409);
+      expect(await response.json()).toMatchObject({
+        message: expect.stringContaining("Picture store is full"),
+      });
+      expect(response.headers.get("x-pe-capture-id")).toBeNull();
+      expect(await store.list()).toEqual([]);
+    } finally {
+      await journal.close();
+      await web.dispose();
+      await native.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
 
 test.each([
   "Work start validates seeds and cannot overwrite a winner under an open run",
   "Pea work.start publishes a cell-bearing seed stamped with pea",
-])("%s", async witness => {
+])("%s", async (witness) => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-start-"));
   const workspace = new RouteWorkspace({
     registrations: [],
@@ -181,7 +191,9 @@ test.each([
   };
   try {
     if (witness.startsWith("Pea")) {
-      expect((await invoke("pea-seed", { count: 1, cell: { edit: { value: "Pea's value" } } })).state).toBe("succeeded");
+      expect(
+        (await invoke("pea-seed", { count: 1, cell: { edit: { value: "Pea's value" } } })).state,
+      ).toBe("succeeded");
       expect(await workspace.readRaw(key, "sample")).toMatchObject({
         doc: { cell: { edit: { value: "Pea's value", by: "pea", base: 0 } } },
       });
@@ -220,7 +232,14 @@ test("a torn last receipt line leaves every other receipt listed, posts one noti
   );
   const list = () =>
     web.handler(new Request("http://host/captures"), Context.make(PictureCaptureStore, store));
-  const facts = { origin: "human", document: { title: "Sample.rvt" }, view: { name: "Level 1" }, focus: null, registration: null, marks: [] };
+  const facts = {
+    origin: "human",
+    document: { title: "Sample.rvt" },
+    view: { name: "Level 1" },
+    focus: null,
+    registration: null,
+    marks: [],
+  };
   const receipts = join(root, "receipts.jsonl");
   const posted = () =>
     storedNotices(stateMachine(receipts)).filter((notice) => notice.path === receipts);
@@ -234,21 +253,18 @@ test("a torn last receipt line leaves every other receipt listed, posts one noti
     for (const _ of [1, 2]) {
       const response = await list();
       expect(response.status, await response.clone().text()).toBe(200);
-      expect((await response.json()).captures.map((receipt: { id: string }) => receipt.id)).toEqual([
-        second.id,
-        first.id,
-      ]);
+      expect((await response.json()).captures.map((receipt: { id: string }) => receipt.id)).toEqual(
+        [second.id, first.id],
+      );
     }
     expect(await readFile(receipts)).toEqual(bytes);
     expect(posted()).toMatchObject([{ class: "keep", place: "Capture receipts" }]);
 
     // Appends continue after it: the next taking is listed, and the torn line is still there.
     const third = await store.keep(Buffer.from("three"), facts);
-    expect((await (await list()).json()).captures.map((receipt: { id: string }) => receipt.id)).toEqual([
-      third.id,
-      second.id,
-      first.id,
-    ]);
+    expect(
+      (await (await list()).json()).captures.map((receipt: { id: string }) => receipt.id),
+    ).toEqual([third.id, second.id, first.id]);
     expect((await readFile(receipts, "utf8")).includes('{"id":"torn","sha":"\n')).toBe(true);
     expect(posted()).toHaveLength(1);
   } finally {

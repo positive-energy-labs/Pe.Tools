@@ -29,11 +29,14 @@ const revitScope = (scope: Target["scope"] | undefined) => ({
 
 export type { ShowElementsResult } from "./element-target.ts";
 
-type Submit = (admission: ActionAdmission, base: string, waitMs: number) => Promise<ActionReceipt | DetachedAction>;
+type Submit = (
+  admission: ActionAdmission,
+  base: string,
+  waitMs: number,
+) => Promise<ActionReceipt | DetachedAction>;
 export const ElementActionSubmission = createContext<Submit>(() => {
   throw Error("This surface has no action submission port.");
 });
-
 
 /**
  * `refProps` for kit `SubjectText`: each Subject token answers this menu with its own element and
@@ -124,12 +127,21 @@ const typing = (el: Element | null) =>
 
 export function useShowInRevit() {
   const submit = useContext(ElementActionSubmission);
-  return useCallback((target: Target, selectOnly: boolean) => showInRevit(target, selectOnly, submit), [submit]);
+  return useCallback(
+    (target: Target, selectOnly: boolean) => showInRevit(target, selectOnly, submit),
+    [submit],
+  );
 }
 
 export function ElementMenu() {
   const show = useShowInRevit();
-  const [menu, setMenu] = useState<{ target: Target | null; code: string | null; route: string | null; x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    target: Target | null;
+    code: string | null;
+    route: string | null;
+    x: number;
+    y: number;
+  } | null>(null);
   const count = menu?.target
     ? new Set([...menu.target.ids, ...(menu.target.refs ?? []).map((ref) => ref.elementId)]).size
     : 0;
@@ -139,12 +151,15 @@ export function ElementMenu() {
   const [said, setSaid] = useState<{ text: string; x: number; y: number } | null>(null);
   const caret = useRef<HTMLSpanElement>(null);
   // The answer stands by the pointer: what Revit did, or why it refused.
-  const run = useCallback((target: Target, selectOnly: boolean, x: number, y: number) => {
-    setSaid({ text: selectOnly ? "selecting…" : "boxing…", x, y });
-    void show(target, selectOnly).then((result) =>
-      setSaid({ text: showElementsMessage(result), x, y }),
-    );
-  }, [show]);
+  const run = useCallback(
+    (target: Target, selectOnly: boolean, x: number, y: number) => {
+      setSaid({ text: selectOnly ? "selecting…" : "boxing…", x, y });
+      void show(target, selectOnly).then((result) =>
+        setSaid({ text: showElementsMessage(result), x, y }),
+      );
+    },
+    [show],
+  );
 
   useEffect(() => {
     let pointer: Element | null = null;
@@ -157,7 +172,8 @@ export function ElementMenu() {
       const node = event.target instanceof Element ? event.target : null;
       const raw = node?.closest("[data-subject]")?.getAttribute("data-subject");
       const code = raw && decode(raw).ok ? raw : null;
-      const route = node?.closest("[data-findings-route]")?.getAttribute("data-findings-route") ?? null;
+      const route =
+        node?.closest("[data-findings-route]")?.getAttribute("data-findings-route") ?? null;
       if (!target && !(code && route)) return;
       event.preventDefault();
       setMenu({ target, code, route, x: event.clientX, y: event.clientY });
@@ -230,7 +246,10 @@ export function ElementMenu() {
             if (!next) setMenu(null);
           }}
           aria-label={menu.target ? `Revit ${subject}` : "Subject actions"}
-          items={[...(menu.target ? VERBS : []), ...(menu.code && menu.route ? [{ key: "findings", label: "Findings" }] : [])]}
+          items={[
+            ...(menu.target ? VERBS : []),
+            ...(menu.code && menu.route ? [{ key: "findings", label: "Findings" }] : []),
+          ]}
           keyOf={(verb) => verb.key}
           labelOf={(verb) => verb.label}
           filter="none"
@@ -250,13 +269,18 @@ export function ElementMenu() {
               ),
             lead: verb.key === "select" ? <SelectInRevitIcon aria-hidden /> : undefined,
             title:
-              verb.key === "findings" ? "Read and write findings on this subject" : verb.key === "box"
-                ? SECTION_BOX_LABEL
-                : `select ${subject} in Revit; the view stays as it is`,
+              verb.key === "findings"
+                ? "Read and write findings on this subject"
+                : verb.key === "box"
+                  ? SECTION_BOX_LABEL
+                  : `select ${subject} in Revit; the view stays as it is`,
           })}
           onPick={(verb) => {
             setMenu(null);
-            if (verb.key === "findings") document.dispatchEvent(new CustomEvent("pe:findings", { detail: { code: menu.code, route: menu.route } }));
+            if (verb.key === "findings")
+              document.dispatchEvent(
+                new CustomEvent("pe:findings", { detail: { code: menu.code, route: menu.route } }),
+              );
             else if (menu.target) run(menu.target, verb.selectOnly ?? false, menu.x, menu.y);
           }}
         />
@@ -291,7 +315,8 @@ export function SelectionBoxButton({ target }: { target: Target }) {
       {...revitScope(target.scope)}
       {...revitTarget(target.ids, target.refs)}
     >
-      <Button kind="quiet"
+      <Button
+        kind="quiet"
         busy={busy}
         refusal={prepared.kind === "refused" ? prepared.message : null}
         label={SELECTION_BOX_LABEL}

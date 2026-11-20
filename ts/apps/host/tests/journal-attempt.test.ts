@@ -23,33 +23,65 @@ test("unpinning mid-action refuses the next journal step", async () => {
   const lifetime = { session: "S", openId: "D" };
   let pin: typeof lifetime | null = lifetime;
   bindControl({ pagePin: async () => pin });
-  const minted = mintPageDoor("page:@pages/pin", { kind: "pinned", ref: lifetime }, "/pages/pin/act", true, lifetime);
+  const minted = mintPageDoor(
+    "page:@pages/pin",
+    { kind: "pinned", ref: lifetime },
+    "/pages/pin/act",
+    true,
+    lifetime,
+  );
   const first = Deferred.makeUnsafe<void>();
   const entered: string[] = [];
-  const f = await fixture(undefined, false, { probe: async () => null, resolve: () => command(
-    { says: "Two steps", needs: "document", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }, z.null(), {
-      bind: async () => ({ effects: [] }),
-      run: (_ctx, execution) => execution.step("publication", "first", {}, () => {
-        entered.push("first");
-        return Deferred.await(first);
-      }).pipe(Effect.andThen(() => execution.step("publication", "second", {}, () => {
-        entered.push("second");
-        return Effect.succeed(null);
-      }))),
-    }),
+  const f = await fixture(undefined, false, {
+    probe: async () => null,
+    resolve: () =>
+      command(
+        {
+          says: "Two steps",
+          needs: "document",
+          effect: "command",
+          dirties: [],
+          input: z.record(z.string(), z.unknown()),
+        },
+        z.null(),
+        {
+          bind: async () => ({ effects: [] }),
+          run: (_ctx, execution) =>
+            execution
+              .step("publication", "first", {}, () => {
+                entered.push("first");
+                return Deferred.await(first);
+              })
+              .pipe(
+                Effect.andThen(() =>
+                  execution.step("publication", "second", {}, () => {
+                    entered.push("second");
+                    return Effect.succeed(null);
+                  }),
+                ),
+              ),
+        },
+      ),
   });
   try {
     const identity = callerOf({ kind: "local" }, { "x-pe-context": minted.token });
     if (!("caller" in identity)) throw Error("Page context not minted");
-    const admitted = await f.journal.invoke({ id: "pin-steps", key: "two", target: { kind: "document", ref: lifetime }, input: {} }, {
-      caller: identity.caller, basis: { kind: "person-pin", page: "page:@pages/pin", boundBy: "human", lifetime },
-    });
+    const admitted = await f.journal.invoke(
+      { id: "pin-steps", key: "two", target: { kind: "document", ref: lifetime }, input: {} },
+      {
+        caller: identity.caller,
+        basis: { kind: "person-pin", page: "page:@pages/pin", boundBy: "human", lifetime },
+      },
+    );
     expect(admitted, JSON.stringify(admitted)).toMatchObject({ state: "running" });
     await vi.waitFor(() => expect(entered).toEqual(["first"]));
     minted.retire(); // The journal retained its own caller, as a held action does.
     pin = null;
     Deferred.doneUnsafe(first, Effect.void);
-    expect(await f.journal.wait("pin-steps")).toMatchObject({ state: "failed", refusal: { code: "grant.revoked" } });
+    expect(await f.journal.wait("pin-steps")).toMatchObject({
+      state: "failed",
+      refusal: { code: "grant.revoked" },
+    });
     expect(entered).toEqual(["first"]);
   } finally {
     Deferred.doneUnsafe(first, Effect.void);
@@ -62,27 +94,57 @@ test("unpinning mid-action refuses the next journal step", async () => {
 const human = { kind: "human", via: "local" } as const;
 
 test.each([false, true])("domain refusal after step entry, dispatched=%s", async (dispatched) => {
-  const f = await fixture(undefined, false, { probe: async () => null, resolve: () => command(
-    { says: "Refuse", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }, z.null(), {
-      bind: async () => ({ effects: [] }),
-      run: (_ctx, execution) => execution.step("native", "test.refuse", {}, (id) => Effect.gen(function* () {
-        if (dispatched) yield* Effect.promise(() => markDispatched(id, "bridge"));
-        return yield* Effect.fail(refused("Exact refusal words", "test.refused"));
-      })),
-    }),
+  const f = await fixture(undefined, false, {
+    probe: async () => null,
+    resolve: () =>
+      command(
+        {
+          says: "Refuse",
+          needs: "nothing",
+          effect: "command",
+          dirties: [],
+          input: z.record(z.string(), z.unknown()),
+        },
+        z.null(),
+        {
+          bind: async () => ({ effects: [] }),
+          run: (_ctx, execution) =>
+            execution.step("native", "test.refuse", {}, (id) =>
+              Effect.gen(function* () {
+                if (dispatched) yield* Effect.promise(() => markDispatched(id, "bridge"));
+                return yield* Effect.fail(refused("Exact refusal words", "test.refused"));
+              }),
+            ),
+        },
+      ),
   });
   try {
-    await f.journal.invoke({ id: "refuse", key: "refuse", target: { kind: "host" }, input: {} }, { caller: human, basis: null });
+    await f.journal.invoke(
+      { id: "refuse", key: "refuse", target: { kind: "host" }, input: {} },
+      { caller: human, basis: null },
+    );
     const receipt = await f.journal.wait("refuse");
-    expect(receipt).toMatchObject({ state: dispatched ? "unknown" : "failed", refusal: { code: "test.refused", message: "Exact refusal words" } });
-    expect(receipt.steps[0]).toMatchObject({ state: dispatched ? "unknown" : "failed", error: "Exact refusal words" });
+    expect(receipt).toMatchObject({
+      state: dispatched ? "unknown" : "failed",
+      refusal: { code: "test.refused", message: "Exact refusal words" },
+    });
+    expect(receipt.steps[0]).toMatchObject({
+      state: dispatched ? "unknown" : "failed",
+      error: "Exact refusal words",
+    });
     if (dispatched) expect(receipt.steps[0]).not.toHaveProperty("notDispatched");
     else expect(receipt.steps[0]).toHaveProperty("notDispatched", true);
-  } finally { await f.dispose(); }
+  } finally {
+    await f.dispose();
+  }
 });
 
 // ADR 0029 rule 10, durable command: only the native side is mocked; the journal is its live Layer.
-async function fixture(readOwnership?: ReadOwnership, failAfter = false, environment?: Parameters<ActionJournal["bindCommands"]>[0]) {
+async function fixture(
+  readOwnership?: ReadOwnership,
+  failAfter = false,
+  environment?: Parameters<ActionJournal["bindCommands"]>[0],
+) {
   const dir = await mkdtemp(join(tmpdir(), "pe-attempt-"));
   const host = Scope.makeUnsafe();
   const journal = Context.get(
@@ -91,37 +153,56 @@ async function fixture(readOwnership?: ReadOwnership, failAfter = false, environ
   );
   const native = Deferred.makeUnsafe<unknown, StepFailure>();
   const calls: { key: string; requestId: string }[] = [];
-  const seen: { identity?: RequestIdentityData; interrupted: boolean; cancelsSettled: number } = { interrupted: false, cancelsSettled: 0 };
-  journal.bindCommands(environment ?? {
-    readOwnership,
-    probe: async () => null,
-    resolve: () =>
-      command(
-        { says: "Hold one native write", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
-        z.null(),
-        {
-          bind: async () => ({ effects: [] }),
-          run: (_ctx, execution) =>
-            execution.step("native", "test.hold", {}, (requestId) =>
-              Effect.gen(function* () {
-                seen.identity = yield* RequestIdentity;
-                yield* Effect.promise(() => markDispatched(requestId, "bridge"));
-                calls.push({ key: "test.hold", requestId });
-                return yield* Deferred.await(native);
-              }).pipe(Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true)))),
-            ).pipe(Effect.andThen((result) => failAfter
-              ? Effect.fail(new StepFailure("later step refused", 409, "refused"))
-              : Effect.succeed(result))),
-          // The mock native door: what the registry's `op.cancel` sends to Revit, answered late.
-          cancel: (requestId) =>
-            Effect.sync(() => calls.push({ key: CANCEL_OPERATION_KEY, requestId })).pipe(
-              Effect.andThen(Effect.sleep("300 millis")),
-              Effect.andThen(Effect.sync(() => void seen.cancelsSettled++)),
-              Effect.as({ cancelled: true }),
-            ),
-        },
-      ),
-  });
+  const seen: { identity?: RequestIdentityData; interrupted: boolean; cancelsSettled: number } = {
+    interrupted: false,
+    cancelsSettled: 0,
+  };
+  journal.bindCommands(
+    environment ?? {
+      readOwnership,
+      probe: async () => null,
+      resolve: () =>
+        command(
+          {
+            says: "Hold one native write",
+            needs: "nothing",
+            effect: "command",
+            dirties: [],
+            input: z.record(z.string(), z.unknown()),
+          },
+          z.null(),
+          {
+            bind: async () => ({ effects: [] }),
+            run: (_ctx, execution) =>
+              execution
+                .step("native", "test.hold", {}, (requestId) =>
+                  Effect.gen(function* () {
+                    seen.identity = yield* RequestIdentity;
+                    yield* Effect.promise(() => markDispatched(requestId, "bridge"));
+                    calls.push({ key: "test.hold", requestId });
+                    return yield* Deferred.await(native);
+                  }).pipe(
+                    Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true))),
+                  ),
+                )
+                .pipe(
+                  Effect.andThen((result) =>
+                    failAfter
+                      ? Effect.fail(new StepFailure("later step refused", 409, "refused"))
+                      : Effect.succeed(result),
+                  ),
+                ),
+            // The mock native door: what the registry's `op.cancel` sends to Revit, answered late.
+            cancel: (requestId) =>
+              Effect.sync(() => calls.push({ key: CANCEL_OPERATION_KEY, requestId })).pipe(
+                Effect.andThen(Effect.sleep("300 millis")),
+                Effect.andThen(Effect.sync(() => void seen.cancelsSettled++)),
+                Effect.as({ cancelled: true }),
+              ),
+          },
+        ),
+    },
+  );
   const submitter = admittedRequestIdentity(human, {});
   const holds = () => calls.filter((call) => call.key === "test.hold");
   // The /actions admission fiber: it journals the row, then is aborted with its request once the
@@ -148,9 +229,13 @@ async function fixture(readOwnership?: ReadOwnership, failAfter = false, environ
     submit,
     answer: (value: Effect.Effect<unknown, StepFailure>) => Deferred.doneUnsafe(native, value),
     closeHost: () => settle(Scope.close(host, Exit.void)),
-    reopen: () => new ActionJournal(journalFixture(join(dir, "partition-operations.json")), Date.now),
+    reopen: () =>
+      new ActionJournal(journalFixture(join(dir, "partition-operations.json")), Date.now),
     /** Receipt revisions the host log holds, as JSON text. */
-    logged: () => new HostLog(stateFixture(join(dir, "log")), Date.now).read(0, (entry) => entry.event.kind === "receipt").entries.map((entry) => JSON.stringify(entry.event)),
+    logged: () =>
+      new HostLog(stateFixture(join(dir, "log")), Date.now)
+        .read(0, (entry) => entry.event.kind === "receipt")
+        .entries.map((entry) => JSON.stringify(entry.event)),
     async dispose() {
       // A failed assertion leaves the step held; release it so the scope's join can finish.
       Deferred.doneUnsafe(native, Effect.succeed(null));
@@ -165,7 +250,10 @@ test("aborting the admission after the row is journaled changes nothing; the att
   try {
     const stepId = await f.submit("held");
     f.answer(Effect.succeed({ ok: true }));
-    expect(await f.journal.wait("held")).toMatchObject({ state: "succeeded", steps: [{ id: stepId, state: "succeeded" }] });
+    expect(await f.journal.wait("held")).toMatchObject({
+      state: "succeeded",
+      steps: [{ id: stepId, state: "succeeded" }],
+    });
     expect(f.seen.interrupted).toBe(false);
     expect(f.calls).toEqual([{ key: "test.hold", requestId: stepId }]);
   } finally {
@@ -176,18 +264,31 @@ test("aborting the admission after the row is journaled changes nothing; the att
 test("owned reads open at admission, Stop signals them, and cleanup precedes parent settlement", async () => {
   const events: string[] = [];
   let release!: () => void;
-  const cleanup = new Promise<void>((resolve) => { release = resolve; });
+  const cleanup = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const f = await fixture({
     open: (identity) => {
       events.push(`open:${identity.ownership.owner}`);
-      return { ownership: identity.ownership, native: async () => { throw Error("unused"); },
-        requestStop: async () => { events.push("stop"); },
+      return {
+        ownership: identity.ownership,
+        native: async () => {
+          throw Error("unused");
+        },
+        requestStop: async () => {
+          events.push("stop");
+        },
         state: () => ({ kind: "unsettled", requiredDescendants: [], evidence: [] }),
-        settle: async () => { events.push("settle"); await cleanup;
-          return { kind: "settled", requiredDescendants: [], evidence: [] }; },
+        settle: async () => {
+          events.push("settle");
+          await cleanup;
+          return { kind: "settled", requiredDescendants: [], evidence: [] };
+        },
       };
     },
-    flight: () => { throw Error("unused"); },
+    flight: () => {
+      throw Error("unused");
+    },
   });
   try {
     await f.submit("read-owner");
@@ -198,30 +299,49 @@ test("owned reads open at admission, Stop signals them, and cleanup precedes par
     expect(events).toEqual(["open:read-owner", "stop", "settle"]);
     release();
     expect((await f.journal.wait("read-owner")).state).toBe("succeeded");
-  } finally { release(); await f.dispose(); }
+  } finally {
+    release();
+    await f.dispose();
+  }
 });
 
 test("live native terminal facts survive the step write and journal reopen", async () => {
   const f = await fixture();
   try {
     const id = await f.submit("facts");
-    await recordNativeTerminal(id, { kind: "restored", views: [] },
-      JSON.stringify({ documentKey: "model", revision: 5, extra: "preserved" }));
+    await recordNativeTerminal(
+      id,
+      { kind: "restored", views: [] },
+      JSON.stringify({ documentKey: "model", revision: 5, extra: "preserved" }),
+    );
     f.answer(Effect.succeed({ ok: true }));
     const row = await f.journal.wait("facts");
-    expect(row.steps[0]).toMatchObject({ touched: { kind: "restored", views: [] },
-      nativeEvidence: { documentKey: "model", revision: 5, extra: "preserved" } });
+    expect(row.steps[0]).toMatchObject({
+      touched: { kind: "restored", views: [] },
+      nativeEvidence: { documentKey: "model", revision: 5, extra: "preserved" },
+    });
     expect(row.steps[0]).not.toHaveProperty("effect");
     expect((await f.reopen().list(undefined, "facts"))[0]?.steps).toEqual(row.steps);
-  } finally { await f.dispose(); }
+  } finally {
+    await f.dispose();
+  }
 });
 
 test.each([
   { touched: { kind: "none" }, state: "failed" },
   { touched: { kind: "rolledBack" }, state: "failed" },
   { touched: { kind: "restored", views: [] }, state: "failed" },
-  { touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 }, state: "incomplete" },
-  { touched: { kind: "restoreFailed", views: [{ view: { documentKey: "doc", uniqueId: "view", id: 1 }, left: ["crop"] }] }, state: "incomplete" },
+  {
+    touched: { kind: "wrote", transactions: [], added: 0, modified: 1, deleted: 0 },
+    state: "incomplete",
+  },
+  {
+    touched: {
+      kind: "restoreFailed",
+      views: [{ view: { documentKey: "doc", uniqueId: "view", id: 1 }, left: ["crop"] }],
+    },
+    state: "incomplete",
+  },
   { touched: { kind: "unknown", reason: "lost-response" }, state: "incomplete" },
 ])("a later refusal uses native $touched.kind testimony: $state", async ({ touched, state }) => {
   const f = await fixture(undefined, true);
@@ -230,7 +350,9 @@ test.each([
     await recordNativeTerminal(id, touched);
     f.answer(Effect.succeed({ ok: true }));
     expect((await f.journal.wait("native-facts")).state).toBe(state);
-  } finally { await f.dispose(); }
+  } finally {
+    await f.dispose();
+  }
 });
 
 test("the attempt runs under the journal's identity with the submitter as causal parent", async () => {
@@ -241,7 +363,10 @@ test("the attempt runs under the journal's identity with the submitter as causal
     await f.journal.wait("owned");
     expect(f.seen.identity?.requestId).not.toBe(f.submitter.requestId);
     expect(f.seen.identity?.caller).toEqual(human);
-    expect(f.seen.identity?.ownership).toMatchObject({ owner: "owned", causalParent: f.submitter.requestId });
+    expect(f.seen.identity?.ownership).toMatchObject({
+      owner: "owned",
+      causalParent: f.submitter.requestId,
+    });
   } finally {
     await f.dispose();
   }
@@ -251,7 +376,10 @@ test("cancel sends op.cancel with the step id and never interrupts the dispatche
   const f = await fixture();
   try {
     const stepId = await f.submit("cancelled");
-    expect(await f.journal.cancel("cancelled")).toMatchObject({ receipt: { state: "running", cancellationRequested: true }, signalled: true });
+    expect(await f.journal.cancel("cancelled")).toMatchObject({
+      receipt: { state: "running", cancellationRequested: true },
+      signalled: true,
+    });
     expect(f.calls).toEqual([
       { key: "test.hold", requestId: stepId },
       { key: CANCEL_OPERATION_KEY, requestId: stepId },
@@ -269,9 +397,14 @@ test("two concurrent Stops on one running step both settle; one op.cancel is sen
   const f = await fixture();
   try {
     const stepId = await f.submit("stopped-twice");
-    const stops = await Promise.allSettled([f.journal.cancel("stopped-twice"), f.journal.cancel("stopped-twice")]);
+    const stops = await Promise.allSettled([
+      f.journal.cancel("stopped-twice"),
+      f.journal.cancel("stopped-twice"),
+    ]);
     expect(stops.map((stop) => stop.status)).toEqual(["fulfilled", "fulfilled"]);
-    expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([{ key: CANCEL_OPERATION_KEY, requestId: stepId }]);
+    expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([
+      { key: CANCEL_OPERATION_KEY, requestId: stepId },
+    ]);
     expect(f.seen.interrupted).toBe(false);
     f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
     expect(await f.journal.wait("stopped-twice")).toMatchObject({ state: "cancelled" });
@@ -305,10 +438,17 @@ test("an action id that equals a running step's id runs its own step; ids are tw
     expect(own).not.toBe(stepId);
     // The other action's Stop reaches its own step, and nothing of the bare-id action.
     const stopping = f.journal.cancel("named-other");
-    await vi.waitFor(() => expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([{ key: CANCEL_OPERATION_KEY, requestId: stepId }]));
+    await vi.waitFor(() =>
+      expect(f.calls.filter((call) => call.key === CANCEL_OPERATION_KEY)).toEqual([
+        { key: CANCEL_OPERATION_KEY, requestId: stepId },
+      ]),
+    );
     await stopping;
     f.answer(Effect.succeed({ ok: true }));
-    expect(await f.journal.wait(stepId)).toMatchObject({ state: "succeeded", steps: [{ id: own, state: "succeeded" }] });
+    expect(await f.journal.wait(stepId)).toMatchObject({
+      state: "succeeded",
+      steps: [{ id: own, state: "succeeded" }],
+    });
     expect(f.seen.interrupted).toBe(false);
   } finally {
     await f.dispose();
@@ -320,7 +460,9 @@ test("closing joins a Stop still sending: the cancel settles before the journal 
   try {
     await f.submit("stopped-at-close");
     const stopping = f.journal.cancel("stopped-at-close");
-    await vi.waitFor(() => expect(f.calls.some((call) => call.key === CANCEL_OPERATION_KEY)).toBe(true));
+    await vi.waitFor(() =>
+      expect(f.calls.some((call) => call.key === CANCEL_OPERATION_KEY)).toBe(true),
+    );
     // The attempt settles at once; only the 300 ms op.cancel send is still open at close.
     f.answer(Effect.fail(new StepFailure("Revit cancelled the request", 499, "cancelled")));
     await f.journal.wait("stopped-at-close");
@@ -345,7 +487,9 @@ test("closing the host scope joins the attempt; it never interrupts it", async (
     expect(f.seen.interrupted).toBe(false);
     expect((await f.reopen().list())[0]).toMatchObject({ id: "joined", state: "succeeded" });
     // The revision the final join committed reached the log: its subscription outlives the close.
-    expect(f.logged().some((event) => event.includes('"joined"') && event.includes('"succeeded"'))).toBe(true);
+    expect(
+      f.logged().some((event) => event.includes('"joined"') && event.includes('"succeeded"')),
+    ).toBe(true);
   } finally {
     await f.dispose();
   }

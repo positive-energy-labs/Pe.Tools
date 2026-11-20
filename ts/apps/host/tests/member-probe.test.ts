@@ -55,12 +55,19 @@ afterEach(async () => {
 async function pod(id: string, count: number): Promise<Member[]> {
   for (const folder of ["checks", "src"]) await mkdir(join(root, id, folder), { recursive: true });
   const files = [
-    ["pod.json", JSON.stringify({ schemaVersion: 2, id, name: id, version: "0.1.0", entrypoints: [] })],
+    [
+      "pod.json",
+      JSON.stringify({ schemaVersion: 2, id, name: id, version: "0.1.0", entrypoints: [] }),
+    ],
     ["src/Shared.cs", "static class Shared { }"],
     ...Array.from({ length: count }, (_, index) => [`checks/c${index}.csx`, `Result(${index});`]),
   ] as const;
   for (const [path, text] of files) await writeFile(join(root, id, path), text);
-  return files.map(([path, text]) => ({ kind: "member", probe: { pod: id, path }, expected: sha(text) }));
+  return files.map(([path, text]) => ({
+    kind: "member",
+    probe: { pod: id, path },
+    expected: sha(text),
+  }));
 }
 const resources = () =>
   commandResources(detachedBridge(), { podsRoot: root } as never, async () => undefined);
@@ -68,16 +75,38 @@ const resources = () =>
 /** The whole action through the real journal and the real probes; returns the discoveries it cost. */
 async function discoveriesOf(id: string, consumes: Member[], prepare = async () => {}) {
   const journal = testJournal();
-  const executor = gatewayExecutor("scripting.execute", detachedBridge(),
-    () => Effect.succeed({ status: "Succeeded" }), pictureCaptures(root));
-  journal.bindCommands({ ...resources(), resolve: () => ({
-    ...executor,
-    definition: async () => ({ says: "Run script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }),
-    bind: async () => ({ effects: [], consumes, prepare: async () => (await prepare(), { kind: "host-leaf" }) }),
-  }) });
+  const executor = gatewayExecutor(
+    "scripting.execute",
+    detachedBridge(),
+    () => Effect.succeed({ status: "Succeeded" }),
+    pictureCaptures(root),
+  );
+  journal.bindCommands({
+    ...resources(),
+    resolve: () => ({
+      ...executor,
+      definition: async () => ({
+        says: "Run script",
+        needs: "nothing",
+        effect: "command",
+        dirties: [],
+        input: z.record(z.string(), z.unknown()),
+      }),
+      bind: async () => ({
+        effects: [],
+        consumes,
+        prepare: async () => (await prepare(), { kind: "host-leaf" }),
+      }),
+    }),
+  });
   scans = 0;
   await journal.invoke(
-    { id, key: "scripting.execute", target: { kind: "host" }, input: { scriptContent: "Result(1);" } },
+    {
+      id,
+      key: "scripting.execute",
+      target: { kind: "host" },
+      input: { scriptContent: "Result(1);" },
+    },
     { caller: approvedPea(id), basis: null },
   );
   return { action: await journal.wait(id), scans };
@@ -107,28 +136,31 @@ test("a member edited between two gates still refuses the run as stale: no read 
   });
 });
 
-test.each(Array.from({ length: 20 }, (_, index) => index))("a pass freezes one scoped Pod snapshot; the next pass and independent probes see edits %s", async () => {
-  const members = await pod("pdrop", 5);
-  const c0 = members.find((member) => member.probe.path === "checks/c0.csx")!;
-  await listPackages({ podsRoots: root });
-  scans = 0;
-  const probe = resources().probe;
-  const pass = {};
-  for (const member of members) expect(await probe(member, "admit", pass)).toBe(member.expected);
-  expect(scans).toBe(0);
-  // One reading per pass: the Pod was read at the pass's first probe, so a later edit is the next pass's.
-  await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
-  expect(await probe(c0, "admit", pass)).toBe(c0.expected);
-  expect(scans).toBe(0);
-  expect(await probe(c0, "turn", {})).toBe(sha("Result(99);"));
-  expect(scans).toBe(1);
-  await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(100);");
-  expect(await probe(c0)).toBe(sha("Result(100);"));
-  expect(scans).toBe(2);
-  await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(101);");
-  expect(await probe(c0)).toBe(sha("Result(101);"));
-  expect(scans).toBe(3);
-});
+test.each(Array.from({ length: 20 }, (_, index) => index))(
+  "a pass freezes one scoped Pod snapshot; the next pass and independent probes see edits %s",
+  async () => {
+    const members = await pod("pdrop", 5);
+    const c0 = members.find((member) => member.probe.path === "checks/c0.csx")!;
+    await listPackages({ podsRoots: root });
+    scans = 0;
+    const probe = resources().probe;
+    const pass = {};
+    for (const member of members) expect(await probe(member, "admit", pass)).toBe(member.expected);
+    expect(scans).toBe(0);
+    // One reading per pass: the Pod was read at the pass's first probe, so a later edit is the next pass's.
+    await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(99);");
+    expect(await probe(c0, "admit", pass)).toBe(c0.expected);
+    expect(scans).toBe(0);
+    expect(await probe(c0, "turn", {})).toBe(sha("Result(99);"));
+    expect(scans).toBe(1);
+    await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(100);");
+    expect(await probe(c0)).toBe(sha("Result(100);"));
+    expect(scans).toBe(2);
+    await writeFile(join(root, "pdrop", "checks/c0.csx"), "Result(101);");
+    expect(await probe(c0)).toBe(sha("Result(101);"));
+    expect(scans).toBe(3);
+  },
+);
 
 test("the index is a shortcut, never the answer: a Pod it does not hold, or holds wrongly, is asked of discovery", async () => {
   const [first] = await pod("early", 1);
@@ -149,10 +181,16 @@ test("a run consumes its entrypoint and every .cs beside it, not another entrypo
     const admitted = (await pod("pdrop", 3)).map((member) => ({ path: member.probe.path, member }));
     // Native matches the entrypoint with either slash and without case.
     const consumes = scriptRunInputs(admitted, "checks\\C0.csx").map(({ member }) => member);
-    return (await discoveriesOf(id, consumes, () => writeFile(join(root, "pdrop", edited), "// edited"))).action;
+    return (
+      await discoveriesOf(id, consumes, () => writeFile(join(root, "pdrop", edited), "// edited"))
+    ).action;
   };
   expect((await run("sibling", "checks/c1.csx")).state).toBe("succeeded");
-  for (const [id, path] of [["helper", "src/Shared.cs"], ["entry", "checks/c0.csx"], ["manifest", "pod.json"]] as const)
+  for (const [id, path] of [
+    ["helper", "src/Shared.cs"],
+    ["entry", "checks/c0.csx"],
+    ["manifest", "pod.json"],
+  ] as const)
     expect(await run(id, path), path).toMatchObject({
       state: "failed",
       refusal: { kind: "stale", consumed: [{ probe: { pod: "pdrop", path } }] },
@@ -162,10 +200,17 @@ test("a run consumes its entrypoint and every .cs beside it, not another entrypo
 test("a member that left the Pod probes null; a discovery that ran out of time is not a changed input", async () => {
   const [, member] = await pod("pdrop", 1);
   const probe = resources().probe;
-  expect(await probe({ ...member!, probe: { pod: "pdrop", path: "checks/gone.csx" } }, "admit", {})).toBeNull();
-  expect(await probe({ ...member!, probe: { pod: "absent", path: "pod.json" } }, "admit", {})).toBeNull();
+  expect(
+    await probe({ ...member!, probe: { pod: "pdrop", path: "checks/gone.csx" } }, "admit", {}),
+  ).toBeNull();
+  expect(
+    await probe({ ...member!, probe: { pod: "absent", path: "pod.json" } }, "admit", {}),
+  ).toBeNull();
   // Discovery's 5 s wait ran out (pod-capture.ts): the Pod was not read, so nothing is known to have changed.
   await expect(
     probe({ ...member!, probe: { pod: "never-lands", path: "pod.json" } }, "dispatch", {}),
-  ).rejects.toMatchObject({ statusCode: 503, message: expect.stringContaining("Pod discovery exceeded") });
+  ).rejects.toMatchObject({
+    statusCode: 503,
+    message: expect.stringContaining("Pod discovery exceeded"),
+  });
 });

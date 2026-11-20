@@ -14,7 +14,12 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
     ...(proposed
       ? {
           [proposed]: {
-            edit: { by: "human" as const, value: "6in", note: "office standard", confidence: "low" },
+            edit: {
+              by: "human" as const,
+              value: "6in",
+              note: "office standard",
+              confidence: "low",
+            },
           },
         }
       : {}),

@@ -6,7 +6,12 @@ import type { Scene } from "@pe/ducts-web/scene";
 import { LOOK } from "@pe/web-kernel/scene/grounds";
 import { portLayer, portSegments, type SurfacePort } from "@pe/web-kernel/scene/ports";
 import { sectionContains } from "@pe/web-kernel/scene/section";
-import { SceneMeshes, type LayerFrame, type PaintOf, type SceneInstance } from "@pe/web-kernel/scene/types";
+import {
+  SceneMeshes,
+  type LayerFrame,
+  type PaintOf,
+  type SceneInstance,
+} from "@pe/web-kernel/scene/types";
 import { surfaceEdges, surfaceAlpha } from "@pe/web-kernel/scene/surfaces";
 
 const instance = (id: number, category = "not a duct category"): SceneInstance => ({

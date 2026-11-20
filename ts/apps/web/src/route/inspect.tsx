@@ -34,7 +34,9 @@ const MEMBER: Inspectable = {
     kind: "route",
     href: (id) => {
       const [pod, path] = JSON.parse(id) as [string, string];
-      return routeAddress("pods").link({ member: { kind: "ids", ids: [podMemberCode({ pod, path })] } });
+      return routeAddress("pods").link({
+        member: { kind: "ids", ids: [podMemberCode({ pod, path })] },
+      });
     },
   },
 };

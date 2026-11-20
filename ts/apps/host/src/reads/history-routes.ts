@@ -15,7 +15,9 @@ const run = <A>(work: () => Promise<A>) =>
         ? error
         : new InvalidRead({ message: String(error), status: 409, problem: "history.unavailable" }),
   });
-const local = Effect.flatMap(RequestIdentity, (identity) => run(async () => localHistory(identity.caller)));
+const local = Effect.flatMap(RequestIdentity, (identity) =>
+  run(async () => localHistory(identity.caller)),
+);
 /** Local History has the same request admission as the surrounding Pe doors. No write can name Value bindings. */
 export const historyRoutes = (history?: History) =>
   HttpRouter.use((router) =>
@@ -30,15 +32,18 @@ export const historyRoutes = (history?: History) =>
         return history;
       };
       yield* router.add("GET", "/pe/history", (request) =>
-        Effect.andThen(local, run(async () => {
-          const query = new URL(request.originalUrl, "http://host").searchParams;
-          const id = query.get("at");
-          if (id) {
-            const point = await owner().get(z.uuid().parse(id));
-            return { point, work: await owner().work(id) };
-          }
-          return owner().list(addressSchema.parse(query.get("document")));
-        })).pipe(Effect.map(HttpServerResponse.jsonUnsafe)),
+        Effect.andThen(
+          local,
+          run(async () => {
+            const query = new URL(request.originalUrl, "http://host").searchParams;
+            const id = query.get("at");
+            if (id) {
+              const point = await owner().get(z.uuid().parse(id));
+              return { point, work: await owner().work(id) };
+            }
+            return owner().list(addressSchema.parse(query.get("document")));
+          }),
+        ).pipe(Effect.map(HttpServerResponse.jsonUnsafe)),
       );
       yield* router.add("POST", "/pe/history", (request) =>
         Effect.gen(function* () {

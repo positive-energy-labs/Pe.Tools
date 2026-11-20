@@ -35,7 +35,11 @@ export interface Goal<R = unknown> {
 const closerSchema = z.strictObject({
   id: z.string().min(1),
   says: z.string().min(1),
-  resolver: z.union([z.literal("person"), z.literal("pea"), z.strictObject({ op: z.string().min(1) })]),
+  resolver: z.union([
+    z.literal("person"),
+    z.literal("pea"),
+    z.strictObject({ op: z.string().min(1) }),
+  ]),
   subject: subjectRefCodeSchema.optional(),
 });
 /** The Goal a host Read publishes; `inputs` are StateCells (`sheet.ts`), checked by the kernel at draw. */
@@ -47,6 +51,10 @@ export const goalSchema = <R extends z.ZodType>(result: R) =>
     inputs: z.array(z.unknown()).readonly(),
     result: z.discriminatedUnion("kind", [
       z.strictObject({ kind: z.literal("complete"), value: result }),
-      z.strictObject({ kind: z.literal("estimate"), value: result.nullable(), sources: z.array(z.string()).readonly() }),
+      z.strictObject({
+        kind: z.literal("estimate"),
+        value: result.nullable(),
+        sources: z.array(z.string()).readonly(),
+      }),
     ]),
   });

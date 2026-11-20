@@ -9,113 +9,170 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { buildCalc } from "./build.ts";
 
-const loadSnapshot = () => nativeResponseSchema("ducts.snapshot.walk").parse({
-  ...structuredClone(raw), vocabulary: VOCABULARY, walk: { ...raw.walk, unreadPeers: [] },
-});
+const loadSnapshot = () =>
+  nativeResponseSchema("ducts.snapshot.walk").parse({
+    ...structuredClone(raw),
+    vocabulary: VOCABULARY,
+    walk: { ...raw.walk, unreadPeers: [] },
+  });
 
 function replay(unitId: number, mirrored = false, supply = false) {
   let snapshot = loadSnapshot();
   if (supply) {
     for (const id of [12777429, 12806600]) snapshot = withFamilyFlipped(snapshot, id);
   }
-  const duct = snapshot.segments.find(d => d.id === 14085956)!;
+  const duct = snapshot.segments.find((d) => d.id === 14085956)!;
   if (mirrored) {
     // Exchange the end connections while retaining the physical tap station and polyline.
-    const a = duct.connectors.find(c => c.index === 0)!;
-    const b = duct.connectors.find(c => c.index === 1)!;
+    const a = duct.connectors.find((c) => c.index === 0)!;
+    const b = duct.connectors.find((c) => c.index === 1)!;
     [a.connectedTo, b.connectedTo] = [b.connectedTo, a.connectedTo];
     for (const c of [a, b]) {
-      const peer = snapshot.nodes.find(n => n.id === c.connectedTo!.elementId)!;
-      peer.connectors.find(p => p.index === c.connectedTo!.connector)!.connectedTo!.connector = c.index;
+      const peer = snapshot.nodes.find((n) => n.id === c.connectedTo!.elementId)!;
+      peer.connectors.find((p) => p.index === c.connectedTo!.connector)!.connectedTo!.connector =
+        c.index;
     }
   }
   const r = suggestRoster(snapshot);
-  const sheet = buildCalc({ snapshot, fan: { unitId, portIndex: supply ? 4 : 2 }, roster: [...r.fans, ...r.suggestions],
-    inputs: inputsFor(snapshot, {}), grids: toGrids({ tables }) });
-  const leg = Object.values(sheet.legs).find(l => l.elementId === duct.id && l.testVisiblePieceReceipt)!;
+  const sheet = buildCalc({
+    snapshot,
+    fan: { unitId, portIndex: supply ? 4 : 2 },
+    roster: [...r.fans, ...r.suggestions],
+    inputs: inputsFor(snapshot, {}),
+    grids: toGrids({ tables }),
+  });
+  const leg = Object.values(sheet.legs).find(
+    (l) => l.elementId === duct.id && l.testVisiblePieceReceipt,
+  )!;
   expect(leg).toBeDefined();
   expect(Object.keys(leg)).not.toContain("testVisiblePieceReceipt");
   for (const p of leg.testVisiblePieceReceipt!) {
     expect(p.lossInWg).not.toBeNull();
-    expect(p.lossInWg).toBeCloseTo(friction(sectionOf(duct.shape, duct.diameterIn, duct.widthIn, duct.heightIn)!,
-      p.cfm, p.lengthFt, duct.roughness.valueFt).dp, 12);
+    expect(p.lossInWg).toBeCloseTo(
+      friction(
+        sectionOf(duct.shape, duct.diameterIn, duct.widthIn, duct.heightIn)!,
+        p.cfm,
+        p.lengthFt,
+        duct.roughness.valueFt,
+      ).dp,
+      12,
+    );
   }
-  return leg.testVisiblePieceReceipt!.map(p => ({ length: p.lengthFt, cfm: p.cfm, drop: p.lossInWg }));
+  return leg.testVisiblePieceReceipt!.map((p) => ({
+    length: p.lengthFt,
+    cfm: p.cfm,
+    drop: p.lossInWg,
+  }));
 }
 
 it("R-SHARE RV-27 excludes RV-30's 65 cfm until tap 14086100", () => {
   const pieces = replay(12806600);
-  expect(pieces.map(p => p.cfm)).toEqual([955, 1020]);
-  expect(pieces.map(p => p.length)).toEqual([
-    expect.closeTo(0.43840000351641584, 8), expect.closeTo(1.863899996483584, 8),
+  expect(pieces.map((p) => p.cfm)).toEqual([955, 1020]);
+  expect(pieces.map((p) => p.length)).toEqual([
+    expect.closeTo(0.43840000351641584, 8),
+    expect.closeTo(1.863899996483584, 8),
   ]);
 });
 
 it("R-SHARE RV-30 and RV-27 price their common c2-to-c1 piece identically", () => {
   const rv30 = replay(12777429);
   const rv27 = replay(12806600);
-  expect(rv27[1]).toEqual(rv30.find(p => Math.abs(p.length! - 1.863899996483584) < 1e-8));
+  expect(rv27[1]).toEqual(rv30.find((p) => Math.abs(p.length! - 1.863899996483584) < 1e-8));
 });
 
 it("R-SHARE mirrored walk from c1 adds the sibling only after c2", () => {
   const pieces = replay(12806600, true);
-  expect(pieces.map(p => p.cfm)).toEqual([955, 1020]);
-  expect(pieces.map(p => p.length)).toEqual([
-    expect.closeTo(1.863899996483584, 8), expect.closeTo(0.43840000351641584, 8),
+  expect(pieces.map((p) => p.cfm)).toEqual([955, 1020]);
+  expect(pieces.map((p) => p.length)).toEqual([
+    expect.closeTo(1.863899996483584, 8),
+    expect.closeTo(0.43840000351641584, 8),
   ]);
 });
 
-it.each([false, true])("R-SHARE supply co-supplier joins at the physical tap, mirrored=%s", mirrored => {
-  const pieces = replay(12806600, mirrored, true);
-  // Reversing these families changes the other shared consumers: the resolved total is 1220.
-  expect(pieces.map(p => p.cfm)).toEqual([1155, 1220]);
-});
+it.each([false, true])(
+  "R-SHARE supply co-supplier joins at the physical tap, mirrored=%s",
+  (mirrored) => {
+    const pieces = replay(12806600, mirrored, true);
+    // Reversing these families changes the other shared consumers: the resolved total is 1220.
+    expect(pieces.map((p) => p.cfm)).toEqual([1155, 1220]);
+  },
+);
 
 it("P-106: a sibling-only tap charges straight Cs and names the passed tap on the shared leg", () => {
   const snapshot = loadSnapshot();
   const roster = suggestRoster(snapshot);
   // Keep the retained topology but state one-tenth flow so its small tap stays below the velocity refusal.
   const model = inputsFor(snapshot, {});
-  const endCfm = Object.fromEntries([...Object.entries(model.units), ...Object.entries(model.terminals)]
-    .flatMap(([id, row]) => row.cfm.value == null ? [] : [[id, row.cfm.value / 10]]));
-  const sheet = buildCalc({ snapshot, fan: { unitId: 12806600, portIndex: 2 },
-    roster: [...roster.fans, ...roster.suggestions], inputs: inputsFor(snapshot, { endCfm }), grids: toGrids({ tables }) });
-  const leg = Object.values(sheet.legs).find(l => l.elementId === 14085956 && l.lossSource.kind === "friction")!;
+  const endCfm = Object.fromEntries(
+    [...Object.entries(model.units), ...Object.entries(model.terminals)].flatMap(([id, row]) =>
+      row.cfm.value == null ? [] : [[id, row.cfm.value / 10]],
+    ),
+  );
+  const sheet = buildCalc({
+    snapshot,
+    fan: { unitId: 12806600, portIndex: 2 },
+    roster: [...roster.fans, ...roster.suggestions],
+    inputs: inputsFor(snapshot, { endCfm }),
+    grids: toGrids({ tables }),
+  });
+  const leg = Object.values(sheet.legs).find(
+    (l) => l.elementId === 14085956 && l.lossSource.kind === "friction",
+  )!;
   // RV-30 owns the branch at 14086100; RV-27 only passes it on its shared duct.
-  expect(Object.values(sheet.legs).some(l => l.elementId === 14086100)).toBe(false);
-  const straight = sheet.fittings.find(p => p.elementId === 14086100)!;
+  expect(Object.values(sheet.legs).some((l) => l.elementId === 14086100)).toBe(false);
+  const straight = sheet.fittings.find((p) => p.elementId === 14086100)!;
   expect(straight.lossInWg).not.toBeNull();
   expect(straight.lossInWg).not.toBe(0);
   expect(leg.testVisiblePieceReceipt).toHaveLength(2);
-  expect(leg.testVisiblePieceReceipt!.every(p => p.lossInWg != null)).toBe(true);
-  expect(leg.lossInWg).toBeCloseTo(leg.testVisiblePieceReceipt!.reduce((sum, p) => sum + p.lossInWg!, 0) + straight.lossInWg!, 12);
+  expect(leg.testVisiblePieceReceipt!.every((p) => p.lossInWg != null)).toBe(true);
+  expect(leg.lossInWg).toBeCloseTo(
+    leg.testVisiblePieceReceipt!.reduce((sum, p) => sum + p.lossInWg!, 0) + straight.lossInWg!,
+    12,
+  );
   // The source line discloses passed taps; the evidence ref names the friction method, Altshul-Tsal.
   expect(leg.lossSource.ref).toContain("1 tap(s) passed (Cs: 14086100)");
   expect(leg.evidence.kind).toBe("friction");
 });
 
-it.each([false, true])("P-107: typed branch drop replaces Cs only when refused=%s", refused => {
+it.each([false, true])("P-107: typed branch drop replaces Cs only when refused=%s", (refused) => {
   const snapshot = loadSnapshot();
   const roster = suggestRoster(snapshot);
   const model = inputsFor(snapshot, {});
-  const endCfm = Object.fromEntries([...Object.entries(model.units), ...Object.entries(model.terminals)]
-    .flatMap(([id, row]) => row.cfm.value == null ? [] : [[id, row.cfm.value / 10]]));
+  const endCfm = Object.fromEntries(
+    [...Object.entries(model.units), ...Object.entries(model.terminals)].flatMap(([id, row]) =>
+      row.cfm.value == null ? [] : [[id, row.cfm.value / 10]],
+    ),
+  );
   const grids = refused ? {} : toGrids({ tables });
-  const input = { snapshot, fan: { unitId: 12806600, portIndex: 2 },
-    roster: [...roster.fans, ...roster.suggestions], grids };
+  const input = {
+    snapshot,
+    fan: { unitId: 12806600, portIndex: 2 },
+    roster: [...roster.fans, ...roster.suggestions],
+    grids,
+  };
   const before = buildCalc({ ...input, inputs: inputsFor(snapshot, { endCfm }) });
-  const after = buildCalc({ ...input, inputs: inputsFor(snapshot, { endCfm, drops: { 14086100: 0.123 } }) });
-  const leg = (sheet: typeof after) => Object.values(sheet.legs)
-    .find(l => l.elementId === 14085956 && l.lossSource.kind === "friction")!;
+  const after = buildCalc({
+    ...input,
+    inputs: inputsFor(snapshot, { endCfm, drops: { 14086100: 0.123 } }),
+  });
+  const leg = (sheet: typeof after) =>
+    Object.values(sheet.legs).find(
+      (l) => l.elementId === 14085956 && l.lossSource.kind === "friction",
+    )!;
   if (!refused) {
     expect(leg(after).lossInWg).toBe(leg(before).lossInWg);
-    expect(after.fittings.find(p => p.elementId === 14086100)).toMatchObject({ table: "SD5-9" });
+    expect(after.fittings.find((p) => p.elementId === 14086100)).toMatchObject({ table: "SD5-9" });
   } else {
     expect(leg(before).lossInWg).toBeNull();
     expect(leg(after).testVisiblePieceReceipt).toHaveLength(2);
-    expect(leg(after).testVisiblePieceReceipt!.every(p => p.lossInWg != null)).toBe(true);
-    expect(leg(after).lossInWg).toBeCloseTo(leg(after).testVisiblePieceReceipt!.reduce((sum, p) => sum + p.lossInWg!, 0) + 0.123, 12);
-    expect(leg(after).lossSource.ref).toContain("typed drop from 14086100 (Cs refused: SD5-9 Cs is not loaded)");
+    expect(leg(after).testVisiblePieceReceipt!.every((p) => p.lossInWg != null)).toBe(true);
+    expect(leg(after).lossInWg).toBeCloseTo(
+      leg(after).testVisiblePieceReceipt!.reduce((sum, p) => sum + p.lossInWg!, 0) + 0.123,
+      12,
+    );
+    expect(leg(after).lossSource.ref).toContain(
+      "typed drop from 14086100 (Cs refused: SD5-9 Cs is not loaded)",
+    );
     expect(leg(after).lossSource.ref).toContain("); Work");
   }
 });

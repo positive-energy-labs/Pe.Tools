@@ -112,7 +112,8 @@ export function PaneStrip({ modes, floaters, layers }: PaneStripProps) {
     ...(layers?.options.flatMap((o) => bind(o, () => layers.onToggle(o.key))) ?? []),
   ]);
   const floaterButtons = floaters?.map((f) => (
-    <Button kind="quiet"
+    <Button
+      kind="quiet"
       key={f.key}
       label={f.label}
       reason={f.says}

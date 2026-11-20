@@ -7,7 +7,11 @@ import { routeAddress, routeAt } from "@pe/agent-contracts";
 import { module, fields } from "./route.ts";
 
 test("/pea declares no sheet, picture or goal", () => {
-  expect([module.spec.sheet, module.spec.picture, module.spec.goal]).toEqual([undefined, undefined, undefined]);
+  expect([module.spec.sheet, module.spec.picture, module.spec.goal]).toEqual([
+    undefined,
+    undefined,
+    undefined,
+  ]);
 });
 
 test("chat owns its address fields and never shares the composer draft", () => {
@@ -18,6 +22,8 @@ test("chat owns its address fields and never shares the composer draft", () => {
   expect(page.prompt).toBe("private draft");
   expect(address.link(page)).not.toContain("prompt");
   expect(address.read({ threadSearch: "unfinished search" }).page.threadSearch).toEqual({
-    v: 0, keywords: "unfinished search", pills: [],
+    v: 0,
+    keywords: "unfinished search",
+    pills: [],
   });
 });

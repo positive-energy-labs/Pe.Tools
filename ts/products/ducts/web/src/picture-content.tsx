@@ -14,7 +14,11 @@ import type { ColourMode } from "@pe/web-kernel/scene/types";
 import { systemPaint } from "@pe/web-kernel/scene/surfaces";
 import type { Kinds, Layer3D, PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { ElementIndex } from "@pe/web-kernel/element-index";
-import type { PictureLayer, PictureLine, PictureOverlayFrame } from "@pe/web-kernel/scene/picture/content";
+import type {
+  PictureLayer,
+  PictureLine,
+  PictureOverlayFrame,
+} from "@pe/web-kernel/scene/picture/content";
 import { Annotations, type Label, type Ruling } from "./annotations.tsx";
 import type { Encoding } from "./encoding.tsx";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";
@@ -153,9 +157,7 @@ export function DuctsOverlay({
     [stageLayers],
   );
   const marks = rulings.filter(
-    (r) =>
-      !meshes ||
-      !covered.has(r.kind === "inferred" ? r.finding.id : r.issue.id),
+    (r) => !meshes || !covered.has(r.kind === "inferred" ? r.finding.id : r.issue.id),
   );
   return (
     <CaptionBounds.Provider value={captionField}>

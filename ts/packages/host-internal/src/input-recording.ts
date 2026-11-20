@@ -1,6 +1,12 @@
 import { Cause, Effect, Exit, Option, Result, Schema } from "effect";
 import { validationIssueSchema } from "@pe/host-contracts/contracts";
-import { refusalSchema, type InputKind, type InputLane, type Truncation, type RecordingPoint } from "@pe/agent-contracts";
+import {
+  refusalSchema,
+  type InputKind,
+  type InputLane,
+  type Truncation,
+  type RecordingPoint,
+} from "@pe/agent-contracts";
 import { canonicalJson, type NativeReadInput } from "./native-read.ts";
 import { BridgeError } from "./dispatch.ts";
 import { InvalidRead, ReadBusy, ReadRetiring } from "./read-errors.ts";
@@ -144,7 +150,11 @@ export type TakingObserver = (taking: Taking) => Effect.Effect<void, DoorFailure
 export const unobserved: TakingObserver = () => Effect.void;
 
 /** A consumer's fixed host recipe: its build-bound key, actual validated input and exact scope. */
-const consumerRecipe = Schema.Struct({ key: Schema.String, input: Schema.Json, scope: Schema.String });
+const consumerRecipe = Schema.Struct({
+  key: Schema.String,
+  input: Schema.Json,
+  scope: Schema.String,
+});
 // Host-minted ids only; decoded before any path is built.
 export const readSetIdName = Schema.String.check(
   Schema.makeFilter((id) => /^[0-9a-f-]{36}$/.test(id) || "Read-set id is not host minted"),
@@ -160,7 +170,12 @@ export const readSetRecordSchema = Schema.Struct({
   recipe: consumerRecipe,
   state: Schema.Literals(["complete", "incomplete"]),
   inputs: Schema.Array(
-    Schema.Struct({ input: recordedInput, scope: Schema.String, start: Schema.Number, takingId: Schema.String }),
+    Schema.Struct({
+      input: recordedInput,
+      scope: Schema.String,
+      start: Schema.Number,
+      takingId: Schema.String,
+    }),
   ),
   children: Schema.Array(
     Schema.Struct({ recipe: consumerRecipe, start: Schema.Number, readSetId: readSetIdName }),
@@ -205,7 +220,11 @@ export interface CaptureLatch {
   readonly begin: () => number | null;
   readonly truncated: () => Truncation | null;
   /** The first stop wins; its marker is persisted best-effort and never fails a read. */
-  readonly stop: (at: number, reason: Truncation["reason"], source: Pick<Truncation, "site" | "op">) => Effect.Effect<void>;
+  readonly stop: (
+    at: number,
+    reason: Truncation["reason"],
+    source: Pick<Truncation, "site" | "op">,
+  ) => Effect.Effect<void>;
 }
 /** The one capture writer of a bundle in this process (no cross-process lock is claimed). */
 export interface RecordingWriter extends RecordingReader {
@@ -306,7 +325,9 @@ export const chooseTaking = Effect.fn("Recording.choose")(function* (
     );
   return chosen[0]!;
 });
-export const replayFailure = Effect.fn("Recording.failure")(function* (recorded: typeof failure.Type) {
+export const replayFailure = Effect.fn("Recording.failure")(function* (
+  recorded: typeof failure.Type,
+) {
   if (recorded.tag === "Refused") {
     const refusal = refusalSchema.safeParse(recorded.refusal);
     if (!refusal.success) return yield* refuse("tamper", "Recorded refusal is damaged");
@@ -331,11 +352,11 @@ const reasonOf = (cause: Cause.Cause<InvalidRead>): Truncation["reason"] => {
     ? "full"
     : problem === "recording.observer"
       ? "observer"
-    : problem === "recording.unsupported"
-      ? "unsupported"
-      : problem === "recording.input"
-        ? "encoding"
-        : "io";
+      : problem === "recording.unsupported"
+        ? "unsupported"
+        : problem === "recording.input"
+          ? "encoding"
+          : "io";
 };
 /**
  * Automatic capture around one live read. Live runs exactly once and its exit is returned
@@ -374,15 +395,22 @@ export const captured = <A, E, R>(
       Effect.flatMap(record(exit), (taking) =>
         taking === null || writer.capture.truncated()
           ? Effect.void
-          : writer.append(taking.input, taking.outcome).pipe(
-              Effect.flatMap((stored) => bind(stored).pipe(
-                Effect.mapError(() => refuse("observer", "Taking observer failed")),
-              )),
-            ),
+          : writer
+              .append(taking.input, taking.outcome)
+              .pipe(
+                Effect.flatMap((stored) =>
+                  bind(stored).pipe(
+                    Effect.mapError(() => refuse("observer", "Taking observer failed")),
+                  ),
+                ),
+              ),
       ),
     );
-    if (Exit.isFailure(kept)) yield* writer.capture.stop(at, reasonOf(kept.cause),
-      { site: Exit.isFailure(exit) ? "failure" : "json", op });
+    if (Exit.isFailure(kept))
+      yield* writer.capture.stop(at, reasonOf(kept.cause), {
+        site: Exit.isFailure(exit) ? "failure" : "json",
+        op,
+      });
     return yield* exit;
   });
 /** A live failure as its recorded outcome, or null for an interrupted read, which is no taking. */
@@ -414,7 +442,9 @@ export const selectedFor = (input: RecordedInput, scope: string, bound: string |
             Effect.flatMap((selected) =>
               bound === undefined || bound === selected
                 ? Effect.succeed(selected)
-                : Effect.fail(refuse("mismatch", "The bound taking differs from the consumer occurrence")),
+                : Effect.fail(
+                    refuse("mismatch", "The bound taking differs from the consumer occurrence"),
+                  ),
             ),
           ),
   );
@@ -426,17 +456,27 @@ export const captureInput = <A, I>(
   codec: Schema.Codec<A, I>,
   live: Effect.Effect<A, DoorFailure>,
   observed: TakingObserver = unobserved,
-  op = input.kind === "native" || input.kind === "publication" ? input.key : input.kind === "work" ? `work.${input.view}`
-    : input.kind === "files" ? `files.${input.file}` : input.kind === "marks"
-      ? `marks.${input.frame === null ? "snapshot" : "frame"}` : input.kind,
+  op = input.kind === "native" || input.kind === "publication"
+    ? input.key
+    : input.kind === "work"
+      ? `work.${input.view}`
+      : input.kind === "files"
+        ? `files.${input.file}`
+        : input.kind === "marks"
+          ? `marks.${input.frame === null ? "snapshot" : "frame"}`
+          : input.kind,
 ): Effect.Effect<A, DoorFailure> =>
-  captured(writer, op, live, (exit) =>
-    Effect.gen(function* () {
-      const outcome: Outcome | null = Exit.isSuccess(exit)
-        ? { kind: "observed", value: yield* encoded(codec, exit.value) }
-        : yield* failedOutcome(exit);
-      return outcome && { input: { input, scope, outputVersion: BUILD_VERSION }, outcome };
-    }),
+  captured(
+    writer,
+    op,
+    live,
+    (exit) =>
+      Effect.gen(function* () {
+        const outcome: Outcome | null = Exit.isSuccess(exit)
+          ? { kind: "observed", value: yield* encoded(codec, exit.value) }
+          : yield* failedOutcome(exit);
+        return outcome && { input: { input, scope, outputVersion: BUILD_VERSION }, outcome };
+      }),
     observed,
     Effect.succeed({ input, scope }),
   );
@@ -464,7 +504,10 @@ export const replayInput = <A, I>(
     const raw = yield* reader.observation(taking);
     return yield* Schema.decodeUnknownEffect(codec)(raw).pipe(
       Effect.mapError(() =>
-        refuse("mismatch", `Recorded ${input.kind === "files" ? `files.${input.file}` : input.kind} no longer satisfies its owner's contract`),
+        refuse(
+          "mismatch",
+          `Recorded ${input.kind === "files" ? `files.${input.file}` : input.kind} no longer satisfies its owner's contract`,
+        ),
       ),
     );
   });
@@ -479,4 +522,5 @@ export const recordedNativeJson = (value: unknown, what: string) =>
     Effect.map(canonicalJson),
     Effect.mapError(() => refuse("input", `Native ${what} is not JSON`, 400)),
   );
-export const recordedNativeArgs = (request: NativeReadInput) => recordedNativeJson(request.input, "input");
+export const recordedNativeArgs = (request: NativeReadInput) =>
+  recordedNativeJson(request.input, "input");

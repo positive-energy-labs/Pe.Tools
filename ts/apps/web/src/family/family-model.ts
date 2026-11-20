@@ -8,7 +8,6 @@ import { measuredValueSchema, showCellValue, type MeasuredValue } from "@pe/agen
 
 // ── the document shape ──────────────────────────────────────────────────────────────────────────
 
-
 interface SketchCurveSpec {
   kind: string;
   on?: string;

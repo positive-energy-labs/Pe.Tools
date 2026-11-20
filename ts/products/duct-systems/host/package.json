@@ -20,8 +20,8 @@
     "@pe/ducts-host": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
-    "zod": "4.3.6",
-    "@pe/host-internal": "workspace:*"
+    "@pe/host-internal": "workspace:*",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

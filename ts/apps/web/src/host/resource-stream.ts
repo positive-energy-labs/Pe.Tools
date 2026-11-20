@@ -285,7 +285,8 @@ export class PeReadings {
   /** Writes fence the connection. Receipt-window loss renews only that subject: it is not
    * evidence that Work changed. A gap diagnoses loss; the replacement snapshot restores it. */
   dirty(request: ReadingRequest, scope: "connection" | "subject" = "connection") {
-    const key = readingKey(request), entry = this.entries.get(key);
+    const key = readingKey(request),
+      entry = this.entries.get(key);
     if (!entry) return;
     if (scope === "connection") return this.schedule();
     this.pending.delete(key);
@@ -377,7 +378,9 @@ export class PeReadings {
         // A remount creates a stale owner even when its key never left the host subscription.
         // Renew that owner's acquisition instead of waiting for an unrelated host edit.
         const remove = [...this.sent]
-          .filter(([key, request]) => this.entries.get(key)?.request !== request || this.renew.has(key))
+          .filter(
+            ([key, request]) => this.entries.get(key)?.request !== request || this.renew.has(key),
+          )
           .map(([key]) => key)
           .slice(0, READING_MAX_KEYS);
         const add = [...this.entries]
@@ -391,19 +394,30 @@ export class PeReadings {
           this.admission = admission;
           let deadline!: ReturnType<typeof setTimeout>;
           const expired = new Promise<never>((_resolve, reject) => {
-            admission.signal.addEventListener("abort", () => reject(admission.signal.reason), { once: true });
-            deadline = setTimeout(() => admission.abort(Error("Reading subscription admission timed out")), READING_DEADLINE_MS);
+            admission.signal.addEventListener("abort", () => reject(admission.signal.reason), {
+              once: true,
+            });
+            deadline = setTimeout(
+              () => admission.abort(Error("Reading subscription admission timed out")),
+              READING_DEADLINE_MS,
+            );
           });
           try {
             await Promise.race([
-              this.update(connection, add.map(([, entry]) => entry.request), remove, admission.signal),
+              this.update(
+                connection,
+                add.map(([, entry]) => entry.request),
+                remove,
+                admission.signal,
+              ),
               expired,
             ]);
           } finally {
             clearTimeout(deadline);
             if (this.admission === admission) this.admission = undefined;
           }
-          if (this.closed || this.connection !== connection || this.generation !== generation) break;
+          if (this.closed || this.connection !== connection || this.generation !== generation)
+            break;
           for (const key of remove) this.sent.delete(key);
           for (const [key, entry] of add) this.sent.set(key, entry.request);
           if (initial && this.sent.size) this.watchSilence?.();
@@ -412,10 +426,12 @@ export class PeReadings {
         break;
       }
     } catch {
-      if (!this.closed && this.connection === connection && this.generation === generation) this.fault();
+      if (!this.closed && this.connection === connection && this.generation === generation)
+        this.fault();
     } finally {
       this.updating = false;
-      if (!this.closed && (this.connection !== connection || this.generation !== generation)) void this.syncSubscriptions();
+      if (!this.closed && (this.connection !== connection || this.generation !== generation))
+        void this.syncSubscriptions();
     }
   }
 

@@ -54,10 +54,10 @@ test("under a test run no content home may resolve outside the temp directory", 
   }
 });
 
-
 afterEach(() => vi.unstubAllEnvs());
 test("firm resolution uses Settings, else the literal default folder, with no marker read", async () => {
-  const { defaultFirmHome, useHomesConfig, homesConfigPath, homesFound } = await import("../src/product-paths.ts");
+  const { defaultFirmHome, useHomesConfig, homesConfigPath, homesFound } =
+    await import("../src/product-paths.ts");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
   const root = mkdtempSync(join(tmpdir(), "pe-resolver-"));
@@ -65,7 +65,9 @@ test("firm resolution uses Settings, else the literal default folder, with no ma
   const file = join(root, "homes.json");
   const prior = homesConfigPath();
   const chosen = join(root, "firm");
-  const marker = vi.fn(() => { throw Error("firm marker read"); });
+  const marker = vi.fn(() => {
+    throw Error("firm marker read");
+  });
   let present = new Set([defaultFirmHome]);
   const facts = { exists: (path: string) => present.has(path), marker };
   try {
@@ -80,15 +82,19 @@ test("firm resolution uses Settings, else the literal default folder, with no ma
     expect(firmSettingsDir(facts)).toBe(join(chosen, "Settings"));
     expect(firmKeysPath(facts)).toBe(join(chosen, "keys.json"));
     expect(homesFound({ facts }).homes.at(-1)?.found).toBe("config");
-    writeFileSync(file, "{}"); present.clear();
+    writeFileSync(file, "{}");
+    present.clear();
     expect(firmHome(facts).root).toBeNull();
     expect(marker).not.toHaveBeenCalled();
-  } finally { useHomesConfig(prior); }
+  } finally {
+    useHomesConfig(prior);
+  }
 });
 
 // Restored after the marker deletion: these two rules never depended on the marker.
 test("homes.json names the user home; a homes.json that does not validate is reported and the defaults answer", async () => {
-  const { defaultFirmHome, readHomesConfig, useHomesConfig, homesConfigPath } = await import("../src/product-paths.ts");
+  const { defaultFirmHome, readHomesConfig, useHomesConfig, homesConfigPath } =
+    await import("../src/product-paths.ts");
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", "");
   vi.stubEnv("PE_TEST_HOME_ROOT", "");
   vi.stubEnv(homeVariable, undefined);
@@ -103,5 +109,7 @@ test("homes.json names the user home; a homes.json that does not validate is rep
     writeFileSync(file, JSON.stringify({ firm: "relative/path" }));
     expect(readHomesConfig().error).toContain("absolute path");
     expect(firmHome(facts).root).toBe(defaultFirmHome);
-  } finally { useHomesConfig(prior); }
+  } finally {
+    useHomesConfig(prior);
+  }
 });

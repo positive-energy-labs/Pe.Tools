@@ -2,7 +2,12 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { resourceReadingSchema } from "../src/pea/product-contracts.generated.ts";
 import { decodeResourceSubscriptionUpdate } from "@pe/runtime/resource-stream";
-import { linkedCatalog, matchPeRoute, peRoutes, servePeRoute } from "../src/pea/product-catalog.generated.ts";
+import {
+  linkedCatalog,
+  matchPeRoute,
+  peRoutes,
+  servePeRoute,
+} from "../src/pea/product-catalog.generated.ts";
 
 const catalogEntries = [...linkedCatalog().entries.values()];
 
@@ -29,7 +34,7 @@ test("product reading requests enter through the assembled stream schema", () =>
     selector: { kind: "roster" },
   };
   const request = JSON.stringify({ add: [reading], remove: [] });
-   expect(decodeResourceSubscriptionUpdate(request)).toEqual({ error: "Invalid resource keys" });
+  expect(decodeResourceSubscriptionUpdate(request)).toEqual({ error: "Invalid resource keys" });
   expect(decodeResourceSubscriptionUpdate(request, resourceReadingSchema)).toEqual({
     add: [reading],
     remove: [],

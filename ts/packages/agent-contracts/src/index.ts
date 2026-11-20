@@ -26,8 +26,19 @@ export * from "./input-lane.ts";
 export * from "./recording-points.ts";
 
 export type { Immutable, RouteGraphJson, RouteGraphWire, GateWhen } from "./route-kernel-data.ts";
-export type { BodyBindings, WorkPatch, PaneContext, BodyContext, ReadingState, Present } from "./route-kernel-bodies.ts";
-export type { HostRouteModule, HostAdmittedRoute, HostWorkRegistration } from "./host-route-admission.ts";
+export type {
+  BodyBindings,
+  WorkPatch,
+  PaneContext,
+  BodyContext,
+  ReadingState,
+  Present,
+} from "./route-kernel-bodies.ts";
+export type {
+  HostRouteModule,
+  HostAdmittedRoute,
+  HostWorkRegistration,
+} from "./host-route-admission.ts";
 export { jsonCodec } from "./route-kernel-codecs.ts";
 export { captureHostModule } from "./host-route-admission.ts";
 export type { KernelServices, ResolvedRead } from "./route-kernel-environment.ts";
@@ -62,7 +73,7 @@ export * from "./schedules-read.ts";
 export * from "./settings-read.ts";
 export * from "./tiered-setting.ts";
 
-export {isRecord} from "./route-state.ts";
+export { isRecord } from "./route-state.ts";
 
 export { blobRefSchema, blobUploadSchema, type BlobRef, type BlobUpload } from "./blob-ref.ts";
 

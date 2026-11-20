@@ -19,7 +19,11 @@ test("the dev tray host recovers after a competing supervisor outlasts the first
   await mkdir(serviceDir, { recursive: true });
   await writeFile(
     lock,
-    JSON.stringify({ pid: process.pid, token: randomUUID(), acquiredUtc: new Date().toISOString() }),
+    JSON.stringify({
+      pid: process.pid,
+      token: randomUUID(),
+      acquiredUtc: new Date().toISOString(),
+    }),
     { flag: "wx" },
   );
 
@@ -50,7 +54,9 @@ test("the dev tray host recovers after a competing supervisor outlasts the first
     host.once("error", (error) => done(error.message));
   });
   let output = "";
-  const read = (chunk: Buffer) => { output += String(chunk); };
+  const read = (chunk: Buffer) => {
+    output += String(chunk);
+  };
   host.stdout!.on("data", read);
   host.stderr!.on("data", read);
   try {
@@ -63,16 +69,27 @@ test("the dev tray host recovers after a competing supervisor outlasts the first
 
     // Fail immediately if the tray's backend dies. Otherwise wait for the same PID to own the
     // receipt and answer at the published endpoint, then for its frontend to come up.
-    const recovered = expect.poll(async () => {
-      const service = await readServiceFile(appBase, name);
-      if (!service || service.pid !== host.pid || !output.includes("Browser: http")) return false;
-      return fetch(`http://127.0.0.1:${service.port}/host/status`, {
-        signal: AbortSignal.timeout(1_000),
-      }).then((response) => response.ok, () => false);
-    }, { timeout: 80_000 }).toBe(true);
+    const recovered = expect
+      .poll(
+        async () => {
+          const service = await readServiceFile(appBase, name);
+          if (!service || service.pid !== host.pid || !output.includes("Browser: http"))
+            return false;
+          return fetch(`http://127.0.0.1:${service.port}/host/status`, {
+            signal: AbortSignal.timeout(1_000),
+          }).then(
+            (response) => response.ok,
+            () => false,
+          );
+        },
+        { timeout: 80_000 },
+      )
+      .toBe(true);
     const outcome = await Promise.race([recovered.then(() => "healthy"), exited]);
     expect(outcome, output).toBe("healthy");
-    console.log("Competing lease released. The same dev host PID recovered and started its frontend.");
+    console.log(
+      "Competing lease released. The same dev host PID recovered and started its frontend.",
+    );
   } finally {
     await rm(lock, { force: true });
     if (host.connected) host.disconnect();

@@ -31,7 +31,10 @@ type Rule = {
   cannotSee: string;
 };
 const allow = (entries: Record<string, string>): Allow[] =>
-  Object.entries(entries).map(([glob, reason]) => ({ glob: /^(?:products|packages)\//.test(glob) ? glob : W + glob, reason }));
+  Object.entries(entries).map(([glob, reason]) => ({
+    glob: /^(?:products|packages)\//.test(glob) ? glob : W + glob,
+    reason,
+  }));
 
 // prettier-ignore
 const RULES: Rule[] = [

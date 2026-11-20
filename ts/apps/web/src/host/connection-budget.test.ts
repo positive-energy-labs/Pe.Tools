@@ -24,11 +24,17 @@ afterEach(() => {
 
 const live = new Set<string>();
 class Stream {
-  onopen = null; onmessage = null; onerror = null;
-  constructor(readonly url: string) { live.add(url); }
-  close() { live.delete(this.url); }
+  onopen = null;
+  onmessage = null;
+  onerror = null;
+  constructor(readonly url: string) {
+    live.add(url);
+  }
+  close() {
+    live.delete(this.url);
+  }
 }
-const paths = () => [...live].map(url => new URL(url, "http://127.0.0.1").pathname);
+const paths = () => [...live].map((url) => new URL(url, "http://127.0.0.1").pathname);
 
 test("a tab's host reads ride its one stream, so they hold no more of the origin's 6 sockets", async () => {
   vi.stubGlobal("EventSource", Stream);
@@ -36,12 +42,18 @@ test("a tab's host reads ride its one stream, so they hold no more of the origin
   const census = peReadings.subscribe({ kind: "inventory" }, () => {});
   await vi.waitFor(() => expect(live.size).toBe(1));
   // /ducts mounts 4 host reads.
-  const stops = Array.from({ length: 4 }, () => publicationSource({
-    read: async (_ctx, publication) => ({ generation: publication.generation, version: 1, state: "current",
-      value: { evaluation: "e", coverage: { refused: [], unknown: [] } } }),
-  }).open({ signal: new AbortController().signal } as ReadingContext, () => {}));
+  const stops = Array.from({ length: 4 }, () =>
+    publicationSource({
+      read: async (_ctx, publication) => ({
+        generation: publication.generation,
+        version: 1,
+        state: "current",
+        value: { evaluation: "e", coverage: { refused: [], unknown: [] } },
+      }),
+    }).open({ signal: new AbortController().signal } as ReadingContext, () => {}),
+  );
   try {
-    await new Promise(done => setTimeout(done, 50));
+    await new Promise((done) => setTimeout(done, 50));
     expect(paths()).toEqual(["/pe/resources"]);
   } finally {
     for (const stop of stops) if (typeof stop === "function") stop();
@@ -57,8 +69,13 @@ test("a page that leaves view frees its socket at once, and takes one again when
     return { onopen: null, onmessage: null, onerror: null, close: () => void held.delete(url) };
   };
   const frames: string[] = [];
-  const readings = new PeReadings(() => "http://127.0.0.1/pe/resources", connect, undefined, async () => {});
-  readings.subscribe({ kind: "inventory" }, frame => frames.push(frame.kind));
+  const readings = new PeReadings(
+    () => "http://127.0.0.1/pe/resources",
+    connect,
+    undefined,
+    async () => {},
+  );
+  readings.subscribe({ kind: "inventory" }, (frame) => frames.push(frame.kind));
   try {
     await vi.waitFor(() => expect(held.size).toBe(1));
     const [first] = held;
@@ -67,7 +84,7 @@ test("a page that leaves view frees its socket at once, and takes one again when
     expect(held.size).toBe(0);
     // Nothing reopens it while hidden, not a new key and not a retry.
     readings.subscribe({ kind: "machine" }, () => {});
-    await new Promise(done => setTimeout(done, 50));
+    await new Promise((done) => setTimeout(done, 50));
     expect(held.size).toBe(0);
     window.dispatchEvent(new Event("pageshow"));
     // A new connection: every key is reacquired, and what was held is fenced until then.
@@ -88,15 +105,25 @@ test("a live tab re-admits its Open publication within three seconds of an answe
   let admitAt = -1;
   let lose = () => {};
   const publication = { kind: "publication", subscription: "open-tab", generation: 0 } as const;
-  const readings = new PeReadings(() => "http://127.0.0.1/pe/resources", () => {
-    const stream = { onopen: null as (() => void) | null, onerror: null as (() => void) | null, onmessage: null, close() {} };
-    lose = () => stream.onerror?.();
-    setTimeout(() => (answering ? stream.onopen : stream.onerror)?.(), 0);
-    return stream;
-  }, undefined, async (_connection, add) => {
-    expect(add).toEqual([publication]);
-    admitAt = Date.now();
-  });
+  const readings = new PeReadings(
+    () => "http://127.0.0.1/pe/resources",
+    () => {
+      const stream = {
+        onopen: null as (() => void) | null,
+        onerror: null as (() => void) | null,
+        onmessage: null,
+        close() {},
+      };
+      lose = () => stream.onerror?.();
+      setTimeout(() => (answering ? stream.onopen : stream.onerror)?.(), 0);
+      return stream;
+    },
+    undefined,
+    async (_connection, add) => {
+      expect(add).toEqual([publication]);
+      admitAt = Date.now();
+    },
+  );
   try {
     const stop = readings.subscribe(publication, () => {});
     await vi.advanceTimersByTimeAsync(10);

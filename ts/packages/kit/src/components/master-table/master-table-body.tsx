@@ -582,7 +582,8 @@ export function MasterTableBody<Row extends RowData>({
                               if (event.target === event.currentTarget) handleGridKey(event);
                             }}
                             onCompositionStart={(event) => {
-                              if (event.target === event.currentTarget) editCell(event.currentTarget, "");
+                              if (event.target === event.currentTarget)
+                                editCell(event.currentTarget, "");
                             }}
                             onCopy={
                               cellEdit
@@ -639,17 +640,23 @@ export function MasterTableBody<Row extends RowData>({
                               // Keep range selection on the td, but give a single-cell edit a native
                               // input: IME/paste/insertText may supply no printable keydown to open it.
                               if (
-                                event.button !== 0 || event.shiftKey || event.ctrlKey || event.metaKey ||
+                                event.button !== 0 ||
+                                event.shiftKey ||
+                                event.ctrlKey ||
+                                event.metaKey ||
                                 table.getSelectedCellCount() > 1
-                              ) return;
+                              )
+                                return;
                               const target = event.target as HTMLElement;
                               const editor = event.currentTarget.querySelector<
                                 HTMLInputElement | HTMLTextAreaElement
                               >(CELL_EDITOR);
                               if (
-                                !editor || document.activeElement === editor ||
+                                !editor ||
+                                document.activeElement === editor ||
                                 (target !== event.currentTarget && target !== editor)
-                              ) return;
+                              )
+                                return;
                               editor.focus();
                               editor.select();
                             }}

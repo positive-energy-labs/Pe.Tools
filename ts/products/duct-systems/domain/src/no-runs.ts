@@ -16,13 +16,21 @@ export function noRunBranches(
   snapshot: DuctSnapshot,
   runs: readonly CalcRun[],
   scope: SystemScope,
-  flows: ReadonlyMap<number, { cfm: number | null }> | Readonly<Record<number,{cfm:number|null}>>,
+  flows:
+    | ReadonlyMap<number, { cfm: number | null }>
+    | Readonly<Record<number, { cfm: number | null }>>,
 ): Map<number, NoRunBranch> {
   const elements = new Map([...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e]));
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
   const name = elementLabeler(snapshot);
   const flow = (id: number) =>
-    (flows instanceof Map ? (flows.has(id)?flows.get(id)!.cfm:terminalCfm(nodes.get(id))) : Object.hasOwn(flows,id)?(flows as Readonly<Record<number,{cfm:number|null}>>)[id]!.cfm:terminalCfm(nodes.get(id))) ?? 0;
+    (flows instanceof Map
+      ? flows.has(id)
+        ? flows.get(id)!.cfm
+        : terminalCfm(nodes.get(id))
+      : Object.hasOwn(flows, id)
+        ? (flows as Readonly<Record<number, { cfm: number | null }>>)[id]!.cfm
+        : terminalCfm(nodes.get(id))) ?? 0;
   const inRun = new Set<number>();
   for (const run of runs)
     if (run.terminal != null && scope.terminals.has(run.terminal) && flow(run.terminal) > 0)
@@ -86,7 +94,12 @@ export function noRunBranches(
       else
         for (const c of e.connectors)
           if (!c.connectedTo && c.kind !== "curve")
-            branch.reasons.push({ kind: "open", at: id, text: `Ends open at ${name(id)}`, connector: c.index });
+            branch.reasons.push({
+              kind: "open",
+              at: id,
+              text: `Ends open at ${name(id)}`,
+              connector: c.index,
+            });
     }
     if (!branch.reasons.length)
       branch.reasons.push({

@@ -23,15 +23,20 @@ import { Effect } from "effect";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 
 export class CommandRejected extends Error {
-  constructor(readonly refusal: CommandRefusal, readonly status = 409, explanation?: string) {
+  constructor(
+    readonly refusal: CommandRefusal,
+    readonly status = 409,
+    explanation?: string,
+  ) {
     super(
-      explanation ?? ("message" in refusal
-        ? refusal.message
-        : refusal.kind === "stale_revision"
-          ? `Work changed to r${refusal.live}`
-          : refusal.kind === "claimed"
-            ? "Another action has reserved this resource."
-            : "Consumed input changed"),
+      explanation ??
+        ("message" in refusal
+          ? refusal.message
+          : refusal.kind === "stale_revision"
+            ? `Work changed to r${refusal.live}`
+            : refusal.kind === "claimed"
+              ? "Another action has reserved this resource."
+              : "Consumed input changed"),
     );
   }
 }
@@ -102,8 +107,14 @@ interface WorkSelection<W> {
 }
 /** Action-owned acquisition: the adapter carries the context. */
 export interface CommandWorkReads {
-  read(key: Parameters<RouteWorkspace["read"]>[0], route: string): ReturnType<RouteWorkspace["read"]>;
-  view(key: Parameters<RouteWorkspace["view"]>[0], route: string): ReturnType<RouteWorkspace["view"]>;
+  read(
+    key: Parameters<RouteWorkspace["read"]>[0],
+    route: string,
+  ): ReturnType<RouteWorkspace["read"]>;
+  view(
+    key: Parameters<RouteWorkspace["view"]>[0],
+    route: string,
+  ): ReturnType<RouteWorkspace["view"]>;
 }
 export interface CommandContext {
   admission: ActionAdmission;
@@ -196,7 +207,12 @@ export function command<C extends Command, S extends z.ZodType>(
     ): ReturnType<StepRecovery>;
   },
 ): CommandExecutor {
-  return { definition, prepared, sealInput: implementation.seal ? prepared : undefined, ...implementation } as CommandExecutor;
+  return {
+    definition,
+    prepared,
+    sealInput: implementation.seal ? prepared : undefined,
+    ...implementation,
+  } as CommandExecutor;
 }
 
 type AuthoredInput<C extends Command> = C extends { authoredInput: infer S extends z.ZodType }

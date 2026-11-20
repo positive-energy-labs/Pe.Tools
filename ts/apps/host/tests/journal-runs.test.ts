@@ -31,8 +31,10 @@ async function files() {
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const bridge = detachedBridge();
-  const captures = new TakeoffCaptures(stateFixture(join(dir, "captures")), join(dir, "aps.json"), () =>
-    new Date().toISOString(),
+  const captures = new TakeoffCaptures(
+    stateFixture(join(dir, "captures")),
+    join(dir, "aps.json"),
+    () => new Date().toISOString(),
   );
   const path = join(dir, "journal.jsonl");
   let writes = 0,
@@ -42,7 +44,10 @@ async function files() {
       Effect.gen(function* () {
         if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
         writes++;
-        const saved = yield* saveMember(Schema.decodeUnknownSync(podMemberSaveRequestSchema)(input), { podsRoot });
+        const saved = yield* saveMember(
+          Schema.decodeUnknownSync(podMemberSaveRequestSchema)(input),
+          { podsRoot },
+        );
         if (loseResult) {
           loseResult = false;
           return yield* Effect.fail(Error("File result lost after commit"));

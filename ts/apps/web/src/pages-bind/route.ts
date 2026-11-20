@@ -19,7 +19,13 @@ export const query = {
   fragment: field(z.string(), "", "query"),
 };
 export const loaded = read(hostRead(contracts.picker));
-export type BindContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never, Verbs<"bind">>;
+export type BindContext = ContextOf<
+  typeof fields & typeof query,
+  typeof loaded,
+  never,
+  never,
+  Verbs<"bind">
+>;
 export const module = route({
   key: "bind",
   name: "Bind",
@@ -47,7 +53,8 @@ export const module = route({
     multiple: false,
     pane: "main",
     read: loaded,
-    options: (data) => (data?.pages ?? []).map((p) => ({ id: oneName(p.slug).ids[0]!, label: p.title || p.slug })),
+    options: (data) =>
+      (data?.pages ?? []).map((p) => ({ id: oneName(p.slug).ids[0]!, label: p.title || p.slug })),
   },
   core: loaded,
   panes: {

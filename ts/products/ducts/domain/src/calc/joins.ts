@@ -37,7 +37,8 @@ export async function followAcceptedJoins(
     const seeds = rulings
       .filter((r) => r.verdict === "accept")
       .flatMap((r) => {
-        const a = elementOf(r.pair[0] ?? ""), b = elementOf(r.pair[1] ?? "");
+        const a = elementOf(r.pair[0] ?? ""),
+          b = elementOf(r.pair[1] ?? "");
         return here.has(a) && !here.has(b) ? [b] : here.has(b) && !here.has(a) ? [a] : [];
       })
       .filter((id) => !seeded.has(id));

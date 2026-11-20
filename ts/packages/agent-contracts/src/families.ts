@@ -8,7 +8,7 @@ import { showCellValue } from "./schedule-grid-data.ts";
 import { documentRefSchema } from "./target.ts";
 import { writeIntentSchema } from "./write-intent.ts";
 import { decode, subjectCode, type SubjectRefCode } from "./subject-ref.ts";
-export { familiesReadProgressSchema,type FamiliesReadProgress } from "./families-progress.ts";
+export { familiesReadProgressSchema, type FamiliesReadProgress } from "./families-progress.ts";
 
 import { draftCellSchema } from "./draft.ts";
 
@@ -208,7 +208,11 @@ export interface FamilyCellAddress {
 
 /** A cell is the SubjectRef `name:[family,type]#field:<parameter>` (ADR 0035 rule 2): the type is
  * part of the name tuple and the parameter is the sub. */
-export const familyCellKey = ({ familyName, typeName, parameter }: FamilyCellAddress): SubjectRefCode =>
+export const familyCellKey = ({
+  familyName,
+  typeName,
+  parameter,
+}: FamilyCellAddress): SubjectRefCode =>
   subjectCode({ keyKind: "name", key: [familyName, typeName], sub: { field: parameter } });
 
 export const familyCellAddress = (key: string): FamilyCellAddress => {
@@ -335,7 +339,8 @@ const familiesDocumentSchema = z
         z.string().regex(/\D/, "an exclusion key is a family name, never an element id"),
         z.object({ by: exclusionAuthorSchema }).strict(),
       )
-      .default({}).meta({ title: "excluded families" }),
+      .default({})
+      .meta({ title: "excluded families" }),
     cells: z.record(familyCellKeySchema, familyCellStateSchema).default({}),
     /** One reviewed native FF patch source, beside per-type cell edits. Only one source may have edits. */
     patch: familiesPatchCellSchema.default({}),
@@ -399,7 +404,7 @@ export const familiesRouteState = {
     "propose",
   ],
   description:
-    "Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for the SubjectRef key name:[\"<familyName>\",\"<typeName>\"]#field:<parameter> (reserved % : ~ @ # / escaped as %xx) from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear staged edits (last writer wins) and exclusions at the expected Work revision. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.",
+    'Shared Family Foundry Work. Set scope.edit to {value:{categoryNames,familyNames,placementScope}}. Set cells.<key>.edit for the SubjectRef key name:["<familyName>","<typeName>"]#field:<parameter> (reserved % : ~ @ # / escaped as %xx) from scopeTypes, or patch.edit for exact native patch source bytes. Either author may replace or clear staged edits (last writer wins) and exclusions at the expected Work revision. Apply plans/checks/writes/readbacks the submitted edits; native patch and per-type edits are mutually exclusive.',
   schema: familiesDocumentSchema,
 } satisfies RouteStateSpec<typeof familiesDocumentSchema>;
 
@@ -426,7 +431,10 @@ export const familiesObservationSummarySchema = familiesObservationSchema
   .extend({ familyCount: z.number(), typeCount: z.number(), issueCount: z.number() });
 export type FamiliesObservation = z.output<typeof familiesObservationSchema>;
 /** An observation without its matrix: what a receipt or a listing carries (the matrix stays in the capture). */
-export const summarizeFamiliesObservation = ({ result, ...reading }: FamiliesObservation): FamiliesObservationSummary => ({
+export const summarizeFamiliesObservation = ({
+  result,
+  ...reading
+}: FamiliesObservation): FamiliesObservationSummary => ({
   ...reading,
   familyCount: result.families.length,
   typeCount: result.families.reduce((count, family) => count + family.typeNames.length, 0),

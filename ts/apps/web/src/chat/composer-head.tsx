@@ -179,7 +179,11 @@ export function useChatSituation(handle: ChatHandle) {
   const origin = handle.value.publication?.origin;
   return {
     head,
-    demo: typeof origin === "object" && origin !== null && "kind" in origin && origin.kind === "fixture",
+    demo:
+      typeof origin === "object" &&
+      origin !== null &&
+      "kind" in origin &&
+      origin.kind === "fixture",
     inventory,
     bound,
     ladder,
@@ -241,43 +245,43 @@ export function ComposerPickers({
   // A closed target names itself in the first empty slot, in the caution tone, and the picker
   // lists only the live inventory.
   const unbound = ladder.levels.findIndex((level) => level.label === null);
-  const levels = ladder.levels.map((level) => ({ ...level,
-    ...(situation.demo ? { provenance: <Tag>Demo</Tag> } : {}),
-  })).map((level, index) =>
-    index === 0
-      ? {
-          ...level,
-          placeholder: !head.targets.length
-            ? "choose Revit documents (optional)"
-            : index === unbound && closedWord
-              ? closedWord
-              : level.placeholder,
-          extra: (
-            <>
-              {level.extra}
-              {head.targets.length ? (
-                <div className="hairline-t mt-1 px-2 pt-1">
-                  <Button
-                    icon={X}
-                    kind="framed"
-                    label="Clear targets"
-                    reason="Run this chat without Revit documents"
-                    refusal={targetDisabled ? "Run this chat without Revit documents" : null}
-                    onClick={() => {
-                      void head.set([]);
-                    }}
-                  >
-                    Clear targets
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          ),
-        }
-      : index === unbound && closedWord
-        ? { ...level, placeholder: closedWord }
-        : level,
-  );
+  const levels = ladder.levels
+    .map((level) => ({ ...level, ...(situation.demo ? { provenance: <Tag>Demo</Tag> } : {}) }))
+    .map((level, index) =>
+      index === 0
+        ? {
+            ...level,
+            placeholder: !head.targets.length
+              ? "choose Revit documents (optional)"
+              : index === unbound && closedWord
+                ? closedWord
+                : level.placeholder,
+            extra: (
+              <>
+                {level.extra}
+                {head.targets.length ? (
+                  <div className="hairline-t mt-1 px-2 pt-1">
+                    <Button
+                      icon={X}
+                      kind="framed"
+                      label="Clear targets"
+                      reason="Run this chat without Revit documents"
+                      refusal={targetDisabled ? "Run this chat without Revit documents" : null}
+                      onClick={() => {
+                        void head.set([]);
+                      }}
+                    >
+                      Clear targets
+                    </Button>
+                  </div>
+                ) : null}
+              </>
+            ),
+          }
+        : index === unbound && closedWord
+          ? { ...level, placeholder: closedWord }
+          : level,
+    );
   return (
     <section aria-label="Pea situation" className="contents" data-testid="composer-head">
       <HeadLadder face="icon" />

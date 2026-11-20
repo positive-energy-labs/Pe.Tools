@@ -13,9 +13,9 @@ test("an empty host list restores nothing", async () => {
 });
 test("bare route restores the focused Place and explicit fields override memory independently", async () => {
   await seedPlaces([
-      { id: ONE, route: "fans", link: "/fans?fan=uid-a%25400&fixture=layout", at: AT },
-      { id: TWO, route: "fans", link: "/fans?fan=uid-b%25400", at: AT },
-    ]);
+    { id: ONE, route: "fans", link: "/fans?fan=uid-a%25400&fixture=layout", at: AT },
+    { id: TWO, route: "fans", link: "/fans?fan=uid-b%25400", at: AT },
+  ]);
   sessionStorage.setItem("pe.place.focus", ONE);
   expect(restorePageSearch(tabPageSearch("/fans"), {})).toEqual({
     fan: "uid-a%400",

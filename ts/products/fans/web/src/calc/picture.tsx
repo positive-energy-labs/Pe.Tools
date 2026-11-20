@@ -219,18 +219,23 @@ export function CalcPicture({
     }),
     [focusIds, beyond],
   );
-  const runs = useMemo(() => calcBreakdownPicture(sheet?.calcBreakdown ?? null, elements), [sheet, elements]);
+  const runs = useMemo(
+    () => calcBreakdownPicture(sheet?.calcBreakdown ?? null, elements),
+    [sheet, elements],
+  );
   const members = useMemo<Members>(
     () =>
       new Map<SubjectKey, readonly SubjectKey[]>([
         ...runs.members,
         ...(sheet?.worstLegs ?? []).map(
           (path) =>
-            [`path:${path.pathId}`, elements.keysOf(path.legs.map((leg) => leg.elementId))] as const,
+            [
+              `path:${path.pathId}`,
+              elements.keysOf(path.legs.map((leg) => leg.elementId)),
+            ] as const,
         ),
         ...blockers.map(
-          (blocker) =>
-            [`issue:${blocker.id}`, elements.keysOf(blockerElements(blocker))] as const,
+          (blocker) => [`issue:${blocker.id}`, elements.keysOf(blockerElements(blocker))] as const,
         ),
       ]),
     [sheet, blockers, runs, elements],
@@ -334,7 +339,10 @@ export function CalcPicture({
     return line ? (line[Math.floor((line.length - 1) / 2)] ?? null) : null;
   };
   // The DOM marks' own word for the issues they are handed is `findings`; here those are the sheet's blockers.
-  const marksOn = new Set<string>([...on.filter((key) => key !== "findings"), ...(on.includes("blockers") ? ["findings"] : [])]);
+  const marksOn = new Set<string>([
+    ...on.filter((key) => key !== "findings"),
+    ...(on.includes("blockers") ? ["findings"] : []),
+  ]);
   const labels = scene.nodes.flatMap(({ node }) =>
     node.point
       ? [
@@ -393,128 +401,135 @@ export function CalcPicture({
           </>
         )}{" "}
         · {blockers.length} blocker{blockers.length === 1 ? "" : "s"}
-        {blockers.filter((b) => b.kind === "backflow").map((b) => (
-          <span key={b.id} data-tone="caution"> · {b.detail}</span>
-        ))}
+        {blockers
+          .filter((b) => b.kind === "backflow")
+          .map((b) => (
+            <span key={b.id} data-tone="caution">
+              {" "}
+              · {b.detail}
+            </span>
+          ))}
       </span>
     );
   return picture({
-        source: props.source,
-        label: "fan sheet",
-        jump,
-        focus,
-        members,
-        // Ruling C: hovering an element lights its section; a pick selects that section.
-        hoverGroups: (group) => group.startsWith("section:"),
-        widen: runs.widen,
-        strands: runs.strands,
-        over: runs.over,
-        lines,
-        name: (key) =>
-          key.startsWith("run:")
-            ? `Run to ${nameOf(runFor(key)?.end.elementId ?? NaN)}`
-            : key.startsWith("section:")
-              ? `Section ${key.slice(8)}`
-              : (nameOf(elements.idOf(key)) ?? "element not in snapshot"),
-        paint,
-        kinds,
-        colour,
-        layers,
-        layerOptions: FAN_LAYER_OPTIONS,
-        capture: { cuts: beyond.cuts },
-        overlay,
-        readout: {
-          subject: fan.mark,
-          summary,
-          facts: (key) => {
-            const run = runFor(key);
-            const section = sides
-              .flatMap((side) => side?.sections ?? [])
-              .find((part) => `section:${part.id}` === key);
-            const path = run ?? section;
-            if (path)
-              return (
-                <dl data-run-facts={run?.id} data-section-facts={section?.id}>
-                  <dt>
-                    {path.side} {run ? "run" : "section"} {run?.critical ? "· critical" : ""}
-                  </dt>
+    source: props.source,
+    label: "fan sheet",
+    jump,
+    focus,
+    members,
+    // Ruling C: hovering an element lights its section; a pick selects that section.
+    hoverGroups: (group) => group.startsWith("section:"),
+    widen: runs.widen,
+    strands: runs.strands,
+    over: runs.over,
+    lines,
+    name: (key) =>
+      key.startsWith("run:")
+        ? `Run to ${nameOf(runFor(key)?.end.elementId ?? NaN)}`
+        : key.startsWith("section:")
+          ? `Section ${key.slice(8)}`
+          : (nameOf(elements.idOf(key)) ?? "element not in snapshot"),
+    paint,
+    kinds,
+    colour,
+    layers,
+    layerOptions: FAN_LAYER_OPTIONS,
+    capture: { cuts: beyond.cuts },
+    overlay,
+    readout: {
+      subject: fan.mark,
+      summary,
+      facts: (key) => {
+        const run = runFor(key);
+        const section = sides
+          .flatMap((side) => side?.sections ?? [])
+          .find((part) => `section:${part.id}` === key);
+        const path = run ?? section;
+        if (path)
+          return (
+            <dl data-run-facts={run?.id} data-section-facts={section?.id}>
+              <dt>
+                {path.side} {run ? "run" : "section"} {run?.critical ? "· critical" : ""}
+              </dt>
+              <dd className="face-mono">
+                {path.cfm ?? "missing"} cfm · {path.telFt.toFixed(1)} eq ft
+              </dd>
+              <dd className="face-mono">
+                {path.knownInWg.toFixed(4)} in-wg known ·{" "}
+                {run
+                  ? run.complete
+                    ? "complete"
+                    : "incomplete"
+                  : `${section?.unpricedLegs ?? 0} unpriced legs`}
+              </dd>
+              <dd>
+                {path.legIds.length} legs · max {path.maxFpm ?? "missing"} fpm
+              </dd>
+            </dl>
+          );
+        const id = elements.idOf(key);
+        const segment = baseScene.segments.find((f) => f.segment.id === id);
+        const node = scene.nodes.find((f) => f.node.id === id);
+        return (
+          <>
+            {segment ? (
+              <SegmentFactsView {...segment} />
+            ) : node ? (
+              <NodeFactsView {...node} />
+            ) : (
+              <p>Element {id} is outside the snapshot</p>
+            )}
+            {legs
+              .filter((leg) => leg.elementId === id)
+              .map((leg) => (
+                <dl key={leg.id} data-leg-facts={leg.id}>
+                  <dt>Calc leg · {leg.flowSource ?? "flow source missing"}</dt>
                   <dd className="face-mono">
-                    {path.cfm ?? "missing"} cfm · {path.telFt.toFixed(1)} eq ft
+                    {leg.flowCfm ?? "missing"} cfm · {leg.velocityFpm ?? "missing"} fpm
                   </dd>
                   <dd className="face-mono">
-                    {path.knownInWg.toFixed(4)} in-wg known ·{" "}
-                    {run
-                      ? run.complete
-                        ? "complete"
-                        : "incomplete"
-                      : `${section?.unpricedLegs ?? 0} unpriced legs`}
-                  </dd>
-                  <dd>
-                    {path.legIds.length} legs · max {path.maxFpm ?? "missing"} fpm
+                    {leg.lossInWg == null ? "missing" : leg.lossInWg.toFixed(4)} in-wg ·{" "}
+                    {leg.lossSource.kind}: {leg.lossSource.ref}
                   </dd>
                 </dl>
-              );
-            const id = elements.idOf(key);
-            const segment = baseScene.segments.find((f) => f.segment.id === id);
-            const node = scene.nodes.find((f) => f.node.id === id);
-            return (
-              <>
-                {segment ? (
-                  <SegmentFactsView {...segment} />
-                ) : node ? (
-                  <NodeFactsView {...node} />
-                ) : (
-                  <p>Element {id} is outside the snapshot</p>
-                )}
-                {legs
-                  .filter((leg) => leg.elementId === id)
-                  .map((leg) => (
-                    <dl key={leg.id} data-leg-facts={leg.id}>
-                      <dt>Calc leg · {leg.flowSource ?? "flow source missing"}</dt>
-                      <dd className="face-mono">
-                        {leg.flowCfm ?? "missing"} cfm · {leg.velocityFpm ?? "missing"} fpm
-                      </dd>
-                      <dd className="face-mono">
-                        {leg.lossInWg == null ? "missing" : leg.lossInWg.toFixed(4)} in-wg ·{" "}
-                        {leg.lossSource.kind}: {leg.lossSource.ref}
-                      </dd>
-                    </dl>
-                  ))}
-              </>
-            );
-          },
-        },
-        furniture: {
-          actions: (
-            <EncodingPicker
-              value={encoding.key}
-              onPick={(encoding) => props.pose({ encoding, layers: [...new Set([...on, "centrelines" as const])] })}
-            />
-          ),
-          legend: (
-            <ScaleLegend
-              encoding={encoding}
-              counts={counts}
-              nameOf={nameOf}
-              onSelect={(id) => {
-                const key = elements.keyOf(id);
-                if (key) props.select(key);
-              }}
-            />
-          ),
-        },
-        goTo: (jumpTo) => (
-          <GoToSubject
-            snapshot={snapshot}
-            here={focusIds}
-            opens={(system) => systemFans(system).length > 0}
-            nameOf={namer}
-            onGo={({ system, id }) => {
-              const key = id == null ? null : elements.keyOf(id);
-              if (id == null) subject?.add(systemFans(system));
-              else if (key) jumpTo(key);
-            }}
-          />
-        ),
+              ))}
+          </>
+        );
+      },
+    },
+    furniture: {
+      actions: (
+        <EncodingPicker
+          value={encoding.key}
+          onPick={(encoding) =>
+            props.pose({ encoding, layers: [...new Set([...on, "centrelines" as const])] })
+          }
+        />
+      ),
+      legend: (
+        <ScaleLegend
+          encoding={encoding}
+          counts={counts}
+          nameOf={nameOf}
+          onSelect={(id) => {
+            const key = elements.keyOf(id);
+            if (key) props.select(key);
+          }}
+        />
+      ),
+    },
+    goTo: (jumpTo) => (
+      <GoToSubject
+        snapshot={snapshot}
+        here={focusIds}
+        opens={(system) => systemFans(system).length > 0}
+        nameOf={namer}
+        onGo={({ system, id }) => {
+          const key = id == null ? null : elements.keyOf(id);
+          if (id == null) subject?.add(systemFans(system));
+          else if (key) jumpTo(key);
+        }}
+      />
+    ),
   });
 }

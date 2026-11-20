@@ -8,7 +8,14 @@
  * replace `name === derivedName(key, bytes)` with `true` (the forged file is then served).
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
@@ -34,7 +41,6 @@ vi.mock("@llamaindex/liteparse", async (importOriginal) => {
 });
 
 function onePagePdf(...lines: string[]): Buffer {
-
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     `<< /Type /Pages /Kids [${lines.map((_, i) => `${4 + i * 2} 0 R`).join(" ")}] /Count ${lines.length} >>`,
@@ -70,7 +76,11 @@ const read = (input: Parameters<typeof runReadDocument>[0]) =>
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 /** End-gate target 5: the files in a derived folder whose name does not match their bytes. */
 const mismatched = (folder: string) =>
-  readdirSync(folder).filter((name) => !/^[0-9a-f]{64}\.[0-9a-f]{64}$/.test(name) || name.split(".")[1] !== sha(readFileSync(join(folder, name))));
+  readdirSync(folder).filter(
+    (name) =>
+      !/^[0-9a-f]{64}\.[0-9a-f]{64}$/.test(name) ||
+      name.split(".")[1] !== sha(readFileSync(join(folder, name))),
+  );
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "derived-parses-"));
@@ -98,7 +108,8 @@ test("person A parses a document once; person B, same project home, parses nothi
       const url = new URL(request ? request.url : String(input));
       const method = init?.method ?? request?.method ?? "GET";
       calls.push(`${method} ${url.pathname}`);
-      if (method === "POST") return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
+      if (method === "POST")
+        return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
       return Response.json({
         job: { id: "job-1", project_id: "p", status: "COMPLETED" },
         markdown: { pages: [{ page_number: 1, success: true, markdown: "HOSTED 1.25 IN WG" }] },
@@ -140,7 +151,8 @@ test("a derived file whose name does not match its bytes is refused and skipped 
   await read({ path: file, pages: "1" });
   const [name] = readdirSync(derived);
   const forged = JSON.stringify({
-    totalPages: 1, pages: [{ pageNum: 1, text: "FORGED 9.99 IN WG" }],
+    totalPages: 1,
+    pages: [{ pageNum: 1, text: "FORGED 9.99 IN WG" }],
   });
   writeFileSync(join(derived, name!), forged);
   expect(mismatched(derived)).toEqual([name]);
@@ -153,12 +165,15 @@ test("a derived file whose name does not match its bytes is refused and skipped 
   await read({ path: file, pages: "1" });
   expect(parses.count).toBe(2);
   const notices = storedNotices(stateTree(runtimeRoot()));
-  expect(notices.map((n) => [n.class, n.path, n.sha256])).toEqual([["keep", join(derived, name!), sha(Buffer.from(forged))],
+  expect(notices.map((n) => [n.class, n.path, n.sha256])).toEqual([
+    ["keep", join(derived, name!), sha(Buffer.from(forged))],
   ]);
   // The reader removed nothing (K-A1). B's own parse then wrote the true bytes under that name
   // through the write door, which rested the forged bytes in B's blob store first.
   expect(mismatched(derived)).toEqual([]);
-  expect(readFileSync(join(runtimeRoot(), "state", "Blobs", "sha256", sha(Buffer.from(forged))), "utf8")).toBe(forged);
+  expect(
+    readFileSync(join(runtimeRoot(), "state", "Blobs", "sha256", sha(Buffer.from(forged))), "utf8"),
+  ).toBe(forged);
 });
 
 test("with no project home the parse lands under the machine state root, never the user home or a temp folder", async () => {

@@ -12,10 +12,18 @@ effectTest("run changes are synchronous, isolate subscribers, and close with the
     );
     const runs = Context.get(context, RunRegistry);
     const ref = { thread: "thread", turn: "turn" };
-    const origin = { caller: { kind: "pea" as const, thread: ref.thread, context: "test" }, run: ref, root: ref };
+    const origin = {
+      caller: { kind: "pea" as const, thread: ref.thread, context: "test" },
+      run: ref,
+      root: ref,
+    };
     let notified = 0;
-    runs.subscribe(() => { throw Error("subscriber failed"); });
-    runs.subscribe(() => { notified++; });
+    runs.subscribe(() => {
+      throw Error("subscriber failed");
+    });
+    runs.subscribe(() => {
+      notified++;
+    });
     runs.open(ref);
     expect(notified).toBe(1);
     expect(() => runs.assertOpen(origin)).not.toThrow();

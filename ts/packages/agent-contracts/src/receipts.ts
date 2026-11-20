@@ -161,7 +161,16 @@ export const safeMcpMetadataSchema = z.strictObject({
   faultCode: receiptFaultCodeSchema.optional(),
 });
 const machineReadingLegSchema = z.enum([
-  "sessions", "attachments", "actions", "host", "peers", "years", "providers", "share", "update", "holdings",
+  "sessions",
+  "attachments",
+  "actions",
+  "host",
+  "peers",
+  "years",
+  "providers",
+  "share",
+  "update",
+  "holdings",
 ]);
 export type MachineReadingLeg = z.infer<typeof machineReadingLegSchema>;
 

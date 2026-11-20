@@ -186,7 +186,12 @@ export function TeachingLayoutView<const L extends TeachingLayout>({
       // A legend is a picture's furniture; a picture draws its own Pane (scene/picture).
       const pane: TeachingPaneRender = (body, { legend: _legend, ...furniture } = {}) => (
         <TeachPane value={`${instance}:${node.id}`}>
-          <Pane {...furniture} id={node.id} title={furniture.title ?? node.label} help={node.purpose}>
+          <Pane
+            {...furniture}
+            id={node.id}
+            title={furniture.title ?? node.label}
+            help={node.purpose}
+          >
             {body}
           </Pane>
         </TeachPane>

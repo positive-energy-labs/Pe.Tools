@@ -9,7 +9,8 @@ export function SettingsHelpTrigger({ onOpen }: { onOpen?: () => void }) {
   const go = useDestination();
   const chip = chipText(reading, fixture);
   return (
-    <Button kind="quiet"
+    <Button
+      kind="quiet"
       label="Settings"
       reason={runtimeIdentity(reading, fixture).detail}
       onClick={() => {

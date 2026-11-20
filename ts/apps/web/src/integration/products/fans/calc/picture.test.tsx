@@ -26,11 +26,17 @@ import { openFanCalcSchema as openSheetSchema } from "@pe/fans-contract/fans-rea
 import type { OpenCalc } from "../../../../../../../products/fans/web/src/calc/types.ts";
 import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { type FanPort } from "@pe/ducts-web/calc/model";
-import { beyondLabels, beyondPicture, CalcPicture } from "../../../../../../../products/fans/web/src/calc/picture.tsx";
+import {
+  beyondLabels,
+  beyondPicture,
+  CalcPicture,
+} from "../../../../../../../products/fans/web/src/calc/picture.tsx";
 
 const io = vi.hoisted(() => ({ call: vi.fn() }));
 vi.mock("../../../../host/client.ts", () => ({ callHostRpc: io.call }));
-vi.mock("../../../../scene/artifact.ts", () => ({ fetchSceneArtifact: async () => new ArrayBuffer(0) }));
+vi.mock("../../../../scene/artifact.ts", () => ({
+  fetchSceneArtifact: async () => new ArrayBuffer(0),
+}));
 vi.mock("../../../../scene/psc1.ts", () => ({
   SCENE_FORMAT: "space-scene-v2",
   decodeScene: () => ({
@@ -130,7 +136,9 @@ function mount(open: OpenCalc | null = sheet, layers = ["meshes", "findings"], f
         context: "glass" as const,
         picture: "model" as const,
         encoding: "health",
-        selected: registry.get(page).selected ? [{ kind: "focus", id: registry.get(page).selected }] : [],
+        selected: registry.get(page).selected
+          ? [{ kind: "focus", id: registry.get(page).selected }]
+          : [],
       }),
       pose,
       query: vi.fn(),
@@ -237,7 +245,12 @@ it("hovering a context element names whose air it is and that this fan's calc le
 
 // Drive 10 fix line 2: about 20 copies of one sentence swamped the /fans picture.
 it("a stopping unit's stubs say whose air they are once, however many elements lie beyond it", () => {
-  const markOf = new Map([[1, "RV-33"], [2, "RV-33"], [3, "RV-33"], [4, "RV-7"]]);
+  const markOf = new Map([
+    [1, "RV-33"],
+    [2, "RV-33"],
+    [3, "RV-33"],
+    [4, "RV-7"],
+  ]);
   const labels = beyondLabels(markOf, (id) => (id === 1 ? null : [id, 0, 0]));
   expect(labels.map((label) => label.text)).toEqual([
     "beyond RV-33 (its own fan); not in this fan's calc",
@@ -318,7 +331,10 @@ it("restores all nine encodings and makes a choice draw its centrelines through 
   ])
     expect((await view.findAllByText(label, { exact: true })).length).toBeGreaterThan(0);
   fireEvent.click(view.getByText("size", { exact: true }));
-  expect(view.pose).toHaveBeenLastCalledWith({ encoding: "size", layers: ["meshes", "centrelines"] }, "named");
+  expect(view.pose).toHaveBeenLastCalledWith(
+    { encoding: "size", layers: ["meshes", "centrelines"] },
+    "named",
+  );
 });
 
 it("the sheet's blockers draw under `blockers`; `findings` is the kernel's findings Work, never the sheet's marks", () => {

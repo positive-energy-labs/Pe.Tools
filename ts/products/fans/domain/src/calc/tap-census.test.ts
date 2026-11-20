@@ -30,7 +30,10 @@ it.each([raw, live])(
         rulings: [{ pair: ["14106988:1", "14122436:1"], verdict: "accept" }],
       }),
     });
-    for (const [id, expected, table] of [[14682361, 0.173027065, "SD5-9"], [14806947, 0.155904829, "SD5-18"]] as const) {
+    for (const [id, expected, table] of [
+      [14682361, 0.173027065, "SD5-9"],
+      [14806947, 0.155904829, "SD5-18"],
+    ] as const) {
       const row = s.fittings.find((f) => f.elementId === id)!;
       const legs = Object.values(s.legs).filter((l) => l.elementId === id);
       expect(row.lossInWg).toBeCloseTo(Math.max(...legs.map((l) => l.lossInWg ?? 0)), 6);

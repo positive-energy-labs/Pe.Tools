@@ -13,9 +13,9 @@ it("decodes a workspace SubjectRef to its Work key, never the encoded bytes", ()
 });
 
 it("refuses a non-workspace subject, an old spelling, and a non-subject field", () => {
-  expect(() => routeWorkSubject(data, { system: subjectCode({ keyKind: "group", key: "g" }) })).toThrow(
-    "workspace",
-  );
+  expect(() =>
+    routeWorkSubject(data, { system: subjectCode({ keyKind: "group", key: "g" }) }),
+  ).toThrow("workspace");
   expect(() => routeWorkSubject(data, { system: '["schedules","s"]' })).toThrow();
   expect(() => routeWorkSubject({ ...builtinData, workSubject: "search" }, {})).toThrow(
     "one subject field",

@@ -23,13 +23,17 @@ const productNames = new Set(
 );
 
 function productImport(file: string, specifier: string): boolean {
-  return importsWorkspace(file, specifier, "products", productNames) ||
-    importsWorkspace(file, specifier, "packages/mcps", new Set(["@pe/mcps"]));
+  return (
+    importsWorkspace(file, specifier, "products", productNames) ||
+    importsWorkspace(file, specifier, "packages/mcps", new Set(["@pe/mcps"]))
+  );
 }
 
 test("shared packages cannot import Pea's product assembly indirectly", () => {
   expect(productImport("packages/runtime/src/p.ts", "@pe/mcps/product-actions")).toBe(true);
-  expect(productImport("packages/runtime/src/p.ts", "../../mcps/src/pea/product-actions.ts")).toBe(true);
+  expect(productImport("packages/runtime/src/p.ts", "../../mcps/src/pea/product-actions.ts")).toBe(
+    true,
+  );
   expect(productImport("packages/runtime/src/p.ts", "@pe/agent-contracts")).toBe(false);
 });
 

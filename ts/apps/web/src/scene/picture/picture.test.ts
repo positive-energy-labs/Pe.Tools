@@ -3,8 +3,6 @@ import type { SubjectKey } from "@pe/kit/lang/attention";
 import { hoverGroupsOf, jumpSubject, markPick, membersWithStrands } from "./picture";
 import { eKey, testElements } from "#/test-attention";
 
-
-
 test("a strand pick selects its own subject; an issue pick its element's SubjectRef and the issue", () => {
   expect(markPick({ key: "run:7", elementId: 1, subject: true }, testElements([1]))).toEqual({
     selected: "run:7",
@@ -45,8 +43,14 @@ test("a jump frames the named element alone, and a run by its element leaves", (
     ["run:a", ["section:1", eKey(30)]],
     ["section:1", [eKey(10), eKey(20)]],
   ]);
-  expect(jumpSubject(eKey(10), members, testElements([10, 20, 30]))).toEqual({ selected: eKey(10), ids: new Set([10]) });
-  expect(jumpSubject("run:a", members, testElements([10, 20, 30]))).toEqual({ selected: "run:a", ids: new Set([10, 20, 30]) });
+  expect(jumpSubject(eKey(10), members, testElements([10, 20, 30]))).toEqual({
+    selected: eKey(10),
+    ids: new Set([10]),
+  });
+  expect(jumpSubject("run:a", members, testElements([10, 20, 30]))).toEqual({
+    selected: "run:a",
+    ids: new Set([10, 20, 30]),
+  });
   // An undeclared group has no elements to frame: the picture says it is not here.
   expect(jumpSubject("run:gone", members, testElements([10, 20, 30])).ids.size).toBe(0);
 });

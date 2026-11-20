@@ -98,10 +98,11 @@ interface TablePresentation<Row extends RowData> {
   };
 }
 
-export type TableProps<Row extends RowData, Data = readonly Row[]> = TablePresentation<Row> & (
-  { rows: readonly Row[]; value?: never; rowsOf?: never } |
-  { value: ValueHandle<Data>; rowsOf: (data: Data) => readonly Row[]; rows?: never }
-);
+export type TableProps<Row extends RowData, Data = readonly Row[]> = TablePresentation<Row> &
+  (
+    | { rows: readonly Row[]; value?: never; rowsOf?: never }
+    | { value: ValueHandle<Data>; rowsOf: (data: Data) => readonly Row[]; rows?: never }
+  );
 
 /** Why a named target is not drawn: the query filtered its row out, or its column is hidden. */
 export const ACTIVE_ROW_HIDDEN = "its row is hidden by the query";

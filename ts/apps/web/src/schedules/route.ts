@@ -46,7 +46,13 @@ export const edit = z
     (patches) => patches.every((p) => p.path[0] === "cells" && p.path.length > 1),
     "Edit individual schedule cells",
   );
-export type SchedulesDrawContext = ContextOf<typeof fields, typeof view, typeof import("@pe/agent-contracts").scheduleGridRouteState, typeof edit, Verbs<"read" | "bind", "push">>;
+export type SchedulesDrawContext = ContextOf<
+  typeof fields,
+  typeof view,
+  typeof import("@pe/agent-contracts").scheduleGridRouteState,
+  typeof edit,
+  Verbs<"read" | "bind", "push">
+>;
 export const module = route({
   key: "schedules",
   name: "Schedules",
@@ -76,7 +82,9 @@ export const module = route({
     read: roster,
     options: (data) =>
       (data?.catalog.schedules ?? []).flatMap((row) =>
-        row.workspaceId ? [{ id: subjectCode({ keyKind: "workspace", key: row.workspaceId }), label: row.name }] : [],
+        row.workspaceId
+          ? [{ id: subjectCode({ keyKind: "workspace", key: row.workspaceId }), label: row.name }]
+          : [],
       ),
   },
   panes: {
@@ -135,21 +143,27 @@ export const module = route({
             const column = data.saved?.snapshot.columns.find(
               (column) => column.columnNumber === columnNumber,
             );
-            const binding = row?.bindings.find(binding => binding.columnNumber === columnNumber);
+            const binding = row?.bindings.find((binding) => binding.columnNumber === columnNumber);
             const schedule = data.saved?.snapshot.scheduleName ?? "Schedule unavailable";
             const after = showCellValue(cell.edit?.value);
-            const stale = work.basis?.stale?.some(cell => cell.key === key);
-            const reason = stale ? "Staged value is stale; read and restage it"
-              : binding?.blocker !== "None" ? binding?.blocker ?? "Missing binding" : null;
+            const stale = work.basis?.stale?.some((cell) => cell.key === key);
+            const reason = stale
+              ? "Staged value is stale; read and restage it"
+              : binding?.blocker !== "None"
+                ? (binding?.blocker ?? "Missing binding")
+                : null;
             if (!binding?.targets.length)
-              return [`${schedule} · ${column?.headerText ?? `Column ${columnNumber}`}: unavailable → ${after} · refused: ${reason ?? "Missing targets"}`];
+              return [
+                `${schedule} · ${column?.headerText ?? `Column ${columnNumber}`}: unavailable → ${after} · refused: ${reason ?? "Missing targets"}`,
+              ];
             // Root's write-review audit ruling permits ids here; ordinary schedule labels stay id-free.
             // Expand grouped/type bindings by native target, never by the rendered row's first value.
-            return binding.targets.map(target => {
+            return binding.targets.map((target) => {
               const element = `${target.elementLabel ?? "Element"} · Id ${target.elementId}`;
-              const parameter = target.parameterName ?? binding.parameterName ?? "Parameter unavailable";
+              const parameter =
+                target.parameterName ?? binding.parameterName ?? "Parameter unavailable";
               const scope = target.scope ?? (binding.isTypeParameter ? "type" : "instance");
-              const before = target.hasValue ? target.displayValue ?? target.rawValue : "unset";
+              const before = target.hasValue ? (target.displayValue ?? target.rawValue) : "unset";
               return `${schedule} · ${element} · ${parameter} (${scope}): ${before ?? "unavailable"} → ${after}${reason ? ` · refused: ${reason}` : ""}`;
             });
           }),

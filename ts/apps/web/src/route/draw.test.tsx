@@ -24,7 +24,11 @@ const Over = ({ ctx }: PictureOverlayProps<{ says: string }>) => <p>{ctx.says}</
 
 test("D18 a pane whose drawing is still loading keeps the page unsettled, and settles when it lands", async () => {
   const body = loader<{ Body: typeof Body }>();
-  const page = render(<section data-url-settled="">{draw("scroll", body.load, "Body")({ says: "drawn" }).node}</section>);
+  const page = render(
+    <section data-url-settled="">
+      {draw("scroll", body.load, "Body")({ says: "drawn" }).node}
+    </section>,
+  );
   // The URL is flushed and no picker is open: only the loading drawing holds the page.
   expect(readMarks(LAYER)).toEqual({ busy: true, urlSettled: true, picker: false });
   expect(marksSettled(readMarks(LAYER))).toBe(false);
@@ -38,7 +42,15 @@ test("D18 a pane whose drawing is still loading keeps the page unsettled, and se
 test("D18 a picture overlay that is still loading keeps the page unsettled", async () => {
   const over = loader<{ Over: typeof Over }>();
   const Overlay = overlay(over.load, "Over");
-  render(<section data-url-settled=""><Overlay ctx={{ says: "overlaid" }} scope={{ kind: "subjects", refs: [] }} picture={() => null} /></section>);
+  render(
+    <section data-url-settled="">
+      <Overlay
+        ctx={{ says: "overlaid" }}
+        scope={{ kind: "subjects", refs: [] }}
+        picture={() => null}
+      />
+    </section>,
+  );
   expect(marksSettled(readMarks(LAYER))).toBe(false);
   await act(async () => over.land({ Over }));
   expect(marksSettled(readMarks(LAYER))).toBe(true);
@@ -46,17 +58,22 @@ test("D18 a picture overlay that is still loading keeps the page unsettled", asy
 
 test("D18 a hidden Place's loading drawing does not hold the shown page", () => {
   const body = loader<{ Body: typeof Body }>();
-  render(<><div inert>{draw("scroll", body.load, "Body")({ says: "hidden" }).node}</div><section data-url-settled="" /></>);
+  render(
+    <>
+      <div inert>{draw("scroll", body.load, "Body")({ says: "hidden" }).node}</div>
+      <section data-url-settled="" />
+    </>,
+  );
   expect(marksSettled(readMarks(LAYER))).toBe(true);
 });
 
 test("D18 one boundary owns the loading fallback: no other source writes it", () => {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
-  const writers = ["apps/web/src", "packages/web-kernel/src"].flatMap(dir =>
+  const writers = ["apps/web/src", "packages/web-kernel/src"].flatMap((dir) =>
     readdirSync(join(root, dir), { recursive: true, encoding: "utf8" })
       .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
       .filter((file) => readFileSync(join(root, dir, file), "utf8").includes("Loading drawing"))
-      .map(file => dir + "/" + file.replaceAll("\\", "/")),
+      .map((file) => dir + "/" + file.replaceAll("\\", "/")),
   );
   expect(writers).toEqual(["packages/web-kernel/src/route/draw.tsx"]);
 });

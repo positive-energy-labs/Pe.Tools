@@ -37,9 +37,13 @@ describe("mounted route view custody", () => {
       fan: { role: "subject", agent: "set" },
       viewport: { role: "pose", agent: "read" },
     } as never;
-    const store = new RouteViewStore(() => [{ key: "duct-systems", title: "Ducts", address: "/duct-systems", fields }]);
+    const store = new RouteViewStore(() => [
+      { key: "duct-systems", title: "Ducts", address: "/duct-systems", fields },
+    ]);
     const lease = store.publish({ ...ducts(id1), page: { fan: "", viewport: "" } });
-    expect(await store.set("t", "duct-systems", id1, lease.revision, { viewport: "{}" })).toMatchObject({
+    expect(
+      await store.set("t", "duct-systems", id1, lease.revision, { viewport: "{}" }),
+    ).toMatchObject({
       ok: false,
       error: expect.stringContaining("may not set"),
     });
@@ -75,10 +79,19 @@ describe("mounted route view custody", () => {
     const result = store.set("t", "acme-fans", id1, lease.revision, { fan: text });
     expect(intent?.patch).toEqual({ fan: text });
     store.publish({ ...ducts(id1), route: "acme-fans", page: { fan: text } });
-    store.ack({ outcome: "rendered", instance: id1, commandId: intent!.commandId, revision: lease.revision, page: { fan: text }, facts: ducts(id1).facts });
+    store.ack({
+      outcome: "rendered",
+      instance: id1,
+      commandId: intent!.commandId,
+      revision: lease.revision,
+      page: { fan: text },
+      facts: ducts(id1).facts,
+    });
     expect(await result).toMatchObject({ ok: true });
     registered.length = 0;
-    await expect(store.set("t", "acme-fans", id1, lease.revision, { fan: text })).resolves.toMatchObject({ ok: false });
+    await expect(
+      store.set("t", "acme-fans", id1, lease.revision, { fan: text }),
+    ).resolves.toMatchObject({ ok: false });
   });
 
   it("refuses ambiguity and only acknowledges the rendered patch on the exact context", async () => {
@@ -122,8 +135,8 @@ describe("mounted route view custody", () => {
     store.subscribe((intent) => {
       commandId = intent.commandId;
     });
-    const system = JSON.stringify({kind:"ids",ids:["system-name:Supply 1"]});
-    const page = {...ducts(id1).page,system};
+    const system = JSON.stringify({ kind: "ids", ids: ["system-name:Supply 1"] });
+    const page = { ...ducts(id1).page, system };
     const result = store.set("t", "duct-systems", id1, lease.revision, { system });
     store.publish({ ...ducts(id1), page });
     expect(
@@ -182,7 +195,9 @@ describe("mounted route view custody", () => {
       store.subscribe((intent) => {
         commandId = intent.commandId;
       });
-      const result = store.set("old-thread", "families", id1, first.revision, { readId: wire("blank") });
+      const result = store.set("old-thread", "families", id1, first.revision, {
+        readId: wire("blank"),
+      });
       store.publish({ ...view(id1, "new-thread"), page: { readId: wire("blank") } });
       expect(store.select("old-thread", "families", id1)).toBeNull();
       expect(

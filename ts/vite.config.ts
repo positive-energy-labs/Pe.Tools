@@ -65,7 +65,9 @@ export default defineConfig({
   },
   test: {
     exclude: [
-      "**/node_modules/**", "**/dist-installed/**", "**/.artifacts/**",
+      "**/node_modules/**",
+      "**/dist-installed/**",
+      "**/.artifacts/**",
       // DIAG-N03-REPORT.md: the intentionally red old-loader falsifier is retired with the legacy Families suite.
       "**/families/workflow.test.tsx",
     ],

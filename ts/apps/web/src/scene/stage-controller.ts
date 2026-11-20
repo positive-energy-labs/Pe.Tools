@@ -21,7 +21,13 @@ import { viewportProject, type Project } from "@pe/web-kernel/scene/projection";
 import { useStageKeys } from "./stage-keys";
 import { flyTo, glideLook, wiggle, type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { LOOK } from "@pe/web-kernel/scene/grounds";
-import { applyLook, center, frame, shiftOnScreen, type OrbitViewport } from "@pe/web-kernel/scene/orbit";
+import {
+  applyLook,
+  center,
+  frame,
+  shiftOnScreen,
+  type OrbitViewport,
+} from "@pe/web-kernel/scene/orbit";
 import type { Bounds } from "@pe/web-kernel/scene/types";
 import { useViewHistory } from "./view-history";
 import type { Bounds2 } from "@pe/web-kernel/lib/affine-frame";

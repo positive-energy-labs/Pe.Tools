@@ -138,7 +138,8 @@ it.each([6311356, 7320242])(
       widthAxis: [-0.707, -0.707, 0],
     };
     main.connectors = [port];
-    const terminal: Node = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(terminalId).toString(16).padStart(8, "0")}`,
+    const terminal: Node = {
+      uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${terminalId.toString(16).padStart(8, "0")}`,
       id: terminalId,
       kind: "terminal",
       category: "Air Terminals",

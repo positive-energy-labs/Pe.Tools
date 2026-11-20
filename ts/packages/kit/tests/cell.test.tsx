@@ -137,18 +137,8 @@ test("a unit-bearing cell draws its unit inside the box, empty or filled, and ke
 
 test("cell authorship comes from host provenance even when values match", () => {
   const same = { value: "250" };
-  expect(
-    cellFromDraft(
-      { edit: { ...same, by: "human" } },
-      { value: "250" },
-    ).author,
-  ).toBe("human");
-  expect(
-    cellFromDraft(
-      { edit: { ...same, by: "pea" } },
-      { value: "250" },
-    ).author,
-  ).toBe("pea");
+  expect(cellFromDraft({ edit: { ...same, by: "human" } }, { value: "250" }).author).toBe("human");
+  expect(cellFromDraft({ edit: { ...same, by: "pea" } }, { value: "250" }).author).toBe("pea");
   // RULES: unknown is deleted from stored Work authors; only admitted writers are exercised here.
 });
 

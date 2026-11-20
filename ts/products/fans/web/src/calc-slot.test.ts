@@ -9,6 +9,19 @@ import { module } from "../route.ts";
  */
 test("Fans draws no borrowed body; its inputs render through the sheet slot", async () => {
   expect(readFileSync(new URL("../route.ts", import.meta.url), "utf8")).not.toMatch(/"InputsBody"/);
-  expect(Object.keys(module.data.sheet?.bindings ?? {})).toEqual(expect.arrayContaining(["writeIntent", "setting.ducts.parameters.fanFlow", "roles", "ratedEsp", "flows", "terminalDrops", "componentDrops", "equipmentFlows"]));
-  expect(Object.values(module.spec.panes).some((p) => (p as { kernel?: string }).kernel === "sheet")).toBe(true);
+  expect(Object.keys(module.data.sheet?.bindings ?? {})).toEqual(
+    expect.arrayContaining([
+      "writeIntent",
+      "setting.ducts.parameters.fanFlow",
+      "roles",
+      "ratedEsp",
+      "flows",
+      "terminalDrops",
+      "componentDrops",
+      "equipmentFlows",
+    ]),
+  );
+  expect(
+    Object.values(module.spec.panes).some((p) => (p as { kernel?: string }).kernel === "sheet"),
+  ).toBe(true);
 });

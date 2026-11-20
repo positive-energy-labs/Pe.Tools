@@ -7,7 +7,6 @@ import { field, route } from "@pe/web-kernel/route";
 import { hostRead } from "@pe/web-kernel/host-read";
 import { draw } from "@pe/web-kernel/route/draw";
 
-
 export const loaded = read(hostRead(contracts.browse));
 export const fields = {
   focus: field(z.string(), "", "pose"),

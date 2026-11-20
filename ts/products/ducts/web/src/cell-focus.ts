@@ -52,7 +52,8 @@ export function focusedElement(subject: string, elements: ElementIndex): number 
 
 /** A picked issue is the place `issue:<key>`; the marks and rows key on the bare key. */
 export const issueSubject = (key: string): SubjectKey => `issue:${key}`;
-export const issueOf = (selected: string) => (selected.startsWith("issue:") ? selected.slice(6) : "");
+export const issueOf = (selected: string) =>
+  selected.startsWith("issue:") ? selected.slice(6) : "";
 
 /** Each selected cell's one member: its element. */
 export const cellMembers = (selected: readonly SubjectKey[], elements: ElementIndex): Members =>

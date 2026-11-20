@@ -144,18 +144,8 @@ it("proposes a duct-body tap and walks on through the landing duct both ways (R-
     [port(0, [5, -5, 0], [0, -1, 0], [300, 0]), port(1, [5, 5, 0], [0, 1, 0], [400, 0])],
   );
   snapshot.nodes.push(
-    node(
-      300,
-      "terminal",
-      [port(0, [5, -5, 0], [0, 1, 0], [2, 0])],
-      50,
-    ),
-    node(
-      400,
-      "terminal",
-      [port(0, [5, 5, 0], [0, -1, 0], [2, 1])],
-      50,
-    ),
+    node(300, "terminal", [port(0, [5, -5, 0], [0, 1, 0], [2, 0])], 50),
+    node(400, "terminal", [port(0, [5, 5, 0], [0, -1, 0], [2, 1])], 50),
   );
   const calcSnapshot2 = withHealth(snapshot);
   const input = {
@@ -254,11 +244,7 @@ it("occupied mouths require a risky tee, preserve both branches, and cross-air-t
   const snapshot = fixture();
   snapshot.segments[1]!.connectors[0]!.connectedTo = { elementId: 900, connector: 0 };
   // Any occupant but an end cap needs a tee; a capped mouth is the C3 transition (next test).
-  snapshot.nodes.push(
-    node(900, "fitting", [
-      port(0, [5, 0, 0], [1, 0, 0], [2, 0]),
-    ]),
-  );
+  snapshot.nodes.push(node(900, "fitting", [port(0, [5, 0, 0], [1, 0, 0], [2, 0])]));
   const calcSnapshot3 = withHealth(snapshot);
   const input = {
     snapshot: calcSnapshot3,
@@ -326,11 +312,7 @@ it("a capped mouth 2.6 in from an open end proposes replacing the cap with a tra
     widthIn: 30,
     heightIn: 30,
   };
-  snapshot.nodes.push(
-    node(900, "cap", [
-      rect(port(0, [4 + gap, 0, 0], [1, 0, 0], [2, 0])),
-    ]),
-  );
+  snapshot.nodes.push(node(900, "cap", [rect(port(0, [4 + gap, 0, 0], [1, 0, 0], [2, 0]))]));
   const s = withHealth(snapshot);
   const input = {
     snapshot: s,
@@ -446,14 +428,7 @@ it("derived served-terminal flow supplies assumed ESP, preserves missing designe
 
 it("an accepted pair takes priority over a nearer automatic join", () => {
   const snapshot = fixture();
-  snapshot.nodes.push(
-    node(
-      250,
-      "terminal",
-      [port(0, [4.1, 0, 0], [-1, 0, 0], null)],
-      50,
-    ),
-  );
+  snapshot.nodes.push(node(250, "terminal", [port(0, [4.1, 0, 0], [-1, 0, 0], null)], 50));
   const calcSnapshot5 = withHealth(snapshot);
   const input = {
     snapshot: calcSnapshot5,
@@ -514,7 +489,12 @@ it("a proposed join's turn at the fan root is priced on its path, not by the uni
   // P-031: the typed drop keeps the person who staged it and its ref, never restamped as an engine default.
   expect(Object.values(typed.assumed.legs).map((l) => l.evidence)).toContainEqual({
     kind: "drop",
-    value: expect.objectContaining({ value: 0.02, source: "Work", author: "human", ref: "work:test" }),
+    value: expect.objectContaining({
+      value: 0.02,
+      source: "Work",
+      author: "human",
+      ref: "work:test",
+    }),
   });
 });
 
@@ -576,7 +556,7 @@ it("assumed flow borrows a receiving unit's flow only through its intake, never 
   const units = (bDirection: "in" | "out", aKind: FanPort["kind"] = "muas") => {
     const dir = (p: Port, d: string): Port => ({ ...p, direction: d });
     const snapshot = snapshotOf({
-    walk: TEST_WALK,
+      walk: TEST_WALK,
       slots: { ...slots, terminalFlow: "named" },
       nodes: [
         node(300, "equipment", [

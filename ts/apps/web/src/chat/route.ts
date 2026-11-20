@@ -9,7 +9,9 @@ import { route } from "@pe/web-kernel/route";
 import { hostRead } from "@pe/web-kernel/host-read";
 import { draw } from "@pe/web-kernel/route/draw";
 
-export const loaded = read(hostRead(contracts.context, () => import("./value-fixtures.ts").then(m => m.contextFixtures)));
+export const loaded = read(
+  hostRead(contracts.context, () => import("./value-fixtures.ts").then((m) => m.contextFixtures)),
+);
 export const fields = {
   ...threadListFields,
   turn: field(z.number().int().positive().optional(), undefined, "query"),

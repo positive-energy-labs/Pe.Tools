@@ -37,9 +37,14 @@ export interface PictureOverlayProps<C> {
 type Context<P> = P extends (props: PictureOverlayProps<infer C>) => ReactNode ? C : never;
 
 /** Loads the overlay with the picture, as `draw` loads a pane body: the route module stays DOM-free for host admission. */
-export function overlay<M, K extends keyof M>(load: () => Promise<M>, name: K & (Context<M[K]> extends never ? never : K)) {
+export function overlay<M, K extends keyof M>(
+  load: () => Promise<M>,
+  name: K & (Context<M[K]> extends never ? never : K),
+) {
   const Component = lazy(() =>
-    load().then((module) => ({ default: module[name] as ComponentType<PictureOverlayProps<Context<M[K]>>> })),
+    load().then((module) => ({
+      default: module[name] as ComponentType<PictureOverlayProps<Context<M[K]>>>,
+    })),
   );
   return (props: PictureOverlayProps<Context<M[K]>>): ReactNode =>
     createElement(DrawingBoundary, null, createElement(Component, props));

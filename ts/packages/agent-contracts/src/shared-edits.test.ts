@@ -111,15 +111,15 @@ test("generic patches cannot forge or erase any host observation for either auth
         });
 });
 
-
 test("stored edits require the shared human or pea stamp", () => {
   const cell = draftCellSchema(z.number());
   for (const by of ["unknown", "person", undefined])
     expect(cell.safeParse({ edit: { value: 1, by } }).success).toBe(false);
   for (const by of ["human", "pea"])
-    expect(cell.parse(JSON.parse(JSON.stringify({ edit: { value: 1, by, ref: "evidence:1" } })))).toEqual({ edit: { value: 1, by, ref: "evidence:1" } });
+    expect(
+      cell.parse(JSON.parse(JSON.stringify({ edit: { value: 1, by, ref: "evidence:1" } }))),
+    ).toEqual({ edit: { value: 1, by, ref: "evidence:1" } });
 });
-
 
 test("caller edits refuse by at every patch depth while the host stamps accepted edits", () => {
   const input = draftEditSchema(z.number());
@@ -130,6 +130,10 @@ test("caller edits refuse by at every patch depth while the host stamps accepted
       { path: ["cells", "width", "edit"], value: { value: 1, by } },
       { path: ["cells", "width"], value: { edit: { value: 1, by } } },
       { path: ["cells", "width", "edit", "by"], value: by },
-    ]) expect(applyPatches(spec, envelope, "pea", [patch], 13)).toMatchObject({ ok: false, error: "Caller edits cannot supply by" });
+    ])
+      expect(applyPatches(spec, envelope, "pea", [patch], 13)).toMatchObject({
+        ok: false,
+        error: "Caller edits cannot supply by",
+      });
   }
 });

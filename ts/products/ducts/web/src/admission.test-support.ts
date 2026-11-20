@@ -4,14 +4,18 @@ import {
 } from "../../../../packages/agent-contracts/src/route-module.ts";
 import type { TypedRoute } from "@pe/web-kernel/route";
 type AdmittableModule = Pick<TypedRoute, "data" | "host" | "entries">;
-export async function admitModules(ducts: AdmittableModule, fans: AdmittableModule, hostVersion = "fans-fixture") {
-const ductsHostModule = ducts.host;
-const fansHostModule = fans.host;
-const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({
-  key,
-  ...entry.axes,
-  uses: [],
-}));
+export async function admitModules(
+  ducts: AdmittableModule,
+  fans: AdmittableModule,
+  hostVersion = "fans-fixture",
+) {
+  const ductsHostModule = ducts.host;
+  const fansHostModule = fans.host;
+  const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({
+    key,
+    ...entry.axes,
+    uses: [],
+  }));
   const ownerEnvelope = {
     source: "builtin-closure" as const,
     version: 1 as const,
@@ -37,11 +41,33 @@ const catalog = Object.entries(ducts.entries).map(([key, entry]) => ({
   if (!hostOwner.ok) throw Error(JSON.stringify(hostOwner.diagnostics));
   const envelope = { ...ownerEnvelope, data: fans.data };
   const fingerprint = await builtinClosureFingerprint(envelope);
-  const fanCatalog = Object.entries(fans.entries).map(([key, entry]) => ({ key, ...entry.axes, uses: [] }));
+  const fanCatalog = Object.entries(fans.entries).map(([key, entry]) => ({
+    key,
+    ...entry.axes,
+    uses: [],
+  }));
   const inventory = createBuiltinRouteInventory({
-    host: { module: fansHostModule, host: true, closure: { envelope, fingerprint }, catalog: fanCatalog },
+    host: {
+      module: fansHostModule,
+      host: true,
+      closure: { envelope, fingerprint },
+      catalog: fanCatalog,
+    },
   });
   const hostPresenter = (await inventory.prepare("host", fingerprint)).admitHost(fansHostModule);
   if (!hostPresenter.ok) throw Error(JSON.stringify(hostPresenter.diagnostics));
-  return { owner: { typed: ducts as unknown as import("@pe/web-kernel/route/typed-route").TypedRoute, data: ducts.data, workFingerprint: hostOwner.route.workFingerprint }, presenter: { typed: fans as unknown as import("@pe/web-kernel/route/typed-route").TypedRoute, data: fans.data, workFingerprint: hostPresenter.route.workFingerprint }, hostOwner: hostOwner.route, hostPresenter: hostPresenter.route };
+  return {
+    owner: {
+      typed: ducts as unknown as import("@pe/web-kernel/route/typed-route").TypedRoute,
+      data: ducts.data,
+      workFingerprint: hostOwner.route.workFingerprint,
+    },
+    presenter: {
+      typed: fans as unknown as import("@pe/web-kernel/route/typed-route").TypedRoute,
+      data: fans.data,
+      workFingerprint: hostPresenter.route.workFingerprint,
+    },
+    hostOwner: hostOwner.route,
+    hostPresenter: hostPresenter.route,
+  };
 }

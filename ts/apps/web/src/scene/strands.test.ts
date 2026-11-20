@@ -54,7 +54,10 @@ test("a chain orients each element to continue the last, in path order", () => {
   // Flow runs the other way: the first element orients toward its successor.
   expect(chain([eKey(2), eKey(1)], pointsOf)[0]!.points[0]).toEqual([9, 0, 0]);
   // An element without a centreline is skipped and the chain bridges it.
-  expect(chain([eKey(1), eKey(9), eKey(2)], pointsOf).map((l) => l.element)).toEqual([eKey(1), eKey(2)]);
+  expect(chain([eKey(1), eKey(9), eKey(2)], pointsOf).map((l) => l.element)).toEqual([
+    eKey(1),
+    eKey(2),
+  ]);
 });
 
 test("shared elements give distinct lanes, ordered by strand order all along", () => {

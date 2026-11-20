@@ -41,11 +41,27 @@ const bundle = () => ({
 // The drive5 Pod row (document-profiler, row ea0fab98): 11 members, ~82 KB of base64, run by
 // workspace and source path, so the bundle rides `prepared` and the members ride `consumes`.
 const podFiles = [
-  { path: "pod.json", bytesBase64: Buffer.from('{"schemaVersion":2,"id":"document-profiler"}').toString("base64") },
-  ...["PeScripts.csproj", "src/ClosureReceipts.cs", "src/MechanicalPlanCensus.cs", "src/A.cs", "src/B.cs", "src/C.cs",
-    "src/D.cs", "src/E.cs", "src/F.cs", "src/G.cs"].map((path) => ({ path, bytesBase64: randomBytes(5_500).toString("base64") })),
+  {
+    path: "pod.json",
+    bytesBase64: Buffer.from('{"schemaVersion":2,"id":"document-profiler"}').toString("base64"),
+  },
+  ...[
+    "PeScripts.csproj",
+    "src/ClosureReceipts.cs",
+    "src/MechanicalPlanCensus.cs",
+    "src/A.cs",
+    "src/B.cs",
+    "src/C.cs",
+    "src/D.cs",
+    "src/E.cs",
+    "src/F.cs",
+    "src/G.cs",
+  ].map((path) => ({ path, bytesBase64: randomBytes(5_500).toString("base64") })),
 ];
-const diagnostics = Array.from({ length: 60 }, (_, i) => ({ code: `D${i}`, message: "x".repeat(150) }));
+const diagnostics = Array.from({ length: 60 }, (_, i) => ({
+  code: `D${i}`,
+  message: "x".repeat(150),
+}));
 
 async function open(dir: string) {
   const host = Scope.makeUnsafe();
@@ -58,15 +74,26 @@ async function open(dir: string) {
     probe: async (dependency) => ("expected" in dependency ? dependency.expected : null),
     resolve: () =>
       command(
-        { says: "Script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
+        {
+          says: "Script",
+          needs: "nothing",
+          effect: "command",
+          dirties: [],
+          input: z.record(z.string(), z.unknown()),
+        },
         z.unknown(),
         {
           bind: async ({ admission }) => ({
             effects: [],
             consumes: admission.input.workspaceKey
-              ? scriptMemberFacts("document-profiler", podFiles, admission.input.sourcePath) : [],
+              ? scriptMemberFacts("document-profiler", podFiles, admission.input.sourcePath)
+              : [],
             prepare: async () => ({
-              script: { sourceBundle: admission.input.sourceBundle ?? (admission.input.workspaceKey ? { files: podFiles } : null) },
+              script: {
+                sourceBundle:
+                  admission.input.sourceBundle ??
+                  (admission.input.workspaceKey ? { files: podFiles } : null),
+              },
             }),
           }),
           run: ({ admission }, execution) =>
@@ -82,8 +109,15 @@ async function open(dir: string) {
   return { journal, close: () => settle(Scope.close(host, Exit.void)) };
 }
 
-const run = async (journal: ActionJournalService["Service"], id: string, input: Record<string, unknown>) => {
-  await journal.invoke({ id, key: "script", target: { kind: "host" }, input }, { caller: human, basis: null });
+const run = async (
+  journal: ActionJournalService["Service"],
+  id: string,
+  input: Record<string, unknown>,
+) => {
+  await journal.invoke(
+    { id, key: "script", target: { kind: "host" }, input },
+    { caller: human, basis: null },
+  );
   return journal.wait(id);
 };
 
@@ -94,11 +128,12 @@ async function measure(kind: "plain" | "pod" | "pod-real", runs: number) {
   const sizes: number[] = [];
   try {
     for (let i = 0; i < runs; i++) {
-      const input = kind === "pod"
-        ? { sourcePath: "src/Run.cs", sourceBundle: bundle() }
-        : kind === "pod-real"
-          ? { sourcePath: "src/MechanicalPlanCensus.cs", workspaceKey: "document-profiler" }
-          : { scriptContent: "var n = 1;\n".repeat(600) };
+      const input =
+        kind === "pod"
+          ? { sourcePath: "src/Run.cs", sourceBundle: bundle() }
+          : kind === "pod-real"
+            ? { sourcePath: "src/MechanicalPlanCensus.cs", workspaceKey: "document-profiler" }
+            : { scriptContent: "var n = 1;\n".repeat(600) };
       expect(await run(journal, `${kind}-${i}`, input)).toMatchObject({ state: "succeeded" });
       sizes.push((await stat(path)).size);
     }
@@ -115,45 +150,58 @@ test.each([
   ["plain", 60, 80_000],
   ["pod", 30, 200_000],
   ["pod-real", 30, 60_000],
-] as const)("%s script runs add a bounded number of journal bytes per run", async (kind, runs, perRun) => {
-  const m = await measure(kind, runs);
-  try {
-    const half = m.sizes[runs / 2 - 1]!, last = m.sizes.at(-1)!;
-    console.log(`K2 ${kind}: ${JSON.stringify({ first: m.sizes[0], half, last, steady: Math.round((last - half) / (runs / 2)), max: Math.max(...m.sizes) })}`);
-    expect(last / runs).toBeLessThan(perRun);
-    expect(Math.max(...m.sizes)).toBeLessThan(Math.max(1 << 20, 2 * perRun * runs) + perRun * 2);
-    // The bundle's bytes live once, in the action's output store, never in the journal line.
-    if (kind !== "plain") {
-      const text = await readFile(m.path, "utf8");
-      expect(text).not.toContain('"bytesBase64"');
-      for (const file of kind === "pod-real" ? podFiles : []) expect(text).not.toContain(file.bytesBase64);
-      // The output store holds them once per action, and the step file carries no stale state.
-      const home = join(m.dir, "action-outputs");
-      const one = join(home, (await readdir(home))[0]!);
-      expect((await readdir(join(one, "bundles"))).length).toBe(1);
-      const stepFile = join(one, "steps", (await readdir(join(one, "steps")))[0]!);
-      expect(JSON.parse(await readFile(stepFile, "utf8"))).not.toHaveProperty("state");
-    }
-    // A reload resolves every bundle: readers of the latest revision see the bytes, unchanged.
-    await m.close();
-    const reopened = await open(m.dir);
+] as const)(
+  "%s script runs add a bounded number of journal bytes per run",
+  async (kind, runs, perRun) => {
+    const m = await measure(kind, runs);
     try {
-      const rows = await reopened.journal.list();
-      expect(rows).toHaveLength(runs);
-      if (kind === "pod")
-        for (const row of rows) {
-          expect((row.input.sourceBundle as { files: unknown[] }).files).toHaveLength(2);
-          expect((row.prepared as { value: { script: { sourceBundle: { files: unknown[] } } } }).value.script.sourceBundle.files).toHaveLength(2);
-          expect((row.steps[0]!.input as { sourceBundle: { files: unknown[] } }).sourceBundle.files).toHaveLength(2);
-        }
+      const half = m.sizes[runs / 2 - 1]!,
+        last = m.sizes.at(-1)!;
+      console.log(
+        `K2 ${kind}: ${JSON.stringify({ first: m.sizes[0], half, last, steady: Math.round((last - half) / (runs / 2)), max: Math.max(...m.sizes) })}`,
+      );
+      expect(last / runs).toBeLessThan(perRun);
+      expect(Math.max(...m.sizes)).toBeLessThan(Math.max(1 << 20, 2 * perRun * runs) + perRun * 2);
+      // The bundle's bytes live once, in the action's output store, never in the journal line.
+      if (kind !== "plain") {
+        const text = await readFile(m.path, "utf8");
+        expect(text).not.toContain('"bytesBase64"');
+        for (const file of kind === "pod-real" ? podFiles : [])
+          expect(text).not.toContain(file.bytesBase64);
+        // The output store holds them once per action, and the step file carries no stale state.
+        const home = join(m.dir, "action-outputs");
+        const one = join(home, (await readdir(home))[0]!);
+        expect((await readdir(join(one, "bundles"))).length).toBe(1);
+        const stepFile = join(one, "steps", (await readdir(join(one, "steps")))[0]!);
+        expect(JSON.parse(await readFile(stepFile, "utf8"))).not.toHaveProperty("state");
+      }
+      // A reload resolves every bundle: readers of the latest revision see the bytes, unchanged.
+      await m.close();
+      const reopened = await open(m.dir);
+      try {
+        const rows = await reopened.journal.list();
+        expect(rows).toHaveLength(runs);
+        if (kind === "pod")
+          for (const row of rows) {
+            expect((row.input.sourceBundle as { files: unknown[] }).files).toHaveLength(2);
+            expect(
+              (row.prepared as { value: { script: { sourceBundle: { files: unknown[] } } } }).value
+                .script.sourceBundle.files,
+            ).toHaveLength(2);
+            expect(
+              (row.steps[0]!.input as { sourceBundle: { files: unknown[] } }).sourceBundle.files,
+            ).toHaveLength(2);
+          }
+      } finally {
+        await reopened.close();
+      }
     } finally {
-      await reopened.close();
+      await m.close().catch(() => {});
+      await rm(m.dir, { recursive: true, force: true });
     }
-  } finally {
-    await m.close().catch(() => {});
-    await rm(m.dir, { recursive: true, force: true });
-  }
-}, 240_000);
+  },
+  240_000,
+);
 
 test("a receipt whose bundle bytes are gone loads, and keeps only the hash for the reader to refuse", async () => {
   const m = await measure("pod", 1);
@@ -168,7 +216,9 @@ test("a receipt whose bundle bytes are gone loads, and keeps only the hash for t
       expect(row!.input.sourceBundle).toEqual({ sha256: expect.stringMatching(/^[0-9a-f]{64}$/) });
       // The script door seals this input before it runs: a bare hash refuses there, and never
       // falls back to the Pod folder.
-      await expect(freezeScript(row!.input)).rejects.toThrow("Invalid Pod source bundle file count");
+      await expect(freezeScript(row!.input)).rejects.toThrow(
+        "Invalid Pod source bundle file count",
+      );
     } finally {
       await reopened.close();
     }
@@ -187,7 +237,10 @@ test("a journal written with bundles inline loads unchanged, with no migration",
     const name = (await readdir(join(one, "bundles")))[0]!;
     const sha = name.replace(/\.json$/, "");
     const bytes = JSON.parse(await readFile(join(one, "bundles", name), "utf8"));
-    const old = (await readFile(m.path, "utf8")).replaceAll(JSON.stringify({ sha256: sha }), JSON.stringify(bytes));
+    const old = (await readFile(m.path, "utf8")).replaceAll(
+      JSON.stringify({ sha256: sha }),
+      JSON.stringify(bytes),
+    );
     await rm(join(one, "bundles"), { recursive: true, force: true });
     await writeFile(m.path, old);
     expect(old).toContain('"bytesBase64"');
@@ -210,30 +263,42 @@ test("a journal written with bundles inline loads unchanged, with no migration",
 test.each([
   ["a path for a hash", { sha256: "a/b" }],
   ["a well-formed hash that names no file", { sha256: "0".repeat(64) }],
-])("a receipt carrying %s loads, and every earlier row still lists", async (_case, sourceBundle) => {
-  const m = await measure("plain", 2);
-  try {
-    await m.journal
-      .invoke({ id: "odd-hash", key: "scripting.execute", target: { kind: "host" }, input: { sourcePath: "src/Run.cs", sourceBundle } }, { caller: human, basis: null })
-      .then(() => m.journal.wait("odd-hash"))
-      .catch(() => {});
-    const before = (await m.journal.list()).map((row) => row.id).sort();
-    expect(before).toContain("odd-hash");
-    expect((await m.journal.list(undefined, "odd-hash"))[0]).toMatchObject({ state: "failed" });
-    await m.close();
-    const reopened = await open(m.dir);
+])(
+  "a receipt carrying %s loads, and every earlier row still lists",
+  async (_case, sourceBundle) => {
+    const m = await measure("plain", 2);
     try {
-      const rows = await reopened.journal.list();
-      expect(rows.map((row) => row.id).sort()).toEqual(before);
-      expect(rows.find((row) => row.id === "odd-hash")!.input.sourceBundle).toEqual(sourceBundle);
+      await m.journal
+        .invoke(
+          {
+            id: "odd-hash",
+            key: "scripting.execute",
+            target: { kind: "host" },
+            input: { sourcePath: "src/Run.cs", sourceBundle },
+          },
+          { caller: human, basis: null },
+        )
+        .then(() => m.journal.wait("odd-hash"))
+        .catch(() => {});
+      const before = (await m.journal.list()).map((row) => row.id).sort();
+      expect(before).toContain("odd-hash");
+      expect((await m.journal.list(undefined, "odd-hash"))[0]).toMatchObject({ state: "failed" });
+      await m.close();
+      const reopened = await open(m.dir);
+      try {
+        const rows = await reopened.journal.list();
+        expect(rows.map((row) => row.id).sort()).toEqual(before);
+        expect(rows.find((row) => row.id === "odd-hash")!.input.sourceBundle).toEqual(sourceBundle);
+      } finally {
+        await reopened.close();
+      }
     } finally {
-      await reopened.close();
+      await m.close().catch(() => {});
+      await rm(m.dir, { recursive: true, force: true });
     }
-  } finally {
-    await m.close().catch(() => {});
-    await rm(m.dir, { recursive: true, force: true });
-  }
-}, 60_000);
+  },
+  60_000,
+);
 
 test("a byte-triggered compaction that dies leaves the appended journal, every row's latest revision readable", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-k2-crash-"));
@@ -244,7 +309,9 @@ test("a byte-triggered compaction that dies leaves the appended journal, every r
   try {
     // Plain runs pass the 1 MiB floor at about the seventh run.
     for (let i = 0; crash.hit === 0 && i < 60; i++)
-      await run(journal, `crash-${i}`, { scriptContent: "var n = 1;\n".repeat(600) }).catch(() => {});
+      await run(journal, `crash-${i}`, { scriptContent: "var n = 1;\n".repeat(600) }).catch(
+        () => {},
+      );
     expect(crash.hit).toBeGreaterThan(0);
   } finally {
     crash.compaction = false;
@@ -284,7 +351,9 @@ test("a journal line from before K2 with inline member bytes loads, and its row 
       expect(JSON.stringify(row!.consumes)).not.toContain("bytesBase64");
       // The gate's strict live parse (`action-journal.ts` gate) accepts the recovered row.
       expect(executableActionReceiptSchema.safeParse(row).success).toBe(true);
-      expect(await run(reopened.journal, "after-old", { scriptContent: "return 1;" })).toMatchObject({ state: "succeeded" });
+      expect(
+        await run(reopened.journal, "after-old", { scriptContent: "return 1;" }),
+      ).toMatchObject({ state: "succeeded" });
     } finally {
       await reopened.close();
     }

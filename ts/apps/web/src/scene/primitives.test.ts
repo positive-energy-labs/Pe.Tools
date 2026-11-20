@@ -1,7 +1,11 @@
 import * as THREE from "three";
 import { expect, test } from "vite-plus/test";
 import { SceneMeshes, type SceneInstance, type ScenePrimitive } from "@pe/web-kernel/scene/types";
-import { primitiveEdges, primitiveMatrix, primitiveTemplate } from "@pe/web-kernel/scene/primitives";
+import {
+  primitiveEdges,
+  primitiveMatrix,
+  primitiveTemplate,
+} from "@pe/web-kernel/scene/primitives";
 import { prepareGeometry } from "./prepare-geometry";
 import { prepareFaceBatches } from "./face-batches";
 import { createFacePicker } from "./picking";

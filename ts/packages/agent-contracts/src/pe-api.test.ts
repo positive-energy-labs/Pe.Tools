@@ -2,10 +2,7 @@ import { runInNewContext } from "node:vm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
-import {
-  createPeClient,
-  httpRoutes as peRoutes,
-} from "./pe-api.ts";
+import { createPeClient, httpRoutes as peRoutes } from "./pe-api.ts";
 import { definePeRouteApi } from "@pe/host-contracts/pe-api";
 const { matchPeRoute, servePeRoute, peClientScript } = definePeRouteApi(peRoutes);
 

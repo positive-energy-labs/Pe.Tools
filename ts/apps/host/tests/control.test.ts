@@ -11,7 +11,19 @@ import {
   type DocumentRef,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { admitCrossing, originOf, bindControl, callerOf, live, admitScript, mintPageDoor, consentedRead, readsOnly, validateFootprintCaller, writeTerminalContext } from "../src/control.ts";
+import {
+  admitCrossing,
+  originOf,
+  bindControl,
+  callerOf,
+  live,
+  admitScript,
+  mintPageDoor,
+  consentedRead,
+  readsOnly,
+  validateFootprintCaller,
+  writeTerminalContext,
+} from "../src/control.ts";
 import { Refused } from "@pe/host-internal/refused";
 import { HOST_CONTEXT_HEADER, productPathNames } from "@pe/host-contracts/contracts";
 import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
@@ -70,7 +82,9 @@ test("a script needs authority over its target alone, whatever else is open besi
     }
     // ADR 0043: the person's pin consents to a ReadOnly run on its own document, and only there.
     expect(admitScript(identity.caller, docA, "/actions", true)).toEqual([]);
-    expect(refusal(() => admitScript(identity.caller, sibling, "/actions", true))).toBe("grant.required");
+    expect(refusal(() => admitScript(identity.caller, sibling, "/actions", true))).toBe(
+      "grant.required",
+    );
     // An external device's ReadOnly run stays a write.
     expect(admitScript(device, docA, "/actions", true)).toEqual([{ kind: "document", ref: docA }]);
   } finally {
@@ -89,9 +103,13 @@ const acquiredCopy = (ref: DocumentRef) =>
 test("a script run is a read only when its mode is known to be ReadOnly", () => {
   expect(readsOnly("scripting.execute", {})).toBe(true);
   expect(readsOnly("scripting.execute", { scriptContent: "Result(1);" })).toBe(true);
-  expect(readsOnly("scripting.execute", { sourcePath: "src/A.cs", permissionMode: "ReadOnly" })).toBe(true);
+  expect(
+    readsOnly("scripting.execute", { sourcePath: "src/A.cs", permissionMode: "ReadOnly" }),
+  ).toBe(true);
   expect(readsOnly("scripting.execute", { sourcePath: "src/A.cs" })).toBe(false);
-  expect(readsOnly("scripting.execute", { scriptContent: "x", permissionMode: "NoTransaction" })).toBe(false);
+  expect(
+    readsOnly("scripting.execute", { scriptContent: "x", permissionMode: "NoTransaction" }),
+  ).toBe(false);
   expect(readsOnly("revit.context.summary", { permissionMode: "ReadOnly" })).toBe(false);
 });
 
@@ -143,10 +161,15 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
   try {
     const identity = callerOf({ kind: "local" }, { "x-pe-context": minted.token });
     if ("refusal" in identity) throw Error(identity.refusal.detail);
-    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions"))
-      .toEqual({ kind: "person-pin", page: "page:@pages/pin", boundBy: "human", lifetime: docA });
-    expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")))
-      .toBe("grant.required");
+    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions")).toEqual({
+      kind: "person-pin",
+      page: "page:@pages/pin",
+      boundBy: "human",
+      lifetime: docA,
+    });
+    expect(
+      refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")),
+    ).toBe("grant.required");
     expect(consentedRead(identity.caller, "scripting.execute", {}, docA)).toBe(true);
     expect(consentedRead(identity.caller, "scripting.execute", {}, docB)).toBe(false);
     expect(
@@ -163,26 +186,36 @@ test("a human Page pin consents only to the exact minted document lifetime", () 
       ),
     ).toBe("grant.required");
     // Even an acquisition elsewhere cannot widen this person's pin to another lifetime.
-    bind((ref) => ref.openId === docB.openId ? "acq-other" : null);
-    expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")))
-      .toBe("grant.required");
+    bind((ref) => (ref.openId === docB.openId ? "acq-other" : null));
+    expect(
+      refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docB }, "/actions")),
+    ).toBe("grant.required");
   } finally {
     minted.retire();
   }
 });
 test("an agent Page pin cannot borrow a person's write consent", () => {
   bind();
-  const minted = mintPageDoor("page:@pages/pin",
-    { kind: "pinned", ref: docA }, "/pages/pin/act", false, docA);
+  const minted = mintPageDoor(
+    "page:@pages/pin",
+    { kind: "pinned", ref: docA },
+    "/pages/pin/act",
+    false,
+    docA,
+  );
   try {
     const identity = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
     if ("refusal" in identity) throw Error(identity.refusal.detail);
-    expect(refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions")))
-      .toBe("grant.required");
+    expect(
+      refusal(() => admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions")),
+    ).toBe("grant.required");
     bind(() => "acq-copy");
-    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions"))
-      .toMatchObject({ kind: "acquisition", id: "acq-copy" });
-  } finally { minted.retire(); }
+    expect(
+      admitCrossing(identity.caller, { kind: "document", ref: docA }, "/actions"),
+    ).toMatchObject({ kind: "acquisition", id: "acq-copy" });
+  } finally {
+    minted.retire();
+  }
 });
 const bind = (acquired: (ref: DocumentRef) => string | null = () => null) =>
   bindControl({
@@ -250,9 +283,16 @@ test("a retiring host leaves the terminal context another host wrote since", asy
 
 test("a page native read keeps only its minted door through request admission", () => {
   bind();
-  const minted = mintPageDoor("page:@pages/pin", {
-    kind: "pinned", ref: docA,
-  }, "/pages/pin/act", true, docA);
+  const minted = mintPageDoor(
+    "page:@pages/pin",
+    {
+      kind: "pinned",
+      ref: docA,
+    },
+    "/pages/pin/act",
+    true,
+    docA,
+  );
   try {
     const transport = callerOf({ kind: "local" }, { [HOST_CONTEXT_HEADER]: minted.token });
     if ("refusal" in transport) throw Error(transport.refusal.detail);
@@ -262,13 +302,20 @@ test("a page native read keeps only its minted door through request admission", 
     expect(Reflect.set(transport.caller, "page", "page:@pages/other")).toBe(false);
     expect(originOf(identity.caller).caller).toEqual({ kind: "page", page: "page:@pages/pin" });
     expect(JSON.stringify(originOf(identity.caller))).not.toContain(minted.token);
-    expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true)).toBeNull();
+    expect(
+      admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true),
+    ).toBeNull();
     const unminted = admittedRequestIdentity({ kind: "page", page: "page:@pages/pin" }, {});
-    expect(refusal(() => admitCrossing(unminted.caller, { kind: "document", ref: docA }, "/call", true)))
-      .toBe("page.use-page-door");
+    expect(
+      refusal(() => admitCrossing(unminted.caller, { kind: "document", ref: docA }, "/call", true)),
+    ).toBe("page.use-page-door");
     minted.retire();
-    expect(() => admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true)).toThrow(Refused);
-  } finally { minted.retire(); }
+    expect(() =>
+      admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true),
+    ).toThrow(Refused);
+  } finally {
+    minted.retire();
+  }
 });
 
 test("request admission preserves a human caller's native authority", () => {
@@ -277,6 +324,7 @@ test("request admission preserves a human caller's native authority", () => {
   const identity = admittedRequestIdentity(caller, {});
   expect(identity.caller).toBe(caller);
   expect(Object.isFrozen(caller)).toBe(true);
-  expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true))
-    .toEqual({ kind: "human" });
+  expect(admitCrossing(identity.caller, { kind: "document", ref: docA }, "/call", true)).toEqual({
+    kind: "human",
+  });
 });

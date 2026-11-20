@@ -182,7 +182,11 @@ test("export reports host retention gaps and oversize pointers without truncatin
   try {
     mkdirSync(join(root, "thread"));
     writeFileSync(join(root, "thread/meta.json"), JSON.stringify({ id: "thread" }));
-    const log = new HostLog(stateFixture(join(root, ".log")), Date.now, { segmentBytes: 1, segments: 1, entryBytes: 256 });
+    const log = new HostLog(stateFixture(join(root, ".log")), Date.now, {
+      segmentBytes: 1,
+      segments: 1,
+      entryBytes: 256,
+    });
     const events: HarnessEvent[] = [1, 2].map((seq) => ({
       kind: "prompt",
       seq,

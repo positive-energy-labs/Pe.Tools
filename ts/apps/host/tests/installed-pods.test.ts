@@ -33,9 +33,17 @@ test("cancelled startup never creates a home after its held listing returns", as
   const release = Promise.withResolvers<void>();
   const list = packages.listPackages;
   vi.spyOn(packages, "listPackages").mockImplementationOnce(async (...args) => {
-    entered.resolve(); await release.promise; return list(...args);
+    entered.resolve();
+    await release.promise;
+    return list(...args);
   });
-  const pending = importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), podsRoot: pods, captures, signal: stop.signal });
+  const pending = importShippedPods({
+    shippedRoot: shipped,
+    ledger: ledgerFixture(ledger),
+    podsRoot: pods,
+    captures,
+    signal: stop.signal,
+  });
   await entered.promise;
   stop.abort();
   release.resolve();
@@ -73,9 +81,19 @@ beforeEach(async () => {
     { podsRoot: source, captures },
   );
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); return rm(root, { recursive: true, force: true }); });
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+  return rm(root, { recursive: true, force: true });
+});
 
-const boot = () => importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), podsRoot: pods, captures });
+const boot = () =>
+  importShippedPods({
+    shippedRoot: shipped,
+    ledger: ledgerFixture(ledger),
+    podsRoot: pods,
+    captures,
+  });
 
 test("a torn import resumes missing members and publishes its manifest last", async () => {
   const directory = join(pods, "example");
@@ -83,23 +101,30 @@ test("a torn import resumes missing members and publishes its manifest last", as
   await mkdir(dirname(member), { recursive: true });
   await writeFile(member, "<title>Tour</title>");
   const writes = vi.spyOn(store, "writeHome");
-  await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
-    .resolves.toMatchObject({ id: "example" });
+  await expect(
+    importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }),
+  ).resolves.toMatchObject({ id: "example" });
   expect(await readFile(join(directory, "pod.json"), "utf8")).toContain('"example"');
   expect(writes.mock.calls.map(([file]) => file.path)).toEqual([join(directory, "pod.json")]);
 });
 
-test.each(["different", "extra"])("a torn folder with a %s file refuses with its address and remedy", async (kind) => {
-  const directory = join(pods, "example");
-  const member = join(directory, kind === "extra" ? "notes.txt" : "pages/tour/index.html");
-  await mkdir(dirname(member), { recursive: true });
-  await writeFile(member, "mine");
-  const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
-  await expect(result).rejects.toThrow(directory);
-  await expect(result).rejects.toThrow(kind === "extra" ? "notes.txt" : "pages/tour/index.html");
-  await expect(result).rejects.toThrow(/remove or rename/i);
-  expect(await readFile(member, "utf8")).toBe("mine");
-});
+test.each(["different", "extra"])(
+  "a torn folder with a %s file refuses with its address and remedy",
+  async (kind) => {
+    const directory = join(pods, "example");
+    const member = join(directory, kind === "extra" ? "notes.txt" : "pages/tour/index.html");
+    await mkdir(dirname(member), { recursive: true });
+    await writeFile(member, "mine");
+    const result = importPod(
+      { archivePath: join(shipped, "example.zip") },
+      { podsRoot: pods, captures },
+    );
+    await expect(result).rejects.toThrow(directory);
+    await expect(result).rejects.toThrow(kind === "extra" ? "notes.txt" : "pages/tour/index.html");
+    await expect(result).rejects.toThrow(/remove or rename/i);
+    expect(await readFile(member, "utf8")).toBe("mine");
+  },
+);
 
 test("a shipped example resumes a torn folder on restart, even if previously recorded present", async () => {
   const entries = readZip(await readFile(join(shipped, "example.zip")));
@@ -112,44 +137,56 @@ test("a shipped example resumes a torn folder on restart, even if previously rec
   expect(await readFile(join(pods, "example", "pod.json"), "utf8")).toContain('"example"');
 });
 
-test.each(["io", "cas"] as const)("import rolls back a second-member failure (%s) and a retry succeeds", async (mode) => {
-  const write = store.writeHome;
-  let count = 0;
-  const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
-    if (++count === 2) {
-      if (mode === "io") throw Error("injected second-member failure");
-      return { ok: false, kind: "conflict", actualSha256: null };
-    }
-    return write(...args);
-  });
-  const start = () => importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
-  await expect(start()).rejects.toThrow(mode === "io" ? "injected second-member failure" : "Pod member changed during import");
-  expect(await readdir(pods)).toEqual([]);
-  spy.mockRestore();
-  await expect(start()).resolves.toMatchObject({ id: "example" });
-});
-
-test.each([true, false])("a throwing second write rolls back only matching bytes (%s)", async (matching) => {
-  const write = store.writeHome;
-  let count = 0;
-  let torn = "";
-  vi.spyOn(store, "writeHome").mockImplementation((...args) => {
-    if (++count !== 2) return write(...args);
-    torn = args[0].path;
-    write(...args);
-    if (!matching) writeFileSync(torn, "concurrent edit");
-    throw Error("injected torn write");
-  });
-  const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
-  await expect(result).rejects.toThrow("injected torn write");
-  if (matching) {
-    await expect(readFile(torn)).rejects.toThrow(/ENOENT/);
+test.each(["io", "cas"] as const)(
+  "import rolls back a second-member failure (%s) and a retry succeeds",
+  async (mode) => {
+    const write = store.writeHome;
+    let count = 0;
+    const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
+      if (++count === 2) {
+        if (mode === "io") throw Error("injected second-member failure");
+        return { ok: false, kind: "conflict", actualSha256: null };
+      }
+      return write(...args);
+    });
+    const start = () =>
+      importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+    await expect(start()).rejects.toThrow(
+      mode === "io" ? "injected second-member failure" : "Pod member changed during import",
+    );
     expect(await readdir(pods)).toEqual([]);
-  } else {
-    await expect(result).rejects.toThrow(torn);
-    expect(await readFile(torn, "utf8")).toBe("concurrent edit");
-  }
-});
+    spy.mockRestore();
+    await expect(start()).resolves.toMatchObject({ id: "example" });
+  },
+);
+
+test.each([true, false])(
+  "a throwing second write rolls back only matching bytes (%s)",
+  async (matching) => {
+    const write = store.writeHome;
+    let count = 0;
+    let torn = "";
+    vi.spyOn(store, "writeHome").mockImplementation((...args) => {
+      if (++count !== 2) return write(...args);
+      torn = args[0].path;
+      write(...args);
+      if (!matching) writeFileSync(torn, "concurrent edit");
+      throw Error("injected torn write");
+    });
+    const result = importPod(
+      { archivePath: join(shipped, "example.zip") },
+      { podsRoot: pods, captures },
+    );
+    await expect(result).rejects.toThrow("injected torn write");
+    if (matching) {
+      await expect(readFile(torn)).rejects.toThrow(/ENOENT/);
+      expect(await readdir(pods)).toEqual([]);
+    } else {
+      await expect(result).rejects.toThrow(torn);
+      expect(await readFile(torn, "utf8")).toBe("concurrent edit");
+    }
+  },
+);
 
 test("rollback names a directory kept because a concurrent writer added a file", async () => {
   const write = store.writeHome;
@@ -163,7 +200,10 @@ test("rollback names a directory kept because a concurrent writer added a file",
     }
     return write(...args);
   });
-  const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
+  const result = importPod(
+    { archivePath: join(shipped, "example.zip") },
+    { podsRoot: pods, captures },
+  );
   await expect(result).rejects.toThrow("ENOTEMPTY");
   await expect(result).rejects.toThrow(directory);
   expect(await readFile(join(directory, "later.txt"), "utf8")).toBe("mine");
@@ -172,77 +212,109 @@ test("rollback names a directory kept because a concurrent writer added a file",
 test("a shipped update dropping a member posts one stored keep notice across restarts", async () => {
   await boot();
   const directory = join(pods, "example");
-  const original = (await listPackages({ podsRoots: pods })).packages.find(p => p.id === "example")!;
+  const original = (await listPackages({ podsRoots: pods })).packages.find(
+    (p) => p.id === "example",
+  )!;
   const before = await readFile(join(directory, "pages", "tour", "index.html"));
   const manifest = join(root, "examples", "example", "pod.json");
   await writeFile(manifest, (await readFile(manifest, "utf8")).replace("1.0.0", "2.0.0"));
   await rm(join(root, "examples", "example", "pages"), { recursive: true });
   await rm(join(shipped, "example.zip"));
-  await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
-    { podsRoot: join(root, "examples"), captures });
+  await exportPod(
+    { pod: "example", archivePath: join(shipped, "example.zip") },
+    { podsRoot: join(root, "examples"), captures },
+  );
   await boot();
   await boot();
-  const notices = storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === directory);
+  const notices = storedNotices(ledgerFixture(ledger).machine).filter((n) => n.path === directory);
   expect(notices).toHaveLength(1);
-  expect(notices[0]).toMatchObject({ class: "keep", reason: expect.stringContaining("removes members") });
+  expect(notices[0]).toMatchObject({
+    class: "keep",
+    reason: expect.stringContaining("removes members"),
+  });
   expect(await readFile(join(directory, "pages", "tour", "index.html"))).toEqual(before);
   for (const member of original.members)
     expect(await readFile(join(directory, member.path))).toEqual(Buffer.from(member.bytes));
-  expect((await listPackages({ podsRoots: pods })).packages.find(p => p.id === "example")!.version).toBe("1.0.0");
+  expect(
+    (await listPackages({ podsRoots: pods })).packages.find((p) => p.id === "example")!.version,
+  ).toBe("1.0.0");
 });
 
-test.each(["io", "cas"] as const)("update rolls back a second-member failure (%s) byte for byte and a retry succeeds", async (mode) => {
-  await boot();
-  const original = (await listPackages({ podsRoots: pods })).packages.find(p => p.id === "example")!;
-  await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), "<title>Updated</title>");
-  await rm(join(shipped, "example.zip"));
-  await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
-    { podsRoot: join(root, "examples"), captures });
-  const write = store.writeHome;
-  let count = 0;
-  const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
-    if (++count === 2) {
-      if (mode === "io") throw Error("injected second-member failure");
-      return { ok: false, kind: "conflict", actualSha256: null };
-    }
-    return write(...args);
-  });
-  expect((await boot()).outcomes).toMatchObject([{ outcome: "present" }]);
-  for (const member of original.members)
-    expect(await readFile(join(original.directory, member.path))).toEqual(Buffer.from(member.bytes));
-  spy.mockRestore();
-  expect((await boot()).outcomes).toMatchObject([{ outcome: "updated" }]);
-});
-
-test.each(["import", "update"] as const)("%s rollback keeps and names a concurrent edit", async (mode) => {
-  if (mode === "update") {
+test.each(["io", "cas"] as const)(
+  "update rolls back a second-member failure (%s) byte for byte and a retry succeeds",
+  async (mode) => {
     await boot();
-    await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), "<title>Updated</title>");
+    const original = (await listPackages({ podsRoots: pods })).packages.find(
+      (p) => p.id === "example",
+    )!;
+    await writeFile(
+      join(root, "examples", "example", "pages", "tour", "index.html"),
+      "<title>Updated</title>",
+    );
     await rm(join(shipped, "example.zip"));
-    await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
-      { podsRoot: join(root, "examples"), captures });
-  }
-  const write = store.writeHome;
-  let count = 0;
-  let first = "";
-  vi.spyOn(store, "writeHome").mockImplementation((...args) => {
-    if (++count === 1) first = args[0].path;
-    if (count === 2) {
-      writeFileSync(first, "concurrent edit");
-      throw Error("injected second-member failure");
+    await exportPod(
+      { pod: "example", archivePath: join(shipped, "example.zip") },
+      { podsRoot: join(root, "examples"), captures },
+    );
+    const write = store.writeHome;
+    let count = 0;
+    const spy = vi.spyOn(store, "writeHome").mockImplementation((...args) => {
+      if (++count === 2) {
+        if (mode === "io") throw Error("injected second-member failure");
+        return { ok: false, kind: "conflict", actualSha256: null };
+      }
+      return write(...args);
+    });
+    expect((await boot()).outcomes).toMatchObject([{ outcome: "present" }]);
+    for (const member of original.members)
+      expect(await readFile(join(original.directory, member.path))).toEqual(
+        Buffer.from(member.bytes),
+      );
+    spy.mockRestore();
+    expect((await boot()).outcomes).toMatchObject([{ outcome: "updated" }]);
+  },
+);
+
+test.each(["import", "update"] as const)(
+  "%s rollback keeps and names a concurrent edit",
+  async (mode) => {
+    if (mode === "update") {
+      await boot();
+      await writeFile(
+        join(root, "examples", "example", "pages", "tour", "index.html"),
+        "<title>Updated</title>",
+      );
+      await rm(join(shipped, "example.zip"));
+      await exportPod(
+        { pod: "example", archivePath: join(shipped, "example.zip") },
+        { podsRoot: join(root, "examples"), captures },
+      );
     }
-    return write(...args);
-  });
-  if (mode === "import") {
-    const result = importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures });
-    await expect(result).rejects.toThrow("rollback kept:");
-    await expect(result).rejects.toThrow(first);
-  } else {
-    await boot();
-    expect(shippedPodUpdateRefusals.get("example")).toContain(first);
-  }
-  expect(await readFile(first, "utf8")).toBe("concurrent edit");
-});
+    const write = store.writeHome;
+    let count = 0;
+    let first = "";
+    vi.spyOn(store, "writeHome").mockImplementation((...args) => {
+      if (++count === 1) first = args[0].path;
+      if (count === 2) {
+        writeFileSync(first, "concurrent edit");
+        throw Error("injected second-member failure");
+      }
+      return write(...args);
+    });
+    if (mode === "import") {
+      const result = importPod(
+        { archivePath: join(shipped, "example.zip") },
+        { podsRoot: pods, captures },
+      );
+      await expect(result).rejects.toThrow("rollback kept:");
+      await expect(result).rejects.toThrow(first);
+    } else {
+      await boot();
+      expect(shippedPodUpdateRefusals.get("example")).toContain(first);
+    }
+    expect(await readFile(first, "utf8")).toBe("concurrent edit");
+  },
+);
 
 test("host-start examples use the override home and the write door, never the Documents home", async () => {
   const override = join(root, "override");
@@ -250,21 +322,40 @@ test("host-start examples use the override home and the write door, never the Do
   const writes = vi.spyOn(store, "writeHome");
   // Observe resolution before any import: a real-home mutant fails without touching personal files.
   expect(productPodsRootPath()).toBe(join(override, "Pods"));
-  const report = await importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(ledger), captures });
+  const report = await importShippedPods({
+    shippedRoot: shipped,
+    ledger: ledgerFixture(ledger),
+    captures,
+  });
   expect(report.outcomes).toMatchObject([{ outcome: "imported" }]);
-  expect(await readFile(join(override, "Pods", "example", "pod.json"), "utf8")).toContain('"example"');
+  expect(await readFile(join(override, "Pods", "example", "pod.json"), "utf8")).toContain(
+    '"example"',
+  );
   expect(writes.mock.calls.length).toBeGreaterThanOrEqual(3);
-  expect(writes.mock.calls.every(([file]) => file.path.startsWith(override + "/") || file.path.startsWith(override + "\\"))).toBe(true);
+  expect(
+    writes.mock.calls.every(
+      ([file]) => file.path.startsWith(override + "/") || file.path.startsWith(override + "\\"),
+    ),
+  ).toBe(true);
 });
 
 test("host-start missing example source posts one notice and never throws", async () => {
   const missing = join(root, "missing-examples");
-  const start = () => importShippedPods({ shippedRoot: missing, ledger: ledgerFixture(ledger), podsRoot: pods, captures });
+  const start = () =>
+    importShippedPods({
+      shippedRoot: missing,
+      ledger: ledgerFixture(ledger),
+      podsRoot: pods,
+      captures,
+    });
   await expect(start()).resolves.toMatchObject({ outcomes: [] });
   await start();
-  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === missing))
-    .toMatchObject([{ class: "keep", place: "Shipped examples" }]);
-  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === missing)).toHaveLength(1);
+  expect(
+    storedNotices(ledgerFixture(ledger).machine).filter((n) => n.path === missing),
+  ).toMatchObject([{ class: "keep", place: "Shipped examples" }]);
+  expect(
+    storedNotices(ledgerFixture(ledger).machine).filter((n) => n.path === missing),
+  ).toHaveLength(1);
 });
 
 test("a dev host with a missing checkout example directory still starts with one notice", async () => {
@@ -272,11 +363,15 @@ test("a dev host with a missing checkout example directory still starts with one
   const missingCheckout = join(root, "missing-checkout");
   Object.defineProperty(hostOwnership, "sourceRoot", { value: missingCheckout });
   try {
-    const start = () => importShippedPods({ ledger: ledgerFixture(ledger), podsRoot: pods, captures });
+    const start = () =>
+      importShippedPods({ ledger: ledgerFixture(ledger), podsRoot: pods, captures });
     await expect(start()).resolves.toMatchObject({ outcomes: [] });
     await start();
-    expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === join(missingCheckout, "examples", "pods")))
-      .toHaveLength(1);
+    expect(
+      storedNotices(ledgerFixture(ledger).machine).filter(
+        (n) => n.path === join(missingCheckout, "examples", "pods"),
+      ),
+    ).toHaveLength(1);
   } finally {
     Object.defineProperty(hostOwnership, "sourceRoot", { value: sourceRoot });
   }
@@ -289,15 +384,21 @@ test("a shipped update uses home CAS without moving the pod, and keeps a later u
   const update = async (html: string) => {
     await writeFile(join(root, "examples", "example", "pages", "tour", "index.html"), html);
     await rm(join(shipped, "example.zip"));
-    await exportPod({ pod: "example", archivePath: join(shipped, "example.zip") },
-      { podsRoot: join(root, "examples"), captures });
+    await exportPod(
+      { pod: "example", archivePath: join(shipped, "example.zip") },
+      { podsRoot: join(root, "examples"), captures },
+    );
     return boot();
   };
   expect((await update("<title>Updated</title>")).outcomes).toMatchObject([{ outcome: "updated" }]);
   expect(await readFile(member, "utf8")).toBe("<title>Updated</title>");
-  expect(writes.mock.calls.some(([file, , sha]) => file.path === member && sha !== null)).toBe(true);
+  expect(writes.mock.calls.some(([file, , sha]) => file.path === member && sha !== null)).toBe(
+    true,
+  );
   await writeFile(member, "<title>Mine</title>");
-  expect((await update("<title>New version</title>")).outcomes).toMatchObject([{ outcome: "present" }]);
+  expect((await update("<title>New version</title>")).outcomes).toMatchObject([
+    { outcome: "present" },
+  ]);
   expect(await readFile(member, "utf8")).toBe("<title>Mine</title>");
 });
 
@@ -311,7 +412,10 @@ test("first boot imports the shipped pod; a restart offers nothing again, even a
   // The import record is machine state beside the ledger this owner named, never in the pod, and it
   // names its archive by file name: no machine path is stored.
   await expect(readFile(join(pods, "example", "imported.json"))).rejects.toThrow();
-  const record = await readFile(importRecordFile("example", { machine: stateMachine(dirname(ledger)) }).path, "utf8");
+  const record = await readFile(
+    importRecordFile("example", { machine: stateMachine(dirname(ledger)) }).path,
+    "utf8",
+  );
   expect(JSON.parse(record).archive).toBe("example.zip");
   expect(record).not.toContain(JSON.stringify(shipped).slice(1, -1));
 
@@ -347,7 +451,9 @@ test("a user's pod with the shipped id, or a folder with its name, is never over
 
 test("the real examples stage and first-boot import unchanged: same members, project bytes kept, four kinds of keys", async () => {
   const examples = join(import.meta.dirname, "..", "..", "..", "..", "examples", "pods");
-  const source = (await listPackages({ podsRoots: examples })).packages.find((p) => p.id === "snowdon-ducts")!;
+  const source = (await listPackages({ podsRoots: examples })).packages.find(
+    (p) => p.id === "snowdon-ducts",
+  )!;
   const staged = await exportPod(
     { pod: "snowdon-ducts", archivePath: join(shipped, "snowdon-ducts.zip") },
     { podsRoot: examples, captures },
@@ -359,7 +465,9 @@ test("the real examples stage and first-boot import unchanged: same members, pro
   const report = await boot();
 
   expect(report.outcomes.map((o) => o.outcome)).toEqual(["imported", "imported"]);
-  const landed = (await listPackages({ podsRoots: pods })).packages.find((p) => p.id === "snowdon-ducts")!;
+  const landed = (await listPackages({ podsRoots: pods })).packages.find(
+    (p) => p.id === "snowdon-ducts",
+  )!;
   expect(landed.members.map((m) => [m.path, m.sha256])).toEqual(
     source.members.map((m) => [m.path, m.sha256]),
   );
@@ -399,19 +507,23 @@ test("rollback undoes repeated writes to one member newest first", async () => {
   const hash = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
   expect(store.writeHome(authoredFixture(path), "first", hash("original")).ok).toBe(true);
   expect(store.writeHome(authoredFixture(path), "second", hash("first")).ok).toBe(true);
-  expect(settings.rollbackHomeMembers([
-    { file: authoredFixture(path), sha256: hash("first"), prior: Buffer.from("original") },
-    { file: authoredFixture(path), sha256: hash("second"), prior: Buffer.from("first") },
-  ])).toEqual([]);
+  expect(
+    settings.rollbackHomeMembers([
+      { file: authoredFixture(path), sha256: hash("first"), prior: Buffer.from("original") },
+      { file: authoredFixture(path), sha256: hash("second"), prior: Buffer.from("first") },
+    ]),
+  ).toEqual([]);
   expect(await readFile(path, "utf8")).toBe("original");
 });
 
 test("a failed last non-manifest write never exposes a manifest during import", async () => {
   const entries = readZip(await readFile(join(shipped, "example.zip")));
   // The ZIP writer sorts pod.json before z-last.txt; publication must move the manifest last.
-  const ordered = new Map([["pod.json", entries.get("pod.json")!] as const,
+  const ordered = new Map([
+    ["pod.json", entries.get("pod.json")!] as const,
     ...[...entries].filter(([path]) => path !== "pod.json"),
-    ["z-last.txt", Buffer.from("last")] as const]);
+    ["z-last.txt", Buffer.from("last")] as const,
+  ]);
   await writeFile(join(shipped, "example.zip"), writeZip(ordered));
   const directory = join(pods, "example");
   const manifest = join(directory, "pod.json");
@@ -424,12 +536,14 @@ test("a failed last non-manifest write never exposes a manifest during import", 
     observations.push(existsSync(manifest));
     return result;
   });
-  await expect(importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }))
-    .rejects.toThrow("last member failed");
+  await expect(
+    importPod({ archivePath: join(shipped, "example.zip") }, { podsRoot: pods, captures }),
+  ).rejects.toThrow("last member failed");
   expect(spy.mock.calls.map(([file]) => file.path)).toEqual([
-    join(directory, "pages", "tour", "index.html"), join(directory, "z-last.txt"),
+    join(directory, "pages", "tour", "index.html"),
+    join(directory, "z-last.txt"),
   ]);
-  expect(observations.every(present => !present)).toBe(true);
+  expect(observations.every((present) => !present)).toBe(true);
   expect(existsSync(manifest)).toBe(false);
 });
 
@@ -437,15 +551,24 @@ test("the shipped census resumes a manifest-free folder recorded present by an o
   const bytes = await readFile(join(shipped, "example.zip"));
   const hash = createHash("sha256").update(bytes).digest("hex");
   await mkdir(dirname(ledger), { recursive: true });
-  await writeFile(ledger, JSON.stringify({ offered: {
-    [hash]: { archive: "example.zip", at: new Date().toISOString(), outcome: "present" },
-  } }));
+  await writeFile(
+    ledger,
+    JSON.stringify({
+      offered: {
+        [hash]: { archive: "example.zip", at: new Date().toISOString(), outcome: "present" },
+      },
+    }),
+  );
   const member = join(pods, "example", "pages", "tour", "index.html");
   await mkdir(dirname(member), { recursive: true });
   await writeFile(member, readZip(bytes).get("pages/tour/index.html")!);
-  expect((await listPackages({ podsRoots: pods })).packages.some(p => p.id === "example")).toBe(false);
+  expect((await listPackages({ podsRoots: pods })).packages.some((p) => p.id === "example")).toBe(
+    false,
+  );
   expect((await boot()).outcomes).toMatchObject([{ outcome: "imported", id: "example" }]);
-  expect((await listPackages({ podsRoots: pods })).packages.some(p => p.id === "example")).toBe(true);
+  expect((await listPackages({ podsRoots: pods })).packages.some((p) => p.id === "example")).toBe(
+    true,
+  );
 });
 
 test("an unrelated manifest-free example folder is kept with one notice across censuses", async () => {
@@ -457,7 +580,10 @@ test("an unrelated manifest-free example folder is kept with one notice across c
   await boot();
   expect(await readdir(directory)).toEqual(["notes.txt"]);
   expect(await readFile(member, "utf8")).toBe("mine");
-  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === directory))
-    .toMatchObject([{ class: "keep", reason: expect.stringContaining("notes.txt") }]);
-  expect(storedNotices(ledgerFixture(ledger).machine).filter(n => n.path === directory)).toHaveLength(1);
+  expect(
+    storedNotices(ledgerFixture(ledger).machine).filter((n) => n.path === directory),
+  ).toMatchObject([{ class: "keep", reason: expect.stringContaining("notes.txt") }]);
+  expect(
+    storedNotices(ledgerFixture(ledger).machine).filter((n) => n.path === directory),
+  ).toHaveLength(1);
 });

@@ -5,7 +5,14 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 import { message, packageIdSchema, packageMemberPathSchema } from "@pe/agent-contracts";
 import { scriptPodMemberBounds } from "@pe/host-contracts/generated";
-import { writeHome, writeState, homeKind, stateKind, type StateRoot, type StoredFile } from "@pe/host-contracts/kinds";
+import {
+  writeHome,
+  writeState,
+  homeKind,
+  stateKind,
+  type StateRoot,
+  type StoredFile,
+} from "@pe/host-contracts/kinds";
 import { stateDirectory, stateTree } from "@pe/host-contracts/service-identity";
 import { hostState } from "./host-ownership.ts";
 import { z } from "zod";
@@ -68,10 +75,16 @@ export async function exportPod(
   options: TransferOptions = {},
 ): Promise<PodExport> {
   const prepared = await preparePodExport(request, options);
-  return writePodExport(prepared, archiveExportKind.in(
-    stateTree(dirname((options.machine ?? hostState()).state)).home({ root: dirname(prepared.result.archivePath), tier: "user" }),
-    basename(prepared.result.archivePath),
-  ));
+  return writePodExport(
+    prepared,
+    archiveExportKind.in(
+      stateTree(dirname((options.machine ?? hostState()).state)).home({
+        root: dirname(prepared.result.archivePath),
+        tier: "user",
+      }),
+      basename(prepared.result.archivePath),
+    ),
+  );
 }
 
 /** Freeze the archive and its dependency versions at command admission. */
@@ -81,7 +94,7 @@ export async function preparePodExport(
   snapshot?: PackageListing,
 ) {
   const archivePath = zipPath(request.archivePath);
-  const listing = snapshot ?? await listPackages({ podsRoots: options.podsRoot });
+  const listing = snapshot ?? (await listPackages({ podsRoots: options.podsRoot }));
   const pod = unique(listing, request.pod);
   const captured = await capturePackage(pod).catch((error: unknown) => {
     throw new TransferRefused(`Pod '${request.pod}' is not exportable: ${message(error)}`);
@@ -134,12 +147,9 @@ export async function writePodExport(
   file: StoredFile<unknown, "state" | "home">,
 ): Promise<PodExport> {
   const { archivePath } = prepared.result;
-  if (resolve(file.path) !== resolve(archivePath)) throw new TransferRefused("Archive destination changed after admission.");
-  await writeArtifact(
-    dirname(archivePath),
-    file,
-    Buffer.from(prepared.bytesBase64, "base64"),
-  );
+  if (resolve(file.path) !== resolve(archivePath))
+    throw new TransferRefused("Archive destination changed after admission.");
+  await writeArtifact(dirname(archivePath), file, Buffer.from(prepared.bytesBase64, "base64"));
   // The caller's export destination may itself be a Pod member.
   await reconcilePackageChanges();
   return prepared.result;
@@ -241,7 +251,10 @@ const vendorPath = (podId: string, settingsPath: string) =>
 const isSettingsJson = (path: string) => /^settings\/.+\.json$/i.test(path);
 
 /** Every capture a text member names travels by hash; one this host does not hold refuses export. */
-async function closeCaptures(files: Map<string, Buffer>, store: PictureCaptures): Promise<string[]> {
+async function closeCaptures(
+  files: Map<string, Buffer>,
+  store: PictureCaptures,
+): Promise<string[]> {
   const named = new Map<string, string>();
   for (const [path, bytes] of files) {
     if (CAPTURE_MEMBER.test(path)) continue;
@@ -296,7 +309,9 @@ export async function installArchive(
   const podsRoot = options.podsRoot ?? productPodsRootPath();
   // A new pod lands in the user home, and its id must be free in every home (ADR 0037 rule 4).
   const everyRoot = options.podsRoot ?? productPodsRoots();
-  const installed = (await listPackages({ podsRoots: everyRoot })).packages.find((p) => p.id === id);
+  const installed = (await listPackages({ podsRoots: everyRoot })).packages.find(
+    (p) => p.id === id,
+  );
   if (installed)
     throw new TransferRefused(
       `Pod id '${id}' is already installed at '${installed.directory}'. Remove or rename that folder, or import an archive with another id.`,
@@ -305,28 +320,46 @@ export async function installArchive(
   const directory = join(podsRoot, folder);
   const resumed = new Map<string, string>();
   const refuseFolder = (taken: string, reason: string): never => {
-    throw new TransferRefused(`Pod folder already exists: ${taken}; ${reason}. Remove or rename it, or import under another id.`, 409);
+    throw new TransferRefused(
+      `Pod folder already exists: ${taken}; ${reason}. Remove or rename it, or import under another id.`,
+      409,
+    );
   };
   // The folder name is an address too, unique across every home (`resolvePackageIdentity`), so it
   // must be free in each, except an exact, manifest-free partial import in the destination home.
   for (const root of [everyRoot].flat()) {
     const taken = join(root, folder);
-    const info = await lstat(taken).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
+    const info = await lstat(taken).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return null;
+    });
     if (!info) continue;
     if (resolve(taken) !== resolve(directory) || !info.isDirectory() || info.isSymbolicLink())
       refuseFolder(taken, "it is not a resumable import destination");
-    if (await lstat(join(taken, "pod.json")).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; }))
+    if (
+      await lstat(join(taken, "pod.json")).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return null;
+      })
+    )
       refuseFolder(taken, "pod.json is already present");
     // Capture every file, including debris that package discovery deliberately ignores.
     const walk = async (relative: string): Promise<void> => {
       for (const entry of await readdir(join(taken, relative), { withFileTypes: true })) {
         const path = relative ? `${relative}/${entry.name}` : entry.name;
         if (entry.isSymbolicLink()) refuseFolder(taken, `'${path}' is a link`);
-        if (entry.isDirectory()) { await walk(path); continue; }
+        if (entry.isDirectory()) {
+          await walk(path);
+          continue;
+        }
         const bytes = entries.get(path);
-        if (!entry.isFile() || !bytes) return refuseFolder(taken, `'${path}' is not an archive member`);
+        if (!entry.isFile() || !bytes)
+          return refuseFolder(taken, `'${path}' is not an archive member`);
         const target = join(taken, path);
-        if ((await lstat(target)).size !== bytes.length || sha256(await readFile(target)) !== sha256(bytes))
+        if (
+          (await lstat(target)).size !== bytes.length ||
+          sha256(await readFile(target)) !== sha256(bytes)
+        )
           refuseFolder(taken, `'${path}' differs from the archive`);
         resumed.set(path, sha256(bytes));
       }
@@ -359,19 +392,30 @@ export async function installArchive(
       );
     }
     // Owned local staging is installation work, not a latency-bounded home discovery request.
-    const admitted = await readPackageDirectory(join(staging, folder), folder, options.signal).catch(error => {
+    const admitted = await readPackageDirectory(
+      join(staging, folder),
+      folder,
+      options.signal,
+    ).catch((error) => {
       options.signal?.throwIfAborted();
-      throw new TransferRefused(`Pod archive '${locator}' is not an admissible pod: ${message(error)}.`);
+      throw new TransferRefused(
+        `Pod archive '${locator}' is not an admissible pod: ${message(error)}.`,
+      );
     });
-    if (admitted.id !== id || admitted.members.length !== entries.size ||
-      admitted.members.some(member => {
+    if (
+      admitted.id !== id ||
+      admitted.members.length !== entries.size ||
+      admitted.members.some((member) => {
         const bytes = entries.get(member.path);
         return !bytes || member.sha256 !== sha256(bytes);
-      }))
+      })
+    )
       throw new TransferRefused(`Pod archive '${locator}' changed during staging capture.`);
     // Manifest last: readers never admit a partially published pod. Home writes use CAS,
     // including first imports, rather than renaming machine state onto a synced drive.
-    for (const [path, bytes] of [...entries].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+    for (const [path, bytes] of [...entries].sort(
+      ([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"),
+    )) {
       options.signal?.throwIfAborted();
       const target = join(directory, path);
       if (resumed.has(path)) {
@@ -379,10 +423,14 @@ export async function installArchive(
           throw new TransferRefused(`Pod member changed during import: ${target}`, 409);
         continue;
       }
-      for (let parent = dirname(target); parent !== directory; parent = dirname(parent)) directories.add(parent);
+      for (let parent = dirname(target); parent !== directory; parent = dirname(parent))
+        directories.add(parent);
       // A write may throw after creating bytes. Undo still uses only our intended hash.
       const file = podMemberKind.in(
-        stateTree(dirname((options.machine ?? hostState()).state)).home({ root: dirname(podsRoot), tier: "user" }),
+        stateTree(dirname((options.machine ?? hostState()).state)).home({
+          root: dirname(podsRoot),
+          tier: "user",
+        }),
         [basename(podsRoot), folder, ...path.split("/")],
       );
       writes.push({ file, sha256: sha256(bytes), prior: null });
@@ -419,13 +467,15 @@ export async function installArchive(
     if (writes.length) await reconcilePackageChanges();
     // Remove only empty directories, never resumed members or a later writer's files.
     for (const path of [...directories].sort((a, b) => b.length - a.length)) {
-      try { await rmdir(path); }
-      catch (undoError) {
+      try {
+        await rmdir(path);
+      } catch (undoError) {
         if ((undoError as NodeJS.ErrnoException).code !== "ENOENT")
           kept.push(`${path} (${String(undoError)})`);
       }
     }
-    if (kept.length) throw new Error(`${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
+    if (kept.length)
+      throw new Error(`${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
     throw error;
   } finally {
     await rm(staging, { recursive: true, force: true });

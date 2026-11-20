@@ -13,7 +13,8 @@ const read = async (sourceDiagnostics?: { packages: string[]; skills: string[] }
     const source = createCapabilityCatalogSource({
       hostBaseUrl: "http://fixture",
       registrations: [],
-      machine: async () => ({ legs: {}, revit: { sessions: [], unclassifiedAttachments: [] } }) as never,
+      machine: async () =>
+        ({ legs: {}, revit: { sessions: [], unclassifiedAttachments: [] } }) as never,
       content: content(sourceDiagnostics),
     });
     return (await source.read({})).sources;

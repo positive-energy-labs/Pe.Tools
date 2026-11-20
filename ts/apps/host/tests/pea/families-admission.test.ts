@@ -2,10 +2,18 @@ import { Effect, Exit, Layer, Scope } from "effect";
 import { admittedBuiltinsLayer } from "../../src/admitted-builtins.ts";
 import { builtinEnrollments } from "../../src/builtin-enrollment.ts";
 import { afterEach, expect, test } from "vite-plus/test";
-import { address, familiesRouteState, familyCellKey, type RouteStateSpec } from "@pe/agent-contracts";
+import {
+  address,
+  familiesRouteState,
+  familyCellKey,
+  type RouteStateSpec,
+} from "@pe/agent-contracts";
 
 import { RouteWorkspace } from "../../../../packages/runtime/src/route-workspace.ts";
-import { hostLoadedFamilies, type HostCall } from "../../../../packages/mcps/src/pea/families-admission.ts";
+import {
+  hostLoadedFamilies,
+  type HostCall,
+} from "../../../../packages/mcps/src/pea/families-admission.ts";
 import { createRouteRegistrations } from "../../../../packages/mcps/src/pea/routes.ts";
 
 const familiesSpec: RouteStateSpec<typeof familiesRouteState.schema> = familiesRouteState;
@@ -57,16 +65,17 @@ async function workspace() {
       reads.push({ target, filter });
       return loaded;
     },
-    { version: 1, schemaVersion: familiesSpec.schemaVersion ?? 1, revision: 0, doc: { scope: { edit: { by: "human", value: casework([]) } } } },
+    {
+      version: 1,
+      schemaVersion: familiesSpec.schemaVersion ?? 1,
+      revision: 0,
+      doc: { scope: { edit: { by: "human", value: casework([]) } } },
+    },
   );
   return { reads, work };
 }
 const propose = (familyName: string, typeName = "12 X 4") => ({
-  path: [
-    "cells",
-    familyCellKey({ familyName, typeName, parameter: "View Description" }),
-    "edit",
-  ],
+  path: ["cells", familyCellKey({ familyName, typeName, parameter: "View Description" }), "edit"],
   value: { value: { value: "Base", storageType: "String" } },
 });
 
@@ -297,7 +306,10 @@ test("item 3: every door refusal names its code and its structured parts, and ke
         const { work, at } = await seededWork(
           {
             scope: {
-              edit: { by: "human", value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] } },
+              edit: {
+                by: "human",
+                value: { ...exhaustScope, categoryNames: ["Walls"], familyNames: [] },
+              },
             },
           },
           catalogOf([]),

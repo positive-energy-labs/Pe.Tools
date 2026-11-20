@@ -14,7 +14,9 @@ import type { RouteStartupProjection } from "@pe/web/route-startup";
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");
 const [file] = await Promise.race([
-  once(process, "message") as Promise<[{ port: number; sourceRoot: string; name: string; routeProjection?: RouteStartupProjection }]>,
+  once(process, "message") as Promise<
+    [{ port: number; sourceRoot: string; name: string; routeProjection?: RouteStartupProjection }]
+  >,
   disconnected.then(() => {
     throw new Error("Host exited before frontend startup");
   }),

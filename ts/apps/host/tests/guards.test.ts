@@ -42,9 +42,9 @@ test("R2: exactly two acts hold, and every guard answers with one of them", () =
     readdirSync(join(root, dir), { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".ts"))
       .flatMap((file) =>
-        [...readFileSync(join(root, dir, file), "utf8").matchAll(/\bh(?:e|o)ld\(\s*"([^"]+)"/g)].map(
-          (match) => match[1]!,
-        ),
+        [
+          ...readFileSync(join(root, dir, file), "utf8").matchAll(/\bh(?:e|o)ld\(\s*"([^"]+)"/g),
+        ].map((match) => match[1]!),
       ),
   );
   expect(named).toHaveLength(3);
@@ -68,9 +68,13 @@ test("only the person is not guarded: Pea, a Page, an MCP device, a service and 
   expect(heldAct(() => guardSave(pea(), "save-as", project))).toBeNull();
   expect(heldAct(() => guardSave(pea(), "self", { ...project, isFamily: true }))).toBeNull();
   expect(heldAct(() => guardDiscard(pea(), [{ ...project, isFamily: true }], "close"))).toBeNull();
-  expect(heldAct(() => guardDiscard(pea(), [{ ...project, isModified: false }], "close"))).toBeNull();
+  expect(
+    heldAct(() => guardDiscard(pea(), [{ ...project, isModified: false }], "close")),
+  ).toBeNull();
   // Held when the fact cannot be read: no `isModified`, or a document the census does not name.
-  expect(heldAct(() => guardDiscard(pea(), [{ title: "Office" }], "close"))).toBe("overwrite-or-discard");
+  expect(heldAct(() => guardDiscard(pea(), [{ title: "Office" }], "close"))).toBe(
+    "overwrite-or-discard",
+  );
   expect(heldAct(() => guardDiscard(pea(), [{}], "stop"))).toBe("overwrite-or-discard");
   expect(heldAct(() => guardSave(pea(), "self", undefined))).toBe("overwrite-or-discard");
 });

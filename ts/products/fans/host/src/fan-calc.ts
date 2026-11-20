@@ -1,5 +1,9 @@
 import * as acquisition from "@pe/fans-contract/fans-host-reads";
-import { CALC_ENGINE_VERSION, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "@pe/fans-contract/fan-calc";
+import {
+  CALC_ENGINE_VERSION,
+  CALC_DETAIL_READ,
+  CALC_BREAKDOWN_READ,
+} from "@pe/fans-contract/fan-calc";
 import { body } from "@pe/host-internal/read-graph";
 import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
@@ -53,7 +57,10 @@ const enginePath = z.object({
   blockerIds: z.array(z.string()),
 });
 const engineBase = {
-  engineVersion: z.literal(CALC_ENGINE_VERSION, "Retired calc engine; record this calculation again. Recording bytes were not changed."),
+  engineVersion: z.literal(
+    CALC_ENGINE_VERSION,
+    "Retired calc engine; record this calculation again. Recording bytes were not changed.",
+  ),
   basis: z.string(),
   legs: details[3].shape.legs,
   blockers: details[4].shape.blockers,
@@ -104,11 +111,8 @@ const titlesOf = (grids: ReturnType<typeof toGrids>) =>
       return title ? [[id, title]] : [];
     }),
   );
-const subject = ({
-  detail: _detail,
-  basis: _basis,
-  ...args
-}: DuctsCalcRequest): DuctsCalcRequest => args;
+const subject = ({ detail: _detail, basis: _basis, ...args }: DuctsCalcRequest): DuctsCalcRequest =>
+  args;
 const walk = read("fans.walk", {
   input: nativeRead("ducts.snapshot.walk").input,
   output: z.object({ seed: z.number(), snapshot: snapshotSchema }),
@@ -137,7 +141,8 @@ const calcModel = read("fans.calculation", {
       autoJoinGapIn: criteria.autoJoinGapIn.value,
       candidateBoxIn: criteria.healBoxIn.value,
     };
-    const { flow } = await ctx.read(ductsInputs, request.target), { slots } = flow;
+    const { flow } = await ctx.read(ductsInputs, request.target),
+      { slots } = flow;
     const acquisition = {
       ...(Object.keys(slots).length ? { slots } : {}),
       selector:
@@ -199,7 +204,8 @@ const calcModel = read("fans.calculation", {
       grids = toGrids(tables.body);
     const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
       ports = [...roster.fans, ...roster.suggestions];
-    const endFlow = request.mode === "chain" ? inputs.terminals[String(request.end.elementId)]?.cfm.value : null;
+    const endFlow =
+      request.mode === "chain" ? inputs.terminals[String(request.end.elementId)]?.cfm.value : null;
     const value =
       request.mode === "fan"
         ? buildCalc({
@@ -220,9 +226,7 @@ const calcModel = read("fans.calculation", {
             start: request.start,
             end: request.end,
             direction: request.direction,
-            ...(endFlow != null
-              ? { flowCfm: endFlow }
-              : {}),
+            ...(endFlow != null ? { flowCfm: endFlow } : {}),
           });
     let beyond: CalcModel["beyond"] = [];
     if (request.mode === "fan") {
@@ -267,7 +271,11 @@ const calcModel = read("fans.calculation", {
       firm:
         "refused" in saved.firm
           ? saved.firm
-          : { version: firmLayer(saved.firm, saved.settings).version, path: saved.firm.path, present: saved.firm.present },
+          : {
+              version: firmLayer(saved.firm, saved.settings).version,
+              path: saved.firm.path,
+              present: saved.firm.present,
+            },
       titles: titlesOf(grids),
       beyond,
     };
@@ -277,27 +285,35 @@ const pathsOf = (value: Calc | Chain): CalcPath[] =>
   "paths" in value ? value.paths : value.path ? [value.path] : [];
 /** The typed closer the engine issued for a blocker, by id: data the page acts on, never the prose. */
 const typedClosers = (value: Calc | Chain) =>
-  new Map(("issues" in value ? value.issues : []).map((issue) => [issue.id, fanCloserSchema.parse(issue.closer)]));
-const compact = (closers: ReturnType<typeof typedClosers>) => (value: Calc["blockers"][number]) => ({
-  id: value.id,
-  ...(closers.has(value.id) ? { typedCloser: closers.get(value.id)! } : {}),
-  kind: value.kind,
-  elementId: value.elementId,
-  ...(value.subject ? { subject: value.subject } : {}),
-  ...(value.connector === undefined ? {} : { connector: value.connector }),
-  effectInWg: value.effectInWg,
-  closer: value.closer.kind,
-  ...(value.proposal ? { proposal: value.proposal } : {}),
-  ...(value.owner ? { owner: value.owner } : {}),
-  ...(value.causedBy ? { causedBy: value.causedBy } : {}),
-});
+  new Map(
+    ("issues" in value ? value.issues : []).map((issue) => [
+      issue.id,
+      fanCloserSchema.parse(issue.closer),
+    ]),
+  );
+const compact =
+  (closers: ReturnType<typeof typedClosers>) => (value: Calc["blockers"][number]) => ({
+    id: value.id,
+    ...(closers.has(value.id) ? { typedCloser: closers.get(value.id)! } : {}),
+    kind: value.kind,
+    elementId: value.elementId,
+    ...(value.subject ? { subject: value.subject } : {}),
+    ...(value.connector === undefined ? {} : { connector: value.connector }),
+    effectInWg: value.effectInWg,
+    closer: value.closer.kind,
+    ...(value.proposal ? { proposal: value.proposal } : {}),
+    ...(value.owner ? { owner: value.owner } : {}),
+    ...(value.causedBy ? { causedBy: value.causedBy } : {}),
+  });
 /** Known blockers first, then the assumed pass's own (R-B consequences cite a known id). */
 /** Known first: a blocker the known pass raises is never a consequence of an assumed heal (R-B). */
 const allBlockers = (value: Calc | Chain) => {
   const known = new Map(value.blockers.map((b) => [b.id, b]));
   const assumed = "assumed" in value ? value.assumed.blockers.filter((b) => !known.has(b.id)) : [];
   const closers = typedClosers(value);
-  return [...known.values(), ...assumed].map((b) => (closers.has(b.id) ? { ...b, typedCloser: closers.get(b.id)! } : b));
+  return [...known.values(), ...assumed].map((b) =>
+    closers.has(b.id) ? { ...b, typedCloser: closers.get(b.id)! } : b,
+  );
 };
 
 /**
@@ -344,7 +360,9 @@ function overview(entry: CalcModel): DuctsCalcOverview {
     target: entry.target,
     basis: entry.value.basis,
     // Parsed through the wire schemas: the engine's readonly shapes become the wire's, and a malformed claim never leaves.
-    ...(sheet ? { claim: fanClaimSchema.parse(sheet.claim), espValues: fanEspValuesSchema.parse(sheet.esp) } : {}),
+    ...(sheet
+      ? { claim: fanClaimSchema.parse(sheet.claim), espValues: fanEspValuesSchema.parse(sheet.esp) }
+      : {}),
     // Rated ESP is the engine's rated value alone.
     fan: sheet ? { ...sheet.fan, ratedEspInWg: sheet.esp.rated.value } : null,
     totals: sheet?.totals ?? null,
@@ -361,7 +379,10 @@ function overview(entry: CalcModel): DuctsCalcOverview {
   };
 }
 
-async function current(ctx: import("@pe/host-internal/read-graph").ReadContext, request: DuctsCalcRequest) {
+async function current(
+  ctx: import("@pe/host-internal/read-graph").ReadContext,
+  request: DuctsCalcRequest,
+) {
   const entry = await ctx.read(calcModel, subject(request));
   if (request.basis && entry.value.basis !== request.basis)
     throw Error("Stale sheet basis; read a new overview before using detail handles");
@@ -478,28 +499,36 @@ export const ductCalc = read(CALC_DETAIL_READ, {
     }
   },
 });
-export const fanRoster = body(acquisition.fanRoster, async function(ctx, { target, mark }) {
-    const saved = await ctx.read(designLayers, target),
-      design = ductsDesign(saved.ducts, saved.fans);
-    const { flow, snapshot: acquired } = await ctx.read(ductsInputs, target), { slots } = flow;
-    const snapshot = { ...acquired, nodes: acquired.nodes.filter(node =>
-      ductsRosterResponseSchema.shape.rows.element.shape.uniqueId.safeParse(node.uniqueId).success) };
-    const inputs = resolveInputs({
-      terminalFlow: flow.terminalFlow,
-      snapshot,
-      work: workLayer(design),
-      versions: { Work: saved.revision },
-      firm: firmLayer(saved.firm, saved.settings),
-    });
-    const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
-      label = elementLabeler(snapshot);
-    const activeSlot = slots.terminalFlow;
-    const wanted = mark?.trim().toLowerCase();
-    return ductsRosterResponseSchema.parse({
-      target,
-      activeSlot,
-      slots: flow.coverage,
-      rows: [...roster.fans, ...roster.suggestions].map((port) => {
+export const fanRoster = body(acquisition.fanRoster, async function (ctx, { target, mark }) {
+  const saved = await ctx.read(designLayers, target),
+    design = ductsDesign(saved.ducts, saved.fans);
+  const { flow, snapshot: acquired } = await ctx.read(ductsInputs, target),
+    { slots } = flow;
+  const snapshot = {
+    ...acquired,
+    nodes: acquired.nodes.filter(
+      (node) =>
+        ductsRosterResponseSchema.shape.rows.element.shape.uniqueId.safeParse(node.uniqueId)
+          .success,
+    ),
+  };
+  const inputs = resolveInputs({
+    terminalFlow: flow.terminalFlow,
+    snapshot,
+    work: workLayer(design),
+    versions: { Work: saved.revision },
+    firm: firmLayer(saved.firm, saved.settings),
+  });
+  const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
+    label = elementLabeler(snapshot);
+  const activeSlot = slots.terminalFlow;
+  const wanted = mark?.trim().toLowerCase();
+  return ductsRosterResponseSchema.parse({
+    target,
+    activeSlot,
+    slots: flow.coverage,
+    rows: [...roster.fans, ...roster.suggestions]
+      .map((port) => {
         const unit = snapshot.nodes.find((node) => node.id === port.unitId);
         return {
           unitId: port.unitId,
@@ -513,8 +542,19 @@ export const fanRoster = body(acquisition.fanRoster, async function(ctx, { targe
           ratedEspInWg: inputs.units[String(port.unitId)]?.esp.value ?? null,
           confirmed: roster.fans.includes(port),
         };
-      }).filter((row) => wanted === undefined || row.mark.trim().toLowerCase() === wanted),
-    });
+      })
+      .filter((row) => wanted === undefined || row.mark.trim().toLowerCase() === wanted),
+  });
 });
 export const networkCalcsBody = body(acquisition.networkCalcs, (_ctx, args) =>
-  acquisition.networkCalcs.data.parse(networkCalcs(args.snapshot, toGrids(args.tables), args.catalogs, args.design, args.firm, args.revision)));
+  acquisition.networkCalcs.data.parse(
+    networkCalcs(
+      args.snapshot,
+      toGrids(args.tables),
+      args.catalogs,
+      args.design,
+      args.firm,
+      args.revision,
+    ),
+  ),
+);

@@ -1,7 +1,11 @@
 import type { DocumentRef } from "@pe/agent-contracts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import { refused } from "@pe/host-internal/command-executor";
-import { readOriginalProcess, type NativeProcess, type SdkReceiptReader } from "./native-receipts.ts";
+import {
+  readOriginalProcess,
+  type NativeProcess,
+  type SdkReceiptReader,
+} from "./native-receipts.ts";
 import { resolveSdkSession, attachedSession } from "./sdk-session.ts";
 
 export async function currentDocument(
@@ -10,9 +14,11 @@ export async function currentDocument(
   requiredKind: boolean | "project",
   process?: NativeProcess,
 ) {
-  const session = await attachedSession(bridge, { session: target.session }).catch((error: unknown) => {
-    throw refused(error instanceof Error ? error.message : String(error));
-  });
+  const session = await attachedSession(bridge, { session: target.session }).catch(
+    (error: unknown) => {
+      throw refused(error instanceof Error ? error.message : String(error));
+    },
+  );
   const doc = session.state?.openDocuments.find((d) => d.openId === target.openId);
   if (
     !doc ||

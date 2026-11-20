@@ -16,33 +16,36 @@ test("the address emitter imports the canonical scene pose when a row references
   expect(output).toContain('import { sceneViewSchema } from "../scene-view.ts";');
 });
 
-test.each([1, -1])("a closed triangle refuses an offset that turns it inside out (%i)", (winding) => {
-  const points: [number, number][] = [
-    [0, 0],
-    [4, 0],
-    [2, 2 * Math.sqrt(3)],
-  ];
-  const triangle = (offset: number) => ({
-    kind: "cuts",
-    cuts: {
-      top: {
-        ...emptySpaceCut,
-        closed: true,
-        polyline: winding > 0 ? points : points.toReversed(),
-        offset: offset * winding,
+test.each([1, -1])(
+  "a closed triangle refuses an offset that turns it inside out (%i)",
+  (winding) => {
+    const points: [number, number][] = [
+      [0, 0],
+      [4, 0],
+      [2, 2 * Math.sqrt(3)],
+    ];
+    const triangle = (offset: number) => ({
+      kind: "cuts",
+      cuts: {
+        top: {
+          ...emptySpaceCut,
+          closed: true,
+          polyline: winding > 0 ? points : points.toReversed(),
+          offset: offset * winding,
+        },
+        north: emptySpaceCut,
+        east: emptySpaceCut,
       },
-      north: emptySpaceCut,
-      east: emptySpaceCut,
-    },
-  });
-  expect(sceneSectionSchema.safeParse(triangle(0.5)).success).toBe(true);
-  const inverted = sceneSectionSchema.safeParse(triangle(3));
-  expect(inverted.success).toBe(false);
-  if (!inverted.success)
-    expect(inverted.error.issues.map((issue) => issue.message)).toContain(
-      "This offset turns the closed cut inside out.",
-    );
-});
+    });
+    expect(sceneSectionSchema.safeParse(triangle(0.5)).success).toBe(true);
+    const inverted = sceneSectionSchema.safeParse(triangle(3));
+    expect(inverted.success).toBe(false);
+    if (!inverted.success)
+      expect(inverted.error.issues.map((issue) => issue.message)).toContain(
+        "This offset turns the closed cut inside out.",
+      );
+  },
+);
 
 test.each(["duct-systems", "fans"] as const)(
   "%s generated Page accepts a bent cut but refuses a self-intersecting replacement",

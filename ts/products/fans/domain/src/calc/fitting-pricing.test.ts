@@ -7,13 +7,7 @@
 import { expect, it } from "vite-plus/test";
 
 import type { FanPort } from "@pe/ducts-domain/roster";
-import {
-  connOf,
-  ductOf,
-  nodeOf,
-  type Fact,
-  type Node,
-} from "@pe/ducts-domain/test-snapshot";
+import { connOf, ductOf, nodeOf, type Fact, type Node } from "@pe/ducts-domain/test-snapshot";
 import { buildCalc, resolveInputs, type CalcSnapshot } from "./index.ts";
 import { grids } from "@pe/ducts-domain/tables.fixture";
 import { inputsFor, TEST_FIRM, TEST_SLOTS, TEST_WALK, cell } from "@pe/ducts-domain/test-inputs";
@@ -216,13 +210,33 @@ it("a fitting whose flow is unknown stays in the census, unpriced under the rule
 
 // P-054: an invalid winning layer blocks fallback, so the matched rule must not price over it.
 it("an unreadable Work drop on a rule-matched elbow withholds the leg with its ref, never the rule's price", () => {
-  const inputs = inputsFor(network, { endCfm: { 6: 150, 10: 150 }, drops: { 6: 0.03, 10: 0.03 }, assignments: { "Round Elbow": "elbow-15d-45-le10" } });
+  const inputs = inputsFor(network, {
+    endCfm: { 6: 150, 10: 150 },
+    drops: { 6: 0.03, 10: 0.03 },
+    assignments: { "Round Elbow": "elbow-15d-45-le10" },
+  });
   const build = (components: typeof inputs.components) =>
-    buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster, grids, inputs: { ...inputs, components } });
+    buildCalc({
+      snapshot: network,
+      fan: { unitId: 100, portIndex: 0 },
+      roster,
+      grids,
+      inputs: { ...inputs, components },
+    });
   expect(build(inputs.components).blockers).toEqual([]);
   const sheet = build({
     ...inputs.components,
-    4: { drop: { status: "invalid", value: null, source: "Work", author: null, version: null, units: "in-wg", ref: "componentDrops/4" } },
+    4: {
+      drop: {
+        status: "invalid",
+        value: null,
+        source: "Work",
+        author: null,
+        version: null,
+        units: "in-wg",
+        ref: "componentDrops/4",
+      },
+    },
   });
   expect(sheet.totals.requiredEspInWg).toBeNull();
   expect(sheet.blockers).toHaveLength(1);

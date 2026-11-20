@@ -14,7 +14,13 @@ import { mintWriteRequest } from "./write-request.ts";
 import { lookupGrid } from "@pe/ducts-domain/loss-grid";
 import { friction, roundSection } from "@pe/ducts-domain/loss-physics";
 import { suggestRoster, type FanPort } from "@pe/ducts-domain/roster";
-import { storeOf, uniqueIdOf, type Connector as Conn, type Node, type Segment } from "@pe/ducts-domain/test-snapshot";
+import {
+  storeOf,
+  uniqueIdOf,
+  type Connector as Conn,
+  type Node,
+  type Segment,
+} from "@pe/ducts-domain/test-snapshot";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { withHealth } from "@pe/ducts-domain/health.fixture";
 import { buildChain, buildCalc, type CalcSnapshot } from "./index.ts";
@@ -175,26 +181,62 @@ const T6 = 0.09187933;
 const T8 = 0.16736657;
 
 it("W5: seed terminal drops are defaults while Work drops remain drops", () => {
-  const inputs = inputsFor(network, { endCfm: { 6: 200, 8: 100, 10: 300 }, drops: { 8: 0.08 }, firm: { ...TEST_FIRM, version: "seed", served: { terminalDropInWg: "default" } } });
-  const sheet = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
-  expect(Object.values(sheet.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "default", ref: "default:seed" });
-  expect(Object.values(sheet.legs).find(l => l.elementId === 8)?.lossSource.kind).toBe("drop");
+  const inputs = inputsFor(network, {
+    endCfm: { 6: 200, 8: 100, 10: 300 },
+    drops: { 8: 0.08 },
+    firm: { ...TEST_FIRM, version: "seed", served: { terminalDropInWg: "default" } },
+  });
+  const sheet = buildCalc({
+    snapshot: network,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs,
+  });
+  expect(Object.values(sheet.legs).find((l) => l.elementId === 6)?.lossSource).toEqual({
+    kind: "default",
+    ref: "default:seed",
+  });
+  expect(Object.values(sheet.legs).find((l) => l.elementId === 8)?.lossSource.kind).toBe("drop");
   for (const source of ["firm", "project"] as const) {
     const drop = inputs.terminals["6"]!.drop;
     if (drop.status !== "valid") throw Error("expected seed terminal drop");
     inputs.terminals["6"]!.drop = { ...drop, source, ref: `${source}:terminalDropInWg` };
-    const tier = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
-    expect(Object.values(tier.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "default", ref: `${source}:seed` });
+    const tier = buildCalc({
+      snapshot: network,
+      fan: { unitId: 100, portIndex: 0 },
+      roster: [fanPort(100, 0, 1)],
+      grids,
+      inputs,
+    });
+    expect(Object.values(tier.legs).find((l) => l.elementId === 6)?.lossSource).toEqual({
+      kind: "default",
+      ref: `${source}:seed`,
+    });
   }
 });
 
-it.each(["firm", "project"] as const)("shows a %s catalogue terminal drop as a drop", source => {
+it.each(["firm", "project"] as const)("shows a %s catalogue terminal drop as a drop", (source) => {
   const inputs = inputsFor(network, { endCfm: { 6: 200, 8: 100, 10: 300 } });
   inputs.terminals["6"]!.drop = {
-    ...inputs.terminals["6"]!.drop, status: "valid", value: 0.08, source, ref: `${source}:6/Grille-6`, version: null,
+    ...inputs.terminals["6"]!.drop,
+    status: "valid",
+    value: 0.08,
+    source,
+    ref: `${source}:6/Grille-6`,
+    version: null,
   };
-  const sheet = buildCalc({ snapshot: network, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0, 1)], grids, inputs });
-  expect(Object.values(sheet.legs).find(l => l.elementId === 6)?.lossSource).toEqual({ kind: "drop", ref: `${source}:Grille-6` });
+  const sheet = buildCalc({
+    snapshot: network,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0, 1)],
+    grids,
+    inputs,
+  });
+  expect(Object.values(sheet.legs).find((l) => l.elementId === 6)?.lossSource).toEqual({
+    kind: "drop",
+    ref: `${source}:Grille-6`,
+  });
 });
 
 it("a complete sheet: required ESP = worst supply + worst return + allowances", () => {
@@ -462,11 +504,9 @@ it("an open end blocks its side; a vacant opposed port within the default gap au
   const ret = sheet.paths.find((p) => p.side === "return")!;
   expect(ret.end).toMatchObject({ kind: "terminal", elementId: 54 });
   expect(sheet.blockers.some((b) => b.id === "inferred-join:52:1")).toBe(false);
-  expect(
-    sheet.notes.some((i) =>
-      i.text.includes("across 0.400 in, default \u22643 in"),
-    ),
-  ).toBe(true);
+  expect(sheet.notes.some((i) => i.text.includes("across 0.400 in, default \u22643 in"))).toBe(
+    true,
+  );
   expect(sheet.legs["53:0>1"]!.lossSource.ref).toContain("auto-joined");
   expect(ret.blockerIds).toEqual([]);
   expect(sheet.totals.requiredEspInWg).toBeNull();
@@ -611,9 +651,9 @@ it("R-FACE: two walked stubs whose vacant ends face each other propose a join; w
     ["terminal", 70],
     ["terminal", 71],
   ]);
-  expect(close.notes.some((i) => i.text.startsWith("auto-joined") && i.text.includes("across 2.400 in"))).toBe(
-    true,
-  );
+  expect(
+    close.notes.some((i) => i.text.startsWith("auto-joined") && i.text.includes("across 2.400 in")),
+  ).toBe(true);
   expect(close.walkedElementIds).toEqual(expect.arrayContaining([64, 65]));
 });
 
@@ -835,44 +875,81 @@ it("side-stream design flow: a receiving unit's design flow is its share at its 
 
 it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053: a model 0 is a 0 Pe wrote)", () => {
   // A 300 cfm source forks to receivers A (200) and B (300), even split, A at 0 and B unstated.
-  const fact = (cfm: number): Node["facts"] => [{ key: "fanFlow", value: cfm, unit: "cfm", provenance: "designer-stated" }];
+  const fact = (cfm: number): Node["facts"] => [
+    { key: "fanFlow", value: cfm, unit: "cfm", provenance: "designer-stated" },
+  ];
   const build = (aFacts: object[]) => {
     const f = node(100, "equipment", { connectors: [conn(0, [1, 0], round(8))], facts: fact(300) });
     const fork = node(2, "fitting", {
       connectors: [conn(0, [1, 1], round(8)), conn(1, [3, 0], round(8)), conn(2, [4, 0], round(8))],
     });
     const receivers = [200, 300].map((id, i) =>
-      node(id, "equipment", { facts: i === 0 ? aFacts : [], connectors: [conn(0, [i + 3, 1], round(8))] }),
+      node(id, "equipment", {
+        facts: i === 0 ? aFacts : [],
+        connectors: [conn(0, [i + 3, 1], round(8))],
+      }),
     );
     const runs = [1, 3, 4].map((id, i) =>
-      duct(id, 10, round(8), [[i * 20, 0, 0], [i * 20 + 10, 0, 0]],
+      duct(
+        id,
+        10,
+        round(8),
+        [
+          [i * 20, 0, 0],
+          [i * 20 + 10, 0, 0],
+        ],
         i === 0
           ? [conn(0, [100, 0], round(8)), conn(1, [2, 0], round(8))]
-          : [conn(0, [2, i], round(8)), conn(1, [[200, 300][i - 1]!, 0], round(8))]),
+          : [conn(0, [2, i], round(8)), conn(1, [[200, 300][i - 1]!, 0], round(8))],
+      ),
     );
     const snap = snapshot([f, fork, ...receivers], runs);
     snap.slots = { ...TEST_SLOTS, fanFlow: "PE_M_Fan_AirFlowDesign" };
     return snap;
   };
   const shares = (snap: CalcSnapshot, inputs: ReturnType<typeof inputsFor>) => {
-    const calc = buildCalc({ snapshot: snap, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)], grids, inputs });
+    const calc = buildCalc({
+      snapshot: snap,
+      fan: { unitId: 100, portIndex: 0 },
+      roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)],
+      grids,
+      inputs,
+    });
     return [3, 4].map((id) => calc.legs[`${id}:0>1`]!.flowCfm);
   };
   // Before the apply: the 0 is Work.
   const staged = build([]);
-  expect(shares(staged, inputsFor(staged, { drops: { 2: 0 }, endCfm: { 200: 0 } }))).toEqual([0, 300]);
+  expect(shares(staged, inputsFor(staged, { drops: { 2: 0 }, endCfm: { 200: 0 } }))).toEqual([
+    0, 300,
+  ]);
   // After the apply and retirement: the parameter reads 0 and the store holds the receipt. Nothing was edited.
   const retired = build(fact(0));
-  const units = resolveInputs({ snapshot: { ...retired, store: storeOf({ equipmentFlows: { "200": { cfm: 0, appliedAt: "t", parameter: retired.slots.fanFlow } } }) }, firm: TEST_FIRM }).units;
+  const units = resolveInputs({
+    snapshot: {
+      ...retired,
+      store: storeOf({
+        equipmentFlows: { "200": { cfm: 0, appliedAt: "t", parameter: retired.slots.fanFlow } },
+      }),
+    },
+    firm: TEST_FIRM,
+  }).units;
   expect(units["200"]!.cfm).toMatchObject({ value: 0, source: "model" });
   expect(shares(retired, { ...inputsFor(retired, { drops: { 2: 0 } }), units })).toEqual([0, 300]);
   // P29: the priced fan's own written 0 is its side-stream budget, not the ends' sum.
   const zero = build([]);
   zero.nodes.find((n) => n.id === 100)!.facts = fact(0);
-  zero.store = storeOf({ equipmentFlows: { "100": { cfm: 0, appliedAt: "t", parameter: zero.slots.fanFlow } } });
+  zero.store = storeOf({
+    equipmentFlows: { "100": { cfm: 0, appliedAt: "t", parameter: zero.slots.fanFlow } },
+  });
   const own = inputsFor(zero, { roles: { 100: "fan" }, drops: { 2: 0 } });
   expect(own.units["100"]!.cfm).toMatchObject({ value: 0, source: "model" });
-  const priced = buildCalc({ snapshot: zero, fan: { unitId: 100, portIndex: 0 }, roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)], grids, inputs: own });
+  const priced = buildCalc({
+    snapshot: zero,
+    fan: { unitId: 100, portIndex: 0 },
+    roster: [fanPort(100, 0), fanPort(200, 1, 0), fanPort(300, 1, 0)],
+    grids,
+    inputs: own,
+  });
   expect(priced.fan.flowCfm).toBe(0);
 });
 
@@ -909,7 +986,10 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
   const stated = snapshot(
     [
       node(100, "equipment", {
-        connectors: [conn(0, [10, 0], round(8)), { ...conn(1, [20, 0], round(8)), direction: "in" }],
+        connectors: [
+          conn(0, [10, 0], round(8)),
+          { ...conn(1, [20, 0], round(8)), direction: "in" },
+        ],
       }),
       louver,
       supply,
@@ -928,7 +1008,9 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
     inletPortIndex: 1,
     directionMismatch: { discharge: 0, networkDischarge: 1 },
   });
-  expect(ruled.notes.find((i) => i.kind === "direction")!.text).toContain("family connector direction");
+  expect(ruled.notes.find((i) => i.kind === "direction")!.text).toContain(
+    "family connector direction",
+  );
   // The mismatch is the only thing wrong with this calc, and it alone withholds `complete`.
   expect(ruled.claim).toMatchObject({
     kind: "incomplete",
@@ -936,7 +1018,11 @@ it("end terminals decide direction despite reversed metadata; an outdoor louver 
     blockingIds: ["direction-mismatch:100"],
   });
   expect(ruled.issues).toEqual([
-    expect.objectContaining({ id: "direction-mismatch:100", severity: "blocking", closer: expect.objectContaining({ kind: "none" }) }),
+    expect.objectContaining({
+      id: "direction-mismatch:100",
+      severity: "blocking",
+      closer: expect.objectContaining({ kind: "none" }),
+    }),
   ]);
   expect(ruled.totals.requiredEspInWg).toBeNull();
 });
@@ -1047,7 +1133,9 @@ it("a branch-entry tap onto this fan's own network is a split (R-Q4): the walk c
     expect(leg.velocityFpm).toBeNull();
     expect(leg.lossInWg).toBeNull();
     expect(leg.lossSource.ref).toBe("unpriced");
-    expect(sheet.blockers.some((b) => b.kind === "not-priced" && b.detail.includes("outside table"))).toBe(true);
+    expect(
+      sheet.blockers.some((b) => b.kind === "not-priced" && b.detail.includes("outside table")),
+    ).toBe(true);
   }
   expect(collar.areaFt2).toBeLessThan(main8.areaFt2);
   expect(sheet.legs["2:1>0"]).toBeUndefined();
@@ -1232,12 +1320,16 @@ it("R-SHARE: a louver shared with a sibling's inlet carries both consumers; this
   expect(typed.blockers.filter((b) => b.kind === "no-flow")).toEqual([]);
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: expect.stringMatching(/^sibling F-200 draws 50 cfm from shared terminal .+: model:fanFlow$/),
+    text: expect.stringMatching(
+      /^sibling F-200 draws 50 cfm from shared terminal .+: model:fanFlow$/,
+    ),
     value: 50,
   });
   expect(typed.notes).toContainEqual({
     kind: "sibling",
-    text: expect.stringMatching(/^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(Work\)$/),
+    text: expect.stringMatching(
+      /^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(Work\)$/,
+    ),
     value: 200,
   });
 
@@ -1400,7 +1492,9 @@ it("R-SHARE + C3: a proposed transition in front of a shared plenum carries this
   // Defect 5: the louver's airflow slot is empty, so its Revit connector flow is the cross-check.
   expect(sheet.notes).toContainEqual({
     kind: "sibling",
-    text: expect.stringMatching(/^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(model:connector Flow\)$/),
+    text: expect.stringMatching(
+      /^shared terminal .+: consumers sum 200 cfm \(this fan 150, siblings 50\); the terminal states 1120 \(model:connector Flow\)$/,
+    ),
     value: 200,
   });
 });
@@ -1536,7 +1630,16 @@ it("lost native coverage never reads complete, and typed evidence reproduces eac
       drops: { 6: 0.05, 8: 0.08, 10: 0.03 },
     }),
   };
-  const walk = { startId: 100, hops: 1, elementsReached: 1, openEnds: 0, candidates: [], truncated: false, elapsedMs: 0, unreadPeers: [] };
+  const walk = {
+    startId: 100,
+    hops: 1,
+    elementsReached: 1,
+    openEnds: 0,
+    candidates: [],
+    truncated: false,
+    elapsedMs: 0,
+    unreadPeers: [],
+  };
   const whole = buildCalc({ ...input, snapshot: { ...network, walk } });
   expect(whole.claim.kind).toBe("complete");
   const unread = buildCalc({
@@ -1552,12 +1655,23 @@ it("lost native coverage never reads complete, and typed evidence reproduces eac
     buildCalc({ ...input, snapshot: { ...network, walk: { ...walk, truncated: true } } }).claim,
   ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "budget" }] });
   expect(
-    buildCalc({ ...input, snapshot: { ...network, reach: { unreadPeers: [], complete: false } } }).claim,
+    buildCalc({ ...input, snapshot: { ...network, reach: { unreadPeers: [], complete: false } } })
+      .claim,
   ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "native-peer", elementId: null }] });
   // P-035: this fan's own system seed read failed (`DuctRef(systemId, -1)`): never complete.
   expect(
-    buildCalc({ ...input, snapshot: { ...network, walk, reach: { unreadPeers: [{ elementId: 555, connector: -1 }], complete: false } } }).claim,
-  ).toMatchObject({ kind: "incomplete", coverage: [{ kind: "native-peer", elementId: null, ref: "system 555 seed read failed" }] });
+    buildCalc({
+      ...input,
+      snapshot: {
+        ...network,
+        walk,
+        reach: { unreadPeers: [{ elementId: 555, connector: -1 }], complete: false },
+      },
+    }).claim,
+  ).toMatchObject({
+    kind: "incomplete",
+    coverage: [{ kind: "native-peer", elementId: null, ref: "system 555 seed read failed" }],
+  });
   const kinds = new Set<string>();
   for (const leg of Object.values(whole.legs)) {
     const e = leg.evidence;
@@ -1580,20 +1694,50 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
   // Each unit returns through its own duct and grille (22 -> 23, 32 -> 33).
   const two = (id: number, out: number, back: number) =>
     node(id, "equipment", {
-      connectors: [conn(0, [out, 0], round(8)), { ...conn(1, [back, 0], round(8)), direction: "in" }],
+      connectors: [
+        conn(0, [out, 0], round(8)),
+        { ...conn(1, [back, 0], round(8)), direction: "in" },
+      ],
     });
   const run = (id: number, from: [number, number], to: [number, number]) =>
-    duct(id, 10, round(8), [[0, 0, 0], [10, 0, 0]], [conn(0, from, round(8)), conn(1, to, round(8))]);
+    duct(
+      id,
+      10,
+      round(8),
+      [
+        [0, 0, 0],
+        [10, 0, 0],
+      ],
+      [conn(0, from, round(8)), conn(1, to, round(8))],
+    );
   const tee40 = node(40, "fitting", {
     partType: "Tee",
-    connectors: [conn(0, [20, 1], round(8)), conn(1, [41, 0], round(8)), conn(2, [30, 1], round(8))],
+    connectors: [
+      conn(0, [20, 1], round(8)),
+      conn(1, [41, 0], round(8)),
+      conn(2, [30, 1], round(8)),
+    ],
   });
   const grille = (id: number, from: number, cls?: string) =>
     node(id, "terminal", { connectors: [conn(0, [from, 1], round(8), "end", [0, 0, 0], cls)] });
-  const network = (supply?: string, back?: string) => snapshot(
-    [two(200, 20, 22), two(300, 30, 32), tee40, grille(42, 41, supply), grille(23, 22, back), grille(33, 32, back)],
-    [run(20, [200, 0], [40, 0]), run(30, [300, 0], [40, 2]), run(41, [40, 1], [42, 0]), run(22, [200, 1], [23, 0]), run(32, [300, 1], [33, 0])],
-  );
+  const network = (supply?: string, back?: string) =>
+    snapshot(
+      [
+        two(200, 20, 22),
+        two(300, 30, 32),
+        tee40,
+        grille(42, 41, supply),
+        grille(23, 22, back),
+        grille(33, 32, back),
+      ],
+      [
+        run(20, [200, 0], [40, 0]),
+        run(30, [300, 0], [40, 2]),
+        run(41, [40, 1], [42, 0]),
+        run(22, [200, 1], [23, 0]),
+        run(32, [300, 1], [33, 0]),
+      ],
+    );
   const snap = network("SupplyAir", "ReturnAir");
   const roster = [fanPort(200, 0, 1), fanPort(300, 0, 1)];
   const inputs = inputsFor(snap, {
@@ -1608,7 +1752,12 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
       roster,
       grids,
       inputs,
-      encounterRulings: rulings.map((at) => ({ at, verdict: "accepted" as const, by: "human" as const, ref: "work:test" })),
+      encounterRulings: rulings.map((at) => ({
+        at,
+        verdict: "accepted" as const,
+        by: "human" as const,
+        ref: "work:test",
+      })),
     });
   const guest = calc(300);
   // Unruled: an error at the tee, a boundary, never complete. Duct 41 is the shared trunk.
@@ -1644,10 +1793,22 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
   expect(Object.keys(guest.legs)).not.toContain("20:0>1");
   // P-028: the same calc over a snapshot that read no coverage is incomplete and says so.
   expect(
-    buildCalc({ snapshot: { ...snap, walk: undefined }, fan: { unitId: 300, portIndex: 0 }, roster, grids, inputs }).claim,
+    buildCalc({
+      snapshot: { ...snap, walk: undefined },
+      fan: { unitId: 300, portIndex: 0 },
+      roster,
+      grids,
+      inputs,
+    }).claim,
   ).toMatchObject({
     kind: "incomplete",
-    coverage: [{ kind: "native-peer", elementId: null, ref: "coverage unread: the snapshot carries no walk and no reach" }],
+    coverage: [
+      {
+        kind: "native-peer",
+        elementId: null,
+        ref: "coverage unread: the snapshot carries no walk and no reach",
+      },
+    ],
   });
   // Unclassified grilles: the only thing the supply side meets is the host's discharge, which is the
   // encounter and no vote on direction. The guest gets the backflow and no direction mismatch.
@@ -1715,26 +1876,62 @@ it("H5 through two real calcs: a guest discharging into a host's supply trunk is
   });
   // Backflow stays on the calc as an error after the ruling, no longer blocking.
   expect(answered.issues.find((i) => i.kind === "backflow")).toMatchObject({ severity: "warning" });
-  expect(answered.blockers.find((b) => b.kind === "backflow")!.detail).toContain("assumes the host is balanced");
+  expect(answered.blockers.find((b) => b.kind === "backflow")!.detail).toContain(
+    "assumes the host is balanced",
+  );
   // Clause 5: rated 0.8 < required 1.0: acceptance cannot complete or mint a write.
   const deadhead = buildCalc({
-    snapshot: snap, fan: { unitId: 300, portIndex: 0 }, roster, grids, inputs,
+    snapshot: snap,
+    fan: { unitId: 300, portIndex: 0 },
+    roster,
+    grids,
+    inputs,
     encounterRulings: [{ at: mine, verdict: "accepted", by: "human", ref: "work:test" }],
-    hosts: new Map([["200:0", { ...host, claim: complete, esp: {
-      rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }),
-    } }]]),
+    hosts: new Map([
+      [
+        "200:0",
+        {
+          ...host,
+          claim: complete,
+          esp: {
+            rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }),
+          },
+        },
+      ],
+    ]),
   });
   expect(deadhead.claim).toMatchObject({ kind: "incomplete", blockingIds: ["backflow:40:0"] });
-  expect(deadhead.issues.find((i) => i.kind === "backflow")).toMatchObject({ severity: "blocking" });
-  expect(deadhead.blockers.find((b) => b.kind === "backflow")!.detail).toContain("backflow/deadhead");
+  expect(deadhead.issues.find((i) => i.kind === "backflow")).toMatchObject({
+    severity: "blocking",
+  });
+  expect(deadhead.blockers.find((b) => b.kind === "backflow")!.detail).toContain(
+    "backflow/deadhead",
+  );
   expect(deadhead.totals.requiredEspInWg).toBeNull();
-  expect(deadhead.issues.find(i => i.kind === "backflow")!.closer.kind).toBe("none");
-  const unruledDeadhead = buildCalc({ snapshot: snap, fan: { unitId: 300, portIndex: 0 }, roster, grids, inputs,
-    hosts: new Map([["200:0", { ...host, claim: complete, esp: { rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }) } }]]) });
+  expect(deadhead.issues.find((i) => i.kind === "backflow")!.closer.kind).toBe("none");
+  const unruledDeadhead = buildCalc({
+    snapshot: snap,
+    fan: { unitId: 300, portIndex: 0 },
+    roster,
+    grids,
+    inputs,
+    hosts: new Map([
+      [
+        "200:0",
+        {
+          ...host,
+          claim: complete,
+          esp: { rated: resolveValue({ model: { value: 0.8, author: null, ref: "rated" } }) },
+        },
+      ],
+    ]),
+  });
   expect(unruledDeadhead.claim.kind).toBe("incomplete");
-  expect(unruledDeadhead.issues.find(i => i.kind === "backflow")!.closer.kind).toBe("none");
+  expect(unruledDeadhead.issues.find((i) => i.kind === "backflow")!.closer.kind).toBe("none");
   // The capability check runs before the input/context; no mint can reach native preview.
-  expect(() => mintWriteRequest(deadhead.claim as never, deadhead, {} as never, {} as never)).toThrow("complete claim");
+  expect(() =>
+    mintWriteRequest(deadhead.claim as never, deadhead, {} as never, {} as never),
+  ).toThrow("complete claim");
   expect(withHost("stale").claim).toMatchObject({
     kind: "incomplete",
     coverage: [{ kind: "host-calc", ref: "host 200:0 calc is at a stale basis" }],

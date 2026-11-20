@@ -23,7 +23,9 @@ test("/pea declares two fill bodies, threads and chat, each owning its track", (
     threads: "fill",
     chat: "fill",
   });
-  expect(scrollTracks(panes), "the kernel draws no scroll track around a body that owns one").toBe(0);
+  expect(scrollTracks(panes), "the kernel draws no scroll track around a body that owns one").toBe(
+    0,
+  );
 });
 
 test("the dock hosts two route surfaces, so neither dock pane adds a track", () => {

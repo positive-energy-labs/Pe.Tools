@@ -16,8 +16,8 @@ const layoutPanes = (panes: Readonly<Record<string, { label: string; purpose: st
       { label, purpose, draws: [], verbs: [] },
     ]),
   );
-import {module as opsModule} from "../ops/route";
-const opsGraph=opsModule.data;
+import { module as opsModule } from "../ops/route";
+const opsGraph = opsModule.data;
 import { PaneSplit } from "../../../../packages/kit/src/components/lang/pane-resize";
 
 beforeEach(() => {
@@ -82,7 +82,8 @@ for (const width of [720, 1280, 1920]) {
         bodies={bodies}
       />,
     );
-    for(const id of Object.keys(opsGraph.panes)) expect(container.querySelector(`[data-pane-id="${id}"]`)).toBeTruthy();
+    for (const id of Object.keys(opsGraph.panes))
+      expect(container.querySelector(`[data-pane-id="${id}"]`)).toBeTruthy();
   });
 }
 

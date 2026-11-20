@@ -27,8 +27,11 @@ test("admitted Place and router facades still reject private imports and reexpor
     "ts/apps/web/src/example/body.tsx": 'import { owner } from "../shell/owner";',
   };
   expect(boundaryCensus(sources).rawPageImports).toHaveLength(1);
-  expect(boundaryCensus({ ...sources,
-    "ts/apps/web/src/route/builtin-routes.tsx": 'export { owner } from "../shell/owner";',
-    "ts/apps/web/src/router.tsx": 'import { owner } from "./shell/owner";',
-  }).rawPageImports).toHaveLength(3);
+  expect(
+    boundaryCensus({
+      ...sources,
+      "ts/apps/web/src/route/builtin-routes.tsx": 'export { owner } from "../shell/owner";',
+      "ts/apps/web/src/router.tsx": 'import { owner } from "./shell/owner";',
+    }).rawPageImports,
+  ).toHaveLength(3);
 });

@@ -39,20 +39,24 @@ test("the Bind viewer carries the Page query from the shell URL into the iframe"
  * its slug (`<pod>--<page>`). The body compared the two, so a 200 reading never drew.
  */
 const reading: PageTargetReading = {
-    page: "page:@snowdon-ducts/pages/tour",
-    slot: "default",
-    binding: { kind: "none" },
-    resolution: { kind: "choose", reason: "missing" },
-    document: null,
+  page: "page:@snowdon-ducts/pages/tour",
+  slot: "default",
+  binding: { kind: "none" },
+  resolution: { kind: "choose", reason: "missing" },
+  document: null,
   write: null,
 };
 const mount = () => {
-  stream.subscribe.mockReset().mockImplementation((_reading: unknown, deliver: (frame: unknown) => void) => {
-    deliver({ kind: "snapshot", value: reading });
-    return () => {};
-  });
+  stream.subscribe
+    .mockReset()
+    .mockImplementation((_reading: unknown, deliver: (frame: unknown) => void) => {
+      deliver({ kind: "snapshot", value: reading });
+      return () => {};
+    });
   const ctx = {
-    page: { read: () => ({ page: oneName("snowdon-ducts--tour"), view: false, query: {}, fragment: "" }) },
+    page: {
+      read: () => ({ page: oneName("snowdon-ducts--tour"), view: false, query: {}, fragment: "" }),
+    },
     value: { state: "ready", value: null },
     verb: () => ({ run: vi.fn() }),
   };
@@ -63,7 +67,10 @@ test("a chosen Page's target draws from its Reading without a press, though the 
   const screen = mount();
   expect(await screen.findByText("choose: missing")).toBeTruthy();
   expect(screen.queryByText("no reading yet")).toBeNull();
-  expect(stream.subscribe).toHaveBeenCalledWith({ kind: "page-target", slug: "snowdon-ducts--tour" }, expect.any(Function));
+  expect(stream.subscribe).toHaveBeenCalledWith(
+    { kind: "page-target", slug: "snowdon-ducts--tour" },
+    expect.any(Function),
+  );
 });
 
 /**
@@ -72,17 +79,28 @@ test("a chosen Page's target draws from its Reading without a press, though the 
  * with the Page's query intact. Mutant: drop `<PageBindingChip>` from the view branch of mount.tsx.
  */
 test("D9: a viewed unbound Page shows its chip, the chip reaches the picker, and the picker returns with the query", () => {
-  stream.subscribe.mockReset().mockImplementation((_reading: unknown, deliver: (frame: unknown) => void) => {
-    deliver({ kind: "snapshot", value: { ...reading, write: null } });
-    return () => {};
-  });
+  stream.subscribe
+    .mockReset()
+    .mockImplementation((_reading: unknown, deliver: (frame: unknown) => void) => {
+      deliver({ kind: "snapshot", value: { ...reading, write: null } });
+      return () => {};
+    });
   const address = routeAddress("bind");
   const at = (link: string) => {
     const page = address.read(Object.fromEntries(new URL(link, "http://host").searchParams)).page;
-    const ctx = { page: { read: () => page }, value: { state: "ready", value: null }, verb: () => ({ run: vi.fn() }) };
+    const ctx = {
+      page: { read: () => page },
+      value: { state: "ready", value: null },
+      verb: () => ({ run: vi.fn() }),
+    };
     return render(<BindBody ctx={ctx as never} />);
   };
-  const viewed = address.link({ page: oneName("snowdon-ducts--tour"), view: true, query: { walk: "1" }, fragment: "p3" });
+  const viewed = address.link({
+    page: oneName("snowdon-ducts--tour"),
+    view: true,
+    query: { walk: "1" },
+    fragment: "p3",
+  });
   const view = at(viewed);
   expect(view.getByLabelText("Page binding").textContent).toContain("unverified");
   expect(view.queryByTestId("pages-bind")).toBeNull();
@@ -102,18 +120,41 @@ test("D9: a viewed unbound Page shows its chip, the chip reaches the picker, and
  */
 test("D9: from a real /bind?view=true Place that remembers view=true, one chip click draws the picker with the query intact", () => {
   stream.subscribe.mockReset().mockImplementation(() => () => {});
-  const link = routeAddress("bind").link({ page: oneName("pdrop--tour"), view: true, query: { walk: "1" } });
+  const link = routeAddress("bind").link({
+    page: oneName("pdrop--tour"),
+    view: true,
+    query: { walk: "1" },
+  });
   let search = new URL(link, "http://host").searchParams;
   const listeners = new Set<() => void>();
-  const go = (next: URLSearchParams) => { search = new URLSearchParams(next); listeners.forEach((l) => l()); };
+  const go = (next: URLSearchParams) => {
+    search = new URLSearchParams(next);
+    listeners.forEach((l) => l());
+  };
   let remembered: unknown = {};
-  const mount = mountTypedRoute(bindRoute, {
-    address: { read: () => new URLSearchParams(search), write: go, subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)) },
-    fixture: null, target: { kind: "host" }, work: { address: null, open: null }, custody: { current: () => true },
-    memory: () => remembered,
-  } as never, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: {} });
+  const mount = mountTypedRoute(
+    bindRoute,
+    {
+      address: {
+        read: () => new URLSearchParams(search),
+        write: go,
+        subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)),
+      },
+      fixture: null,
+      target: { kind: "host" },
+      work: { address: null, open: null },
+      custody: { current: () => true },
+      memory: () => remembered,
+    } as never,
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+    { sources: {} },
+  );
   // The pane's context, with the mount's own Page port; the picker read is not under test.
-  const ctxOf = () => ({ page: mount.page, value: { state: "ready", value: null }, verb: () => ({ run: vi.fn() }) });
+  const ctxOf = () => ({
+    page: mount.page,
+    value: { state: "ready", value: null },
+    verb: () => ({ run: vi.fn() }),
+  });
   try {
     remembered = ctxOf().page.read(); // the Place's memory of the viewed Page
     const view = render(<BindBody ctx={ctxOf() as never} />);
@@ -127,7 +168,9 @@ test("D9: from a real /bind?view=true Place that remembers view=true, one chip c
     view.rerender(<BindBody ctx={ctxOf() as never} />);
     expect(view.getByTestId("pages-bind")).toBeTruthy();
     expect(view.queryByTitle("Page pdrop--tour")).toBeNull();
-  } finally { mount.dispose(); }
+  } finally {
+    mount.dispose();
+  }
 });
 
 /**
@@ -138,26 +181,70 @@ test("D9: from a real /bind?view=true Place that remembers view=true, one chip c
  */
 test("D40: a pin pressed while the binding Reading is pending is sent once, says it is busy, and survives Back", async () => {
   stream.subscribe.mockReset().mockImplementation(() => () => {}); // the Reading never lands
-  const link = routeAddress("bind").link({ page: oneName("pdrop--tour"), view: false, query: { walk: "1" } });
+  const link = routeAddress("bind").link({
+    page: oneName("pdrop--tour"),
+    view: false,
+    query: { walk: "1" },
+  });
   let search = new URL(link, "http://host").searchParams;
   const listeners = new Set<() => void>();
-  const go = (next: URLSearchParams) => { search = new URLSearchParams(next); listeners.forEach((l) => l()); };
-  const mount = mountTypedRoute(bindRoute, {
-    address: { read: () => new URLSearchParams(search), write: go, subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)) },
-    fixture: null, target: { kind: "host" }, work: { address: null, open: null }, custody: { current: () => true },
-    memory: () => ({}),
-  } as never, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), { sources: {} });
+  const go = (next: URLSearchParams) => {
+    search = new URLSearchParams(next);
+    listeners.forEach((l) => l());
+  };
+  const mount = mountTypedRoute(
+    bindRoute,
+    {
+      address: {
+        read: () => new URLSearchParams(search),
+        write: go,
+        subscribe: (l: () => void) => (listeners.add(l), () => listeners.delete(l)),
+      },
+      fixture: null,
+      target: { kind: "host" },
+      work: { address: null, open: null },
+      custody: { current: () => true },
+      memory: () => ({}),
+    } as never,
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+    { sources: {} },
+  );
   const ref = { session: "S", openId: "brodie" };
   let answer!: () => void;
-  const run = vi.fn(() => new Promise<null>((resolve) => { answer = () => resolve(null); }));
-  const value = { threads: [], pages: [], inventory: { sessions: [{ sessionId: "S", year: 2025, processId: 1, openDocuments: [{ title: "Brodie", openId: "brodie", address: null }] }] } };
-  const ctxOf = () => ({ page: mount.page, value: { state: "ready", value }, verb: () => ({ run }) });
+  const run = vi.fn(
+    () =>
+      new Promise<null>((resolve) => {
+        answer = () => resolve(null);
+      }),
+  );
+  const value = {
+    threads: [],
+    pages: [],
+    inventory: {
+      sessions: [
+        {
+          sessionId: "S",
+          year: 2025,
+          processId: 1,
+          openDocuments: [{ title: "Brodie", openId: "brodie", address: null }],
+        },
+      ],
+    },
+  };
+  const ctxOf = () => ({
+    page: mount.page,
+    value: { state: "ready", value },
+    verb: () => ({ run }),
+  });
   try {
     const form = render(<BindBody ctx={ctxOf() as never} />);
     expect(form.getByText("no reading yet")).toBeTruthy();
     const option = () => form.getByRole("option", { name: /Brodie/ });
     fireEvent.click(option());
-    expect(run, "the press is sent, not dropped").toHaveBeenCalledExactlyOnceWith({ kind: "pinned", ref });
+    expect(run, "the press is sent, not dropped").toHaveBeenCalledExactlyOnceWith({
+      kind: "pinned",
+      ref,
+    });
     expect(form.getByTestId("pages-bind").getAttribute("aria-busy")).toBe("true");
     expect(form.getByRole("status").textContent).toContain("Binding…");
     expect(option().getAttribute("aria-disabled")).toBe("true");
@@ -166,7 +253,9 @@ test("D40: a pin pressed while the binding Reading is pending is sent once, says
     // Back stays in this document (the click is taken, not followed), so the bind in flight lives.
     expect(fireEvent.click(form.getByRole("link", { name: "Back to the Page" }))).toBe(false);
     expect(ctxOf().page.read()).toMatchObject({ view: true, query: { walk: "1" } });
-    await act(async () => { answer(); });
+    await act(async () => {
+      answer();
+    });
     // The same body now draws the viewed Page; back at the picker it holds the answer it waited for.
     expect(form.getByTitle("Page pdrop--tour")).toBeTruthy();
     ctxOf().page.pose({ view: false }, "named");
@@ -174,5 +263,7 @@ test("D40: a pin pressed while the binding Reading is pending is sent once, says
     expect(form.getByRole("status").textContent).toContain("Bound.");
     expect(form.getByTestId("pages-bind").getAttribute("aria-busy")).toBeNull();
     expect(option().getAttribute("aria-disabled")).toBeNull();
-  } finally { mount.dispose(); }
+  } finally {
+    mount.dispose();
+  }
 });

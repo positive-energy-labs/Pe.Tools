@@ -62,9 +62,20 @@ export type RouteViewRoute = {
 }[RouteKey];
 
 /** Root keys a link carries beside any route's fields; no route declares one. `shell` is never carried. */
-const carryKeys = ["thread", "target", "work", "fixture", "open", "at", "atInstance", "compare"] as const;
+const carryKeys = [
+  "thread",
+  "target",
+  "work",
+  "fixture",
+  "open",
+  "at",
+  "atInstance",
+  "compare",
+] as const;
 export type Carry = Partial<Record<(typeof carryKeys)[number], string>>;
-type LinkedPage<R extends RouteKey> = R extends RouteKey ? LinkPage<R> & Omit<Carry,keyof FieldsOf<R>> : never;
+type LinkedPage<R extends RouteKey> = R extends RouteKey
+  ? LinkPage<R> & Omit<Carry, keyof FieldsOf<R>>
+  : never;
 
 type Moved<P> = { ok: true; page: P; patch: Partial<P> } | { ok: false; error: string };
 
@@ -114,7 +125,11 @@ export interface RouteAddress<R extends RouteKey> {
   /** The keys the address bar holds. */
   readonly keys: readonly UrlKey<R>[];
   /** Search (router-parsed or raw strings) → the URL page, typed, and the root carry. */
-  read(search: Record<string, unknown>): { page: UrlPage<R>; carry: Carry; problems: readonly RouteAddressProblem[] };
+  read(search: Record<string, unknown>): {
+    page: UrlPage<R>;
+    carry: Carry;
+    problems: readonly RouteAddressProblem[];
+  };
   /**
    * Page → the address bar's search: each URL key the page names, a default as `undefined` so a
    * merge drops it. Draft keys (`share: false`) included; this is the address, not a link.
@@ -236,9 +251,16 @@ function build(route: RouteKey) {
 
   const read = (search: Page) => {
     const problems: RouteAddressProblem[] = [];
-    const page = settle(Object.fromEntries(urlKeys.map(key => [key,
-      readField(fields[key]!, search[key], () => problems.push({ kind: "non-text", field: key })),
-    ])));
+    const page = settle(
+      Object.fromEntries(
+        urlKeys.map((key) => [
+          key,
+          readField(fields[key]!, search[key], () =>
+            problems.push({ kind: "non-text", field: key }),
+          ),
+        ]),
+      ),
+    );
     const carry: Carry = {};
     for (const key of carryKeys) {
       const value = textOf(search[key])?.trim();
@@ -252,9 +274,10 @@ function build(route: RouteKey) {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(page)) {
       const field = fields[key];
-      if (!field && carryKeys.some(name=>name===key)) {
-        if(value !== undefined && typeof value !== "string") throw Error(`${route} shell key '${key}' must be text`);
-        if(value) params.set(key,value);
+      if (!field && carryKeys.some((name) => name === key)) {
+        if (value !== undefined && typeof value !== "string")
+          throw Error(`${route} shell key '${key}' must be text`);
+        if (value) params.set(key, value);
         continue;
       }
       if (!field?.url) throw Error(`${route} links carry no '${key}'`);
@@ -483,7 +506,9 @@ export const routeAt = (pathname: string): RouteKey | null =>
 
 /** The routes that lease a mounted view to Pea. */
 // `filter` cannot narrow by a declaration's `agent` member; `RouteViewRoute` is the same rule, typed.
-export const routeViewRoutes = routeDirectory.map(({directory}) => (directory.path.slice(1) || "home") as RouteKey).filter((route) => route in routeAddresses && "agent" in routeAddresses[route]) as [
+export const routeViewRoutes = routeDirectory
+  .map(({ directory }) => (directory.path.slice(1) || "home") as RouteKey)
+  .filter((route) => route in routeAddresses && "agent" in routeAddresses[route]) as [
   RouteViewRoute,
   ...RouteViewRoute[],
 ];

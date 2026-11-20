@@ -15,7 +15,12 @@ import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
 import { NodeServices } from "../../../host/tests/family-attach-host.fixture.ts";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
-import { bindWork, canonicalRouteInput, podMemberCode, READING_MAX_FRAME_BYTES } from "@pe/agent-contracts";
+import {
+  bindWork,
+  canonicalRouteInput,
+  podMemberCode,
+  READING_MAX_FRAME_BYTES,
+} from "@pe/agent-contracts";
 import { module } from "./route";
 import { direct, mountTypedRoute } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client.ts";
@@ -24,9 +29,17 @@ import { Scope, Exit } from "effect";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store.ts";
 import { SdkDriver } from "../../../host/src/sdk-session.ts";
 import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
-import { detachedBridge, testHostInputs, journalAt, callRouteOver } from "../../../host/tests/effect-test.ts";
+import {
+  detachedBridge,
+  testHostInputs,
+  journalAt,
+  callRouteOver,
+} from "../../../host/tests/effect-test.ts";
 import { bindActionReadings, type Readings } from "../host/resource-stream";
-import { submitAction, recoverAction } from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
+import {
+  submitAction,
+  recoverAction,
+} from "../../../../packages/mcps/src/shared/takeoff-action-client.ts";
 import { withInvocationContext, readOutbox } from "@pe/runtime/context";
 
 beforeEach(() => vi.stubEnv("LLAMA_CLOUD_API_KEY", "fixture-key"));
@@ -38,95 +51,244 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-"));
   const member = { pod: "test", path: "settings/family/HCB.json" };
   const scope = Scope.makeUnsafe();
-  const writer = await Effect.runPromise(openRecordingWriter(stateFixture(join(dir, "history")), {build: "surface", catalog: nativeCatalogIdentity()}, {maxBytes: 10_000_000, maxTakings: 1000}));
-  const lane = {kind: "live" as const, captureStore: writer};
-  const sets = Context.get(await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)), HostInputReadSets);
-  const work = new RouteWorkspace({ publicationAuthor: () => "human", registrations: [], store: fileRouteDocumentStore(stateFixture(join(dir, "work"))), capture: capturedWorkReads(writer, Effect.runPromise) });
-  const workReads: NonNullable<CommandResources["workReads"]> = admission => {
-    const read = async (method: "read" | "view", key: Parameters<RouteWorkspace["read"]>[0], route: string) => {
-      const current = await Effect.runPromise(sets.open({key: `command.work.${method}`, input: JSON.parse(JSON.stringify({id: admission.id, command: admission.key, key, route})), scope: JSON.stringify(admission.target)}, null));
+  const writer = await Effect.runPromise(
+    openRecordingWriter(
+      stateFixture(join(dir, "history")),
+      { build: "surface", catalog: nativeCatalogIdentity() },
+      { maxBytes: 10_000_000, maxTakings: 1000 },
+    ),
+  );
+  const lane = { kind: "live" as const, captureStore: writer };
+  const sets = Context.get(
+    await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)),
+    HostInputReadSets,
+  );
+  const work = new RouteWorkspace({
+    publicationAuthor: () => "human",
+    registrations: [],
+    store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
+    capture: capturedWorkReads(writer, Effect.runPromise),
+  });
+  const workReads: NonNullable<CommandResources["workReads"]> = (admission) => {
+    const read = async (
+      method: "read" | "view",
+      key: Parameters<RouteWorkspace["read"]>[0],
+      route: string,
+    ) => {
+      const current = await Effect.runPromise(
+        sets.open(
+          {
+            key: `command.work.${method}`,
+            input: JSON.parse(
+              JSON.stringify({ id: admission.id, command: admission.key, key, route }),
+            ),
+            scope: JSON.stringify(admission.target),
+          },
+          null,
+        ),
+      );
       try {
         const value = await work[method](key, route, workReadContext(current, Effect.runPromise));
         await Effect.runPromise(current.seal);
         return value;
-      } finally { await Effect.runPromise(current.close); }
+      } finally {
+        await Effect.runPromise(current.close);
+      }
     };
-    return {read: (key, route) => read("read", key, route), view: (key, route) => read("view", key, route)};
+    return {
+      read: (key, route) => read("read", key, route),
+      view: (key, route) => read("view", key, route),
+    };
   };
-  const admitted = await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(work), scope));
+  const admitted = await Effect.runPromise(
+    Layer.buildWithScope(admittedBuiltinsLayer(work), scope),
+  );
   const fingerprint = Context.get(admitted, AdmittedBuiltins).routes.get("family")!.workFingerprint;
   const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
   const bridge = detachedBridge();
-  const parsed = {jobId: "small", fileName: "small.pdf", pages: [], blocks: [], images: []};
-  const parsePdf = vi.fn(async () => parsed)
-    .mockRejectedValue(Error("PDF parser refused this source")).mockResolvedValueOnce(parsed);
+  const parsed = { jobId: "small", fileName: "small.pdf", pages: [], blocks: [], images: [] };
+  const parsePdf = vi
+    .fn(async () => parsed)
+    .mockRejectedValue(Error("PDF parser refused this source"))
+    .mockResolvedValueOnce(parsed);
   await mkdir(join(dir, member.pod, "settings/family"), { recursive: true });
-  await writeFile(join(dir, member.pod, "pod.json"), JSON.stringify({id: member.pod}));
+  await writeFile(join(dir, member.pod, "pod.json"), JSON.stringify({ id: member.pod }));
   await writeFile(join(dir, member.pod, member.path), JSON.stringify({ family: { name: "HCB" } }));
   const pdf = join(dir, "source.pdf");
   await writeFile(pdf, "%PDF-" + "x".repeat(7 * 1024 * 1024));
-  const web = await serveRoutes(callRouteOver(journal, undefined, { workspace: work, workReads, podsRoot: dir, parsePdf }).pipe(
-    Layer.provide(testHostInputs), Layer.provide(NodeServices.layer),
-  ), bridge, Layer.succeed(SdkDriver, () => Effect.die("No native access")));
+  const web = await serveRoutes(
+    callRouteOver(journal, undefined, { workspace: work, workReads, podsRoot: dir, parsePdf }).pipe(
+      Layer.provide(testHostInputs),
+      Layer.provide(NodeServices.layer),
+    ),
+    bridge,
+    Layer.succeed(SdkDriver, () => Effect.die("No native access")),
+  );
   const nativeFetch = globalThis.fetch;
-  const token = mintContext({kind: "human", via: "cli"});
+  const token = mintContext({ kind: "human", via: "cli" });
   const caller = { kind: "human" as const, via: "local" as const };
   const outboxes: ReturnType<typeof readOutbox>[] = [];
   const request = (url: any, init?: RequestInit) => {
-    if (init?.method === "POST" && new URL(String(url), "http://localhost").pathname === "/actions") {
+    if (
+      init?.method === "POST" &&
+      new URL(String(url), "http://localhost").pathname === "/actions"
+    ) {
       const admission = JSON.parse(String(init.body));
-      if(admission.key === "family.attach-spec") outboxes.push(readOutbox(`pe-action::${admission.id}:${canonicalRouteInput(null)}`));
+      if (admission.key === "family.attach-spec")
+        outboxes.push(readOutbox(`pe-action::${admission.id}:${canonicalRouteInput(null)}`));
     }
-    return nativeFetch(new URL(String(url), web.base), {...init, headers: {...Object.fromEntries(new Headers(init?.headers)), [HOST_CONTEXT_HEADER]: token}});
+    return nativeFetch(new URL(String(url), web.base), {
+      ...init,
+      headers: { ...Object.fromEntries(new Headers(init?.headers)), [HOST_CONTEXT_HEADER]: token },
+    });
   };
-  const feed = await Effect.runPromise(sets.open({key: "surface.work-feed", input: {}, scope: "host"}, null));
-  const observe = observeResources(work, undefined, hostResourceObserver(bridge, () => journal), workReadContext(feed, Effect.runPromise));
+  const feed = await Effect.runPromise(
+    sets.open({ key: "surface.work-feed", input: {}, scope: "host" }, null),
+  );
+  const observe = observeResources(
+    work,
+    undefined,
+    hostResourceObserver(bridge, () => journal),
+    workReadContext(feed, Effect.runPromise),
+  );
   const frames: unknown[] = [];
-  const readings = { subscribe: (request: any, deliver: any) => observe(request, frame => {
-    frames.push(frame);
-    expect(Buffer.byteLength(JSON.stringify(frame))).toBeLessThan(READING_MAX_FRAME_BYTES);
-    deliver(frame);
-  }), dirty() {} } as unknown as Readings;
-  vi.stubGlobal("window", {location: {origin: web.base}});
+  const readings = {
+    subscribe: (request: any, deliver: any) =>
+      observe(request, (frame) => {
+        frames.push(frame);
+        expect(Buffer.byteLength(JSON.stringify(frame))).toBeLessThan(READING_MAX_FRAME_BYTES);
+        deliver(frame);
+      }),
+    dirty() {},
+  } as unknown as Readings;
+  vi.stubGlobal("window", { location: { origin: web.base } });
   const stop = bindActionReadings(readings);
   vi.stubGlobal("fetch", request);
-  const door = createWorkFeedClient(readings, { submit: command => withInvocationContext({caller}, () => submitAction(command)), write: async () => { throw Error("No cell write"); } });
-  const search = new URLSearchParams({member: JSON.stringify({kind: "ids", ids: [podMemberCode(member)]})});
-  const mount = mountTypedRoute(module, { address: {read: () => search, write() {}, subscribe: () => () => {}},
-    target: {kind: "host"}, work: {address: null, open: null}, fixture: null, custody: {current: () => true}, memory: () => ({}) },
-    fingerprint, {work: door});
+  const door = createWorkFeedClient(readings, {
+    submit: (command) => withInvocationContext({ caller }, () => submitAction(command)),
+    write: async () => {
+      throw Error("No cell write");
+    },
+  });
+  const search = new URLSearchParams({
+    member: JSON.stringify({ kind: "ids", ids: [podMemberCode(member)] }),
+  });
+  const mount = mountTypedRoute(
+    module,
+    {
+      address: { read: () => search, write() {}, subscribe: () => () => {} },
+      target: { kind: "host" },
+      work: { address: null, open: null },
+      fixture: null,
+      custody: { current: () => true },
+      memory: () => ({}),
+    },
+    fingerprint,
+    { work: door },
+  );
   let startReturnHandle: unknown = null;
   try {
     await vi.waitFor(() => expect(mount.startAction()).not.toBeNull());
     expect(mount.owner()?.handle).toBeNull();
     await mount.startAction()!.run();
     startReturnHandle = mount.owner()?.handle ?? null;
-    await expect(direct(mount.verb("attach")).run({member, source: await uploadBlob({fileName: "small.pdf", base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64")})})).resolves.toMatchObject({member, pages: 0});
-    expect((await journal.list()).find(row=>row.key === "work.start")).toMatchObject({state: "succeeded", result: {revision: 1}});
-    const attached = (await journal.list()).find(row=>row.key === "family.attach-spec")!;
-    expect(attached).toMatchObject({state: "succeeded", input: {work: {revision: 1}}});
-    expect((await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)))?.doc).toMatchObject({spec: {member, doc: {jobId: "small"}}});
-    expect(JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8"))).toMatchObject({path: "settings/family/small-small.json"});
+    await expect(
+      direct(mount.verb("attach")).run({
+        member,
+        source: await uploadBlob({
+          fileName: "small.pdf",
+          base64: Buffer.from("%PDF-1.4\nsmall manufacturer source\n%%EOF").toString("base64"),
+        }),
+      }),
+    ).resolves.toMatchObject({ member, pages: 0 });
+    expect((await journal.list()).find((row) => row.key === "work.start")).toMatchObject({
+      state: "succeeded",
+      result: { revision: 1 },
+    });
+    const attached = (await journal.list()).find((row) => row.key === "family.attach-spec")!;
+    expect(attached).toMatchObject({ state: "succeeded", input: { work: { revision: 1 } } });
+    expect(
+      (
+        await work.read(
+          bindWork("family", null),
+          "family",
+          workReadContext(feed, Effect.runPromise),
+        )
+      )?.doc,
+    ).toMatchObject({ spec: { member, doc: { jobId: "small" } } });
+    expect(
+      JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8")),
+    ).toMatchObject({ path: "settings/family/small-small.json" });
     await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(2));
-    const run = direct(mount.verb("attach")).run({member, source: await uploadBlob({fileName: "source.pdf", base64: (await readFile(pdf)).toString("base64")})});
+    const run = direct(mount.verb("attach")).run({
+      member,
+      source: await uploadBlob({
+        fileName: "source.pdf",
+        base64: (await readFile(pdf)).toString("base64"),
+      }),
+    });
     await expect(run).rejects.toThrow("PDF parser refused this source");
     expect(mount.reviewProblem("attach")).toContain("PDF parser refused this source");
-    const receipt = (await journal.list()).find(row=>row.key === "family.attach-spec" && row.state === "failed")!;
-    if (receipt.target.kind !== "host") throw Error("Attach fixture must retain its live host target");
-    await expect(recoverAction(receipt.id, "family.attach-spec", {
-      ...receipt.input, source: {...(receipt.input.source as object), fileName: "another.pdf"},
-    }, receipt.target)).rejects.toThrow("returned a receipt for different intent or target");
+    const receipt = (await journal.list()).find(
+      (row) => row.key === "family.attach-spec" && row.state === "failed",
+    )!;
+    if (receipt.target.kind !== "host")
+      throw Error("Attach fixture must retain its live host target");
+    await expect(
+      recoverAction(
+        receipt.id,
+        "family.attach-spec",
+        {
+          ...receipt.input,
+          source: { ...(receipt.input.source as object), fileName: "another.pdf" },
+        },
+        receipt.target,
+      ),
+    ).rejects.toThrow("returned a receipt for different intent or target");
     expect(JSON.stringify(receipt)).not.toMatch(/"(?:base64|bytesBase64)"/);
     expect(JSON.stringify(frames)).not.toMatch(/"(?:base64|bytesBase64)"/);
-    expect(await readFile(join(dir, "journal.jsonl"), "utf8")).not.toMatch(/"(?:base64|bytesBase64)"/);
-    expect(outboxes[1]?.admission?.input.source).toMatchObject({fileName: "source.pdf", size: 7 * 1024 * 1024 + 5});
+    expect(await readFile(join(dir, "journal.jsonl"), "utf8")).not.toMatch(
+      /"(?:base64|bytesBase64)"/,
+    );
+    expect(outboxes[1]?.admission?.input.source).toMatchObject({
+      fileName: "source.pdf",
+      size: 7 * 1024 * 1024 + 5,
+    });
     expect(JSON.stringify(outboxes[1]).length).toBeLessThan(1024);
     expect(parsePdf).toHaveBeenCalledTimes(2);
-    expect(writer.capture.truncated(), "History survives Start, attach publication and failed attach").toBeNull();
+    expect(
+      writer.capture.truncated(),
+      "History survives Start, attach publication and failed attach",
+    ).toBeNull();
     expect(writer.capture.begin()).not.toBeNull();
     expect(frames.length).toBeGreaterThan(0);
   } finally {
-    if(process.env.PE_START_ATTACH_EVIDENCE) await writeFile(process.env.PE_START_ATTACH_EVIDENCE, JSON.stringify({startReturnHandle, stored: await work.read(bindWork("family", null), "family", workReadContext(feed, Effect.runPromise)), truncated: writer.capture.truncated(), receipts: await journal.list()}, null, 2));
-    mount.dispose(); stop(); await Effect.runPromise(feed.seal); await Effect.runPromise(feed.close); vi.unstubAllGlobals(); await journal.close(); await web.close(); await Effect.runPromise(Scope.close(scope, Exit.void)); await rm(dir, {recursive: true, force: true});
+    if (process.env.PE_START_ATTACH_EVIDENCE)
+      await writeFile(
+        process.env.PE_START_ATTACH_EVIDENCE,
+        JSON.stringify(
+          {
+            startReturnHandle,
+            stored: await work.read(
+              bindWork("family", null),
+              "family",
+              workReadContext(feed, Effect.runPromise),
+            ),
+            truncated: writer.capture.truncated(),
+            receipts: await journal.list(),
+          },
+          null,
+          2,
+        ),
+      );
+    mount.dispose();
+    stop();
+    await Effect.runPromise(feed.seal);
+    await Effect.runPromise(feed.close);
+    vi.unstubAllGlobals();
+    await journal.close();
+    await web.close();
+    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await rm(dir, { recursive: true, force: true });
   }
 });

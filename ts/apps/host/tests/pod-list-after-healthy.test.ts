@@ -30,7 +30,9 @@ test("the first pod.list after healthy on a fresh home lists every shipped pod a
     expect(listed).toEqual(expect.arrayContaining(shipped));
     // The default pod is the user home's own: created at this start, it lists at this start.
     expect(listed).toContain("default");
-    expect(existsSync(join(process.env.PE_TOOLS_PRODUCT_HOME!, "Pods", "default", "pod.json"))).toBe(true);
+    expect(
+      existsSync(join(process.env.PE_TOOLS_PRODUCT_HOME!, "Pods", "default", "pod.json")),
+    ).toBe(true);
   } finally {
     await host.close();
   }

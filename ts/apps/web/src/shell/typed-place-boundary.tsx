@@ -29,7 +29,7 @@ export function admittedRouterAddress(history: {
   };
 }
 
-export function PlaceBoundary<State extends {dispose(): void}>({
+export function PlaceBoundary<State extends { dispose(): void }>({
   identity,
   path,
   address,
@@ -47,7 +47,12 @@ export function PlaceBoundary<State extends {dispose(): void}>({
   const [ready, setReady] = useState<AdmittedPlace<State> | null>(null);
   useEffect(() => {
     let place = held.current;
-    if (place && (lifetime.current.identity !== identity || lifetime.current.scope !== scope || lifetime.current.address !== address)) {
+    if (
+      place &&
+      (lifetime.current.identity !== identity ||
+        lifetime.current.scope !== scope ||
+        lifetime.current.address !== address)
+    ) {
       if (lifetime.current.scope) lifetime.current.scope.retire(place);
       else place.dispose();
       place = null;

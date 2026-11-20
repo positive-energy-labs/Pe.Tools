@@ -26,7 +26,8 @@ export function pageLink(href: string, frontend: string) {
       fragment: url.hash.slice(1),
     };
     return { slug, page, href: routeAddress("bind").link(page) };
-  } catch (error) { console.warn("ts/apps/web/src/workbench/page-link.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/workbench/page-link.ts: fallback after failure", error);
     return null;
   }
 }

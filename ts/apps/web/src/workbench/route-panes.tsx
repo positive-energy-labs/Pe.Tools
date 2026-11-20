@@ -41,7 +41,10 @@ export function RouteDock({
 }) {
   const { store } = useWorkbench();
   const router = useRouter();
-  const chatAddress = useMemo(() => dockChatAddress(admittedRouterAddress(router.history)), [router]);
+  const chatAddress = useMemo(
+    () => dockChatAddress(admittedRouterAddress(router.history)),
+    [router],
+  );
   const views = usePlaceViews();
   const tabs = useRouteTabs();
   const chat = routeRegistry.chat;
@@ -137,21 +140,35 @@ export function RouteDock({
           tools: { label: "tools", purpose: "Retained tool routes", draws: [], verbs: [] },
         }}
         active={() => true}
-        state={{ panes: layout, onChange: (next) => {
-          setLayout(next);
-          writeLayoutState(DOCK_LAYOUT, { pea: { folded: next.pea?.folded === true } });
-        } }}
+        state={{
+          panes: layout,
+          onChange: (next) => {
+            setLayout(next);
+            writeLayoutState(DOCK_LAYOUT, { pea: { folded: next.pea?.folded === true } });
+          },
+        }}
         bodies={{
           pea: (frame) =>
             frame(
               tabs.route || pea ? (
-                <PaneFloorBoundary><DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
-                  <TypedShell module={chat.module} fingerprint={chat.fingerprint} address={tabs.route ? chatAddress : undefined} />
-                </DockSurface></DockBand></PaneFloorBoundary>
+                <PaneFloorBoundary>
+                  <DockBand value={{ node: peaHead }}>
+                    <DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
+                      <TypedShell
+                        module={chat.module}
+                        fingerprint={chat.fingerprint}
+                        address={tabs.route ? chatAddress : undefined}
+                      />
+                    </DockSurface>
+                  </DockBand>
+                </PaneFloorBoundary>
               ) : (
                 children
               ),
-              { ...paneFrame(DOCK_PANES.pea.body), tabs: <div ref={setPeaHead} className="contents" /> },
+              {
+                ...paneFrame(DOCK_PANES.pea.body),
+                tabs: <div ref={setPeaHead} className="contents" />,
+              },
             ),
           tools: (frame) =>
             frame(
@@ -162,11 +179,20 @@ export function RouteDock({
                     onOpen={() => void navigate({ to: "/$route", params: { route: "open" } })}
                   />
                 )}
-                <DockBand value={{ node: toolHead }}><PlaceViewsProvider value={views}><RouteRetention {...tabs} renderRoute={renderRoute} /></PlaceViewsProvider></DockBand>
+                <DockBand value={{ node: toolHead }}>
+                  <PlaceViewsProvider value={views}>
+                    <RouteRetention {...tabs} renderRoute={renderRoute} />
+                  </PlaceViewsProvider>
+                </DockBand>
               </>,
               {
                 ...paneFrame(DOCK_PANES.tools.body),
-                tabs: <>{strip}<div ref={setToolHead} className="contents" /></>,
+                tabs: (
+                  <>
+                    {strip}
+                    <div ref={setToolHead} className="contents" />
+                  </>
+                ),
                 actions: (
                   <RouteTabActions
                     tabs={tabs.tabs}

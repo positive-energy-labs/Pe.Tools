@@ -1,4 +1,4 @@
-import type {Point2,AffineFrame} from "@pe/web-kernel/lib/affine-frame";
+import type { Point2, AffineFrame } from "@pe/web-kernel/lib/affine-frame";
 /** Revit's plan export: pixel size and where three corners sit in model feet. */
 type PlanRegistration = {
   imageSha256?: string;
@@ -60,4 +60,3 @@ export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame:
     />
   );
 }
-

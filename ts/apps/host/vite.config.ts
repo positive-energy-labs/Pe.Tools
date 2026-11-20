@@ -4,14 +4,7 @@ import { liteParseNativePlugin } from "@pe/mcps/build";
 import { dirname, join } from "node:path";
 import { receiptBuildDefines } from "./src/build-stamp.ts";
 import { prepareSourceClosures } from "./src/source-closures.ts";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {

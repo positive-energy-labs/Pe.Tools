@@ -20,7 +20,7 @@ export function dockChatAddress(address: AdmittedAddressPort): AdmittedAddressPo
       else search.set("fixture", fixture);
       address.write(search, history);
     },
-    subscribe: listener => address.subscribe(listener),
+    subscribe: (listener) => address.subscribe(listener),
   };
 }
 export interface HostedRouteProps {
@@ -38,7 +38,16 @@ export function hostedRouteAddress(
   const listeners = new Set<() => void>();
   const retainSubject = () => {
     const subject = route.spec.subject;
-    if (work !== undefined && subject) search.set(subject.field, JSON.stringify(route.spec.fields[subject.field]!.schema.parse({kind:"ids", ids:[subjectCode({ keyKind: "workspace", key: work })]})));
+    if (work !== undefined && subject)
+      search.set(
+        subject.field,
+        JSON.stringify(
+          route.spec.fields[subject.field]!.schema.parse({
+            kind: "ids",
+            ids: [subjectCode({ keyKind: "workspace", key: work })],
+          }),
+        ),
+      );
   };
   retainSubject();
   return {

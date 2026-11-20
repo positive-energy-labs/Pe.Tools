@@ -5,12 +5,16 @@ import { productGuides } from "../src/pea/guides.generated.ts";
 import { renderDuctsSkill } from "@pe/fans-contract/pea/ducts-skill";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { productAssemblyPaths, renderProductAssembly } from "../../../apps/web/scripts/product-assembly.ts";
+import {
+  productAssemblyPaths,
+  renderProductAssembly,
+} from "../../../apps/web/scripts/product-assembly.ts";
 
 test("guide composition discovers contract package registrations", () => {
   const checkout = fileURLToPath(new URL("../../../../", import.meta.url));
-  expect(readFileSync(new URL("../src/pea/guides.generated.ts", import.meta.url), "utf8"))
-    .toBe(renderProductAssembly(checkout).outputs[productAssemblyPaths.guides]);
+  expect(readFileSync(new URL("../src/pea/guides.generated.ts", import.meta.url), "utf8")).toBe(
+    renderProductAssembly(checkout).outputs[productAssemblyPaths.guides],
+  );
 });
 
 test("published instructions and skills carry every registered product guide", () => {

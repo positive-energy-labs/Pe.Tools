@@ -35,4 +35,3 @@ export function issueAt(
     )[0]
   );
 }
-

@@ -13,15 +13,24 @@ export const SHOWN = ":not([inert] *)";
 
 /** Resolves when `region` and everything in it is settled. */
 export const settled = (region: Element, timeout = 10_000) =>
-  waitFor(() => {
-    const busy = region.matches(BUSY) ? region : region.querySelector(BUSY);
-    if (busy) throw Error(`still busy: ${busy.getAttribute("aria-label") ?? busy.getAttribute("data-work") ?? busy.tagName}`);
-  }, { timeout });
+  waitFor(
+    () => {
+      const busy = region.matches(BUSY) ? region : region.querySelector(BUSY);
+      if (busy)
+        throw Error(
+          `still busy: ${busy.getAttribute("aria-label") ?? busy.getAttribute("data-work") ?? busy.tagName}`,
+        );
+    },
+    { timeout },
+  );
 
 /** Resolves with the shown Place's route root once its URL write is flushed. */
 export const urlSettled = (timeout = 10_000) =>
-  waitFor(() => {
-    const root = document.querySelector<HTMLElement>(`[data-url-settled]${SHOWN}`);
-    if (!root) throw Error("no shown Place has flushed its URL");
-    return root;
-  }, { timeout });
+  waitFor(
+    () => {
+      const root = document.querySelector<HTMLElement>(`[data-url-settled]${SHOWN}`);
+      if (!root) throw Error("no shown Place has flushed its URL");
+      return root;
+    },
+    { timeout },
+  );

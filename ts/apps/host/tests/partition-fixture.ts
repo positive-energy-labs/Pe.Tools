@@ -54,20 +54,22 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
   };
   const captures = captureStore(join(dir, "captures"));
   // effect-edge: test-runner
-  const { capture } = await Effect.runPromise(captures.refresh(
-    target,
-    Effect.succeed({
-      result: {},
-      snapshot: {
-        reading: { at, version: "reviewed", observedAt: "2026-09-09T18:00:00.000Z" },
-        carriers: { stage: "Materialization", status: "ready", missingCarrierGuids: [] },
-        world: { docName: "Model", r10Path: null, lanes: [], zones: [], systems: [] },
-        zoneFrs: [candidate],
-        regionsByZone: {},
-      },
-    }),
-    Effect.succeed(true),
-  ));
+  const { capture } = await Effect.runPromise(
+    captures.refresh(
+      target,
+      Effect.succeed({
+        result: {},
+        snapshot: {
+          reading: { at, version: "reviewed", observedAt: "2026-09-09T18:00:00.000Z" },
+          carriers: { stage: "Materialization", status: "ready", missingCarrierGuids: [] },
+          world: { docName: "Model", r10Path: null, lanes: [], zones: [], systems: [] },
+          zoneFrs: [candidate],
+          regionsByZone: {},
+        },
+      }),
+      Effect.succeed(true),
+    ),
+  );
   return {
     workspace,
     captures,

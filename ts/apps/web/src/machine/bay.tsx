@@ -37,7 +37,12 @@ import { Row } from "@pe/kit/lang/row";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { Scroll } from "@pe/kit/lang/scroll";
-import { docKey, heldRowParts, SessionCard, type SessionDocument } from "../components/lang/session";
+import {
+  docKey,
+  heldRowParts,
+  SessionCard,
+  type SessionDocument,
+} from "../components/lang/session";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { QueryCommand } from "@pe/kit/table/model";
 import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
@@ -157,11 +162,12 @@ function PatchBayBody({
   );
   const years = machine?.revit.years ?? [];
   const keptYearsAt = keptMachineLegAt(machine?.legs.years);
-  const yearStatus = machine?.legs.years?.error != null
-    ? { kind: "error", label: "The Revit version check failed. Pe is trying again." } as const
-    : machine?.revit.years == null
-      ? { kind: "busy", label: "Pe is finding the installed Revit versions." } as const
-      : { kind: "advisory", label: "No installed Revit versions were found." } as const;
+  const yearStatus =
+    machine?.legs.years?.error != null
+      ? ({ kind: "error", label: "The Revit version check failed. Pe is trying again." } as const)
+      : machine?.revit.years == null
+        ? ({ kind: "busy", label: "Pe is finding the installed Revit versions." } as const)
+        : ({ kind: "advisory", label: "No installed Revit versions were found." } as const);
   // The jack in hand: the picked row, else, once the arrow is typed, the first row the query keeps.
   // Derived, never captured: a pasted "clinic -> new 2024" filters and arms in one event.
   const inHand: LaunchDraft =
@@ -497,7 +503,10 @@ function PatchBayBody({
         </div>
         <div className="flex flex-wrap items-center gap-1 px-(--gutter) pb-1 hairline-t pt-1">
           {keptYearsAt && (
-            <OutcomeLine kind="advisory" label={`Using Revit versions last checked ${new Date(keptYearsAt).toLocaleString()}. Pe is checking again.`} />
+            <OutcomeLine
+              kind="advisory"
+              label={`Using Revit versions last checked ${new Date(keptYearsAt).toLocaleString()}. Pe is checking again.`}
+            />
           )}
           {years.length ? (
             <Switcher
@@ -514,7 +523,9 @@ function PatchBayBody({
                 disabled: saved !== null && year < saved,
               }))}
             />
-          ) : <OutcomeLine {...yearStatus} />}
+          ) : (
+            <OutcomeLine {...yearStatus} />
+          )}
           <Switcher
             ariaLabel="whose"
             value={newOwner}
@@ -550,8 +561,8 @@ function PatchBayBody({
       className={
         layout === "row"
           ? "flex min-h-0 min-w-0 flex-col"
-          // Only switchers wrap; wrapping the column-oriented ArtifactFrame moves the grid offscreen.
-          : "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_span[role=group]]:max-w-full [&_span[role=group]]:flex-wrap"
+          : // Only switchers wrap; wrapping the column-oriented ArtifactFrame moves the grid offscreen.
+            "flex max-h-72 min-w-0 shrink-0 flex-col pr-6 [&_table]:table-fixed [&_[data-slot=table-filters]]:gap-y-1 [&_[data-slot=query-box]]:basis-full [&_[data-slot=query-box]]:flex-none [&_span[role=group]]:max-w-full [&_span[role=group]]:flex-wrap"
       }
     >
       <ModelTable

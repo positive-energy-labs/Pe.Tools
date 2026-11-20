@@ -1,9 +1,17 @@
 import { ownedSession } from "./callers.ts";
 import { Effect, Queue } from "effect";
 import { type HttpServerRequest } from "effect/http";
-import { BRIDGE_CONTRACT_VERSION, type BridgeFrame, type BridgeStateSnapshot } from "@pe/host-contracts/contracts";
+import {
+  BRIDGE_CONTRACT_VERSION,
+  type BridgeFrame,
+  type BridgeStateSnapshot,
+} from "@pe/host-contracts/contracts";
 import { RevitBridge } from "@pe/host-internal/bridge";
-export const connectTestBridge = (processId = 42, ownership: Record<string, unknown> = {}, state: Partial<BridgeStateSnapshot> = {}) =>
+export const connectTestBridge = (
+  processId = 42,
+  ownership: Record<string, unknown> = {},
+  state: Partial<BridgeStateSnapshot> = {},
+) =>
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     // A string is one frame; an array is one socket batch, decoded frame by frame in one pull.
@@ -48,14 +56,16 @@ export const connectTestBridge = (processId = 42, ownership: Record<string, unkn
                 title: "Selected",
                 address: "C:/model.rvt",
                 isActive: false,
-                isFamilyDocument: false, projectHome: null,
+                isFamilyDocument: false,
+                projectHome: null,
               },
               {
                 openId: "other-open",
                 title: "Active",
                 address: "C:/other.rvt",
                 isActive: true,
-                isFamilyDocument: false, projectHome: null,
+                isFamilyDocument: false,
+                projectHome: null,
               },
             ],
             revitVersion: "test",

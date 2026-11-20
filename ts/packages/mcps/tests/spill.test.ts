@@ -16,7 +16,12 @@ afterEach(() => rmSync(dir, { recursive: true, force: true }));
 const big = {
   ok: true,
   key: "op:scripting.execute",
-  result: { response: { status: "Succeeded", data: { rows: Array.from({ length: 4000 }, (_, i) => ({ i, name: `Unit ${i}` })) } } },
+  result: {
+    response: {
+      status: "Succeeded",
+      data: { rows: Array.from({ length: 4000 }, (_, i) => ({ i, name: `Unit ${i}` })) },
+    },
+  },
 };
 
 test("a result under the cap is returned untouched and writes nothing", () => {
@@ -42,7 +47,9 @@ test("a result over the cap becomes a pointer whose file is the whole result, on
 });
 
 test("a long multi-line text value inside the result is written one line per array element", () => {
-  const output = Array.from({ length: 3000 }, (_, i) => `row ${i} padding padding padding`).join("\n");
+  const output = Array.from({ length: 3000 }, (_, i) => `row ${i} padding padding padding`).join(
+    "\n",
+  );
   const result = { ok: true, result: { response: { status: "Succeeded", output } } };
   const pointer = JSON.parse(capResultText("pe_do", result, JSON.stringify(result), dir));
   const file = JSON.parse(readFileSync(pointer.path, "utf8"));

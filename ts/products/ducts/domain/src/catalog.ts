@@ -2,7 +2,11 @@ import type { Immutable } from "@pe/agent-contracts/route-kernel-data";
 import { friction, sectionOf } from "./loss-physics.ts";
 import type { DuctSnapshot } from "./types.ts";
 
-export { catalogSchema, catalogTableSchema, type CatalogTable } from "@pe/ducts-contract/duct-catalog";
+export {
+  catalogSchema,
+  catalogTableSchema,
+  type CatalogTable,
+} from "@pe/ducts-contract/duct-catalog";
 import {
   type CatalogTable,
   type Catalogs as ContractCatalogs,
@@ -32,7 +36,13 @@ export type CatalogLoss = {
   source?: CatalogTable["source"];
   notes: string[];
 } & (
-  | { dp: number; tier: CatalogTable["home"]["tier"]; staticInWg: number | null; pv: number; fpm: number }
+  | {
+      dp: number;
+      tier: CatalogTable["home"]["tier"];
+      staticInWg: number | null;
+      pv: number;
+      fpm: number;
+    }
   | { dp: null; finding: CatalogFinding; error: string }
 );
 

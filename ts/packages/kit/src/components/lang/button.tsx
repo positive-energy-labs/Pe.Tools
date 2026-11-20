@@ -116,8 +116,8 @@ export function Button({
             setOutcome(
               value && "message" in value
                 ? { kind: "refused", label: value.message }
-                // A handled refusal can resolve void. Only an explicit outcome claims success.
-                : value || null,
+                : // A handled refusal can resolve void. Only an explicit outcome claims success.
+                  value || null,
             ),
           (error: unknown) =>
             setOutcome({

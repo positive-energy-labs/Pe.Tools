@@ -17,7 +17,9 @@ vi.mock("node:fs/promises", async (actual) => {
 });
 afterEach(async () => {
   vi.restoreAllMocks();
-  vi.mocked(fs.readFile).mockImplementation((await vi.importActual<typeof fs>("node:fs/promises")).readFile);
+  vi.mocked(fs.readFile).mockImplementation(
+    (await vi.importActual<typeof fs>("node:fs/promises")).readFile,
+  );
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
@@ -26,37 +28,55 @@ test("gateway prepare refuses an oversized archive before reading its bytes", as
   roots.push(root);
   const archivePath = join(root, "oversized.zip");
   const file = await open(archivePath, "w");
-  try { await file.truncate(scriptPodMemberBounds.maxTotalBytes * 2 + 1); }
-  finally { await file.close(); }
+  try {
+    await file.truncate(scriptPodMemberBounds.maxTotalBytes * 2 + 1);
+  } finally {
+    await file.close();
+  }
   const read = (await vi.importActual<typeof fs>("node:fs/promises")).readFile;
   const reads = vi.mocked(fs.readFile).mockImplementation((...args: Parameters<typeof read>) => {
     if (args[0] === archivePath) throw Error("whole archive read before bound");
     return read(...args);
   });
   await expect(prepareImport({ archivePath })).rejects.toMatchObject({
-    name: "TransferRefused", status: 422,
+    name: "TransferRefused",
+    status: 422,
     message: `Pod archive exceeds ${scriptPodMemberBounds.maxTotalBytes * 2} bytes.`,
   });
   expect(reads.mock.calls.some(([path]) => path === archivePath)).toBe(false);
 });
 
-test.each(["missing", "directory"])("gateway prepare gives typed 404 for %s archive", async (kind) => {
-  const root = await mkdtemp(join(tmpdir(), "pe-archive-absent-"));
-  roots.push(root);
-  const archivePath = join(root, "absent.zip");
-  if (kind === "directory") await mkdir(archivePath);
-  await expect(prepareImport({ archivePath })).rejects.toMatchObject({
-    name: "TransferRefused", status: 404, message: `No pod archive at ${archivePath}.`,
-  });
-});
+test.each(["missing", "directory"])(
+  "gateway prepare gives typed 404 for %s archive",
+  async (kind) => {
+    const root = await mkdtemp(join(tmpdir(), "pe-archive-absent-"));
+    roots.push(root);
+    const archivePath = join(root, "absent.zip");
+    if (kind === "directory") await mkdir(archivePath);
+    await expect(prepareImport({ archivePath })).rejects.toMatchObject({
+      name: "TransferRefused",
+      status: 404,
+      message: `No pod archive at ${archivePath}.`,
+    });
+  },
+);
 
-test.each(["../escape", "pages", "", 42, null])("gateway prepare refuses invalid manifest id %s", async (id) => {
-  const root = await mkdtemp(join(tmpdir(), "pe-archive-id-"));
-  roots.push(root);
-  const archivePath = join(root, "invalid.zip");
-  await writeFile(archivePath, writeZip(new Map([["pod.json", Buffer.from(JSON.stringify({ id }))]])));
-  await expect(prepareImport({ archivePath })).rejects.toMatchObject({ name: "TransferRefused", status: 422 });
-});
+test.each(["../escape", "pages", "", 42, null])(
+  "gateway prepare refuses invalid manifest id %s",
+  async (id) => {
+    const root = await mkdtemp(join(tmpdir(), "pe-archive-id-"));
+    roots.push(root);
+    const archivePath = join(root, "invalid.zip");
+    await writeFile(
+      archivePath,
+      writeZip(new Map([["pod.json", Buffer.from(JSON.stringify({ id }))]])),
+    );
+    await expect(prepareImport({ archivePath })).rejects.toMatchObject({
+      name: "TransferRefused",
+      status: 422,
+    });
+  },
+);
 
 test("gateway prepare strips manifest BOM and captures archive bytes only in its commit payload", async () => {
   const root = await mkdtemp(join(tmpdir(), "pe-archive-bom-"));
@@ -66,7 +86,13 @@ test("gateway prepare strips manifest BOM and captures archive bytes only in its
   await writeFile(archivePath, bytes);
   const { bound, archive } = await prepareImport({ archivePath });
   expect(bound.effects).toEqual([{ kind: "member", pod: "bom-pod", path: "pod.json" }]);
-  expect(bound.consumes).toEqual([{ kind: "file", probe: { path: archivePath }, expected: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
+  expect(bound.consumes).toEqual([
+    {
+      kind: "file",
+      probe: { path: archivePath },
+      expected: expect.stringMatching(/^[a-f0-9]{64}$/),
+    },
+  ]);
   await rm(archivePath);
   expect(Buffer.from(archive.bytesBase64, "base64")).toEqual(bytes);
 });

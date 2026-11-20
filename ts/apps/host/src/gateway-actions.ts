@@ -17,10 +17,23 @@ import {
   archiveExportKind,
 } from "./pod-transfer.ts";
 import { z } from "zod";
-import { CommandRejected, StepFailure, io, nativeStep, refused, type CommandContext, type CommandExecutor } from "@pe/host-internal/command-executor";
+import {
+  CommandRejected,
+  StepFailure,
+  io,
+  nativeStep,
+  refused,
+  type CommandContext,
+  type CommandExecutor,
+} from "@pe/host-internal/command-executor";
 import { scratchPageDirectory } from "./page-libraries.ts";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
-import { freezeScript, requireScriptSuccess, runPodScript, scriptMemberFacts } from "./operation-script.ts";
+import {
+  freezeScript,
+  requireScriptSuccess,
+  runPodScript,
+  scriptMemberFacts,
+} from "./operation-script.ts";
 import { validateNativeInput } from "./native-input.ts";
 import { projectNativeOutput } from "./native-output.ts";
 import { isViewImage } from "@pe/agent-contracts/native-output-read";
@@ -86,11 +99,22 @@ const preparedGatewaySchema = z.discriminatedUnion("kind", [
 
 /** The gateway observes availability before invoking a public native action. */
 export const gatewayNativeLeaves = (key: string): readonly string[] =>
-  isTsOnlyOperationKey(key) ? [] : ["host.ops.catalog", ...(key === "scripting.execute" ? ["revit.detail.elements"] : []), key];
+  isTsOnlyOperationKey(key)
+    ? []
+    : ["host.ops.catalog", ...(key === "scripting.execute" ? ["revit.detail.elements"] : []), key];
 
 /** A host-leaf operation, run on the journal-owned attempt fiber with the journal's services. */
-export type GatewayLocalContext = { receiptId: string; settingPath?: string; caller: import("@pe/agent-contracts").Caller };
-export type GatewayLocal = (key: string, input: unknown, scope?: HostSessionScope, context?: GatewayLocalContext) => Effect.Effect<unknown, unknown, AttemptHost>;
+export type GatewayLocalContext = {
+  receiptId: string;
+  settingPath?: string;
+  caller: import("@pe/agent-contracts").Caller;
+};
+export type GatewayLocal = (
+  key: string,
+  input: unknown,
+  scope?: HostSessionScope,
+  context?: GatewayLocalContext,
+) => Effect.Effect<unknown, unknown, AttemptHost>;
 
 /** Generated native metadata is the fallback contract; public semantic implementations are hidden. */
 export function gatewayExecutor(
@@ -145,8 +169,11 @@ export function gatewayExecutor(
         native: gatewayNativeLeaves(key),
         says: metadata.description ?? key,
         needs:
-          key === "settings.tiers.write" && ctx.admission.target.kind === "document" ? "document" :
-          !isTsOnlyOperationKey(key) && metadata.needs === "nothing" ? "session" : metadata.needs,
+          key === "settings.tiers.write" && ctx.admission.target.kind === "document"
+            ? "document"
+            : !isTsOnlyOperationKey(key) && metadata.needs === "nothing"
+              ? "session"
+              : metadata.needs,
         principal: metadata.principal,
         effect: "command",
         dirties: [],
@@ -165,11 +192,15 @@ export function gatewayExecutor(
       let process: NativeProcess | undefined;
       let script: Awaited<ReturnType<typeof freezeScript>>;
       requireEligibleCaller(metadata, caller, "/actions");
-      if ((metadata.effect === "Read" || metadata.effect === "TransactRead") && key !== "scripting.execute")
+      if (
+        (metadata.effect === "Read" || metadata.effect === "TransactRead") &&
+        key !== "scripting.execute"
+      )
         throw refused("Only catalogued commands enter action admission");
-      const expected = key === "settings.tiers.write" && target
-        ? { kind: "document" as const, ref: target }
-        : gatewayTarget(key, metadata.needs, session, target?.openId);
+      const expected =
+        key === "settings.tiers.write" && target
+          ? { kind: "document" as const, ref: target }
+          : gatewayTarget(key, metadata.needs, session, target?.openId);
       if (canonicalRouteInput(expected) !== canonicalRouteInput(admission.target))
         throw refused("Target does not match operation needs");
       validateInput(admission.input, metadata);
@@ -196,7 +227,9 @@ export function gatewayExecutor(
                 ) as { id?: string })
               : null;
             if (!pod?.id) throw refused("The captured script has no exact Pod identity");
-            consumes.push(...scriptMemberFacts(pod.id, script.sourceBundle.files, admission.input.sourcePath));
+            consumes.push(
+              ...scriptMemberFacts(pod.id, script.sourceBundle.files, admission.input.sourcePath),
+            );
           }
           if (!target) throw refused("Scripts require an exact document target");
           // The run is fenced natively to its target, so its footprint is that document alone.
@@ -212,8 +245,12 @@ export function gatewayExecutor(
         switch (key) {
           case "settings.tiers.write": {
             // Host-owned settings use the document pointer, without dispatching a native operation.
-            const { pointer } = await Effect.runPromise(targetHomes(bridge, { openDocumentId: target?.openId }));
-            const tier = readSettingTiers(String(authored.owner), pointer).find(tier => tier.tier === authored.tier);
+            const { pointer } = await Effect.runPromise(
+              targetHomes(bridge, { openDocumentId: target?.openId }),
+            );
+            const tier = readSettingTiers(String(authored.owner), pointer).find(
+              (tier) => tier.tier === authored.tier,
+            );
             if (!tier?.path) throw refused(tier?.notFound ?? "The setting home was not found");
             payload = { kind: "host-leaf", settingPath: tier.path };
             effects.push({ kind: "file", path: tier.path });
@@ -234,10 +271,13 @@ export function gatewayExecutor(
               });
             break;
           case "pod.export": {
-            const captured = await preparePodExport({
-              pod: String(authored.pod),
-              archivePath: String(authored.archivePath),
-            }, { captures: pictures });
+            const captured = await preparePodExport(
+              {
+                pod: String(authored.pod),
+                archivePath: String(authored.archivePath),
+              },
+              { captures: pictures },
+            );
             consumes.push({ kind: "catalog", probe: {}, expected: captured.versions });
             payload = {
               kind: "host-leaf",
@@ -247,7 +287,12 @@ export function gatewayExecutor(
             break;
           }
           case "pod.import": {
-            const { bytes, entries, id, archivePath: path } = await readArchive(String(authored.archivePath));
+            const {
+              bytes,
+              entries,
+              id,
+              archivePath: path,
+            } = await readArchive(String(authored.archivePath));
             consumes.push({
               kind: "file",
               probe: { path },
@@ -347,93 +392,134 @@ export function gatewayExecutor(
         },
       };
     },
-    run: ({ admission, caller }: CommandContext, execution: ActionExecution) => Effect.suspend(() => {
-      const prepared = execution.prepared as z.infer<typeof preparedGatewaySchema>;
-      const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
-      if (
-        key === "scripting.execute" &&
-        admission.input.sourcePath != null &&
-        !capturedScript?.sourceBundle
-      )
-        throw refused("Original script has no sealed source bundle");
-      const capturedInput = capturedScript
-        ? { ...admission.input, sourceBundle: capturedScript.sourceBundle }
-        : admission.input;
-      const input = key === "scripting.execute"
-        ? { ...capturedInput, caller: guards(caller) ? "Agent" : "Person" }
-        : capturedInput;
-      return execution.step(
-        prepared.kind === "native-leaf" ? "native" : "file",
-        key,
-        input,
-        (requestId): Effect.Effect<unknown, unknown, AttemptHost> => {
-          if (prepared.kind === "host-leaf") {
-            const { archive, export: exported } = prepared;
-            if (archive)
-              return io(async () => {
-                const bytes = Buffer.from(archive.bytesBase64, "base64");
-                const installed = await installArchive(bytes, archive.locator, archive.folder, {
-                  captures: pictures,
-                });
-                if (!prepared.promotedPage) return installed;
-                // A promote moves: the locator is the scratch folder the archive was captured from.
-                await retireScratchPage(archive.locator, prepared.promotedPage, readZip(bytes));
-                return { ...installed, key: `page:@${installed.id}/pages/${prepared.promotedPage}` };
-              });
-            if (exported)
-              return io(() => {
-                const captured = exported as Awaited<ReturnType<typeof preparePodExport>>;
-                return writePodExport(captured, archiveExportKind.in(
-                  hostState().home({ root: dirname(captured.result.archivePath), tier: "user" }), basename(captured.result.archivePath),
-                ));
-              });
-            return local(key, input, admission.target.kind === "document"
-              ? { bridgeSessionId: admission.target.ref.session, openDocumentId: admission.target.ref.openId }
-              : undefined, { receiptId: admission.id, settingPath: prepared.settingPath, caller });
-          }
-          const target = admission.target;
-          if (target.kind !== "document" && target.kind !== "session")
-            return Effect.fail(refused("Native target required"));
-          const step = key === "scripting.execute" ? runPodScript(bridge,
-            target.kind === "document" ? target.ref : { session: target.session }, input, requestId,
-          ) : nativeStep(
-            bridge,
-            target.kind === "document" ? target.ref : { session: target.session },
+    run: ({ admission, caller }: CommandContext, execution: ActionExecution) =>
+      Effect.suspend(() => {
+        const prepared = execution.prepared as z.infer<typeof preparedGatewaySchema>;
+        const capturedScript = prepared.kind === "native-leaf" ? prepared.script : undefined;
+        if (
+          key === "scripting.execute" &&
+          admission.input.sourcePath != null &&
+          !capturedScript?.sourceBundle
+        )
+          throw refused("Original script has no sealed source bundle");
+        const capturedInput = capturedScript
+          ? { ...admission.input, sourceBundle: capturedScript.sourceBundle }
+          : admission.input;
+        const input =
+          key === "scripting.execute"
+            ? { ...capturedInput, caller: guards(caller) ? "Agent" : "Person" }
+            : capturedInput;
+        return execution
+          .step(
+            prepared.kind === "native-leaf" ? "native" : "file",
             key,
             input,
-            requestId,
-          );
-          // A capture command (the focused view image) keeps its picture as the read door does, so
-          // its result names the capture and never a path on the host's disk.
-          return isViewImage(key)
-            ? step.pipe(
-                Effect.flatMap((value) =>
-                  projectNativeOutput(pictures, key, value, input,
-                    { openDocumentId: target.kind === "document" ? target.ref.openId : null }, caller),
-                ),
-                Effect.mapError((error) =>
-                  error instanceof StepFailure ? error : new StepFailure(error.message, error.status, "failed"),
-                ),
+            (requestId): Effect.Effect<unknown, unknown, AttemptHost> => {
+              if (prepared.kind === "host-leaf") {
+                const { archive, export: exported } = prepared;
+                if (archive)
+                  return io(async () => {
+                    const bytes = Buffer.from(archive.bytesBase64, "base64");
+                    const installed = await installArchive(bytes, archive.locator, archive.folder, {
+                      captures: pictures,
+                    });
+                    if (!prepared.promotedPage) return installed;
+                    // A promote moves: the locator is the scratch folder the archive was captured from.
+                    await retireScratchPage(archive.locator, prepared.promotedPage, readZip(bytes));
+                    return {
+                      ...installed,
+                      key: `page:@${installed.id}/pages/${prepared.promotedPage}`,
+                    };
+                  });
+                if (exported)
+                  return io(() => {
+                    const captured = exported as Awaited<ReturnType<typeof preparePodExport>>;
+                    return writePodExport(
+                      captured,
+                      archiveExportKind.in(
+                        hostState().home({
+                          root: dirname(captured.result.archivePath),
+                          tier: "user",
+                        }),
+                        basename(captured.result.archivePath),
+                      ),
+                    );
+                  });
+                return local(
+                  key,
+                  input,
+                  admission.target.kind === "document"
+                    ? {
+                        bridgeSessionId: admission.target.ref.session,
+                        openDocumentId: admission.target.ref.openId,
+                      }
+                    : undefined,
+                  { receiptId: admission.id, settingPath: prepared.settingPath, caller },
+                );
+              }
+              const target = admission.target;
+              if (target.kind !== "document" && target.kind !== "session")
+                return Effect.fail(refused("Native target required"));
+              const step =
+                key === "scripting.execute"
+                  ? runPodScript(
+                      bridge,
+                      target.kind === "document" ? target.ref : { session: target.session },
+                      input,
+                      requestId,
+                    )
+                  : nativeStep(
+                      bridge,
+                      target.kind === "document" ? target.ref : { session: target.session },
+                      key,
+                      input,
+                      requestId,
+                    );
+              // A capture command (the focused view image) keeps its picture as the read door does, so
+              // its result names the capture and never a path on the host's disk.
+              return isViewImage(key)
+                ? step.pipe(
+                    Effect.flatMap((value) =>
+                      projectNativeOutput(
+                        pictures,
+                        key,
+                        value,
+                        input,
+                        { openDocumentId: target.kind === "document" ? target.ref.openId : null },
+                        caller,
+                      ),
+                    ),
+                    Effect.mapError((error) =>
+                      error instanceof StepFailure
+                        ? error
+                        : new StepFailure(error.message, error.status, "failed"),
+                    ),
+                  )
+                : step;
+            },
+            {
+              process: prepared.kind === "native-leaf" ? prepared.process : undefined,
+              check: stepCheck(key),
+            },
+          )
+          .pipe(
+            Effect.mapError((error) => {
+              if (
+                key !== "settings.tiers.write" ||
+                !(error instanceof StepFailure) ||
+                (error.status !== 409 && error.status !== 422)
               )
-            : step;
-        },
-        {
-          process: prepared.kind === "native-leaf" ? prepared.process : undefined,
-          check: stepCheck(key),
-        },
-      ).pipe(Effect.mapError((error) => {
-        if (key !== "settings.tiers.write" || !(error instanceof StepFailure) ||
-            (error.status !== 409 && error.status !== 422))
-          return error;
-        // Classify after the step records its undispatched refusal, keeping its status and words.
-        const refusal = new CommandRejected(
-          error.status === 409 ? { kind: "stale", consumed: [] } : { kind: "invalid" },
-          error.status,
-        );
-        refusal.message = error.message;
-        return refusal;
-      }));
-    }),
+                return error;
+              // Classify after the step records its undispatched refusal, keeping its status and words.
+              const refusal = new CommandRejected(
+                error.status === 409 ? { kind: "stale", consumed: [] } : { kind: "invalid" },
+                error.status,
+              );
+              refusal.message = error.message;
+              return refusal;
+            }),
+          );
+      }),
     recover: async (step: import("@pe/agent-contracts").ActionStep, raw: unknown) => {
       const prepared = raw as z.infer<typeof preparedGatewaySchema>;
       if (prepared.kind !== "native-leaf")
@@ -452,7 +538,10 @@ export function gatewayExecutor(
         return read;
       } catch (error) {
         const { result, state: _state, ...intent } = read.step;
-        return { ...read, step: actionStepSchema.parse({ ...intent, ...checkFailure(error, result) }) };
+        return {
+          ...read,
+          step: actionStepSchema.parse({ ...intent, ...checkFailure(error, result) }),
+        };
       }
     },
   };

@@ -2,7 +2,7 @@
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { borrowWords, WorksharingNote } from "./worksharing-note";
-import {worksharingOf} from "./review-contract";
+import { worksharingOf } from "./review-contract";
 import { leaks } from "./visible-text";
 
 afterEach(cleanup);
@@ -41,5 +41,7 @@ test("a workshared preview discloses every borrow, how long it lasts, and who bl
 test("a non-workshared preview carries no disclosure and the commit says nothing extra", () => {
   expect(worksharingOf({ response: { writes: [] } })).toBeNull();
   expect(borrowWords(null)).toBeNull();
-  expect(borrowWords({ cloud: false, elements: [{ id: 1, name: "x", status: "owned" }], creates: [] })).toBeNull();
+  expect(
+    borrowWords({ cloud: false, elements: [{ id: 1, name: "x", status: "owned" }], creates: [] }),
+  ).toBeNull();
 });

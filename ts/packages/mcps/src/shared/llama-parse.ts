@@ -28,7 +28,10 @@ export interface LlamaSend {
  * passes `noteLlamaSend(machine)` (`llama-key.ts`). The caller names the machine state because the
  * host and a Pea tool process resolve theirs differently, and this module imports nothing node-only.
  */
-export type LlamaParseRequest = LlamaParseWork & { apiKey: string; sent: (send: LlamaSend) => void };
+export type LlamaParseRequest = LlamaParseWork & {
+  apiKey: string;
+  sent: (send: LlamaSend) => void;
+};
 
 type LlamaCloudClient = InstanceType<(typeof import("@llamaindex/llama-cloud"))["default"]>;
 export type LlamaParseResult = Awaited<ReturnType<LlamaCloudClient["parsing"]["parse"]>>;
@@ -62,7 +65,11 @@ async function upload(request: LlamaParseRequest): Promise<LlamaParseResult> {
     { maxRetries: 0 },
   );
   // The upload succeeded even when polling later fails; the send is noticed at this crossing.
-  request.sent({ jobId: job.id, fileName: request.file.name, pages: request.targetPages ?? "all pages" });
+  request.sent({
+    jobId: job.id,
+    fileName: request.file.name,
+    pages: request.targetPages ?? "all pages",
+  });
   const result = await client.parsing.waitForCompletion(
     job.id,
     { expand: request.expand },

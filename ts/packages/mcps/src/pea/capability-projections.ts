@@ -277,7 +277,11 @@ function packageRows(pod: PackageProjection): Capability[] {
         principal: capabilityPrincipals(reference.kind === "script"),
         input: reference.kind === "script" ? podInputSchema : {},
         ...(entry.mode ? { mode: entry.mode } : {}),
-        package: { id: pod.id, path: member.path, sha256: reference.kind === "script" ? scriptSourceRevision(pod.members) : member.sha256 },
+        package: {
+          id: pod.id,
+          path: member.path,
+          sha256: reference.kind === "script" ? scriptSourceRevision(pod.members) : member.sha256,
+        },
         projection: entry.projection,
         source: "packages",
         rank: 1,

@@ -22,7 +22,12 @@ import { Spawner } from "./spawner.ts";
 import { MessagesReply, ModelList, ResponsesReply } from "./edge-schemas.ts";
 import { z } from "zod";
 
-import { harnessKeyRole, keyRefusalText, resolveKey, sharedKeys } from "@pe/host-contracts/shared-keys";
+import {
+  harnessKeyRole,
+  keyRefusalText,
+  resolveKey,
+  sharedKeys,
+} from "@pe/host-contracts/shared-keys";
 import { adapterCli, adapterLogin, adapters, openAdapter, stopChild } from "./adapter.ts";
 import { classifyEndpointFailure } from "./endpoint-failure.ts";
 import { codexMcpServerNames, mergePath, userCodexConfigPath } from "./user-shell.ts";
@@ -217,7 +222,8 @@ function authEnv(record: ProviderRecord, modelId?: string): Record<string, strin
  */
 function endpointKey(record: EndpointRecord): string {
   const key = resolveKey(record.auth.apiKey, harnessKeyRole[record.harness], hostState());
-  if ("refused" in key) throw new Refusal(keyRefusalText(key.refused, harnessKeyRole[record.harness]));
+  if ("refused" in key)
+    throw new Refusal(keyRefusalText(key.refused, harnessKeyRole[record.harness]));
   return key.value;
 }
 const sharedKeyValues = () => {
@@ -904,7 +910,12 @@ export function createProviders(options: ProvidersOptions) {
       if ("refused" in key) {
         const message = keyRefusalText(key.refused, harnessKeyRole[record.harness]);
         return finish({
-          readiness: { state: "refused", step: "endpoint", message, failure: classifyEndpointFailure(message) },
+          readiness: {
+            state: "refused",
+            step: "endpoint",
+            message,
+            failure: classifyEndpointFailure(message),
+          },
           models: [],
           traits: [],
           probedAt: probedAt(),
@@ -1021,7 +1032,8 @@ export function createProviders(options: ProvidersOptions) {
       if (/\s/.test(apiKey)) throw new Refusal("API key contains whitespace");
       // No key of your own: the firm keys.json entry for this harness's role, or a refusal.
       const key = resolveKey(apiKey, harnessKeyRole[input.harness], hostState());
-      if ("refused" in key) throw new Refusal(keyRefusalText(key.refused, harnessKeyRole[input.harness]));
+      if ("refused" in key)
+        throw new Refusal(keyRefusalText(key.refused, harnessKeyRole[input.harness]));
       baseUrl = normalizeBaseUrl(input.harness, input.auth.baseUrl);
     } catch (error) {
       if (!(error instanceof Refusal)) throw error;

@@ -1,4 +1,9 @@
-import { inputBindingKey, inputIdentity, type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import {
+  inputBindingKey,
+  inputIdentity,
+  type InputConsumption,
+  type ReadSetId,
+} from "@pe/host-internal/input-occurrence";
 /**
  * Host input occurrences (docs/features/routes/GLOSSARY.md): which exact taking each consumer read. An
  * admitted consumer opens one context; every input it starts reserves its occurrence synchronously,
@@ -216,7 +221,9 @@ function liveContext(
       if (!writer || writer.capture.truncated()) return Effect.void;
       if (budget.lost) {
         const at = writer.capture.begin();
-        return at === null ? Effect.void : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
+        return at === null
+          ? Effect.void
+          : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
       }
       const records: InputReadSetRecord[] = [];
       const walk = (node: LiveNode) => {
@@ -231,7 +238,9 @@ function liveContext(
       );
       if (bytes > limits.metadataBytesPerRoot) {
         const at = writer.capture.begin();
-        return at === null ? Effect.void : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
+        return at === null
+          ? Effect.void
+          : writer.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
       }
       // Children before parents, so every durable link resolves.
       return Effect.forEach(records.reverse(), (value) => writer.readSets.keep(value), {
@@ -239,7 +248,9 @@ function liveContext(
       }).pipe(
         Effect.catch(() => {
           const at = writer.capture.begin();
-          return at === null ? Effect.void : writer.capture.stop(at, "io", { site: "occurrence", op: recipe.key });
+          return at === null
+            ? Effect.void
+            : writer.capture.stop(at, "io", { site: "occurrence", op: recipe.key });
         }),
       );
     }),
@@ -429,7 +440,8 @@ export class HostInputReadSets extends Context.Service<
                   const record = yield* lane.recordingStore.readSets.get(id);
                   if (
                     recipeKey(record.recipe) === recipeKey(recipe) &&
-                    (selected === null || typeof selected === "string" ||
+                    (selected === null ||
+                      typeof selected === "string" ||
                       record.inputs.some((entry) => entry.takingId === selected.takingId))
                   )
                     matches.push(id);
@@ -458,7 +470,13 @@ export class HostInputReadSets extends Context.Service<
           // Past the cap, a live read still computes, in a detached context, while capture stops (K4).
           if (open + 1 > limits.openRoots) {
             const at = lane.captureStore?.capture.begin() ?? null;
-            const stopped = at === null ? Effect.void : lane.captureStore!.capture.stop(at, "full", { site: "occurrence", op: recipe.key });
+            const stopped =
+              at === null
+                ? Effect.void
+                : lane.captureStore!.capture.stop(at, "full", {
+                    site: "occurrence",
+                    op: recipe.key,
+                  });
             return Effect.as(
               stopped,
               detachedContext(recipe, () => true),

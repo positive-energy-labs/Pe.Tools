@@ -50,15 +50,17 @@ it("Chadds RA 37 leaves both side-tapped stubs open even if Revit reports zero",
   }
   const { snap } = load();
   const ids = [14663504, 14663546];
-  expect(snap.systems.find(system => system.name === "RA 37")?.isWellConnected).toBe(false);
+  expect(snap.systems.find((system) => system.name === "RA 37")?.isWellConnected).toBe(false);
   // The capture predates the zero/null distinction. Replay the two open ends as explicit zeroes.
-  const segments = snap.segments.filter(segment => ids.includes(segment.id));
-  expect(segments.map(segment => segment.id).sort()).toEqual(ids);
+  const segments = snap.segments.filter((segment) => ids.includes(segment.id));
+  expect(segments.map((segment) => segment.id).sort()).toEqual(ids);
   for (const segment of segments)
-    segment.connectors.find(connector => connector.index === 1)!.flowCfm = 0;
+    segment.connectors.find((connector) => connector.index === 1)!.flowCfm = 0;
   const plan = healPlan(snap);
   for (const id of ids) {
-    expect(plan.groups.flatMap(group => group.items).some(item => item.key === `cap:${id}:1`)).toBe(false);
+    expect(
+      plan.groups.flatMap((group) => group.items).some((item) => item.key === `cap:${id}:1`),
+    ).toBe(false);
     expect(plan.hard.get(`open-end:${id}:1`)?.note).toContain("flow unknown");
   }
 });
@@ -304,7 +306,9 @@ it.skipIf(!existsSync(CHADDS))(
     });
     expect(ids(blindPriced.blockers)).toEqual(met);
     expect(ids(blindPriced.assumed.blockers)).toEqual(met);
-    expect(blindPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(true);
+    expect(blindPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(
+      true,
+    );
     expect(blindPriced.totals.return.worstPath).toBeNull();
     expect(blindPriced.totals.requiredEspInWg).toBeNull();
 
@@ -335,7 +339,9 @@ it.skipIf(!existsSync(CHADDS))(
       }),
     });
     expect(ids(seededPriced.blockers)).toEqual(met);
-    expect(seededPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(true);
+    expect(seededPriced.blockers.every((b) => b.kind === "no-flow" || b.kind === "backflow")).toBe(
+      true,
+    );
     expect(seededPriced.totals.return.worstPath).toBeNull();
     expect(seededPriced.totals.requiredEspInWg).toBeNull();
   },
@@ -514,9 +520,12 @@ it.skipIf(!existsSync(CHADDS))(
       ref: "unpriced",
     });
     expect(sheet.legs["14551976:0>1"]!.lossInWg).toBeNull();
-    expect(sheet.blockers).toContainEqual(expect.objectContaining({
-      elementId: 14551976, detail: expect.stringContaining("ER5-2 is stated for Ab/Ac 0.5, As/Ac 1"),
-    }));
+    expect(sheet.blockers).toContainEqual(
+      expect.objectContaining({
+        elementId: 14551976,
+        detail: expect.stringContaining("ER5-2 is stated for Ab/Ac 0.5, As/Ac 1"),
+      }),
+    );
     expect(sheet.notes.some((i) => /diverging-table/.test(i.text))).toBe(false);
 
     // 3. The supply's round volume damper 13493795 is no longer the 1.0 in-wg "designer-stated" row:

@@ -1294,8 +1294,14 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
       await post({ ...read, release: true });
       return shown;
     })()`);
-    expect(timeline.value?.data?.undo, "the Timeline offers the person's edit").toMatchObject({ revision: 3 });
-    const undone = await request(target, "history", { direction: "undo", works, expected: timeline.value!.data!.undo });
+    expect(timeline.value?.data?.undo, "the Timeline offers the person's edit").toMatchObject({
+      revision: 3,
+    });
+    const undone = await request(target, "history", {
+      direction: "undo",
+      works,
+      expected: timeline.value!.data!.undo,
+    });
     expect(undone.body).toMatchObject({
       ok: true,
       write: { by: "human", kind: "restore", base: 3, revision: 4 },

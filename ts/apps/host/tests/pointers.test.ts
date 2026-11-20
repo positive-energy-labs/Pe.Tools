@@ -35,7 +35,11 @@ const open = () =>
     log: new HostLog(stateFixture(join(root, "log")), Date.now),
     worldRoot: tmpdir(),
     mcpServer: () => ({ name: "pea", command: "unused", args: [], env: [] }),
-    providers: createProviders({ spawner: testSpawner(), shellPath: async () => "", probeOnStart: false }),
+    providers: createProviders({
+      spawner: testSpawner(),
+      shellPath: async () => "",
+      probeOnStart: false,
+    }),
   });
 
 // Mutant: classify pointers.point as a raw Read again. The real /call refuses it with 409.
@@ -44,18 +48,33 @@ test("Pea points at a families type through the action door and the next head st
   const native = await fixtureNative(join(root, "point-door"));
   const abort = new AbortController();
   try {
-    const created = await actAs(human, () => threads.fetch(new Request("http://host/pe/threads", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ providerId: "claude" }),
-    })));
-    const { id } = await created.json() as { id: string };
+    const created = await actAs(human, () =>
+      threads.fetch(
+        new Request("http://host/pe/threads", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ providerId: "claude" }),
+        }),
+      ),
+    );
+    const { id } = (await created.json()) as { id: string };
     const caller = approvedPea(id);
     const door = native.actions({}, undefined, { pointers: threads.pointers });
-    const stream = resourceResponse(new Request(`http://host/pe/resources?keys=${encodeURIComponent(JSON.stringify([
-      { kind: "thread-head", thread: id },
-    ]))}`, { signal: abort.signal }), observeResources(new RouteWorkspace({
-      registrations: [], store: fileRouteDocumentStore(stateFixture(join(root, "pointer-work"))),
-    }), threads.heads));
+    const stream = resourceResponse(
+      new Request(
+        `http://host/pe/resources?keys=${encodeURIComponent(
+          JSON.stringify([{ kind: "thread-head", thread: id }]),
+        )}`,
+        { signal: abort.signal },
+      ),
+      observeResources(
+        new RouteWorkspace({
+          registrations: [],
+          store: fileRouteDocumentStore(stateFixture(join(root, "pointer-work"))),
+        }),
+        threads.heads,
+      ),
+    );
     const reader = stream.body!.getReader();
     let buffer = "";
     const next = async (): Promise<unknown> => {
@@ -78,34 +97,63 @@ test("Pea points at a families type through the action door and the next head st
     vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname;
-      if (path === "/pe/capabilities") return Response.json({
-        at: new Date().toISOString(), machine: machineFixture([]), sources: {}, diagnostics: [],
-        capabilities: buildCapabilities({ ops: [], routes: [], packages: [], skills: [] }),
-      });
+      if (path === "/pe/capabilities")
+        return Response.json({
+          at: new Date().toISOString(),
+          machine: machineFixture([]),
+          sources: {},
+          diagnostics: [],
+          capabilities: buildCapabilities({ ops: [], routes: [], packages: [], skills: [] }),
+        });
       if (path === "/ops") return Response.json({ operations: tsOnlyOperationCatalog });
       if (path === "/pe/scope/self") return actAs(caller, () => threads.fetch(request));
       const response = await door.request(request, caller);
       requests.push({ path, status: response.status });
       return response;
     });
-    const run = (key: string, input: object, toolCallId: string) => withInvocationContext({
-      caller, hostBaseUrl: "http://point.test",
-    }, () => peDo.execute(peDo.inputSchema.parse({ key, input, timeoutSeconds: 30 }), { agent: { toolCallId } }));
-    const result = await run("op:pointers.point", {
-      route: "families", target: subjectCode({ keyKind: "name", key: ["Price LBP15A Return", "8 X 4 D"] }), label: "Return type",
-    }, "point");
+    const run = (key: string, input: object, toolCallId: string) =>
+      withInvocationContext(
+        {
+          caller,
+          hostBaseUrl: "http://point.test",
+        },
+        () =>
+          peDo.execute(peDo.inputSchema.parse({ key, input, timeoutSeconds: 30 }), {
+            agent: { toolCallId },
+          }),
+      );
+    const result = await run(
+      "op:pointers.point",
+      {
+        route: "families",
+        target: subjectCode({ keyKind: "name", key: ["Price LBP15A Return", "8 X 4 D"] }),
+        label: "Return type",
+      },
+      "point",
+    );
     expect(result, JSON.stringify({ result, requests })).toMatchObject({ ok: true });
     expect(requests).toContainEqual({ path: "/actions", status: 200 });
-    expect(requests.some(request => request.path === "/call")).toBe(false);
-    expect(await next()).toMatchObject({ value: { pointers: [expect.objectContaining({ route: "families", label: "Return type" })] } });
+    expect(requests.some((request) => request.path === "/call")).toBe(false);
+    expect(await next()).toMatchObject({
+      value: { pointers: [expect.objectContaining({ route: "families", label: "Return type" })] },
+    });
     const [pointer] = threads.pointers.read(id).pointers;
     expect(pointer).toBeDefined();
-    expect(await run("op:pointers.dismiss", { id: pointer!.id }, "dismiss")).toMatchObject({ ok: true });
+    expect(await run("op:pointers.dismiss", { id: pointer!.id }, "dismiss")).toMatchObject({
+      ok: true,
+    });
     expect(await next()).toMatchObject({ value: { pointers: [] } });
-    const raw = await door.request(new Request("http://host/call", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ key: "pointers.point", request: { route: "families", target: pointer!.target, label: "retired" } }),
-    }), caller);
+    const raw = await door.request(
+      new Request("http://host/call", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          key: "pointers.point",
+          request: { route: "families", target: pointer!.target, label: "retired" },
+        }),
+      }),
+      caller,
+    );
     expect(raw.status).toBe(409);
     expect(await raw.text()).toContain("raw mutation dispatch is retired");
   } finally {
@@ -119,21 +167,29 @@ test("Pea points at a families type through the action door and the next head st
 test("standalone heads stream empty pointers without admitting pointer mutations", async () => {
   const threads = await open();
   const frames: unknown[] = [];
-  const stop = threads.heads.observe("standalone", frame => frames.push(frame.value));
+  const stop = threads.heads.observe("standalone", (frame) => frames.push(frame.value));
   try {
     await Promise.resolve();
     expect(frames).toEqual([{ targets: [], revision: 0, pointers: [] }]);
-    const response = await actAs(human, () => threads.fetch(new Request("http://host/pe/scope/standalone", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ targets: [], expectedRevision: 0 }),
-    })));
+    const response = await actAs(human, () =>
+      threads.fetch(
+        new Request("http://host/pe/scope/standalone", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ targets: [], expectedRevision: 0 }),
+        }),
+      ),
+    );
     expect(response.status).toBe(200);
     expect(frames.at(-1)).toEqual({ targets: [], revision: 1, pointers: [] });
     expect(() => threads.pointers.read("standalone")).toThrow("Unknown thread");
-    expect(() => threads.pointers.point("standalone", {
-      route: "fans", target: {}, label: "missing",
-    })).toThrow("Unknown thread");
+    expect(() =>
+      threads.pointers.point("standalone", {
+        route: "fans",
+        target: {},
+        label: "missing",
+      }),
+    ).toThrow("Unknown thread");
     expect(() => threads.pointers.dismiss("standalone", "missing")).toThrow("Unknown thread");
   } finally {
     stop();
@@ -154,7 +210,7 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
   );
   const id = ((await created.json()) as { id: string }).id;
   const heads: unknown[] = [];
-  const stop = first.heads.observe(id, frame => heads.push(frame.value.pointers));
+  const stop = first.heads.observe(id, (frame) => heads.push(frame.value.pointers));
   await Promise.resolve();
   expect(heads).toEqual([[]]);
   // The call route reaches thread meta only through the injected port.
@@ -174,9 +230,13 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
   const second = await open();
   port.bind(second.pointers);
   const [pointer] = port.read(pointerThread({ kind: "human" } as never, id)).pointers;
-  expect(pointer).toMatchObject({ route: "fans", label: "FC-1 fan flow", target: { selected: '["UniqueId:u-7"]' } });
+  expect(pointer).toMatchObject({
+    route: "fans",
+    label: "FC-1 fan flow",
+    target: { selected: '["UniqueId:u-7"]' },
+  });
   const dismissed: unknown[] = [];
-  const release = second.heads.observe(id, frame => dismissed.push(frame.value.pointers));
+  const release = second.heads.observe(id, (frame) => dismissed.push(frame.value.pointers));
   await Promise.resolve();
   port.dismiss(id, pointer!.id);
   expect(dismissed.at(-1)).toEqual([]);

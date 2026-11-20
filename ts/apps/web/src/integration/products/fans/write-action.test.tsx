@@ -17,7 +17,18 @@ afterEach(() =>
 test("Fans plans losses through its own handle alone; no /ducts handle rides from /fans", async () => {
   const f = await createWitness(closes);
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
-  f.fans.invoke("edit", { patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }] }, f.fans.workBasis()!);
+  f.fans.invoke(
+    "edit",
+    {
+      patches: [
+        {
+          path: ["writeIntent"],
+          value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } },
+        },
+      ],
+    },
+    f.fans.workBasis()!,
+  );
   await vi.waitFor(() =>
     expect(f.fans.work()?.value).toMatchObject({
       writeIntent: { edit: { value: { walk: { unitId: 1 } } } },
@@ -25,8 +36,13 @@ test("Fans plans losses through its own handle alone; no /ducts handle rides fro
   );
   expect(f.fans.invoke("losses", {})).toEqual({ kind: "preview" });
   await vi.waitFor(() => expect(f.inputs.get("fans:sheet.plan")).toBeTruthy());
-  const sent = f.inputs.get("fans:sheet.plan") as { work: WorkHandle; readWorks?: Record<string, WorkHandle> };
-  expect(sent).toMatchObject({ work: { key: { route: "fans" }, revision: f.fans.work()!.revision } });
+  const sent = f.inputs.get("fans:sheet.plan") as {
+    work: WorkHandle;
+    readWorks?: Record<string, WorkHandle>;
+  };
+  expect(sent).toMatchObject({
+    work: { key: { route: "fans" }, revision: f.fans.work()!.revision },
+  });
   expect(Object.keys(sent.readWorks ?? {})).toEqual([]);
 });
 
@@ -36,21 +52,49 @@ test("after a reopen the human plan sends its owner feed's handle, which the hos
   const saved = new Map<string, unknown>();
   const address = "C:/Models/Plant.rvt" as never;
   const first: (() => void)[] = [];
-  const before = await createWitness(first, saved, {}, { address, open: { session: "s", openId: "first" } });
+  const before = await createWitness(
+    first,
+    saved,
+    {},
+    { address, open: { session: "s", openId: "first" } },
+  );
   await vi.waitFor(() => expect(before.fans.workBasis()).toBeTruthy());
-  before.fans.invoke("edit", { patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }] }, before.fans.workBasis()!);
-  await vi.waitFor(() => expect(saved.get("fans")).toMatchObject({
-    doc: { writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } },
-  }));
+  before.fans.invoke(
+    "edit",
+    {
+      patches: [
+        {
+          path: ["writeIntent"],
+          value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } },
+        },
+      ],
+    },
+    before.fans.workBasis()!,
+  );
+  await vi.waitFor(() =>
+    expect(saved.get("fans")).toMatchObject({
+      doc: { writeIntent: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } },
+    }),
+  );
   first.reverse().forEach((close) => close());
-  const f = await createWitness(closes, saved, {}, { address, open: { session: "s", openId: "reopened" } });
+  const f = await createWitness(
+    closes,
+    saved,
+    {},
+    { address, open: { session: "s", openId: "reopened" } },
+  );
   await vi.waitFor(() => expect(f.fans.workBasis()).toBeTruthy());
   await vi.waitFor(() =>
-    expect(f.fans.work()?.value).toMatchObject({ writeIntent: { edit: { value: { walk: { unitId: 1 } } } } }),
+    expect(f.fans.work()?.value).toMatchObject({
+      writeIntent: { edit: { value: { walk: { unitId: 1 } } } },
+    }),
   );
   expect(f.fans.invoke("losses", {})).toEqual({ kind: "preview" });
   await vi.waitFor(() => expect(f.inputs.get("fans:sheet.plan")).toBeTruthy());
-  const sent = f.inputs.get("fans:sheet.plan") as { work: WorkHandle; readWorks?: Record<string, WorkHandle> };
+  const sent = f.inputs.get("fans:sheet.plan") as {
+    work: WorkHandle;
+    readWorks?: Record<string, WorkHandle>;
+  };
   expect(sent.work).toEqual(f.fans.work()!.handle);
   expect(Object.keys(sent.readWorks ?? {})).toEqual([]);
 });

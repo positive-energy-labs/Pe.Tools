@@ -100,7 +100,9 @@ export function buildCalcTree(
           .filter(({ path }) => wholeOf(sheet, path))
           .reduce<number | null>(
             (best, { path, index }) =>
-              best == null || path.knownInWg > (sheet.paths[best]?.knownInWg ?? -Infinity) ? index : best,
+              best == null || path.knownInWg > (sheet.paths[best]?.knownInWg ?? -Infinity)
+                ? index
+                : best,
             null,
           );
         const paths = relevant.map(({ path, index }) => {
@@ -244,4 +246,6 @@ export function buildCalcTree(
 
 /** Every run row of these trees: a group's fan calcs sit between it and their runs. */
 export const runNodesOf = (trees: readonly TreeNode[]): TreeNode[] =>
-  trees.flatMap((tree) => tree.children.flatMap((fan) => fan.children.filter((n) => n.kind === "run")));
+  trees.flatMap((tree) =>
+    tree.children.flatMap((fan) => fan.children.filter((n) => n.kind === "run")),
+  );

@@ -171,13 +171,19 @@ export function linkRouteBodies(
   const list = (table: object, ids: readonly string[], path: string, kind: string) =>
     ids.forEach((id, i) => reference(table, id, `${path}.${i}`, kind));
   if (
-    Object.values(data.fields).filter((f) => f.role === "subject").length !== (data.subject ? 1 : 0) ||
+    Object.values(data.fields).filter((f) => f.role === "subject").length !==
+      (data.subject ? 1 : 0) ||
     (data.subject && data.fields[data.subject!.field]?.role !== "subject")
   )
-    fail("subject.field", data.subject?.field ?? "", "declared subject field", "Subject fields must match the subject declaration");
+    fail(
+      "subject.field",
+      data.subject?.field ?? "",
+      "declared subject field",
+      "Subject fields must match the subject declaration",
+    );
   if (Object.values(data.fields).filter((f) => f.role === "selection").length !== 1)
     fail("fields", "", "one selection field", "Declare exactly one selection");
-  if(data.subject) {
+  if (data.subject) {
     reference(data.panes, data.subject!.pane, "subject.pane", "pane");
     reference(data.readings, data.subject!.roster, "subject.roster", "reading");
     reference(data.readings, data.subject!.detail, "subject.detail", "reading");
@@ -549,12 +555,18 @@ export function linkRouteBodies(
     if (node.kind === "pane") reference(data.panes, node.id, `${path}.id`, "pane");
     else if (node.kind === "gate") {
       if (node.when === "subject") {
-        if (!data.subject) fail(`${path}.when`, "subject", "subject declaration", "Subject gate requires a subject");
+        if (!data.subject)
+          fail(`${path}.when`, "subject", "subject declaration", "Subject gate requires a subject");
       } else {
         const field = data.fields[node.when.field];
         const schema = field && "schema" in field ? bindings.schemas[field.schema] : undefined;
         if (!schema?.safeParse(node.when.value).success)
-          fail(`${path}.when`, node.when.field, "declared field value", "Gate must name a field and a value accepted by its schema");
+          fail(
+            `${path}.when`,
+            node.when.field,
+            "declared field value",
+            "Gate must name a field and a value accepted by its schema",
+          );
       }
       layout(node.child, `${path}.child`);
     } else {

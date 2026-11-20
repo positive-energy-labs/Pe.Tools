@@ -22,16 +22,20 @@ import { peRoutes } from "@pe/mcps/product-catalog";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = [
-  ...Object.entries(import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true })),
-  ["fans", fanContracts], ["duct-systems", systemContracts],
+  ...Object.entries(
+    import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
+  ),
+  ["fans", fanContracts],
+  ["duct-systems", systemContracts],
 ] as const;
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
 test("every guide calc read resolves through pe-api and the registered host read", () => {
   const apiInput = z.fromJSONSchema(peRoutes["reads.value"].catalog.discovery!.input!);
   for (const read of Object.values(GUIDE_CALC_READS)) {
-    const args = read === GUIDE_CALC_READS.calc
-      ? { target: { session: "s", openId: "d" }, fan: [], calcPath: "" }
-      : { target: { session: "s", openId: "d" }, mode: "fan", unitId: 1, portIndex: 0 };
+    const args =
+      read === GUIDE_CALC_READS.calc
+        ? { target: { session: "s", openId: "d" }, fan: [], calcPath: "" }
+        : { target: { session: "s", openId: "d" }, mode: "fan", unitId: 1, portIndex: 0 };
     const raw = { read, args, subscription: `guide:${read}`, generation: 0 };
     const request = peRoutes["reads.value"].body.parse(apiInput.parse(raw));
     expect(apiInput.safeParse({ ...raw, args: {} }).success, read).toBe(false);
@@ -42,10 +46,14 @@ test("every guide calc read resolves through pe-api and the registered host read
     expect(bound.args).toEqual(definition!.input.parse(args));
   }
 });
-test.each(["ducts.sheet", "fans.sheet", "fans.worksheet"])("retired read %s is refused without an alias", read => {
-  expect(() => graphRoute("reads.value", { read, args: {}, subscription: "retired", generation: 0 }))
-    .toThrow(`Host read is not registered: ${read}`);
-});
+test.each(["ducts.sheet", "fans.sheet", "fans.worksheet"])(
+  "retired read %s is refused without an alias",
+  (read) => {
+    expect(() =>
+      graphRoute("reads.value", { read, args: {}, subscription: "retired", generation: 0 }),
+    ).toThrow(`Host read is not registered: ${read}`);
+  },
+);
 const port = (take: InputPort["take"]): InputPort => ({
   evaluation: "test",
   origin: {},
@@ -58,19 +66,38 @@ test("the browser door binds the target in the host contract's shape", () => {
   const ref = { session: "s", openId: "d" };
   const fans = hostRead(fanContracts.calc);
   expect(fans.input.parse({ fan: [], calcPath: "" })).not.toHaveProperty("target");
-  expect(fans.request?.({ fan: [], calcPath: "" }, { kind: "document", ref })).toMatchObject({ args: { target: ref } });
+  expect(fans.request?.({ fan: [], calcPath: "" }, { kind: "document", ref })).toMatchObject({
+    args: { target: ref },
+  });
   const rooms = hostRead(roomsWorkspace);
-  expect(rooms.request?.(rooms.input.parse({ view: "" }), { kind: "document", ref })).toMatchObject({ args: { target: { kind: "document", ref } } });
+  expect(rooms.request?.(rooms.input.parse({ view: "" }), { kind: "document", ref })).toMatchObject(
+    { args: { target: { kind: "document", ref } } },
+  );
 });
 
 test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {
   const handles = contracts.flatMap(([, module]) => Object.values(module));
   expect(contracts).toHaveLength(15);
   expect(handles.map((h) => h.key).sort()).toEqual([
-    "bind.picker", "captures.browse", "chat.context", "duct-loss.result", "ducts.network",
-    "ducts.pricing", "ducts.roster", "families.view", "family.workspace", "fans.calc",
-    "open.documents", "ops.workspace", "pods.author", "pods.roster", "rooms.workspace",
-    "schedules.view", "settings.machine", "takeoffs.adoption", "takeoffs.views",
+    "bind.picker",
+    "captures.browse",
+    "chat.context",
+    "duct-loss.result",
+    "ducts.network",
+    "ducts.pricing",
+    "ducts.roster",
+    "families.view",
+    "family.workspace",
+    "fans.calc",
+    "open.documents",
+    "ops.workspace",
+    "pods.author",
+    "pods.roster",
+    "rooms.workspace",
+    "schedules.view",
+    "settings.machine",
+    "takeoffs.adoption",
+    "takeoffs.views",
   ]);
   // Mutant: register read(name, ...) with copied schemas instead of body(handle, ...).
   for (const h of handles) {
@@ -81,13 +108,22 @@ test("each route's contract.ts declares the reads its host serves, with the host
   }
   const axes = Object.fromEntries(handles.map((h) => [h.key, h.axes]));
   // Joined, not the one hand constant: a read that walks the model no longer says Cheap Metadata.
-  expect(axes["chat.context"]).toEqual({ subject: "None", touches: ["Metadata"], effect: "Read", cost: "Cheap", cardinality: "One" });
+  expect(axes["chat.context"]).toEqual({
+    subject: "None",
+    touches: ["Metadata"],
+    effect: "Read",
+    cost: "Cheap",
+    cardinality: "One",
+  });
   expect(axes["fans.calc"]!.cost).toBe(native("ducts.snapshot.walk").axes.cost);
-  expect(axes["fans.calc"]!.touches).toEqual(expect.arrayContaining([...native("ducts.snapshot.walk").axes.touches]));
+  expect(axes["fans.calc"]!.touches).toEqual(
+    expect.arrayContaining([...native("ducts.snapshot.walk").axes.touches]),
+  );
 });
 
 test("a composition whose uses cannot join throws at host registration", () => {
-  const input = z.null(), data = z.number();
+  const input = z.null(),
+    data = z.number();
   const orphan = contract("probe.join.orphan", { input, data, uses: [] });
   const composed = body(
     contract("probe.join.composed", { input, data, uses: [orphan, "ducts.tables"] }),
@@ -101,11 +137,25 @@ test("a composition whose uses cannot join throws at host registration", () => {
 });
 
 test("a keyedBy path that names no row collection refuses when the contract is minted", () => {
-  const data = z.object({ rows: z.array(z.string()), name: z.string() }).and(z.object({ more: z.record(z.string(), z.number()) }));
-  expect(contract("probe.keyed", { input: z.null(), data, uses: [], keyedBy: { rows: { kind: "name" }, more: { kind: "name" } } }).keyedBy).toHaveProperty("more");
-  expect(() => contract("probe.keyed.bad", { input: z.null(), data, uses: [], keyedBy: { name: { kind: "name" } } })).toThrow(
-    "Read 'probe.keyed.bad' keys 'name', which is no row collection in its data",
-  );
+  const data = z
+    .object({ rows: z.array(z.string()), name: z.string() })
+    .and(z.object({ more: z.record(z.string(), z.number()) }));
+  expect(
+    contract("probe.keyed", {
+      input: z.null(),
+      data,
+      uses: [],
+      keyedBy: { rows: { kind: "name" }, more: { kind: "name" } },
+    }).keyedBy,
+  ).toHaveProperty("more");
+  expect(() =>
+    contract("probe.keyed.bad", {
+      input: z.null(),
+      data,
+      uses: [],
+      keyedBy: { name: { kind: "name" } },
+    }),
+  ).toThrow("Read 'probe.keyed.bad' keys 'name', which is no row collection in its data");
 });
 
 test("ctx.read(native(key)) is the native door: same body, same input, same value", async () => {
@@ -113,15 +163,29 @@ test("ctx.read(native(key)) is the native door: same body, same input, same valu
   expect(bodyOf(tables)).toBe(nativeRead("ducts.tables"));
   const target = { kind: "host" as const };
   const taken: unknown[] = [];
-  const probe = body(contract("probe.native", { input: z.null(), data: tables.data, uses: [tables] }), (ctx) =>
-    ctx.read(tables, { request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" }),
+  const probe = body(
+    contract("probe.native", { input: z.null(), data: tables.data, uses: [tables] }),
+    (ctx) =>
+      ctx.read(tables, { request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" }),
   );
-  const value = await evaluate(probe, null, port(async (name, args) => {
-    taken.push([name, args]);
-    return { body: { folder: "x", tables: {}, missing: ["CD3-2"], unsupported: {} }, version: "v1" };
-  }));
+  const value = await evaluate(
+    probe,
+    null,
+    port(async (name, args) => {
+      taken.push([name, args]);
+      return {
+        body: { folder: "x", tables: {}, missing: ["CD3-2"], unsupported: {} },
+        version: "v1",
+      };
+    }),
+  );
   expect(value.data.version).toBe("v1");
-  expect(taken).toEqual([["native", { key: "ducts.tables", request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" }]]);
+  expect(taken).toEqual([
+    [
+      "native",
+      { key: "ducts.tables", request: { ids: ["CD3-2"] }, target, version: "v0", role: "acquire" },
+    ],
+  ]);
   // @ts-expect-error the handle's input is the native read's whole input: a bare request has no target
   void ((ctx: ReadContext) => ctx.read(tables, { ids: [] }));
 });
@@ -129,7 +193,10 @@ test("ctx.read(native(key)) is the native door: same body, same input, same valu
 test("the host owns a read's lifetime: the last subscriber's release stops the read, and only then", async () => {
   const signals: AbortSignal[] = [];
   const input = leaf("probe-wait", z.null(), z.number(), false);
-  const definition = body(contract("probe.lifetime", { input: z.null(), data: z.number(), uses: [] }), (ctx) => ctx.read(input, null));
+  const definition = body(
+    contract("probe.lifetime", { input: z.null(), data: z.number(), uses: [] }),
+    (ctx) => ctx.read(input, null),
+  );
   const publications = new Publications();
   let answer!: (value: number) => void;
   // The read's own signal reaches every input it takes.
@@ -163,7 +230,9 @@ test("one declaration types the host body and the pane", () => {
   // The host body's side: `body()` takes a run that returns the contract's data.
   const hostBody = () => body(ductLoss, (): Data => ({ error: null, result: null }));
   // The pane's side: what it draws is the contract's publication.
-  expectTypeOf<NonNullable<z.output<typeof ductLoss.output>["value"]>["data"]>().toEqualTypeOf<Data>();
+  expectTypeOf<
+    NonNullable<z.output<typeof ductLoss.output>["value"]>["data"]
+  >().toEqualTypeOf<Data>();
   expect(hostBody).toBeTypeOf("function");
   // @ts-expect-error a body that returns another shape does not compile
   void (() => body(ductLoss, () => ({ error: 1, result: null })));

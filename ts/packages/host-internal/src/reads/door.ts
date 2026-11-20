@@ -9,7 +9,14 @@ import { z } from "zod";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import { workKeySchema } from "@pe/agent-contracts/route-state";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
-import { nativeArgs, nativeOutputAssets, nativeReadInput, nativeReadValue, type NativeArgs, type NativeValue } from "@pe/agent-contracts/native-output-read";
+import {
+  nativeArgs,
+  nativeOutputAssets,
+  nativeReadInput,
+  nativeReadValue,
+  type NativeArgs,
+  type NativeValue,
+} from "@pe/agent-contracts/native-output-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { AnyReadHandle, ReadHandle } from "@pe/agent-contracts/handle";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
@@ -50,7 +57,8 @@ export function bodyOf<I, D>(h: Pick<ReadHandle<string, I, D>, "key">): Read<I, 
   if (!made) throw Error(`Read '${h.key}' has no body on this host`);
   return made;
 }
-const isOperation = (key: string): key is HostOperationKey => hostOpCatalog.some((op) => op.key === key);
+const isOperation = (key: string): key is HostOperationKey =>
+  hostOpCatalog.some((op) => op.key === key);
 export interface Leaf<I, O> {
   readonly name: string;
   readonly input: z.ZodType<I>;
@@ -69,8 +77,11 @@ export const leaf = <I, O>(
   validate = true,
 ): Leaf<I, O> => Object.freeze({ name, input, output, leaf: true, validate });
 /** Standard tracked Work inputs, shared by every host route. */
-export const workScope=leaf("work-scope",documentRefSchema,workKeySchema,false);
-export const workValue=z.object({doc:z.unknown(),revision:z.number()}).passthrough().nullable();
+export const workScope = leaf("work-scope", documentRefSchema, workKeySchema, false);
+export const workValue = z
+  .object({ doc: z.unknown(), revision: z.number() })
+  .passthrough()
+  .nullable();
 export const documentMark = {
   ...leaf(
     "document-mark",
@@ -103,10 +114,7 @@ export function nativeRead<K extends HostOperationKey>(
 ): Read<NativeArgs<K>, NativeValue<K>> {
   if (natives.has(key)) return natives.get(key) as Read<NativeArgs<K>, NativeValue<K>>;
   const operation = hostOpCatalog.find((op) => op.key === key);
-  if (
-    !operation ||
-    !(operation.effect === "Read" || operation.effect === "TransactRead")
-  )
+  if (!operation || !(operation.effect === "Read" || operation.effect === "TransactRead"))
     throw Error(`Input is not a catalog Read/Read: ${key}`);
   const input = nativeReadInput(key);
   const output = nativeReadValue(key);

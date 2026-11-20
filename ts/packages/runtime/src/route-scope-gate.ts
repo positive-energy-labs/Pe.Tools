@@ -1,6 +1,9 @@
 import { applyPatches, canonicalRouteInput, workKey } from "@pe/agent-contracts";
 import type { z } from "zod";
-import type { Immutable, RouteStateGraph as RouteGraphJson } from "../../agent-contracts/src/route-kernel-data.ts";
+import type {
+  Immutable,
+  RouteStateGraph as RouteGraphJson,
+} from "../../agent-contracts/src/route-kernel-data.ts";
 import {
   AcceptanceToken,
   InvocationToken,
@@ -37,10 +40,7 @@ export type ScopeGateOptions<
   G extends RouteGraphJson,
   S extends SchemaTable,
   W = Immutable<WorkOf<G, S>>,
-> = (
-  | WorkServices<W>
-  | { readonly workSchema?: never; readonly hashWork?: never }
-) & {
+> = (WorkServices<W> | { readonly workSchema?: never; readonly hashWork?: never }) & {
   /** Kernel composition resolves the new Work identity before publishing a subject move. */
   readonly scopeFields?: readonly string[];
   readonly identityForPage?: (page: PageOf<G, S>) => ScopeIdentity;
@@ -76,9 +76,7 @@ export function createRouteScopeGate<
   S extends SchemaTable,
   W = Immutable<WorkOf<G, S>>,
 >(options: ScopeGateOptions<G, S, W>): AcceptanceOwner<G, S, W> {
-  const suppliedWork = [options.workSchema, options.hashWork].filter(
-    Boolean,
-  ).length;
+  const suppliedWork = [options.workSchema, options.hashWork].filter(Boolean).length;
   if (suppliedWork !== 0 && suppliedWork !== 2) throw Error("Incomplete Work acceptance services");
   type Snapshot = AcceptanceSnapshot<G, S, W>;
   const work = options as Partial<WorkServices<W>>;
@@ -214,8 +212,7 @@ export function createRouteScopeGate<
     token: InvocationToken | AcceptanceToken,
     delivery: WorkDelivery<W>,
   ): WorkReduction {
-    if (!work.workSchema || !work.hashWork)
-      return { kind: "refused", reason: "wrong-work" };
+    if (!work.workSchema || !work.hashWork) return { kind: "refused", reason: "wrong-work" };
     if (
       !issuer.owns(token) ||
       (delivery.kind === "ack"

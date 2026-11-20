@@ -14,23 +14,72 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
   const f = await setup();
   const admission = await f.admission();
   let release = () => {};
-  const hold = new Promise<void>(resolve => { release = resolve; });
-  f.native.onRequest(async key => { if (key === "schedule.cells.apply") await hold; });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  f.native.onRequest(async (key) => {
+    if (key === "schedule.cells.apply") await hold;
+  });
   const pending = f.submit(admission);
   const dir = await mkdtemp(join(tmpdir(), "pe-cold-write-"));
   let cold: Awaited<ReturnType<typeof fixtureNative>> | undefined;
   try {
-    await vi.waitFor(async () => expect((await f.native.journal.list(undefined, admission.id))[0]).toMatchObject({ state: "running", steps: expect.arrayContaining([expect.objectContaining({ key: "schedule.cells.apply", state: "running", dispatchedAt: expect.any(String) })]) }));
-    await copyFile(join(f.dir, "native", "partition-operations.json"), join(dir, "partition-operations.json"));
-    const durable = (await readFile(join(dir, "partition-operations.json"), "utf8")).trim().split("\n")
-      .map(line => JSON.parse(line)).flatMap(line => line.receipt?.body?.kind === "action" && line.receipt.body.value.id === admission.id ? [line.receipt.body.value] : []).at(-1);
-    expect(durable).toMatchObject({ state: "running", steps: expect.arrayContaining([expect.objectContaining({ key: "schedule.cells.apply", state: "running", dispatchedAt: expect.any(String) })]) });
+    await vi.waitFor(async () =>
+      expect((await f.native.journal.list(undefined, admission.id))[0]).toMatchObject({
+        state: "running",
+        steps: expect.arrayContaining([
+          expect.objectContaining({
+            key: "schedule.cells.apply",
+            state: "running",
+            dispatchedAt: expect.any(String),
+          }),
+        ]),
+      }),
+    );
+    await copyFile(
+      join(f.dir, "native", "partition-operations.json"),
+      join(dir, "partition-operations.json"),
+    );
+    const durable = (await readFile(join(dir, "partition-operations.json"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .flatMap((line) =>
+        line.receipt?.body?.kind === "action" && line.receipt.body.value.id === admission.id
+          ? [line.receipt.body.value]
+          : [],
+      )
+      .at(-1);
+    expect(durable).toMatchObject({
+      state: "running",
+      steps: expect.arrayContaining([
+        expect.objectContaining({
+          key: "schedule.cells.apply",
+          state: "running",
+          dispatchedAt: expect.any(String),
+        }),
+      ]),
+    });
     cold = await fixtureNative(dir);
     const response = await cold.actions()(admission);
     expect(response.status, await response.clone().text()).toBeLessThan(400);
-    expect(await cold.journal.wait(admission.id)).toMatchObject({ state: "unknown", steps: expect.arrayContaining([expect.objectContaining({ key: "schedule.cells.apply", state: "unknown", dispatchedAt: expect.any(String) })]) });
+    expect(await cold.journal.wait(admission.id)).toMatchObject({
+      state: "unknown",
+      steps: expect.arrayContaining([
+        expect.objectContaining({
+          key: "schedule.cells.apply",
+          state: "unknown",
+          dispatchedAt: expect.any(String),
+        }),
+      ]),
+    });
     expect(cold.calls).toEqual([]);
-  } finally { release(); await pending; await cold?.close(); await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    release();
+    await pending;
+    await cold?.close();
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 // ADR 0039 rule 1 reverses this journey. It used to assert that a corrupt journal refuses every
@@ -53,11 +102,13 @@ test("E8 corrupt journal is discarded with one notice, and a real action then ru
       version: 8,
       discarded: expect.any(String),
     });
-    expect(
-      storedNotices(stateMachine(dir)).filter((notice) => notice.path === path),
-    ).toMatchObject([{ class: "discard", place: "Action journal", sha256: sha256Hex(corrupt) }]);
+    expect(storedNotices(stateMachine(dir)).filter((notice) => notice.path === path)).toMatchObject(
+      [{ class: "discard", place: "Action journal", sha256: sha256Hex(corrupt) }],
+    );
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
-    expect(await readFile(join(stateMachine(dir).blobs, "sha256", sha256Hex(corrupt)))).toEqual(corrupt);
+    expect(await readFile(join(stateMachine(dir).blobs, "sha256", sha256Hex(corrupt)))).toEqual(
+      corrupt,
+    );
   } finally {
     await cold.close();
     await rm(dir, { recursive: true, force: true });
@@ -75,7 +126,10 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
   const resend = () =>
     new Request("http://host/actions", {
       method: "POST",
-      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: "2000-01-01T00:00:00.000Z" },
+      headers: {
+        "content-type": "application/json",
+        [ADMISSION_RESEND_HEADER]: "2000-01-01T00:00:00.000Z",
+      },
       body: JSON.stringify(admission),
     });
   const dir = await mkdtemp(join(tmpdir(), "pe-replay-journal-"));
@@ -106,7 +160,9 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
         request.headers.set(ADMISSION_RESEND_HEADER, sentAt);
         const invalid = await post.request(request);
         expect(invalid.status, sentAt).toBe(409);
-        expect(await invalid.json()).toMatchObject({ error: { code: "journal.discarded", details: { notDispatched: true } } });
+        expect(await invalid.json()).toMatchObject({
+          error: { code: "journal.discarded", details: { notDispatched: true } },
+        });
       }
       expect(cold.calls, start).toEqual([]);
       await cold.close();
@@ -134,13 +190,17 @@ test("E8 a new admission first sent after discard survives a lost first POST", a
   const cold = await fixtureNative(dir);
   try {
     await cold.journal.list();
-    const header = JSON.parse((await readFile(join(dir, "partition-operations.json"), "utf8")).split("\n")[0]!);
+    const header = JSON.parse(
+      (await readFile(join(dir, "partition-operations.json"), "utf8")).split("\n")[0]!,
+    );
     const sentAt = new Date(Date.parse(header.discarded) + 1).toISOString();
-    const response = await cold.actions().request(new Request("http://host/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: sentAt },
-      body: JSON.stringify(admission),
-    }));
+    const response = await cold.actions().request(
+      new Request("http://host/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: sentAt },
+        body: JSON.stringify(admission),
+      }),
+    );
     expect(response.status, await response.clone().text()).toBeLessThan(400);
     expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);
   } finally {
@@ -149,37 +209,47 @@ test("E8 a new admission first sent after discard survives a lost first POST", a
   }
 });
 
-test.each([10, 1])("E8 a re-send %i minutes ahead of the host clock crosses the real actions door", async (minutes) => {
-  const f = await setup();
-  const admission = await f.admission();
-  const dir = await mkdtemp(join(tmpdir(), "pe-future-send-"));
-  await writeFile(join(dir, "partition-operations.json"), "corrupt journal header\n");
-  const cold = await fixtureNative(dir);
-  try {
-    await cold.journal.list();
-    const response = await cold.actions().request(new Request("http://host/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: new Date(Date.now() + minutes * 60_000).toISOString() },
-      body: JSON.stringify(admission),
-    }));
-    if (minutes === 10) {
-      expect(response.status).toBe(409);
-      expect(await response.json()).toMatchObject({ error: {
-        code: "journal.future-send",
-        message: expect.stringContaining("five minutes ahead of the host clock"),
-        details: { notDispatched: true },
-      } });
-      expect(cold.calls).toEqual([]);
-      expect(await cold.journal.list(undefined, admission.id)).toEqual([]);
-    } else {
-      expect(response.status, await response.clone().text()).toBeLessThan(400);
-      expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);
+test.each([10, 1])(
+  "E8 a re-send %i minutes ahead of the host clock crosses the real actions door",
+  async (minutes) => {
+    const f = await setup();
+    const admission = await f.admission();
+    const dir = await mkdtemp(join(tmpdir(), "pe-future-send-"));
+    await writeFile(join(dir, "partition-operations.json"), "corrupt journal header\n");
+    const cold = await fixtureNative(dir);
+    try {
+      await cold.journal.list();
+      const response = await cold.actions().request(
+        new Request("http://host/actions", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            [ADMISSION_RESEND_HEADER]: new Date(Date.now() + minutes * 60_000).toISOString(),
+          },
+          body: JSON.stringify(admission),
+        }),
+      );
+      if (minutes === 10) {
+        expect(response.status).toBe(409);
+        expect(await response.json()).toMatchObject({
+          error: {
+            code: "journal.future-send",
+            message: expect.stringContaining("five minutes ahead of the host clock"),
+            details: { notDispatched: true },
+          },
+        });
+        expect(cold.calls).toEqual([]);
+        expect(await cold.journal.list(undefined, admission.id)).toEqual([]);
+      } else {
+        expect(response.status, await response.clone().text()).toBeLessThan(400);
+        expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);
+      }
+    } finally {
+      await cold.close();
+      await rm(dir, { recursive: true, force: true });
     }
-  } finally {
-    await cold.close();
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+  },
+);
 
 test("E8 a re-send refuses when the journal's own discard time does not parse", async () => {
   const f = await setup();
@@ -188,11 +258,16 @@ test("E8 a re-send refuses when the journal's own discard time does not parse", 
   await writeFile(join(dir, "partition-operations.json"), '{"version":8,"discarded":"x"}\n');
   const cold = await fixtureNative(dir);
   try {
-    const response = await cold.actions().request(new Request("http://host/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: new Date().toISOString() },
-      body: JSON.stringify(admission),
-    }));
+    const response = await cold.actions().request(
+      new Request("http://host/actions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [ADMISSION_RESEND_HEADER]: new Date().toISOString(),
+        },
+        body: JSON.stringify(admission),
+      }),
+    );
     expect(response.status, await response.clone().text()).toBe(409);
     expect(cold.calls).toEqual([]);
   } finally {
@@ -207,11 +282,16 @@ test("W7c an intact journal admits a future re-send as new work", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-intact-future-"));
   const cold = await fixtureNative(dir);
   try {
-    const response = await cold.actions().request(new Request("http://host/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json", [ADMISSION_RESEND_HEADER]: new Date(Date.now() + 600_000).toISOString() },
-      body: JSON.stringify(admission),
-    }));
+    const response = await cold.actions().request(
+      new Request("http://host/actions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [ADMISSION_RESEND_HEADER]: new Date(Date.now() + 600_000).toISOString(),
+        },
+        body: JSON.stringify(admission),
+      }),
+    );
     expect(response.status, await response.clone().text()).toBeLessThan(400);
     expect(await cold.journal.wait(admission.id)).toMatchObject({ id: admission.id });
     expect(await cold.journal.list(undefined, admission.id)).toHaveLength(1);

@@ -36,11 +36,23 @@ afterEach(() => vi.clearAllMocks());
 const caller = { kind: "human" as const, via: "local" as const };
 
 test("a refused capture carries typed reasons and never reads or stores a PNG", async () => {
-  const pictures = new PictureCaptures(stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"), 1024, () => 1);
+  const pictures = new PictureCaptures(
+    stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"),
+    1024,
+    () => 1,
+  );
   const keep = vi.spyOn(pictures, "keep");
   const notDrawn = [{ elementId: 7, reasons: ["PhaseHidden"] }];
-  const value = await Effect.runPromise(projectNativeOutput(pictures, "capture.test",
-    { refused: true, notDrawn, filePath: null }, {}, {}, caller));
+  const value = await Effect.runPromise(
+    projectNativeOutput(
+      pictures,
+      "capture.test",
+      { refused: true, notDrawn, filePath: null },
+      {},
+      {},
+      caller,
+    ),
+  );
   expect(value).toEqual({ refused: true, notDrawn, capture: null, imageUrl: null });
   expect(keep).not.toHaveBeenCalled();
 });

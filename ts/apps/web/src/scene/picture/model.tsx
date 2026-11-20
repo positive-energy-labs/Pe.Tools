@@ -1,4 +1,8 @@
-import type { PictureLayer, PictureLine, PictureOverlayFrame } from "@pe/web-kernel/scene/picture/content";
+import type {
+  PictureLayer,
+  PictureLine,
+  PictureOverlayFrame,
+} from "@pe/web-kernel/scene/picture/content";
 import type { ElementIndex } from "@pe/web-kernel/element-index";
 import { RegistryContext } from "@effect/atom-react";
 import { holdCitation } from "@pe/kit/lang/attention";
@@ -21,9 +25,19 @@ import { ContinuationMarks } from "@pe/web-kernel/scene/continuations";
 import type { PictureBounds } from "@pe/web-kernel/scene/framing";
 import { framingPoints } from "@pe/web-kernel/scene/framing";
 import { LOOK } from "@pe/web-kernel/scene/grounds";
-import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "@pe/web-kernel/scene/orbit";
+import {
+  boundsOfInstances,
+  boundsOfPoints,
+  frame,
+  type OrbitViewport,
+} from "@pe/web-kernel/scene/orbit";
 import { CONTEXT_DEFAULT, type PictureContext } from "#/scene/picture/picture";
-import { sectionProject, viewportProject, type Project, type Size } from "@pe/web-kernel/scene/projection";
+import {
+  sectionProject,
+  viewportProject,
+  type Project,
+  type Size,
+} from "@pe/web-kernel/scene/projection";
 import type { ColourMode, ContextMode } from "@pe/web-kernel/scene/types";
 import { Scene3D } from "#/scene/scene3d";
 import { fitSection, sectionVolume, type Section } from "@pe/web-kernel/scene/section";
@@ -244,7 +258,15 @@ export function ModelPicture({
     } catch (error) {
       return { volume: null, refusal: error instanceof Error ? error.message : "Invalid section" };
     }
-  }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, draft, sectionDraft, bounds]);
+  }, [
+    section,
+    sectionSubject,
+    look.layers.preset,
+    look.section.paddingFt,
+    draft,
+    sectionDraft,
+    bounds,
+  ]);
   const clipVolume = clip.volume;
   const shownView = { preset, section: section ?? clipVolume?.section ?? null };
   const baseLayers = useMemo(

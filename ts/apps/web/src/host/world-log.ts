@@ -41,7 +41,8 @@ function toWorldEvent(event: HostEvent, sessions: SessionInventory[]): SessionEv
     case "connected": {
       const session = sessions.find((s) => s.sessionId === event.sessionId);
       const who = session
-        ? (session.sdkSessionId ?? `Revit${session.processId === null ? "" : ` ${session.processId}`}`)
+        ? (session.sdkSessionId ??
+          `Revit${session.processId === null ? "" : ` ${session.processId}`}`)
         : event.sessionId;
       return {
         ...base,

@@ -13,7 +13,12 @@ export function calcsOf(snapshot: DuctSnapshot, shorthand: InputsShorthand = {})
 }
 
 /** A hand-built leg: only what the panes' projections read. */
-export const legOf = (id: string, elementId: number, kind: Calc["legs"][string]["kind"], lossInWg: number | null) =>
+export const legOf = (
+  id: string,
+  elementId: number,
+  kind: Calc["legs"][string]["kind"],
+  lossInWg: number | null,
+) =>
   ({
     id,
     elementId,
@@ -40,7 +45,10 @@ export const calcOf = (
       side: "supply",
       legIds,
       end: { kind: "terminal", elementId: terminal },
-      knownInWg: legIds.reduce((sum, id) => sum + (legs.find((leg) => leg.id === id)?.lossInWg ?? 0), 0),
+      knownInWg: legIds.reduce(
+        (sum, id) => sum + (legs.find((leg) => leg.id === id)?.lossInWg ?? 0),
+        0,
+      ),
       blockerIds: [],
     })),
     blockers: [],

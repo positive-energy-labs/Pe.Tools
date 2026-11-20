@@ -106,7 +106,9 @@ export function undeclaredContext(
 ): string | null {
   const servers: readonly string[] = manifest.mcpServers;
   const tools: readonly string[] = manifest.claude.tools;
-  const extraServers = (init.mcp_servers ?? []).map((s) => s.name).filter((n) => !servers.includes(n));
+  const extraServers = (init.mcp_servers ?? [])
+    .map((s) => s.name)
+    .filter((n) => !servers.includes(n));
   const extraTools = (init.tools ?? []).filter((tool) => {
     const server = toolServer(tool);
     return server === undefined ? !tools.includes(tool) : !servers.includes(server);

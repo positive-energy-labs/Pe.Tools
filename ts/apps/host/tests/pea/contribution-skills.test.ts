@@ -32,7 +32,10 @@ async function world(prefix: string) {
     root,
     home,
     agent,
-    projections: [stateDirectory(storage, ".agents", "skills").path, stateDirectory(storage, ".claude", "skills").path],
+    projections: [
+      stateDirectory(storage, ".agents", "skills").path,
+      stateDirectory(storage, ".claude", "skills").path,
+    ],
     options: { productHomePath: home, agent: storage, captureDirectory },
   };
 }
@@ -134,8 +137,7 @@ test("a corrupt projection receipt cannot turn skill retirement into a path esca
     );
     await writeFile(join(agent, "outside"), "keep");
     await publishPeaSkills(options);
-    const prior =
-      JSON.stringify({ "../../outside": "a".repeat(64) });
+    const prior = JSON.stringify({ "../../outside": "a".repeat(64) });
     const sha = createHash("sha256").update(prior).digest("hex");
     expect(storedNotices(options.agent.machine)).toMatchObject([
       { class: "discard", path: join(root, ".pe-projection.json"), sha256: sha },

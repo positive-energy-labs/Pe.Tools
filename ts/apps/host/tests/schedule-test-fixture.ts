@@ -82,29 +82,54 @@ export async function setup(options: { cold?: boolean } = {}) {
     readGraph: async (request) => {
       const graph = graphRoute("reads.value", request);
       const publication = graph.publication!;
-      return graph.publish(publications, publication.subscription, publication.generation, inputPort({
-        evaluation: crypto.randomUUID(), origin: () => null, revision: () => 0,
-        workspace: app.workspace, marks: hostMarks(marks), run: Effect.runPromise,
-        source: {
-          workKey: async () => { throw Error("Unexpected Work binding"); },
-          file: async () => { throw Error("Unexpected file input"); },
-          call: async () => { throw Error("Unexpected native input"); },
-          resource: (request) => new Promise((resolve, reject) => {
-            let stop = () => {};
-            stop = observeHost(request as never, (frame) => {
-              if (frame.kind === "snapshot") { stop(); resolve(frame.value); }
-              if (frame.kind === "failure") { stop(); reject(Error(frame.error)); }
-            });
-          }),
-        },
-      }));
+      return graph.publish(
+        publications,
+        publication.subscription,
+        publication.generation,
+        inputPort({
+          evaluation: crypto.randomUUID(),
+          origin: () => null,
+          revision: () => 0,
+          workspace: app.workspace,
+          marks: hostMarks(marks),
+          run: Effect.runPromise,
+          source: {
+            workKey: async () => {
+              throw Error("Unexpected Work binding");
+            },
+            file: async () => {
+              throw Error("Unexpected file input");
+            },
+            call: async () => {
+              throw Error("Unexpected native input");
+            },
+            resource: (request) =>
+              new Promise((resolve, reject) => {
+                let stop = () => {};
+                stop = observeHost(request as never, (frame) => {
+                  if (frame.kind === "snapshot") {
+                    stop();
+                    resolve(frame.value);
+                  }
+                  if (frame.kind === "failure") {
+                    stop();
+                    reject(Error(frame.error));
+                  }
+                });
+              }),
+          },
+        }),
+      );
     },
     capabilityCatalog: { read: (scope) => capabilities.read(scope) },
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     heads: { observe: () => () => {} },
     observeHostResource: (request, publish) => observeHost(request, publish),
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
-    markReadings: (observe) => (request, publish) => markReadings(marks, (ref, key, at) => ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null))(observe)(request, publish),
+    markReadings: (observe) => (request, publish) =>
+      markReadings(marks, (ref, key, at) =>
+        ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+      )(observe)(request, publish),
     registrations: [
       {
         spec: scheduleGridRouteState,
@@ -150,7 +175,8 @@ export async function setup(options: { cold?: boolean } = {}) {
             openId: reopened && target === b ? "reopened-B" : target.openId,
             title: "Same",
             address: document,
-            isFamilyDocument: false, projectHome: null,
+            isFamilyDocument: false,
+            projectHome: null,
             isActive: true,
           },
         ],
@@ -190,18 +216,27 @@ export async function setup(options: { cold?: boolean } = {}) {
           sent.push({ key, input, session: session!, openId: openId!, id });
           if (key === "revit.catalog.schedules") {
             onCatalog();
-            return { target: { session: session!, document: null }, value: { entries: structuredClone(catalog) } };
+            return {
+              target: { session: session!, document: null },
+              value: { entries: structuredClone(catalog) },
+            };
           }
           if (key === "revit.detail.schedules") {
             readCount++;
             if (readbackFails && sent.some((s) => s.key === "schedule.cells.apply"))
               throw Error("readback unavailable");
-            return { target: { session: session!, document: null }, value: structuredClone(detail) };
+            return {
+              target: { session: session!, document: null },
+              value: structuredClone(detail),
+            };
           }
           if (key !== "schedule.cells.apply") throw Error(`Unexpected ${key}`);
           await hold;
           if (unknown) throw new BridgeError("lost native reply", 503);
-          return { target: { session: session!, document: null }, value: structuredClone(response) };
+          return {
+            target: { session: session!, document: null },
+            value: structuredClone(response),
+          };
         },
         catch: (error) => {
           // Only a BridgeError is a typed native failure; any other throw stays a defect.
@@ -251,18 +286,29 @@ export async function setup(options: { cold?: boolean } = {}) {
   );
   const mount = () =>
     serveRoutes(
-      Layer.mergeAll(pe, callRouteOver(owner, captures, { workspace: work, sdk }).pipe(Layer.provide(DuctFiles.layer(hostState().home)), Layer.provide(PictureCaptureStore.layer()), Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))))),
+      Layer.mergeAll(
+        pe,
+        callRouteOver(owner, captures, { workspace: work, sdk }).pipe(
+          Layer.provide(DuctFiles.layer(hostState().home)),
+          Layer.provide(PictureCaptureStore.layer()),
+          Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(marks))),
+        ),
+      ),
       bridge,
     );
   let server = await mount();
-  const catalogSource = () => createCapabilityCatalogSource({
-    hostBaseUrl: server.base,
-    registrations: [{ spec: scheduleGridRouteState }],
-    machine: async () => machineFixture(sessions().map(session => ({
-      session: session.sessionId,
-      documents: session.state.openDocuments,
-    }))),
-  });
+  const catalogSource = () =>
+    createCapabilityCatalogSource({
+      hostBaseUrl: server.base,
+      registrations: [{ spec: scheduleGridRouteState }],
+      machine: async () =>
+        machineFixture(
+          sessions().map((session) => ({
+            session: session.sessionId,
+            documents: session.state.openDocuments,
+          })),
+        ),
+    });
   capabilities = catalogSource();
   vi.stubEnv(HOST_CONTEXT_VARIABLE, mintContext({ kind: "human", via: "cli" }));
   cleanup.push(() => server.close());
@@ -387,7 +433,9 @@ export async function setup(options: { cold?: boolean } = {}) {
       detail = value;
     },
     reads: () => readCount,
-    onCatalog: (callback: () => void) => { onCatalog = callback; },
+    onCatalog: (callback: () => void) => {
+      onCatalog = callback;
+    },
     revitChanged,
     bridgeDetached,
     addSchedule: (scheduleId: number, name: string) =>

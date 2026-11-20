@@ -23,7 +23,12 @@ const core = { snapshot: DEMO_ROOMS } as never;
 
 test("/rooms declares subject, query and goal, and no carry key", () => {
   const { spec, data } = module;
-  expect(data.subject).toMatchObject({ field: "room", noun: "room", pane: "main", roster: "value" });
+  expect(data.subject).toMatchObject({
+    field: "room",
+    noun: "room",
+    pane: "main",
+    roster: "value",
+  });
   expect(Object.fromEntries(Object.entries(data.fields).map(([k, f]) => [k, f.role]))).toEqual({
     view: "query",
     room: "subject",
@@ -36,29 +41,59 @@ test("/rooms declares subject, query and goal, and no carry key", () => {
   expect(Object.keys(data.fields).filter((key) => CARRY.includes(key))).toEqual([]);
   // The core read is the Goal, drawn by the kernel's goal pane beside the route's one hand body.
   expect(data.goal).toBe("value");
-  expect(Object.fromEntries(Object.entries(spec.panes).map(([id, p]) => [id, (p as { kernel?: string }).kernel ?? "route"])))
-    .toEqual({ main: "route", goal: "goal" });
+  expect(
+    Object.fromEntries(
+      Object.entries(spec.panes).map(([id, p]) => [
+        id,
+        (p as { kernel?: string }).kernel ?? "route",
+      ]),
+    ),
+  ).toEqual({ main: "route", goal: "goal" });
   expect(titlePane(spec)).toBeNull();
 });
 
 test("a room is a region SubjectRef over its carrier GUID, in roster order with the table's labels", () => {
   const options = module.spec.subject!.options(core);
-  expect(options.map((o) => o.label)).toEqual(["R1 · Fixture level", "R2 · Fixture level", "R3 · Fixture level", "R4 · Fixture level"]);
+  expect(options.map((o) => o.label)).toEqual([
+    "R1 · Fixture level",
+    "R2 · Fixture level",
+    "R3 · Fixture level",
+    "R4 · Fixture level",
+  ]);
   expect(options[0]!.id).toBe(regionSubject(zone!.guid));
-  expect(decode(options[1]!.id)).toEqual({ ok: true, value: { keyKind: "region", key: room!.guid } });
+  expect(decode(options[1]!.id)).toEqual({
+    ok: true,
+    value: { keyKind: "region", key: room!.guid },
+  });
   expect(regionOf(options[1]!.id)).toBe(room!.guid);
   // Only a region names a room: an element's UniqueId is not the carrier, and never decodes as one.
   expect(regionOf(`UniqueId:${room!.uniqueId}`)).toBeNull();
 });
 
 test("the Goal is the partition inbox: failing and gone marks first, staged marks assumed, the answer greyed until none is left", () => {
-  const mark = (kind: Mark["kind"], run: string, polygon: readonly (readonly number[])[]): Mark =>
-    ({ kind, run, anchor: { view: DEMO_VIEW, level: "Fixture level", polygon: polygon as [number, number][] } });
+  const mark = (
+    kind: Mark["kind"],
+    run: string,
+    polygon: readonly (readonly number[])[],
+  ): Mark => ({
+    kind,
+    run,
+    anchor: { view: DEMO_VIEW, level: "Fixture level", polygon: polygon as [number, number][] },
+  });
   const work = roomsRouteState.schema.parse({
     marks: {
       staged: { edit: { by: "human", value: mark("merge", "fixture-run", room!.outer) } },
       failing: { edit: { by: "human", value: mark("wall", "older-run", room!.outer) } },
-      gone: { edit: { by: "human", value: mark("reject", "older-run", [[900, 900], [910, 900], [910, 910]]) } },
+      gone: {
+        edit: {
+          by: "human",
+          value: mark("reject", "older-run", [
+            [900, 900],
+            [910, 900],
+            [910, 910],
+          ]),
+        },
+      },
     },
   });
   const goal = roomsGoal(work, DEMO_ROOMS, DEMO_VIEW);
@@ -71,19 +106,36 @@ test("the Goal is the partition inbox: failing and gone marks first, staged mark
   expect(goal.next?.id).toBe("mark:failing");
   expect(goal.result).toEqual({ kind: "estimate", value: null, sources: [] });
   // Nothing left: the answer stands. No view, or a view never partitioned, names its exit.
-  expect(roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, DEMO_VIEW).result).toEqual({ kind: "complete", value: "2 rooms on Fixture level plan" });
-  expect(roomsGoal(work, DEMO_ROOMS, "").unresolved).toEqual([{ id: "view", says: "Choose a level and a plan view", resolver: "person" }]);
-  expect(roomsGoal(work, { ...DEMO_ROOMS, regions: [zone!, held!] }, DEMO_VIEW).unresolved[0]).toMatchObject({ id: "partition", resolver: { op: "rooms.partition" } });
+  expect(roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, DEMO_VIEW).result).toEqual({
+    kind: "complete",
+    value: "2 rooms on Fixture level plan",
+  });
+  expect(roomsGoal(work, DEMO_ROOMS, "").unresolved).toEqual([
+    { id: "view", says: "Choose a level and a plan view", resolver: "person" },
+  ]);
+  expect(
+    roomsGoal(work, { ...DEMO_ROOMS, regions: [zone!, held!] }, DEMO_VIEW).unresolved[0],
+  ).toMatchObject({ id: "partition", resolver: { op: "rooms.partition" } });
   // The host read publishes it: the core value carries the Goal's fields, and decodes this one.
-  const published = roomsData.pick({ unresolved: true, assumed: true, next: true, inputs: true, result: true });
+  const published = roomsData.pick({
+    unresolved: true,
+    assumed: true,
+    next: true,
+    inputs: true,
+    result: true,
+  });
   expect(published.safeParse(goal).success).toBe(true);
 });
 
 test("the hand inbox list, the card: selection codec and the picked/show fields are deleted", () => {
-  for (const file of ["inbox.tsx", "selection.ts", "selection.test.ts"]) expect(existsSync(here(file)), file).toBe(false);
+  for (const file of ["inbox.tsx", "selection.ts", "selection.test.ts"])
+    expect(existsSync(here(file)), file).toBe(false);
   const source = ["mount.tsx", "workspace.tsx", "bindings.ts", "route.ts", "page.ts", "card.tsx"]
-    .map((file) => readFileSync(here(file), "utf8")).join("\n");
-  expect(source).not.toMatch(/RoomsInbox|roomSelection|card:\$\{|raw\.picked|page\.show|onShow|ListView/);
+    .map((file) => readFileSync(here(file), "utf8"))
+    .join("\n");
+  expect(source).not.toMatch(
+    /RoomsInbox|roomSelection|card:\$\{|raw\.picked|page\.show|onShow|ListView/,
+  );
 });
 
 /*
@@ -98,9 +150,20 @@ test("the hand inbox list, the card: selection codec and the picked/show fields 
  */
 test.fails("kernel gap: store-binding-write (10)", async () => {
   const { sheetWrites } = await import("../../../host/src/slots/sheet.ts");
-  const sheet = { draft: true as const, bindings: { name: { home: { at: "store" as const, store: "rooms" }, domain: { kind: "enum" as const, shape: { type: "string" } }, per: "subject" as const } } };
+  const sheet = {
+    draft: true as const,
+    bindings: {
+      name: {
+        home: { at: "store" as const, store: "rooms" },
+        domain: { kind: "enum" as const, shape: { type: "string" } },
+        per: "subject" as const,
+      },
+    },
+  };
   expect(writesRevit(sheet)).toBe(true);
-  expect(sheetWrites(sheet, { name: { [regionSubject(room!.guid)]: { edit: { value: "Pantry" } } } })).toHaveLength(1);
+  expect(
+    sheetWrites(sheet, { name: { [regionSubject(room!.guid)]: { edit: { value: "Pantry" } } } }),
+  ).toHaveLength(1);
 });
 
 /*
@@ -114,5 +177,7 @@ test.fails("kernel gap: store-binding-write (10)", async () => {
  */
 test.fails("kernel gap: picture-pane (10)", () => {
   expect(module.data).toHaveProperty("picture");
-  expect(Object.values(module.spec.panes).map((pane) => (pane as { kernel?: string }).kernel)).toContain("picture");
+  expect(
+    Object.values(module.spec.panes).map((pane) => (pane as { kernel?: string }).kernel),
+  ).toContain("picture");
 });

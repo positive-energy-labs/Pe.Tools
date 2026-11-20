@@ -4,7 +4,12 @@
  */
 import type { CoverageGap, Encounter, FanClaim } from "@pe/fans-contract/fans-inputs";
 import type { SourcedValue } from "@pe/agent-contracts";
-import { coverageGaps, wholeCoverage, type Coverage, type WholeCoverage } from "@pe/ducts-domain/calc/coverage";
+import {
+  coverageGaps,
+  wholeCoverage,
+  type Coverage,
+  type WholeCoverage,
+} from "@pe/ducts-domain/calc/coverage";
 import type { FanPortRef, Leg, CalcPath, Side } from "./types.ts";
 
 const COMPLETE = Symbol("complete claim");
@@ -107,7 +112,10 @@ export function hostStatic(
   host: HostCalc | "absent" | "cycle",
   e: Encounter,
   network: string,
-): { inWg: number; basis: string; source: string } | CoverageGap | { kind: "backflow"; detail: string } {
+):
+  | { inWg: number; basis: string; source: string }
+  | CoverageGap
+  | { kind: "backflow"; detail: string } {
   const gap = (kind: CoverageGap["kind"], why: string): CoverageGap => ({
     kind,
     elementId: e.elementId,
@@ -125,7 +133,10 @@ export function hostStatic(
   if (rating != null && (!Number.isFinite(rating) || rating < 0))
     return gap("host-calc", "rated ESP is invalid");
   if (rating != null && rating < host.claim.requiredEspInWg)
-    return { kind: "backflow", detail: `host rated ESP ${rating} is below required ESP ${host.claim.requiredEspInWg}: backflow/deadhead` };
+    return {
+      kind: "backflow",
+      detail: `host rated ESP ${rating} is below required ESP ${host.claim.requiredEspInWg}: backflow/deadhead`,
+    };
   for (const p of host.paths) {
     if (p.side !== "supply") continue;
     const k = p.legIds.findIndex((id) => host.legs[id]?.elementId === e.elementId);
@@ -135,7 +146,10 @@ export function hostStatic(
     return {
       inWg: (rating ?? host.claim.requiredEspInWg) - losses.reduce((a, v) => a + v, 0),
       basis: host.claim.basis,
-      source: rating == null ? "host required ESP minus loss to tie-in; assumes the host is balanced" : "host rated ESP minus loss to tie-in",
+      source:
+        rating == null
+          ? "host required ESP minus loss to tie-in; assumes the host is balanced"
+          : "host rated ESP minus loss to tie-in",
     };
   }
   return gap("host-calc", "calc does not reach the tie-in");
@@ -147,14 +161,23 @@ export const whole = (p: CalcPath, legs: Readonly<Record<string, Leg>>) =>
   p.blockerIds.length === 0 && p.legIds.every((id) => priced(legs[id]));
 
 /** R-SHARE: a priced terminal run through this same branch already pays for N onward. */
-export function pricesBeyond(m: Met, paths: readonly CalcPath[], legs: Readonly<Record<string, Leg>>): boolean {
+export function pricesBeyond(
+  m: Met,
+  paths: readonly CalcPath[],
+  legs: Readonly<Record<string, Leg>>,
+): boolean {
   const branch = paths[m.path];
   if (!branch) return false;
   const prefix = branch.legIds.slice(0, -1);
-  return paths.some((p) => p.side === branch.side && p.end.kind === "terminal" &&
-    p.legIds.length > branch.legIds.length && whole(p, legs) &&
-    prefix.every((id, i) => p.legIds[i] === id) &&
-    legs[p.legIds[prefix.length] ?? ""]?.elementId === m.encounter.elementId);
+  return paths.some(
+    (p) =>
+      p.side === branch.side &&
+      p.end.kind === "terminal" &&
+      p.legIds.length > branch.legIds.length &&
+      whole(p, legs) &&
+      prefix.every((id, i) => p.legIds[i] === id) &&
+      legs[p.legIds[prefix.length] ?? ""]?.elementId === m.encounter.elementId,
+  );
 }
 
 export interface ClaimFacts {
@@ -178,11 +201,7 @@ const SIDES: readonly Side[] = ["supply", "return"];
  * whole calc is `to-boundary`; anything missing unexpectedly is `incomplete`.
  */
 /** The only writer of a `complete` claim. Its coverage parameter is the type no `lost` entry fits. */
-const complete = (
-  _read: WholeCoverage,
-  basis: string,
-  requiredEspInWg: number,
-): CompleteClaim => {
+const complete = (_read: WholeCoverage, basis: string, requiredEspInWg: number): CompleteClaim => {
   const claim: CompleteClaim = {
     [COMPLETE]: true,
     kind: "complete",
@@ -203,7 +222,8 @@ export function claimOf(f: ClaimFacts): DomainClaim {
     if (e.verdict === "refused" || (m.policy.backflow && e.verdict === "unruled"))
       blocking.add(m.policy.backflow ? backflowId(e) : ENCOUNTER_KEY(e));
     // Added once, on the path that ends there; a return tie-in carries no static row at all.
-    if (e.static.kind === "host-calc") tieIn.set(m.path, pricesBeyond(m, f.paths, f.legs) ? 0 : e.static.inWg);
+    if (e.static.kind === "host-calc")
+      tieIn.set(m.path, pricesBeyond(m, f.paths, f.legs) ? 0 : e.static.inWg);
     else if (
       m.policy.static === "host-calc" &&
       e.verdict === "accepted" &&
@@ -218,7 +238,11 @@ export function claimOf(f: ClaimFacts): DomainClaim {
     else if (!whole(p, f.legs))
       for (const id of p.legIds)
         if (!priced(f.legs[id]))
-          coverage.push({ kind: "pricing", elementId: f.legs[id]?.elementId ?? null, ref: `leg ${id}` });
+          coverage.push({
+            kind: "pricing",
+            elementId: f.legs[id]?.elementId ?? null,
+            ref: `leg ${id}`,
+          });
   });
   // Paths arrive ranked: a side's first is its critical run, unless a tie-in's static makes another worse.
   const worst = (side: Side) => {
@@ -232,10 +256,7 @@ export function claimOf(f: ClaimFacts): DomainClaim {
   for (const side of SIDES)
     if (!f.paths.some((p) => p.side === side))
       coverage.push({ kind: "pricing", elementId: null, ref: `no ${side} path` });
-  const total = SIDES.reduce(
-    (a, side) => a + Math.max(0, worst(side)) + f.allowanceInWg[side],
-    0,
-  );
+  const total = SIDES.reduce((a, side) => a + Math.max(0, worst(side)) + f.allowanceInWg[side], 0);
   const knownInWg = +(Number.isFinite(total) ? total : 0).toFixed(6);
   const unique = coverage.filter(
     (g, i) => coverage.findIndex((x) => x.kind === g.kind && x.ref === g.ref) === i,
@@ -244,7 +265,13 @@ export function claimOf(f: ClaimFacts): DomainClaim {
   const boundaryIds = new Set(unruled.map(backflowId));
   const read = wholeCoverage(f.coverage);
   if (!read || unique.length || [...blocking].some((id) => !boundaryIds.has(id)))
-    return { kind: "incomplete", basis: f.basis, knownInWg, coverage: unique, blockingIds: [...blocking] };
+    return {
+      kind: "incomplete",
+      basis: f.basis,
+      knownInWg,
+      coverage: unique,
+      blockingIds: [...blocking],
+    };
   const [boundary, ...more] = unruled;
   if (boundary)
     return {
@@ -260,7 +287,9 @@ export function claimOf(f: ClaimFacts): DomainClaim {
       kind: "incomplete",
       basis: f.basis,
       knownInWg,
-      coverage: [{ kind: "pricing", elementId: null, ref: "required ESP is not a finite pressure" }],
+      coverage: [
+        { kind: "pricing", elementId: null, ref: "required ESP is not a finite pressure" },
+      ],
       blockingIds: [],
     };
   return complete(read, f.basis, knownInWg);

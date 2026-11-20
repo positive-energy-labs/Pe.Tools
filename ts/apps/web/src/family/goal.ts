@@ -17,9 +17,19 @@ export function familyGoal(
   const unresolved: Closer[] = [
     ...(work.reading || read.member
       ? []
-      : [{ id: "capture", says: "No family to review: capture the open family, or open a saved one", resolver: { op: "family.capture" } }]),
-    ...(read.profileError ? [{ id: "profile", says: `Saved family: ${read.profileError}`, resolver: "person" as const }] : []),
-    ...(read.specError ? [{ id: "spec", says: `Cut sheet: ${read.specError}`, resolver: "person" as const }] : []),
+      : [
+          {
+            id: "capture",
+            says: "No family to review: capture the open family, or open a saved one",
+            resolver: { op: "family.capture" },
+          },
+        ]),
+    ...(read.profileError
+      ? [{ id: "profile", says: `Saved family: ${read.profileError}`, resolver: "person" as const }]
+      : []),
+    ...(read.specError
+      ? [{ id: "spec", says: `Cut sheet: ${read.specError}`, resolver: "person" as const }]
+      : []),
     ...peas.map(([pointer, cell]): Closer => {
       const cited = cell.edit?.sources?.length ?? 0;
       return {
@@ -31,13 +41,23 @@ export function familyGoal(
   ];
   return {
     unresolved,
-    assumed: read.spec || read.specError
-      ? []
-      : [{ id: "spec", says: "No cut sheet attached: the values rest on the capture alone", resolver: { op: "family.attach-spec" } }],
+    assumed:
+      read.spec || read.specError
+        ? []
+        : [
+            {
+              id: "spec",
+              says: "No cut sheet attached: the values rest on the capture alone",
+              resolver: { op: "family.attach-spec" },
+            },
+          ],
     next: unresolved[0] ?? null,
     inputs: [],
     result: unresolved.length
       ? { kind: "estimate", value: null, sources: [] }
-      : { kind: "complete", value: `${staged.length} staged cell${staged.length === 1 ? "" : "s"} reviewed` },
+      : {
+          kind: "complete",
+          value: `${staged.length} staged cell${staged.length === 1 ? "" : "s"} reviewed`,
+        },
   };
 }

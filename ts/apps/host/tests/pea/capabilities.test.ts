@@ -12,7 +12,10 @@ import {
   type ThreadHead,
   emptyThreadHead,
 } from "@pe/agent-contracts";
-import { buildCapabilities, createCapabilityCatalogSource } from "../../../../packages/mcps/src/pea/capabilities.ts";
+import {
+  buildCapabilities,
+  createCapabilityCatalogSource,
+} from "../../../../packages/mcps/src/pea/capabilities.ts";
 import { builtinPeaSkillSnapshots } from "../../../../packages/mcps/src/pea/skill-publication.ts";
 import type { PackageProjection } from "@pe/agent-contracts";
 import { peDo, peRead, peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
@@ -33,7 +36,13 @@ import { projectRouteRead } from "../../src/reads/routes.ts";
 import { routeRegistry } from "../../src/routes.generated.ts";
 import { z } from "zod";
 import { fixture as readDoor } from "../host-read-graph.test-support.ts";
-import { admitCrossing, bindControl, callerOf, mintContext, retireContext } from "../../src/control.ts";
+import {
+  admitCrossing,
+  bindControl,
+  callerOf,
+  mintContext,
+  retireContext,
+} from "../../src/control.ts";
 import { Refused } from "@pe/host-internal/refused";
 
 const ops = hostOpCatalog.filter((op) =>
@@ -612,9 +621,14 @@ test("pe_read route graphs read the real host door before releasing their public
 
 test("Pea discovers the sheet plan, decodes any route's handle, and previews a complete fan", async () => {
   fakeRuntimeHost("http://127.0.0.1:19999");
-  const closed = closedFan(100), tables = recordedTables();
-  const f = await workFixture("real", (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }), null,
-    { native: key => key === "ducts.tables" ? tables : undefined });
+  const closed = closedFan(100),
+    tables = recordedTables();
+  const f = await workFixture(
+    "real",
+    (_key, input) => closedFan(100, { requiredEsp: input.slots?.requiredEsp }),
+    null,
+    { native: (key) => (key === "ducts.tables" ? tables : undefined) },
+  );
   // Pea acts inside its turn's open run (ADR 0038): every Pea command needs one.
   const peaRun = { thread: "t1", turn: "discover" };
   f.runs.open(peaRun);
@@ -624,14 +638,13 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews a c
       "fans",
       "human",
       [
-        { path: ["writeIntent", "edit"], value: { value: { walk: { unitId: 100, portIndex: 0 } } } },
+        {
+          path: ["writeIntent", "edit"],
+          value: { value: { walk: { unitId: 100, portIndex: 0 } } },
+        },
         { path: ["flows", "UniqueId:fixture-terminal", "edit"], value: { value: 200 } },
         {
-          path: [
-            "flows",
-            elementSubject(closed.nodes.find((node) => node.id === 3)!),
-            "edit",
-          ],
+          path: ["flows", elementSubject(closed.nodes.find((node) => node.id === 3)!), "edit"],
           value: { value: 250 },
         },
       ],
@@ -639,7 +652,11 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews a c
     );
     expect(staged.ok).toBe(true);
     expect((await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.doc).toMatchObject({
-      flows: { [elementSubject(closed.nodes.find(node => node.id === 3)!)]: { edit: { value: 250, by: "human" } } },
+      flows: {
+        [elementSubject(closed.nodes.find((node) => node.id === 3)!)]: {
+          edit: { value: 250, by: "human" },
+        },
+      },
     });
     const fans = (await f.saved.view({ ...f.key, route: "fans" }, "fans"))!.handle;
     const work = (await f.saved.view(f.key, "duct-systems"))!.handle;
@@ -674,7 +691,11 @@ test("Pea discovers the sheet plan, decodes any route's handle, and previews a c
     expect(row.description).toContain("Work handle");
     expect(commands["sheet.plan"].input.safeParse({ work: fans }).success).toBe(true);
     expect(commands["sheet.plan"].input.safeParse({ work }).success).toBe(true);
-    const preview = await run(peDo, { key: row.key, input: { work: fans }, timeoutSeconds: 5 }, head);
+    const preview = await run(
+      peDo,
+      { key: row.key, input: { work: fans }, timeoutSeconds: 5 },
+      head,
+    );
     expect(preview, JSON.stringify(preview)).toMatchObject({
       ok: true,
       result: { state: "succeeded", result: { previewOnly: true } },
@@ -827,7 +848,8 @@ test("W0-1: a Pea undo on /fans steps the Ducts edit the fans read used", async 
           },
         ],
       });
-    if (url.pathname === "/pe/capabilities") return Response.json(catalog([routeRegistry.fans!.host.workState as never]));
+    if (url.pathname === "/pe/capabilities")
+      return Response.json(catalog([routeRegistry.fans!.host.workState as never]));
     if (url.pathname === "/pe/reads/value") {
       if (body.release) return Response.json({ value: null, state: "superseded" });
       if (body.read.startsWith("route:"))
@@ -893,27 +915,52 @@ test("pe_do route Work accepts the SDK session id pe_read accepts (rooms-draw-ba
     if (url.pathname === "/ops") return Response.json({ operations: [] });
     if (typeof init?.body === "string" && JSON.parse(init.body).key === "bridge.sessions.list")
       return Response.json({
-        sessions: [{ sessionId: "b1", sdkSessionId: "acc-x", connected: true,
-          openDocuments: [{ openId: "project-a", address: projectA, isFamilyDocument: false }] }],
+        sessions: [
+          {
+            sessionId: "b1",
+            sdkSessionId: "acc-x",
+            connected: true,
+            openDocuments: [{ openId: "project-a", address: projectA, isFamilyDocument: false }],
+          },
+        ],
       });
     if (url.pathname === "/pe/capabilities") return Response.json(catalog());
     if (url.pathname === "/pe/reads/value") {
       const body = JSON.parse(String(init?.body));
       return body.release
         ? Response.json({ value: null, state: "superseded" })
-        : Response.json({ value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) } });
+        : Response.json({
+            value: { data: projectRouteRead(routeRegistry[body.read.slice(6)]!.host) },
+          });
     }
     if (!url.pathname.includes("/route-state/")) throw Error(`unexpected ${url.pathname}`);
-    return Response.json({ route: "families", revision: 2, handle: { key: familiesWork, revision: 2 }, doc: {}, ok: true });
+    return Response.json({
+      route: "families",
+      revision: 2,
+      handle: { key: familiesWork, revision: 2 },
+      doc: {},
+      ok: true,
+    });
   });
   const target = { kind: "open", ref: { session: "acc-x", openId: "project-a" } };
   try {
-    const read = (await run(peRead, { key: "route:families", target, timeoutSeconds: 30 }, turn)) as { ok: boolean };
+    const read = (await run(
+      peRead,
+      { key: "route:families", target, timeoutSeconds: 30 },
+      turn,
+    )) as { ok: boolean };
     expect(read.ok).toBe(true);
-    const edit = (await run(peDo, {
-      key: "route:families.edit", target, expectedRevision: 2, timeoutSeconds: 30,
-      input: { patches: [{ path: ["intent"], value: "x" }] },
-    }, turn)) as { ok?: boolean; content?: string };
+    const edit = (await run(
+      peDo,
+      {
+        key: "route:families.edit",
+        target,
+        expectedRevision: 2,
+        timeoutSeconds: 30,
+        input: { patches: [{ path: ["intent"], value: "x" }] },
+      },
+      turn,
+    )) as { ok?: boolean; content?: string };
     expect(edit.content ?? "").not.toContain("no longer open");
     expect(edit.ok).toBe(true);
   } finally {

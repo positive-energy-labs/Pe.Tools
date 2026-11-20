@@ -84,8 +84,7 @@ export const familiesPartsSchema = z.object({
   records: z.array(z.string()).nullable(),
 });
 
-
-export {valueReadRequest,valueReadResponse} from "./value.ts";
+export { valueReadRequest, valueReadResponse } from "./value.ts";
 
 export { blobRefSchema, blobUploadSchema } from "./blob-ref.ts";
 export { placesFileSchema } from "./places.ts";

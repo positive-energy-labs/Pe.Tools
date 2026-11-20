@@ -10,7 +10,11 @@ import { readRecord } from "@pe/agent-contracts/chat-state";
 import { FactChip } from "@pe/kit/lang/chip";
 import type { RevitElementReference } from "@pe/kit/lang/revit-target";
 import { useRouteFixture } from "@pe/web-kernel/route/activity";
-import { prepareElements, revitReferences, type RevitObservationScope } from "@pe/web-kernel/revit/element-target";
+import {
+  prepareElements,
+  revitReferences,
+  type RevitObservationScope,
+} from "@pe/web-kernel/revit/element-target";
 
 type Reference = RevitElementReference & { label: string };
 const records = (value: unknown): Record<string, unknown>[] =>

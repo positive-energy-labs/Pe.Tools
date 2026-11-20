@@ -12,4 +12,3 @@ export async function plan(page: Page) {
     300_000,
   );
 }
-

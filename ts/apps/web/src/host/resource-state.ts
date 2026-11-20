@@ -85,14 +85,22 @@ function subject(
   emit({ state: "loading", requestId: serialized, deadline });
   const timer = setTimeout(() => {
     if (previous !== undefined) return emit({ state: "stale", previous, reason: "disconnected" });
-    reportFault({ code: "reading.timeout", elapsedMs: SUBJECT_WAIT_S * 1000, readingKind: request.kind },
-      Error(`reading ${serialized}: the host sent nothing before its deadline`));
-    emit({ state: "failed", message: `Source sent no answer after ${SUBJECT_WAIT_S}s; explicitly refresh to retry` });
+    reportFault(
+      { code: "reading.timeout", elapsedMs: SUBJECT_WAIT_S * 1000, readingKind: request.kind },
+      Error(`reading ${serialized}: the host sent nothing before its deadline`),
+    );
+    emit({
+      state: "failed",
+      message: `Source sent no answer after ${SUBJECT_WAIT_S}s; explicitly refresh to retry`,
+    });
   }, SUBJECT_WAIT_S * 1000);
-  const release = source.subscribe(request, frame => {
+  const release = source.subscribe(request, (frame) => {
     if (closed) return;
     if (frame.kind === "snapshot") {
-      const decoded = request.kind === "inventory" ? Schema.decodeUnknownExit(bridgeSessionsListSchema)(frame.value) : null;
+      const decoded =
+        request.kind === "inventory"
+          ? Schema.decodeUnknownExit(bridgeSessionsListSchema)(frame.value)
+          : null;
       if (decoded && Exit.isFailure(decoded)) {
         clearTimeout(timer);
         return emit({ state: "failed", message: "Host inventory does not decode.", previous });
@@ -100,16 +108,33 @@ function subject(
       previous = decoded && Exit.isSuccess(decoded) ? decoded.value : frame.value;
       if (frame.stale) return emit({ state: "stale", previous, reason: "disconnected" });
       clearTimeout(timer);
-      emit({ state: "ready", observation: previous, ...(frame.changed === undefined ? {} : { changed: frame.changed }) });
+      emit({
+        state: "ready",
+        observation: previous,
+        ...(frame.changed === undefined ? {} : { changed: frame.changed }),
+      });
     } else if (frame.kind === "failure") {
       clearTimeout(timer);
-      emit({ state: "failed", message: frame.error, ...(previous === undefined ? {} : { previous }) });
+      emit({
+        state: "failed",
+        message: frame.error,
+        ...(previous === undefined ? {} : { previous }),
+      });
     } else if ((frame.kind === "gap" || frame.kind === "stale") && last.state !== "failed") {
-      emit(previous !== undefined ? { state: "stale", previous, reason: frame.kind === "gap" ? "gap" : "disconnected" }
-        : frame.kind === "gap" ? absent : { state: "loading", requestId: serialized, deadline });
+      emit(
+        previous !== undefined
+          ? { state: "stale", previous, reason: frame.kind === "gap" ? "gap" : "disconnected" }
+          : frame.kind === "gap"
+            ? absent
+            : { state: "loading", requestId: serialized, deadline },
+      );
     }
   });
-  return () => { closed = true; clearTimeout(timer); release(); };
+  return () => {
+    closed = true;
+    clearTimeout(timer);
+    release();
+  };
 }
 
 const families = new WeakMap<Readings, (key: string) => Atom.Atom<Reading<unknown>>>();

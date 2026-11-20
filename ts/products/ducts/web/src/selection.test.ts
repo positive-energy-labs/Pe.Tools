@@ -6,14 +6,7 @@ import { paintOf } from "@pe/web-kernel/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
 import { paintOfDucts } from "./selection.ts";
 
-
 afterEach(() => resetKnob());
-
-
-
-
-
-
 
 test("non-focus MEP paints as stub (kind from its snapshot system, pipes unknown); other context stays context", () => {
   const { snapshot } = NAVIGATION_FIXTURE;

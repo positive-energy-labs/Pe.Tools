@@ -134,7 +134,8 @@ const terminalDropCriterion = criteriaCellOf("terminalDropInWg");
 /** A resolved value's provenance as a leg's `lossSource.ref` reads it. */
 // A staged value names its tier (and revision); an observed one its tier and the parameter or key its ref ends in.
 const provenance = (v: Resolved<unknown>) => {
-  const what = v.source === "Work" || v.source === "run" ? v.version : (v.version ?? v.ref?.split("/").pop());
+  const what =
+    v.source === "Work" || v.source === "run" ? v.version : (v.version ?? v.ref?.split("/").pop());
   return `${v.source}${what == null ? "" : `:${what}`}`;
 };
 const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : null);
@@ -357,7 +358,7 @@ class Pricer {
     const st = w.states[s]!;
     const e = st.el;
     const f = flows.leg.get(legKey(s, out));
-    const cfm = share ? share.cfm : f?.cfm ?? null;
+    const cfm = share ? share.cfm : (f?.cfm ?? null);
     const kind: Leg["kind"] = isSegment(e) ? "duct" : e.kind === "cap" ? "fitting" : e.kind;
     const leg: Leg = {
       id,
@@ -383,7 +384,8 @@ class Pricer {
     } else if (cfm != null) {
       const r = this.price(w, flows, side, s, out, cfm);
       // Test-visible receipt: the wire evidence omits per-piece length, cfm and drop; keep this off the wire.
-      if (r.testVisiblePieceReceipt) Object.defineProperty(leg, "testVisiblePieceReceipt", { value: r.testVisiblePieceReceipt });
+      if (r.testVisiblePieceReceipt)
+        Object.defineProperty(leg, "testVisiblePieceReceipt", { value: r.testVisiblePieceReceipt });
       p = r.p;
       ids.push(...r.ids);
       if (r.cfm != null && r.cfm !== cfm) {
@@ -460,7 +462,13 @@ class Pricer {
     s: number,
     out: number | undefined,
     cfm: number,
-  ): { p: PricedLeg | null; ids: string[]; note?: string; cfm?: number; testVisiblePieceReceipt?: Leg["testVisiblePieceReceipt"] } {
+  ): {
+    p: PricedLeg | null;
+    ids: string[];
+    note?: string;
+    cfm?: number;
+    testVisiblePieceReceipt?: Leg["testVisiblePieceReceipt"];
+  } {
     const { grids } = this.input;
     const st = w.states[s]!;
     const e = st.el;
@@ -473,7 +481,10 @@ class Pricer {
     // A refused drop (invalid) withholds the leg with its ref unless it is a model placeholder a loss rule prices.
     // An invalid winning layer blocks fallback (work-value.ts), so a person's or Pea's unreadable drop never falls to a rule (P-054).
     if (stated?.status === "invalid" && stated.source !== "model")
-      return drop(null, `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`);
+      return drop(
+        null,
+        `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`,
+      );
     if (isSegment(e)) return this.duct(w, flows, side, s, out, cfm);
     const conn = (i: number | undefined) => e.connectors.find((c) => c.index === i);
     if (e.kind === "terminal") {
@@ -523,8 +534,10 @@ class Pricer {
     proposed?: ProposedPath,
   ): PricedLeg {
     if (this.pricingLeg && !proposed) this.onLeg(this.pricingLeg, key);
-    const stated = !proposed && input.leg === "Cs"
-      ? this.input.inputs.components[String(input.fitting.id)]?.drop : undefined;
+    const stated =
+      !proposed && input.leg === "Cs"
+        ? this.input.inputs.components[String(input.fitting.id)]?.drop
+        : undefined;
     const flows = ruleFlows(input.flows);
     const matched = input.facts.inputError
       ? undefined
@@ -537,14 +550,25 @@ class Pricer {
       this.choices,
     );
     // P-107: a typed branch drop substitutes only for a refused straight loss, never a rule price.
-    if (p.lossInWg == null && stated && (stated.value != null || (stated.status === "invalid" && stated.source !== "model")))
-      return priceLeg({
-        kind: "drop", element: input.fitting,
-        cfm: input.flows.through, inWg: stated.value,
-        source: `typed drop from ${input.fitting.id} (Cs refused: ${p.unpriced}); ${stated.value == null
-          ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
-          : provenance(stated)}`,
-      }, this.input.grids);
+    if (
+      p.lossInWg == null &&
+      stated &&
+      (stated.value != null || (stated.status === "invalid" && stated.source !== "model"))
+    )
+      return priceLeg(
+        {
+          kind: "drop",
+          element: input.fitting,
+          cfm: input.flows.through,
+          inWg: stated.value,
+          source: `typed drop from ${input.fitting.id} (Cs refused: ${p.unpriced}); ${
+            stated.value == null
+              ? `${stated.ref ?? provenance(stated)}; the stated drop is unreadable, retype it`
+              : provenance(stated)
+          }`,
+        },
+        this.input.grids,
+      );
     const src = p.source?.kind === "rule" ? p.source : null;
     const rule = src ? ruleByKey(src.rule) : assigned ? ruleByKey(assigned.value) : matched;
     const chosen = rule ? this.input.inputs.tables[rule.key] : undefined;
@@ -606,8 +630,10 @@ class Pricer {
       if (!tap || !isTap(tap)) continue;
       const f = flows.leg.get(legKey(s, c.index));
       if (f && f.cfm == null) return null;
-      const draws = flows.draws.filter(d => d.junction === s && w.ends[d.sibling]?.out === c.index);
-      if (draws.some(d => d.cfm == null)) return null;
+      const draws = flows.draws.filter(
+        (d) => d.junction === s && w.ends[d.sibling]?.out === c.index,
+      );
+      if (draws.some((d) => d.cfm == null)) return null;
       const siblingCfm = draws.reduce((sum, d) => sum + (d.cfm ?? 0), 0);
       // A sibling joins the walk at this station; splitTappedDuct subtracts in walk order.
       taps.push({ tap, branchCfm: (f?.cfm ?? 0) - siblingCfm, siblingCfm });
@@ -651,7 +677,9 @@ class Pricer {
                   inlet: x.tap.connectors.find((c) => c.connectedTo?.elementId === duct.id),
                   outlet: undefined,
                   main: duct,
-                  converging: (side === "return") === taps.some(t => t.tap.id === x.tap.id && t.branchCfm > 0),
+                  converging:
+                    (side === "return") ===
+                    taps.some((t) => t.tap.id === x.tap.id && t.branchCfm > 0),
                 }),
               }),
             ],
@@ -712,8 +740,12 @@ class Pricer {
     return {
       p,
       ids,
-      testVisiblePieceReceipt: pieces.map((piece, i) => ({ lengthFt: piece.lengthFt, cfm: piece.cfm, lossInWg: priced[i]?.lossInWg ?? null })),
-      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map(p => p.elementId).join(", ")})` : ""}${cs.flatMap(p => p.source?.kind === "drop" ? [`; ${p.source.source}`] : []).join("")}`,
+      testVisiblePieceReceipt: pieces.map((piece, i) => ({
+        lengthFt: piece.lengthFt,
+        cfm: piece.cfm,
+        lossInWg: priced[i]?.lossInWg ?? null,
+      })),
+      note: `, ${round(length)} ft${cs.length ? `, ${cs.length} tap(s) passed (Cs: ${cs.map((p) => p.elementId).join(", ")})` : ""}${cs.flatMap((p) => (p.source?.kind === "drop" ? [`; ${p.source.source}`] : [])).join("")}`,
       // The flow the leg is priced at where it enters, the same piece its velocity is read from: a
       // duct left by a tap on its side carries the upstream flow up to that tap (RV-15's tap on
       // 14682079 is fed 150 cfm through 4.93 ft of the 10 in main), never the branch's 35.
@@ -817,7 +849,8 @@ class Pricer {
     const parentIn = main.connectors.find((c) => c.index === parent.in);
     const taps = parentIn && parentIn.kind !== "curve" ? this.tapsOn(w, flows, st.parent) : null;
     const total = stateFlow(flows, st.parent);
-    const up = total == null ? null : total - (taps?.reduce((sum, t) => sum + t.siblingCfm, 0) ?? 0);
+    const up =
+      total == null ? null : total - (taps?.reduce((sum, t) => sum + t.siblingCfm, 0) ?? 0);
     const branch =
       taps && up != null
         ? splitTappedDuct({
@@ -978,7 +1011,16 @@ class Pricer {
                     : src?.kind === "drop" && stated?.value === leg.lossInWg
                       ? sourced(stated)
                       : // No resolved input states this number: the engine set it (a leg carrying none of this fan's flow, an untyped proposed path).
-                        resolveValue({ default: observed("default", leg.lossSource.ref || "engine", leg.lossInWg) }, "in-wg"),
+                        resolveValue(
+                          {
+                            default: observed(
+                              "default",
+                              leg.lossSource.ref || "engine",
+                              leg.lossInWg,
+                            ),
+                          },
+                          "in-wg",
+                        ),
                 };
     }
   }
@@ -1586,7 +1628,11 @@ const sideSum = (f: Flows, w: Walk) => {
   return ends.some(([, v]) => v == null) ? null : ends.reduce((a, [, v]) => a + v!, 0);
 };
 
-function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<string, HostCalc>): Calc {
+function buildCalcPass(
+  input: BuildCalcInput,
+  assumeHeals: boolean,
+  hosts: Map<string, HostCalc>,
+): Calc {
   const g = graphOf(input.snapshot);
   const pricer = new Pricer(input, g);
   const unit = g.byId.get(input.fan.unitId);
@@ -1869,7 +1915,8 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
           // Chadds louver 14088043 states 1120 there while its airflow slot is empty).
           const resolved = input.inputs.terminals[String(id)]?.cfm;
           const node = g.byId.get(id);
-          const revit = node && !isSegment(node) ? positive(slotFlowOf(node, REVIT_FLOW_SLOT).cfm) : null;
+          const revit =
+            node && !isSegment(node) ? positive(slotFlowOf(node, REVIT_FLOW_SLOT).cfm) : null;
           const stated: Resolved<number | null> | null =
             resolved?.value != null
               ? resolved
@@ -1917,9 +1964,13 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
   const self = fanKey(input.fan);
   const buildHost = (host: FanPortRef): HostCalc => {
     // H5 consumes the known claim only; a host's heal preview cannot supply required pressure.
-    const calc = buildCalcPass({ ...input, fan: host, dependents: [...(input.dependents ?? []), self] }, false, hosts);
+    const calc = buildCalcPass(
+      { ...input, fan: host, dependents: [...(input.dependents ?? []), self] },
+      false,
+      hosts,
+    );
     // Accepted cycle gaps depend on the ancestor chain; unruled reads do not enter the claim.
-    if (!calc.claim.coverage.some(gap => gap.kind === "cycle")) hosts.set(fanKey(host), calc);
+    if (!calc.claim.coverage.some((gap) => gap.kind === "cycle")) hosts.set(fanKey(host), calc);
     return calc;
   };
   const hostOf = (host: FanPortRef): HostCalc | "absent" | "cycle" =>
@@ -1939,8 +1990,7 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
       if (read.kind === "backflow") {
         deadheads.set(backflowId(m.encounter), read.detail);
         gaps.push({ kind: "host-calc", elementId: m.encounter.elementId, ref: read.detail });
-      }
-      else if (m.encounter.verdict === "accepted") gaps.push(read);
+      } else if (m.encounter.verdict === "accepted") gaps.push(read);
     } else if (m.encounter.verdict === "accepted")
       m.encounter.static = {
         kind: "host-calc",
@@ -1951,7 +2001,8 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
   }
   // Q3: backflow is an error on the calc and the picture whatever a person ruled.
   for (const m of met) {
-    const reason = deadheads.get(backflowId(m.encounter)) ??
+    const reason =
+      deadheads.get(backflowId(m.encounter)) ??
       (m.encounter.static.kind === "host-calc" ? m.encounter.static.source : null);
     if (m.policy.backflow && !pricer.blockers.has(backflowId(m.encounter)))
       pricer.blockers.set(backflowId(m.encounter), {
@@ -1962,7 +2013,10 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
         owner: m.encounter.host,
         detail: `${g.name(unit.id)} discharges into the positive-pressure duct of fan ${tagOf(m.encounter.host.unitId) || g.name(m.encounter.host.unitId)} at ${g.name(m.encounter.elementId)}${reason ? `; ${reason}` : ""}`,
         effectInWg: m.encounter.static.kind === "host-calc" ? m.encounter.static.inWg : null,
-        closer: { kind: "ruling", note: deadheads.get(backflowId(m.encounter)) ?? "rule this tie-in accepted or refused" },
+        closer: {
+          kind: "ruling",
+          note: deadheads.get(backflowId(m.encounter)) ?? "rule this tie-in accepted or refused",
+        },
       });
   }
   // Q4 (implementor default 2026-11-16, queued to the owner): a family direction the network reads the
@@ -1990,7 +2044,9 @@ function buildCalcPass(input: BuildCalcInput, assumeHeals: boolean, hosts: Map<s
     basis,
     paths,
     legs: pricer.legs,
-    blockingIds: blockers.filter((b) => !backflow.has(b.id) || deadheads.has(b.id)).map((b) => b.id),
+    blockingIds: blockers
+      .filter((b) => !backflow.has(b.id) || deadheads.has(b.id))
+      .map((b) => b.id),
     coverage: coverageOf(input.snapshot, walked),
     gaps,
     met,
@@ -2062,23 +2118,24 @@ function issueOf(
   };
   const encounter = encounters.find((e) => backflowId(e) === b.id);
   const deadhead = deadheads.get(b.id);
-  const closer: FanIssue["closer"] = deadhead != null
-    ? { kind: "none", reason: deadhead }
-    : encounter
-    ? { kind: "encounter", encounter }
-    : b.closer.candidate
-      ? { kind: "heal", pair: b.closer.candidate.pair }
-      : b.kind === "unknown-drop" && kind === "terminal"
-        ? // No offer rides here: an offer names its caller, and the engine has none. The firm's terminal
-          // drop a caller may take is `inputs.criteria.terminalDropInWg`, with its own source and ref.
-          cell("terminalDrop")
-        : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
-          ? cell("componentDrop")
-          : b.kind === "no-flow" && kind === "terminal"
-            ? cell("terminalFlow")
-            : b.kind === "no-flow" && kind === "equipment"
-              ? cell("fanFlow")
-              : { kind: "none", reason: b.closer.note };
+  const closer: FanIssue["closer"] =
+    deadhead != null
+      ? { kind: "none", reason: deadhead }
+      : encounter
+        ? { kind: "encounter", encounter }
+        : b.closer.candidate
+          ? { kind: "heal", pair: b.closer.candidate.pair }
+          : b.kind === "unknown-drop" && kind === "terminal"
+            ? // No offer rides here: an offer names its caller, and the engine has none. The firm's terminal
+              // drop a caller may take is `inputs.criteria.terminalDropInWg`, with its own source and ref.
+              cell("terminalDrop")
+            : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
+              ? cell("componentDrop")
+              : b.kind === "no-flow" && kind === "terminal"
+                ? cell("terminalFlow")
+                : b.kind === "no-flow" && kind === "equipment"
+                  ? cell("fanFlow")
+                  : { kind: "none", reason: b.closer.note };
   return {
     id: b.id,
     kind: b.kind,

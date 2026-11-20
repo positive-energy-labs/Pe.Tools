@@ -13,7 +13,9 @@ import { contentRootsReady } from "../src/content-roots.ts";
 import { sha256Hex } from "@pe/host-contracts/kinds";
 
 test("a custom Pods root leaves pod and podless output in machine state, like C# PodRuns", () => {
-  expect(runsDirectory("site", { podsRoot: "X:/custom/Pods" }).path).toBe(join(hostState().runs, "site"));
+  expect(runsDirectory("site", { podsRoot: "X:/custom/Pods" }).path).toBe(
+    join(hostState().runs, "site"),
+  );
   expect(runsDirectory(null, { podsRoot: "X:/custom/Pods" }).path).toBe(hostState().podlessRuns);
 });
 
@@ -59,7 +61,9 @@ test("a run writer preserves prior evidence without a checked read", async () =>
   const folder = await run(writeRun("mine", "kept-run", { "result.json": "prior evidence" }));
   await run(writeRun("mine", "kept-run", { "result.json": "replacement evidence" }));
   expect(readFileSync(join(folder, "result.json"), "utf8")).toBe("replacement evidence");
-  expect(readFileSync(join(hostState().blobs, "sha256", sha256Hex("prior evidence")), "utf8")).toBe("prior evidence");
+  expect(readFileSync(join(hostState().blobs, "sha256", sha256Hex("prior evidence")), "utf8")).toBe(
+    "prior evidence",
+  );
 });
 
 // Mutants, each run red once (2026-11-11): `productPodsRoots` ignores its pointer; and
@@ -73,7 +77,9 @@ test("a call that targets a document lists and writes its project home's Pods; a
     const free = await run(listPods());
     // The sentinel: the listing is not empty, so "no site" is not "nothing listed".
     expect(free.pods.map((one) => one.id)).toEqual(["mine"]);
-    expect(free.projectPods).toMatch(/^No document is targeted.*appear when the call targets a document\.$/);
+    expect(free.projectPods).toMatch(
+      /^No document is targeted.*appear when the call targets a document\.$/,
+    );
 
     const targeted = await run(listPods({ pointer }));
     expect(targeted.pods.map((one) => [one.id, one.home])).toEqual([
@@ -87,7 +93,10 @@ test("a call that targets a document lists and writes its project home's Pods; a
     await run(writeMember({ ...member, content: "{}" }, { pointer }));
     expect(readFileSync(join(project, "Pods", "site", "settings", "a.json"), "utf8")).toBe("{}");
     expect(existsSync(join(user, "Pods", "site"))).toBe(false);
-    expect((await run(readMember(member, { pointer }))).home).toEqual({ tier: "project", path: project });
+    expect((await run(readMember(member, { pointer }))).home).toEqual({
+      tier: "project",
+      path: project,
+    });
     await expect(run(readMember(member))).rejects.toMatchObject({ statusCode: 403 });
 
     expect((await run(listPods({ pointer: null }))).projectPods).toMatch(/names no project home/);
@@ -109,11 +118,18 @@ test("the pointer a call reads is its target document's, from the bridge's open-
       { state: null },
     ]),
   } as never;
-  const of = (openDocumentId?: string) => Effect.runPromise(targetHomes(bridge, { openDocumentId }));
+  const of = (openDocumentId?: string) =>
+    Effect.runPromise(targetHomes(bridge, { openDocumentId }));
   expect(await of("one")).toEqual({ pointer });
   expect(await of("two")).toEqual({ pointer: null });
   const decode = Schema.decodeUnknownSync(bridgeDocumentSnapshotSchema);
-  const snapshot = { openId: "three", title: "Model", address: null, isFamilyDocument: false, isActive: false };
+  const snapshot = {
+    openId: "three",
+    title: "Model",
+    address: null,
+    isFamilyDocument: false,
+    isActive: false,
+  };
   expect(() => decode(snapshot)).toThrow();
   expect(decode({ ...snapshot, projectHome: null }).projectHome).toBeNull();
   // No target, or a document that is not open: no project home, and the listing says so.
@@ -123,7 +139,9 @@ test("the pointer a call reads is its target document's, from the bridge's open-
 
 // M2: filing runs under the Pod's content home violates ADR 0037 rule 6.
 test("a project-only Pod files run bytes outside every content home", async () => {
-  const folder = await run(writeRun("site", "project-run", { "receipt.json": "project run" }, { pointer }));
+  const folder = await run(
+    writeRun("site", "project-run", { "receipt.json": "project run" }, { pointer }),
+  );
   expect(folder).toBe(join(runsDirectory("site").path, "project-run"));
   for (const home of [user, project, process.env.PE_TOOLS_SHARED_ROOT!]) {
     const rel = relative(home, folder);

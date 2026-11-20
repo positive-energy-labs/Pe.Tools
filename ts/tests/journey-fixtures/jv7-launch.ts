@@ -8,7 +8,9 @@ import { openBrowser } from "@pe/browser";
 import type { ServiceFile } from "../../packages/host-contracts/src/vendor/pe-service.ts";
 import { seedConversationWork, CONVERSATION_THREADS } from "../e2e/conversation-work.fixture.ts";
 
-const root = resolve(execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim());
+const root = resolve(
+  execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(),
+);
 const dir = join(root, ".artifacts", "jv7", String(Date.now()));
 // Agent homes must sit outside checkout instructions, even for a no-Revit fixture.
 const home = await mkdtemp(join(tmpdir(), "pe-jv7-"));
@@ -48,14 +50,26 @@ host.stdout?.on("data", (b) => {
 host.stderr?.on("data", (b) => {
   log += b;
 });
-const wait = <T>(read: () => Promise<T | undefined>, name: string) => waitFor(async () => {
-  if (host.exitCode !== null || host.signalCode !== null)
-    throw Error(`PRECONDITION: host exited ${host.exitCode}: ${log.slice(-2000)}`);
-  return read();
-}, name, 120_000);
+const wait = <T>(read: () => Promise<T | undefined>, name: string) =>
+  waitFor(
+    async () => {
+      if (host.exitCode !== null || host.signalCode !== null)
+        throw Error(`PRECONDITION: host exited ${host.exitCode}: ${log.slice(-2000)}`);
+      return read();
+    },
+    name,
+    120_000,
+  );
 let browser: Awaited<ReturnType<typeof openBrowser>> | undefined;
 let service: ServiceFile | undefined;
-const receipt: { commit: string; started: string; dir: string; cleanup: string[]; code?: number; error?: string } = {
+const receipt: {
+  commit: string;
+  started: string;
+  dir: string;
+  cleanup: string[];
+  code?: number;
+  error?: string;
+} = {
   commit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
   started: new Date().toISOString(),
   dir,
@@ -67,7 +81,11 @@ try {
     for (const file of await readdir(folder).catch(() => [])) {
       if (!file.endsWith("-no-revit.json")) continue;
       const row: ServiceFile = JSON.parse(await readFile(join(folder, file), "utf8"));
-      if (row.pid === host.pid && row.sourceRoot && resolve(row.sourceRoot).toLowerCase() === root.toLowerCase())
+      if (
+        row.pid === host.pid &&
+        row.sourceRoot &&
+        resolve(row.sourceRoot).toLowerCase() === root.toLowerCase()
+      )
         return row;
     }
   }, "owned service receipt");
@@ -84,22 +102,27 @@ try {
   const tab = await browser.page();
   const target = tab.targetId;
   await tab.release();
-  const child = spawn(process.execPath, ["--import", "jiti/register", "tests/journey-fixtures/jv7-fans.ts"], {
-    cwd: join(root, "ts"),
-    windowsHide: true,
-    stdio: "inherit",
-    env: {
-      ...env,
-      E2E_LINKAGE_MODE: "fixture-linkage",
-      E2E_TARGET: "", E2E_SESSION: "",
-      E2E_WEB: url,
-      E2E_LABEL: `base-${Date.now()}`,
-      JV7_HOST: `http://127.0.0.1:${ownedService.port}`,
-      JV7_TOKEN: ownedService.token,
-      CDP_PORT: String(new URL(browser.info.endpoint).port),
-      CDP_TARGET: target,
+  const child = spawn(
+    process.execPath,
+    ["--import", "jiti/register", "tests/journey-fixtures/jv7-fans.ts"],
+    {
+      cwd: join(root, "ts"),
+      windowsHide: true,
+      stdio: "inherit",
+      env: {
+        ...env,
+        E2E_LINKAGE_MODE: "fixture-linkage",
+        E2E_TARGET: "",
+        E2E_SESSION: "",
+        E2E_WEB: url,
+        E2E_LABEL: `base-${Date.now()}`,
+        JV7_HOST: `http://127.0.0.1:${ownedService.port}`,
+        JV7_TOKEN: ownedService.token,
+        CDP_PORT: String(new URL(browser.info.endpoint).port),
+        CDP_TARGET: target,
+      },
     },
-  });
+  );
   await exited(child, 300_000).catch(async (error) => {
     await stopOwned(child);
     throw error;

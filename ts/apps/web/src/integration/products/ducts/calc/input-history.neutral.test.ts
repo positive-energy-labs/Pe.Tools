@@ -1,10 +1,16 @@
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { expect, test } from "vite-plus/test";
 import { writeLabel } from "../../../../shell/work-writes.ts";
-import { editLabel, presentInputHistory } from "../../../../../../../products/ducts/web/src/calc/input-history.neutral.ts";
+import {
+  editLabel,
+  presentInputHistory,
+} from "../../../../../../../products/ducts/web/src/calc/input-history.neutral.ts";
 
 test("staging the write scope is named and marked internal", () => {
-  expect(writeLabel([{ path: ["writeIntent", "edit"], value: 1 }], {})).toEqual({ label: "Edit write scope", internal: true });
+  expect(writeLabel([{ path: ["writeIntent", "edit"], value: 1 }], {})).toEqual({
+    label: "Edit write scope",
+    internal: true,
+  });
 });
 
 test("a criteria edit is named in words, never by its key", () => {
@@ -14,7 +20,14 @@ test("a criteria edit is named in words, never by its key", () => {
 });
 
 test("reverting a value keeps Revert in History and its undo description", () => {
-  const label = editLabel({ componentDrops: { [elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" })]: null } }, () => "DS-1");
+  const label = editLabel(
+    {
+      componentDrops: {
+        [elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" })]: null,
+      },
+    },
+    () => "DS-1",
+  );
   expect(label).toBe("Revert part drop DS-1");
   const entries = [
     { id: "revert", press: "revert", label, by: "human", at: 1, state: "undone", detail: "none" },

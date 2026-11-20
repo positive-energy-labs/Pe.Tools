@@ -68,7 +68,8 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
               <h2>Request</h2>
               <span className="flex gap-1">
                 {(selected.requestExamples ?? []).map((example) => (
-                  <Button kind="quiet"
+                  <Button
+                    kind="quiet"
                     key={example.name}
                     label={example.name}
                     reason={example.description}
@@ -101,7 +102,9 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
                   setValue(result as Value);
                   setFailure(null);
                 })
-                .catch((error) => setFailure(error instanceof Error ? error.message : String(error)))
+                .catch((error) =>
+                  setFailure(error instanceof Error ? error.message : String(error)),
+                )
             }
           >
             Run read

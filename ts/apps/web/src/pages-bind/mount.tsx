@@ -1,4 +1,8 @@
-import { harnessThreadSummarySchema, pageTargetReadingSchema, routeAddress } from "@pe/agent-contracts";
+import {
+  harnessThreadSummarySchema,
+  pageTargetReadingSchema,
+  routeAddress,
+} from "@pe/agent-contracts";
 import { useEffect, useState } from "react";
 import type { PageTargetReading, PageChoice } from "@pe/agent-contracts";
 import { inventoryOf } from "../host/resource-state";

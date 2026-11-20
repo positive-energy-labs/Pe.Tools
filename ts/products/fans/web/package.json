@@ -36,19 +36,11 @@
     "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
     "@pe/kit": "workspace:*",
+    "@pe/web-kernel": "workspace:*",
     "react": "^19.2.0",
-    "zod": "4.3.6",
-    "@pe/web-kernel": "workspace:*"
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "jsdom": "^28.1.0",
-    "@types/node": "^25.6.2",
-    "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
-    "@types/react": "^19.2.7",
-    "@types/react-dom": "^19.2.3",
-    "@types/three": "catalog:",
-    "@types/qrcode": "catalog:",
     "@effect/atom-react": "4.0.2",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/duct-systems-domain": "workspace:*",
@@ -59,7 +51,15 @@
     "@pe/runtime": "workspace:*",
     "@tanstack/react-router": "1.170.31",
     "@testing-library/react": "^16.3.0",
+    "@types/node": "^25.6.2",
+    "@types/qrcode": "catalog:",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "catalog:",
     "effect": "4.0.2",
-    "three": "catalog:"
+    "jsdom": "^28.1.0",
+    "three": "catalog:",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
   }
 }

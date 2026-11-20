@@ -57,7 +57,9 @@ export type DerivedStore<P extends HomePath | StatePath> = {
   blobRoot: StatePath;
 };
 
-export const derivedStoreOf = <P extends HomePath | StatePath>(dir: DerivedDir<P>): DerivedStore<P> => ({
+export const derivedStoreOf = <P extends HomePath | StatePath>(
+  dir: DerivedDir<P>,
+): DerivedStore<P> => ({
   dir: dir.path,
   path: dir.file,
   notices: dir.machine.notices,

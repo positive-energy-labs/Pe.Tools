@@ -47,7 +47,10 @@ async function liveHost(
   await writeFile(join(firmHome, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firmHome);
   const inputRoot = dirname(firmRootPath()!);
-  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
+  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({
+    ...rosterCapture,
+    vocabulary: VOCABULARY,
+  });
   const inputs =
     isolated ??
     (record
@@ -202,7 +205,11 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
     );
     await until("refresh-needed");
   } finally {
-    try { await closeStream?.(); } finally { await host.close(); }
+    try {
+      await closeStream?.();
+    } finally {
+      await host.close();
+    }
   }
 });
 

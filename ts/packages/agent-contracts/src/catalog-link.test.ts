@@ -7,7 +7,13 @@ const { linkedCatalog } = createPeCatalog(builtinHostActions);
 const catalogEntries = [...linkedCatalog().entries.values()];
 
 const leaf = (key: string, uses: string[] = []): CatalogLink => ({
-  key, uses, subject: "Document", touches: ["Metadata"], effect: "Read", cost: "Bounded", cardinality: "One",
+  key,
+  uses,
+  subject: "Document",
+  touches: ["Metadata"],
+  effect: "Read",
+  cost: "Bounded",
+  cardinality: "One",
 });
 
 describe("link", () => {
@@ -37,19 +43,37 @@ describe("commandLink and declared plan axes", () => {
   it("keeps a Pod command's native uses, so its cost is checked against the native leaf", () => {
     const pod = commandLink(
       "pod.acme.write",
-      { says: "x", dirties: [], needs: "project-document", effect: "command", input: {} as never, native: ["ducts.apply"] },
-      { subject: "Document", touches: ["Geometry"], effect: "ModelWrite", cost: "Cheap", cardinality: "One" },
+      {
+        says: "x",
+        dirties: [],
+        needs: "project-document",
+        effect: "command",
+        input: {} as never,
+        native: ["ducts.apply"],
+      },
+      {
+        subject: "Document",
+        touches: ["Geometry"],
+        effect: "ModelWrite",
+        cost: "Cheap",
+        cardinality: "One",
+      },
       "",
     );
     expect(pod).toMatchObject({ key: "pod.acme.write", uses: ["ducts.apply"] });
     const extended = linkedCatalog().extend([pod]);
-    expect(extended.ok ? [] : extended.errors).toContain("pod.acme.write: cost understates ducts.apply");
+    expect(extended.ok ? [] : extended.errors).toContain(
+      "pod.acme.write: cost understates ducts.apply",
+    );
   });
 
   it("declares catalog Work plans Read, and never reads a no-native rehearsal as Read", () => {
     expect(commandCatalogAxes["data-table.apply.plan"]).toMatchObject({ effect: "Read" });
     expect(commandCatalogAxes["parameter-links.apply.plan"]).toMatchObject({ effect: "Read" });
     expect(commandCatalogAxes["data-table.apply"]).toMatchObject({ effect: "ModelWrite" });
-    expect(commandCatalogAxes["families.apply.preview"]).toMatchObject({ effect: "TransactRead", rollsBack: true });
+    expect(commandCatalogAxes["families.apply.preview"]).toMatchObject({
+      effect: "TransactRead",
+      rollsBack: true,
+    });
   });
 });

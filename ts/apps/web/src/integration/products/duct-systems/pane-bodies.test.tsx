@@ -2,14 +2,14 @@ import { refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import { pricing } from "@pe/duct-systems-contract/contract";
 // @vitest-environment jsdom
 import { RegistryContext } from "@effect/atom-react";
-import { cleanup,fireEvent,render,screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { isValidElement } from "react";
-import { afterEach,expect,test,vi } from "vite-plus/test";
+import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createWitness } from "./cutover.test-support.ts";
 import { typedSubjectDoor } from "../../../shell/typed-mount.ts";
 import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 import { makeAtomRegistry } from "../../../shell/owner.ts";
-import { cellFocusOf,cellFocusSubject } from "@pe/ducts-web/cell-focus";
+import { cellFocusOf, cellFocusSubject } from "@pe/ducts-web/cell-focus";
 import { ductsLink, systemCode } from "@pe/ducts-web/identity";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 
@@ -21,7 +21,9 @@ vi.mock("../../../../../../products/duct-systems/web/src/screen/tree-sidebar.tsx
   },
 }));
 vi.mock("../../../../../../products/duct-systems/web/src/screen/picture.tsx", async (actual) => ({
-  ...(await actual<typeof import("../../../../../../products/duct-systems/web/src/screen/picture.tsx")>()),
+  ...(await actual<
+    typeof import("../../../../../../products/duct-systems/web/src/screen/picture.tsx")
+  >()),
   DuctsPicture: () => {
     leaves.picture();
     return <p>Picture body</p>;
@@ -51,16 +53,19 @@ function registry() {
   return value;
 }
 
-
 test("F16 the sidebar navigates the document roster before pricing and keeps atomic all/clear", async () => {
   const f = await createWitness(closes, new Map(), { [pricing.key]: { kind: "use", open() {} } });
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() =>
+    expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true),
+  );
   expect(valueOf(f.owner.readingStatus("value").snapshot)).toBeFalsy();
-  render(<RegistryContext value={registry()}>
-    <SubjectDoor value={typedSubjectDoor(f.owner.native)}>
-      {nodeFor(f.owner, "e-systems")}
-    </SubjectDoor>
-  </RegistryContext>);
+  render(
+    <RegistryContext value={registry()}>
+      <SubjectDoor value={typedSubjectDoor(f.owner.native)}>
+        {nodeFor(f.owner, "e-systems")}
+      </SubjectDoor>
+    </RegistryContext>,
+  );
   expect(screen.getByRole("listbox", { name: "systems" }).textContent).toContain("SA");
   expect(screen.getByRole("combobox", { name: "Search systems" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "All systems" }));
@@ -71,9 +76,13 @@ test("F16 the sidebar navigates the document roster before pricing and keeps ato
 
 test("an admitted network pane runs no sibling body when another pane is hidden", async () => {
   const f = await createWitness(closes);
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() =>
+    expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true),
+  );
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
-  await vi.waitFor(() => expect(f.owner.readingStatus("ducts").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() =>
+    expect(f.owner.readingStatus("ducts").snapshot.state === "ready").toBe(true),
+  );
   f.owner.setPaneDemand("e-picture", false);
   render(<RegistryContext value={registry()}>{nodeFor(f.owner, "e-sidebar")}</RegistryContext>);
   expect(screen.getByText("Tree body")).toBeTruthy();
@@ -86,7 +95,9 @@ test("a restored semantic cell selection lands on that fitting cell through the 
   const f = await createWitness(closes);
   const fitting = snapshot.nodes.find((node) => node.kind === "fitting");
   if (!fitting) throw Error("The pinned network has no fitting");
-  await vi.waitFor(() => expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true));
+  await vi.waitFor(() =>
+    expect(f.owner.readingStatus("roster").snapshot.state === "ready").toBe(true),
+  );
   f.owner.controls.subject({ kind: "ids", ids: [systemCode("SA")] });
   await vi.waitFor(() => {
     const state = f.owner.readingStatus("value").snapshot;
@@ -94,9 +105,7 @@ test("a restored semantic cell selection lands on that fitting cell through the 
     expect(state.state === "ready").toBe(true);
   });
   const subject = cellFocusSubject(snapshot, ["SA"], { segment: "componentDrops", id: fitting.id });
-  expect(f.owner.page.select([{ kind: "focus", id: subject }]).kind).toBe(
-    "accepted",
-  );
+  expect(f.owner.page.select([{ kind: "focus", id: subject }]).kind).toBe("accepted");
   const selected = f.owner.page.read().selected[0];
   if (!selected) throw Error("The kernel did not retain the selection");
   expect(cellFocusOf(selected.id)).toMatchObject({
@@ -117,9 +126,15 @@ test("a rule owner crossing without system context still lands on its rule", asy
   const f = await createWitness(closes);
   const url = new URL(ductsLink([], {}, { kind: "rule", key: "tap-std" }), "http://127.0.0.1");
   const destination = f.mount(f.admitted.owner, url.searchParams, "rule-no-system");
-  expect(destination.page.read().selected.map((item: { id: string }) => item.id)).toEqual(["rule:tap-std"]);
-  await vi.waitFor(() => expect(destination.readingStatus("value").snapshot.state === "ready").toBe(true));
-  const view = render(<RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>);
+  expect(destination.page.read().selected.map((item: { id: string }) => item.id)).toEqual([
+    "rule:tap-std",
+  ]);
+  await vi.waitFor(() =>
+    expect(destination.readingStatus("value").snapshot.state === "ready").toBe(true),
+  );
+  const view = render(
+    <RegistryContext value={registry()}>{nodeFor(destination, "e-rules-all")}</RegistryContext>,
+  );
   const row = view.container.querySelector('[data-key="tap-std"]');
   expect(row).not.toBeNull();
   expect(row?.hasAttribute("data-landed")).toBe(true);

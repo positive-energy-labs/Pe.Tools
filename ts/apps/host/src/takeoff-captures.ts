@@ -325,9 +325,10 @@ export class TakeoffCaptures {
 
   /** The typed route reads the same full observation as the explicit Families command. */
   observeFamilies(
-    work: WorkKey, listener:(value:OwnerValue<FamiliesObservation|null>)=>void,
+    work: WorkKey,
+    listener: (value: OwnerValue<FamiliesObservation | null>) => void,
   ) {
-    const key=`families-reading:${workKey(work)}`;
+    const key = `families-reading:${workKey(work)}`;
     return this.reads.observe(
       key,
       () => this.displayedFamilies(work),
@@ -429,7 +430,9 @@ export class TakeoffCaptures {
     this.setState(key, { kind: "reading", target, ...(previous ? { previous } : {}) });
     const assertCurrent = Effect.gen(function* () {
       if (fenced() || !(yield* current))
-        return yield* Effect.fail(new Error("Snapshot target or generation changed before publication."));
+        return yield* Effect.fail(
+          new Error("Snapshot target or generation changed before publication."),
+        );
     });
     return yield* Effect.gen(function* () {
       const { result, snapshot } = yield* collect;
@@ -449,7 +452,9 @@ export class TakeoffCaptures {
           else self.refreshing.delete(key);
           // A peer still reading settles the state; a newer generation already replaced it.
           if (Exit.isSuccess(exit) || left || fenced()) return;
-          const error = Cause.hasInterrupts(exit.cause) ? Error("Snapshot read was cancelled.") : Cause.squash(exit.cause);
+          const error = Cause.hasInterrupts(exit.cause)
+            ? Error("Snapshot read was cancelled.")
+            : Cause.squash(exit.cause);
           self.setState(key, {
             kind: "failed",
             target,
@@ -854,7 +859,7 @@ export class TakeoffCaptures {
       pointerKind.in(this.storage, [
         "families",
         "progress",
-      `${this.progressKey(value.document, value.filter)}.latest`,
+        `${this.progressKey(value.document, value.filter)}.latest`,
       ]),
       id,
     );

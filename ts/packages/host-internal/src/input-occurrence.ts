@@ -30,7 +30,10 @@ export interface InputConsumption {
   readonly taking: (name: string) => Effect.Effect<string, InvalidRead>;
   readonly linkReadSet: (name: string, id: ReadSetId) => Effect.Effect<void, InvalidRead>;
   readonly dependency: (name: string) => Effect.Effect<ReadSetId, InvalidRead>;
-  readonly exportBasis: (contract: { readonly key: string }, basis: string) => Effect.Effect<void, InvalidRead>;
+  readonly exportBasis: (
+    contract: { readonly key: string },
+    basis: string,
+  ) => Effect.Effect<void, InvalidRead>;
   readonly seal: Effect.Effect<void, InvalidRead>;
   /** Idempotent; an unsealed context stays incomplete and never synthesizes links. */
   readonly close: Effect.Effect<void>;
@@ -63,7 +66,13 @@ export const attemptFor = (input: RecordedInput, scope: string) =>
       return inputBindingKey(reserved.value.occurrence.input, reserved.value.occurrence.scope) ===
         inputBindingKey(input, scope)
         ? Result.succeed(reserved.value)
-        : Result.fail(new InvalidRead({ message: "The reserved attempt names another input or scope", status: 409, problem: "recording.mismatch" }));
+        : Result.fail(
+            new InvalidRead({
+              message: "The reserved attempt names another input or scope",
+              status: 409,
+              problem: "recording.mismatch",
+            }),
+          );
     const consumption = yield* Effect.serviceOption(CurrentInputConsumption);
     return consumption._tag === "Some" ? consumption.value.start(input, scope) : null;
   });

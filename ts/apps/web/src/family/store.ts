@@ -41,16 +41,25 @@ const noEdit = { draft: null, failure: null };
 const noSubscribe = () => () => {};
 
 export function useFamilyStore(ctx: FamilyContext) {
-  const current=useRef(ctx);current.current=ctx;
-  const data=useValue(ctx.value);
-  const page=familyPageSchema.parse(ctx.page.read());
-  const target=ctx.target??{kind:"host" as const};
-  const work=data?.handle?{handle:workHandleSchema.parse(data.handle),doc:data.familyWork}:null;
-  const scope={page,target,work};
-  const setPage=(patch:Record<string,unknown>)=>{
-    const {stage,pane,overlay,drill,inspector,doc,...query}=patch;
+  const current = useRef(ctx);
+  current.current = ctx;
+  const data = useValue(ctx.value);
+  const page = familyPageSchema.parse(ctx.page.read());
+  const target = ctx.target ?? { kind: "host" as const };
+  const work = data?.handle
+    ? { handle: workHandleSchema.parse(data.handle), doc: data.familyWork }
+    : null;
+  const scope = { page, target, work };
+  const setPage = (patch: Record<string, unknown>) => {
+    const { stage, pane, overlay, drill, inspector, doc, ...query } = patch;
     ctx.page.query(query);
-    ctx.page.pose(Object.fromEntries(Object.entries({stage,pane,overlay,drill,inspector,doc}).filter(([,v])=>v!==undefined)));
+    ctx.page.pose(
+      Object.fromEntries(
+        Object.entries({ stage, pane, overlay, drill, inspector, doc }).filter(
+          ([, v]) => v !== undefined,
+        ),
+      ),
+    );
   };
   // The subject is the open family (ADR 0035 rule 1): its saved member, or none for the Work's own draft.
   const picked = memberOf(ctx.page.read());
@@ -65,18 +74,30 @@ export function useFamilyStore(ctx: FamilyContext) {
   );
   const inspect = useMemo(() => inspectOf(page.inspector), [page.inspector]);
   const drillType = page.drill || null;
-  const run=useCallback(async(id:"attach",input:unknown={})=>{
-    try {await current.current.verb(id).run(input);return null;}
-    catch(error){return {message:error instanceof Error?error.message:String(error)};}
-  },[]);
-  const identity=work?workKey(work.handle.key):null;
-  const write=useCallback<CellWire["write"]>((patches,expectedRevision=work?.handle.revision??-1)=>{
-    const latest=current.current;
-    const handle=latest.value.value?.handle?workHandleSchema.parse(latest.value.value.handle):null;
-    if(!handle||workKey(handle.key)!==identity||handle.revision!==expectedRevision)
-      return Promise.resolve({code:"stale-work",message:"Family Work changed; review the current cells"});
-    return latest.cells.patch(patches,{label:"Edit family cells"});
-  },[identity,work?.handle.revision]);
+  const run = useCallback(async (id: "attach", input: unknown = {}) => {
+    try {
+      await current.current.verb(id).run(input);
+      return null;
+    } catch (error) {
+      return { message: error instanceof Error ? error.message : String(error) };
+    }
+  }, []);
+  const identity = work ? workKey(work.handle.key) : null;
+  const write = useCallback<CellWire["write"]>(
+    (patches, expectedRevision = work?.handle.revision ?? -1) => {
+      const latest = current.current;
+      const handle = latest.value.value?.handle
+        ? workHandleSchema.parse(latest.value.value.handle)
+        : null;
+      if (!handle || workKey(handle.key) !== identity || handle.revision !== expectedRevision)
+        return Promise.resolve({
+          code: "stale-work",
+          message: "Family Work changed; review the current cells",
+        });
+      return latest.cells.patch(patches, { label: "Edit family cells" });
+    },
+    [identity, work?.handle.revision],
+  );
   // CHEAT(K gaps 1/4): grouped domain edits retain their unacknowledged input until typed Work observes it.
   const edits = useMemo(
     () => (work ? familyEditBuffer(work.handle.key, write) : null),
@@ -244,24 +265,20 @@ export function useFamilyStore(ctx: FamilyContext) {
           patches.push(...cellPatches([FAMILY_CELLS], id, fields[id] ?? {}, { kind: "clear" }));
         edits.stage(updated, patches, work.handle.revision);
       },
-      setOverlay: (value: Setter<Overlay>) =>
-        setPage({ overlay: next(value, page.overlay) }),
+      setOverlay: (value: Setter<Overlay>) => setPage({ overlay: next(value, page.overlay) }),
       setTable: (value: Setter<TableState>) => {
         const updated = next(value, table);
-        setPage(
-          {
-            query: updated.query,
-            sort: { columns: updated.sorts },
-            hidden: Object.fromEntries(
-              (updated.hiddenColumns ?? []).map((key) => [key, true as const]),
-            ),
-          },
-        );
+        setPage({
+          query: updated.query,
+          sort: { columns: updated.sorts },
+          hidden: Object.fromEntries(
+            (updated.hiddenColumns ?? []).map((key) => [key, true as const]),
+          ),
+        });
       },
       setDrill: (value: Setter<TableState>) =>
         setMemory((c) => ({ ...c, drill: next(value, c.drill) })),
-      setDocMode: (value: Setter<"text" | "sheet">) =>
-        setPage({ doc: next(value, page.doc) }),
+      setDocMode: (value: Setter<"text" | "sheet">) => setPage({ doc: next(value, page.doc) }),
       setDocZoom: (value: Setter<number>) =>
         setMemory((c) => ({ ...c, docZoom: next(value, c.docZoom) })),
       setDrillType: (value: Setter<string | null>) =>
@@ -337,7 +354,7 @@ export function useFamilyStore(ctx: FamilyContext) {
     docMode: page.doc,
     drillType,
     inspect,
-    busy:ctx.value.state === "refreshing"?{key:"read"}:null,
+    busy: ctx.value.state === "refreshing" ? { key: "read" } : null,
     failure: editState.failure,
     editFailure: editState.failure,
     actions,

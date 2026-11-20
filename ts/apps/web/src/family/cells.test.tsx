@@ -6,5 +6,9 @@ test("shared parameter directives lock descendant cells without locking local de
   expect(
     familyLockOf({ parameters: { $preset: "@local/_params/width" } })("/parameters/Height/value"),
   ).toContain("shared source");
-  expect(familyLockOf({ parameters: { Height: { dataType: "Length", value: "12in" } } })("/parameters/Height/value")).toBeNull();
+  expect(
+    familyLockOf({ parameters: { Height: { dataType: "Length", value: "12in" } } })(
+      "/parameters/Height/value",
+    ),
+  ).toBeNull();
 });

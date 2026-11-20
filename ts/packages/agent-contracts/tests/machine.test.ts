@@ -73,9 +73,9 @@ test("bounded discovery evidence validates its counts and detail request", () =>
       ],
     },
   });
-  expect(settingsValue.safeParse({ machine: JSON.parse(JSON.stringify(bounded)), settings: {} }).success).toBe(
-    true,
-  );
+  expect(
+    settingsValue.safeParse({ machine: JSON.parse(JSON.stringify(bounded)), settings: {} }).success,
+  ).toBe(true);
   const row = bounded.revit.sessions![0]!;
   const document = row.holdings![0]!;
   const invalid = {

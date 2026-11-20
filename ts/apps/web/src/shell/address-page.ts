@@ -8,12 +8,7 @@
 import { routeAddress, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import type { z } from "zod";
 import type { PageMove } from "#/shell/page";
-import {
-  appAtomRegistry,
-  createRouteOwner,
-  useOwned,
-  useRouteOwner,
-} from "#/shell/owner";
+import { appAtomRegistry, createRouteOwner, useOwned, useRouteOwner } from "#/shell/owner";
 import { routeUrlPage, useInitialUrlPage, useUrlPage } from "../route/url";
 import { createViewOwner } from "../route/view-owner";
 
@@ -21,7 +16,7 @@ import { createViewOwner } from "../route/view-owner";
  * `createFileRoute(path)({ ...routeFile(route), component })`: the address is the search. Its
  * input is `SearchSchemaInput`, which is what lets a `<Link to="/$route" params={{ route: "settings" }}>` omit every key.
  */
-export {routeFile} from "./route-file";
+export { routeFile } from "./route-file";
 
 export type AddressPage<R extends RouteKey> = readonly [
   RoutePage<R>,

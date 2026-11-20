@@ -18,19 +18,6 @@
     "./link": "./src/link.ts",
     "./pea/ducts-skill": "./src/pea/ducts-skill.ts"
   },
-  "pe": {
-    "guide": "./pea/ducts-skill",
-    "admissionPreflight": "./admission",
-    "tool": {
-      "key": "fans",
-      "module": "./semantic-actions",
-      "export": "fansTool"
-    },
-    "reads": {
-      "module": "./read-discovery",
-      "export": "fansReadDiscovery"
-    }
-  },
   "scripts": {
     "check": "vp exec tsc --noEmit",
     "test": "vp test"
@@ -45,5 +32,18 @@
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
+  },
+  "pe": {
+    "guide": "./pea/ducts-skill",
+    "admissionPreflight": "./admission",
+    "tool": {
+      "key": "fans",
+      "module": "./semantic-actions",
+      "export": "fansTool"
+    },
+    "reads": {
+      "module": "./read-discovery",
+      "export": "fansReadDiscovery"
+    }
   }
 }

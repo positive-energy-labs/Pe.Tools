@@ -3,9 +3,7 @@ import { peRoutes } from "@pe/mcps/product-catalog";
 import type { createContributionContent } from "./pe-routes.ts";
 
 /** Served behind `servePeRoute`: the route matched and its input parsed before this runs. */
-export function createPluginsHandler(
-  content: ReturnType<typeof createContributionContent>,
-) {
+export function createPluginsHandler(content: ReturnType<typeof createContributionContent>) {
   return async (request: Request) => {
     const declared = matchPeRoute(request.method, new URL(request.url).pathname)!;
     await content.lifecycle.ready;

@@ -28,14 +28,7 @@ import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { toggleLayer, type PicturePage } from "@pe/agent-contracts";
-import {
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
 import { useElementIndex, type ElementIndex } from "@pe/web-kernel/element-index";
 import { useElementAttention, useHoveredIssue, useIssueHover } from "@pe/web-kernel/attention";
@@ -51,16 +44,15 @@ import { strandLayers } from "#/scene/strands";
 import type { Bounds, IssueTarget } from "@pe/web-kernel/scene/types";
 
 import { usePictureFloaters } from "./floaters";
+import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "./model";
 import {
-  boundsOfIds,
-  ModelPicture,
-  poseOf,
-  usePictureBounds,
-} from "./model";
-import { type PictureLayer, type PictureContent, type PictureStrand, layersOn } from "@pe/web-kernel/scene/picture/content";
+  type PictureLayer,
+  type PictureContent,
+  type PictureStrand,
+  layersOn,
+} from "@pe/web-kernel/scene/picture/content";
 import { useCapture, usePictureRead } from "./read";
 import { strandFixture, strandFixtureOn } from "./strand-fixture";
-
 
 /** Preserve the picture's complete furniture when hosted by a kernel pane. */
 export const renderPicturePane: TeachingPaneRender = (body, furniture) => (
@@ -244,7 +236,9 @@ export function Picture<L extends string, F extends string>({
     ],
   );
   // The kernel builds every capture from the focus; a route authors no scene request (ADR 0035 rule 2).
-  const overviewRequest = request ? { ...request, contextRepresentation: "overview" as const } : null;
+  const overviewRequest = request
+    ? { ...request, contextRepresentation: "overview" as const }
+    : null;
   const captured = useCapture(
     pictureSize ? (contextRepresentation === "meshes" ? request : overviewRequest) : null,
     native,
@@ -352,11 +346,16 @@ export function Picture<L extends string, F extends string>({
   // The page's element pick; a claim or a row selects through `issue` and its members.
   const pickedElement = elements.idOf(page.selected);
   const pickedId = Number.isFinite(pickedElement) ? pickedElement : null;
-  const pickedKey: SubjectKey | null = page.selected.includes(":") ? (page.selected as SubjectKey) : null;
+  const pickedKey: SubjectKey | null = page.selected.includes(":")
+    ? (page.selected as SubjectKey)
+    : null;
   const widen = content.widen;
   const selectionOf = (id: number) => {
     const key = elements.keyOf(id);
-    return new Set([id, ...(key && widen ? widen(key) : []).map(elements.idOf).filter(Number.isFinite)]);
+    return new Set([
+      id,
+      ...(key && widen ? widen(key) : []).map(elements.idOf).filter(Number.isFinite),
+    ]);
   };
   // Attention is the one selection; keyed on its members so a hover elsewhere redraws nothing.
   const selectedSig = [...attentionSelected].join();

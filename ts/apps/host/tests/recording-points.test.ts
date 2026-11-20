@@ -15,7 +15,14 @@ import {
 import type { DocumentKey } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { CurrentInputConsumption, type InputConsumption } from "@pe/host-internal/input-occurrence";
 import { HostInputReadSets } from "../src/input-occurrence.ts";
-import { captureInput, replayInput, type ConsumerRecipe, type HostInputLane, type RecordingWriter, type RecordingReader } from "@pe/host-internal/input-recording";
+import {
+  captureInput,
+  replayInput,
+  type ConsumerRecipe,
+  type HostInputLane,
+  type RecordingWriter,
+  type RecordingReader,
+} from "@pe/host-internal/input-recording";
 import { openRecordingReader, openRecordingWriter } from "../src/native-recording.ts";
 import { recordingPoints } from "../src/recording-points.ts";
 import { workInput, workInputScope, workInputCodecs } from "../src/work-inputs.ts";
@@ -119,10 +126,17 @@ const fixture = Effect.gen(function* () {
   yield* second.seal;
   yield* second.close;
   const point = {
-    version: 1 as const, id: randomUUID() as RecordingPointId, document: doc,
-    reason: { kind: "captured" as const }, at: 1, identity,
+    version: 1 as const,
+    id: randomUUID() as RecordingPointId,
+    document: doc,
+    reason: { kind: "captured" as const },
+    at: 1,
+    identity,
     takingRange: { start: 0, end: writer.takingCursor() },
-    bindings: [ { ...consumer("A"), readSetId: container.id }, { ...consumer("B"), readSetId: second.id } ],
+    bindings: [
+      { ...consumer("A"), readSetId: container.id },
+      { ...consumer("B"), readSetId: second.id },
+    ],
   };
   yield* writer.points.keep(point);
   const outsideRecipe = { ...recipe, input: { selector: "outside" } };
@@ -153,67 +167,65 @@ const selectedNative = (reader: RecordingReader, current: InputConsumption) =>
     return taking.outcome.kind === "answered" ? taking.outcome.nativeRequestId : "refused";
   });
 
-effectTest(
-  "point bindings reopen the exact A/B recipe without live inputs",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      expect(yield* problem(f.replay.open(recipe, null))).toBe("recording.ambiguous");
-      const acquire = HostInputReadSets.layer.bind(HostInputReadSets);
-      const noLive = vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane, limits) => {
-        if (lane.kind !== "recording") throw Error("Replay acquired a live input factory");
-        return acquire(lane, limits);
-      });
-      yield* Effect.addFinalizer(() => Effect.sync(() => noLive.mockRestore()));
-      for (const [instance, expected] of [
-        ["A", f.a],
-        ["B", f.b],
-      ]) {
-        const current = yield* f.points.open(doc, f.point.id, consumer(instance), recipe);
-        expect(current.id).toBe(expected);
-        expect(yield* selectedNative(f.reader, current)).toBe(`native-${instance}`);
-        yield* current.close;
-        const work = yield* f.points.open(doc, f.point.id, consumer(instance), workRecipe);
-        expect(work.id).toBe(f.work);
-        const key = bindWork("test", path, undefined, ref);
-        const value = yield* replayInput(
-          f.reader,
-          workInput(key, "raw"),
-          workInputScope(key),
-          workInputCodecs.raw,
-        ).pipe(Effect.provideService(CurrentInputConsumption, work));
-        expect(value?.doc).toEqual({ count: 7 });
-        yield* work.close;
-      }
-      expect(
-        yield* problem(f.points.open(doc, f.point.id, consumer("missing"), f.outsideRecipe)),
-      ).toBe("recording.miss");
-      expect(yield* problem(f.points.open(doc, f.point.id, consumer("A"), f.outsideRecipe))).toBe(
-        "recording.miss",
-      );
-      expect(
-        yield* problem(
-          f.points.open(doc, f.point.id, consumer("A"), { ...recipe, scope: "foreign" }),
-        ),
-      ).toBe("recording.miss");
-      expect(yield* problem(f.points.open(foreign, f.point.id, consumer("A"), recipe))).toBe(
-        "recording.scope",
-      );
-      expect(
-        yield* problem(f.points.open(doc, randomUUID() as RecordingPointId, consumer("A"), recipe)),
-      ).toBe("recording.point");
-      // A late incomplete OTHER body still invalidates the whole bound graph, not just that selection.
-      const record = yield* f.reader.readSets.get(f.work);
-      yield* Effect.promise(() =>
-        writeFile(
-          join(f.dir, "read-sets", `${f.work}.json`),
-          JSON.stringify({ ...record, state: "incomplete" }),
-        ),
-      );
-      expect(yield* problem(f.points.open(doc, f.point.id, consumer("A"), recipe))).toBe(
-        "recording.context",
-      );
-    }),
+effectTest("point bindings reopen the exact A/B recipe without live inputs", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    expect(yield* problem(f.replay.open(recipe, null))).toBe("recording.ambiguous");
+    const acquire = HostInputReadSets.layer.bind(HostInputReadSets);
+    const noLive = vi.spyOn(HostInputReadSets, "layer").mockImplementation((lane, limits) => {
+      if (lane.kind !== "recording") throw Error("Replay acquired a live input factory");
+      return acquire(lane, limits);
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(() => noLive.mockRestore()));
+    for (const [instance, expected] of [
+      ["A", f.a],
+      ["B", f.b],
+    ]) {
+      const current = yield* f.points.open(doc, f.point.id, consumer(instance), recipe);
+      expect(current.id).toBe(expected);
+      expect(yield* selectedNative(f.reader, current)).toBe(`native-${instance}`);
+      yield* current.close;
+      const work = yield* f.points.open(doc, f.point.id, consumer(instance), workRecipe);
+      expect(work.id).toBe(f.work);
+      const key = bindWork("test", path, undefined, ref);
+      const value = yield* replayInput(
+        f.reader,
+        workInput(key, "raw"),
+        workInputScope(key),
+        workInputCodecs.raw,
+      ).pipe(Effect.provideService(CurrentInputConsumption, work));
+      expect(value?.doc).toEqual({ count: 7 });
+      yield* work.close;
+    }
+    expect(
+      yield* problem(f.points.open(doc, f.point.id, consumer("missing"), f.outsideRecipe)),
+    ).toBe("recording.miss");
+    expect(yield* problem(f.points.open(doc, f.point.id, consumer("A"), f.outsideRecipe))).toBe(
+      "recording.miss",
+    );
+    expect(
+      yield* problem(
+        f.points.open(doc, f.point.id, consumer("A"), { ...recipe, scope: "foreign" }),
+      ),
+    ).toBe("recording.miss");
+    expect(yield* problem(f.points.open(foreign, f.point.id, consumer("A"), recipe))).toBe(
+      "recording.scope",
+    );
+    expect(
+      yield* problem(f.points.open(doc, randomUUID() as RecordingPointId, consumer("A"), recipe)),
+    ).toBe("recording.point");
+    // A late incomplete OTHER body still invalidates the whole bound graph, not just that selection.
+    const record = yield* f.reader.readSets.get(f.work);
+    yield* Effect.promise(() =>
+      writeFile(
+        join(f.dir, "read-sets", `${f.work}.json`),
+        JSON.stringify({ ...record, state: "incomplete" }),
+      ),
+    );
+    expect(yield* problem(f.points.open(doc, f.point.id, consumer("A"), recipe))).toBe(
+      "recording.context",
+    );
+  }),
 );
 
 effectTest(
@@ -262,7 +274,10 @@ effectTest(
 effectTest("K4 keeps valid durable point bindings readable after truncation", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    yield* f.writer.capture.stop(f.writer.capture.begin()!, "full", { site: "builtin", op: "test.capture" });
+    yield* f.writer.capture.stop(f.writer.capture.begin()!, "full", {
+      site: "builtin",
+      op: "test.capture",
+    });
     expect(f.writer.points.ids()).toHaveLength(1);
     const reader = yield* openRecordingReader(f.dir, identity, bounds),
       points = recordingPoints(
@@ -281,16 +296,24 @@ if (corpus)
     Effect.gen(function* () {
       const dir = yield* temporary;
       yield* Effect.promise(() => cp(corpus, dir, { recursive: true }));
-      const manifest = yield* Effect.promise(async () => JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")));
+      const manifest = yield* Effect.promise(async () =>
+        JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")),
+      );
       const writer = yield* openRecordingWriter(stateFixture(dir), manifest, bounds);
       const ids = ["17cd7b7c-fedb-4352-b8f9-9a66b0311126", "c4308818-7c32-4bc4-8880-6ad3267731d1"];
       const record = yield* writer.readSets.get(ids[0]!);
-      const taking = writer.taking(record.inputs.find((input) => input.input.kind === "document")!.takingId)!;
+      const taking = writer.taking(
+        record.inputs.find((input) => input.input.kind === "document")!.takingId,
+      )!;
       const value = yield* writer.observation(taking);
       const document = documentId((value as { address: string }).address);
       const point = {
-        version: 1 as const, id: randomUUID() as RecordingPointId, document,
-        reason: { kind: "captured" as const }, at: 1, identity: writer.identity,
+        version: 1 as const,
+        id: randomUUID() as RecordingPointId,
+        document,
+        reason: { kind: "captured" as const },
+        at: 1,
+        identity: writer.identity,
         takingRange: { start: 0, end: writer.takingCursor() },
         bindings: ids.map((readSetId, index) => ({ ...consumer(String(index)), readSetId })),
       };
@@ -299,7 +322,12 @@ if (corpus)
       const replay = yield* readSets({ kind: "recording", recordingStore: reader, at: null });
       expect(yield* problem(replay.open(record.recipe, null))).toBe("recording.ambiguous");
       for (const [index, id] of ids.entries()) {
-        const current = yield* recordingPoints(reader, replay).open(document, point.id, consumer(String(index)), record.recipe);
+        const current = yield* recordingPoints(reader, replay).open(
+          document,
+          point.id,
+          consumer(String(index)),
+          record.recipe,
+        );
         expect(current.id).toBe(id);
         yield* current.close;
       }

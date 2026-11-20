@@ -1,9 +1,4 @@
-import {
-  AttentionDocument,
-  useMembers,
-  useMention,
-  type SubjectKey,
-} from "@pe/kit/lang/attention";
+import { AttentionDocument, useMembers, useMention, type SubjectKey } from "@pe/kit/lang/attention";
 import { useElementAttention } from "@pe/web-kernel/attention";
 import { useElementIndex } from "@pe/web-kernel/element-index";
 import type { Tone } from "@pe/kit/lib/token";

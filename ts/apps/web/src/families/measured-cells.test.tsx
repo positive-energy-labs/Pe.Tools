@@ -1,4 +1,4 @@
-import {useCellCollection} from "@pe/kit/lang/cell";
+import { useCellCollection } from "@pe/kit/lang/cell";
 // @vitest-environment jsdom
 /**
  * `/families` reads the PROJECT, so a measured cell there shows and stages the project's unit. A

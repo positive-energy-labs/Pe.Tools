@@ -26,14 +26,21 @@ function place() {
       },
     })),
     store: {
-      getState: async ({ targetKey, route }) => structuredClone(saved.get(`${route}:${targetKey}`) ?? null),
+      getState: async ({ targetKey, route }) =>
+        structuredClone(saved.get(`${route}:${targetKey}`) ?? null),
       setState: async ({ targetKey, route, value }) => {
         saved.set(`${route}:${targetKey}`, structuredClone(value));
       },
     },
   });
   const works = [ducts, fans];
-  const edit = async (key: WorkKey, by: "human" | "pea", press: string, path: "a" | "b", value: number) => {
+  const edit = async (
+    key: WorkKey,
+    by: "human" | "pea",
+    press: string,
+    path: "a" | "b",
+    value: number,
+  ) => {
     const result = await host.write(key, key.route, by, {
       kind: "apply",
       press,
@@ -48,7 +55,11 @@ function place() {
   };
   const read = async (by: "human" | "pea", receipts: ActionStatus[] = []) =>
     workTimelineSchema.parse(mergeTimeline([await host.timeline(works, by, receipts)]).timeline);
-  const press = async (by: "human" | "pea", direction: "undo" | "redo", receipts: ActionStatus[] = []) => {
+  const press = async (
+    by: "human" | "pea",
+    direction: "undo" | "redo",
+    receipts: ActionStatus[] = [],
+  ) => {
     const next = (await read(by, receipts))[direction];
     if (!next) throw Error(`The read offers no ${direction}`);
     const result = await host.step(works, by, direction, next, async () => receipts);
@@ -97,7 +108,10 @@ test("two Works: two undos then one redo through the door, and the read names ea
   const after = await f.read("human");
   expect(after.undo).toMatchObject({ work: f.ducts });
   expect(after.redo).toMatchObject({ work: f.fans });
-  expect(after.rows.flatMap((row) => (row.kind === "edit" ? [row.state] : []))).toEqual(["applied", "undone"]);
+  expect(after.rows.flatMap((row) => (row.kind === "edit" ? [row.state] : []))).toEqual([
+    "applied",
+    "undone",
+  ]);
 });
 
 test.each(["human", "pea"] as const)(
@@ -114,7 +128,10 @@ test.each(["human", "pea"] as const)(
       state: "blocked",
       blockedBy: { receipt: "receipt-1", label: "ducts.push" },
     });
-    expect(read.rows.find((row) => row.kind === "receipt")).toMatchObject({ id: "receipt-1", work: f.ducts });
+    expect(read.rows.find((row) => row.kind === "receipt")).toMatchObject({
+      id: "receipt-1",
+      work: f.ducts,
+    });
 
     // A client that still holds the step it was shown before the write landed is refused too.
     const shown = (await f.read(by)).undo!;
@@ -124,7 +141,10 @@ test.each(["human", "pea"] as const)(
     expect((await f.host.view(f.ducts, f.ducts.route))!.doc).toMatchObject({ a: 5 });
     // An edit made after the write is still the caller's to undo.
     await f.edit(f.ducts, by, "later", "b", 9);
-    expect((await f.press(by, "undo", receipts)).result).toMatchObject({ ok: true, doc: { a: 5, b: 0 } });
+    expect((await f.press(by, "undo", receipts)).result).toMatchObject({
+      ok: true,
+      doc: { a: 5, b: 0 },
+    });
   },
 );
 
@@ -140,7 +160,10 @@ test("undo is per author on every Work, and a stale expected step is refused", a
     ok: false,
     code: "stale_revision",
   });
-  expect((await f.press("human", "undo")).result).toMatchObject({ ok: true, write: { key: f.fans } });
+  expect((await f.press("human", "undo")).result).toMatchObject({
+    ok: true,
+    write: { key: f.fans },
+  });
   expect((await f.press("human", "undo")).result).toMatchObject({ ok: true, doc: { a: 0, b: 2 } });
 });
 
@@ -160,10 +183,21 @@ test("a rejected Pea write marks consumed human edits not written and Pea edits 
   const reason = "rejected by person";
   const rejected = actionStatusSchema.parse({
     ...revitWrite(f.ducts, pea.revision, { a: 1, b: 2 }),
-    state: "cancelled", error: reason, status: 409, effects: [],
-    consumes: [{ kind: "work", probe: { handle: { key: f.ducts, revision: pea.revision }, paths: [["a"], ["b"]] }, expected: { a: 1, b: 2 } }],
+    state: "cancelled",
+    error: reason,
+    status: 409,
+    effects: [],
+    consumes: [
+      {
+        kind: "work",
+        probe: { handle: { key: f.ducts, revision: pea.revision }, paths: [["a"], ["b"]] },
+        expected: { a: 1, b: 2 },
+      },
+    ],
   });
-  expect((await f.read("human", [rejected])).rows.filter(row => row.kind === "edit")).toMatchObject([
+  expect(
+    (await f.read("human", [rejected])).rows.filter((row) => row.kind === "edit"),
+  ).toMatchObject([
     { by: "human", notWritten: { invocation: rejected.id, reason, rejected: false } },
     { by: "pea", notWritten: { invocation: rejected.id, reason, rejected: true } },
   ]);
@@ -172,9 +206,16 @@ test("a rejected Pea write marks consumed human edits not written and Pea edits 
 test("a successful preview with no effects leaves the host Timeline step undoable", async () => {
   const f = place();
   const edit = await f.edit(f.ducts, "human", "Preview input", "a", 5);
-  const preview = actionStatusSchema.parse({ ...revitWrite(f.ducts, edit.revision, { a: 5 }), key: "ducts.plan", effects: [] });
+  const preview = actionStatusSchema.parse({
+    ...revitWrite(f.ducts, edit.revision, { a: 5 }),
+    key: "ducts.plan",
+    effects: [],
+  });
   const read = await f.read("human", [preview]);
   expect(read.undo).toMatchObject({ work: f.ducts, label: "Preview input" });
   expect(read.refusal.undo).toBeNull();
-  expect((await f.press("human", "undo", [preview])).result).toMatchObject({ ok: true, doc: { a: 0 } });
+  expect((await f.press("human", "undo", [preview])).result).toMatchObject({
+    ok: true,
+    doc: { a: 0 },
+  });
 });

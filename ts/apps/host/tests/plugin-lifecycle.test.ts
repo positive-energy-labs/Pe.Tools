@@ -10,7 +10,11 @@ import { Effect } from "effect";
 import { human, actAs } from "./callers.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 import { createPluginsHandler } from "../src/plugins-handler.ts";
-import { bindPackageLifecycle, createPackageLifecycle, requirePackageEnabled } from "../src/package-lifecycle.ts";
+import {
+  bindPackageLifecycle,
+  createPackageLifecycle,
+  requirePackageEnabled,
+} from "../src/package-lifecycle.ts";
 import { listPackages } from "../src/packages.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
 import { freezeScript } from "../src/operation-script.ts";
@@ -33,8 +37,11 @@ test("unchanged inventory refresh does not republish a Pod", async () => {
   await writeFile(join(pods, "circuits/pod.json"), '{"id":"circuits"}');
   await writeFile(join(pods, "circuits/pages/tour/index.html"), "<title>Circuits</title>");
   const changed = vi.fn();
-  const lifecycle = createPackageLifecycle({ machine: stateMachine(root), changed,
-    packages: () => listPackages({ podsRoots: pods }) });
+  const lifecycle = createPackageLifecycle({
+    machine: stateMachine(root),
+    changed,
+    packages: () => listPackages({ podsRoots: pods }),
+  });
   try {
     await lifecycle.ready;
     expect(lifecycle.active("circuits")).toBe(true);
@@ -44,7 +51,9 @@ test("unchanged inventory refresh does not republish a Pod", async () => {
     await lifecycle.refresh();
     expect(changed).not.toHaveBeenCalled();
     expect(lifecycle.packages()[0]).toBe(publication);
-  } finally { await lifecycle.close(); }
+  } finally {
+    await lifecycle.close();
+  }
 });
 
 test("an import before initialization finishes becomes active after the initial census", async () => {
@@ -53,30 +62,47 @@ test("an import before initialization finishes becomes active after the initial 
   vi.stubEnv("LOCALAPPDATA", join(root, "machine"));
   let release = () => {};
   let captured = () => {};
-  const hold = new Promise<void>(resolve => { release = resolve; });
-  const census = new Promise<void>(resolve => { captured = resolve; });
+  const hold = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const census = new Promise<void>((resolve) => {
+    captured = resolve;
+  });
   let initial = true;
-  const lifecycle = createPackageLifecycle({ packages: async () => {
-    const listing = await listPackages({ podsRoots: join(root, "Pods") });
-    if (initial) { initial = false; captured(); await hold; }
-    return listing;
-  } });
+  const lifecycle = createPackageLifecycle({
+    packages: async () => {
+      const listing = await listPackages({ podsRoots: join(root, "Pods") });
+      if (initial) {
+        initial = false;
+        captured();
+        await hold;
+      }
+      return listing;
+    },
+  });
   bindPackageLifecycle(lifecycle);
   await census;
   const archivePath = join(root, "input.zip");
-  await writeFile(archivePath, writeZip(new Map([
-    ["pod.json", Buffer.from('{"id":"early"}')],
-    ["pages/tour/index.html", Buffer.from("<title>Early</title>")],
-  ])));
+  await writeFile(
+    archivePath,
+    writeZip(
+      new Map([
+        ["pod.json", Buffer.from('{"id":"early"}')],
+        ["pages/tour/index.html", Buffer.from("<title>Early</title>")],
+      ]),
+    ),
+  );
   const pending = importPod({ archivePath });
   try {
-    await vi.waitFor(async () => expect(await readFile(join(root, "Pods/early/pod.json"), "utf8")).toContain("early"));
+    await vi.waitFor(async () =>
+      expect(await readFile(join(root, "Pods/early/pod.json"), "utf8")).toContain("early"),
+    );
     expect(lifecycle.initialized()).toBe(false);
     release();
     await pending;
     await lifecycle.ready;
     await lifecycle.refresh();
-    expect(lifecycle.inventory().find(p => p.id === "pod:early")?.status).toBe("active");
+    expect(lifecycle.inventory().find((p) => p.id === "pod:early")?.status).toBe("active");
   } finally {
     release();
     await pending;
@@ -169,10 +195,16 @@ test("public disable removes Page, script, member, catalog and receipted skill; 
   await mkdir(join(pods, "new", "pages/tour"), { recursive: true });
   await writeFile(join(pods, "new/pod.json"), '{"id":"new"}');
   await writeFile(join(pods, "new/pages/tour/index.html"), "new");
-  await expect.poll(async () => {
-    try { await requirePackageEnabled("new"); return true; }
-    catch { return false; }
-  }).toBe(true);
+  await expect
+    .poll(async () => {
+      try {
+        await requirePackageEnabled("new");
+        return true;
+      } catch {
+        return false;
+      }
+    })
+    .toBe(true);
   expect((await pages(new Request("http://host/pages/new--tour/"))).status).toBe(200);
   await content.lifecycle.close();
 });
@@ -200,14 +232,20 @@ test("Pod JavaScript is never imported and its package contribution still instal
   try {
     expect(lifecycle.inventory().find((p) => p.id === "pod:hook")?.status).toBe("active");
     expect(lifecycle.packages().map((p) => p.id)).toEqual(["hook"]);
-    expect(lifecycle.packages()[0]!.members.some((m) => m.path === "plugins/x/index.js")).toBe(true);
-    await expect(readFile(join(root, "import-sentinel"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(lifecycle.packages()[0]!.members.some((m) => m.path === "plugins/x/index.js")).toBe(
+      true,
+    );
+    await expect(readFile(join(root, "import-sentinel"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
     await lifecycle.setEnabled("pod:hook", false);
     expect(lifecycle.packages()).toEqual([]);
     await lifecycle.setEnabled("pod:hook", true);
     expect(lifecycle.packages().map((p) => p.id)).toEqual(["hook"]);
     await lifecycle.refresh();
-    await expect(readFile(join(root, "import-sentinel"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(root, "import-sentinel"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   } finally {
     await lifecycle.close();
   }

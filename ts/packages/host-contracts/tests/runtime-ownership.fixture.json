@@ -219,9 +219,7 @@
       "name": "default present",
       "productHome": "C:\\User\\Pe.Tools",
       "sharedRoot": null,
-      "existing": [
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
+      "existing": ["G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"],
       "markerFiles": {},
       "pointer": null,
       "user": "C:\\User\\Pe.Tools",
@@ -247,9 +245,7 @@
       "project": null,
       "firm": null,
       "sharedDriveRoot": null,
-      "homes": [
-        "C:\\User\\Pe.Tools"
-      ],
+      "homes": ["C:\\User\\Pe.Tools"],
       "firmSettings": null,
       "firmPreferences": null,
       "firmKeys": null
@@ -258,19 +254,14 @@
       "name": "chosen present",
       "productHome": "C:\\User\\Pe.Tools",
       "sharedRoot": "D:\\Firm\\Software\\Pe.Tools",
-      "existing": [
-        "D:\\Firm\\Software\\Pe.Tools"
-      ],
+      "existing": ["D:\\Firm\\Software\\Pe.Tools"],
       "markerFiles": {},
       "pointer": null,
       "user": "C:\\User\\Pe.Tools",
       "project": null,
       "firm": "D:\\Firm\\Software\\Pe.Tools",
       "sharedDriveRoot": "D:\\Firm",
-      "homes": [
-        "C:\\User\\Pe.Tools",
-        "D:\\Firm\\Software\\Pe.Tools"
-      ],
+      "homes": ["C:\\User\\Pe.Tools", "D:\\Firm\\Software\\Pe.Tools"],
       "firmSettings": "D:\\Firm\\Software\\Pe.Tools\\Settings",
       "firmPreferences": "D:\\Firm\\Software\\Pe.Tools\\Settings\\preferences.json",
       "firmKeys": "D:\\Firm\\Software\\Pe.Tools\\keys.json"
@@ -279,18 +270,14 @@
       "name": "chosen absent",
       "productHome": "C:\\User\\Pe.Tools",
       "sharedRoot": "D:\\Firm\\Software\\Pe.Tools",
-      "existing": [
-        "G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"
-      ],
+      "existing": ["G:\\Shared drives\\PE Team Folder\\04 PE Software Files\\Pe.Tools"],
       "markerFiles": {},
       "pointer": null,
       "user": "C:\\User\\Pe.Tools",
       "project": null,
       "firm": null,
       "sharedDriveRoot": null,
-      "homes": [
-        "C:\\User\\Pe.Tools"
-      ],
+      "homes": ["C:\\User\\Pe.Tools"],
       "firmSettings": null,
       "firmPreferences": null,
       "firmKeys": null
@@ -299,9 +286,7 @@
       "name": "project marker retained",
       "productHome": "C:\\User\\Pe.Tools",
       "sharedRoot": "D:\\Firm\\Software\\Pe.Tools",
-      "existing": [
-        "D:\\Firm\\Software\\Pe.Tools"
-      ],
+      "existing": ["D:\\Firm\\Software\\Pe.Tools"],
       "markerFiles": {
         "D:\\Firm\\Projects\\One\\Pe.Tools": "{\"tier\":\"project\"}"
       },
@@ -406,10 +391,7 @@
         "sourceRoot": null,
         "installedRoot": "C:\\Users\\Alice\\AppData\\Local\\Positive Energy\\Pe.Tools"
       },
-      "launch": [
-        "--launch-window",
-        "http://127.0.0.1:5150/open"
-      ],
+      "launch": ["--launch-window", "http://127.0.0.1:5150/open"],
       "argv": [
         "--lane",
         "installed",
@@ -426,10 +408,7 @@
         "sourceRoot": "C:\\src\\Pe.Tools",
         "installedRoot": null
       },
-      "launch": [
-        "--launch-window",
-        "http://127.0.0.1:5175/open"
-      ],
+      "launch": ["--launch-window", "http://127.0.0.1:5175/open"],
       "argv": [
         "--lane",
         "dev",

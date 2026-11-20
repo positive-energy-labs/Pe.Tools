@@ -10,7 +10,13 @@ import {
   isPackageMember,
   listPackages,
 } from "./packages.ts";
-import { CommandRejected, StepFailure, nativeStep, refused, io } from "@pe/host-internal/command-executor";
+import {
+  CommandRejected,
+  StepFailure,
+  nativeStep,
+  refused,
+  io,
+} from "@pe/host-internal/command-executor";
 import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -24,7 +30,8 @@ const sourceBundleSchema = z.object({
 });
 
 /** One sentence for both doors that refuse a script with no exact document: this one and `/call`'s admission. */
-export const scriptNeedsDocument = "A script run needs one exact open document target; choose a document before running it.";
+export const scriptNeedsDocument =
+  "A script run needs one exact open document target; choose a document before running it.";
 
 /** Every Pod script door reaches this sealed bundle and exact target immediately before execution. */
 export function runPodScript(
@@ -34,27 +41,51 @@ export function runPodScript(
   requestId: string,
 ) {
   return Effect.gen(function* () {
-    if (!target.openId)
-      return yield* Effect.fail(refused(scriptNeedsDocument));
-    const captured = input.sourcePath != null
-      ? yield* io(() => freezeScript(input)).pipe(Effect.mapError((error) => error instanceof PackageDiscoveryExceeded
-        ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
-        : error instanceof CommandRejected ? error : refused(error instanceof Error ? error.message : String(error))))
-      : undefined;
+    if (!target.openId) return yield* Effect.fail(refused(scriptNeedsDocument));
+    const captured =
+      input.sourcePath != null
+        ? yield* io(() => freezeScript(input)).pipe(
+            Effect.mapError((error) =>
+              error instanceof PackageDiscoveryExceeded
+                ? new CommandRejected(
+                    { kind: "domain", code: error.code, message: error.message },
+                    503,
+                  )
+                : error instanceof CommandRejected
+                  ? error
+                  : refused(error instanceof Error ? error.message : String(error)),
+            ),
+          )
+        : undefined;
     const sealedInput = captured ? { ...input, sourceBundle: captured.sourceBundle } : input;
     const model = yield* Effect.try({
       try: () => {
         const bundle = sourceBundleSchema.nullish().parse(sealedInput.sourceBundle);
         const manifest = bundle?.files.find((file) => file.path === "pod.json");
         if (!manifest) return undefined;
-        const raw = JSON.parse(Buffer.from(manifest.bytesBase64, "base64").toString("utf8").replace(/^\uFEFF/, ""));
+        const raw = JSON.parse(
+          Buffer.from(manifest.bytesBase64, "base64")
+            .toString("utf8")
+            .replace(/^\uFEFF/, ""),
+        );
         return raw.for === undefined ? undefined : podModelSchema.parse(raw.for);
       },
-      catch: () => new CommandRejected({ kind: "domain", code: "script.input", message: "Invalid Pod source bundle or model declaration" }, 400),
+      catch: () =>
+        new CommandRejected(
+          {
+            kind: "domain",
+            code: "script.input",
+            message: "Invalid Pod source bundle or model declaration",
+          },
+          400,
+        ),
     });
     if (model) {
       const detail = yield* nativeStep(bridge, target, "revit.detail.elements", {
-        query: { kind: "ElementReferences", elementIds: model.probes.map((probe) => probe.elementId) },
+        query: {
+          kind: "ElementReferences",
+          elementIds: model.probes.map((probe) => probe.elementId),
+        },
       });
       const message = wrongPodModel(model, detail);
       if (message) return yield* Effect.fail(refused(message, "wrong-model"));
@@ -72,9 +103,15 @@ export function requireScriptSuccess(value: unknown): void {
     value && typeof value === "object" && "diagnostics" in value && Array.isArray(value.diagnostics)
       ? value.diagnostics
       : [];
-  const first = diagnostics.find((entry): entry is { message: string } =>
-    !!entry && typeof entry === "object" && "severity" in entry && entry.severity === "Error" &&
-    "message" in entry && typeof entry.message === "string");
+  const first = diagnostics.find(
+    (entry): entry is { message: string } =>
+      !!entry &&
+      typeof entry === "object" &&
+      "severity" in entry &&
+      entry.severity === "Error" &&
+      "message" in entry &&
+      typeof entry.message === "string",
+  );
   const cause = first?.message.split(/\r?\n/, 1)[0]?.trim().slice(0, 300);
   throw new StepFailure(
     `Script execution ${typeof status === "string" ? status : "returned no valid status"}${cause ? `: ${cause}` : ""}`,
@@ -91,13 +128,22 @@ export function requireScriptSuccess(value: unknown): void {
  * nothing here. The bundle still carries every script: native preparation refuses a Pod whose
  * declared entrypoint has no file. The entrypoint matches as native matches it.
  */
-export const scriptRunInputs = <F extends { path: string }>(files: readonly F[], sourcePath: unknown): F[] => {
+export const scriptRunInputs = <F extends { path: string }>(
+  files: readonly F[],
+  sourcePath: unknown,
+): F[] => {
   const entrypoint = String(sourcePath).replaceAll("\\", "/").trim().toLowerCase();
-  return files.filter((file) => !/\.csx$/i.test(file.path) || file.path.toLowerCase() === entrypoint);
+  return files.filter(
+    (file) => !/\.csx$/i.test(file.path) || file.path.toLowerCase() === entrypoint,
+  );
 };
 
 /** The member facts one script run of `pod` consumes: what the journal's gate re-reads. */
-export const scriptMemberFacts = (pod: string, files: readonly { path: string; bytesBase64: string }[], sourcePath: unknown) =>
+export const scriptMemberFacts = (
+  pod: string,
+  files: readonly { path: string; bytesBase64: string }[],
+  sourcePath: unknown,
+) =>
   scriptRunInputs(files, sourcePath).map((file) => ({
     kind: "member" as const,
     probe: { pod, path: file.path },
@@ -125,12 +171,14 @@ export async function freezeScript(
             .toString("utf8")
             .replace(/^\uFEFF/, ""),
         ).id;
-      } catch (error) { console.warn("ts/apps/host/src/operation-script.ts: fallback after failure", error);
+      } catch (error) {
+        console.warn("ts/apps/host/src/operation-script.ts: fallback after failure", error);
         /* Native preparation owns malformed manifest refusal. */
       }
       if (typeof id === "string") {
-        try { requireIndexedPackageAvailable(id); }
-        catch (error) {
+        try {
+          requireIndexedPackageAvailable(id);
+        } catch (error) {
           throw error instanceof PackageDiscoveryExceeded
             ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
             : error;
@@ -201,9 +249,14 @@ export async function freezeScript(
   });
   const pod = listing.packages.find((pod) => pod.folder === workspace);
   if (!pod) throw Error(`No admitted Pod in workspace '${workspace}'.`);
-  return freezeScript({ ...input, sourceBundle: (await capturePackage(pod).catch((error: unknown) => {
-    throw error instanceof PackageDiscoveryExceeded
-      ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
-      : error;
-  })).sourceBundle });
+  return freezeScript({
+    ...input,
+    sourceBundle: (
+      await capturePackage(pod).catch((error: unknown) => {
+        throw error instanceof PackageDiscoveryExceeded
+          ? new CommandRejected({ kind: "domain", code: error.code, message: error.message }, 503)
+          : error;
+      })
+    ).sourceBundle,
+  });
 }

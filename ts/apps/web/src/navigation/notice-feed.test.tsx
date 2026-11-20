@@ -59,7 +59,6 @@ afterEach(cleanup);
 
 const GAP = "Activity must read the host notice feed";
 
-
 test("red (slice 6 seam c): home Activity reads the notice feed", async () => {
   const { Ledger } = await import("./ledger");
   const { LEDGER_PRESENTATIONS } = await import("./ledger-model");
@@ -101,10 +100,25 @@ test("a tier-save feed row exposes its stored receipt in the overlay DOM", async
   const receipt = "165c9d43-0e40-457b-b4fa-53d2477964e9";
   const reason = `kaitp set 800 at ducts criteria.velocityLimitFpm.supply in the project home. Receipt ${receipt}.`;
   const before = feed.rows;
-  feed.rows = noticeRows({ threads: [], receipts: [], works: [], machine: null, stored: [{
-    class: "keep", place: SETTING_WRITE_PLACE, path: "project/Settings/ducts.json", sha256: "saved",
-    at: new Date().toISOString(), reason,
-  }] }, Date.now());
+  feed.rows = noticeRows(
+    {
+      threads: [],
+      receipts: [],
+      works: [],
+      machine: null,
+      stored: [
+        {
+          class: "keep",
+          place: SETTING_WRITE_PLACE,
+          path: "project/Settings/ducts.json",
+          sha256: "saved",
+          at: new Date().toISOString(),
+          reason,
+        },
+      ],
+    },
+    Date.now(),
+  );
   try {
     render(<Ledger presentation={LEDGER_PRESENTATIONS.overlay} />);
     const row = screen.getByText("Setting saved").closest('[role="option"]');
@@ -131,22 +145,60 @@ test("discard paths and harness stderr stay behind the overlay row tooltip", asy
   const writeText = vi.fn(async () => {});
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
   const before = feed.rows;
-  feed.rows = noticeRows({
-    threads: [{
-      id: "died", title: "Dead harness", providerName: "Claude", updatedAt: at, lastSeq: 1,
-      activity: { state: "failed", pending: 0, lastSeq: 1, message: "The claude harness exited (code 3)." },
-      lifecycle: { status: "active", explicitUnread: false, readSeq: 1 },
-      events: [{
-        kind: "error", seq: 1, at, turnId: "u1", message: "The claude harness exited (code 3).",
-        failure: { kind: "other", message: "The claude harness exited (code 3).", raw: stderr },
-      }],
-    }] as unknown as Parameters<typeof noticeRows>[0]["threads"],
-    receipts: [], works: [], machine: null,
-    stored: [{ class: "discard", place: "Broken settings", path, sha256: "bad", at, reason: "Invalid JSON" }],
-  }, now);
+  feed.rows = noticeRows(
+    {
+      threads: [
+        {
+          id: "died",
+          title: "Dead harness",
+          providerName: "Claude",
+          updatedAt: at,
+          lastSeq: 1,
+          activity: {
+            state: "failed",
+            pending: 0,
+            lastSeq: 1,
+            message: "The claude harness exited (code 3).",
+          },
+          lifecycle: { status: "active", explicitUnread: false, readSeq: 1 },
+          events: [
+            {
+              kind: "error",
+              seq: 1,
+              at,
+              turnId: "u1",
+              message: "The claude harness exited (code 3).",
+              failure: {
+                kind: "other",
+                message: "The claude harness exited (code 3).",
+                raw: stderr,
+              },
+            },
+          ],
+        },
+      ] as unknown as Parameters<typeof noticeRows>[0]["threads"],
+      receipts: [],
+      works: [],
+      machine: null,
+      stored: [
+        {
+          class: "discard",
+          place: "Broken settings",
+          path,
+          sha256: "bad",
+          at,
+          reason: "Invalid JSON",
+        },
+      ],
+    },
+    now,
+  );
   try {
     render(<Ledger presentation={LEDGER_PRESENTATIONS.overlay} />);
-    for (const [name, detail] of [["Broken settings", path], ["Dead harness", stderr]]) {
+    for (const [name, detail] of [
+      ["Broken settings", path],
+      ["Dead harness", stderr],
+    ]) {
       const row = screen.getByText(name!).closest('[role="option"]');
       expect(row).not.toBeNull();
       expect(row!.textContent).not.toContain(detail);

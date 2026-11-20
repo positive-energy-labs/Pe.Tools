@@ -10,7 +10,8 @@ import { assertSealed } from "../src/document-marks.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import { settle, testDocumentMarks } from "./effect-test.ts";
 // These fakes read no attempt service; the journal provides them in production.
-const runOwned = (run: Effect.Effect<unknown, unknown, unknown>) => settle(run as Effect.Effect<unknown, unknown>);
+const runOwned = (run: Effect.Effect<unknown, unknown, unknown>) =>
+  settle(run as Effect.Effect<unknown, unknown>);
 import { detachedBridge, sessionView } from "./effect-test.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
@@ -45,59 +46,67 @@ async function fixture() {
     key: { binding: "open" as const, route: "schedules", target: null, open: { ...ref } },
     revision: 1,
   };
-  const makeBridge = () => detachedBridge({
-    subscribe: (listener: (event: never) => void) => {
-      listeners.push(listener);
-      return () => {};
-    },
-    list: Effect.succeed([
-      sessionView({
-        sessionId: "A",
-        connected: true,
-        ...ownedSession,
-        processId: 42,
-        processStartUtcUnixMs: 1000,
-        state: { openDocuments: [{ ...ref, isFamilyDocument: false, projectHome: null }] },
-      }),
-    ]),
-  } as never);
+  const makeBridge = () =>
+    detachedBridge({
+      subscribe: (listener: (event: never) => void) => {
+        listeners.push(listener);
+        return () => {};
+      },
+      list: Effect.succeed([
+        sessionView({
+          sessionId: "A",
+          connected: true,
+          ...ownedSession,
+          processId: 42,
+          processStartUtcUnixMs: 1000,
+          state: { openDocuments: [{ ...ref, isFamilyDocument: false, projectHome: null }] },
+        }),
+      ]),
+    } as never);
   let bridge = makeBridge();
   let marks = testDocumentMarks(bridge);
   const receipts: ActionReceipt[] = [];
   let request = "one";
   let evidence: unknown = { model: 1 };
   const run = vi.fn(() => Effect.succeed({ applied: true }));
-  const make = (definition: Command) => () => workWriteBoundary(
-    {
-      definition,
-      prepared: z.object({ request: z.string(), dependencies: z.unknown() }),
-      bind: async (ctx) => {
-        expect(ctx.admission.input.source).toEqual({
-          pod: "p",
-          path: "s.json",
-          sha256: "a".repeat(64),
-        });
-        return {
-          effects: [{ kind: "document", ref }],
-          prepare: async () => ({ request, dependencies: evidence }),
-        };
+  const make = (definition: Command) => () =>
+    workWriteBoundary(
+      {
+        definition,
+        prepared: z.object({ request: z.string(), dependencies: z.unknown() }),
+        bind: async (ctx) => {
+          expect(ctx.admission.input.source).toEqual({
+            pod: "p",
+            path: "s.json",
+            sha256: "a".repeat(64),
+          });
+          return {
+            effects: [{ kind: "document", ref }],
+            prepare: async () => ({ request, dependencies: evidence }),
+          };
+        },
+        seal: (raw) => {
+          const p = z.object({ request: z.string(), dependencies: z.unknown() }).parse(raw);
+          return { request: { request: p.request }, evidence: p.dependencies };
+        },
+        run,
       },
-      seal: (raw) => {
-        const p = z.object({ request: z.string(), dependencies: z.unknown() }).parse(raw);
-        return { request: { request: p.request }, evidence: p.dependencies };
-      },
-      run,
-    },
-    bridge,
-    { sdk: sdkSessions, marks },
-  );
-  const executors = { preview: make(commands["schedule.apply.preview"]), apply: make(commands["schedule.apply"]) };
+      bridge,
+      { sdk: sdkSessions, marks },
+    );
+  const executors = {
+    preview: make(commands["schedule.apply.preview"]),
+    apply: make(commands["schedule.apply"]),
+  };
   let current = executors.preview;
   let executor = current();
   const doc = tools.schedules.work.schema.parse({
     writeIntent: {
       "schedule.apply": {
-        edit: { by: "human", value: { source: { pod: "p", path: "s.json", sha256: "a".repeat(64) } } },
+        edit: {
+          by: "human",
+          value: { source: { pod: "p", path: "s.json", sha256: "a".repeat(64) } },
+        },
       },
     },
   });
@@ -131,7 +140,12 @@ async function fixture() {
     documentChanged: async () => {
       const before = marks.changedAt(ref);
       for (const listener of listeners)
-        listener({ kind: "event", sessionId: "A", eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }) } as never);
+        listener({
+          kind: "event",
+          sessionId: "A",
+          eventName: "document-changed",
+          payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }),
+        } as never);
       await vi.waitFor(() => expect(marks.changedAt(ref)).not.toBe(before));
     },
     /** A new host process: a fresh bridge and mark holder, so observedSince moves. */
@@ -143,23 +157,24 @@ async function fixture() {
     },
     run,
     receipts,
-    recordPreview: (id: string, result: unknown, key = "schedule.apply.preview") => receipts.push({
-      id,
-      key,
-      caller: ctx.caller,
-      target: ctx.admission.target,
-      input: ctx.admission.input,
-      basis: ctx.basis,
-      effects: [],
-      consumes: [],
-      claims: [],
-      steps: [],
-      prepared: { state: "unprepared" },
-      recovery: [],
-      startedAt: new Date().toISOString(),
-      state: "succeeded",
-      result: writePreviewSchema.parse(result),
-    }),
+    recordPreview: (id: string, result: unknown, key = "schedule.apply.preview") =>
+      receipts.push({
+        id,
+        key,
+        caller: ctx.caller,
+        target: ctx.admission.target,
+        input: ctx.admission.input,
+        basis: ctx.basis,
+        effects: [],
+        consumes: [],
+        claims: [],
+        steps: [],
+        prepared: { state: "unprepared" },
+        recovery: [],
+        startedAt: new Date().toISOString(),
+        state: "succeeded",
+        result: writePreviewSchema.parse(result),
+      }),
     evidence: (value: unknown) => {
       evidence = value;
     },
@@ -192,9 +207,11 @@ test("preview exposes a derived request without running the write; changed deriv
 test("re-derived identical inputs apply; a changed dependency refuses before execution", async () => {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const preview = await runOwned(f.executor.run(f.ctx, {
-    prepared: await bound.prepare!(),
-  } as ActionExecution));
+  const preview = await runOwned(
+    f.executor.run(f.ctx, {
+      prepared: await bound.prepare!(),
+    } as ActionExecution),
+  );
   f.recordPreview("preview", preview);
   f.apply();
   f.evidence({ model: 1 });
@@ -220,9 +237,11 @@ test("missing preview and foreign Work refuse before native execution", async ()
 test("a new Work revision invalidates the seal even when the request is identical", async () => {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const preview = await runOwned(f.executor.run(f.ctx, {
-    prepared: await bound.prepare!(),
-  } as ActionExecution));
+  const preview = await runOwned(
+    f.executor.run(f.ctx, {
+      prepared: await bound.prepare!(),
+    } as ActionExecution),
+  );
   f.recordPreview("preview", preview);
   f.apply();
   (f.ctx.admission.input.work as { revision: number }).revision++;
@@ -237,9 +256,11 @@ test("refetching the same dependency set in a different order preserves the prev
   const b = { kind: "file" as const, probe: { path: "b" }, expected: "b1" };
   f.ctx.consumed = [a, b];
   const bound = await f.executor.bind(f.ctx);
-  const preview = await runOwned(f.executor.run(f.ctx, {
-    prepared: await bound.prepare!(),
-  } as ActionExecution));
+  const preview = await runOwned(
+    f.executor.run(f.ctx, {
+      prepared: await bound.prepare!(),
+    } as ActionExecution),
+  );
   f.recordPreview("preview", preview);
   f.apply();
   f.ctx.consumed = [b, a, b];
@@ -250,10 +271,17 @@ test("refetching the same dependency set in a different order preserves the prev
 });
 
 test("write admission refuses a producer without a semantic projection", () => {
-  expect(() => workWriteBoundary({
-    definition: commands["schedule.apply"], prepared: z.unknown(),
-    bind: async () => ({ effects: [] }), run: () => Effect.succeed(null),
-  }, detachedBridge())).toThrow("producer-owned seal projection");
+  expect(() =>
+    workWriteBoundary(
+      {
+        definition: commands["schedule.apply"],
+        prepared: z.unknown(),
+        bind: async () => ({ effects: [] }),
+        run: () => Effect.succeed(null),
+      },
+      detachedBridge(),
+    ),
+  ).toThrow("producer-owned seal projection");
 });
 
 test("re-pricing a changed preview remains a successful read and never runs a write", async () => {
@@ -261,7 +289,9 @@ test("re-pricing a changed preview remains a successful read and never runs a wr
   for (const id of ["preview-one", "preview-two"]) {
     f.ctx.admission.id = id;
     const bound = await f.executor.bind(f.ctx);
-    const preview = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
+    const preview = await runOwned(
+      f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution),
+    );
     expect(preview).toMatchObject({ previewOnly: true });
     f.recordPreview(id, preview);
     f.change();
@@ -275,7 +305,9 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     const f = await fixture();
     const capture = async () => {
       const bound = await f.executor.bind(f.ctx);
-      const result = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
+      const result = await runOwned(
+        f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution),
+      );
       f.recordPreview(f.ctx.admission.id, result);
       return result as { seal: unknown };
     };
@@ -285,12 +317,18 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     f.ctx.consumed = [{ kind: "file", probe: { path: "new" }, expected: "new" }];
     f.apply();
     const stale = await f.executor.bind(f.ctx);
-    await expect(stale.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" },
-      message: expect.stringContaining("requestHash, work, dependencies") });
+    await expect(stale.prepare!()).rejects.toMatchObject({
+      refusal: { code: "preview.stale" },
+      message: expect.stringContaining("requestHash, work, dependencies"),
+    });
     // Capture again through the preview executor, then apply the exact same derived input.
     const fresh = await fixture();
     const bound = await fresh.executor.bind(fresh.ctx);
-    const preview = writePreviewSchema.parse(await runOwned(fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution)));
+    const preview = writePreviewSchema.parse(
+      await runOwned(
+        fresh.executor.run(fresh.ctx, { prepared: await bound.prepare!() } as ActionExecution),
+      ),
+    );
     fresh.recordPreview("fresh", preview);
     vi.setSystemTime(Date.now() + 60_000);
     fresh.apply();
@@ -299,14 +337,18 @@ test("an older preview refuses changed request and Work; a fresh preview keeps i
     expect(prepared).toMatchObject({ seal: preview.seal });
     await runOwned(fresh.executor.run(fresh.ctx, { prepared } as ActionExecution));
     expect(fresh.run).toHaveBeenCalledOnce();
-  } finally { vi.useRealTimers(); }
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 /** Plan, then a change at each seal key; apply must say "Plan changed (key)" and never run the write. */
 async function plannedThenApply() {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const plan = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
+  const plan = await runOwned(
+    f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution),
+  );
   f.recordPreview("plan", plan);
   return { f, plan: plan as { seal: { documentMark: unknown } } };
 }
@@ -316,7 +358,9 @@ test("a Revit change to the planned document changes the seal; apply refuses pla
   await f.documentChanged();
   f.apply();
   const apply = await f.executor.bind(f.ctx);
-  await expect(apply.prepare!()).rejects.toThrow("Plan changed; plan the current Work again (documentMark)");
+  await expect(apply.prepare!()).rejects.toThrow(
+    "Plan changed; plan the current Work again (documentMark)",
+  );
   expect(f.run).not.toHaveBeenCalled();
 });
 
@@ -344,7 +388,9 @@ test("a plan that goes stale after preflight is refused at prepare, before the w
 test("a rehearsal receipt cannot arm apply: only the declared plan key seals", async () => {
   const f = await fixture();
   const bound = await f.executor.bind(f.ctx);
-  const plan = await runOwned(f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution));
+  const plan = await runOwned(
+    f.executor.run(f.ctx, { prepared: await bound.prepare!() } as ActionExecution),
+  );
   f.recordPreview("rehearsal", plan, "schedule.rehearse");
   f.apply();
   const apply = await f.executor.bind(f.ctx);
@@ -359,29 +405,50 @@ test("a change the host received but has not applied yet still refuses the seale
     subscribe: (next: (event: never) => void) => ((listener = next), () => {}),
     list: Effect.promise(async () => {
       await new Promise((resolve) => setTimeout(resolve, 20)); // the tail awaits bridge.list
-      return [sessionView({ sessionId: "A", connected: true, ...ownedSession, processId: 42, processStartUtcUnixMs: 1000, state: { openDocuments: [{ openId: "open-A" }] } })];
+      return [
+        sessionView({
+          sessionId: "A",
+          connected: true,
+          ...ownedSession,
+          processId: 42,
+          processStartUtcUnixMs: 1000,
+          state: { openDocuments: [{ openId: "open-A" }] },
+        }),
+      ];
     }),
   } as never);
   const marks = testDocumentMarks(bridge);
   const ref = { session: "A", openId: "open-A" };
   const sealed = { observedSince: marks.observedSince ?? null, changedAt: marks.changedAt(ref) };
-  listener({ kind: "event", sessionId: "A", eventName: "document-changed", payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }) } as never);
+  listener({
+    kind: "event",
+    sessionId: "A",
+    eventName: "document-changed",
+    payloadJson: JSON.stringify({ changedOpenIds: ["open-A"] }),
+  } as never);
   expect(marks.changedAt(ref), "the cache has not caught up").toBeNull();
   await expect(assertSealed(marks, ref, sealed)).rejects.toThrow("Plan changed (documentMark)");
 });
 
-test.each(["caller", "requestHash", "work", "documentMark", "incarnation", "dependencies"] as const)(
-  "prepare independently rechecks sealed %s after bind", async key => {
-    const f = await fixture();
-    const previewBinding = await f.executor.bind(f.ctx);
-    const preview = await runOwned(f.executor.run(f.ctx, { prepared: await previewBinding.prepare!() } as ActionExecution));
-    f.recordPreview("preview", preview);
-    f.apply();
-    const apply = await f.executor.bind(f.ctx);
-    const result = f.receipts[0].state === "succeeded" ? f.receipts[0].result : null;
-    const seal = (result as { seal: Record<string, unknown> }).seal;
-    seal[key] = key === "caller" ? { kind: "human", via: "cli" } : { tampered: true };
-    await expect(apply.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
-    expect(f.run).not.toHaveBeenCalled();
-  },
-);
+test.each([
+  "caller",
+  "requestHash",
+  "work",
+  "documentMark",
+  "incarnation",
+  "dependencies",
+] as const)("prepare independently rechecks sealed %s after bind", async (key) => {
+  const f = await fixture();
+  const previewBinding = await f.executor.bind(f.ctx);
+  const preview = await runOwned(
+    f.executor.run(f.ctx, { prepared: await previewBinding.prepare!() } as ActionExecution),
+  );
+  f.recordPreview("preview", preview);
+  f.apply();
+  const apply = await f.executor.bind(f.ctx);
+  const result = f.receipts[0].state === "succeeded" ? f.receipts[0].result : null;
+  const seal = (result as { seal: Record<string, unknown> }).seal;
+  seal[key] = key === "caller" ? { kind: "human", via: "cli" } : { tampered: true };
+  await expect(apply.prepare!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
+  expect(f.run).not.toHaveBeenCalled();
+});

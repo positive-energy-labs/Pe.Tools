@@ -10,8 +10,14 @@ import { projectRouteRead } from "../../src/reads/routes.ts";
 const catalog = () => ({
   at: "2026-11-16T00:00:00Z",
   machine: machineFixture([{ session: "b1", documents: null }]),
-  sources: { catalog: "ok" }, diagnostics: [],
-  capabilities: buildCapabilities({ ops: [], routes: [routeRegistry.fans!.host.workState as never], packages: [], skills: [] }),
+  sources: { catalog: "ok" },
+  diagnostics: [],
+  capabilities: buildCapabilities({
+    ops: [],
+    routes: [routeRegistry.fans!.host.workState as never],
+    packages: [],
+    skills: [],
+  }),
 });
 
 test("Pea undo falls back to its owner when the Place read returns non-JSON", async () => {
@@ -27,7 +33,13 @@ test("Pea undo falls back to its owner when the Place read returns non-JSON", as
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-    if (url.pathname === "/pe/scope/self") return Response.json({ ...emptyThreadHead, thread: "t1", revision: 4, targets: [{ request: { kind: "open", ref }, admission: null }] });
+    if (url.pathname === "/pe/scope/self")
+      return Response.json({
+        ...emptyThreadHead,
+        thread: "t1",
+        revision: 4,
+        targets: [{ request: { kind: "open", ref }, admission: null }],
+      });
     if (body?.key === "bridge.sessions.list")
       return Response.json({
         sessions: [
@@ -44,8 +56,7 @@ test("Pea undo falls back to its owner when the Place read returns non-JSON", as
       if (body.read.startsWith("route:"))
         return Response.json({ value: { data: projectRouteRead(routeRegistry.fans!.host) } });
       reads.push(body);
-      if (body.read === "fans.roster")
-        return new Response("Unavailable", { status: 503 });
+      if (body.read === "fans.roster") return new Response("Unavailable", { status: 503 });
       expect(body).toMatchObject({ read: "work.timeline", args: { works } });
       return Response.json({
         value: {
@@ -81,9 +92,7 @@ test("Pea undo falls back to its owner when the Place read returns non-JSON", as
     expect(undone, JSON.stringify(undone)).toMatchObject({ ok: true });
     expect(reads[0]).toMatchObject({ read: "fans.roster", args: { target: ref } });
     // An unreadable Place adds no member; the owner's offered step still reaches history.
-    expect(historyBodies).toEqual([
-      { direction: "undo", works, expected: step },
-    ]);
+    expect(historyBodies).toEqual([{ direction: "undo", works, expected: step }]);
   } finally {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();

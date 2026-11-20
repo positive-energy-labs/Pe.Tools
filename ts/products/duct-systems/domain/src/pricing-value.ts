@@ -42,14 +42,17 @@ export function pricingValue(
       findings: surveyed.findings,
       effective: {
         ...edit,
-        designFriction: serveSetting(
-          settings,
-          ["project", "firm"],
-          ["designFriction"],
-          z.number().positive(),
-          DEFAULT_DESIGN_FRICTION_RATE,
-        ).value ?? DEFAULT_DESIGN_FRICTION_RATE,
-        parameters: Object.fromEntries(Object.entries(snapshot.slots).filter(([, value]) => value != null)),
+        designFriction:
+          serveSetting(
+            settings,
+            ["project", "firm"],
+            ["designFriction"],
+            z.number().positive(),
+            DEFAULT_DESIGN_FRICTION_RATE,
+          ).value ?? DEFAULT_DESIGN_FRICTION_RATE,
+        parameters: Object.fromEntries(
+          Object.entries(snapshot.slots).filter(([, value]) => value != null),
+        ),
       },
     },
     analysis: {

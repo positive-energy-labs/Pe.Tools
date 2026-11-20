@@ -70,7 +70,6 @@ const CODECS: Record<string, Codec<unknown>> = {
     decode: (text) =>
       text === "1" || text === "true" ? true : text === "0" || text === "false" ? false : INVALID,
   },
-
 };
 
 /** Top-level collection values require a collection constructor. Objects may contain arrays. */
@@ -101,7 +100,6 @@ export function field<S extends z.ZodType, const A extends Access>(
     schema,
     codec: found,
     ...access,
-
   };
 }
 
@@ -148,25 +146,56 @@ export const setKeys = (fields: Fields) => keysWhere(fields, (field) => field.ag
 /** Exact set spelling, including ids containing commas. `all` resolves against the current roster. */
 export type Many = string[] | "all";
 export const manyCodec: Codec<Many> = {
-  encode: value => value === "all" ? "all" : value.map(id =>
-    id === "all" ? "%61ll" : encodeURIComponent(id).replaceAll("~", "%7E").replaceAll("%20", " ")
-  ).join(","),
-  decode: text => {
+  encode: (value) =>
+    value === "all"
+      ? "all"
+      : value
+          .map((id) =>
+            id === "all"
+              ? "%61ll"
+              : encodeURIComponent(id).replaceAll("~", "%7E").replaceAll("%20", " "),
+          )
+          .join(","),
+  decode: (text) => {
     if (text === "all") return "all";
-    try { return text ? text.split(",").map(decodeURIComponent) : []; }
-    catch { return INVALID; }
+    try {
+      return text ? text.split(",").map(decodeURIComponent) : [];
+    } catch {
+      return INVALID;
+    }
   },
 };
 export const stableKeyKinds = ["UniqueId", "system-name", "name"] as const;
 export type StableKeyKind = (typeof stableKeyKinds)[number];
-export function manyField<const A extends Access & { cap?: number; initial?: Many; choices?: readonly string[]; schema?: never; codec?: never; cardinality?: never; keyKind?: never }>(
-  keyKind: StableKeyKind, access: A,
-) {
-  if (!stableKeyKinds.includes(keyKind)) throw Error("Subject keys must be stable; ElementId is refused");
+export function manyField<
+  const A extends Access & {
+    cap?: number;
+    initial?: Many;
+    choices?: readonly string[];
+    schema?: never;
+    codec?: never;
+    cardinality?: never;
+    keyKind?: never;
+  },
+>(keyKind: StableKeyKind, access: A) {
+  if (!stableKeyKinds.includes(keyKind))
+    throw Error("Subject keys must be stable; ElementId is refused");
   const { cap = 50000, initial = [], choices, ...projection } = access;
   return {
     ...projection,
-    schema: z.union([z.array(z.string().min(1).refine(id => !choices || choices.includes(id), "Unknown key")).max(cap), z.literal("all")]).default(initial),
+    schema: z
+      .union([
+        z
+          .array(
+            z
+              .string()
+              .min(1)
+              .refine((id) => !choices || choices.includes(id), "Unknown key"),
+          )
+          .max(cap),
+        z.literal("all"),
+      ])
+      .default(initial),
     codec: manyCodec,
     cardinality: "many" as const,
     keyKind,
@@ -175,9 +204,13 @@ export function manyField<const A extends Access & { cap?: number; initial?: Man
 /** Structured scalar Page values have one JSON spelling. */
 export const jsonCodec = <S extends z.ZodType>(schema: S): Codec<z.output<S>> => ({
   encode: JSON.stringify,
-  decode: text => {
-    try { const result = schema.safeParse(JSON.parse(text)); return result.success ? result.data : INVALID; }
-    catch { return INVALID; }
+  decode: (text) => {
+    try {
+      const result = schema.safeParse(JSON.parse(text));
+      return result.success ? result.data : INVALID;
+    } catch {
+      return INVALID;
+    }
   },
 });
 export const resolveMany = (value: Many, roster: readonly string[]) =>
@@ -185,9 +218,21 @@ export const resolveMany = (value: Many, roster: readonly string[]) =>
 
 /** Ordered column priorities; order and direction survive URL and agent projections. */
 export function sortField<const A extends Access>(access: A) {
-  const schema = z.object({ columns: z.array(z.object({
-    key: z.string().min(1).max(512), dir: z.enum(["asc", "desc"]),
-  }).strict()).max(8) }).strict().default({ columns: [] });
+  const schema = z
+    .object({
+      columns: z
+        .array(
+          z
+            .object({
+              key: z.string().min(1).max(512),
+              dir: z.enum(["asc", "desc"]),
+            })
+            .strict(),
+        )
+        .max(8),
+    })
+    .strict()
+    .default({ columns: [] });
   return { ...access, schema, codec: jsonCodec(schema) };
 }
 /** A set of column keys: presence means hidden, with no ordered-list semantics. */

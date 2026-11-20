@@ -263,7 +263,9 @@
     if (refused) {
       Object.assign(error, {
         name: "PeRefusal",
-        code: j.refusal ? j.refusal.code : j.resolution?.reason || j.resolution?.kind || issue?.code,
+        code: j.refusal
+          ? j.refusal.code
+          : j.resolution?.reason || j.resolution?.kind || issue?.code,
         refusal: j.refusal || null,
         resolution: j.resolution || null,
       });

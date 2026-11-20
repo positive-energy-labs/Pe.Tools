@@ -25,7 +25,6 @@ import { listPackages } from "../src/packages.ts";
 import { exportPod, importRecordFile, writeZip } from "../src/pod-transfer.ts";
 import { importPod } from "./pod-import.ts";
 
-
 let root: string;
 let pods: string;
 let web: Awaited<ReturnType<typeof serveRoutes>>;
@@ -44,10 +43,9 @@ beforeEach(async () => {
     "x-pe-context": mintContext({ kind: "human", via: "cli" }),
   };
   web = await serveRoutes(
-    callRouteOver(
-      native.journal,
-      captureStore(join(root, "captures")),
-    ).pipe(Layer.provide(testHostInputs)),
+    callRouteOver(native.journal, captureStore(join(root, "captures"))).pipe(
+      Layer.provide(testHostInputs),
+    ),
     bridge,
   );
 });
@@ -159,7 +157,11 @@ test("identity refuses selected invalid members, links and unsafe output folders
   expect(
     (await call("pod.list", { projection: "identity", folder: "default/nested" })).status,
   ).toBe(400);
-  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
+  expect(
+    (await native.journal.list())
+      .flatMap((row) => row.steps)
+      .filter((step) => step.kind === "native"),
+  ).toEqual([]);
 });
 
 /* ── Archive transport: host-only, zero native calls ──────────────────────────────────────── */
@@ -278,7 +280,9 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   expect(await otherStore.blob(sha)).not.toBeNull();
   // An imported capture is an old observation: held by hash, never a new taking on this host.
   expect(await otherStore.list()).toEqual([]);
-  const keys = (await listPackages({ podsRoots: otherPods })).packages[0]!.contributions.map((c) => c.key);
+  const keys = (await listPackages({ podsRoots: otherPods })).packages[0]!.contributions.map(
+    (c) => c.key,
+  );
   expect(keys).toEqual(
     expect.arrayContaining([
       "page:@ducts/pages/tour",
@@ -290,7 +294,11 @@ test("export vendors, ports the project, closes captures; import into a renamed 
   await expect(
     importPod({ archivePath, folder: "Twice" }, { podsRoot: otherPods, captures: otherStore }),
   ).rejects.toThrow(`already installed at '${join(otherPods, "Other Name")}'`);
-  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
+  expect(
+    (await native.journal.list())
+      .flatMap((row) => row.steps)
+      .filter((step) => step.kind === "native"),
+  ).toEqual([]);
 });
 
 test("a capture this host does not hold refuses export and writes nothing", async () => {
@@ -322,8 +330,14 @@ test("pod.export and pod.import cross /actions with no session and no native cal
   const missing = await act("pod.import", { archivePath: "relative.zip" });
   expect(missing).toMatchObject({ error: expect.stringContaining("relative.zip") });
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
-  expect((await listPackages({ podsRoots: pods })).packages.map((pod) => pod.id)).toEqual(["ducts"]);
-  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
+  expect((await listPackages({ podsRoots: pods })).packages.map((pod) => pod.id)).toEqual([
+    "ducts",
+  ]);
+  expect(
+    (await native.journal.list())
+      .flatMap((row) => row.steps)
+      .filter((step) => step.kind === "native"),
+  ).toEqual([]);
 });
 
 const zip = (files: Record<string, string | Buffer>) =>
@@ -385,7 +399,9 @@ test("pod.promote moves a scratch Page into a new Pod byte for byte, unbound, an
   // No Page state travels: it is machine state, and a stale `.state` folder is debris.
   await expect(readFile(join(inPod, ".state", "events.jsonl"))).rejects.toThrow();
   await expect(readFile(join(inPod, ".state", "binding.json"))).rejects.toThrow();
-  expect(await readFile(join(pages, "notes", ".state", "events.jsonl"), "utf8")).toBe('{"seq":1}\n');
+  expect(await readFile(join(pages, "notes", ".state", "events.jsonl"), "utf8")).toBe(
+    '{"seq":1}\n',
+  );
   expect(await readFile(join(pages, "notes", ".state", "binding.json"), "utf8")).toBe("{}");
   // One Page, one home: the scratch copy is gone, and the debris the Pod refused is still there to read.
   await expect(readFile(join(pages, "notes", "index.html"))).rejects.toThrow();
@@ -400,6 +416,9 @@ test("pod.promote moves a scratch Page into a new Pod byte for byte, unbound, an
   expect(missing).toMatchObject({ error: expect.stringContaining(join(pages, "missing")) });
   expect(missing).toMatchObject({ state: "failed", notDispatched: true, steps: [] });
   await expect(readFile(join(pods, "other", "pod.json"))).rejects.toThrow();
-  expect((await native.journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
+  expect(
+    (await native.journal.list())
+      .flatMap((row) => row.steps)
+      .filter((step) => step.kind === "native"),
+  ).toEqual([]);
 });
-

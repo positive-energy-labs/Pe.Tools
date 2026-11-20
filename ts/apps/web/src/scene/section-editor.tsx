@@ -14,7 +14,14 @@ import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { token } from "@pe/kit/lib/token";
 import { AXIS_LABEL } from "@pe/web-kernel/scene/plane";
-import { CUT_AXES, mergeCut, moveCutEdge, sectionCuts, type CutAxis, type Point } from "@pe/web-kernel/scene/cuts";
+import {
+  CUT_AXES,
+  mergeCut,
+  moveCutEdge,
+  sectionCuts,
+  type CutAxis,
+  type Point,
+} from "@pe/web-kernel/scene/cuts";
 import type { Bounds } from "@pe/web-kernel/scene/types";
 import type { SectionEditorController } from "./section-editor-controller";
 

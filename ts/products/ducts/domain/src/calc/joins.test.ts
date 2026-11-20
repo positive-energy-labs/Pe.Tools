@@ -4,11 +4,23 @@ import { nodeOf, snapshotOf } from "../test-snapshot.ts";
 import { coverageOf, wholeCoverage } from "./coverage.ts";
 import { followAcceptedJoins, mergeFar } from "./joins.ts";
 
-const walk = { startId: 1, hops: 2, elementsReached: 3, openEnds: 1, truncated: false, elapsedMs: 1, unreadPeers: [], candidates: [] };
+const walk = {
+  startId: 1,
+  hops: 2,
+  elementsReached: 3,
+  openEnds: 1,
+  truncated: false,
+  elapsedMs: 1,
+  unreadPeers: [],
+  candidates: [],
+};
 
 // R1: the join continuation lives in the domain; this file imports nothing from the host.
 test("an accepted join reads its unwalked side once, and the walked copy replaces the candidate", async () => {
-  const near = snapshotOf({ walk, nodes: [nodeOf(1, "equipment"), { ...nodeOf(2, "fitting"), reason: "candidate" } as never] });
+  const near = snapshotOf({
+    walk,
+    nodes: [nodeOf(1, "equipment"), { ...nodeOf(2, "fitting"), reason: "candidate" } as never],
+  });
   const far = snapshotOf({
     walk: { ...walk, startId: 2 },
     document: { ...near.document, readAt: "later" },
@@ -42,11 +54,24 @@ test("the merge keeps the far walk's unread peers, candidates and counts", () =>
   const peer = { elementId: 7, connector: 1 };
   const merged = mergeFar(
     snapshotOf({ walk }),
-    snapshotOf({ walk: { ...walk, startId: 9, truncated: true, unreadPeers: [peer], candidates: [end] } }),
+    snapshotOf({
+      walk: { ...walk, startId: 9, truncated: true, unreadPeers: [peer], candidates: [end] },
+    }),
   );
-  expect(merged.walk).toMatchObject({ startId: 1, hops: 4, elementsReached: 6, openEnds: 2, truncated: true, unreadPeers: [peer], candidates: [end] });
+  expect(merged.walk).toMatchObject({
+    startId: 1,
+    hops: 4,
+    elementsReached: 6,
+    openEnds: 2,
+    truncated: true,
+    unreadPeers: [peer],
+    candidates: [end],
+  });
   // A far read that carries no coverage evidence is lost coverage, never a pass.
-  expect(mergeFar(snapshotOf({ walk }), snapshotOf()).reach).toEqual({ complete: false, unreadPeers: [BLIND_PART] });
+  expect(mergeFar(snapshotOf({ walk }), snapshotOf()).reach).toEqual({
+    complete: false,
+    unreadPeers: [BLIND_PART],
+  });
 });
 
 // P-047: another fan's peer in the merged reach must not explain away the blind read.

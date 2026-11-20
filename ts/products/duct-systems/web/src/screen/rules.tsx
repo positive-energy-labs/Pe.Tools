@@ -109,13 +109,7 @@ export function Chips({
   );
 }
 /** proto: copied from losses-view.tsx (`StagedLosses`, reduced): each edit rule as applied → edit, the edit drops and unit statics with the fan they move, and discard. */
-export function StagedRules({
-  priced,
-  work,
-}: {
-  priced: Priced;
-  work: LossesWork;
-}) {
+export function StagedRules({ priced, work }: { priced: Priced; work: LossesWork }) {
   const keys = Object.keys(priced.effective.rules).sort();
   const terminals = Object.keys(priced.effective.terminalDrops).length;
   const components = Object.keys(priced.effective.componentDrops).length;
@@ -144,15 +138,7 @@ export function StagedRules({
       ),
     );
   };
-  if (
-    !keys.length &&
-    !terminals &&
-    !components &&
-    !catalogs &&
-    !flows &&
-    !unitFlows &&
-    !roles
-  )
+  if (!keys.length && !terminals && !components && !catalogs && !flows && !unitFlows && !roles)
     return <p className="text-ink-2 t-small">None edit</p>;
   return (
     <div className="flex flex-col gap-0.5 t-small" data-e-edit="">

@@ -53,7 +53,8 @@ export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<numbe
     failed: "truncated" | "incomplete" | null,
   ): SourceCoverage[] => {
     // A source from before the native read listed unread peers cannot say which peers it read.
-    if (!Array.isArray(peers)) return [lost(name, "absent", null, `the native ${name} lists no unread peers`)];
+    if (!Array.isArray(peers))
+      return [lost(name, "absent", null, `the native ${name} lists no unread peers`)];
     const entries = peers.flatMap((p) =>
       p.connector < 0
         ? [
@@ -65,7 +66,14 @@ export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<numbe
           ? [lost(name, "peer", p.elementId, `${p.elementId}:${p.connector}`)]
           : held.has(p.elementId)
             ? []
-            : [lost(name, "unplaced", null, `${p.elementId}:${p.connector} is on no element this read holds`)],
+            : [
+                lost(
+                  name,
+                  "unplaced",
+                  null,
+                  `${p.elementId}:${p.connector} is on no element this read holds`,
+                ),
+              ],
     );
     // A walk is truncated unless it says `false` (P-047). A truncated walk is lost whatever it names; an incomplete reach is explained only by a peer it names.
     if (failed === "truncated" || (failed && peers.length === 0))
@@ -74,10 +82,21 @@ export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<numbe
   };
   const { walk, reach } = snapshot;
   if (walk == null && reach == null)
-    return [lost("snapshot", "absent", null, "coverage unread: the snapshot carries no walk and no reach")];
+    return [
+      lost(
+        "snapshot",
+        "absent",
+        null,
+        "coverage unread: the snapshot carries no walk and no reach",
+      ),
+    ];
   return [
-    ...(walk == null ? [] : source("walk", walk.unreadPeers, walk.truncated === false ? null : "truncated")),
-    ...(reach == null ? [] : source("reach", reach.unreadPeers, reach.complete ? null : "incomplete")),
+    ...(walk == null
+      ? []
+      : source("walk", walk.unreadPeers, walk.truncated === false ? null : "truncated")),
+    ...(reach == null
+      ? []
+      : source("reach", reach.unreadPeers, reach.complete ? null : "incomplete")),
   ];
 }
 
@@ -85,6 +104,12 @@ export function coverageOf(snapshot: CoverageEvidence, walked: ReadonlySet<numbe
 export const coverageGaps = (c: Coverage): CoverageGap[] =>
   c.flatMap((s) =>
     s.kind === "lost"
-      ? [{ kind: s.reason === "truncated" ? "budget" : "native-peer", elementId: s.elementId, ref: s.ref }]
+      ? [
+          {
+            kind: s.reason === "truncated" ? "budget" : "native-peer",
+            elementId: s.elementId,
+            ref: s.ref,
+          },
+        ]
       : [],
   );

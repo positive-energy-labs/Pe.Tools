@@ -57,7 +57,9 @@ describe("contracts <- runtime <- surface adapters", () => {
       const [scope, name, ...entry] = module.split("/");
       expect(manifest.dependencies[`${scope}/${name}`]).toBe("workspace:*");
       const product = name!.replace(/-contract$/, "");
-      const contract = JSON.parse(readFileSync(join(ROOT, "products", product, "contract/package.json"), "utf8"));
+      const contract = JSON.parse(
+        readFileSync(join(ROOT, "products", product, "contract/package.json"), "utf8"),
+      );
       expect(contract.exports[`./${entry.join("/")}`]).toBeDefined();
     }
   });

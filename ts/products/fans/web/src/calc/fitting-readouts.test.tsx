@@ -12,15 +12,28 @@ it.each([
   { losses: [null, null], lossInWg: null, text: "— in-wg", tone: null },
 ])("qualifies the loss cell for $losses", ({ losses, lossInWg, text, tone }) => {
   const group: FittingGroup = {
-    key: "rule:elbow", kind: "rule", title: "Elbows", reach: "every elbow",
-    table: "CD3-1", tableMeaning: "Elbow", source: "default", choices: [], clear: null,
+    key: "rule:elbow",
+    kind: "rule",
+    title: "Elbows",
+    reach: "every elbow",
+    table: "CD3-1",
+    tableMeaning: "Elbow",
+    source: "default",
+    choices: [],
+    clear: null,
     members: losses.map((loss, i) => ({
-      key: String(i), subject: [], ids: [], lossInWg: loss,
+      key: String(i),
+      subject: [],
+      ids: [],
+      lossInWg: loss,
       note: loss == null ? "not priced" : null,
     })),
-    lossInWg, unpriced: losses.filter((loss) => loss == null).length,
+    lossInWg,
+    unpriced: losses.filter((loss) => loss == null).length,
   };
-  const { container } = render(<FittingReadouts groups={[group]} ductsHref="/ducts" waiting={null} />);
+  const { container } = render(
+    <FittingReadouts groups={[group]} ductsHref="/ducts" waiting={null} />,
+  );
   const cell = container.querySelector('[data-fitting-group="rule:elbow"] > .face-mono')!;
   expect(cell.textContent).toBe(text);
   expect(cell.querySelector('[data-tone="caution"]')?.getAttribute("data-tone") ?? null).toBe(tone);

@@ -15,7 +15,10 @@ import type { Priced } from "@pe/ducts-web/priced";
 import { calcOf, legOf, pricedOf } from "@pe/ducts-web/calcs.test-support";
 import { NativeObservationScope } from "@pe/web-kernel/revit/observation";
 import type { TreeNode } from "../../../../../../../products/duct-systems/web/src/network/model.ts";
-import { SystemTree, type TreeCtx } from "../../../../../../../products/duct-systems/web/src/screen/tree-sidebar.tsx";
+import {
+  SystemTree,
+  type TreeCtx,
+} from "../../../../../../../products/duct-systems/web/src/screen/tree-sidebar.tsx";
 import { fanFacts } from "../../../../../../../products/duct-systems/web/src/screen/fan-sections.tsx";
 import { runOf } from "../../../../../../../products/duct-systems/web/src/screen/run-detail.tsx";
 import { Scroll } from "@pe/kit/lang/scroll";
@@ -239,11 +242,21 @@ test("address query and name sort round trip; revealing an excluded selection ne
 test("fan facts list each reaching fan on its own calc, in roster order, and claim ESP only on a complete one", () => {
   const terminal = (id: number) => legOf(`${id}:1>`, id, "terminal", 0.1);
   const first = calcOf(1, [terminal(20)], [{ terminal: 20, legIds: ["20:1>"] }]);
-  const second = calcOf(2, [terminal(20), terminal(21)], [
-    { terminal: 20, legIds: ["20:1>"] },
-    { terminal: 21, legIds: ["21:1>"] },
-  ]);
-  first.claim = { kind: "complete", basis: "test", requiredEspInWg: 0.125, coverage: [], blockingIds: [] };
+  const second = calcOf(
+    2,
+    [terminal(20), terminal(21)],
+    [
+      { terminal: 20, legIds: ["20:1>"] },
+      { terminal: 21, legIds: ["21:1>"] },
+    ],
+  );
+  first.claim = {
+    kind: "complete",
+    basis: "test",
+    requiredEspInWg: 0.125,
+    coverage: [],
+    blockingIds: [],
+  };
   first.fan.flowCfm = 400;
   const priced = { calcs: [first, second] } as unknown as Priced;
   const scope = (...ids: number[]) => ({ terminals: new Set(ids), prices: new Set(ids) });
@@ -268,7 +281,11 @@ test("a unit's ports are separate fans: a port with no path is not listed, and n
   const scope = { terminals: new Set([20]), prices: new Set([10, 20]) };
   expect(fanFacts(pricedOf([zero, one]), scope).map((f) => [f.key, f.tel])).toEqual([["1:0", 40]]);
   // Port 1 reaches the system only at an open end: it is listed, with no TEL of its own to claim.
-  const open = calcOf(1, [legOf("10:2>1", 10, "duct", null)], [{ terminal: 99, legIds: ["10:2>1"] }]);
+  const open = calcOf(
+    1,
+    [legOf("10:2>1", 10, "duct", null)],
+    [{ terminal: 99, legIds: ["10:2>1"] }],
+  );
   open.fan.portIndex = 1;
   open.paths[0]!.end = { kind: "open-end", elementId: 10 };
   expect(fanFacts(pricedOf([zero, open]), scope).map((f) => [f.key, f.tel])).toEqual([
@@ -278,10 +295,21 @@ test("a unit's ports are separate fans: a port with no path is not listed, and n
 });
 
 test("a fan whose calc reaches the system but ends at an open boundary is one of its fans, with its claim and blockers (P-072)", () => {
-  const calc = calcOf(7, [legOf("10:1>2", 10, "duct", 0.2)], [{ terminal: 99, legIds: ["10:1>2"] }]);
+  const calc = calcOf(
+    7,
+    [legOf("10:1>2", 10, "duct", 0.2)],
+    [{ terminal: 99, legIds: ["10:1>2"] }],
+  );
   calc.paths[0]!.end = { kind: "open-end", elementId: 10 };
   calc.blockers = [
-    { id: "open-end:10:2", kind: "open-end", elementId: 10, detail: "open", effectInWg: null, closer: { kind: "heal", note: "" } },
+    {
+      id: "open-end:10:2",
+      kind: "open-end",
+      elementId: 10,
+      detail: "open",
+      effectInWg: null,
+      closer: { kind: "heal", note: "" },
+    },
   ];
   const priced = pricedOf([calc]);
   const facts = fanFacts(priced, { terminals: new Set([20]), prices: new Set([10, 20]) });
@@ -295,7 +323,13 @@ test("a fan whose calc reaches the system but ends at an open boundary is one of
 test("a duct with an unpriced interval has no friction loss or rate, never the priced intervals' sum (P-073)", () => {
   const interval = (id: string, dp: number | null) => ({
     ...legOf(id, 10, "duct", dp),
-    evidence: { kind: "friction" as const, roughnessFt: 0.0003, lengthFt: 10, hydraulicDiameterFt: 1, ref: "test" },
+    evidence: {
+      kind: "friction" as const,
+      roughnessFt: 0.0003,
+      lengthFt: 10,
+      hydraulicDiameterFt: 1,
+      ref: "test",
+    },
   });
   const legs = [interval("10:1>2", 0.2), interval("10:2>3", null)];
   const of = (calcs: Parameters<typeof pricedOf>[0]) => runOf(pricedOf(calcs), 10);

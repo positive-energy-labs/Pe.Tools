@@ -96,8 +96,17 @@ export interface PictureContent<L extends string = string, F extends string = st
   onPick?: (key: SubjectKey | null) => void;
 }
 
-export type LayerOption<L extends string = string> = { key: L; label: string; chord?: Chord; says?: string; off?: true };
+export type LayerOption<L extends string = string> = {
+  key: L;
+  label: string;
+  chord?: Chord;
+  says?: string;
+  off?: true;
+};
 
 /** The layer keys on: the page's list, or the options' default set. */
-export const layersOn = <L extends string>(layers: PicturePage["layers"], options: readonly LayerOption<L>[]): L[] =>
+export const layersOn = <L extends string>(
+  layers: PicturePage["layers"],
+  options: readonly LayerOption<L>[],
+): L[] =>
   options.filter((o) => (layers === "default" ? !o.off : layers.includes(o.key))).map((o) => o.key);

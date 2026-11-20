@@ -93,7 +93,8 @@ const snap = (segments: Segment[], order: string[] | null = ORDER): DuctSnapshot
       : {}),
   };
 };
-const working = (phase: string | null) => designOf({ workingPhase: { edit: { by: "human", value: phase } } });
+const working = (phase: string | null) =>
+  designOf({ workingPhase: { edit: { by: "human", value: phase } } });
 
 /** Project A's shape: Existing run 1 -> 2; Future duct 3 joined to 2's end and lying inside duct 4. */
 const projectA = () => {
@@ -151,5 +152,7 @@ it("a demolished element, and one only proximity would join, warn too; one touch
 
 // A duct outside the working phase that proximity still joined would price a wrong ESP with no error.
 it("proximity never joins a duct outside the working phase", () => {
-  expect(tolerated(projectA(), working("Existing")).findings.map((f) => f.id)).toEqual(["out-of-phase:3"]);
+  expect(tolerated(projectA(), working("Existing")).findings.map((f) => f.id)).toEqual([
+    "out-of-phase:3",
+  ]);
 });

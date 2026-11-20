@@ -13,11 +13,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse as Response } from "effect/http";
-import {
-  captureReceiptSchema,
-  captureUrl,
-  type CaptureReceipt,
-} from "@pe/agent-contracts";
+import { captureReceiptSchema, captureUrl, type CaptureReceipt } from "@pe/agent-contracts";
 import {
   appendLine,
   readLines,
@@ -107,7 +103,10 @@ export class PictureCaptures {
   /** Keep one taking: the blob if this sha is new, then one appended receipt. */
   async keep(
     bytes: Buffer,
-    facts: Pick<CaptureReceipt, "origin" | "document" | "view" | "focus" | "registration" | "marks">,
+    facts: Pick<
+      CaptureReceipt,
+      "origin" | "document" | "view" | "focus" | "registration" | "marks"
+    >,
   ): Promise<CaptureReceipt> {
     const sha = sha256Hex(bytes);
     if (facts.registration && facts.registration.imageSha256 !== sha)

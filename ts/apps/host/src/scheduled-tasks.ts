@@ -217,7 +217,11 @@ export function createScheduledTasks(options: {
   const dispatch = (id: string, force = false) => {
     const work = run(id, force);
     pending.add(work);
-    void work.finally(() => pending.delete(work)).catch((error) => { console.error("scheduled-tasks: asynchronous operation failed", error); });
+    void work
+      .finally(() => pending.delete(work))
+      .catch((error) => {
+        console.error("scheduled-tasks: asynchronous operation failed", error);
+      });
     return work;
   };
   async function poll() {
@@ -228,7 +232,10 @@ export function createScheduledTasks(options: {
       if (missedRun(row.schedule, row.nextRunAt, at)) {
         row.nextRunAt = nextRun(row.schedule, at);
         save();
-      } else void dispatch(row.id).catch((error) => { console.error("scheduled-tasks: asynchronous operation failed", error); });
+      } else
+        void dispatch(row.id).catch((error) => {
+          console.error("scheduled-tasks: asynchronous operation failed", error);
+        });
     }
   }
   let timer: ReturnType<typeof setInterval> | undefined;

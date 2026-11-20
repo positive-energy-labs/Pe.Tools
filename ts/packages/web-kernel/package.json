@@ -62,13 +62,13 @@
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/kit": "workspace:*",
+    "@tanstack/react-router": "1.170.31",
     "effect": "4.0.2",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "catalog:",
-    "zod": "4.3.6",
-    "@tanstack/react-router": "1.170.31"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@testing-library/react": "^16.3.0",

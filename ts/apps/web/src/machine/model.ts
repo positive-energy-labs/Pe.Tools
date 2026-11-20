@@ -5,7 +5,13 @@ import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/sett
  * critical state. Runtime ownership comes from the host's enforced connections; stale readings
  * never certify a current match.
  */
-import { planWaits, receiptRunning, type Machine, type MachineSession, type Reading } from "@pe/agent-contracts";
+import {
+  planWaits,
+  receiptRunning,
+  type Machine,
+  type MachineSession,
+  type Reading,
+} from "@pe/agent-contracts";
 
 import { unsavedOf } from "./session";
 
@@ -27,7 +33,6 @@ export const machineOf = (reading: Reading<Machine>): Machine | null =>
 /** The host stopped answering after it had answered: the honest gap, said in the body. */
 export const disconnected = (reading: Reading<Machine>) =>
   reading.state === "stale" && reading.reason === "disconnected";
-
 
 /** What the install scrim says: the version going in, the current leg in words, and the baseline host. */
 export interface Installing {
@@ -81,7 +86,6 @@ export function installing(reading: Reading<Machine>, accepting: boolean): Insta
           : "Starting the update",
   };
 }
-
 
 export function runtimeIdentity(reading: Reading<Machine>, fixture = false) {
   const host = machineOf(reading)?.host;
@@ -137,9 +141,6 @@ export function chipText(reading: Reading<Machine>, fixture = false): string {
   const waiting = reading.state === "ready" && planWaits(reading.observation);
   return identity.text + (waiting ? ` · ${waiting.latest} ready` : "");
 }
-
-
-
 
 /** The group that opens by itself: Update while a plan waits or a receipt runs (ruling). */
 export function autoOpen(machine: Machine | null): GroupKey | null {

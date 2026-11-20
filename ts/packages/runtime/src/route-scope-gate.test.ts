@@ -202,7 +202,6 @@ test.each(["ack-first", "stream-first"])("%s publishes once without a browser hi
   expect(publications).toEqual([1]);
   expect(f.owner.read()?.work?.value.amount).toBe(1);
 
-
   expect(f.owner.acceptPage(invocation, { search: "review" }).kind).toBe("accepted");
 });
 test("A?B?A never revives an attempt; a late acknowledgement cannot publish", () => {
@@ -280,7 +279,6 @@ test("stale snapshots and old acknowledgements cannot regress Work", () => {
   expect(f.owner.acceptWork(f.read, snapshot(1)).kind).toBe("duplicate");
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack(2) }).kind).toBe("duplicate");
   expect(f.owner.read()?.work?.revision).toBe(5);
-
 });
 test("accepted Work carries the host's handle, and a contiguous ack advances that one handle", () => {
   const f = fixture();
@@ -302,7 +300,6 @@ test("snapshot before ack does not republish", () => {
     receipt: "none",
   });
   expect(publications).toBe(1);
-
 });
 test("equal revision conflicts recover without overwriting Work", () => {
   const f = fixture();
@@ -316,7 +313,6 @@ test("equal revision conflicts recover without overwriting Work", () => {
     reason: "contradiction",
   });
   expect(f.owner.read()?.work?.value.amount).toBe(1);
-
 });
 test("snapshot then contradictory delta recovers", () => {
   const f = fixture();
@@ -339,7 +335,6 @@ test("a gap requests recovery, a snapshot recovers, and older deltas cannot regr
   expect(f.owner.acceptWork(f.read, snapshot(3)).kind).toBe("published");
   expect(f.owner.acceptWork(f.read, { kind: "stream", write: ack(3) }).kind).toBe("duplicate");
   expect(f.owner.acceptWork(f.read, { kind: "stream", write: ack(2) }).kind).toBe("duplicate");
-
 });
 test("contiguous deltas fill a gap", () => {
   const f = fixture();
@@ -379,7 +374,6 @@ test("foreign, copied, proxied and wrong-Work tokens refuse", () => {
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack(1, 1, { key: other }) })).toEqual(
     { kind: "refused", reason: "wrong-work" },
   );
-
 });
 test("published snapshots and token identity are frozen", () => {
   const f = fixture();
@@ -513,7 +507,6 @@ test("superseding a write attempt retires its Page but preserves its successful 
   f.owner.capture("write");
   expect(f.owner.acceptWork(invocation, { kind: "ack", write: ack() }).kind).toBe("receipt-only");
   expect(f.owner.read()?.work?.revision).toBe(0);
-
 });
 
 test("a route without Work constructs without Work acceptance services", () => {

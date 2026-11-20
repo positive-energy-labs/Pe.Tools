@@ -7,7 +7,13 @@ import {
   NATIVE_BODY_VERSION_HEADER,
 } from "@pe/agent-contracts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
-import { leaf, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "@pe/host-internal/reads/evaluator";
+import {
+  leaf,
+  nativeArgs,
+  nativeRead,
+  type InputPort,
+  RefusedPartition,
+} from "@pe/host-internal/reads/evaluator";
 import { workBinding } from "@pe/host-internal/reads/work";
 import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
 import { workTimelineInput } from "./work-timeline.ts";
@@ -57,7 +63,9 @@ export function inputPort(options: {
         return custom(raw, {
           ...port,
           take: async (key, args) =>
-            context ? context.read(leaf(key, z.unknown(), z.unknown()), args) : port.take(key, args),
+            context
+              ? context.read(leaf(key, z.unknown(), z.unknown()), args)
+              : port.take(key, args),
         });
       if (name === "resource") return source.resource(raw);
       if (name.startsWith("local:")) return source.file(name, raw);

@@ -15,19 +15,35 @@ import { regionSubject } from "./subject";
 import { bindings } from "./bindings";
 import type { RoomsContext } from "./route";
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 // A region is published as `region:<carrierGuid>` (hover, mentions, inbox members); the plan must
 // draw that same region hovered and selected, wired as TypedPane wires the Rooms pane.
 test("a region hovered or picked as its regionSubject draws hovered and selected on the plan", () => {
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(private read: ResizeObserverCallback) {}
-    observe() { this.read([{ contentRect: { width: 800, height: 600 } }] as ResizeObserverEntry[], this as unknown as ResizeObserver); }
-    unobserve() {}
-    disconnect() {}
-  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private read: ResizeObserverCallback) {}
+      observe() {
+        this.read(
+          [{ contentRect: { width: 800, height: 600 } }] as ResizeObserverEntry[],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   const [target, other] = DEMO_ROOMS.regions;
-  const ctx = { value: { value: { snapshot: DEMO_ROOMS } }, page: { read: () => ({ room: { kind: "ids", ids: [regionSubject(target!.guid)] } }) }, cells: { doc: null }, target: null } as unknown as RoomsContext;
+  const ctx = {
+    value: { value: { snapshot: DEMO_ROOMS } },
+    page: { read: () => ({ room: { kind: "ids", ids: [regionSubject(target!.guid)] } }) },
+    cells: { doc: null },
+    target: null,
+  } as unknown as RoomsContext;
   const bound = bindings(ctx);
   const registry = makeAtomRegistry();
   const doc = "s/1";
@@ -35,14 +51,31 @@ test("a region hovered or picked as its regionSubject draws hovered and selected
   const page = roomsPageSchema.parse({ view: DEMO_VIEW });
   const view = render(
     <RegistryContext value={registry}>
-      <AttentionScope doc={doc} selected={Atom.make(() => new Set(bound.selected))} members={bound.members}>
-        <RoomsPlan renderPane={(body, furniture) => <Pane picture {...furniture}>{body}</Pane>} rows={rows} plan={DEMO_PLAN}
-          planRefusal={null} planError={null} empty={null} onSelect={() => {}} trace={{ data: null, none: "fixture" }}
-          page={{ read: () => page, pose: () => {} }} />
+      <AttentionScope
+        doc={doc}
+        selected={Atom.make(() => new Set(bound.selected))}
+        members={bound.members}
+      >
+        <RoomsPlan
+          renderPane={(body, furniture) => (
+            <Pane picture {...furniture}>
+              {body}
+            </Pane>
+          )}
+          rows={rows}
+          plan={DEMO_PLAN}
+          planRefusal={null}
+          planError={null}
+          empty={null}
+          onSelect={() => {}}
+          trace={{ data: null, none: "fixture" }}
+          page={{ read: () => page, pose: () => {} }}
+        />
       </AttentionScope>
     </RegistryContext>,
   );
-  const path = (guid: string) => view.container.querySelector<SVGPathElement>(`path[data-subject="${regionSubject(guid)}"]`)!;
+  const path = (guid: string) =>
+    view.container.querySelector<SVGPathElement>(`path[data-subject="${regionSubject(guid)}"]`)!;
   expect(path(target!.guid).style.strokeWidth).toContain("3px");
   expect(path(other!.guid).style.strokeWidth).toContain("2px");
   const rest = path(other!.guid).getAttribute("fill");

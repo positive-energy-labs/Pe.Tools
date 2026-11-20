@@ -10,7 +10,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { expect, test } from "vite-plus/test";
-import { BASELINE, census, closureCensus, isProduction, routeFolders } from "./route-closure-census.ts";
+import {
+  BASELINE,
+  census,
+  closureCensus,
+  isProduction,
+  routeFolders,
+} from "./route-closure-census.ts";
 
 const frozen: string[] = JSON.parse(readFileSync(BASELINE, "utf8"));
 
@@ -18,20 +24,31 @@ test("no route folder gains an import of another route, a shared folder, or the 
   const actual = census();
   const added = actual.filter((edge) => !frozen.includes(edge));
   const gone = frozen.filter((edge) => !actual.includes(edge));
-  expect(added, `route closure: new offenders (a route folder imports only itself, the kernel and packages):\n${added.join("\n")}`).toEqual([]);
-  expect(gone, `route closure: these edges are gone; delete them from route-closure.baseline.json (\`node src/route-closure-census.ts --tighten\`):\n${gone.join("\n")}`).toEqual([]);
+  expect(
+    added,
+    `route closure: new offenders (a route folder imports only itself, the kernel and packages):\n${added.join("\n")}`,
+  ).toEqual([]);
+  expect(
+    gone,
+    `route closure: these edges are gone; delete them from route-closure.baseline.json (\`node src/route-closure-census.ts --tighten\`):\n${gone.join("\n")}`,
+  ).toEqual([]);
 });
 
 test("the census goes red on each planted offender and passes the clean shapes", () => {
   const routes = new Set(["fans", "ducts", "chat"]);
-  expect(closureCensus({
-    "fans/planted.ts": `import { systemCode } from "../ducts/identity";`,
-    "navigation/planted.tsx": `import { ChatShell } from "#/chat/chat-shell";`,
-    "fans/body.tsx": `import { callOp } from "#/host/client"; export const b = () => callOp("x");`,
-    "ducts/load.ts": `export const l = () => fetch("/api");`,
-    "chat/lazy.ts": `export const l = () => import("../fans/route");`,
-    "fans/types.ts": `export type T = import("@/ducts/route").X;`,
-  }, routes)).toEqual([
+  expect(
+    closureCensus(
+      {
+        "fans/planted.ts": `import { systemCode } from "../ducts/identity";`,
+        "navigation/planted.tsx": `import { ChatShell } from "#/chat/chat-shell";`,
+        "fans/body.tsx": `import { callOp } from "#/host/client"; export const b = () => callOp("x");`,
+        "ducts/load.ts": `export const l = () => fetch("/api");`,
+        "chat/lazy.ts": `export const l = () => import("../fans/route");`,
+        "fans/types.ts": `export type T = import("@/ducts/route").X;`,
+      },
+      routes,
+    ),
+  ).toEqual([
     "chat/lazy.ts -> fans/route",
     "ducts/load.ts uses fetch",
     "fans/body.tsx uses callOp",
@@ -39,25 +56,35 @@ test("the census goes red on each planted offender and passes the clean shapes",
     "fans/types.ts -> ducts/route",
     "navigation/planted.tsx -> chat/chat-shell",
   ]);
-  expect(closureCensus({
-    "fans/a.ts": `import { x } from "./b"; import { y } from "#/shell/owner"; import { z } from "@pe/kit";`,
-    "fans/a.test.ts": `import { d } from "../ducts/identity";`,
-    "fans/b.test-support.ts": `import { d } from "../ducts/identity";`,
-    "design-system/s.tsx": `import { d } from "../ducts/identity";`,
-    "fans/d.ts": `import { s } from "../design-system/open-examples";`,
-    "shell/owner.ts": `export const call = () => fetch("/api");`,
-  }, routes)).toEqual([]);
+  expect(
+    closureCensus(
+      {
+        "fans/a.ts": `import { x } from "./b"; import { y } from "#/shell/owner"; import { z } from "@pe/kit";`,
+        "fans/a.test.ts": `import { d } from "../ducts/identity";`,
+        "fans/b.test-support.ts": `import { d } from "../ducts/identity";`,
+        "design-system/s.tsx": `import { d } from "../ducts/identity";`,
+        "fans/d.ts": `import { s } from "../design-system/open-examples";`,
+        "shell/owner.ts": `export const call = () => fetch("/api");`,
+      },
+      routes,
+    ),
+  ).toEqual([]);
 });
 
 test("a product's web folder is a route folder, closed against web routes and other products", () => {
   const routes = new Set(["chat", "products/fans/web", "products/duct-systems/web"]);
-  expect(closureCensus({
-    "products/fans/web/a.ts": `import { x } from "../../duct-systems/web/x"; import { c } from "../../../apps/web/src/chat/c";`,
-    "products/fans/web/b.ts": `import { a } from "./a"; import { d } from "../domain/d"; import { s } from "#/shell/owner";`,
-    "navigation/planted.tsx": `import { r } from "../../../../products/fans/web/route";`,
-    "chat/planted.ts": `export const l = () => callOp("x");`,
-    "products/fans/web/load.ts": `export const l = () => fetch("/api");`,
-  }, routes)).toEqual([
+  expect(
+    closureCensus(
+      {
+        "products/fans/web/a.ts": `import { x } from "../../duct-systems/web/x"; import { c } from "../../../apps/web/src/chat/c";`,
+        "products/fans/web/b.ts": `import { a } from "./a"; import { d } from "../domain/d"; import { s } from "#/shell/owner";`,
+        "navigation/planted.tsx": `import { r } from "../../../../products/fans/web/route";`,
+        "chat/planted.ts": `export const l = () => callOp("x");`,
+        "products/fans/web/load.ts": `export const l = () => fetch("/api");`,
+      },
+      routes,
+    ),
+  ).toEqual([
     "chat/planted.ts uses callOp",
     "navigation/planted.tsx -> products/fans/web/route",
     "products/fans/web/a.ts -> chat/c",
@@ -68,14 +95,26 @@ test("a product's web folder is a route folder, closed against web routes and ot
 
 test("the census sees every route folder and exempts only the design-system window", () => {
   const routes = routeFolders();
-  for (const name of ["chat", "products/fans/web", "products/duct-systems/web", "open", "sessions", "settings"]) expect(routes).toContain(name);
-  for (const name of ["design-system", "shell", "route", "navigation", "workbench", "routes"]) expect(routes).not.toContain(name);
+  for (const name of [
+    "chat",
+    "products/fans/web",
+    "products/duct-systems/web",
+    "open",
+    "sessions",
+    "settings",
+  ])
+    expect(routes).toContain(name);
+  for (const name of ["design-system", "shell", "route", "navigation", "workbench", "routes"])
+    expect(routes).not.toContain(name);
 });
 
 // Boundary of both `journeys/` exemptions: no production source imports a journey, in any form
 // (static, side-effect, dynamic, re-export). Scope: every tracked non-test, non-journey source under products, apps, packages.
 const journeyImports = (text: string) =>
-  ts.preProcessFile(text, true, true).importedFiles.map((f) => f.fileName).filter((m) => /(?:^|\/)journeys(?:\/|$)/.test(m));
+  ts
+    .preProcessFile(text, true, true)
+    .importedFiles.map((f) => f.fileName)
+    .filter((m) => /(?:^|\/)journeys(?:\/|$)/.test(m));
 
 test("the journey matcher flags each import form and passes a non-journey import", () => {
   for (const text of [
@@ -83,15 +122,26 @@ test("the journey matcher flags each import form and passes a non-journey import
     `import "./journeys/x.ts";`,
     `export const l = () => import("../journeys/x.ts");`,
     `export * from "../journeys";`,
-  ]) expect(journeyImports(text), text).toHaveLength(1);
-  expect(journeyImports(`import { a } from "../journal/x.ts"; import "./b"; export * from "./c"; import("./d");`)).toEqual([]);
+  ])
+    expect(journeyImports(text), text).toHaveLength(1);
+  expect(
+    journeyImports(
+      `import { a } from "../journal/x.ts"; import "./b"; export * from "./c"; import("./d");`,
+    ),
+  ).toEqual([]);
 });
 
 test("no production source imports a journey file", () => {
   const root = join(import.meta.dirname, "../../../..");
-  const files = execFileSync("git", ["-C", root, "ls-files", "-z", "ts/products", "ts/apps", "ts/packages"], { encoding: "utf8", maxBuffer: 1 << 28 })
+  const files = execFileSync(
+    "git",
+    ["-C", root, "ls-files", "-z", "ts/products", "ts/apps", "ts/packages"],
+    { encoding: "utf8", maxBuffer: 1 << 28 },
+  )
     .split("\0")
     .filter((file) => isProduction(file) && !/\/(?:journeys|tests?|node_modules)\//.test(file));
   expect(files.length).toBeGreaterThan(100);
-  expect(files.filter((file) => journeyImports(readFileSync(join(root, file), "utf8")).length > 0)).toEqual([]);
+  expect(
+    files.filter((file) => journeyImports(readFileSync(join(root, file), "utf8")).length > 0),
+  ).toEqual([]);
 });

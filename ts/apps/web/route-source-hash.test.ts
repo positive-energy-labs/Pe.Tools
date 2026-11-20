@@ -57,9 +57,15 @@ test("a test-named dependency is captured by the real resolver and invalidates r
   writeFileSync(dependency, "export const value = 1;\n");
   writeFileSync(join(f.root, "entry.ts"), 'export { value } from "./ts/value.test.ts";\n');
   const closure = await f.build();
-  expect(closure.envelope.modules.map(member => member.id)).toContain("ts/value.test.ts");
-  const receipt = { checkout: routeStartupOwner(f.root), sourceHash: routeStartupSourceHash(f.root),
-    projections: { [join(f.root, "ts/apps/web/src/a/source-closure.generated.json")]: canonicalRouteJson(closure) } };
+  expect(closure.envelope.modules.map((member) => member.id)).toContain("ts/value.test.ts");
+  const receipt = {
+    checkout: routeStartupOwner(f.root),
+    sourceHash: routeStartupSourceHash(f.root),
+    projections: {
+      [join(f.root, "ts/apps/web/src/a/source-closure.generated.json")]:
+        canonicalRouteJson(closure),
+    },
+  };
   expect(currentRouteStartupProjection(f.root, receipt)).toBe(true);
   writeFileSync(dependency, "export const value = 2;\n");
   expect(routeStartupSourceHash(f.root)).not.toBe(receipt.sourceHash);

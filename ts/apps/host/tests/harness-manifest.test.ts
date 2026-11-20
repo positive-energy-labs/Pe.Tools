@@ -26,7 +26,13 @@ test("the Claude projection closes every account door and keeps the shell and fi
     expect(options.tools).toContain(tool);
   for (const tool of ["WebFetch", "WebSearch", "ToolSearch", "Agent", "TodoWrite"])
     expect(options.tools).toContain(tool);
-  for (const cut of ["CronCreate", "EnterWorktree", "PushNotification", "RemoteTrigger", "DesignSync"])
+  for (const cut of [
+    "CronCreate",
+    "EnterWorktree",
+    "PushNotification",
+    "RemoteTrigger",
+    "DesignSync",
+  ])
     expect(options.tools).not.toContain(cut);
   expect(emitRawSDKMessages).toEqual([{ type: "system", subtype: "init" }]);
 });

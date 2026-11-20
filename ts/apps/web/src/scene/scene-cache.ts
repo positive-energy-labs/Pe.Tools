@@ -101,16 +101,20 @@ export class SceneCache<T extends SceneData = SceneData> {
     // Scoped captures have different observation times at the same revision.
     for (const [key, { scene: entry }] of this.#entries) {
       const previous = entry.metadata.evidence;
-      const sourceChanged = previous.sources.length !== evidence.sources.length || previous.sources.some((before) =>
-        !evidence.sources.some(
-          (after) =>
-            before.placement.hostDocumentKey === after.placement.hostDocumentKey &&
-            before.placement.linkUniqueId === after.placement.linkUniqueId &&
-            before.documentKey === after.documentKey && JSON.stringify(before.revision) === JSON.stringify(after.revision) &&
-              before.availability === after.availability &&
-              JSON.stringify(before.toHost) === JSON.stringify(after.toHost),
-        ),
-      );
+      const sourceChanged =
+        previous.sources.length !== evidence.sources.length ||
+        previous.sources.some(
+          (before) =>
+            !evidence.sources.some(
+              (after) =>
+                before.placement.hostDocumentKey === after.placement.hostDocumentKey &&
+                before.placement.linkUniqueId === after.placement.linkUniqueId &&
+                before.documentKey === after.documentKey &&
+                JSON.stringify(before.revision) === JSON.stringify(after.revision) &&
+                before.availability === after.availability &&
+                JSON.stringify(before.toHost) === JSON.stringify(after.toHost),
+            ),
+        );
       // New document epochs and rebuilt source partitions invalidate every old scope of that document.
       if (
         previous.documentKey === evidence.documentKey &&

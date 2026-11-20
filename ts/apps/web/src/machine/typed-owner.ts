@@ -10,12 +10,17 @@ export type OpenSource<V extends OpenVerb = OpenVerb> = {
   verb(id: NoInfer<V>): RunVerb;
   readonly value: ReadingState<OpenContext["value"]["value"]>;
   // A pane's typed Page port, or the mount's own.
-  readonly page: OpenContext["page"] | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
+  readonly page:
+    | OpenContext["page"]
+    | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
 };
 import type { OpenOwner } from "./context";
 const openActions: readonly OpenVerb[] = ["start", "open", "close", "stop", "restart"];
 export function useOpenTypedOwner(ctx: OpenSource): OpenOwner;
-export function useOpenTypedOwner<V extends OpenVerb>(ctx: OpenSource<V>, actions: readonly V[]): OpenOwner;
+export function useOpenTypedOwner<V extends OpenVerb>(
+  ctx: OpenSource<V>,
+  actions: readonly V[],
+): OpenOwner;
 export function useOpenTypedOwner(
   ctx: OpenSource,
   actions: readonly OpenVerb[] = openActions,
@@ -28,7 +33,7 @@ export function useOpenTypedOwner(
         subscribe: () => () => {},
         version: () => 0,
         fixture: null,
-        busy: () => actions.find(id => current.current.verb(id).pending) ?? null,
+        busy: () => actions.find((id) => current.current.verb(id).pending) ?? null,
         view: {
           read: () => ({
             page: {
@@ -48,9 +53,15 @@ export function useOpenTypedOwner(
           get: (id: string) => {
             const { value } = current.current;
             return {
-              status: value.state === "ready" ? "complete" : value.state === "reading" || value.state === "refreshing" ? "pending" : "failed",
+              status:
+                value.state === "ready"
+                  ? "complete"
+                  : value.state === "reading" || value.state === "refreshing"
+                    ? "pending"
+                    : "failed",
               current: value.state === "ready",
-              value: "value" in value ? value.value[id as "machine" | "recents" | "threads"] : undefined,
+              value:
+                "value" in value ? value.value[id as "machine" | "recents" | "threads"] : undefined,
               error: refusalOf(value),
             };
           },

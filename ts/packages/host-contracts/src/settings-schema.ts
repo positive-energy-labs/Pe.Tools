@@ -7,7 +7,4 @@
 export const settingsSchemaPathPattern = /\/schemas\/settings\/[^/]+\/[^/]+\.json$/i;
 
 export const settingsSchemaPath = (schema: string): string | null =>
-  settingsSchemaPathPattern.exec(
-    schema.replace(/[?#].*$/, "").replaceAll("\\", "/"),
-  )?.[0] ?? null;
-
+  settingsSchemaPathPattern.exec(schema.replace(/[?#].*$/, "").replaceAll("\\", "/"))?.[0] ?? null;

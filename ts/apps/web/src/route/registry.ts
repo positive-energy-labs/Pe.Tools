@@ -15,7 +15,10 @@ const declarations = import.meta.glob<{
   router?: { dock?: boolean };
 }>(["../*/route.ts", "../../../../products/*/web/route.ts"], { eager: true });
 const closures = import.meta.glob<unknown>(
-  ["../*/source-closure.generated.json", "../../../../products/*/web/source-closure.generated.json"],
+  [
+    "../*/source-closure.generated.json",
+    "../../../../products/*/web/source-closure.generated.json",
+  ],
   {
     eager: true,
     import: "default",
@@ -36,8 +39,17 @@ export const routeRegistry: Readonly<Record<string, WebRoute>> = Object.fromEntr
     const closure = closures[path.replace(/route\.ts$/, "source-closure.generated.json")];
     if (!closure) throw Error(`${module.data.key} has no builtin closure: run codegen:routes`);
     const key = module.data.key;
-    return [key, { key, module, dock: router?.dock === true,
-      fingerprint: workFingerprintSchema.parse(`builtin-closure:${closureSchema.parse(closure).fingerprint}`) }];
+    return [
+      key,
+      {
+        key,
+        module,
+        dock: router?.dock === true,
+        fingerprint: workFingerprintSchema.parse(
+          `builtin-closure:${closureSchema.parse(closure).fingerprint}`,
+        ),
+      },
+    ];
   }),
 );
 

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 import { ORBIT_FOV, toCamera, type OrbitViewport } from "@pe/web-kernel/scene/orbit";
-import { newCamera, placeCamera, projectThrough, rayThrough, viewportProject } from "@pe/web-kernel/scene/projection";
+import {
+  newCamera,
+  placeCamera,
+  projectThrough,
+  rayThrough,
+  viewportProject,
+} from "@pe/web-kernel/scene/projection";
 import { Vector3, OrthographicCamera } from "three";
 import { fromControls } from "@pe/web-kernel/scene/orbit";
 import { viewportCodec, orbitViewportSchema } from "@pe/agent-contracts";

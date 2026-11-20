@@ -12,7 +12,6 @@ export const CALC_BREAKDOWN_READ = "fans.calc-breakdown";
 import type { Encounter, FanEspValues, FanIssue, LegEvidence } from "./fans-inputs.ts";
 import type { FanBlockerKind } from "@pe/host-contracts/generated";
 
-
 /** A roster entry's identity. Reached ends decide the physical discharge/inlet in the sheet. */
 export interface FanPortRef {
   unitId: number;

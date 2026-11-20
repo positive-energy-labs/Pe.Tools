@@ -14,20 +14,38 @@ async function lifecycle(changeSourceAfterCopy = false) {
   const source = join(dir, "never-opened.input");
   await writeFile(source, "Host copy input; no Revit opens this file.", "utf8");
   const calls: string[][] = [];
-  const post = native.actions({ peaWork: join(dir, "acquisitions"), sdk: async args => {
-    calls.push([...args]);
-    if (changeSourceAfterCopy && args[0] === "session" && args[1] === "start") await writeFile(source, "Source changed after destination copy", "utf8");
-    if (args[0] === "doc" && args[1] === "open") throw Error("Transport lost the SDK open outcome");
-    // Existing retained SDK envelopes, unchanged. No SDK/Revit state is simulated.
-    return replay(`${args[0]}-${args[1]}`);
-  } });
-  return { dir, native, source, calls, post,
+  const post = native.actions({
+    peaWork: join(dir, "acquisitions"),
+    sdk: async (args) => {
+      calls.push([...args]);
+      if (changeSourceAfterCopy && args[0] === "session" && args[1] === "start")
+        await writeFile(source, "Source changed after destination copy", "utf8");
+      if (args[0] === "doc" && args[1] === "open")
+        throw Error("Transport lost the SDK open outcome");
+      // Existing retained SDK envelopes, unchanged. No SDK/Revit state is simulated.
+      return replay(`${args[0]}-${args[1]}`);
+    },
+  });
+  return {
+    dir,
+    native,
+    source,
+    calls,
+    post,
     async open() {
-      const response = await post({ id: "unknown-open", key: "instances.open", target: { kind: "host" }, input: { source, into: { start: { year: "2025", owner: "pea", addins: "on" } } } });
+      const response = await post({
+        id: "unknown-open",
+        key: "instances.open",
+        target: { kind: "host" },
+        input: { source, into: { start: { year: "2025", owner: "pea", addins: "on" } } },
+      });
       expect(response.status, await response.clone().text()).toBeLessThan(400);
       return native.journal.wait("unknown-open");
     },
-    async close() { await native.close(); await rm(dir, { recursive: true, force: true }); },
+    async close() {
+      await native.close();
+      await rm(dir, { recursive: true, force: true });
+    },
   };
 }
 
@@ -36,26 +54,51 @@ test("R6 real acquisition cleanup cannot reconcile an unknown SDK open outcome",
   const { native, source, calls, post } = f;
   try {
     const original = await f.open();
-    expect(original, JSON.stringify(original)).toMatchObject({ state: "unknown", steps: expect.arrayContaining([expect.objectContaining({ key: "instances.open", state: "unknown" })]) });
+    expect(original, JSON.stringify(original)).toMatchObject({
+      state: "unknown",
+      steps: expect.arrayContaining([
+        expect.objectContaining({ key: "instances.open", state: "unknown" }),
+      ]),
+    });
     const before = calls.length;
-    const cleanup = await post({ id: "cleanup", key: "instances.cleanup", target: { kind: "host" }, input: { acquisition: original.id, unsaved: "discard" } });
+    const cleanup = await post({
+      id: "cleanup",
+      key: "instances.cleanup",
+      target: { kind: "host" },
+      input: { acquisition: original.id, unsaved: "discard" },
+    });
     expect(cleanup.status, await cleanup.clone().text()).toBeLessThan(400);
-    expect(await native.journal.wait("cleanup")).toMatchObject({ state: "failed", notDispatched: true, refusal: { code: expect.stringMatching(/^(acquisition\.unproven|reconciliation\.unresolved)$/) } });
+    expect(await native.journal.wait("cleanup")).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: {
+        code: expect.stringMatching(/^(acquisition\.unproven|reconciliation\.unresolved)$/),
+      },
+    });
     expect(await native.journal.wait(original.id)).toEqual(original);
-    expect(calls.slice(before).every(args => args[1] === "list")).toBe(true);
+    expect(calls.slice(before).every((args) => args[1] === "list")).toBe(true);
     expect(await readFile(source, "utf8")).toBe("Host copy input; no Revit opens this file.");
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 });
 
 test("E6/E10 a copied destination never refreshes a changed source after durable preparation", async () => {
   const f = await lifecycle(true);
   try {
     const original = await f.open();
-    expect(original, JSON.stringify(original)).toMatchObject({ state: "incomplete", prepared: { state: "ready" } });
-    expect(original.steps.some(step => step.kind === "file" && step.state === "succeeded")).toBe(true);
-    expect(f.calls.some(args => args[0] === "session" && args[1] === "start")).toBe(true);
-    expect(f.calls.filter(args => args[0] === "doc" && args[1] === "open")).toEqual([]);
+    expect(original, JSON.stringify(original)).toMatchObject({
+      state: "incomplete",
+      prepared: { state: "ready" },
+    });
+    expect(original.steps.some((step) => step.kind === "file" && step.state === "succeeded")).toBe(
+      true,
+    );
+    expect(f.calls.some((args) => args[0] === "session" && args[1] === "start")).toBe(true);
+    expect(f.calls.filter((args) => args[0] === "doc" && args[1] === "open")).toEqual([]);
     expect(await f.native.journal.wait(original.id)).toEqual(original);
     expect(await readFile(f.source, "utf8")).toBe("Source changed after destination copy");
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 });

@@ -1,4 +1,10 @@
-import { familyCaptureSchema, familyReads, type FamilyReadKey, type WorkKey, type DocumentRef } from "@pe/agent-contracts";
+import {
+  familyCaptureSchema,
+  familyReads,
+  type FamilyReadKey,
+  type WorkKey,
+  type DocumentRef,
+} from "@pe/agent-contracts";
 import { contextFetch as fetch } from "@pe/runtime/context";
 
 export async function readFamilyCapture(
@@ -23,4 +29,3 @@ export async function readFamilyCapture(
   if (key === "family.cancel-read") return familyReads[key].result.parse(value);
   return familyCaptureSchema.parse(value);
 }
-

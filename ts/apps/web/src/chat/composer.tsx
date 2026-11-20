@@ -184,213 +184,217 @@ export function ThreadComposer({
             event.currentTarget.focus({ preventScroll: true });
         }}
       >
-      <ScopeKeys keys={shortcuts} />
-      <ComposerFrame>
-        <Composer
-          // Files dropped anywhere on the box attach; a file drag over it takes the recess ground.
-          dragging={files.dragging}
-          drop={files.dropProps}
-          menus={
-            <>
-              <ListPopup<Capability>
-                anchor="caret"
-                caret={form}
-                side="top"
-                owner={area}
-                open={mentions.open}
-                onOpenChange={(open) => (open ? undefined : mentions.dismiss())}
-                query={mentions.query}
-                onCollection={mentions.bind}
-                aria-label="Mentions"
-                {...listOf(chatReading(handle, "capabilities"), () => mentions.rows)}
-                keyOf={(row) => row.key}
-                labelOf={(row) => row.title}
-                groupOf={(row) => MENTION_KINDS[row.kind].group}
-                groupCap={MENTION_GROUP_CAP}
-                empty="nothing to mention"
-                maxHeight="min(20rem, 45dvh)"
-                onPick={mentions.pick}
-                detail={(row) => catalog && mentionFace(row, catalog).detail}
-                row={(row) => {
-                  const Icon = MENTION_KINDS[row.kind].icon;
-                  const face = catalog && mentionFace(row, catalog);
-                  return {
-                    lead: <Icon aria-hidden />,
-                    label: face?.title ?? row.title,
-                    aside: face?.mono ? <span className="face-mono">{face.fact}</span> : face?.fact,
-                    title: row.key,
-                  };
-                }}
-              />
-              <ListPopup<SlashCommand>
-                // Above the whole composer, never over its work or text.
-                anchor="caret"
-                caret={form}
-                side="top"
-                owner={area}
-                open={slash.open}
-                onOpenChange={(open) => (open ? undefined : slash.dismiss())}
-                query={slash.query}
-                onCollection={slash.bind}
-                aria-label="Commands"
-                items={commands}
-                keyOf={(command) => command.name}
-                labelOf={(command) => command.name}
-                filter="substring"
-                empty="no skills in this thread"
-                maxHeight="min(20rem, 45dvh)"
-                onPick={(command) => setText(slash.pick(command))}
-                // a slash command is a machine identifier — mono; what it does reads in the footer
-                row={(command) => ({
-                  lead: <SkillIcon aria-hidden />,
-                  label: <span className="face-mono">/{command.name}</span>,
-                })}
-                detail={(command) => command.description}
-              />
-            </>
-          }
-          work={
-            <>
-              {work}
-              {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
-              {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
-              {files.attachments.length > 0 || draft.mentions.length > 0 ? (
-                <div className="flex flex-wrap items-end gap-1.5">
-                  {draft.mentions.map((mention) => (
-                    <MentionChip
-                      key={mention.key}
-                      label={mention.title}
-                      kind={mentionWord(mention.kind)}
-                      pointer={mention.key}
-                      facts={mention.facts}
-                      takenAt={mention.takenAt}
-                      onRemove={() => setDraft((previous) => dropMention(previous, mention.key))}
-                    />
-                  ))}
-                  {files.attachments.map((attachment, index) => (
-                    <AttachmentChip
-                      key={index}
-                      attachment={attachment}
-                      onRemove={() => files.remove(index)}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </>
-          }
-          pickers={pickers}
-          refusal={files.refusal ?? refusedSend ?? refusal}
-          tools={
-            state || noneReady ? (
+        <ScopeKeys keys={shortcuts} />
+        <ComposerFrame>
+          <Composer
+            // Files dropped anywhere on the box attach; a file drag over it takes the recess ground.
+            dragging={files.dragging}
+            drop={files.dropProps}
+            menus={
               <>
-                {state}
-                {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
+                <ListPopup<Capability>
+                  anchor="caret"
+                  caret={form}
+                  side="top"
+                  owner={area}
+                  open={mentions.open}
+                  onOpenChange={(open) => (open ? undefined : mentions.dismiss())}
+                  query={mentions.query}
+                  onCollection={mentions.bind}
+                  aria-label="Mentions"
+                  {...listOf(chatReading(handle, "capabilities"), () => mentions.rows)}
+                  keyOf={(row) => row.key}
+                  labelOf={(row) => row.title}
+                  groupOf={(row) => MENTION_KINDS[row.kind].group}
+                  groupCap={MENTION_GROUP_CAP}
+                  empty="nothing to mention"
+                  maxHeight="min(20rem, 45dvh)"
+                  onPick={mentions.pick}
+                  detail={(row) => catalog && mentionFace(row, catalog).detail}
+                  row={(row) => {
+                    const Icon = MENTION_KINDS[row.kind].icon;
+                    const face = catalog && mentionFace(row, catalog);
+                    return {
+                      lead: <Icon aria-hidden />,
+                      label: face?.title ?? row.title,
+                      aside: face?.mono ? (
+                        <span className="face-mono">{face.fact}</span>
+                      ) : (
+                        face?.fact
+                      ),
+                      title: row.key,
+                    };
+                  }}
+                />
+                <ListPopup<SlashCommand>
+                  // Above the whole composer, never over its work or text.
+                  anchor="caret"
+                  caret={form}
+                  side="top"
+                  owner={area}
+                  open={slash.open}
+                  onOpenChange={(open) => (open ? undefined : slash.dismiss())}
+                  query={slash.query}
+                  onCollection={slash.bind}
+                  aria-label="Commands"
+                  items={commands}
+                  keyOf={(command) => command.name}
+                  labelOf={(command) => command.name}
+                  filter="substring"
+                  empty="no skills in this thread"
+                  maxHeight="min(20rem, 45dvh)"
+                  onPick={(command) => setText(slash.pick(command))}
+                  // a slash command is a machine identifier — mono; what it does reads in the footer
+                  row={(command) => ({
+                    lead: <SkillIcon aria-hidden />,
+                    label: <span className="face-mono">/{command.name}</span>,
+                  })}
+                  detail={(command) => command.description}
+                />
               </>
-            ) : null
-          }
-          fork={
-            <Button
-              label="fork"
-              icon={GitFork}
-              refusal={
-                !currentThreadId
-                  ? "No thread to fork yet"
-                  : isRunning
-                    ? "Fork after the running turn ends"
-                    : null
-              }
-              onClick={() => void forkThread()}
-            />
-          }
-          attach={
-            <>
-              <Button
-                icon={Paperclip}
-                label="Attach files: images and text, 5 MB each, 10 a message"
-                onClick={files.browse}
-              />
-              <input {...files.fileInputProps} />
-            </>
-          }
-          send={
-            asking ? (
+            }
+            work={
               <>
+                {work}
+                {noneReady ? <FirstOpenCard providers={providers} origin={config.origin} /> : null}
+                {repairing ? <ProviderRepair provider={repairing} providers={providers} /> : null}
+                {files.attachments.length > 0 || draft.mentions.length > 0 ? (
+                  <div className="flex flex-wrap items-end gap-1.5">
+                    {draft.mentions.map((mention) => (
+                      <MentionChip
+                        key={mention.key}
+                        label={mention.title}
+                        kind={mentionWord(mention.kind)}
+                        pointer={mention.key}
+                        facts={mention.facts}
+                        takenAt={mention.takenAt}
+                        onRemove={() => setDraft((previous) => dropMention(previous, mention.key))}
+                      />
+                    ))}
+                    {files.attachments.map((attachment, index) => (
+                      <AttachmentChip
+                        key={index}
+                        attachment={attachment}
+                        onRemove={() => files.remove(index)}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            }
+            pickers={pickers}
+            refusal={files.refusal ?? refusedSend ?? refusal}
+            tools={
+              state || noneReady ? (
+                <>
+                  {state}
+                  {noneReady ? <span data-tone="caution">no provider is ready</span> : null}
+                </>
+              ) : null
+            }
+            fork={
+              <Button
+                label="fork"
+                icon={GitFork}
+                refusal={
+                  !currentThreadId
+                    ? "No thread to fork yet"
+                    : isRunning
+                      ? "Fork after the running turn ends"
+                      : null
+                }
+                onClick={() => void forkThread()}
+              />
+            }
+            attach={
+              <>
+                <Button
+                  icon={Paperclip}
+                  label="Attach files: images and text, 5 MB each, 10 a message"
+                  onClick={files.browse}
+                />
+                <input {...files.fileInputProps} />
+              </>
+            }
+            send={
+              asking ? (
+                <>
+                  <Button
+                    label="stop"
+                    icon={Square}
+                    refusal={!currentThreadId ? "No running thread" : null}
+                    onClick={() => void cancel()}
+                  />
+                  <Button
+                    kind="commit"
+                    label="Answer Pea's question"
+                    icon={ArrowUp}
+                    refusal={
+                      !answer
+                        ? "This question takes a pick, not text: answer it above"
+                        : draft.text.trim()
+                          ? null
+                          : "Type your answer, or pick one above"
+                    }
+                    onClick={sendCurrent}
+                  />
+                </>
+              ) : isRunning ? (
                 <Button
                   label="stop"
                   icon={Square}
                   refusal={!currentThreadId ? "No running thread" : null}
                   onClick={() => void cancel()}
                 />
-                <Button
-                  kind="commit"
-                  label="Answer Pea's question"
-                  icon={ArrowUp}
-                  refusal={
-                    !answer
-                      ? "This question takes a pick, not text: answer it above"
-                      : draft.text.trim()
-                        ? null
-                        : "Type your answer, or pick one above"
-                  }
-                  onClick={sendCurrent}
-                />
-              </>
-            ) : isRunning ? (
-              <Button
-                label="stop"
-                icon={Square}
-                refusal={!currentThreadId ? "No running thread" : null}
-                onClick={() => void cancel()}
-              />
-            ) : (
-              <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
-                <Button
-                  kind="commit"
-                  label={send.label}
-                  icon={ArrowUp}
-                  busy={isRunning}
-                  data-tone={refusedSend ? "caution" : undefined}
-                  aria-disabled={Boolean(send.refusal) || undefined}
-                  onClick={sendCurrent}
-                />
-              </TooltipHint>
-            )
-          }
-          onSend={sendCurrent}
-          onKey={(event) => slash.onKeyDown(event) || mentions.onKeyDown(event)}
-          name="input"
-          aria-label="Message"
-          areaRef={setArea}
-          aria-autocomplete="list"
-          aria-haspopup="listbox"
-          placeholder={
-            noneReady
-              ? "no provider is ready"
-              : asking
-                ? answer
-                  ? "Pea is waiting on your answer; type it here, Enter sends it"
-                  : "Pea is waiting on a pick in the question above"
-                : "Ask Pea; / for a skill, @ to point at a thing"
-          }
-          autoFocus={autoFocus}
-          value={draft.text}
-          onChange={(event) => {
-            setText(event.currentTarget.value);
-            mentions.onCaret(event.currentTarget.selectionStart);
-            slash.reset();
-            mentions.reset();
-          }}
-          onSelect={(event) => mentions.onCaret(event.currentTarget.selectionStart)}
-          onPaste={files.pasteHandler}
-        />
-        <AssetReel
-          assets={assets}
-          onMention={(mention) => {
-            setDraft((previous) => referModel(previous, mention));
-            area?.focus();
-          }}
-        />
-      </ComposerFrame>
+              ) : (
+                <TooltipHint content={refusedSend ?? send.refusal ?? send.says}>
+                  <Button
+                    kind="commit"
+                    label={send.label}
+                    icon={ArrowUp}
+                    busy={isRunning}
+                    data-tone={refusedSend ? "caution" : undefined}
+                    aria-disabled={Boolean(send.refusal) || undefined}
+                    onClick={sendCurrent}
+                  />
+                </TooltipHint>
+              )
+            }
+            onSend={sendCurrent}
+            onKey={(event) => slash.onKeyDown(event) || mentions.onKeyDown(event)}
+            name="input"
+            aria-label="Message"
+            areaRef={setArea}
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            placeholder={
+              noneReady
+                ? "no provider is ready"
+                : asking
+                  ? answer
+                    ? "Pea is waiting on your answer; type it here, Enter sends it"
+                    : "Pea is waiting on a pick in the question above"
+                  : "Ask Pea; / for a skill, @ to point at a thing"
+            }
+            autoFocus={autoFocus}
+            value={draft.text}
+            onChange={(event) => {
+              setText(event.currentTarget.value);
+              mentions.onCaret(event.currentTarget.selectionStart);
+              slash.reset();
+              mentions.reset();
+            }}
+            onSelect={(event) => mentions.onCaret(event.currentTarget.selectionStart)}
+            onPaste={files.pasteHandler}
+          />
+          <AssetReel
+            assets={assets}
+            onMention={(mention) => {
+              setDraft((previous) => referModel(previous, mention));
+              area?.focus();
+            }}
+          />
+        </ComposerFrame>
       </div>
     </KeyScope>
   );

@@ -49,78 +49,179 @@ vi.mock("../scene/scene3d", () => ({
   },
 }));
 
-
 const observers = new Map<Element, ResizeObserverCallback>();
-afterEach(() => { cleanup(); observers.clear(); io.call.mockReset(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  observers.clear();
+  io.call.mockReset();
+  vi.unstubAllGlobals();
+});
 
 test("JZ H04 typed Fans picture demands exact elements and reach, refuses document-only detail and replaces document authority", async () => {
   const { open, tree, resize, mounts, registry } = pictureJourney();
   try {
     const a = open("a");
-    await waitFor(() => expect(a.value(), JSON.stringify(a.value())).toMatchObject({ state: "ready" }));
+    await waitFor(() =>
+      expect(a.value(), JSON.stringify(a.value())).toMatchObject({ state: "ready" }),
+    );
     // The picture pane is the kernel's, loaded lazily: it is measured once it has mounted.
     const view = render(tree(a));
-    await waitFor(() => { resize(); expect(io.call).toHaveBeenCalled(); });
-    expect(io.call.mock.calls.every(([, req]) => req.contextRepresentation === "overview"), "H04: mount acquires no detailed geometry").toBe(true);
+    await waitFor(() => {
+      resize();
+      expect(io.call).toHaveBeenCalled();
+    });
+    expect(
+      io.call.mock.calls.every(([, req]) => req.contextRepresentation === "overview"),
+      "H04: mount acquires no detailed geometry",
+    ).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "Read detailed" }));
-    await waitFor(() => expect(io.call.mock.calls.some(([, req]) => req.contextRepresentation === "meshes")).toBe(true));
+    await waitFor(() =>
+      expect(io.call.mock.calls.some(([, req]) => req.contextRepresentation === "meshes")).toBe(
+        true,
+      ),
+    );
     const detail = io.call.mock.calls.find(([, req]) => req.contextRepresentation === "meshes")!;
     const sheet = (valueOf(a.value()) as any).open;
     const context = a.page.read().context !== "off";
-    const expected = [...new Set<number>([sheet.overview.fan.unitId, ...sheet.elements.walkedElementIds,
-      ...(context ? sheet.elements.beyond.flatMap((unit: { elementIds: number[] }) => unit.elementIds) : []),
-    ])].sort((x, y) => x - y);
-    expect(detail[1].elementIds, "H04: detail names only the opened walk and declared neighbours").toEqual(expected);
+    const expected = [
+      ...new Set<number>([
+        sheet.overview.fan.unitId,
+        ...sheet.elements.walkedElementIds,
+        ...(context
+          ? sheet.elements.beyond.flatMap((unit: { elementIds: number[] }) => unit.elementIds)
+          : []),
+      ]),
+    ].sort((x, y) => x - y);
+    expect(
+      detail[1].elementIds,
+      "H04: detail names only the opened walk and declared neighbours",
+    ).toEqual(expected);
     expect(detail[1]).toMatchObject({ contextPaddingFt: 10, focusOnly: false });
     expect(detail[2]).toMatchObject({ bridgeSessionId: "h04", openDocumentId: "a" });
-    const b = open("b"); await waitFor(() => expect(b.value().state === "ready").toBe(true));
-    view.rerender(tree(b)); resize();
+    const b = open("b");
+    await waitFor(() => expect(b.value().state === "ready").toBe(true));
+    view.rerender(tree(b));
+    resize();
     await waitFor(() => expect(detail[2].signal.aborted).toBe(true));
     const count = io.call.mock.calls.length;
-    expect(io.call.mock.calls.filter(([, , options]) => options.openDocumentId === "b").every(([, req]) => req.contextRepresentation === "overview")).toBe(true);
+    expect(
+      io.call.mock.calls
+        .filter(([, , options]) => options.openDocumentId === "b")
+        .every(([, req]) => req.contextRepresentation === "overview"),
+    ).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "Read detailed" }));
     await waitFor(() => expect(io.call.mock.calls.length).toBeGreaterThan(count));
-    expect(io.call.mock.calls.at(-1)![2]).toMatchObject({ bridgeSessionId: "h04", openDocumentId: "b" });
+    expect(io.call.mock.calls.at(-1)![2]).toMatchObject({
+      bridgeSessionId: "h04",
+      openDocumentId: "b",
+    });
     expect(io.call.mock.calls.at(-1)![1].contextRepresentation).toBe("meshes");
-    const empty = open("empty", true); await waitFor(() => expect(empty.value().state === "ready").toBe(true));
-    view.rerender(tree(empty)); resize();
+    const empty = open("empty", true);
+    await waitFor(() => expect(empty.value().state === "ready").toBe(true));
+    view.rerender(tree(empty));
+    resize();
     const before = io.call.mock.calls.length;
-    expect(view.queryByRole("button", { name: "Read detailed" }), "H04: no element scope offers no detail action").toBeNull();
+    expect(
+      view.queryByRole("button", { name: "Read detailed" }),
+      "H04: no element scope offers no detail action",
+    ).toBeNull();
     await act(async () => {});
-    expect(io.call.mock.calls.length, "H04: a document without elements never authorizes detail").toBe(before);
-  } finally { cleanup(); mounts.forEach(m => m.dispose()); registry.dispose(); }
+    expect(
+      io.call.mock.calls.length,
+      "H04: a document without elements never authorizes detail",
+    ).toBe(before);
+  } finally {
+    cleanup();
+    mounts.forEach((m) => m.dispose());
+    registry.dispose();
+  }
 });
 
 function pictureJourney() {
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(private callback: ResizeObserverCallback) {}
-    observe(element: Element) { observers.set(element, this.callback); }
-    unobserve(element: Element) { observers.delete(element); }
-    disconnect() {}
-  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private callback: ResizeObserverCallback) {}
+      observe(element: Element) {
+        observers.set(element, this.callback);
+      }
+      unobserve(element: Element) {
+        observers.delete(element);
+      }
+      disconnect() {}
+    },
+  );
   io.call.mockImplementation(() => new Promise(() => {}));
   const spec = route({ ...fans.spec, edits: undefined });
   const registry = makeAtomRegistry();
   const stamp = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
   const open = (openId: string, empty = false) => {
-    const mount = mountTypedRoute(spec, {
-      target: { kind: "document", ref: { session: "h04", openId } }, fixture: null,
-      work: { address: null, open: null },
-      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
-      custody: { current: () => true }, memory: () => ({ viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] } }),
-    }, stamp, { timeline: fixtureTimeline(), sources: { "fans.calc": { kind: "use", async open(ctx, deliver) {
-      const packet = structuredClone(await fans.spec.core!.source.provide!("layout", ctx.args));
-      const data = packet.value!.data as any;
-      data.calcSnapshot.sourceVersion = `h04-${openId}`;
-      if (empty) { data.calcSnapshot.nodes = []; data.calcSnapshot.segments = []; data.open = null; data.opened = []; data.rows = []; data.fans.rows = []; }
-      deliver({ kind: "complete", value: packet, revision: 1 });
-    } } } });
-    mounts.push(mount); mount.subscribe(() => {}); mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })] });
+    const mount = mountTypedRoute(
+      spec,
+      {
+        target: { kind: "document", ref: { session: "h04", openId } },
+        fixture: null,
+        work: { address: null, open: null },
+        address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+        custody: { current: () => true },
+        memory: () => ({
+          viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] },
+        }),
+      },
+      stamp,
+      {
+        timeline: fixtureTimeline(),
+        sources: {
+          "fans.calc": {
+            kind: "use",
+            async open(ctx, deliver) {
+              const packet = structuredClone(
+                await fans.spec.core!.source.provide!("layout", ctx.args),
+              );
+              const data = packet.value!.data as any;
+              data.calcSnapshot.sourceVersion = `h04-${openId}`;
+              if (empty) {
+                data.calcSnapshot.nodes = [];
+                data.calcSnapshot.segments = [];
+                data.open = null;
+                data.opened = [];
+                data.rows = [];
+                data.fans.rows = [];
+              }
+              deliver({ kind: "complete", value: packet, revision: 1 });
+            },
+          },
+        },
+      },
+    );
+    mounts.push(mount);
+    mount.subscribe(() => {});
+    mount.page.subject({
+      kind: "ids",
+      ids: [
+        stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 }),
+      ],
+    });
     return mount;
   };
-  const tree = (mount: ReturnType<typeof open>) => <TestAttention registry={registry}>{mount.draw("calc-picture", ctx => kernelPane(mount, "calc-picture", ctx)) as React.ReactNode}</TestAttention>;
-  const resize = () => act(() => { for (const [target, callback] of observers) callback([{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry], {} as ResizeObserver); });
+  const tree = (mount: ReturnType<typeof open>) => (
+    <TestAttention registry={registry}>
+      {
+        mount.draw("calc-picture", (ctx) =>
+          kernelPane(mount, "calc-picture", ctx),
+        ) as React.ReactNode
+      }
+    </TestAttention>
+  );
+  const resize = () =>
+    act(() => {
+      for (const [target, callback] of observers)
+        callback(
+          [{ target, contentRect: { width: 640, height: 480 } } as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+    });
   return { open, tree, resize, mounts, registry };
 }
 
@@ -130,37 +231,78 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     const a = open("jm-pose");
     await waitFor(() => expect(a.value().state === "ready").toBe(true));
     const view = render(tree(a));
-    await waitFor(() => { resize(); expect(io.orbit?.read()).toBeTruthy(); });
+    await waitFor(() => {
+      resize();
+      expect(io.orbit?.read()).toBeTruthy();
+    });
     const orbit = io.orbit!;
-    const pose: import("@pe/web-kernel/scene/orbit").OrbitViewport = { kind: "orbit", yaw: 170, elev: 17, zoom: 2, pivot: [0, 0, 0] };
+    const pose: import("@pe/web-kernel/scene/orbit").OrbitViewport = {
+      kind: "orbit",
+      yaw: 170,
+      elev: 17,
+      zoom: 2,
+      pivot: [0, 0, 0],
+    };
     const gesture = orbit.begin();
     const committed = a.page.read().viewport;
     act(() => orbit.preview(gesture, pose));
-    expect(a.page.read().viewport, "B14: pointer preview does not publish Page or recompute route reads").toEqual(committed);
-    view.rerender(tree(a)); resize();
+    expect(
+      a.page.read().viewport,
+      "B14: pointer preview does not publish Page or recompute route reads",
+    ).toEqual(committed);
+    view.rerender(tree(a));
+    resize();
     expect(io.orbit, "B18: equal typed Page projection retains the camera owner").toBe(orbit);
     expect(orbit.owns(gesture), "B18: resize does not interrupt an uncommitted gesture").toBe(true);
     expect(orbit.read(), "B18: resize and projection preserve the uncommitted pose").toEqual(pose);
     act(() => orbit.end(gesture));
-    expect(a.page.read().viewport, "B18: gesture release commits the same pose into Page").toEqual(pose);
-    const roster = render(<TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(a)}>
-      {a.draw("calc-roster", ctx => <RosterBody ctx={ctx as any} />) as React.ReactNode}
-    </SubjectDoor></TestAttention>);
-    expect(roster.getByRole("combobox", { name: "Search fans" }), "B03: Fans keeps its own named roster").toBeTruthy();
-    expect(roster.queryByRole("button", { name: "Choose fan" }), "B03: a route roster has no duplicate picker").toBeNull();
-    expect(roster.container.textContent, "B03: readable identity never prints encoded subject ids").not.toContain("9cb9f188-28aa-4094-8b76");
+    expect(a.page.read().viewport, "B18: gesture release commits the same pose into Page").toEqual(
+      pose,
+    );
+    const roster = render(
+      <TestAttention registry={registry}>
+        <SubjectDoor value={typedSubjectDoor(a)}>
+          {a.draw("calc-roster", (ctx) => <RosterBody ctx={ctx as any} />) as React.ReactNode}
+        </SubjectDoor>
+      </TestAttention>,
+    );
+    expect(
+      roster.getByRole("combobox", { name: "Search fans" }),
+      "B03: Fans keeps its own named roster",
+    ).toBeTruthy();
+    expect(
+      roster.queryByRole("button", { name: "Choose fan" }),
+      "B03: a route roster has no duplicate picker",
+    ).toBeNull();
+    expect(
+      roster.container.textContent,
+      "B03: readable identity never prints encoded subject ids",
+    ).not.toContain("9cb9f188-28aa-4094-8b76");
     fireEvent.click(roster.getByRole("button", { name: "All fans" }));
     expect(a.page.read().fan, "B03: All remains symbolic").toEqual({ kind: "all" });
-    act(() => typedSubjectDoor(a)!.add([stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 })]));
+    act(() =>
+      typedSubjectDoor(a)!.add([
+        stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 }),
+      ]),
+    );
     expect(a.page.read().fan, "B03: additive open never narrows All").toEqual({ kind: "all" });
     fireEvent.click(roster.getByRole("button", { name: "Clear fans" }));
     expect(a.page.read().fan, "B03: None remains explicit").toEqual({ kind: "ids", ids: [] });
     roster.unmount();
-  } finally { cleanup(); mounts.forEach(m => m.dispose()); registry.dispose(); }
+  } finally {
+    cleanup();
+    mounts.forEach((m) => m.dispose());
+    registry.dispose();
+  }
 });
 
 import { Context, Effect, Layer, Queue, Option } from "effect";
-import { createRootRoute, createRouter, createMemoryHistory, RouterProvider } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRouter,
+  createMemoryHistory,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { rm } from "node:fs/promises";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { tmpdir } from "node:os";
@@ -191,152 +333,436 @@ import "@pe/fans-web/mount";
 import { routeRegistry } from "../route/registry";
 import { bindActionReadings } from "../host/resource-stream";
 
-const trace = vi.hoisted(()=>({submit:vi.fn(),fetch:vi.fn(),base:"",target:null as any,results:[] as any[]}));
-vi.mock("@pe/web-kernel/host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
-vi.mock("../../../host/src/session-route",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../host/tests/native-receipt-fixture");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
-const ambient = <S,I>(tag:Context.Key<S,I>)=>Layer.effect(tag,Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
-
+const trace = vi.hoisted(() => ({
+  submit: vi.fn(),
+  fetch: vi.fn(),
+  base: "",
+  target: null as any,
+  results: [] as any[],
+}));
+vi.mock("@pe/web-kernel/host/runtime", () => ({
+  hostFetch: trace.fetch,
+  runtimeStreamUrl: (url: string) => new URL(url, trace.base).toString(),
+}));
+vi.mock("../../../host/src/session-route", async (actual) => {
+  const real = await actual<any>();
+  const { Effect } = await import("effect");
+  const { sdkSessions } = await import("../../../host/tests/native-receipt-fixture");
+  return { ...real, runPeRevitCli: (args: any) => Effect.promise(() => sdkSessions(args)) };
+});
+vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => {
+  const real = await actual<any>();
+  trace.submit.mockImplementation(async (...args: any[]) => {
+    const row = await real.submitAction(...args);
+    ((trace as any).results ??= []).push(row);
+    return row;
+  });
+  return { ...real, submitAction: trace.submit };
+});
+const ambient = <S, I>(tag: Context.Key<S, I>) =>
+  Layer.effect(tag, Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
 
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused with the claim's reason",async()=>{
- trace.results=[];
- trace.submit.mockClear();
- const originalFetch=globalThis.fetch;
- const requests:any[]=[];
- let bridge:any;
- const roster=nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
- const walk=nativeResponseSchema("ducts.snapshot.walk").parse({ ...walkCapture, vocabulary: VOCABULARY, walk: { ...walkCapture.walk, unreadPeers: [] } });
- const tables=nativeResponseSchema("ducts.tables").parse({folder:"fixture",tables:{},missing:[],unsupported:{}});
- const native=Layer.effect(HostNativeRead,Effect.gen(function*(){
-   bridge=yield* connectTestBridge(); trace.target=bridge.target;
-   yield* Effect.forkScoped(Effect.forever(Queue.take(bridge.outgoing).pipe(Effect.flatMap((frame:any)=>{
-     const request=frame.request;if(!request)return Effect.void;
-     requests.push({key:request.operationKey,input:JSON.parse(request.payloadJson)});
-     const value=request.operationKey==="ducts.snapshot.roster"?roster:request.operationKey==="ducts.snapshot.walk"?walk:request.operationKey==="ducts.tables"?tables:request.operationKey==="ducts.apply.plan"?(()=>{
-       const input=JSON.parse(request.payloadJson);
-       const writes=(input.components??[]).map((row:any)=>({id:row.id,kind:"component",outcome:"planned",before:"unset",after:`${row.inWg} in-wg`,reason:null}));
-       return {previewOnly:true,writes,counts:{planned:writes.length,written:0,refused:0,unchanged:0},systemsAfter:[],storeRevision:0};
-     })():request.operationKey==="revit.catalog.field-options"?{descriptor:{key:JSON.parse(request.payloadJson).key,mode:"Suggestion",allowsCustomValue:true,dependsOn:[],requiredRuntimeMode:"LiveDocument"},items:[],result:{kind:"Success",message:""}}:{};
-     const reply=Queue.offer(bridge.incoming,JSON.stringify({kind:"Response",response:{requestId:request.requestId,openDocumentId:request.openDocumentId,ok:true,statusCode:200,payloadJson:JSON.stringify(value),metrics:{requestBytes:0,responseBytes:0,revitExecutionMs:0,roundTripMs:0,serializationMs:0}}}));
-     return reply;
-   }))));
-   return yield* HostNativeRead;
- })).pipe(Layer.provide(ambient(HostNativeRead)),Layer.provide(ambient(RevitBridge)));
- const dir=await mkdtemp(join(tmpdir(),"pe-f05-bisect-"));
- const stamp=admittedReceiptStamps().host!;
- const captureStore=await Effect.runPromise(openRecordingWriter(stateFixture(dir),{build:JSON.stringify({version:stamp.version,build:stamp.build,commit:stamp.commit}),catalog:nativeCatalogIdentity()},{maxBytes:256*1024*1024,maxTakings:10000}));
- const inputs=await Effect.runPromise(HostInputContext.pipe(Effect.provide(HostInputContext.layer({kind:"live",captureStore}))));
- const host=await bootHost({inputs,reads:{live:{marks:ambient(HostDocumentMarks),inventory:HostSessionInventory.layer.pipe(Layer.provide(Layer.mergeAll(ambient(RevitBridge),ambient(SdkSession)))),files:DuctFiles.layer(hostState().home),native}},revitCompositionFactory:()=>({provider:RevitBridgeLive,routes:Layer.unwrap(Effect.gen(function*(){const reads=yield* ReadOwner;return yield* makeCallRoute(undefined,{workspace:reads.work.workspace,sdk:sdkSessions,workReads:reads.work.reads},{pointers:reads.work.pointers,retainedRead:reads.retainedCall,nativeBody:reads.nativeBody});})).pipe(Layer.provide(native))})});
- trace.base=host.base;
- const forward=async(url:any,init:any={})=>{
-   const headers=new Headers(init.headers);headers.set("x-pe-context",host.terminal);headers.set(HOST_RUNTIME_SERVICE_HEADER,hostOwnership.serviceName);
-   const target=new URL(typeof url==="string"?url:url.url??url.href,host.base);
-   return originalFetch(`${host.base}${target.pathname}${target.search}`,{...init,headers});
- };
- trace.fetch.mockImplementation(forward);vi.stubGlobal("fetch",forward);
- const {Stream,streams}=hostEventSource(request=>forward(request.url,{signal:request.signal}));
- vi.stubGlobal("ResizeObserver",class {observe(){} unobserve(){} disconnect(){}});
- vi.stubGlobal("EventSource",Stream);
- const unbind=bindActionReadings();
- let generation=0;
- const { fansReadResponse } = await import("@pe/fans-contract/fans-read");
-const { address:workAddress } = await import("@pe/agent-contracts");
- const source: import("@pe/web-kernel/shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
-   const subscription=crypto.randomUUID(),current=++generation;
-   const body={read:"fans.calc",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
-   void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(async response=>{
-     const wire=await response.json();if(!response.ok)throw Error(JSON.stringify(wire));const value=fansReadResponse.parse(wire);
-     if(!ctx.signal.aborted)deliver({kind:"complete",value,revision:value.version});
-   }).catch(error=>{if(!ctx.signal.aborted)deliver({kind:"failure",error});});
-   return ()=>{void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...body,generation:++generation,release:true})});};
- }};
- const selected=stableFanKey({ uniqueId: walk.nodes.find(n=>n.id===14577391)!.uniqueId!, portIndex: 2 });
- let search=new URLSearchParams({fan:JSON.stringify({kind:"ids",ids:[selected]})});
- const {TypedWrite}=await import("../shell/typed-shell");
- const {KeyScopeHost}=await import("@pe/kit/keys");
- const mount=mountTypedRoute(fans,{
-   target:{kind:"document",ref:trace.target},fixture:null,work:{address:workAddress("C:/model.rvt"),open:trace.target},
-   address:{read:()=>new URLSearchParams(search),write:next=>{search=new URLSearchParams(next);},subscribe:()=>()=>{}},
-   custody:{current:()=>true},memory:()=>({}),
- },routeRegistry.fans!.fingerprint,{sources:{"fans.calc":source}});
- const React=await import("react");
- const {SheetPane}=await import("./slots/sheet/pane.tsx");
- const registry=makeAtomRegistry();
- function Journey(){const [,set]=React.useState(0);React.useEffect(()=>mount.subscribe(()=>set(n=>n+1)),[]);return <TestAttention registry={registry}><SubjectDoor value={typedSubjectDoor(mount)}><KeyScopeHost id="scope-revert"><TypedWrite mount={mount} id="losses"/>{mount.draw("calc-inputs",ctx=><SheetPane ctx={{draw:ctx as any,slot:mount.spec.sheet!,field:mount.spec.subject?.field}}/>) as React.ReactNode}</KeyScopeHost></SubjectDoor></TestAttention>;}
- const router=createRouter({routeTree:createRootRoute({component:Journey}),history:createMemoryHistory({initialEntries:["/fans"]})});
- const phase=(at:string)=>{if(process.env.PE_FANS_SCOPE_EVIDENCE)writeFileSync(process.env.PE_FANS_SCOPE_EVIDENCE,JSON.stringify({at,revision:mount.owner()?.handle?.revision,problem:mount.reviewProblem("losses"),results:(trace as any).results,requests},null,2));};
- try{
-   render(<RouterProvider router={router}/>);
-   await vi.waitFor(()=>expect(mount.startAction()).toBeTruthy(),{timeout:20000});
-   await vi.waitFor(()=>expect(mount.owner()?.scope.key.binding).toBe("address"),{timeout:20000});
+test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused with the claim's reason", async () => {
+  trace.results = [];
+  trace.submit.mockClear();
+  const originalFetch = globalThis.fetch;
+  const requests: any[] = [];
+  let bridge: any;
+  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({
+    ...rosterCapture,
+    vocabulary: VOCABULARY,
+  });
+  const walk = nativeResponseSchema("ducts.snapshot.walk").parse({
+    ...walkCapture,
+    vocabulary: VOCABULARY,
+    walk: { ...walkCapture.walk, unreadPeers: [] },
+  });
+  const tables = nativeResponseSchema("ducts.tables").parse({
+    folder: "fixture",
+    tables: {},
+    missing: [],
+    unsupported: {},
+  });
+  const native = Layer.effect(
+    HostNativeRead,
+    Effect.gen(function* () {
+      bridge = yield* connectTestBridge();
+      trace.target = bridge.target;
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Queue.take(bridge.outgoing).pipe(
+            Effect.flatMap((frame: any) => {
+              const request = frame.request;
+              if (!request) return Effect.void;
+              requests.push({ key: request.operationKey, input: JSON.parse(request.payloadJson) });
+              const value =
+                request.operationKey === "ducts.snapshot.roster"
+                  ? roster
+                  : request.operationKey === "ducts.snapshot.walk"
+                    ? walk
+                    : request.operationKey === "ducts.tables"
+                      ? tables
+                      : request.operationKey === "ducts.apply.plan"
+                        ? (() => {
+                            const input = JSON.parse(request.payloadJson);
+                            const writes = (input.components ?? []).map((row: any) => ({
+                              id: row.id,
+                              kind: "component",
+                              outcome: "planned",
+                              before: "unset",
+                              after: `${row.inWg} in-wg`,
+                              reason: null,
+                            }));
+                            return {
+                              previewOnly: true,
+                              writes,
+                              counts: {
+                                planned: writes.length,
+                                written: 0,
+                                refused: 0,
+                                unchanged: 0,
+                              },
+                              systemsAfter: [],
+                              storeRevision: 0,
+                            };
+                          })()
+                        : request.operationKey === "revit.catalog.field-options"
+                          ? {
+                              descriptor: {
+                                key: JSON.parse(request.payloadJson).key,
+                                mode: "Suggestion",
+                                allowsCustomValue: true,
+                                dependsOn: [],
+                                requiredRuntimeMode: "LiveDocument",
+                              },
+                              items: [],
+                              result: { kind: "Success", message: "" },
+                            }
+                          : {};
+              const reply = Queue.offer(
+                bridge.incoming,
+                JSON.stringify({
+                  kind: "Response",
+                  response: {
+                    requestId: request.requestId,
+                    openDocumentId: request.openDocumentId,
+                    ok: true,
+                    statusCode: 200,
+                    payloadJson: JSON.stringify(value),
+                    metrics: {
+                      requestBytes: 0,
+                      responseBytes: 0,
+                      revitExecutionMs: 0,
+                      roundTripMs: 0,
+                      serializationMs: 0,
+                    },
+                  },
+                }),
+              );
+              return reply;
+            }),
+          ),
+        ),
+      );
+      return yield* HostNativeRead;
+    }),
+  ).pipe(Layer.provide(ambient(HostNativeRead)), Layer.provide(ambient(RevitBridge)));
+  const dir = await mkdtemp(join(tmpdir(), "pe-f05-bisect-"));
+  const stamp = admittedReceiptStamps().host!;
+  const captureStore = await Effect.runPromise(
+    openRecordingWriter(
+      stateFixture(dir),
+      {
+        build: JSON.stringify({ version: stamp.version, build: stamp.build, commit: stamp.commit }),
+        catalog: nativeCatalogIdentity(),
+      },
+      { maxBytes: 256 * 1024 * 1024, maxTakings: 10000 },
+    ),
+  );
+  const inputs = await Effect.runPromise(
+    HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", captureStore }))),
+  );
+  const host = await bootHost({
+    inputs,
+    reads: {
+      live: {
+        marks: ambient(HostDocumentMarks),
+        inventory: HostSessionInventory.layer.pipe(
+          Layer.provide(Layer.mergeAll(ambient(RevitBridge), ambient(SdkSession))),
+        ),
+        files: DuctFiles.layer(hostState().home),
+        native,
+      },
+    },
+    revitCompositionFactory: () => ({
+      provider: RevitBridgeLive,
+      routes: Layer.unwrap(
+        Effect.gen(function* () {
+          const reads = yield* ReadOwner;
+          return yield* makeCallRoute(
+            undefined,
+            { workspace: reads.work.workspace, sdk: sdkSessions, workReads: reads.work.reads },
+            {
+              pointers: reads.work.pointers,
+              retainedRead: reads.retainedCall,
+              nativeBody: reads.nativeBody,
+            },
+          );
+        }),
+      ).pipe(Layer.provide(native)),
+    }),
+  });
+  trace.base = host.base;
+  const forward = async (url: any, init: any = {}) => {
+    const headers = new Headers(init.headers);
+    headers.set("x-pe-context", host.terminal);
+    headers.set(HOST_RUNTIME_SERVICE_HEADER, hostOwnership.serviceName);
+    const target = new URL(typeof url === "string" ? url : (url.url ?? url.href), host.base);
+    return originalFetch(`${host.base}${target.pathname}${target.search}`, { ...init, headers });
+  };
+  trace.fetch.mockImplementation(forward);
+  vi.stubGlobal("fetch", forward);
+  const { Stream, streams } = hostEventSource((request) =>
+    forward(request.url, { signal: request.signal }),
+  );
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  vi.stubGlobal("EventSource", Stream);
+  const unbind = bindActionReadings();
+  let generation = 0;
+  const { fansReadResponse } = await import("@pe/fans-contract/fans-read");
+  const { address: workAddress } = await import("@pe/agent-contracts");
+  const source: import("@pe/web-kernel/shell/source-contract").UseSource = {
+    kind: "use",
+    open(ctx, deliver) {
+      const subscription = crypto.randomUUID(),
+        current = ++generation;
+      const body = {
+        read: "fans.calc",
+        subscription,
+        generation: current,
+        args: { target: trace.target, ...(ctx.args as object) },
+      };
+      void forward("/pe/reads/value", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+        .then(async (response) => {
+          const wire = await response.json();
+          if (!response.ok) throw Error(JSON.stringify(wire));
+          const value = fansReadResponse.parse(wire);
+          if (!ctx.signal.aborted) deliver({ kind: "complete", value, revision: value.version });
+        })
+        .catch((error) => {
+          if (!ctx.signal.aborted) deliver({ kind: "failure", error });
+        });
+      return () => {
+        void forward("/pe/reads/value", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ ...body, generation: ++generation, release: true }),
+        });
+      };
+    },
+  };
+  const selected = stableFanKey({
+    uniqueId: walk.nodes.find((n) => n.id === 14577391)!.uniqueId!,
+    portIndex: 2,
+  });
+  let search = new URLSearchParams({ fan: JSON.stringify({ kind: "ids", ids: [selected] }) });
+  const { TypedWrite } = await import("../shell/typed-shell");
+  const { KeyScopeHost } = await import("@pe/kit/keys");
+  const mount = mountTypedRoute(
+    fans,
+    {
+      target: { kind: "document", ref: trace.target },
+      fixture: null,
+      work: { address: workAddress("C:/model.rvt"), open: trace.target },
+      address: {
+        read: () => new URLSearchParams(search),
+        write: (next) => {
+          search = new URLSearchParams(next);
+        },
+        subscribe: () => () => {},
+      },
+      custody: { current: () => true },
+      memory: () => ({}),
+    },
+    routeRegistry.fans!.fingerprint,
+    { sources: { "fans.calc": source } },
+  );
+  const React = await import("react");
+  const { SheetPane } = await import("./slots/sheet/pane.tsx");
+  const registry = makeAtomRegistry();
+  function Journey() {
+    const [, set] = React.useState(0);
+    React.useEffect(() => mount.subscribe(() => set((n) => n + 1)), []);
+    return (
+      <TestAttention registry={registry}>
+        <SubjectDoor value={typedSubjectDoor(mount)}>
+          <KeyScopeHost id="scope-revert">
+            <TypedWrite mount={mount} id="losses" />
+            {
+              mount.draw("calc-inputs", (ctx) => (
+                <SheetPane
+                  ctx={{
+                    draw: ctx as any,
+                    slot: mount.spec.sheet!,
+                    field: mount.spec.subject?.field,
+                  }}
+                />
+              )) as React.ReactNode
+            }
+          </KeyScopeHost>
+        </SubjectDoor>
+      </TestAttention>
+    );
+  }
+  const router = createRouter({
+    routeTree: createRootRoute({ component: Journey }),
+    history: createMemoryHistory({ initialEntries: ["/fans"] }),
+  });
+  const phase = (at: string) => {
+    if (process.env.PE_FANS_SCOPE_EVIDENCE)
+      writeFileSync(
+        process.env.PE_FANS_SCOPE_EVIDENCE,
+        JSON.stringify(
+          {
+            at,
+            revision: mount.owner()?.handle?.revision,
+            problem: mount.reviewProblem("losses"),
+            results: (trace as any).results,
+            requests,
+          },
+          null,
+          2,
+        ),
+      );
+  };
+  try {
+    render(<RouterProvider router={router} />);
+    await vi.waitFor(() => expect(mount.startAction()).toBeTruthy(), { timeout: 20000 });
+    await vi.waitFor(() => expect(mount.owner()?.scope.key.binding).toBe("address"), {
+      timeout: 20000,
+    });
 
-   for(const route of Object.keys(fans.spec.edits!.owners)){
-     const owner=mount.owner(route)!;
-     if(owner!==mount.owner()){
-       await vi.waitFor(()=>expect(owner.ready).toBe(true),{timeout:20000});
-       expect(owner.handle?.revision).toBe(0);
-       continue;
-     }
-     await vi.waitFor(()=>expect(owner.absent).toBe(true),{timeout:20000});
-     expect(owner.handle).toBeNull();
-     const id=crypto.randomUUID();
-     const started=await forward("/actions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({
-       id,key:"work.start",target:{kind:"host"},input:{key:owner.scope.key,seed:owner.config.state.schema.parse({})},
-     })});
-     expect([200,202]).toContain(started.status);
-     const settled=await forward(`/actions?id=${id}&wait=25000`);
-     expect((await settled.json())[0]).toMatchObject({id,key:"work.start",state:"succeeded"});
-     await vi.waitFor(()=>expect(mount.owner(route)?.ready).toBe(true),{timeout:20000});
-   }
+    for (const route of Object.keys(fans.spec.edits!.owners)) {
+      const owner = mount.owner(route)!;
+      if (owner !== mount.owner()) {
+        await vi.waitFor(() => expect(owner.ready).toBe(true), { timeout: 20000 });
+        expect(owner.handle?.revision).toBe(0);
+        continue;
+      }
+      await vi.waitFor(() => expect(owner.absent).toBe(true), { timeout: 20000 });
+      expect(owner.handle).toBeNull();
+      const id = crypto.randomUUID();
+      const started = await forward("/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id,
+          key: "work.start",
+          target: { kind: "host" },
+          input: { key: owner.scope.key, seed: owner.config.state.schema.parse({}) },
+        }),
+      });
+      expect([200, 202]).toContain(started.status);
+      const settled = await forward(`/actions?id=${id}&wait=25000`);
+      expect((await settled.json())[0]).toMatchObject({
+        id,
+        key: "work.start",
+        state: "succeeded",
+      });
+      await vi.waitFor(() => expect(mount.owner(route)?.ready).toBe(true), { timeout: 20000 });
+    }
 
-   act(()=>mount.refresh());
-   await screen.findByRole("button",{name:"None"},{timeout:20000});
-   const user=userEvent.setup();
-   const edit=async(id:string,value:string)=>{
-     const subject=elementSubject((walk.nodes.find((n:any)=>n.id===Number(id)) ?? walk.segments.find((n:any)=>n.id===Number(id)))!);
-     const row=await vi.waitFor(()=>{const row=document.querySelector(`[data-sheet-address="componentDrops:${subject}"]`);expect(row, JSON.stringify({cells:[...document.querySelectorAll("[data-sheet-address]")].map(e=>e.getAttribute("data-sheet-address")),text:document.body.textContent?.slice(-3500),value:mount.value().state})).toBeTruthy();return row!;});
-     const input=within(row as HTMLElement).getByRole("textbox");
-     await user.clear(input);await user.type(input,`${value}{Enter}`);
-   };
-   await edit("14577394","0.02");
-   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(2),{timeout:20000});
-   phase("r2");
-   act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
-   fireEvent.click(await screen.findByRole("button",{name:"None"}));
-   fireEvent.click(await screen.findByRole("option",{name:/MUAS-1.*1 staged/}));
-   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(3),{timeout:20000});
-   phase("r3");
-   act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
-   // A staged cell's own clear verb returns it to the source underneath (the old row's Revert).
-   const ds1=elementSubject((walk.nodes.find((n:any)=>n.id===14577394) ?? walk.segments.find((n:any)=>n.id===14577394))!);
-   fireEvent.click(within(document.querySelector(`[data-sheet-address="componentDrops:${ds1}"]`) as HTMLElement).getByRole("button",{name:/clear/i}));
-   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(4),{timeout:20000});
-   phase("r4");
-   act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
-   await edit("13493812","0.01");
-   await vi.waitFor(()=>expect(mount.owner()?.handle?.revision).toBe(5),{timeout:20000});
-   phase("r5");
-   act(()=>mount.refresh());
-   await vi.waitFor(()=>expect(mount.value().state === "ready").toBe(true),{timeout:20000});
-   phase("before Plan");
-   fireEvent.click(await screen.findByRole("button",{name:"plan Write to Revit"}));
-   await vi.waitFor(()=>expect(trace.results).toHaveLength(1),{timeout:20000});
-   // The recorded MUAS-1 walk holds an unruled inferred join, so its calc is incomplete: the plan is refused with the
-   // claim's reason and no native plan is read (invariant 1). The group write once planned B without A here; that
-   // the fan scope is a projection of current edits is witnessed in ducts-domain staged.test.ts.
-   expect(trace.results[0].state).toBe("failed");
-   expect(String(trace.results[0].error ?? mount.reviewProblem("losses"))).toMatch(/Nothing is written from a incomplete fan calc .*inferred-join:14122436:1/);
-   expect(requests.some(row=>row.key==="ducts.apply.plan")).toBe(false);
-   expect(document.body.textContent).not.toContain("no staged edit");
- } finally {
-   phase("finally");
-   cleanup();mount.dispose();registry.dispose();unbind();for(const stream of streams)stream.close();
-   vi.unstubAllGlobals();await host.close();await rm(dir,{recursive:true,force:true});
- }
-},60000);
+    act(() => mount.refresh());
+    await screen.findByRole("button", { name: "None" }, { timeout: 20000 });
+    const user = userEvent.setup();
+    const edit = async (id: string, value: string) => {
+      const subject = elementSubject(
+        (walk.nodes.find((n: any) => n.id === Number(id)) ??
+          walk.segments.find((n: any) => n.id === Number(id)))!,
+      );
+      const row = await vi.waitFor(() => {
+        const row = document.querySelector(`[data-sheet-address="componentDrops:${subject}"]`);
+        expect(
+          row,
+          JSON.stringify({
+            cells: [...document.querySelectorAll("[data-sheet-address]")].map((e) =>
+              e.getAttribute("data-sheet-address"),
+            ),
+            text: document.body.textContent?.slice(-3500),
+            value: mount.value().state,
+          }),
+        ).toBeTruthy();
+        return row!;
+      });
+      const input = within(row as HTMLElement).getByRole("textbox");
+      await user.clear(input);
+      await user.type(input, `${value}{Enter}`);
+    };
+    await edit("14577394", "0.02");
+    await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(2), { timeout: 20000 });
+    phase("r2");
+    act(() => mount.refresh());
+    await vi.waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20000 });
+    fireEvent.click(await screen.findByRole("button", { name: "None" }));
+    fireEvent.click(await screen.findByRole("option", { name: /MUAS-1.*1 staged/ }));
+    await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(3), { timeout: 20000 });
+    phase("r3");
+    act(() => mount.refresh());
+    await vi.waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20000 });
+    // A staged cell's own clear verb returns it to the source underneath (the old row's Revert).
+    const ds1 = elementSubject(
+      (walk.nodes.find((n: any) => n.id === 14577394) ??
+        walk.segments.find((n: any) => n.id === 14577394))!,
+    );
+    fireEvent.click(
+      within(
+        document.querySelector(`[data-sheet-address="componentDrops:${ds1}"]`) as HTMLElement,
+      ).getByRole("button", { name: /clear/i }),
+    );
+    await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(4), { timeout: 20000 });
+    phase("r4");
+    act(() => mount.refresh());
+    await vi.waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20000 });
+    await edit("13493812", "0.01");
+    await vi.waitFor(() => expect(mount.owner()?.handle?.revision).toBe(5), { timeout: 20000 });
+    phase("r5");
+    act(() => mount.refresh());
+    await vi.waitFor(() => expect(mount.value().state === "ready").toBe(true), { timeout: 20000 });
+    phase("before Plan");
+    fireEvent.click(await screen.findByRole("button", { name: "plan Write to Revit" }));
+    await vi.waitFor(() => expect(trace.results).toHaveLength(1), { timeout: 20000 });
+    // The recorded MUAS-1 walk holds an unruled inferred join, so its calc is incomplete: the plan is refused with the
+    // claim's reason and no native plan is read (invariant 1). The group write once planned B without A here; that
+    // the fan scope is a projection of current edits is witnessed in ducts-domain staged.test.ts.
+    expect(trace.results[0].state).toBe("failed");
+    expect(String(trace.results[0].error ?? mount.reviewProblem("losses"))).toMatch(
+      /Nothing is written from a incomplete fan calc .*inferred-join:14122436:1/,
+    );
+    expect(requests.some((row) => row.key === "ducts.apply.plan")).toBe(false);
+    expect(document.body.textContent).not.toContain("no staged edit");
+  } finally {
+    phase("finally");
+    cleanup();
+    mount.dispose();
+    registry.dispose();
+    unbind();
+    for (const stream of streams) stream.close();
+    vi.unstubAllGlobals();
+    await host.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+}, 60000);

@@ -334,9 +334,7 @@ export function AppBar() {
         </div>
       )}
       {/* The Situation band rides the bar itself; the Ctrl+. drawer is the narrow-bar fallback. */}
-      {!compact && (
-        <BandOutlet className="pe-appbar-situation" />
-      )}
+      {!compact && <BandOutlet className="pe-appbar-situation" />}
       {/* Consent never folds into the drawer: the tray's card is its sweep, so the panel draws none. */}
       <div
         className="pe-appbar-commands"
@@ -372,7 +370,8 @@ export function AppBar() {
               onClick={() => host.setPinned(!host.pinned)}
             />
             <span className="flex-1" />
-            <Button kind="quiet"
+            <Button
+              kind="quiet"
               icon={ExternalLink}
               reason="Open this page in a window"
               label="Open in window"

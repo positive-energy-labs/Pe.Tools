@@ -4,7 +4,12 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { z } from "zod";
 import type { CatalogLink } from "./catalog.ts";
 import { INVALID } from "./page-keys.ts";
-import { decodeRouteGraph, linkRouteBodies, linkRouteGates, routeBindingSchema } from "./route-bodies.ts";
+import {
+  decodeRouteGraph,
+  linkRouteBodies,
+  linkRouteGates,
+  routeBindingSchema,
+} from "./route-bodies.ts";
 import { projectKernelDirectory } from "./route-directory.ts";
 import { orderedListField } from "./route-field.ts";
 import { canonicalRouteJson } from "./route-graph.ts";
@@ -31,13 +36,38 @@ import {
 } from "./route-module.ts";
 const bytes = new TextEncoder().encode("export const bodies = {};\n");
 it("links field gates to schema values rather than stage tables", () => {
-  const graph = { ...builtinData, fields: { ...builtinData.fields, stage: { ...builtinData.fields.search, role: "stage" as const, schema: "stage" } },
-    layout: { kind: "gate" as const, when: { field: "stage", value: "inspect" }, child: builtinData.layout } };
+  const graph = {
+    ...builtinData,
+    fields: {
+      ...builtinData.fields,
+      stage: { ...builtinData.fields.search, role: "stage" as const, schema: "stage" },
+    },
+    layout: {
+      kind: "gate" as const,
+      when: { field: "stage", value: "inspect" },
+      child: builtinData.layout,
+    },
+  };
   const table = { ...schemas, stage: z.enum(["inspect", "write"]) };
   expect(linkRouteGates(graph, table)).toEqual([]);
-  expect(linkRouteGates({ ...graph, layout: { ...graph.layout, when: { field: "stage", value: "missing" } } }, table)).toMatchObject([{ path: "layout.when" }]);
-  expect(linkRouteGates({ ...graph, layout: { ...graph.layout, when: { field: "missing", value: "inspect" } } }, table)).toMatchObject([{ path: "layout.when" }]);
-  expect(linkRouteGates({ ...graph, subject: undefined, layout: { ...graph.layout, when: "subject" } }, table)).toMatchObject([{ path: "layout.when" }]);
+  expect(
+    linkRouteGates(
+      { ...graph, layout: { ...graph.layout, when: { field: "stage", value: "missing" } } },
+      table,
+    ),
+  ).toMatchObject([{ path: "layout.when" }]);
+  expect(
+    linkRouteGates(
+      { ...graph, layout: { ...graph.layout, when: { field: "missing", value: "inspect" } } },
+      table,
+    ),
+  ).toMatchObject([{ path: "layout.when" }]);
+  expect(
+    linkRouteGates(
+      { ...graph, subject: undefined, layout: { ...graph.layout, when: "subject" } },
+      table,
+    ),
+  ).toMatchObject([{ path: "layout.when" }]);
 });
 const contracts = new TextEncoder().encode("kernel, schemas and codecs v1\n");
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -87,7 +117,7 @@ async function refuse(data: RouteGraphJson, overrides: object = {}, catalog = ba
   return result.diagnostics;
 }
 describe("one decoded admission", () => {
-it("admits builtin and complete mixed-identity Pod through the same door", async () => {
+  it("admits builtin and complete mixed-identity Pod through the same door", async () => {
     const builtin = await prepare();
     expect(builtin.port.admit({ ...builtinModule, artifact: builtin.artifact })).toMatchObject({
       ok: true,
@@ -116,7 +146,7 @@ it("admits builtin and complete mixed-identity Pod through the same door", async
       }),
     ).toMatchObject({ ok: true });
   });
-it("diagnoses wrong, missing, extra and conflicting bodies at the slot", async () => {
+  it("diagnoses wrong, missing, extra and conflicting bodies at the slot", async () => {
     const errors = await refuse(builtinData, {
       bodies: { ...builtinBodies, calculate: { ...builtinBodies.calculate, kind: "picker" } },
     });
@@ -141,7 +171,7 @@ it("diagnoses wrong, missing, extra and conflicting bodies at the slot", async (
       expect.objectContaining({ path: "readings.total.derive", code: "kind" }),
     );
   });
-it("refuses unknown pane and Page/Work/reading dependencies", async () => {
+  it("refuses unknown pane and Page/Work/reading dependencies", async () => {
     expect(
       await refuse({ ...builtinData, subject: { ...builtinData.subject, pane: "absent" } }),
     ).toContainEqual(expect.objectContaining({ path: "subject.pane" }));
@@ -164,7 +194,7 @@ it("refuses unknown pane and Page/Work/reading dependencies", async () => {
       ),
     );
   });
-it("refuses reading cycles, stage mismatch and multiple subjects/selections", async () => {
+  it("refuses reading cycles, stage mismatch and multiple subjects/selections", async () => {
     expect(
       await refuse({
         ...builtinData,
@@ -193,7 +223,7 @@ it("refuses reading cycles, stage mismatch and multiple subjects/selections", as
       }),
     ).toContainEqual(expect.objectContaining({ path: "fields" }));
   });
-it("checks field codecs, refinements and stage enums", async () => {
+  it("checks field codecs, refinements and stage enums", async () => {
     const data = {
       ...builtinData,
       fields: {
@@ -228,7 +258,7 @@ it("checks field codecs, refinements and stage enums", async () => {
       await refuse(builtinData, { schemas: { ...schemas, subjectOne: z.string().nullable() } }),
     ).toContainEqual(expect.objectContaining({ path: "fields.system.schema", code: "identity" }));
   });
-it("refuses invalid axes and transitive geometry without policy", async () => {
+  it("refuses invalid axes and transitive geometry without policy", async () => {
     expect(
       await refuse(builtinData, {
         entries: {
@@ -266,7 +296,7 @@ it("refuses invalid axes and transitive geometry without policy", async () => {
       ),
     ).toContainEqual(expect.objectContaining({ path: "readings.roster.geometry" }));
   });
-it("refuses automatic dependency closures that reach detailed geometry", async () => {
+  it("refuses automatic dependency closures that reach detailed geometry", async () => {
     const data = {
       ...podModule.data,
       readings: {
@@ -291,7 +321,7 @@ it("refuses automatic dependency closures that reach detailed geometry", async (
   });
 });
 describe("canonical bytes", () => {
-it.each([() => 1, undefined, Infinity, NaN, 1n, new Date(), "\ud800", Symbol("x")])(
+  it.each([() => 1, undefined, Infinity, NaN, 1n, new Date(), "\ud800", Symbol("x")])(
     "refuses invalid JSON: %s",
     (value) => {
       expect(() => canonicalRouteJson({ value })).toThrow();
@@ -306,7 +336,7 @@ it.each([() => 1, undefined, Infinity, NaN, 1n, new Date(), "\ud800", Symbol("x"
       ).toBe(false);
     },
   );
-it("rejects accessors, sparse arrays and cycles without evaluating them", () => {
+  it("rejects accessors, sparse arrays and cycles without evaluating them", () => {
     const cycle: { self?: unknown } = {};
     cycle.self = cycle;
     const sparse: unknown[] = [];
@@ -324,7 +354,7 @@ it("rejects accessors, sparse arrays and cycles without evaluating them", () => 
       expect(() => canonicalRouteJson(value)).toThrow();
     expect(canonicalRouteJson({ z: -0, a: [1e30, "€"] })).toBe('{"a":[1e+30,"€"],"z":0}');
   });
-it("requires roles and refuses required review", () => {
+  it("requires roles and refuses required review", () => {
     const { role: _role, ...field } = builtinData.fields.search;
     expect(
       decodeRouteGraph({ ...builtinData, fields: { ...builtinData.fields, search: field } }).ok,
@@ -336,7 +366,7 @@ it("requires roles and refuses required review", () => {
       }).ok,
     ).toBe(false);
   });
-it("matches independent SHA256, binds body bytes and refuses a wrong fingerprint", async () => {
+  it("matches independent SHA256, binds body bytes and refuses a wrong fingerprint", async () => {
     const { artifact, evidence } = await prepare();
     const expected = createHash("sha256")
       .update(`pe.route.v1\n${canonicalRouteJson(artifact)}`)
@@ -365,7 +395,7 @@ it("matches independent SHA256, binds body bytes and refuses a wrong fingerprint
     const wrong = await createRouteAdmission({ ...evidence, expectedFingerprint: "0".repeat(64) });
     expect(wrong.admitUnknown({ ...builtinModule, artifact }).ok).toBe(false);
   });
-it("rejects unsafe paths, duplicate members, missing entries and unresolved closures", async () => {
+  it("rejects unsafe paths, duplicate members, missing entries and unresolved closures", async () => {
     const { artifact, evidence } = await prepare();
     for (const path of ["../bodies.js", "/bodies.js", "a\\b", "a//b", "C:body.js", "missing.js"])
       await expect(

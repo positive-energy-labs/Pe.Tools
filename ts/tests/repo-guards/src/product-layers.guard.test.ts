@@ -21,24 +21,35 @@ for (const [from, spec, fails] of [
     `import * as x from "${spec}";`,
     `export * from "${spec}";`,
     `const x = import("${spec}");`,
-  ]) test(`${from}: ${statement}`, () => {
-    const file = `products/${from}/src/planted.ts`;
-    expect(productLayerViolations({ [file]: statement })).toEqual(fails ? [`${file} -> ${spec}`] : []);
-  });
+  ])
+    test(`${from}: ${statement}`, () => {
+      const file = `products/${from}/src/planted.ts`;
+      expect(productLayerViolations({ [file]: statement })).toEqual(
+        fails ? [`${file} -> ${spec}`] : [],
+      );
+    });
 }
 
 test("web may import the shared base domain", () => {
-  expect(productLayerViolations({ "products/fans/web/src/planted.ts":
-    'import { x } from "@pe/ducts-domain/types";' })).toEqual([]);
+  expect(
+    productLayerViolations({
+      "products/fans/web/src/planted.ts": 'import { x } from "@pe/ducts-domain/types";',
+    }),
+  ).toEqual([]);
 });
 
 test("the shared base domain may not import a product domain", () => {
   const file = "products/ducts/domain/src/planted.ts";
   const spec = "@pe/fans-domain/calc/network-calcs";
-  expect(productLayerViolations({ [file]: `import { x } from "${spec}";` })).toEqual([`${file} -> ${spec}`]);
+  expect(productLayerViolations({ [file]: `import { x } from "${spec}";` })).toEqual([
+    `${file} -> ${spec}`,
+  ]);
 });
 
 test("the shared base domain may import a product contract", () => {
-  expect(productLayerViolations({ "products/ducts/domain/src/planted.ts":
-    'import { Calc } from "@pe/fans-contract/fan-calc";' })).toEqual([]);
+  expect(
+    productLayerViolations({
+      "products/ducts/domain/src/planted.ts": 'import { Calc } from "@pe/fans-contract/fan-calc";',
+    }),
+  ).toEqual([]);
 });

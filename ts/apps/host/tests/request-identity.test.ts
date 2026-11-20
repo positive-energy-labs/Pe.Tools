@@ -17,78 +17,146 @@ effectTest("EventSource query ownership carries its minted human into native adm
     const server = createServer();
     yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()));
     const port = () => (server.address() as import("node:net").AddressInfo).port;
-    const identity = requestIdentityLayer({ port, frontendOrigin: Effect.succeed(undefined),
-      share: { read: async () => { throw Error("local requests never read sharing"); }, observe: () => {} } });
+    const identity = requestIdentityLayer({
+      port,
+      frontendOrigin: Effect.succeed(undefined),
+      share: {
+        read: async () => {
+          throw Error("local requests never read sharing");
+        },
+        observe: () => {},
+      },
+    });
     const routes = Layer.mergeAll(
       HttpRouter.add("GET", "/", () => Effect.succeed(HttpServerResponse.html("mint"))),
-      HttpRouter.add("GET", "/pe/resources", () => Effect.gen(function* () {
-        yield* Effect.yieldNow;
-        const result = yield* Effect.result(admitNativeCaller("ducts.tables"));
-        return HttpServerResponse.jsonUnsafe(result._tag === "Success"
-          ? { caller: (yield* RequestIdentity).caller.kind, native: result.success.key }
-          : { problem: result.failure.problem }, { status: result._tag === "Success" ? 200 : 403 });
-      })),
+      HttpRouter.add("GET", "/pe/resources", () =>
+        Effect.gen(function* () {
+          yield* Effect.yieldNow;
+          const result = yield* Effect.result(admitNativeCaller("ducts.tables"));
+          return HttpServerResponse.jsonUnsafe(
+            result._tag === "Success"
+              ? { caller: (yield* RequestIdentity).caller.kind, native: result.success.key }
+              : { problem: result.failure.problem },
+            { status: result._tag === "Success" ? 200 : 403 },
+          );
+        }),
+      ),
     );
-    yield* Layer.build(HttpRouter.serve(routes.pipe(Layer.provide(identity))).pipe(
-      Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
-    ));
+    yield* Layer.build(
+      HttpRouter.serve(routes.pipe(Layer.provide(identity))).pipe(
+        Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
+      ),
+    );
     yield* Effect.promise(async () => {
       const base = `http://127.0.0.1:${port()}`;
-      const nav = await fetch(base, { headers: { accept: "text/html", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } });
+      const nav = await fetch(base, {
+        headers: {
+          accept: "text/html",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-dest": "document",
+        },
+      });
       const cookie = nav.headers.get("set-cookie")!.split(";")[0]!;
       await nav.body?.cancel();
-      const revisit = await fetch(base, { headers: { cookie, accept: "text/html", "sec-fetch-site": "none",
-        "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" } });
+      const revisit = await fetch(base, {
+        headers: {
+          cookie,
+          accept: "text/html",
+          "sec-fetch-site": "none",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-dest": "document",
+        },
+      });
       expect(revisit.headers.get("set-cookie")!.split(";")[0]).toBe(cookie);
       await revisit.body?.cancel();
       const headers = { cookie, referer: `${base}/fans`, "sec-fetch-site": "same-origin" };
       const send = async (query: string, extra: Record<string, string> = {}) => {
-        const response = await fetch(`${base}/pe/resources${query}`, { headers: { ...headers, ...extra } });
+        const response = await fetch(`${base}/pe/resources${query}`, {
+          headers: { ...headers, ...extra },
+        });
         return { status: response.status, body: await response.json() };
       };
       const query = `?peRuntimeService=${hostOwnership.serviceName}`;
-      expect(await send(query)).toEqual({ status: 200, body: { caller: "human", native: "ducts.tables" } });
-      expect(await send("?peRuntimeService=foreign", { [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName })).toMatchObject({ status: 403 });
-      expect(await send(query, { [HOST_RUNTIME_SERVICE_HEADER]: "foreign" })).toMatchObject({ status: 403 });
+      expect(await send(query)).toEqual({
+        status: 200,
+        body: { caller: "human", native: "ducts.tables" },
+      });
+      expect(
+        await send("?peRuntimeService=foreign", {
+          [HOST_RUNTIME_SERVICE_HEADER]: hostOwnership.serviceName,
+        }),
+      ).toMatchObject({ status: 403 });
+      expect(await send(query, { [HOST_RUNTIME_SERVICE_HEADER]: "foreign" })).toMatchObject({
+        status: 403,
+      });
       expect(await send("")).toMatchObject({ status: 403 });
-      expect(await send(query, { cookie: "" })).toEqual({ status: 403, body: { problem: "context.missing" } });
-      expect(await send(query, { referer: "" })).toEqual({ status: 403, body: { problem: "context.missing" } });
+      expect(await send(query, { cookie: "" })).toEqual({
+        status: 403,
+        body: { problem: "context.missing" },
+      });
+      expect(await send(query, { referer: "" })).toEqual({
+        status: 403,
+        body: { problem: "context.missing" },
+      });
       expect(await send(query, { origin: "http://127.0.0.1:5274" })).toMatchObject({ status: 403 });
     });
   }),
 );
 
 /* purge-2 c103cdbc: a cross-site frame's navigation minted a browser context, and nothing refused the framing. */
-effectTest("only this origin's own navigation mints a browser context, and a page refuses a foreign frame", () =>
-  Effect.gen(function* () {
-    const server = createServer();
-    yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()));
-    const port = () => (server.address() as import("node:net").AddressInfo).port;
-    const identity = requestIdentityLayer({ port, frontendOrigin: Effect.succeed(undefined),
-      share: { read: async () => { throw Error("local requests never read sharing"); }, observe: () => {} } });
-    const routes = HttpRouter.add("GET", "/", () => Effect.succeed(HttpServerResponse.html("page")));
-    yield* Layer.build(HttpRouter.serve(routes.pipe(Layer.provide(identity))).pipe(
-      Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
-    ));
-    yield* Effect.promise(async () => {
-      const navigate = async (site?: string, dest = "iframe") => {
-        const response = await fetch(`http://127.0.0.1:${port()}/`, { headers: { accept: "text/html",
-          "sec-fetch-mode": "navigate", "sec-fetch-dest": dest, ...(site ? { "sec-fetch-site": site } : {}) } });
-        await response.body?.cancel();
-        return { status: response.status, minted: response.headers.has("set-cookie"),
-          frames: response.headers.get("content-security-policy") };
-      };
-      const page = { status: 200, frames: "frame-ancestors 'self'" };
-      // The re-admission frame, a typed address, and a client that sends no fetch metadata.
-      expect(await navigate("same-origin")).toEqual({ ...page, minted: true });
-      expect(await navigate("none", "document")).toEqual({ ...page, minted: true });
-      expect(await navigate(undefined, "document")).toEqual({ ...page, minted: true });
-      // Another site's frame or link still reads the page, as the anonymous caller it arrived as.
-      expect(await navigate("cross-site")).toEqual({ ...page, minted: false });
-      expect(await navigate("same-site")).toEqual({ ...page, minted: false });
-      expect(await navigate("cross-site", "document")).toEqual({ ...page, minted: false });
-    });
-  }),
+effectTest(
+  "only this origin's own navigation mints a browser context, and a page refuses a foreign frame",
+  () =>
+    Effect.gen(function* () {
+      const server = createServer();
+      yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()));
+      const port = () => (server.address() as import("node:net").AddressInfo).port;
+      const identity = requestIdentityLayer({
+        port,
+        frontendOrigin: Effect.succeed(undefined),
+        share: {
+          read: async () => {
+            throw Error("local requests never read sharing");
+          },
+          observe: () => {},
+        },
+      });
+      const routes = HttpRouter.add("GET", "/", () =>
+        Effect.succeed(HttpServerResponse.html("page")),
+      );
+      yield* Layer.build(
+        HttpRouter.serve(routes.pipe(Layer.provide(identity))).pipe(
+          Layer.provide(NodeHttpServer.layer(() => server, { host: "127.0.0.1", port: 0 })),
+        ),
+      );
+      yield* Effect.promise(async () => {
+        const navigate = async (site?: string, dest = "iframe") => {
+          const response = await fetch(`http://127.0.0.1:${port()}/`, {
+            headers: {
+              accept: "text/html",
+              "sec-fetch-mode": "navigate",
+              "sec-fetch-dest": dest,
+              ...(site ? { "sec-fetch-site": site } : {}),
+            },
+          });
+          await response.body?.cancel();
+          return {
+            status: response.status,
+            minted: response.headers.has("set-cookie"),
+            frames: response.headers.get("content-security-policy"),
+          };
+        };
+        const page = { status: 200, frames: "frame-ancestors 'self'" };
+        // The re-admission frame, a typed address, and a client that sends no fetch metadata.
+        expect(await navigate("same-origin")).toEqual({ ...page, minted: true });
+        expect(await navigate("none", "document")).toEqual({ ...page, minted: true });
+        expect(await navigate(undefined, "document")).toEqual({ ...page, minted: true });
+        // Another site's frame or link still reads the page, as the anonymous caller it arrived as.
+        expect(await navigate("cross-site")).toEqual({ ...page, minted: false });
+        expect(await navigate("same-site")).toEqual({ ...page, minted: false });
+        expect(await navigate("cross-site", "document")).toEqual({ ...page, minted: false });
+      });
+    }),
 );
 
 const turns = () =>

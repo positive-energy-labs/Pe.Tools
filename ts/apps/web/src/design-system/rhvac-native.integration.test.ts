@@ -90,11 +90,13 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         reading: { ...seed.readings.snapshot.capture.snapshot.reading, at: owner.at },
         world: { ...seed.readings.snapshot.capture.snapshot.world, r10Path: path },
       };
-      const capture = await settle(owner.captures.refresh(
-        owner.target,
-        Effect.succeed({ result: null, snapshot }),
-        Effect.succeed(true),
-      ));
+      const capture = await settle(
+        owner.captures.refresh(
+          owner.target,
+          Effect.succeed({ result: null, snapshot }),
+          Effect.succeed(true),
+        ),
+      );
       const nativeLinks: unknown[] = [];
       const bridge = {
         list: Effect.succeed([

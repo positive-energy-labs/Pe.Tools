@@ -135,39 +135,71 @@ test.each([
 
 test("named SDK selection decodes payload after diagnostic refusal", async () => {
   const valid = JSON.parse(replay("session-list"));
-  expect(await namedSdkSession("acc-r1", async () => JSON.stringify(valid)))
-    .toMatchObject({ case: "controlled-active", id: "acc-r1" });
+  expect(await namedSdkSession("acc-r1", async () => JSON.stringify(valid))).toMatchObject({
+    case: "controlled-active",
+    id: "acc-r1",
+  });
   valid.result.sessions[0].process.pid = "71464";
-  await expect(namedSdkSession("acc-r1", async () => JSON.stringify(valid)))
-    .rejects.toThrow(/invalid SessionListResult payload/);
+  await expect(namedSdkSession("acc-r1", async () => JSON.stringify(valid))).rejects.toThrow(
+    /invalid SessionListResult payload/,
+  );
   valid.result = null;
   valid.diagnostics = [{ code: "session.failed", detail: "read failed", fix: null }];
-  await expect(namedSdkSession("acc-r1", async () => JSON.stringify(valid)))
-    .rejects.toThrow("The SDK does not name one session 'acc-r1'");
+  await expect(namedSdkSession("acc-r1", async () => JSON.stringify(valid))).rejects.toThrow(
+    "The SDK does not name one session 'acc-r1'",
+  );
 });
 
 // K1c: the readable "already has a session" message answers only a start that expected no session row.
 test.each([
-  { name: "a fresh start beside a live session", input: { expectSession: "absent" }, detail: "expected no session row, but 'dev' exists. Nothing was dispatched.", readable: true },
-  { name: "an adoption start", input: {}, detail: "expected no session row, but 'dev' exists. Nothing was dispatched.", readable: false },
-  { name: "a recorded-session expectation", input: { expectSession: "C:/receipts/dev.json" }, detail: "expected the recorded session, but no matching row exists. Nothing was dispatched.", readable: false },
-])("a stale start expectation reads plainly only for $name", async ({ input, detail, readable }) => {
-  const id = crypto.randomUUID();
-  const release = bindActionDispatch(id, { refusal: () => null, validate: async () => null, dispatched: async () => {} });
-  try {
-    const error = await dispatchSdk(
-      { ...input, argv: ["session", "start", "--year", "2025", "--request-id", SDK_REQUEST_ID, "--json"] },
-      id,
-      async () => replay("session-start", {
-        result: { state: "refused", legs: [] },
-        diagnostics: [{ code: "op.stale-expectation", detail, fix: null }],
-      }),
-    ).catch((error: unknown) => error);
-    expect(error).toMatchObject({ outcome: "refused" });
-    expect((error as Error).message).toBe(readable
-      ? `Revit 2025 already has a session, so nothing was started. Use that session or stop it first. (op.stale-expectation: ${detail})`
-      : `op.stale-expectation: ${detail}`);
-  } finally {
-    release();
-  }
-});
+  {
+    name: "a fresh start beside a live session",
+    input: { expectSession: "absent" },
+    detail: "expected no session row, but 'dev' exists. Nothing was dispatched.",
+    readable: true,
+  },
+  {
+    name: "an adoption start",
+    input: {},
+    detail: "expected no session row, but 'dev' exists. Nothing was dispatched.",
+    readable: false,
+  },
+  {
+    name: "a recorded-session expectation",
+    input: { expectSession: "C:/receipts/dev.json" },
+    detail: "expected the recorded session, but no matching row exists. Nothing was dispatched.",
+    readable: false,
+  },
+])(
+  "a stale start expectation reads plainly only for $name",
+  async ({ input, detail, readable }) => {
+    const id = crypto.randomUUID();
+    const release = bindActionDispatch(id, {
+      refusal: () => null,
+      validate: async () => null,
+      dispatched: async () => {},
+    });
+    try {
+      const error = await dispatchSdk(
+        {
+          ...input,
+          argv: ["session", "start", "--year", "2025", "--request-id", SDK_REQUEST_ID, "--json"],
+        },
+        id,
+        async () =>
+          replay("session-start", {
+            result: { state: "refused", legs: [] },
+            diagnostics: [{ code: "op.stale-expectation", detail, fix: null }],
+          }),
+      ).catch((error: unknown) => error);
+      expect(error).toMatchObject({ outcome: "refused" });
+      expect((error as Error).message).toBe(
+        readable
+          ? `Revit 2025 already has a session, so nothing was started. Use that session or stop it first. (op.stale-expectation: ${detail})`
+          : `op.stale-expectation: ${detail}`,
+      );
+    } finally {
+      release();
+    }
+  },
+);

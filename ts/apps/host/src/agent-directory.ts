@@ -43,8 +43,11 @@ export function prepareAgentDirectory(): void {
   } catch (error) {
     console.error("Agent instructions unavailable", { path: instructions, error });
     note(hostState(), {
-      class: "keep", place: "Agent instructions", path: instructions,
-      sha256: null, reason: `Instructions unavailable: ${String(error)}`,
+      class: "keep",
+      place: "Agent instructions",
+      path: instructions,
+      sha256: null,
+      reason: `Instructions unavailable: ${String(error)}`,
     });
   }
 }

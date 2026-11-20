@@ -28,7 +28,12 @@ const runtime = <A>(
   dir: string,
   admitted: ReceiptStamp | null,
   program: Effect.Effect<A, never, ActionJournalService | HostLogService>,
-) => Effect.runPromise(Effect.scoped(program).pipe(Effect.provide(ActionJournalService.live(admitted, stateFixture(dir)))));
+) =>
+  Effect.runPromise(
+    Effect.scoped(program).pipe(
+      Effect.provide(ActionJournalService.live(admitted, stateFixture(dir))),
+    ),
+  );
 
 test("each runtime scope owns its journal; the log mirrors commits in order and drains on close", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-host-receipts-"));
@@ -50,7 +55,9 @@ test("each runtime scope owns its journal; the log mirrors commits in order and 
     { kind: "receipt", receipt: { body: { op: "test.b" }, stamp: host } },
   ]);
   // The released runtime refuses late work; its successor never borrows it.
-  await expect(first.journal.recordQueue("test.late", "late", "s", "started", 1)).rejects.toThrow("closed");
+  await expect(first.journal.recordQueue("test.late", "late", "s", "started", 1)).rejects.toThrow(
+    "closed",
+  );
   const second = await runtime(
     dir,
     null,
@@ -59,7 +66,9 @@ test("each runtime scope owns its journal; the log mirrors commits in order and 
       const log = yield* HostLogService;
       return {
         journal,
-        stamps: (yield* Effect.promise(() => journal.read({ kinds: ["queue"] }))).map((row) => row.stamp),
+        stamps: (yield* Effect.promise(() => journal.read({ kinds: ["queue"] }))).map(
+          (row) => row.stamp,
+        ),
         logged: log.read(0).entries.length,
       };
     }),
@@ -73,11 +82,11 @@ test("a non-host stamp fails runtime construction; no later stamp mutation exist
   const dir = await mkdtemp(join(tmpdir(), "pe-host-receipts-"));
   dirs.push(dir);
   const exit = await Effect.runPromiseExit(
-    Effect.scoped(Effect.gen(function* () {
-      return yield* ActionJournalService;
-    })).pipe(
-      Effect.provide(ActionJournalService.live(stamp("web"), stateFixture(dir))),
-    ),
+    Effect.scoped(
+      Effect.gen(function* () {
+        return yield* ActionJournalService;
+      }),
+    ).pipe(Effect.provide(ActionJournalService.live(stamp("web"), stateFixture(dir)))),
   );
   expect(Exit.isFailure(exit) && String(exit.cause)).toContain("requires a host stamp");
 });
@@ -98,10 +107,15 @@ test("journal facts and their mirrored log entries take the runtime Clock; advan
         yield* Effect.promise(() => journal.recordQueue("test.b", "b", "s", "queued", 2));
         return {
           facts: (yield* Effect.promise(() => journal.read({ kinds: ["queue"] }))).map((r) => r.at),
-          mirrored: log.read(0).entries.map(({ at, event }) => [at, event.kind === "receipt" && event.receipt.at]),
+          mirrored: log
+            .read(0)
+            .entries.map(({ at, event }) => [at, event.kind === "receipt" && event.receipt.at]),
         };
       }),
-    ).pipe(Effect.provide(ActionJournalService.live(null, stateFixture(dir))), Effect.provide(TestClock.layer())),
+    ).pipe(
+      Effect.provide(ActionJournalService.live(null, stateFixture(dir))),
+      Effect.provide(TestClock.layer()),
+    ),
   );
   expect(facts).toEqual([first, later]);
   expect(mirrored).toEqual([

@@ -49,7 +49,9 @@ test("gestures press only what a person could press and read typing back", async
   expect(await log()).toBe("enabled;");
 
   // `within` scopes to the first shown region of that name, not a hidden or inert earlier twin.
-  expect(await g.click({ role: "button", name: "Scoped action", within: '[aria-label="Pane"]' })).toMatchObject({ outcome: "done" });
+  expect(
+    await g.click({ role: "button", name: "Scoped action", within: '[aria-label="Pane"]' }),
+  ).toMatchObject({ outcome: "done" });
   expect(await log()).toBe("enabled;scoped;");
 
   expect(await g.type({ role: "textbox", name: "Doubling" }, "Duct")).toEqual({

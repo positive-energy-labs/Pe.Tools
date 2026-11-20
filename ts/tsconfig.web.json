@@ -3,16 +3,8 @@
     "target": "ES2022",
     "jsx": "react-jsx",
     "module": "ESNext",
-    "lib": [
-      "ES2024",
-      "DOM",
-      "DOM.Iterable",
-      "DOM.AsyncIterable"
-    ],
-    "types": [
-      "vite-plus/client",
-      "node"
-    ],
+    "lib": ["ES2024", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "types": ["vite-plus/client", "node"],
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,

@@ -11,9 +11,8 @@ const sharedUrl = new URL(
 // the real kernel in apps/web/src/route/pod-loader.test.ts.
 const module = async () => {
   const { createInstruments } = await import(sharedUrl);
-  const { initialCircuitState, circuitReduce } = await import(
-    "../../../../examples/pods/snowdon-circuits/pages/tour/circuits.mjs"
-  );
+  const { initialCircuitState, circuitReduce } =
+    await import("../../../../examples/pods/snowdon-circuits/pages/tour/circuits.mjs");
   return { initial: initialCircuitState, reducer: circuitReduce, create: createInstruments };
 };
 
@@ -37,7 +36,12 @@ function harness(initial, reducer, options = {}) {
     useState: (value) => {
       const index = hook++;
       if (!(index in hooks)) hooks[index] = value;
-      return [hooks[index], (next) => { hooks[index] = next; }];
+      return [
+        hooks[index],
+        (next) => {
+          hooks[index] = next;
+        },
+      ];
     },
     useEffect: (fn) => effects.push(fn),
   };
@@ -71,10 +75,17 @@ function harness(initial, reducer, options = {}) {
     exportSnapshot: async (snapshot) => calls.push({ export: snapshot }),
     ...options,
   };
-  return { api, calls, effects, themes, state: () => state, render: (component) => {
-    hook = 0;
-    return component();
-  } };
+  return {
+    api,
+    calls,
+    effects,
+    themes,
+    state: () => state,
+    render: (component) => {
+      hook = 0;
+      return component();
+    },
+  };
 }
 function all(node) {
   if (!node || typeof node !== "object") return [];

@@ -132,7 +132,10 @@ export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
 );
 
 const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
-  Effect.flatMap(getHostStatus({ connected: false }, { revit: false }, null, contentHomesFound()), Response.json),
+  Effect.flatMap(
+    getHostStatus({ connected: false }, { revit: false }, null, contentHomesFound()),
+    Response.json,
+  ),
 );
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));
@@ -326,8 +329,7 @@ function liveHttpLive(options: HttpLiveOptions) {
       ...shareIntentFile(hostState()),
     });
   const devices =
-    options.devices ??
-    createDevices(devicesKind.in(hostState(), hostOwnership.serviceName));
+    options.devices ?? createDevices(devicesKind.in(hostState(), hostOwnership.serviceName));
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,

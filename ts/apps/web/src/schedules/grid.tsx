@@ -31,7 +31,9 @@ export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
     revision: ctx.cells.basis?.workRevision ?? null,
     hydrated: ctx.value.value !== undefined,
     readPrompt: namesOf(page.workspaceId).length
-      ? ctx.cells.doc ? "Read schedule" : "Start this schedule Work, then Read schedule"
+      ? ctx.cells.doc
+        ? "Read schedule"
+        : "Start this schedule Work, then Read schedule"
       : "Choose schedule in the header, then Read schedule",
     apply: async (patches) => {
       if (refusal) return { code: "not-ready", message: refusal };

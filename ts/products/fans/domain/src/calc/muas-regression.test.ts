@@ -90,7 +90,9 @@ it("Q4: the family's connector direction sets MUAS-1's roles, and the network's 
     inletPortIndex: 1,
     directionMismatch: { discharge: 2, networkDischarge: 1 },
   });
-  expect(sheet.notes.find((n) => n.kind === "direction")!.text).toContain("family connector direction");
+  expect(sheet.notes.find((n) => n.kind === "direction")!.text).toContain(
+    "family connector direction",
+  );
   // The unmodified capture never yields `complete`: the mismatch is a blocking issue on the fan.
   for (const s of [sheet, replay(false, snapshot)]) {
     expect(s.claim.kind).toBe("incomplete");

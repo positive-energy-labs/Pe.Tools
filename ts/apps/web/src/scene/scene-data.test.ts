@@ -86,11 +86,14 @@ it("the last reader leaving aborts the client wait and ignores a late native ans
 it("supersedes unsent selections and releases a dispatched detailed read before the replacement", async () => {
   vi.useFakeTimers();
   const answers: ((value: { id: string }) => void)[] = [];
-  io.call.mockImplementation(() => new Promise(resolve => answers.push(resolve)));
-  const source = (ids: number[], representation: "overview" | "meshes" = "overview") => sceneData({
-    kind: "capture", document: { session: "supersede", openId: "doc" }, revision: 1,
-    request: sceneRequest(ids, false, 15, representation),
-  });
+  io.call.mockImplementation(() => new Promise((resolve) => answers.push(resolve)));
+  const source = (ids: number[], representation: "overview" | "meshes" = "overview") =>
+    sceneData({
+      kind: "capture",
+      document: { session: "supersede", openId: "doc" },
+      revision: 1,
+      request: sceneRequest(ids, false, 15, representation),
+    });
   const first = source([1]).subscribe(() => {});
   first();
   const second = source([1, 2]).subscribe(() => {});

@@ -66,7 +66,10 @@ export async function buildBuiltinClosure(
     let sha256 = seen.hashed.get(path);
     if (!sha256) {
       const bytes = readFileSync(path);
-      seen.hashed.set(path, (sha256 = textFile.test(path) ? routeSourceHash(bytes) : exactHash(bytes)));
+      seen.hashed.set(
+        path,
+        (sha256 = textFile.test(path) ? routeSourceHash(bytes) : exactHash(bytes)),
+      );
     }
     return { id: idFor(path), sha256 };
   };

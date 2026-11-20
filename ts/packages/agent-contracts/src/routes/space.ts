@@ -140,7 +140,9 @@ export const spaceAddress = {
     /** The layers the picture draws, in `SPACE_LAYERS` order. */
     layers: manyField("name", {
       url: "push",
-      agent: "set", initial: ["meshes", "context", "cuts"], choices: SPACE_LAYERS,
+      agent: "set",
+      initial: ["meshes", "context", "cuts"],
+      choices: SPACE_LAYERS,
     }),
   },
   conflict: spaceConflict,

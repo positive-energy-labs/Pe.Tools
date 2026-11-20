@@ -123,9 +123,7 @@ export const updateRoutes = Layer.mergeAll(
       const outcome = yield* Effect.tryPromise({
         try: () => reader.apply(planId),
         catch: (error) => error,
-      }).pipe(
-        Effect.catch((error) => Effect.succeed({ error: String(error) })),
-      );
+      }).pipe(Effect.catch((error) => Effect.succeed({ error: String(error) })));
       if ("error" in outcome) return Response.jsonUnsafe(outcome, { status: 409 });
       const receipt = outcome.receipt;
       const refused = receipt?.state === "refused" || receipt?.state === "failed";

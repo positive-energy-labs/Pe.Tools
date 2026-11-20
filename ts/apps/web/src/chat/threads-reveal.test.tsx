@@ -51,7 +51,13 @@ vi.mock("#/navigation/route-controls", () => ({
 }));
 vi.mock("#/chat/thread-palette", () => ({
   NewThreadButton: () => null,
-  ThreadsSidebar: ({ onSelect, searchSerial }: { onSelect(id: string): void; searchSerial: number }) => (
+  ThreadsSidebar: ({
+    onSelect,
+    searchSerial,
+  }: {
+    onSelect(id: string): void;
+    searchSerial: number;
+  }) => (
     <nav aria-label="Threads">
       <div role="option" aria-selected={false} onClick={() => onSelect("office")}>
         Office model
@@ -61,7 +67,10 @@ vi.mock("#/chat/thread-palette", () => ({
   ),
 }));
 
-const handle = { page: { read: () => ({ threadSearch: undefined, threadSort: "" }), query: () => {} }, selection: { read: () => [], set: () => {} } } as unknown as ChatHandle;
+const handle = {
+  page: { read: () => ({ threadSearch: undefined, threadSort: "" }), query: () => {} },
+  selection: { read: () => [], set: () => {} },
+} as unknown as ChatHandle;
 
 beforeEach(() => {
   // Pea's surface at 1400x900 with the tools open: 683px, under threads + Pea's 643px floor.

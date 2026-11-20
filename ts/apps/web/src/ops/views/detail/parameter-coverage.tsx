@@ -30,7 +30,14 @@ function Samples({
   const names = new Map(handles.map((h) => [h.elementId, h.displayName]));
   const uniqueIds = new Map(handles.map((h) => [h.elementId, h.uniqueId]));
   return (
-    <SubjectTextContext value={{ doc, nameOf: (id) => names.get(id) ?? null, uniqueIdOf: (id) => uniqueIds.get(id) ?? null, refProps }}>
+    <SubjectTextContext
+      value={{
+        doc,
+        nameOf: (id) => names.get(id) ?? null,
+        uniqueIdOf: (id) => uniqueIds.get(id) ?? null,
+        refProps,
+      }}
+    >
       <Provenance>
         {label}:{" "}
         <SubjectText

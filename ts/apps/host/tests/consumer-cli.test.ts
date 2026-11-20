@@ -24,13 +24,22 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
   const native = await fixtureNative(dir);
   const bridge = native.bridge;
   const web = HttpRouter.toWebHandler(
-    opsCatalogRoute(() => Effect.die("not navigation")).pipe(nativeReadRoot(Layer.succeed(SdkDriver, () => Effect.tryPromise({ try: () => sdk(), catch: (error) => error })))).pipe(
-      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-    ),
+    opsCatalogRoute(() => Effect.die("not navigation"))
+      .pipe(
+        nativeReadRoot(
+          Layer.succeed(SdkDriver, () =>
+            Effect.tryPromise({ try: () => sdk(), catch: (error) => error }),
+          ),
+        ),
+      )
+      .pipe(Layer.provideMerge(Layer.succeed(RevitBridge, bridge))),
     { disableLogger: true },
   );
   try {
-    const response = await web.handler(new Request("http://host/ops"), Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})));
+    const response = await web.handler(
+      new Request("http://host/ops"),
+      Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})),
+    );
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body).toEqual({
@@ -46,7 +55,13 @@ test("missing or ambiguous bridge keeps generated discovery metadata and reports
     vi.stubGlobal("fetch", async (input: string | URL | Request) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       return url.pathname === "/ops"
-        ? web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})))
+        ? web.handler(
+            new Request(url),
+            Context.make(
+              RequestIdentity,
+              admittedRequestIdentity({ kind: "human", via: "local" }, {}),
+            ),
+          )
         : Response.json({ result: { recents: [] } });
     });
     const source = createCapabilityCatalogSource({

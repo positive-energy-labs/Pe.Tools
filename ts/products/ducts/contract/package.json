@@ -16,6 +16,20 @@
     "./duct-loss-read": "./src/duct-loss-read.ts",
     "./fan-scope.neutral": "./src/fan-scope.neutral.ts"
   },
+  "scripts": {
+    "check": "vp exec tsc --noEmit",
+    "test": "vp test"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  },
   "pe": {
     "guide": "./pea-guide",
     "commands": {
@@ -46,19 +60,5 @@
         "export": "DUCTS_REFRESH_HEADER"
       }
     }
-  },
-  "scripts": {
-    "check": "vp exec tsc --noEmit",
-    "test": "vp test"
-  },
-  "dependencies": {
-    "@pe/agent-contracts": "workspace:*",
-    "@pe/host-contracts": "workspace:*",
-    "zod": "4.3.6"
-  },
-  "devDependencies": {
-    "@types/node": "^25.6.2",
-    "typescript": "^6.0.3",
-    "vite-plus": "catalog:"
   }
 }

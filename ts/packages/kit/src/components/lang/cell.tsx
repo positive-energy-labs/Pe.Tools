@@ -8,13 +8,13 @@ import { useWork } from "./work";
  * never go inside a data cell. Precedence is the cascade order in cell.css.
  */
 import {
-createContext,
-useContext,
-useEffect,
-useRef,
-useState,
-useTransition,
-type RefObject,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type RefObject,
 } from "react";
 
 import { useScopeKeys } from "../../keys";
@@ -44,17 +44,17 @@ export const stateCellRecipe = tv({
 
 import { focusQuiet } from "../../lib/utils";
 import {
-cellFactsText,
-stagedBy,
-parseCell,
-readCell,
-readMeasuredText,
-type CellCommit,
-type CellOption,
-type CellRefusal,
-type CellTransition,
-type CellTransitionKind,
-type StateCellProps,
+  cellFactsText,
+  stagedBy,
+  parseCell,
+  readCell,
+  readMeasuredText,
+  type CellCommit,
+  type CellOption,
+  type CellRefusal,
+  type CellTransition,
+  type CellTransitionKind,
+  type StateCellProps,
 } from "./cell-state";
 import { ListPopup } from "./list-popup";
 import { TooltipHint } from "./tooltip";
@@ -63,22 +63,22 @@ export { useCellCollection, useCollectionCell, handleCellProps, cellSource } fro
 export type { CellHandle, HandleCellProps } from "./cell-handle";
 
 export {
-CELL_STATE_ORDER,
-cellFactsText,
-cellFromDraft,
-cellStateLabel,
-fmtNum,
-readMeasuredText,
-unitWord
+  CELL_STATE_ORDER,
+  cellFactsText,
+  cellFromDraft,
+  cellStateLabel,
+  fmtNum,
+  readMeasuredText,
+  unitWord,
 } from "./cell-state";
 export type {
-CellCommit,
-CellOption,
-CellPick,
-CellRefusal,
-CellTransition,
-CellTransitionKind,
-StateCellProps
+  CellCommit,
+  CellOption,
+  CellPick,
+  CellRefusal,
+  CellTransition,
+  CellTransitionKind,
+  StateCellProps,
 } from "./cell-state";
 
 /** Each kind's glyph, key and plain sentence. The caller's `reason` overrides the sentence. */
@@ -133,8 +133,11 @@ const RefusalDetail = ({ detail }: { detail: string }) => (
 export const CellHost = createContext<RefObject<HTMLElement | null> | null>(null);
 
 export function StateCell(input: StateCellProps | HandleCellProps) {
-  const paneValue=usePaneValue();
-  const props = "cell" in input ? handleCellProps({...input,value:input.value??paneValue??undefined}) : input;
+  const paneValue = usePaneValue();
+  const props =
+    "cell" in input
+      ? handleCellProps({ ...input, value: input.value ?? paneValue ?? undefined })
+      : input;
   const { value, modelValue, capReason, grounding, confidence, note } = props;
   const read = readCell(props);
   const reviewed = read.unsettled === "drift" && props.reviewed !== undefined && modelValue != null;
@@ -269,10 +272,14 @@ export function StateCell(input: StateCellProps | HandleCellProps) {
         }
       };
       const send = (refused: ReturnType<CellCommit>) => {
-        if (refused instanceof Promise) startRun(async () => {
-          try { settle(await refused); }
-          catch (error) { settle({ message: error instanceof Error ? error.message : String(error) }); }
-        });
+        if (refused instanceof Promise)
+          startRun(async () => {
+            try {
+              settle(await refused);
+            } catch (error) {
+              settle({ message: error instanceof Error ? error.message : String(error) });
+            }
+          });
         else settle(refused);
       };
       // The measured kind: a bare number stages with the column's unit and calls nothing; anything
@@ -352,7 +359,10 @@ export function StateCell(input: StateCellProps | HandleCellProps) {
               anchor="trigger"
               trigger={
                 read.unsettled != null ? (
-                  <span className={slots.unsettled({ className: "min-w-0 truncate" })} data-state={read.unsettled}>
+                  <span
+                    className={slots.unsettled({ className: "min-w-0 truncate" })}
+                    data-state={read.unsettled}
+                  >
                     {shown}
                   </span>
                 ) : (
@@ -388,8 +398,11 @@ export function StateCell(input: StateCellProps | HandleCellProps) {
                         : refused,
                   );
                 startRun(async () => {
-                  try { settle(await props.choice!.pick(o.key)); }
-                  catch (error) { settle({ message: error instanceof Error ? error.message : String(error) }); }
+                  try {
+                    settle(await props.choice!.pick(o.key));
+                  } catch (error) {
+                    settle({ message: error instanceof Error ? error.message : String(error) });
+                  }
                 });
               }}
             />
@@ -544,9 +557,9 @@ export function StateCell(input: StateCellProps | HandleCellProps) {
             className={slots.base()}
             data-body={read.body ?? undefined}
             data-author={props.author}
-              data-damage={props.damage || undefined}
+            data-damage={props.damage || undefined}
             data-seam={read.seam ? "" : undefined}
-              data-never={read.never ? "" : undefined}
+            data-never={read.never ? "" : undefined}
             data-unsaved={
               read.unsaved === "pea"
                 ? "pea"

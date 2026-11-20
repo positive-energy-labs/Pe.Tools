@@ -3,22 +3,34 @@ import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { elementSubjectSchema, fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
 import { fansDocumentSchema } from "../fans.ts";
 
-it.each(["flows", "ratedEsp", "equipmentFlows", "roles", "terminalDrops", "componentDrops"])("P-119: fans Work %s raw keys explain UniqueId SubjectRefs", segment => {
-  const parsed = fansDocumentSchema.safeParse({ [segment]: { "14577396": {} } });
-  expect(parsed.success).toBe(false);
-  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused");
-});
+it.each(["flows", "ratedEsp", "equipmentFlows", "roles", "terminalDrops", "componentDrops"])(
+  "P-119: fans Work %s raw keys explain UniqueId SubjectRefs",
+  (segment) => {
+    const parsed = fansDocumentSchema.safeParse({ [segment]: { "14577396": {} } });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success)
+      expect(parsed.error.issues[0]?.message).toBe(
+        "keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused",
+      );
+  },
+);
 
 it("P-119: a canonical non-element subject explains the UniqueId refinement", () => {
   const parsed = elementSubjectSchema.safeParse("system-name:supply");
   expect(parsed.success).toBe(false);
-  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused");
+  if (!parsed.success)
+    expect(parsed.error.issues[0]?.message).toBe(
+      "keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused",
+    );
 });
 
 it("W5: fans edit raw element keys explain the required UniqueId SubjectRefs", () => {
   const parsed = fansCalcEditsSchema.safeParse({ flows: { "14577396": 100 } });
   expect(parsed.success).toBe(false);
-  if (!parsed.success) expect(parsed.error.issues[0]?.message).toBe("keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused");
+  if (!parsed.success)
+    expect(parsed.error.issues[0]?.message).toBe(
+      "keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused",
+    );
 });
 
 import {
@@ -55,7 +67,9 @@ it("refuses withdrawn source text on drop, flow and ESP edit values", () => {
   };
   for (const [segment, values] of Object.entries(edits))
     expect(calcEditsSchema.safeParse({ [segment]: values }).success).toBe(false);
-  expect(calcEditsSchema.safeParse({ esp: { [key]: { inWg: 1, source: "unsupported" } } }).success).toBe(false);
+  expect(
+    calcEditsSchema.safeParse({ esp: { [key]: { inWg: 1, source: "unsupported" } } }).success,
+  ).toBe(false);
 });
 const key = "proposed:14106988:1|14122436:1>straight";
 const proposed = {
@@ -90,11 +104,9 @@ it("lets a layer or a tier file hold one side of a sided criterion; the engine b
   expect(ductsCriteriaLayerSchema.parse({ velocityLimitFpm: { supply: 850 } })).toEqual({
     velocityLimitFpm: { supply: 850 },
   });
-  expect(ductsCalcEditsSchema.parse({ criteria: { velocityLimitFpm: { return: null } } })).toEqual(
-    {
-      criteria: { velocityLimitFpm: { return: null } },
-    },
-  );
+  expect(ductsCalcEditsSchema.parse({ criteria: { velocityLimitFpm: { return: null } } })).toEqual({
+    criteria: { velocityLimitFpm: { return: null } },
+  });
   const firm = {
     version: "f",
     criteria: {
@@ -130,22 +142,57 @@ it("a resolved wire value agrees with its status, as the kernel resolution does 
   const base = { units: "cfm", version: null };
   const ok = [
     { ...base, status: "valid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
-    { ...base, status: "valid", value: 100, source: "Work", author: "pea", ref: "work:fans/flows/k" },
-    { ...base, status: "invalid", value: null, source: "Work", author: null, ref: "work:fans/flows/k" },
+    {
+      ...base,
+      status: "valid",
+      value: 100,
+      source: "Work",
+      author: "pea",
+      ref: "work:fans/flows/k",
+    },
+    {
+      ...base,
+      status: "invalid",
+      value: null,
+      source: "Work",
+      author: null,
+      ref: "work:fans/flows/k",
+    },
     { ...base, status: "missing", value: null, source: "none", author: null, ref: null },
     // A refused model value (a family placeholder) is invalid from the model, citing why.
-    { ...base, status: "invalid", value: null, source: "model", author: null, ref: "family placeholder 1 on 2" },
+    {
+      ...base,
+      status: "invalid",
+      value: null,
+      source: "model",
+      author: null,
+      ref: "family placeholder 1 on 2",
+    },
   ];
   const bad = [
     { ...base, status: "valid", value: 100, source: "none", author: null, ref: null },
-    { ...base, status: "valid", value: 100, source: "Work", author: null, ref: "work:fans/flows/k" },
+    {
+      ...base,
+      status: "valid",
+      value: 100,
+      source: "Work",
+      author: null,
+      ref: "work:fans/flows/k",
+    },
     { ...base, status: "valid", value: null, source: "model", author: null, ref: "model:7/Flow" },
     { ...base, status: "invalid", value: 100, source: "model", author: null, ref: "model:7/Flow" },
     { ...base, status: "missing", value: null, source: "firm", author: null, ref: "firm:x" },
     // P-041: the wire is the kernel union, so a missing value carries no ref.
-    { ...base, status: "missing", value: null, source: "none", author: null, ref: "family placeholder 1 on 2" },
+    {
+      ...base,
+      status: "missing",
+      value: null,
+      source: "none",
+      author: null,
+      ref: "family placeholder 1 on 2",
+    },
     { ...base, status: "valid", value: 100, source: "model", author: null, ref: " " },
   ];
-  expect(ok.map(v => cfm.safeParse(v).success)).toEqual(ok.map(() => true));
-  expect(bad.map(v => cfm.safeParse(v).success)).toEqual(bad.map(() => false));
+  expect(ok.map((v) => cfm.safeParse(v).success)).toEqual(ok.map(() => true));
+  expect(bad.map((v) => cfm.safeParse(v).success)).toEqual(bad.map(() => false));
 });

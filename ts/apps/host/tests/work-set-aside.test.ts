@@ -23,7 +23,8 @@ import { sha256Hex } from "@pe/host-contracts/kinds";
 
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 
-const blobOf = (bytes: Uint8Array, path: string) => join(stateMachine(path).blobs, "sha256", sha256Hex(bytes));
+const blobOf = (bytes: Uint8Array, path: string) =>
+  join(stateMachine(path).blobs, "sha256", sha256Hex(bytes));
 const posted = (path: string) => storedNotices(stateMachine(path)).filter((n) => n.path === path);
 
 for (const [spec, staged] of [
@@ -33,15 +34,20 @@ for (const [spec, staged] of [
   test(`${spec.route} Work at the previous schemaVersion is set aside: the blob holds its exact bytes, one notice names the Place, and the route opens empty`, async () => {
     const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-"));
     const store = fileRouteDocumentStore(stateFixture(dir));
-    const key = bindWork(spec.route, null), targetKey = workKey(key);
+    const key = bindWork(spec.route, null),
+      targetKey = workKey(key);
     const open = () => new RouteWorkspace({ store, registrations: [{ spec }] });
     try {
       await store.setState({
         targetKey,
-        route: spec.route, value: {
-        version: 1, schemaVersion: spec.schemaVersion - 1, revision: 7,
-        doc: { ...spec.schema.parse({}), ...staged }, history: [],
-      },
+        route: spec.route,
+        value: {
+          version: 1,
+          schemaVersion: spec.schemaVersion - 1,
+          revision: 7,
+          doc: { ...spec.schema.parse({}), ...staged },
+          history: [],
+        },
       });
       const path = join(dir, (await readdir(dir))[0]!);
       // Noncanonical whitespace distinguishes the original file from reserialized Work.
@@ -53,7 +59,7 @@ for (const [spec, staged] of [
       expect(posted(path)).toMatchObject([
         {
           class: "discard",
-        place: `Work for ${spec.route} (${targetKey})`,
+          place: `Work for ${spec.route} (${targetKey})`,
           sha256: sha256Hex(prior),
           reason: expect.stringContaining(blobOf(prior, path)),
         },
@@ -67,35 +73,51 @@ for (const [spec, staged] of [
       const fresh = open();
       expect(await fresh.start(key, {}, "human")).toMatchObject({ ok: true });
       expect(await fresh.readUncaptured(key, spec.route)).toMatchObject({
-        schemaVersion: spec.schemaVersion, revision: 1, doc: spec.schema.parse({}),
+        schemaVersion: spec.schemaVersion,
+        revision: 1,
+        doc: spec.schema.parse({}),
       });
-    } finally { await rm(dir, { recursive: true, force: true }); }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 }
 
-test.each(["record", "envelope"])("unreadable Work %s keeps exact prior bytes in its notice's blob", async (kind) => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-blob-"));
-  const store = fileRouteDocumentStore(stateFixture(dir));
-  const spec = ductsRouteState, key = bindWork(spec.route, null), targetKey = workKey(key);
-  try {
-    await store.setState({ targetKey, route: spec.route, value: { unreadable: true } });
-    const path = join(dir, (await readdir(dir))[0]!);
-    if (kind === "record") await writeFile(path, "  {broken JSON\n");
-    const prior = await readFile(path);
-    const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
-    expect(await workspace.readUncaptured(key, spec.route)).toBeNull();
-    expect(await store.getState({ targetKey, route: spec.route })).toBeNull();
-    expect(await readFile(blobOf(prior, path))).toEqual(prior);
-    expect(posted(path)).toMatchObject([
-      { class: "discard", sha256: sha256Hex(prior), reason: expect.stringContaining(blobOf(prior, path)) },
-    ]);
-  } finally { await rm(dir, { recursive: true, force: true }); }
-});
+test.each(["record", "envelope"])(
+  "unreadable Work %s keeps exact prior bytes in its notice's blob",
+  async (kind) => {
+    const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-blob-"));
+    const store = fileRouteDocumentStore(stateFixture(dir));
+    const spec = ductsRouteState,
+      key = bindWork(spec.route, null),
+      targetKey = workKey(key);
+    try {
+      await store.setState({ targetKey, route: spec.route, value: { unreadable: true } });
+      const path = join(dir, (await readdir(dir))[0]!);
+      if (kind === "record") await writeFile(path, "  {broken JSON\n");
+      const prior = await readFile(path);
+      const workspace = new RouteWorkspace({ store, registrations: [{ spec }] });
+      expect(await workspace.readUncaptured(key, spec.route)).toBeNull();
+      expect(await store.getState({ targetKey, route: spec.route })).toBeNull();
+      expect(await readFile(blobOf(prior, path))).toEqual(prior);
+      expect(posted(path)).toMatchObject([
+        {
+          class: "discard",
+          sha256: sha256Hex(prior),
+          reason: expect.stringContaining(blobOf(prior, path)),
+        },
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);
 
 test("a person's clear goes through the one set-aside door: bytes kept, one notice", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-clear-"));
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const spec = ductsRouteState, targetKey = workKey(bindWork(spec.route, null));
+  const spec = ductsRouteState,
+    targetKey = workKey(bindWork(spec.route, null));
   try {
     await store.setState({ targetKey, route: spec.route, value: { mine: "work" } });
     const path = join(dir, (await readdir(dir))[0]!);
@@ -103,10 +125,14 @@ test("a person's clear goes through the one set-aside door: bytes kept, one noti
     await store.setState({ targetKey, route: spec.route, value: null });
     expect(await readdir(dir)).toEqual([]);
     expect(await readFile(blobOf(prior, path))).toEqual(prior);
-    expect(posted(path)).toMatchObject([{ class: "discard", sha256: sha256Hex(prior), reason: expect.stringContaining("Cleared.") }]);
+    expect(posted(path)).toMatchObject([
+      { class: "discard", sha256: sha256Hex(prior), reason: expect.stringContaining("Cleared.") },
+    ]);
     // Clearing what is not there is not an error.
     await store.setState({ targetKey, route: spec.route, value: null });
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 // Windows has no portable way to deny one process a read of its own file; a folder at the Work
@@ -115,7 +141,9 @@ test("a person's clear goes through the one set-aside door: bytes kept, one noti
 test("Work that cannot be read is kept: it still exists, one notice posted, and the route opens empty", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-kept-"));
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const spec = ductsRouteState, key = bindWork(spec.route, null), targetKey = workKey(key);
+  const spec = ductsRouteState,
+    key = bindWork(spec.route, null),
+    targetKey = workKey(key);
   try {
     await store.setState({ targetKey, route: spec.route, value: { any: "value" } });
     const path = join(dir, (await readdir(dir))[0]!);
@@ -130,35 +158,87 @@ test("Work that cannot be read is kept: it still exists, one notice posted, and 
     // No fresh Work lands over what was kept.
     await expect(workspace.start(key, {}, "human")).rejects.toThrow();
     expect(await readFile(join(path, "inside.txt"), "utf8")).toBe("kept");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("set-aside fans Work names every staged row in its one notice, and the bytes are kept", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")), spec = fansRouteState;
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")),
+    spec = fansRouteState;
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  const key = bindWork(spec.route, null),
+    targetKey = workKey(key);
   try {
-    await store.setState({ targetKey, route: spec.route, value: { version: 1, schemaVersion: spec.schemaVersion - 1, revision: 2, history: [],
-      doc: { esp: { unitA: { edit: { value: { inWg: 0.5 } } } }, terminalDrops: { grille: { edit: { value: { inWg: 0.03, source: "firm table 4" }, by: "human" } } } } } });
-    const path = join(dir, (await readdir(dir))[0]!), prior = await readFile(path);
-    expect(await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(key, spec.route)).toBeNull();
+    await store.setState({
+      targetKey,
+      route: spec.route,
+      value: {
+        version: 1,
+        schemaVersion: spec.schemaVersion - 1,
+        revision: 2,
+        history: [],
+        doc: {
+          esp: { unitA: { edit: { value: { inWg: 0.5 } } } },
+          terminalDrops: {
+            grille: { edit: { value: { inWg: 0.03, source: "firm table 4" }, by: "human" } },
+          },
+        },
+      },
+    });
+    const path = join(dir, (await readdir(dir))[0]!),
+      prior = await readFile(path);
+    expect(
+      await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(
+        key,
+        spec.route,
+      ),
+    ).toBeNull();
     expect(await readFile(blobOf(prior, path))).toEqual(prior);
     expect(posted(path)).toHaveLength(1);
-    expect(posted(path)[0]!.reason).toContain("Set aside 2 staged rows of fans: esp/unitA by nobody; terminalDrops/grille by human source firm table 4.");
-  } finally { await rm(dir, { recursive: true, force: true }); }
+    expect(posted(path)[0]!.reason).toContain(
+      "Set aside 2 staged rows of fans: esp/unitA by nobody; terminalDrops/grille by human source firm table 4.",
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
 
 test("a stored legacy { cfm, source } airflow is set aside at the current schema and listed once, not decoded", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")), spec = fansRouteState;
+  const dir = await mkdtemp(join(tmpdir(), "pe-work-set-aside-")),
+    spec = fansRouteState;
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const key = bindWork(spec.route, null), targetKey = workKey(key);
+  const key = bindWork(spec.route, null),
+    targetKey = workKey(key);
   try {
-    await store.setState({ targetKey, route: spec.route, value: { version: 1, schemaVersion: spec.schemaVersion, revision: 2, history: [],
-      doc: { ...spec.schema.parse({}), equipmentFlows: { unitA: { edit: { value: { cfm: 900, source: "balancing report" } } } } } } });
-    const path = join(dir, (await readdir(dir))[0]!), prior = await readFile(path);
-    expect(await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(key, spec.route)).toBeNull();
+    await store.setState({
+      targetKey,
+      route: spec.route,
+      value: {
+        version: 1,
+        schemaVersion: spec.schemaVersion,
+        revision: 2,
+        history: [],
+        doc: {
+          ...spec.schema.parse({}),
+          equipmentFlows: { unitA: { edit: { value: { cfm: 900, source: "balancing report" } } } },
+        },
+      },
+    });
+    const path = join(dir, (await readdir(dir))[0]!),
+      prior = await readFile(path);
+    expect(
+      await new RouteWorkspace({ store, registrations: [{ spec }] }).readUncaptured(
+        key,
+        spec.route,
+      ),
+    ).toBeNull();
     expect(await readFile(blobOf(prior, path))).toEqual(prior);
     expect(posted(path)).toHaveLength(1);
-    expect(posted(path)[0]!.reason.split("equipmentFlows/unitA by nobody source balancing report.")).toHaveLength(2);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+    expect(
+      posted(path)[0]!.reason.split("equipmentFlows/unitA by nobody source balancing report."),
+    ).toHaveLength(2);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

@@ -85,7 +85,13 @@ import {
 } from "@pe/web-kernel/scene/projection";
 import { setDamageHue } from "@pe/web-kernel/scene/damage";
 import { kindHue, kindL } from "@pe/web-kernel/scene/kinds";
-import { routeColour, routeLines, surfaceEdges, shellLines, surfaceAlpha } from "@pe/web-kernel/scene/surfaces";
+import {
+  routeColour,
+  routeLines,
+  surfaceEdges,
+  shellLines,
+  surfaceAlpha,
+} from "@pe/web-kernel/scene/surfaces";
 import type {
   IssueState,
   IssueTarget,

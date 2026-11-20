@@ -19,7 +19,8 @@ import { readingRequestSchema, chatValue, openData, opsData, bindData } from "@p
 import { resourceContent } from "./resource-content.ts";
 const resource = <O extends z.ZodType>(output: O) => ({
   ...leaf("resource", readingRequestSchema, output),
-  content: (value: z.output<O>, args: z.output<typeof readingRequestSchema>) => resourceContent(args, value),
+  content: (value: z.output<O>, args: z.output<typeof readingRequestSchema>) =>
+    resourceContent(args, value),
 });
 export const resources = {
   machine: resource(chatValue.shape.machine),

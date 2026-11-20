@@ -20,7 +20,7 @@ export function readJournalSnapshot(bytes: Buffer) {
   const receipts: Receipt[] = [];
   const mappings: [string, string][] = [];
   let torn = false;
-  const parseReceipt = (value:unknown) => projectReceipt(persistedReceiptSchema.parse(value));
+  const parseReceipt = (value: unknown) => projectReceipt(persistedReceiptSchema.parse(value));
   const entry = z.union([
     z.strictObject({ receipt: z.unknown() }),
     z.strictObject({ mapping: z.tuple([z.string(), z.uuid()]) }),

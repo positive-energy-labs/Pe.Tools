@@ -25,7 +25,12 @@ function replayInput(id: number, typed = false) {
     grids,
     inputs: inputsFor(snapshot, {
       endCfm: id === 14577391 ? { 14577391: 900 } : {},
-      drops: { 14577394: 0.0132, 14577396: 0.18, 14088043: 0.026, ...Object.fromEntries(typed ? [[13926753, 0.04]] : []) },
+      drops: {
+        14577394: 0.0132,
+        14577396: 0.18,
+        14088043: 0.026,
+        ...Object.fromEntries(typed ? [[13926753, 0.04]] : []),
+      },
       fittingDrops: typed ? { "proposed:14106988:1|14122436:1>straight": 0.05 } : {},
       rulings: [{ pair: ["14106988:1", "14122436:1"], verdict: "accept" }],
     }),
@@ -44,15 +49,21 @@ it("Manual D real r52 leaves out-of-range legs unpriced", () => {
   const s = replay(14577391);
   // Q4: was network-chosen with no stated family; the family (as stated above) now sets discharge c1.
   expect(s.fan).toMatchObject({ dischargePortIndex: 1, inletPortIndex: 2 });
-  expect(Object.values(s.legs).filter(l => l.lossInWg === null).map(l => ({id:l.id, elementId:l.elementId}))).toEqual([
+  expect(
+    Object.values(s.legs)
+      .filter((l) => l.lossInWg === null)
+      .map((l) => ({ id: l.id, elementId: l.elementId })),
+  ).toEqual([
     { id: "13926753:2>1", elementId: 13926753 },
     { id: "heal:14122436:1|14106988:1:fitting>14106988", elementId: 14122436 },
   ]);
   // Was [] and worst paths 2.057835/0.600244, ESP 2.658079; ruling (c), P-102.
   expect(s.blockers.map(({ fitting, detail }) => ({ fitting, detail }))).toEqual([
     { fitting: "13926753", detail: "Ab/Ac 0.11470197078869993 outside table range 0.25..1" },
-    { fitting: "proposed:14106988:1|14122436:1>straight",
-      detail: expect.stringContaining("Ao/A1 0.08726646259971649 outside table range 0.1..16") },
+    {
+      fitting: "proposed:14106988:1|14122436:1>straight",
+      detail: expect.stringContaining("Ao/A1 0.08726646259971649 outside table range 0.1..16"),
+    },
   ]);
   expect(s.totals.supply.worstPath).toBeNull();
   expect(s.totals.return.worstPath).toBeNull();
@@ -92,27 +103,45 @@ it("Manual D r52 human Work drops close both unpriced legs and permit minting", 
   const unit = input.snapshot.nodes.find((n) => n.id === 14577391)!;
   const parameter = input.snapshot.slots!.requiredEsp!;
   // The old capture lacks cohort evidence: state an instance cohort for this deterministic replay.
-  input.snapshot = { ...input.snapshot, parameterCohorts: [{
-    parameter, owner: { kind: "instance", id: unit.id },
-    members: [{ elementId: unit.id, uniqueId: unit.uniqueId }],
-    complete: true, basis: input.snapshot.document.readAt,
-  }] };
+  input.snapshot = {
+    ...input.snapshot,
+    parameterCohorts: [
+      {
+        parameter,
+        owner: { kind: "instance", id: unit.id },
+        members: [{ elementId: unit.id, uniqueId: unit.uniqueId }],
+        complete: true,
+        basis: input.snapshot.document.readAt,
+      },
+    ],
+  };
   const first = buildCalc(input);
-  const accepted = { ...input, encounterRulings: first.encounters.map((e) => ({
-    at: { elementId: e.elementId, connector: e.connector },
-    verdict: "accepted" as const, by: "human" as const, ref: "replay:accepted-tie-in",
-  })) };
+  const accepted = {
+    ...input,
+    encounterRulings: first.encounters.map((e) => ({
+      at: { elementId: e.elementId, connector: e.connector },
+      verdict: "accepted" as const,
+      by: "human" as const,
+      ref: "replay:accepted-tie-in",
+    })),
+  };
   const sheet = buildCalc(accepted);
   expect(sheet.blockers).toEqual([]);
   expect(sheet.claim.kind).toBe("complete");
   for (const value of [0.04, 0.05])
     expect(Object.values(sheet.legs).map((l) => l.evidence)).toContainEqual({
-      kind: "drop", value: expect.objectContaining({ value, source: "Work", author: "human", ref: "work:test" }),
+      kind: "drop",
+      value: expect.objectContaining({ value, source: "Work", author: "human", ref: "work:test" }),
     });
   if (sheet.claim.kind !== "complete") throw Error("complete replay required");
   const { request: minted } = mintWriteRequest(sheet.claim, sheet, accepted, {
-    appliedAt: input.snapshot.document.readAt, slots: input.snapshot.slots!,
-    peerClaims: new Map(), rulings: {}, storeDeletes: {},
+    appliedAt: input.snapshot.document.readAt,
+    slots: input.snapshot.slots!,
+    peerClaims: new Map(),
+    rulings: {},
+    storeDeletes: {},
   });
-  expect(minted.equipment).toEqual([{ id: 14577391, externalStaticInWg: sheet.claim.requiredEspInWg }]);
+  expect(minted.equipment).toEqual([
+    { id: 14577391, externalStaticInWg: sheet.claim.requiredEspInWg },
+  ]);
 });

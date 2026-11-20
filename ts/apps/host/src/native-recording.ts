@@ -29,8 +29,7 @@ import { z } from "zod";
 const recordingMetadataKind = stateKind({
   schema: z.unknown(),
   place: (_folder: string, _id: string) => "Recording metadata",
-  segments: (folder: string,
-  id: string) => [folder, `${id}.json`],
+  segments: (folder: string, id: string) => [folder, `${id}.json`],
 });
 import { Clock, Effect, Exit, Schema } from "effect";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -140,13 +139,18 @@ const loadBundle = Effect.fn("Recording.load")(function* (
     }
   }
   // A crash between the blob and taking append must not recover uncharged disk capacity.
-  for (const name of yield* io(() => readdir(observations).catch((error: unknown) => missing(error) ? [] : Promise.reject(error)))) {
-    const sha = yield* Schema.decodeUnknownEffect(sha256Name)(name.endsWith(".json") ? name.slice(0, -5) : null)
-      .pipe(Effect.mapError(() => refuse("tamper", "Observation filename is not a SHA-256")));
+  for (const name of yield* io(() =>
+    readdir(observations).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
+  )) {
+    const sha = yield* Schema.decodeUnknownEffect(sha256Name)(
+      name.endsWith(".json") ? name.slice(0, -5) : null,
+    ).pipe(Effect.mapError(() => refuse("tamper", "Observation filename is not a SHA-256")));
     if (!stored.has(sha)) used += (yield* io(() => stat(join(observations, name)))).size;
   }
   const names = yield* io(() =>
-    readdir(join(dir, READ_SETS)).catch((error: unknown) => (missing(error) ? [] : Promise.reject(error))),
+    readdir(join(dir, READ_SETS)).catch((error: unknown) =>
+      missing(error) ? [] : Promise.reject(error),
+    ),
   );
   const sets: string[] = [];
   for (const name of names) {
@@ -223,7 +227,13 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         Effect.mapError(() => refuse("tamper", `Observation ${sha} is not JSON`)),
       );
     }),
-    coverage: () => [...new Set(takings.flatMap((taking) => taking.input.kind === "publication" ? [] : [taking.input.kind]))],
+    coverage: () => [
+      ...new Set(
+        takings.flatMap((taking) =>
+          taking.input.kind === "publication" ? [] : [taking.input.kind],
+        ),
+      ),
+    ],
     truncation,
     readSets: {
       ids: () => sets.slice(),
@@ -233,10 +243,21 @@ const loadBundle = Effect.fn("Recording.load")(function* (
         );
         const text = yield* bounded(join(dir, READ_SETS, `${name}.json`), null);
         if (text === null) return yield* refuse("context", `No read set ${name} in this recording`);
-        const record = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(readSetRecordSchema))(
-          text,
-        ).pipe(Effect.mapError(() => refuse("tamper", `Read set ${name} is damaged or retired; record it again. Recording bytes were not changed.`)));
-        if (record.id !== name || record.identity.build !== identity.build || record.identity.catalog !== identity.catalog)
+        const record = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(readSetRecordSchema),
+        )(text).pipe(
+          Effect.mapError(() =>
+            refuse(
+              "tamper",
+              `Read set ${name} is damaged or retired; record it again. Recording bytes were not changed.`,
+            ),
+          ),
+        );
+        if (
+          record.id !== name ||
+          record.identity.build !== identity.build ||
+          record.identity.catalog !== identity.catalog
+        )
           return yield* refuse("mismatch", `Read set ${name} belongs to another build or name`);
         const seen = new Set<string>();
         for (const entry of record.inputs) {
@@ -245,7 +266,11 @@ const loadBundle = Effect.fn("Recording.load")(function* (
             return yield* refuse("ambiguous", `Read set ${name} names one input occurrence twice`);
           seen.add(occurrence);
           const taking = takings.find((candidate) => candidate.id === entry.takingId);
-          if (!taking || inputIdentity(taking.input) !== inputIdentity(entry.input) || taking.scope !== entry.scope)
+          if (
+            !taking ||
+            inputIdentity(taking.input) !== inputIdentity(entry.input) ||
+            taking.scope !== entry.scope
+          )
             return yield* refuse("mismatch", `Read set ${name} links a taking of another input`);
         }
         for (const takingId of Object.values(record.takingLinks))
@@ -301,9 +326,9 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
     return write;
   };
   const keepReadSet = Effect.fn("Recording.keepReadSet")(function* (record: InputReadSetRecord) {
-    const bytes = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(readSetRecordSchema))(record).pipe(
-      Effect.mapError(() => refuse("input", "Read-set metadata is not encodable", 400)),
-    );
+    const bytes = yield* Schema.encodeUnknownEffect(Schema.fromJsonString(readSetRecordSchema))(
+      record,
+    ).pipe(Effect.mapError(() => refuse("input", "Read-set metadata is not encodable", 400)));
     if (record.identity.build !== identity.build || record.identity.catalog !== identity.catalog)
       return yield* refuse("mismatch", "Read-set metadata names another build");
     const size = Buffer.byteLength(bytes);
@@ -334,7 +359,10 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
         const size = Buffer.byteLength(bytes);
         if (reader.points.ids().includes(point.id) || pointWrites.has(point.id))
           return yield* refuse("point", "Point already exists");
-        if (used + size > bounds.maxBytes || reader.points.ids().length + pointWrites.size >= bounds.maxTakings)
+        if (
+          used + size > bounds.maxBytes ||
+          reader.points.ids().length + pointWrites.size >= bounds.maxTakings
+        )
           return yield* refuse("full", "Recording is full; point was not kept", 507);
         used += size;
         pointWrites.add(point.id);
@@ -359,7 +387,8 @@ export const openRecordingWriter = Effect.fn("Recording.writer")(function* (
           if (truncated) return Effect.void;
           const op = truncationSchema.shape.op.safeParse(source.op);
           truncated = {
-            at, stoppedAt: clock.currentTimeMillisUnsafe(),
+            at,
+            stoppedAt: clock.currentTimeMillisUnsafe(),
             reason,
             site: source.site,
             op: op.success ? op.data : "unknown",

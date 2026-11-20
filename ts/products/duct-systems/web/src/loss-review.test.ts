@@ -63,39 +63,59 @@ test("review rows speak Revit's words: no loss-method tokens, no store machine w
   expect(review.rows[1]).toBe("Pe loss record (Project Information): none yet → created · planned");
 });
 
-test.each(["human", "pea"])("each write keeps the Work cell's author when %s previews it", (caller) => {
-  const review = presentLosses(
-    {
-      response: {
-        counts: { planned: 4, written: 0, refused: 0, unchanged: 0 },
-        writes: [
-          { id: 7, kind: "equipment-flow", outcome: "planned", before: "880 cfm", after: "925 cfm" },
-          { id: 8, kind: "terminal", outcome: "planned" },
-          { id: null, kind: "slot", key: "fanFlow", outcome: "planned" },
-          { id: null, kind: "store", outcome: "planned", before: "absent" },
-        ],
+test.each(["human", "pea"])(
+  "each write keeps the Work cell's author when %s previews it",
+  (caller) => {
+    const review = presentLosses(
+      {
+        response: {
+          counts: { planned: 4, written: 0, refused: 0, unchanged: 0 },
+          writes: [
+            {
+              id: 7,
+              kind: "equipment-flow",
+              outcome: "planned",
+              before: "880 cfm",
+              after: "925 cfm",
+            },
+            { id: 8, kind: "terminal", outcome: "planned" },
+            { id: null, kind: "slot", key: "fanFlow", outcome: "planned" },
+            { id: null, kind: "store", outcome: "planned", before: "absent" },
+          ],
+        },
+        derivedRequest: { terminals: [{ id: 8, inWg: 0.05, source: "Work" }] },
+        seal: { caller: { kind: caller } },
       },
-      derivedRequest: { terminals: [{ id: 8, inWg: 0.05, source: "Work" }] },
-      seal: { caller: { kind: caller } },
-    },
-    {
-      readings: {
-        ducts: { value: { nodes: [{ id: 7, uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" }], segments: [] } },
-        fansWork: {
-          value: { equipmentFlows: { [elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" })]: { edit: { value: { cfm: 925 }, by: "pea" } } } } as never,
+      {
+        readings: {
+          ducts: {
+            value: {
+              nodes: [{ id: 7, uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" }],
+              segments: [],
+            },
+          },
+          fansWork: {
+            value: {
+              equipmentFlows: {
+                [elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000007" })]: {
+                  edit: { value: { cfm: 925 }, by: "pea" },
+                },
+              },
+            } as never,
+          },
         },
       },
-    },
-  );
-  expect(review.cells).toEqual([
-    expect.objectContaining({ key: "equipment-flow:7", before: "880 cfm", author: "pea" }),
-    expect.objectContaining({ key: "terminal:8", before: null, author: null }),
-    expect.objectContaining({ key: "slot:fanFlow", author: null }),
-    expect.objectContaining({ key: "store:", author: null }),
-  ]);
-  expect(review.cells[0]!.after).toContain("925 cfm");
-  expect(review.cells[1]!.after).toContain("0.05 in-wg");
-});
+    );
+    expect(review.cells).toEqual([
+      expect.objectContaining({ key: "equipment-flow:7", before: "880 cfm", author: "pea" }),
+      expect.objectContaining({ key: "terminal:8", before: null, author: null }),
+      expect.objectContaining({ key: "slot:fanFlow", author: null }),
+      expect.objectContaining({ key: "store:", author: null }),
+    ]);
+    expect(review.cells[0]!.after).toContain("925 cfm");
+    expect(review.cells[1]!.after).toContain("0.05 in-wg");
+  },
+);
 
 test("a fan assignment never guesses the prior fan", () => {
   const review = presentFan(

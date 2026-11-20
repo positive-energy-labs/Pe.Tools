@@ -384,7 +384,11 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             undefined,
             undefined,
             telemetry,
-          ).pipe(Effect.provide(HostDocumentMarks.none), Effect.provide(DuctFiles.layer(hostState().home)), Effect.provide(PictureCaptureStore.layer()));
+          ).pipe(
+            Effect.provide(HostDocumentMarks.none),
+            Effect.provide(DuctFiles.layer(hostState().home)),
+            Effect.provide(PictureCaptureStore.layer()),
+          );
           yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));
           yield* Effect.gen(function* () {
             yield* Effect.promise(async () => {
@@ -448,7 +452,11 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             });
           });
         }),
-      ).pipe(Effect.provide(ActionJournalService.live(null, stateFixture(directory))), Effect.provide(Spawner.live), Effect.provide(NodeServices.layer)),
+      ).pipe(
+        Effect.provide(ActionJournalService.live(null, stateFixture(directory))),
+        Effect.provide(Spawner.live),
+        Effect.provide(NodeServices.layer),
+      ),
     );
   } finally {
     if (previousLocalAppData === undefined) delete process.env.LOCALAPPDATA;

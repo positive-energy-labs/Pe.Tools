@@ -29,9 +29,9 @@ export function useEnvironmentReadingSlice<T, S>(
     if (name === null) return;
     let active = true;
     void (async () => {
-      const {environmentExample} = await import("../design-system/environment-examples");
+      const { environmentExample } = await import("../design-system/environment-examples");
       const reading = environmentExample(name, slot);
-      if (active) setSaved({key:identity, reading:reading as Reading<T>});
+      if (active) setSaved({ key: identity, reading: reading as Reading<T> });
     })().catch((error: unknown) => {
       if (active) setSaved({ key: identity, reading: { state: "failed", message: String(error) } });
     });

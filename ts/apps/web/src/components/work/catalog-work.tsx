@@ -109,7 +109,11 @@ export function CatalogWorkReview({
   const key = applyKeyOf(owner);
   const [work, setWork] = useState<{ doc: unknown; handle: WorkHandle } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const [plan, setPlan] = useState<{ revision: number; cells: WriteCell[]; seal: WriteSeal } | null>(null);
+  const [plan, setPlan] = useState<{
+    revision: number;
+    cells: WriteCell[];
+    seal: WriteSeal;
+  } | null>(null);
   useEffect(() => {
     setWork(null);
     setPlan(null);
@@ -128,9 +132,14 @@ export function CatalogWorkReview({
   }, [client, at, target.session, target.openId]);
   const cells = work ? catalogWorkCells(owner, work.doc) : [];
   // The plan holds only while the Work it sealed is current; any later revision disarms it.
-  const held = plan && work && plan.revision === work.handle.revision &&
-    plan.seal.documentMark.session === target.session && plan.seal.documentMark.openId === target.openId
-    ? plan : null;
+  const held =
+    plan &&
+    work &&
+    plan.revision === work.handle.revision &&
+    plan.seal.documentMark.session === target.session &&
+    plan.seal.documentMark.openId === target.openId
+      ? plan
+      : null;
   const admit = (id: string, k: string) =>
     client.submit({
       id: `${id}-${crypto.randomUUID()}`,

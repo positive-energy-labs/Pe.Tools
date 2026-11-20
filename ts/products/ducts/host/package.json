@@ -27,11 +27,11 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
-    "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/host-internal": "workspace:*",
     "effect": "4.0.2",

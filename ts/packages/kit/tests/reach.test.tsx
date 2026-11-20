@@ -231,7 +231,11 @@ test("the pointer moving the cursor never scrolls; a key moving it does (N1)", (
 
 const noop = () => {};
 function Mirror() {
-  return <output data-testid="mirror">{useAtomValue(rung({ doc: "kit", key: elementKey("u42") }))}</output>;
+  return (
+    <output data-testid="mirror">
+      {useAtomValue(rung({ doc: "kit", key: elementKey("u42") }))}
+    </output>
+  );
 }
 
 test("rows and picture subscribers share reach without updating the route", () => {

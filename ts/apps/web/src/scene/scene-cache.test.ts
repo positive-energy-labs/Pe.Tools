@@ -10,7 +10,13 @@ const scene = (epoch = 1, document = "a", builtUtc = "now", sourceEpoch = epoch)
       documentKey: document,
       observedAt: builtUtc,
       sources: [
-        { documentKey: document, placement: { hostDocumentKey: document, linkUniqueId: null }, revision: { kind: "observed", epoch: sourceEpoch }, availability: "loaded", toHost: [] },
+        {
+          documentKey: document,
+          placement: { hostDocumentKey: document, linkUniqueId: null },
+          revision: { kind: "observed", epoch: sourceEpoch },
+          availability: "loaded",
+          toHost: [],
+        },
       ],
     },
     elements: [],

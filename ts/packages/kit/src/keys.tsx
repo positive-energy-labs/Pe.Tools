@@ -109,19 +109,38 @@ export function KeyScope({
 export const useScopeLive = (): boolean => use(ScopeContext).live;
 
 /** A route's DOM host also owns focus in its React portals. */
-export function KeyScopeHost({ id, hidden, className, children }: {
-  id: string; hidden?: boolean; className?: string; children: ReactNode;
+export function KeyScopeHost({
+  id,
+  hidden,
+  className,
+  children,
+}: {
+  id: string;
+  hidden?: boolean;
+  className?: string;
+  children: ReactNode;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const [portal, setPortal] = useState<HTMLElement | null>(null);
-  const element = useMemo(() => portal ? { current: portal } : host, [portal]);
-  return <KeyScope id={id} hidden={hidden} element={element}>
-    <div ref={host} className={className} onFocusCapture={event => {
-      const target = event.currentTarget.contains(event.target) ? null : event.target as HTMLElement;
-      // Focus and the next key may occur in one turn; portal bindings must already exist.
-      flushSync(() => setPortal(target));
-    }} onBlurCapture={() => flushSync(() => setPortal(null))}>{children}</div>
-  </KeyScope>;
+  const element = useMemo(() => (portal ? { current: portal } : host), [portal]);
+  return (
+    <KeyScope id={id} hidden={hidden} element={element}>
+      <div
+        ref={host}
+        className={className}
+        onFocusCapture={(event) => {
+          const target = event.currentTarget.contains(event.target)
+            ? null
+            : (event.target as HTMLElement);
+          // Focus and the next key may occur in one turn; portal bindings must already exist.
+          flushSync(() => setPortal(target));
+        }}
+        onBlurCapture={() => flushSync(() => setPortal(null))}
+      >
+        {children}
+      </div>
+    </KeyScope>
+  );
 }
 
 /** One chord a scope node binds. */

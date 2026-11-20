@@ -11,7 +11,14 @@ import { NO_SYSTEM, systemsOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 export type GoTarget = { system: string; id: number | null };
-type Item = GoTarget & { uniqueId?: string | null; key: string; name: string; detail: string; group: string; meta: string };
+type Item = GoTarget & {
+  uniqueId?: string | null;
+  key: string;
+  name: string;
+  detail: string;
+  group: string;
+  meta: string;
+};
 type Element = DuctSnapshot["nodes"][number] | DuctSnapshot["segments"][number];
 
 const HERE = "Open here";

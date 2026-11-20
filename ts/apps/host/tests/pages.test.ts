@@ -24,7 +24,14 @@ import {
   type PageLive,
 } from "../src/pages-route.ts";
 import { readRequestIdentity, type IdentityOptions } from "../src/request-identity.ts";
-import { admitCrossing, bindControl, callerOf, currentCaller, live, onPagePinRevoke } from "../src/control.ts";
+import {
+  admitCrossing,
+  bindControl,
+  callerOf,
+  currentCaller,
+  live,
+  onPagePinRevoke,
+} from "../src/control.ts";
 import { Refused } from "@pe/host-internal/refused";
 import { asCaller, human, pea, serviceHeaders } from "./callers.ts";
 import * as packages from "../src/packages.ts";
@@ -64,47 +71,55 @@ async function pagesRoot(live?: PageLive) {
 }
 
 describe("pages", () => {
-  it.each([4000, 6000])("Pod listing taking %i ms shares one five-second Page budget with lifecycle", async (listingMs) => {
-    const { pods, fetch } = await pagesRoot();
-    const directory = join(pods, "late");
-    await mkdir(join(directory, "pages", "tour"), { recursive: true });
-    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
-    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
-    const listing = await packages.listPackages({ podsRoots: pods });
-    const entered = Promise.withResolvers<void>();
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
-      entered.resolve();
-      await new Promise((resolve) => setTimeout(resolve, listingMs));
-      return listing;
-    });
-    const active = vi.spyOn(lifecycle, "activePackages").mockImplementation(async (candidates) => {
-      await new Promise((resolve) => setTimeout(resolve, 4000));
-      return [...candidates];
-    });
-    const delivery: { answer?: Response } = {};
-    const opening = fetch("/pages/late--tour/").then((response) => { delivery.answer = response; return response; });
-    await entered.promise;
-    try {
-      await vi.advanceTimersByTimeAsync(4999);
-      expect(delivery.answer).toBeUndefined();
-      expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(delivery.answer?.status).toBe(503);
-      const expiry = await (await opening).json();
-      expect(expiry.message).toContain("Pod discovery exceeded 5000 ms");
-      // The code is what lets pe.js ask again by itself and leave every other 503 alone.
-      expect(expiry.code).toBe("pod.discovery.exceeded");
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
-    } finally {
-      await vi.advanceTimersByTimeAsync(10000);
-      await opening;
-      list.mockRestore();
-      active.mockRestore();
-      vi.useRealTimers();
-    }
-  });
+  it.each([4000, 6000])(
+    "Pod listing taking %i ms shares one five-second Page budget with lifecycle",
+    async (listingMs) => {
+      const { pods, fetch } = await pagesRoot();
+      const directory = join(pods, "late");
+      await mkdir(join(directory, "pages", "tour"), { recursive: true });
+      await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+      await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+      const listing = await packages.listPackages({ podsRoots: pods });
+      const entered = Promise.withResolvers<void>();
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+        entered.resolve();
+        await new Promise((resolve) => setTimeout(resolve, listingMs));
+        return listing;
+      });
+      const active = vi
+        .spyOn(lifecycle, "activePackages")
+        .mockImplementation(async (candidates) => {
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+          return [...candidates];
+        });
+      const delivery: { answer?: Response } = {};
+      const opening = fetch("/pages/late--tour/").then((response) => {
+        delivery.answer = response;
+        return response;
+      });
+      await entered.promise;
+      try {
+        await vi.advanceTimersByTimeAsync(4999);
+        expect(delivery.answer).toBeUndefined();
+        expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(delivery.answer?.status).toBe(503);
+        const expiry = await (await opening).json();
+        expect(expiry.message).toContain("Pod discovery exceeded 5000 ms");
+        // The code is what lets pe.js ask again by itself and leave every other 503 alone.
+        expect(expiry.code).toBe("pod.discovery.exceeded");
+        await vi.advanceTimersByTimeAsync(5000);
+        expect(active).toHaveBeenCalledTimes(listingMs < 5000 ? 1 : 0);
+      } finally {
+        await vi.advanceTimersByTimeAsync(10000);
+        await opening;
+        list.mockRestore();
+        active.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("W34: the page-target Reading asks again after a discovery expiry and serves the target once the folder answers", async () => {
     const { pods, handle } = await pagesRoot();
@@ -140,42 +155,50 @@ describe("pages", () => {
     }
   });
 
-  it.each(["document", "iframe"])("W34: a %s request for a Page that discovery cannot find yet gets the host's words and asks again by itself", async (dest) => {
-    const { pods, fetch } = await pagesRoot();
-    const directory = join(pods, "late");
-    await mkdir(join(directory, "pages", "tour"), { recursive: true });
-    await writeFile(join(directory, "pod.json"), '{"id":"late"}');
-    await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
-    const listing = await packages.listPackages({ podsRoots: pods });
-    let slow = true;
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
-      if (slow) await new Promise((resolve) => setTimeout(resolve, 6000));
-      return listing;
-    });
-    const open = () => fetch("/pages/late--tour/?walk=1", { headers: { accept: "text/html,*/*", "sec-fetch-dest": dest } });
-    try {
-      const opening = open();
-      await vi.advanceTimersByTimeAsync(5000);
-      const waiting = await opening;
-      expect(waiting.status).toBe(503);
-      expect(waiting.headers.get("content-type")).toContain("text/html");
-      const html = await waiting.text();
-      expect(html).toContain('<meta http-equiv="refresh"');
-      expect(html).toContain("waiting for the Pods folder: Pod discovery exceeded 5000 ms listing");
-      expect(html).toContain("Try again when the folder is available.");
-      // The same request, once the folder answers, is the Page (or its place in the app).
-      slow = false;
-      vi.useRealTimers();
-      const served = await open();
-      expect(served.status).toBe(dest === "document" ? 302 : 200);
-    } finally {
+  it.each(["document", "iframe"])(
+    "W34: a %s request for a Page that discovery cannot find yet gets the host's words and asks again by itself",
+    async (dest) => {
+      const { pods, fetch } = await pagesRoot();
+      const directory = join(pods, "late");
+      await mkdir(join(directory, "pages", "tour"), { recursive: true });
+      await writeFile(join(directory, "pod.json"), '{"id":"late"}');
+      await writeFile(join(directory, "pages", "tour", "index.html"), "<title>Late tour</title>");
+      const listing = await packages.listPackages({ podsRoots: pods });
+      let slow = true;
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      await vi.advanceTimersByTimeAsync(10000);
-      list.mockRestore();
-      vi.useRealTimers();
-    }
-  });
+      const list = vi.spyOn(packages, "listPackages").mockImplementation(async () => {
+        if (slow) await new Promise((resolve) => setTimeout(resolve, 6000));
+        return listing;
+      });
+      const open = () =>
+        fetch("/pages/late--tour/?walk=1", {
+          headers: { accept: "text/html,*/*", "sec-fetch-dest": dest },
+        });
+      try {
+        const opening = open();
+        await vi.advanceTimersByTimeAsync(5000);
+        const waiting = await opening;
+        expect(waiting.status).toBe(503);
+        expect(waiting.headers.get("content-type")).toContain("text/html");
+        const html = await waiting.text();
+        expect(html).toContain('<meta http-equiv="refresh"');
+        expect(html).toContain(
+          "waiting for the Pods folder: Pod discovery exceeded 5000 ms listing",
+        );
+        expect(html).toContain("Try again when the folder is available.");
+        // The same request, once the folder answers, is the Page (or its place in the app).
+        slow = false;
+        vi.useRealTimers();
+        const served = await open();
+        expect(served.status).toBe(dest === "document" ? 302 : 200);
+      } finally {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        await vi.advanceTimersByTimeAsync(10000);
+        list.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 
   it("the Bind redirect keeps the Page's whole query in its query field", async () => {
     const { fetch } = await pagesRoot();
@@ -185,10 +208,12 @@ describe("pages", () => {
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("location")!, "http://host");
     expect(location.pathname).toBe("/bind");
-    expect(routeAddress("bind").read(Object.fromEntries(location.searchParams)).page).toMatchObject({
-      view: true,
-      query: { walk: "1", x: "2" },
-    });
+    expect(routeAddress("bind").read(Object.fromEntries(location.searchParams)).page).toMatchObject(
+      {
+        view: true,
+        query: { walk: "1", x: "2" },
+      },
+    );
   });
 
   it("lists and serves a package's pages as <id>--<page>, keyed by manifest id, state outside the pod", async () => {
@@ -442,7 +467,10 @@ describe("pages", () => {
         agent: {},
         agentError: expect.stringContaining(file),
       });
-      const response = await agent("/pages/todo/events", { method: "POST", body: '{"type":"verdict"}' });
+      const response = await agent("/pages/todo/events", {
+        method: "POST",
+        body: '{"type":"verdict"}',
+      });
       expect(response.status).toBe(422);
       expect(await response.json()).toMatchObject({ message: expect.stringContaining(file) });
     },
@@ -606,7 +634,12 @@ describe("pages", () => {
     });
     afterEach(() => {
       heads = {};
-      bindControl({ heads: null, acquired: () => null, acquiredSession: () => null, pagePin: undefined });
+      bindControl({
+        heads: null,
+        acquired: () => null,
+        acquiredSession: () => null,
+        pagePin: undefined,
+      });
     });
     /** `peaSession`: every document there is one Pea acquired. */
     const bind = (peaSession?: string) =>
@@ -906,7 +939,10 @@ describe("pages", () => {
     });
 
     it("C3 checks every Pod model probe in one read on the bound document", async () => {
-      const entries = [{ elementId: 1, elementUniqueId: "one" }, { elementId: 2, elementUniqueId: "wrong" }];
+      const entries = [
+        { elementId: 1, elementUniqueId: "one" },
+        { elementId: 2, elementUniqueId: "wrong" },
+      ];
       const reads: unknown[] = [];
       const { pods, fetch } = await pagesRoot({
         sessions: async () => [session("S1")],
@@ -918,15 +954,43 @@ describe("pages", () => {
       const pod = join(pods, "tour");
       await mkdir(join(pod, "pages", "tour"), { recursive: true });
       await writeFile(join(pod, "pages", "tour", "index.html"), "<title>Tour</title>");
-      await writeFile(join(pod, "pod.json"), JSON.stringify({ id: "tour", for: { title: "Chadds", probes: [
-        { elementId: 1, uniqueId: "one" }, { elementId: 2, uniqueId: "two" },
-      ] } }));
-      await asCaller(human, fetch)("/pe/pages/tour--tour/binding", { method: "PUT", body: JSON.stringify({ kind: "pinned", ref: docA }) });
+      await writeFile(
+        join(pod, "pod.json"),
+        JSON.stringify({
+          id: "tour",
+          for: {
+            title: "Chadds",
+            probes: [
+              { elementId: 1, uniqueId: "one" },
+              { elementId: 2, uniqueId: "two" },
+            ],
+          },
+        }),
+      );
+      await asCaller(human, fetch)("/pe/pages/tour--tour/binding", {
+        method: "PUT",
+        body: JSON.stringify({ kind: "pinned", ref: docA }),
+      });
       reads.length = 0; // Binding itself answers a target reading.
-      const target = () => asCaller({ kind: "page", page: "page:@tour/pages/tour" }, fetch)("/pages/tour--tour/target").then(async (r) => pageTargetReadingSchema.parse(await r.json()));
-      expect((await target()).resolution).toEqual({ kind: "refused", reason: "wrong-model", message: "this Pod is for Chadds; the bound document is Other" });
+      const target = () =>
+        asCaller(
+          { kind: "page", page: "page:@tour/pages/tour" },
+          fetch,
+        )("/pages/tour--tour/target").then(async (r) =>
+          pageTargetReadingSchema.parse(await r.json()),
+        );
+      expect((await target()).resolution).toEqual({
+        kind: "refused",
+        reason: "wrong-model",
+        message: "this Pod is for Chadds; the bound document is Other",
+      });
       expect(reads).toHaveLength(1);
-      expect(reads[0]).toMatchObject({ body: { key: "revit.detail.elements", request: { query: { kind: "ElementReferences", elementIds: [1, 2] } } } });
+      expect(reads[0]).toMatchObject({
+        body: {
+          key: "revit.detail.elements",
+          request: { query: { kind: "ElementReferences", elementIds: [1, 2] } },
+        },
+      });
       entries[1].elementUniqueId = "two";
       expect((await target()).resolution.kind).toBe("resolved");
       expect(reads).toHaveLength(2);
@@ -941,7 +1005,10 @@ describe("pages", () => {
       const reading = (await (
         await two.page.get("/pages/todo/target")
       ).json()) as PageTargetReading;
-      expect(reading.resolution).toEqual({ kind: "resolved", target: { kind: "document", ref: docA } });
+      expect(reading.resolution).toEqual({
+        kind: "resolved",
+        target: { kind: "document", ref: docA },
+      });
       const none = await host([session("S1", MODEL, "new-opening")]);
       await none.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       expect(
@@ -958,9 +1025,13 @@ describe("pages", () => {
         caller: { kind: "page", page: "page:@pages/todo" },
         basis: { kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime: docA },
       });
-      expect(await (await yours.page.get("/pages/todo/target")).json()).toMatchObject({ write: { kind: "human" } });
+      expect(await (await yours.page.get("/pages/todo/target")).json()).toMatchObject({
+        write: { kind: "human" },
+      });
       const peas = await host([session("S2")]);
-      await peas.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: { session: "S2", openId: "B" } });
+      await peas
+        .as(human)
+        .put("/pe/pages/todo/binding", { kind: "pinned", ref: { session: "S2", openId: "B" } });
       expect(await (await peas.page.post("/pages/todo/act", { key: "k" })).json()).toMatchObject({
         basis: { kind: "person-pin", boundBy: "human", lifetime: { session: "S2", openId: "B" } },
       });
@@ -969,47 +1040,72 @@ describe("pages", () => {
     it("a detached document with no Address binds and runs by its exact lifetime", async () => {
       bind();
       const detached = session("S1");
-      const f = await host([{ ...detached, documents: detached.documents!.map((doc) => ({ ...doc, address: null })) }]);
-      const response = await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
+      const f = await host([
+        { ...detached, documents: detached.documents!.map((doc) => ({ ...doc, address: null })) },
+      ]);
+      const response = await f
+        .as(human)
+        .put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ resolution: { kind: "resolved", target: { kind: "document", ref: docA } } });
+      expect(await response.json()).toMatchObject({
+        resolution: { kind: "resolved", target: { kind: "document", ref: docA } },
+      });
       expect((await f.page.post("/pages/todo/act", { key: "k" })).status).toBe(202);
     });
 
     it("a Pea pin cannot consent to a write after its acquisition is released", async () => {
       bind("S1");
       const f = await host([session("S1")]);
-      expect((await f.as(pea("t1")).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA })).status).toBe(200);
+      expect(
+        (await f.as(pea("t1")).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA })).status,
+      ).toBe(200);
       // Pinning needs acquisition. Release it before the write so only boundBy distinguishes consent.
       bind();
       const response = await f.page.post("/pages/todo/act", { key: "k" });
       expect(response.status).toBe(403);
-      expect(await code(response)).toMatchObject({ code: "grant.required", door: "/pages/todo/act" });
+      expect(await code(response)).toMatchObject({
+        code: "grant.required",
+        door: "/pages/todo/act",
+      });
       expect(f.forwarded).toEqual([]);
     });
 
-    it.each(["unpin", "repin", "agent", "reopen"] as const)("a person's pin is rechecked after %s before the next step and resume", async (change) => {
-      bind();
-      const sessions = [session("S1"), session("S2", "C:/Other.rvt")];
-      const f = await host(sessions);
-      await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
-      const response = await f.page.post("/pages/todo/act", { key: "k" });
-      expect(response.status).toBe(202);
-      const basis = basisSchema.parse((await response.json()).basis);
-      expect(await live(basis, "step")).toBeNull();
-      const fenced: string[] = [];
-      const stop = onPagePinRevoke((page) => fenced.push(page));
-      cleanup.push(async () => stop());
-      if (change === "reopen") sessions[0] = session("S1", MODEL, "new-opening");
-      else {
-        if (change === "agent") bind("S1");
-        await f.as(change === "agent" ? pea("t1") : human).put("/pe/pages/todo/binding",
-          change === "unpin" ? { kind: "none" } : { kind: "pinned", ref: change === "repin" ? { session: "S2", openId: "B" } : docA });
-      }
-      expect(fenced).toEqual(change === "reopen" ? [] : ["page:@pages/todo"]);
-      for (const moment of ["step", "authorize", "native dispatch"])
-        expect((await live(basis, moment))?.refusal).toMatchObject({ code: "grant.revoked", door: moment, lifetime: docA });
-    });
+    it.each(["unpin", "repin", "agent", "reopen"] as const)(
+      "a person's pin is rechecked after %s before the next step and resume",
+      async (change) => {
+        bind();
+        const sessions = [session("S1"), session("S2", "C:/Other.rvt")];
+        const f = await host(sessions);
+        await f.as(human).put("/pe/pages/todo/binding", { kind: "pinned", ref: docA });
+        const response = await f.page.post("/pages/todo/act", { key: "k" });
+        expect(response.status).toBe(202);
+        const basis = basisSchema.parse((await response.json()).basis);
+        expect(await live(basis, "step")).toBeNull();
+        const fenced: string[] = [];
+        const stop = onPagePinRevoke((page) => fenced.push(page));
+        cleanup.push(async () => stop());
+        if (change === "reopen") sessions[0] = session("S1", MODEL, "new-opening");
+        else {
+          if (change === "agent") bind("S1");
+          await f.as(change === "agent" ? pea("t1") : human).put(
+            "/pe/pages/todo/binding",
+            change === "unpin"
+              ? { kind: "none" }
+              : {
+                  kind: "pinned",
+                  ref: change === "repin" ? { session: "S2", openId: "B" } : docA,
+                },
+          );
+        }
+        expect(fenced).toEqual(change === "reopen" ? [] : ["page:@pages/todo"]);
+        for (const moment of ["step", "authorize", "native dispatch"])
+          expect((await live(basis, moment))?.refusal).toMatchObject({
+            code: "grant.revoked",
+            door: moment,
+            lifetime: docA,
+          });
+      },
+    );
 
     it("no binding is choose with one Revit or two, never a guess at the active document", async () => {
       bind();
@@ -1079,9 +1175,9 @@ describe("pages", () => {
       expect(await code(await put({ kind: "anonymous" }, { kind: "none" }))).toMatchObject({
         code: "context.missing",
       });
-      expect((await put(pea("t9"), { kind: "pinned", ref: { session: "S2", openId: "B" } })).status).toBe(
-        200,
-      );
+      expect(
+        (await put(pea("t9"), { kind: "pinned", ref: { session: "S2", openId: "B" } })).status,
+      ).toBe(200);
       expect(JSON.parse(await readFile(join(state, "todo", "binding.json"), "utf8"))).toEqual({
         slots: { default: { kind: "pinned", ref: { session: "S2", openId: "B" } } },
         // Pea set it, so it is no person's consent to the Page's ReadOnly scripts.
@@ -1235,17 +1331,34 @@ describe("pages", () => {
         body,
       };
     }
-    it.each(["MepBoundExceeded", "MepSystemsEmpty"])("W50: native %s words reach the Page banner without HTTP noise", async (code) => {
-      const message = code === "MepBoundExceeded"
-        ? "More than 1024 MEP systems. Narrow domain or pass systemUniqueId."
-        : "No MEP systems match this scope. Choose a system in this document or change domain.";
-      const { pe, body } = await page((url) => url.pathname === "/pages/todo/call"
-        ? Response.json({ kind: "BridgeError", message, evidence: { issues: [{ code, instancePath: "$.maxSystems", message }] } }, { status: 400 })
-        : undefined);
-      await expect(pe.read!("mep.system.members", { domain: "piping", maxSystems: 1024 })).rejects.toMatchObject({ name: "PeRefusal", code, message });
-      expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject({ textContent: message });
-      expect(JSON.stringify(body.children)).not.toContain("500");
-    });
+    it.each(["MepBoundExceeded", "MepSystemsEmpty"])(
+      "W50: native %s words reach the Page banner without HTTP noise",
+      async (code) => {
+        const message =
+          code === "MepBoundExceeded"
+            ? "More than 1024 MEP systems. Narrow domain or pass systemUniqueId."
+            : "No MEP systems match this scope. Choose a system in this document or change domain.";
+        const { pe, body } = await page((url) =>
+          url.pathname === "/pages/todo/call"
+            ? Response.json(
+                {
+                  kind: "BridgeError",
+                  message,
+                  evidence: { issues: [{ code, instancePath: "$.maxSystems", message }] },
+                },
+                { status: 400 },
+              )
+            : undefined,
+        );
+        await expect(
+          pe.read!("mep.system.members", { domain: "piping", maxSystems: 1024 }),
+        ).rejects.toMatchObject({ name: "PeRefusal", code, message });
+        expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject(
+          { textContent: message },
+        );
+        expect(JSON.stringify(body.children)).not.toContain("500");
+      },
+    );
 
     const options: IdentityOptions = {
       port: () => 5180,
@@ -1287,26 +1400,52 @@ describe("pages", () => {
           url.pathname === "/pages/todo/act"
             ? Response.json(
                 failing
-                  ? { id: "a1", state: "failed", error: "Script execution CompilationFailed", status: 422, evidence: { result: broken } }
+                  ? {
+                      id: "a1",
+                      state: "failed",
+                      error: "Script execution CompilationFailed",
+                      status: 422,
+                      evidence: { result: broken },
+                    }
                   : { id: "a1", state: "succeeded", result: run },
               )
             : undefined,
         "page:@ducts/pages/tour",
       );
       const acts = () => sent.filter((one) => one.url === "/pages/todo/act").map((one) => one.body);
-      expect(await pe.script!("./checks/census.csx", { input: { level: "L2" } })).toEqual({ rows: [1] });
-      expect(await pe.do!("script:@ducts/src/Census.cs", { input: { level: "L2" }, mode: "WriteTransaction" })).toEqual({ rows: [1] });
+      expect(await pe.script!("./checks/census.csx", { input: { level: "L2" } })).toEqual({
+        rows: [1],
+      });
+      expect(
+        await pe.do!("script:@ducts/src/Census.cs", {
+          input: { level: "L2" },
+          mode: "WriteTransaction",
+        }),
+      ).toEqual({ rows: [1] });
       expect(await pe.script!("/src/Census.cs")).toEqual({ rows: [1] });
       expect(await pe.script!("src/Census.cs")).toEqual({ rows: [1] });
       expect(await pe.script!("../checks/census.csx")).toEqual({ rows: [1] });
       expect(await pe.script!("Result(1);\n")).toEqual({ rows: [1] });
       expect(acts()).toEqual([
-        { key: "script:@ducts/pages/tour/checks/census.csx", input: { input: { level: "L2" }, timeoutSeconds: 120 } },
-        { key: "script:@ducts/src/Census.cs", input: { input: { level: "L2" }, permissionMode: "WriteTransaction", timeoutSeconds: 120 } },
+        {
+          key: "script:@ducts/pages/tour/checks/census.csx",
+          input: { input: { level: "L2" }, timeoutSeconds: 120 },
+        },
+        {
+          key: "script:@ducts/src/Census.cs",
+          input: {
+            input: { level: "L2" },
+            permissionMode: "WriteTransaction",
+            timeoutSeconds: 120,
+          },
+        },
         { key: "script:@ducts/src/Census.cs", input: { timeoutSeconds: 120 } },
         { key: "script:@ducts/src/Census.cs", input: { timeoutSeconds: 120 } },
         { key: "script:@ducts/pages/checks/census.csx", input: { timeoutSeconds: 120 } },
-        { key: "scripting.execute", input: { timeoutSeconds: 120, scriptContent: "Result(1);\n", permissionMode: "ReadOnly" } },
+        {
+          key: "scripting.execute",
+          input: { timeoutSeconds: 120, scriptContent: "Result(1);\n", permissionMode: "ReadOnly" },
+        },
       ]);
       // A Pod Page's script is never fetched and sent as anonymous source.
       expect(sent.some((one) => one.url.endsWith(".csx") || one.url.endsWith(".cs"))).toBe(false);
@@ -1316,7 +1455,9 @@ describe("pages", () => {
         () => null,
         (thrown: Error & { run?: unknown }) => thrown,
       );
-      expect(error?.message).toBe("script:@ducts/pages/tour/checks/census.csx CompilationFailed: CS1002: ; expected");
+      expect(error?.message).toBe(
+        "script:@ducts/pages/tour/checks/census.csx CompilationFailed: CS1002: ; expected",
+      );
       expect(error?.run).toEqual(broken);
       expect((pe as unknown as { lastRun: unknown }).lastRun).toEqual(broken);
     });
@@ -1329,13 +1470,21 @@ describe("pages", () => {
     it("pe.diff dry-runs a script, runs it, and answers rows from the run's own change ids", async () => {
       const ids = (...list: number[]) => ({ ids: list, total: list.length });
       const changes = (kept: boolean) => ({
-        added: ids(3), modified: ids(1), deleted: ids(2), transactions: [], kept,
-        summary: kept ? "Changed 3 elements" : "ReadOnly run", undo: kept ? "Pe script: heal" : null,
+        added: ids(3),
+        modified: ids(1),
+        deleted: ids(2),
+        transactions: [],
+        kept,
+        summary: kept ? "Changed 3 elements" : "ReadOnly run",
+        undo: kept ? "Pe script: heal" : null,
       });
       let wrote = false;
       let dryFails = false;
       const entry = (elementId: number, typeName: string, raw: string, shown: string) => ({
-        elementId, name: `Tap ${elementId}`, categoryName: "Duct Fittings", typeName,
+        elementId,
+        name: `Tap ${elementId}`,
+        categoryName: "Duct Fittings",
+        typeName,
         requestedParameters: [{ name: "Loss", rawValue: raw, displayValue: shown }],
       });
       const { pe, sent } = await page((url, init) => {
@@ -1343,28 +1492,67 @@ describe("pages", () => {
         if (url.pathname === "/pages/todo/act") {
           const dry = body.input.permissionMode === "ReadOnly";
           if (dry && dryFails)
-            return Response.json({ id: "a", state: "failed", status: 422, evidence: { result: {
-              status: "PolicyRejected", output: "", diagnostics: [{ severity: "Error", message: "script-owned transaction" }] } } });
+            return Response.json({
+              id: "a",
+              state: "failed",
+              status: 422,
+              evidence: {
+                result: {
+                  status: "PolicyRejected",
+                  output: "",
+                  diagnostics: [{ severity: "Error", message: "script-owned transaction" }],
+                },
+              },
+            });
           wrote ||= !dry;
-          return Response.json({ id: "a", state: "succeeded", result: {
-            status: "Succeeded", data: { healed: 1 }, diagnostics: [], output: "", changes: changes(!dry) } });
+          return Response.json({
+            id: "a",
+            state: "succeeded",
+            result: {
+              status: "Succeeded",
+              data: { healed: 1 },
+              diagnostics: [],
+              output: "",
+              changes: changes(!dry),
+            },
+          });
         }
         if (url.pathname === "/pages/todo/call")
-          return Response.json({ entries: (body.request.query.elementIds as number[]).flatMap((id) =>
-            id === 1 ? [entry(1, wrote ? "Tight" : "Loose", wrote ? "0.254" : "0.250", "0.25")]
-            : id === 2 && !wrote ? [entry(2, "Loose", "0.1", "0.10")]
-            : id === 3 && wrote ? [entry(3, "Tight", "0.3", "0.30")] : []) });
+          return Response.json({
+            entries: (body.request.query.elementIds as number[]).flatMap((id) =>
+              id === 1
+                ? [entry(1, wrote ? "Tight" : "Loose", wrote ? "0.254" : "0.250", "0.25")]
+                : id === 2 && !wrote
+                  ? [entry(2, "Loose", "0.1", "0.10")]
+                  : id === 3 && wrote
+                    ? [entry(3, "Tight", "0.3", "0.30")]
+                    : [],
+            ),
+          });
         return undefined;
       }, "page:@ducts/pages/tour");
-      const diff = pe.diff as unknown as (run: object, names?: string[]) => Promise<Record<string, unknown>>;
+      const diff = pe.diff as unknown as (
+        run: object,
+        names?: string[],
+      ) => Promise<Record<string, unknown>>;
 
       const answer = await diff({ script: "heals/taps.csx", input: { tight: true } }, ["Loss"]);
 
-      const posts = sent.filter((one) => one.method === "POST" && /\/(act|call)$/.test(one.url)).map((one) => one.body as {
-        key: string; input?: { permissionMode?: string }; request?: { query: { elementIds: number[] } } });
-      expect(posts.map((one) => one.input?.permissionMode ?? one.request?.query.elementIds ?? "declared")).toEqual([
-        "ReadOnly", [1, 2], "declared", [3, 1],
-      ]);
+      const posts = sent
+        .filter((one) => one.method === "POST" && /\/(act|call)$/.test(one.url))
+        .map(
+          (one) =>
+            one.body as {
+              key: string;
+              input?: { permissionMode?: string };
+              request?: { query: { elementIds: number[] } };
+            },
+        );
+      expect(
+        posts.map(
+          (one) => one.input?.permissionMode ?? one.request?.query.elementIds ?? "declared",
+        ),
+      ).toEqual(["ReadOnly", [1, 2], "declared", [3, 1]]);
       expect(answer).toMatchObject({
         data: { healed: 1 },
         changes: { undo: "Pe script: heal", kept: true },
@@ -1392,13 +1580,22 @@ describe("pages", () => {
       dryFails = true;
       wrote = false;
       const blind = await diff({ script: "heals/taps.csx" }, ["Loss"]);
-      expect(blind.dry).toMatchObject({ ran: false, why: expect.stringContaining("script-owned transaction") });
+      expect(blind.dry).toMatchObject({
+        ran: false,
+        why: expect.stringContaining("script-owned transaction"),
+      });
       expect(blind).toMatchObject({ unread: 1, changes: { kept: true } });
       expect((blind.rows as { id: number }[]).map((row) => row.id)).toEqual([3, 3]);
       wrote = false;
       const aimed = await diff({ script: "heals/taps.csx", expect: [1] }, ["Loss"]);
       expect(aimed).toMatchObject({ unread: 0, dry: { ran: false } });
-      expect(aimed.rows).toContainEqual({ id: 1, change: "modified", parameter: "Type", before: "Loose", after: "Tight" });
+      expect(aimed.rows).toContainEqual({
+        id: 1,
+        change: "modified",
+        parameter: "Type",
+        before: "Loose",
+        after: "Tight",
+      });
 
       // The retired (elementIds, parameterNames, run) form is refused in plain words, before anything runs.
       const acts = sent.length;
@@ -1607,44 +1804,76 @@ describe("pages", () => {
       }
     });
 
-    it.each(["target", "state", "text", "read", "do"])("D43: %s retries transport reads on 1/2/5/10 seconds and clears its waiting line", async (door) => {
-      const { sleep, pass, waits } = owned();
-      let attempts = 0;
-      const path = door === "read" || door === "do" ? "call" : door;
-      const { pe, body } = await page((url) => {
-        if (url.pathname.endsWith(`/${path}`) && ++attempts <= 5) throw new TypeError("Failed to fetch");
-        return undefined;
-      }, undefined, undefined, sleep);
-      const result = door === "target" ? pe.target!()
-        : door === "read" || door === "do" ? pe[door]!("revit.context.summary")
-        : pe.state!({ base: 0, reduce: (s: unknown) => s });
-      // Observe rejection immediately so the red mutant leaves no unhandled rejection.
-      const outcome = result.then((value) => ({ value }), (error) => ({ error }));
-      for (const ms of [1000, 2000, 5000, 10000, 10000]) {
-        await pass(ms);
-        const note = body.children.find((node) => (node as { id?: string }).id === "pe-waiting");
-        expect(note).toMatchObject({ textContent: expect.stringContaining("Failed to fetch") });
-      }
-      expect(await outcome).not.toHaveProperty("error");
-      expect(attempts).toBe(6);
-      expect(waits).toEqual([]);
-      expect(body.children.find((node) => (node as { id?: string }).id === "pe-waiting")).toMatchObject({ hidden: true });
-    });
+    it.each(["target", "state", "text", "read", "do"])(
+      "D43: %s retries transport reads on 1/2/5/10 seconds and clears its waiting line",
+      async (door) => {
+        const { sleep, pass, waits } = owned();
+        let attempts = 0;
+        const path = door === "read" || door === "do" ? "call" : door;
+        const { pe, body } = await page(
+          (url) => {
+            if (url.pathname.endsWith(`/${path}`) && ++attempts <= 5)
+              throw new TypeError("Failed to fetch");
+            return undefined;
+          },
+          undefined,
+          undefined,
+          sleep,
+        );
+        const result =
+          door === "target"
+            ? pe.target!()
+            : door === "read" || door === "do"
+              ? pe[door]!("revit.context.summary")
+              : pe.state!({ base: 0, reduce: (s: unknown) => s });
+        // Observe rejection immediately so the red mutant leaves no unhandled rejection.
+        const outcome = result.then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        );
+        for (const ms of [1000, 2000, 5000, 10000, 10000]) {
+          await pass(ms);
+          const note = body.children.find((node) => (node as { id?: string }).id === "pe-waiting");
+          expect(note).toMatchObject({ textContent: expect.stringContaining("Failed to fetch") });
+        }
+        expect(await outcome).not.toHaveProperty("error");
+        expect(attempts).toBe(6);
+        expect(waits).toEqual([]);
+        expect(
+          body.children.find((node) => (node as { id?: string }).id === "pe-waiting"),
+        ).toMatchObject({ hidden: true });
+      },
+    );
 
     it("D43: committed fire catches up after transport loss without appending twice, including an SSE echo", async () => {
       const { sleep, pass } = owned();
       const row = { seq: 1, origin: "page", at: "2026-11-14T00:00:00Z", event: { type: "add" } };
-      let committed = false, reads = 0;
-      const { pe, streams, sent } = await page((url) => {
-        if (url.pathname.endsWith("/events")) { committed = true; return Response.json(row); }
-        if (url.pathname.endsWith("/state") && committed) {
-          if (++reads === 1) throw new TypeError("Failed to fetch");
-          return Response.json({ seq: 1, events: [row] });
-        }
-        return undefined;
-      }, undefined, undefined, sleep);
-      const k = await pe.state!({ base: 0, reduce: (s: number) => s + 1 }) as { state: number; fire(e: unknown): Promise<boolean> };
-      const result = k.fire(row.event).then((value) => ({ value }), (error) => ({ error }));
+      let committed = false,
+        reads = 0;
+      const { pe, streams, sent } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/events")) {
+            committed = true;
+            return Response.json(row);
+          }
+          if (url.pathname.endsWith("/state") && committed) {
+            if (++reads === 1) throw new TypeError("Failed to fetch");
+            return Response.json({ seq: 1, events: [row] });
+          }
+          return undefined;
+        },
+        undefined,
+        undefined,
+        sleep,
+      );
+      const k = (await pe.state!({ base: 0, reduce: (s: number) => s + 1 })) as {
+        state: number;
+        fire(e: unknown): Promise<boolean>;
+      };
+      const result = k.fire(row.event).then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
       await pass(1000);
       streams[0]!.onmessage!({ data: JSON.stringify(row) });
       expect(await result).toEqual({ value: true });
@@ -1652,35 +1881,63 @@ describe("pages", () => {
       expect(sent.filter((r) => r.url.endsWith("/events"))).toHaveLength(1);
     });
 
-    it.each(["append", "mutation", "script"])("D43: %s transport loss reports unknown outcome and never retries", async (door) => {
-      const { sleep, waits } = owned();
-      const { pe, sent, body } = await page((url) => {
-        if (url.pathname.endsWith("/call")) return Response.json({ notDispatched: true }, { status: 409 });
-        if (url.pathname.endsWith("/events") || url.pathname.endsWith("/act")) throw new TypeError("Failed to fetch");
-        return undefined;
-      }, undefined, undefined, sleep);
-      const result = door === "script" ? pe.script!("script:@kit/src/Copy.cs")
-        : door === "mutation" ? pe.do!("revit.mutate")
-        : (await pe.state!({ base: 0, reduce: (s: unknown) => s }) as { fire(e: unknown): Promise<unknown> }).fire({ type: "add" });
-      await expect(result).rejects.toThrow(/outcome.*unknown.*Failed to fetch/i);
-      expect(sent.filter((r) => /\/(events|act)$/.test(r.url))).toHaveLength(1);
-      expect(waits).toEqual([]);
-      expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject({ textContent: expect.stringContaining("Failed to fetch") });
-    });
+    it.each(["append", "mutation", "script"])(
+      "D43: %s transport loss reports unknown outcome and never retries",
+      async (door) => {
+        const { sleep, waits } = owned();
+        const { pe, sent, body } = await page(
+          (url) => {
+            if (url.pathname.endsWith("/call"))
+              return Response.json({ notDispatched: true }, { status: 409 });
+            if (url.pathname.endsWith("/events") || url.pathname.endsWith("/act"))
+              throw new TypeError("Failed to fetch");
+            return undefined;
+          },
+          undefined,
+          undefined,
+          sleep,
+        );
+        const result =
+          door === "script"
+            ? pe.script!("script:@kit/src/Copy.cs")
+            : door === "mutation"
+              ? pe.do!("revit.mutate")
+              : (
+                  (await pe.state!({ base: 0, reduce: (s: unknown) => s })) as {
+                    fire(e: unknown): Promise<unknown>;
+                  }
+                ).fire({ type: "add" });
+        await expect(result).rejects.toThrow(/outcome.*unknown.*Failed to fetch/i);
+        expect(sent.filter((r) => /\/(events|act)$/.test(r.url))).toHaveLength(1);
+        expect(waits).toEqual([]);
+        expect(body.children.find((n) => (n as { id?: string }).id === "pe-refusal")).toMatchObject(
+          { textContent: expect.stringContaining("Failed to fetch") },
+        );
+      },
+    );
 
     it("D43: a lost connection while polling a sent act's receipt is retried, and the act is sent once", async () => {
       const { sleep, pass } = owned();
       let polls = 0;
-      const { pe, sent } = await page((url) => {
-        if (url.pathname.endsWith("/call")) return Response.json({ notDispatched: true }, { status: 409 });
-        if (url.pathname.endsWith("/act")) return Response.json({ id: "a1", state: "running" });
-        if (url.pathname.endsWith("/actions")) {
-          if (++polls === 1) throw new TypeError("Failed to fetch");
-          return Response.json([{ id: "a1", state: "succeeded", result: { kept: true } }]);
-        }
-        return undefined;
-      }, undefined, undefined, sleep);
-      const result = pe.do!("revit.mutate").then((value) => ({ value }), (error) => ({ error }));
+      const { pe, sent } = await page(
+        (url) => {
+          if (url.pathname.endsWith("/call"))
+            return Response.json({ notDispatched: true }, { status: 409 });
+          if (url.pathname.endsWith("/act")) return Response.json({ id: "a1", state: "running" });
+          if (url.pathname.endsWith("/actions")) {
+            if (++polls === 1) throw new TypeError("Failed to fetch");
+            return Response.json([{ id: "a1", state: "succeeded", result: { kept: true } }]);
+          }
+          return undefined;
+        },
+        undefined,
+        undefined,
+        sleep,
+      );
+      const result = pe.do!("revit.mutate").then(
+        (value) => ({ value }),
+        (error) => ({ error }),
+      );
       await pass(250);
       await pass(1000);
       expect(await result).toEqual({ value: { kept: true } });
@@ -1693,11 +1950,17 @@ describe("pages", () => {
       "Pod discovery exceeded 5000 ms listing G:/Shared drives/Pods. Try again when the folder is available.";
     const late = () =>
       normalizePeError(
-        Response.json({ error: words, message: words, code: "pod.discovery.exceeded" }, { status: 503 }),
+        Response.json(
+          { error: words, message: words, code: "pod.discovery.exceeded" },
+          { status: 503 },
+        ),
       );
     const owned = () => {
       const waits: { ms: number; end: () => void }[] = [];
-      const sleep = ((end: () => void, ms: number) => (waits.push({ ms, end }), 0)) as unknown as typeof setTimeout;
+      const sleep = ((end: () => void, ms: number) => (
+        waits.push({ ms, end }),
+        0
+      )) as unknown as typeof setTimeout;
       /** Every wait the Page is in is exactly `ms`; then they all end. */
       const pass = async (...ms: number[]) => {
         await expect.poll(() => waits.map((wait) => wait.ms)).toEqual(ms);
@@ -1719,14 +1982,23 @@ describe("pages", () => {
         undefined,
         sleep,
       );
-      const note = () => body.children.find((node) => (node as { id?: string }).id === "pe-waiting") as
-        | { textContent: string; hidden: boolean; role: string }
-        | undefined;
+      const note = () =>
+        body.children.find((node) => (node as { id?: string }).id === "pe-waiting") as
+          | { textContent: string; hidden: boolean; role: string }
+          | undefined;
       const target = pe.target!();
       const rendered: unknown[] = [];
-      const state = pe.state!({ reduce: (s: unknown) => s, base: { tries: 0 }, render: (s: unknown) => rendered.push(s) });
+      const state = pe.state!({
+        reduce: (s: unknown) => s,
+        base: { tries: 0 },
+        render: (s: unknown) => rendered.push(s),
+      });
       await pass(1000, 1000);
-      expect(note()).toMatchObject({ textContent: `waiting for the Pods folder: ${words}`, hidden: false, role: "status" });
+      expect(note()).toMatchObject({
+        textContent: `waiting for the Pods folder: ${words}`,
+        hidden: false,
+        role: "status",
+      });
       expect(pe.doc).toBeNull();
       await pass(2000, 2000);
       expect(await target).toEqual(resolved.document);
@@ -1752,7 +2024,9 @@ describe("pages", () => {
         undefined,
         sleep,
       );
-      const loading = pe.state!({ reduce: (s: unknown) => s, base: { tries: 5 } }) as Promise<{ state: unknown }>;
+      const loading = pe.state!({ reduce: (s: unknown) => s, base: { tries: 5 } }) as Promise<{
+        state: unknown;
+      }>;
       await pass(1000);
       await pass(2000);
       expect((await loading).state).toEqual({ tries: 5 });
@@ -1765,7 +2039,8 @@ describe("pages", () => {
       let calls = 0;
       const { pe, sent } = await page(
         (url) => {
-          if (url.pathname.endsWith("/call")) return ++calls <= 2 || calls === 4 ? late() : undefined;
+          if (url.pathname.endsWith("/call"))
+            return ++calls <= 2 || calls === 4 ? late() : undefined;
           if (url.pathname.endsWith("/act")) return late();
           return undefined;
         },
@@ -1792,7 +2067,9 @@ describe("pages", () => {
         (url) => {
           if (url.pathname.endsWith("/target") && ++asked.target)
             return Response.json(
-              { error: { code: "grant.required", message: "this Page may not read that document" } },
+              {
+                error: { code: "grant.required", message: "this Page may not read that document" },
+              },
               { status: 403 },
             );
           if (url.pathname.endsWith("/state") && ++asked.state)
@@ -1810,15 +2087,26 @@ describe("pages", () => {
       await expect(pe.state!({ reduce: (s: unknown) => s, base: {} })).rejects.toThrow("503");
       expect(asked).toEqual({ target: 1, state: 1 });
       expect(waits).toEqual([]);
-      expect(body.children.find((node) => (node as { id?: string }).id === "pe-waiting")).toBeUndefined();
+      expect(
+        body.children.find((node) => (node as { id?: string }).id === "pe-waiting"),
+      ).toBeUndefined();
     });
 
     it("pe.target throws wrong-model as PeTargetRefusal and displays the host's words", async () => {
       const message = "this Pod is for Chadds; the bound document is Other";
-      const { pe, body } = await page((url) => url.pathname.endsWith("/target") ? Response.json({
-        ...resolved, resolution: { kind: "refused", reason: "wrong-model", message },
-      }) : undefined);
-      await expect(pe.target!()).rejects.toMatchObject({ name: "PeTargetRefusal", code: "wrong-model", message });
+      const { pe, body } = await page((url) =>
+        url.pathname.endsWith("/target")
+          ? Response.json({
+              ...resolved,
+              resolution: { kind: "refused", reason: "wrong-model", message },
+            })
+          : undefined,
+      );
+      await expect(pe.target!()).rejects.toMatchObject({
+        name: "PeTargetRefusal",
+        code: "wrong-model",
+        message,
+      });
       expect((body.children[0] as { textContent: string }).textContent).toBe(message);
     });
 

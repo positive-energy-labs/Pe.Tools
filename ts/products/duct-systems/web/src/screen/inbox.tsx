@@ -158,8 +158,13 @@ export function Inbox({
       );
       switch (verb.kind) {
         case "encounter":
-          return make(`e${i}`, Link, verb.label, verb.label,
-            () => void work.write(encounterPatches(verb.issue, verb.choice, work.doc)));
+          return make(
+            `e${i}`,
+            Link,
+            verb.label,
+            verb.label,
+            () => void work.write(encounterPatches(verb.issue, verb.choice, work.doc)),
+          );
         case "price-as":
           return worded ? (
             <RuleAssignment key={`rule${i}`} family={verb.family} work={work} />
@@ -189,7 +194,11 @@ export function Inbox({
           );
         case "airflow":
           // The choice is the shared compact picker, in the open row only.
-          return worded ? <a key={`a${i}`} href="/fans">Choose {verb.of === "unit" ? "fanFlow" : "terminalFlow"} slot in Fans settings</a> : null;
+          return worded ? (
+            <a key={`a${i}`} href="/fans">
+              Choose {verb.of === "unit" ? "fanFlow" : "terminalFlow"} slot in Fans settings
+            </a>
+          ) : null;
         case "focus":
           return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
         case "command":
@@ -259,10 +268,7 @@ export function Inbox({
         cite(registry, {
           owner,
           focus: null,
-          refs:
-            lit?.owner === owner
-              ? lit.refs
-              : citedReferences(subjects, heading.references),
+          refs: lit?.owner === owner ? lit.refs : citedReferences(subjects, heading.references),
         });
       };
       return {

@@ -3,17 +3,19 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "test": "vp test --config product-composition.config.ts" },
+  "scripts": {
+    "test": "vp test --config product-composition.config.ts"
+  },
   "devDependencies": {
     "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/duct-systems-domain": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
     "@pe/ducts-web": "workspace:*",
-    "@pe/duct-systems-contract": "workspace:*",
-    "@pe/duct-systems-domain": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
     "@pe/fans-host": "workspace:*",

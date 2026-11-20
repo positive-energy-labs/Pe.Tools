@@ -27,7 +27,10 @@ const recordBeats = () =>
   vi.stubGlobal("fetch", async (url: string | URL | Request, init?: RequestInit) => {
     if (String(url).includes("/pe/notices/presence/"))
       beats.push(JSON.parse(String(init?.body)) as (typeof beats)[number]);
-    return new Response('{"ok":true}', { status: 200, headers: { "content-type": "application/json" } });
+    return new Response('{"ok":true}', {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   });
 
 test("thread presence beats on focus and every 5 seconds, and stops on route departure", async () => {
@@ -68,7 +71,10 @@ test("a down host gets at most 7 presence beats in 85 seconds, then the 5 second
   vi.stubGlobal("fetch", async () => {
     attempts++;
     if (down) throw new TypeError("Failed to fetch");
-    return new Response('{"ok":true}', { status: 200, headers: { "content-type": "application/json" } });
+    return new Response('{"ok":true}', {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
   });
   function Surface() {
     useThreadPresence("t1");
@@ -230,7 +236,10 @@ test("two windows serialize delivery and reread the shared acknowledgement", asy
       for (const stream of streams)
         stream.onmessage?.(
           new MessageEvent("message", {
-            data: JSON.stringify({ ...snapshot(), value: { id: 1, tray: false, rows: [row("same-turn")] } }),
+            data: JSON.stringify({
+              ...snapshot(),
+              value: { id: 1, tray: false, rows: [row("same-turn")] },
+            }),
           }),
         );
       await Promise.all(queues.values());
@@ -241,7 +250,10 @@ test("two windows serialize delivery and reread the shared acknowledgement", asy
       for (const stream of streams)
         stream.onmessage?.(
           new MessageEvent("message", {
-            data: JSON.stringify({ ...snapshot(), value: { id: 2, tray: false, rows: [row("same-turn")] } }),
+            data: JSON.stringify({
+              ...snapshot(),
+              value: { id: 2, tray: false, rows: [row("same-turn")] },
+            }),
           }),
         );
       await Promise.all(queues.values());

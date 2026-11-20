@@ -105,7 +105,10 @@ const testScoped = <S, E>(layer: Layer.Layer<S, E>) => {
  * (a module-level fixture's scope lives with its worker). Closing it closes every registered run.
  */
 export const registryService = (): RunRegistry["Service"] => {
-  return Context.get(testScoped(RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer))), RunRegistry);
+  return Context.get(
+    testScoped(RunRegistry.layer.pipe(Layer.provide(NodeCrypto.layer))),
+    RunRegistry,
+  );
 };
 
 /** {@link RevitBridgeDetached} as a value, built in a scope the running test closes. */
@@ -114,22 +117,43 @@ export const detachedBridge = (overrides?: Partial<RevitBridge["Service"]>) =>
 
 type DocumentView = BridgeStateSnapshot["openDocuments"][number];
 const emptyState = {
-  activeDocumentCloudModelGuid: null, activeDocumentCloudModelUrn: null, activeDocumentCloudProjectGuid: null,
-  activeDocumentIsFamilyDocument: false, activeDocumentIsModelInCloud: false, activeDocumentIsWorkshared: false,
-  activeDocumentKey: null, activeDocumentObservedAtUnixMs: 0, activeDocumentPath: null, activeDocumentTitle: null,
-  documentIdentity: null, hasActiveDocument: false, revitVersion: "test", runtimeAssemblies: [],
-  runtimeFramework: "test", sharedParametersFilename: null,
+  activeDocumentCloudModelGuid: null,
+  activeDocumentCloudModelUrn: null,
+  activeDocumentCloudProjectGuid: null,
+  activeDocumentIsFamilyDocument: false,
+  activeDocumentIsModelInCloud: false,
+  activeDocumentIsWorkshared: false,
+  activeDocumentKey: null,
+  activeDocumentObservedAtUnixMs: 0,
+  activeDocumentPath: null,
+  activeDocumentTitle: null,
+  documentIdentity: null,
+  hasActiveDocument: false,
+  revitVersion: "test",
+  runtimeAssemblies: [],
+  runtimeFramework: "test",
+  sharedParametersFilename: null,
 } satisfies Omit<BridgeStateSnapshot, "openDocuments">;
 /** A session row for a `list` override; unnamed state is empty, documents unsaved and inactive. */
-export const sessionView = ({ state, ...view }: Omit<BridgeSessionView, "state"> & {
-  state?: Partial<Omit<BridgeStateSnapshot, "openDocuments">> & { openDocuments: readonly (Partial<DocumentView> & { openId: string })[] };
+export const sessionView = ({
+  state,
+  ...view
+}: Omit<BridgeSessionView, "state"> & {
+  state?: Partial<Omit<BridgeStateSnapshot, "openDocuments">> & {
+    openDocuments: readonly (Partial<DocumentView> & { openId: string })[];
+  };
 }): BridgeSessionView => ({
   ...view,
   state: {
     ...emptyState,
     ...state,
     openDocuments: (state?.openDocuments ?? []).map((document) => ({
-      title: "", address: null, isFamilyDocument: false, isActive: false, projectHome: null, ...document,
+      title: "",
+      address: null,
+      isFamilyDocument: false,
+      isActive: false,
+      projectHome: null,
+      ...document,
     })),
   },
 });
@@ -180,7 +204,13 @@ export const familiesReader = async (
     }
   // effect-edge: test-runner
   const context = await Effect.runPromise(
-    Layer.buildWithScope(FamiliesReader.layer.pipe(Layer.provide(HostDocumentMarks.none), Layer.provide(NodeServices.layer)), scope),
+    Layer.buildWithScope(
+      FamiliesReader.layer.pipe(
+        Layer.provide(HostDocumentMarks.none),
+        Layer.provide(NodeServices.layer),
+      ),
+      scope,
+    ),
   );
   return Context.get(context, FamiliesReader);
 };
@@ -233,7 +263,9 @@ export const machineOwner = (
   sources: PromiseMachineSources,
   options?: MachineOptions,
 ): MachineOwnerPromise => {
-  return machineOwnerPromise(Context.get(testScoped(MachineOwner.layer(liftLegs(sources), options)), MachineOwner));
+  return machineOwnerPromise(
+    Context.get(testScoped(MachineOwner.layer(liftLegs(sources), options)), MachineOwner),
+  );
 };
 
 /** The live {@link Spawner} for Promise tests, owned like {@link captureStore}'s scope. */
@@ -246,7 +278,10 @@ export const testSpawner = (): Spawner["Service"] => {
  * running test closes. Two calls over one directory are two layers over the same files.
  */
 export const captureStore = (directory: string, apsCachePath?: string): TakeoffCaptures => {
-  return Context.get(testScoped(CaptureStore.layer(stateFixture(directory), apsCachePath)), CaptureStore);
+  return Context.get(
+    testScoped(CaptureStore.layer(stateFixture(directory), apsCachePath)),
+    CaptureStore,
+  );
 };
 
 /** A real adapter owned by the running test's scope. */
@@ -263,49 +298,92 @@ export async function testAdapter(...args: Parameters<typeof adapter.openAdapter
 }
 
 export const testDocumentMarks = (bridge: RevitBridge["Service"]) =>
-  Context.get(testScoped(HostDocumentMarks.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)))), HostDocumentMarks);
+  Context.get(
+    testScoped(HostDocumentMarks.layer.pipe(Layer.provide(Layer.succeed(RevitBridge, bridge)))),
+    HostDocumentMarks,
+  );
 /** `makeCallRoute` over one test journal: the routes yield the service, this test provides it. */
 export const callRouteOver = (
   journal: ActionJournalService["Service"],
   ...args: Parameters<typeof makeCallRoute>
-) => Layer.unwrap(makeCallRoute(...args)).pipe(Layer.provide(Layer.succeed(ActionJournalService, journal)));
+) =>
+  Layer.unwrap(makeCallRoute(...args)).pipe(
+    Layer.provide(Layer.succeed(ActionJournalService, journal)),
+  );
 // testScoped builds synchronously; undici's layer is async, so test journals use fetch.
 export const testJournal = () =>
-  Context.get(testScoped(ActionJournalService.live(null, undefined, FetchHttpClient.layer)), ActionJournalService);
+  Context.get(
+    testScoped(ActionJournalService.live(null, undefined, FetchHttpClient.layer)),
+    ActionJournalService,
+  );
 /** The production journal over `path` in the running test's scope: closing it joins, as the host's does. */
 export const journalAt = (
-  path: string, now: () => number, stamp?: () => ReceiptStamp | null, retain?: number,
+  path: string,
+  now: () => number,
+  stamp?: () => ReceiptStamp | null,
+  retain?: number,
 ) =>
-  Context.get(testScoped(ActionJournalService.at(journalFixture(path), now, stamp, retain, FetchHttpClient.layer),
-    ), ActionJournalService,
+  Context.get(
+    testScoped(
+      ActionJournalService.at(journalFixture(path), now, stamp, retain, FetchHttpClient.layer),
+    ),
+    ActionJournalService,
   );
 
-export const pictureCaptures = (root: string) => Context.get(testScoped(PictureCaptureStore.layer(stateFixture(root))), PictureCaptureStore);
-export const testDuctFiles = () => Context.get(testScoped(DuctFiles.layer(hostState().home)), DuctFiles);
+export const pictureCaptures = (root: string) =>
+  Context.get(testScoped(PictureCaptureStore.layer(stateFixture(root))), PictureCaptureStore);
+export const testDuctFiles = () =>
+  Context.get(testScoped(DuctFiles.layer(hostState().home)), DuctFiles);
 
-export const testHostInputs = Layer.mergeAll(DuctFiles.layer(hostState().home), PictureCaptureStore.layer(), HostDocumentMarks.layer);
+export const testHostInputs = Layer.mergeAll(
+  DuctFiles.layer(hostState().home),
+  PictureCaptureStore.layer(),
+  HostDocumentMarks.layer,
+);
 
 /** Immediate native acknowledgements for read payload fixtures. Barrier tests supply their own handles. */
 export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBridge["Service"] => ({
   ...bridge,
-  invokeHandle: (key, input, session, openId, requestId) => Effect.gen(function* () {
-    const attached = (yield* bridge.list).find((row) => row.sessionId === session)!;
-    const answer = yield* Effect.cached(bridge.invoke(key, input, session, openId, requestId).pipe(
-      Effect.orDie,
-      Effect.map(({ value }) => ({
-        value, nativeRequestId: requestId!,
-        actualTarget: { processIncarnation: { pid: attached.processId!, startedAt: attached.processStartUtcUnixMs! }, openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const } },
-        freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
-        cost: {}, outcome: "native-acknowledged" as const,
-      })),
-    ));
-    return { answer, terminal: Effect.as(answer, "native-acknowledged" as const).pipe(Effect.orDie) };
-  }),
+  invokeHandle: (key, input, session, openId, requestId) =>
+    Effect.gen(function* () {
+      const attached = (yield* bridge.list).find((row) => row.sessionId === session)!;
+      const answer = yield* Effect.cached(
+        bridge.invoke(key, input, session, openId, requestId).pipe(
+          Effect.orDie,
+          Effect.map(({ value }) => ({
+            value,
+            nativeRequestId: requestId!,
+            actualTarget: {
+              processIncarnation: {
+                pid: attached.processId!,
+                startedAt: attached.processStartUtcUnixMs!,
+              },
+              openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const },
+            },
+            freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+            cost: {},
+            outcome: "native-acknowledged" as const,
+          })),
+        ),
+      );
+      return {
+        answer,
+        terminal: Effect.as(answer, "native-acknowledged" as const).pipe(Effect.orDie),
+      };
+    }),
 });
 
-export const testInputContext = () => Context.get(testScoped(HostInputContext.layer({ kind: "live" })), HostInputContext);
+export const testInputContext = () =>
+  Context.get(testScoped(HostInputContext.layer({ kind: "live" })), HostInputContext);
 /** The native fixture has no parameter catalog; disclose that without inventing model options. */
 export const unavailableFieldOptions = {
-  descriptor:{key:"parameter-identities",mode:"Constraint",allowsCustomValue:false,dependsOn:[],requiredRuntimeMode:"LiveDocument"},
-  items:[],result:{kind:"Unsupported",message:"Fixture does not provide parameter options"},
+  descriptor: {
+    key: "parameter-identities",
+    mode: "Constraint",
+    allowsCustomValue: false,
+    dependsOn: [],
+    requiredRuntimeMode: "LiveDocument",
+  },
+  items: [],
+  result: { kind: "Unsupported", message: "Fixture does not provide parameter options" },
 };

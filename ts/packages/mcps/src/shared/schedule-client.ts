@@ -33,6 +33,9 @@ export async function readScheduleCapture<K extends ScheduleReadKey>(
       Error((value as { error?: string }).error ?? `Schedule read failed (${response.status})`),
       { status: response.status },
     );
-  const parsed = key === "schedule.grid.catalog" ? scheduleCatalogSchema.parse(value) : scheduleReadingSchema.parse(value);
+  const parsed =
+    key === "schedule.grid.catalog"
+      ? scheduleCatalogSchema.parse(value)
+      : scheduleReadingSchema.parse(value);
   return parsed as ScheduleResult<K>;
 }

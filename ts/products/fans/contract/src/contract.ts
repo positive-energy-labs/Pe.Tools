@@ -9,7 +9,12 @@ import { CALC_READ } from "./fan-calc.ts";
 export const calc = contract(CALC_READ, {
   input: fansReadArgs,
   data: fansCalcData,
-  uses: ["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables", "revit.catalog.field-options"],
+  uses: [
+    "ducts.snapshot.roster",
+    "ducts.snapshot.walk",
+    "ducts.tables",
+    "revit.catalog.field-options",
+  ],
   keyedBy: {
     rows: { kind: "UniqueId", sub: "port" },
     "fans.rows": { kind: "UniqueId", sub: "port" },

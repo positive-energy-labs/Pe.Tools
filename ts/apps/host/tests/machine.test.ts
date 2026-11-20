@@ -174,7 +174,10 @@ test("kept years never hold up a census and survive a stalled check until it rec
   const received: Machine[] = [];
   const stop = second.machine.observe((value) => received.push(value));
   try {
-    expect(received[0]).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now, attemptedAtUtc: null } } });
+    expect(received[0]).toMatchObject({
+      revit: { years: [2025] },
+      legs: { years: { observedAtUtc: now, attemptedAtUtc: null } },
+    });
     const beforeDoctor = await Promise.race([
       second.machine.refresh(),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
@@ -222,15 +225,35 @@ test("only an answering Revit in the SDK execution boundary is asked for holding
   const fault = vi.fn();
   const f = fixture({ fault });
   const foreign: ObservedActive = {
-    ...row, process: { ...row.process, pid: 43 },
-    execution: { allowed: false, code: "session.no-match", detail: "Outside this command's execution boundary" },
+    ...row,
+    process: { ...row.process, pid: 43 },
+    execution: {
+      allowed: false,
+      code: "session.no-match",
+      detail: "Outside this command's execution boundary",
+    },
   };
   const starting: ControlledPending = {
-    case: "controlled-pending", id: "starting", detail: "Bridge has not registered",
-    execution: row.execution, year: row.year, observedAtUtc: row.observedAtUtc,
-    shape: row.shape, origin: "cli", project: null, worktree: "C:/checkout",
-    receipt: { payload: "installed", generationRoot: "C:/revit", receiptPath: "C:/revit/session.json" },
-    attempt: { attempt: "launched", process: { ...row.process, pid: 44 }, bridge: { bridge: "missing-endpoint" } },
+    case: "controlled-pending",
+    id: "starting",
+    detail: "Bridge has not registered",
+    execution: row.execution,
+    year: row.year,
+    observedAtUtc: row.observedAtUtc,
+    shape: row.shape,
+    origin: "cli",
+    project: null,
+    worktree: "C:/checkout",
+    receipt: {
+      payload: "installed",
+      generationRoot: "C:/revit",
+      receiptPath: "C:/revit/session.json",
+    },
+    attempt: {
+      attempt: "launched",
+      process: { ...row.process, pid: 44 },
+      bridge: { bridge: "missing-endpoint" },
+    },
   };
   vi.mocked(f.sources.sessions).mockResolvedValue([foreign, starting, row]);
   vi.mocked(f.sources.holdings).mockRejectedValue(Error("holdings decoder failed"));
@@ -238,9 +261,13 @@ test("only an answering Revit in the SDK execution boundary is asked for holding
   expect(f.sources.holdings).toHaveBeenCalledExactlyOnceWith(row.process);
   expect(f.sources.documents).toHaveBeenCalledExactlyOnceWith(row.process);
   expect(result.revit.sessions?.map((entry) => entry.holdingsLeg.error)).toEqual([
-    null, null, expect.stringContaining("holdings decoder failed"),
+    null,
+    null,
+    expect.stringContaining("holdings decoder failed"),
   ]);
-  expect(fault).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ leg: "holdings", kind: "error" }));
+  expect(fault).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ leg: "holdings", kind: "error" }),
+  );
 });
 
 test("lifecycle gets the exact document census while years and holdings are still waiting", async () => {
@@ -249,7 +276,8 @@ test("lifecycle gets the exact document census while years and holdings are stil
   vi.mocked(f.sources.years).mockReturnValue(new Promise(() => {}));
   vi.mocked(f.sources.holdings).mockReturnValue(new Promise(() => {}));
   const result = readMachineSession(row.process).then(
-    (value) => ({ value }), (error: unknown) => ({ error }),
+    (value) => ({ value }),
+    (error: unknown) => ({ error }),
   );
   try {
     await vi.advanceTimersByTimeAsync(15_001);
@@ -267,7 +295,9 @@ test("a stuck document census refuses with a next step before the machine deadli
   const f = fixture();
   vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
   let error: unknown;
-  void readMachineSession(row.process).catch((caught: unknown) => { error = caught; });
+  void readMachineSession(row.process).catch((caught: unknown) => {
+    error = caught;
+  });
   try {
     await vi.advanceTimersByTimeAsync(3_001);
     expect(error).toMatchObject({ message: expect.stringContaining("Switch to Revit") });
@@ -430,12 +460,17 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
     sdkRun.mockResolvedValueOnce(
       envelope(docs, { ...row.process, processStartUtc: "a-new-process" }),
     );
-    await expect(settle(sources.documents(row.process))).rejects.toThrow("different process incarnation");
-    sdkRun.mockResolvedValueOnce(envelope(
-      { state: "ok", documents: [] }, row.process,
-      [{ code: "doc.bridge-unreachable", detail: "bridge did not answer" }],
-    ));
-    await expect(settle(sources.documents(row.process))).rejects.toThrow("incomplete document census");
+    await expect(settle(sources.documents(row.process))).rejects.toThrow(
+      "different process incarnation",
+    );
+    sdkRun.mockResolvedValueOnce(
+      envelope({ state: "ok", documents: [] }, row.process, [
+        { code: "doc.bridge-unreachable", detail: "bridge did not answer" },
+      ]),
+    );
+    await expect(settle(sources.documents(row.process))).rejects.toThrow(
+      "incomplete document census",
+    );
     const holdings = [
       {
         openId: "sdk-open",
@@ -460,7 +495,9 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
     sdkRun.mockResolvedValueOnce(
       envelope({ state: "ok", documents: holdings }, { ...row.process, processStartUtc: "new" }),
     );
-    await expect(settle(sources.holdings(row.process))).rejects.toThrow("different process incarnation");
+    await expect(settle(sources.holdings(row.process))).rejects.toThrow(
+      "different process incarnation",
+    );
   } finally {
     sdkRun.mockReset();
   }

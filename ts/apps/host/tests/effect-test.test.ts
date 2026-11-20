@@ -12,7 +12,9 @@ effectTest.fails(
     Effect.gen(function* () {
       yield* Effect.addFinalizer(() => Effect.sync(() => (probe.finalized = true)));
       yield* Effect.forkScoped(
-        Effect.forever(Effect.sync(() => (probe.ticking = true)).pipe(Effect.andThen(Effect.yieldNow))),
+        Effect.forever(
+          Effect.sync(() => (probe.ticking = true)).pipe(Effect.andThen(Effect.yieldNow)),
+        ),
       );
       yield* Effect.never;
     }),

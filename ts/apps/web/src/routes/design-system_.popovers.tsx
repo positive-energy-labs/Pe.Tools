@@ -1,25 +1,25 @@
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
-import { FieldOptionPicker,FieldOptionSelect,type FieldOption } from "#/host/field-options";
-import { previousOf,useInventory,useReading } from "#/host/resource-state";
+import { FieldOptionPicker, FieldOptionSelect, type FieldOption } from "#/host/field-options";
+import { previousOf, useInventory, useReading } from "#/host/resource-state";
 import { hostFetch } from "@pe/web-kernel/host/runtime";
 import type { Machine } from "@pe/agent-contracts";
 import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
 import { Button } from "@pe/kit/lang/button";
-import { HoverCard,HoverCardContent,HoverCardTrigger } from "@pe/kit/lang/hover-card";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@pe/kit/lang/hover-card";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import {
-Popover,
-PopoverClose,
-SubjectPopoverContent as PopoverContent,
-PopoverDescription,
-PopoverTitle,
-PopoverTrigger,
+  Popover,
+  PopoverClose,
+  SubjectPopoverContent as PopoverContent,
+  PopoverDescription,
+  PopoverTitle,
+  PopoverTrigger,
 } from "@pe/kit/lang/popover";
 import { ThemeToggle } from "@pe/kit/lang/theme-toggle";
-import { Tooltip,TooltipContent,TooltipTrigger } from "@pe/kit/lang/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@pe/kit/lang/tooltip";
 import { Table } from "@pe/kit/table/table";
-import { createFileRoute,Link } from "@tanstack/react-router";
-import { useEffect,useState,type ReactNode } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
 
 export const Route = createFileRoute("/design-system_/popovers")({ component: PopoverHarness });
 
@@ -116,7 +116,9 @@ function ResourcePreviews() {
                 machineReading.state === "failed" ? machineReading.message : "No observation yet."
               }
             />
-            <Link to="/$route" params={{ route: "settings" }}>Open Settings</Link>
+            <Link to="/$route" params={{ route: "settings" }}>
+              Open Settings
+            </Link>
           </div>
         </PreviewRow>
         <PreviewRow
@@ -204,10 +206,21 @@ function ClickSpecimen() {
       <PopoverContent>
         <PopoverTitle>Observation options</PopoverTitle>
         <PopoverDescription>Interactive content stays open while you work.</PopoverDescription>
-        <Button kind="quiet" label="Include archived" pressed={checked} onClick={() => setChecked(!checked)}>
+        <Button
+          kind="quiet"
+          label="Include archived"
+          pressed={checked}
+          onClick={() => setChecked(!checked)}
+        >
           Archived: {checked ? "included" : "hidden"}
         </Button>
-        <PopoverClose render={<Button kind="quiet" label="Close details">Close</Button>} />
+        <PopoverClose
+          render={
+            <Button kind="quiet" label="Close details">
+              Close
+            </Button>
+          }
+        />
       </PopoverContent>
     </Popover>
   );
@@ -218,7 +231,13 @@ function HoverSpecimen() {
       <HoverCardTrigger>Hover preview</HoverCardTrigger>
       <HoverCardContent aria-label="Preview specimen">
         <p>Hover holds this preview. Click or Enter exposes the same controls.</p>
-        <PopoverClose render={<Button kind="quiet" label="Close preview">Close</Button>} />
+        <PopoverClose
+          render={
+            <Button kind="quiet" label="Close preview">
+              Close
+            </Button>
+          }
+        />
       </HoverCardContent>
     </HoverCard>
   );
@@ -323,7 +342,9 @@ function PopoverHarness() {
   return (
     <main className="space-y-5 p-3">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <Link to="/$route" params={{ route: "design-system" }}>Back to design system</Link>
+        <Link to="/$route" params={{ route: "design-system" }}>
+          Back to design system
+        </Link>
         <h1>Popovers</h1>
         <ThemeToggle />
       </header>

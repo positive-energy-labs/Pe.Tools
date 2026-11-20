@@ -1,15 +1,15 @@
 import { podCaptureResponseSchema } from "@pe/host-contracts/operation-types";
 import { Schema } from "effect";
-import { mkdir,mkdtemp,open,rename,rm,symlink,writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach,beforeEach,expect,test } from "vite-plus/test";
+import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import {
-capturePackage,
-isPackageMember,
-kindOfMember,
-listPackages,
-readPackage,
+  capturePackage,
+  isPackageMember,
+  kindOfMember,
+  listPackages,
+  readPackage,
 } from "../src/packages.ts";
 
 let root: string;
@@ -55,7 +55,13 @@ test("C3 admits a tour's model declaration and rejects empty or malformed probes
   const model = { title: "Chadds", probes: [{ elementId: 42, uniqueId: "stable" }] };
   await put("Original", "pod.json", JSON.stringify({ id: "mixed", for: model }));
   expect((await listPackages({ podsRoots: root })).packages[0]?.for).toEqual(model);
-  for (const invalid of [null, {}, { ...model, probes: [] }, { ...model, probes: [{ elementId: 0, uniqueId: "x" }] }, { ...model, probes: [{ elementId: 1, uniqueId: "" }] }]) {
+  for (const invalid of [
+    null,
+    {},
+    { ...model, probes: [] },
+    { ...model, probes: [{ elementId: 0, uniqueId: "x" }] },
+    { ...model, probes: [{ elementId: 1, uniqueId: "" }] },
+  ]) {
     await put("Original", "pod.json", JSON.stringify({ id: "mixed", for: invalid }));
     expect((await listPackages({ podsRoots: root })).packages).toHaveLength(0);
   }
@@ -118,7 +124,9 @@ test("an entrypoint is any script of the Pod, keeps its declared mode, and gets 
       mode: "ReadOnly",
     }),
   ]);
-  expect(pod.contributions.find((row) => row.key === "script:@mixed/heals/Fix.cs")).not.toHaveProperty("mode");
+  expect(
+    pod.contributions.find((row) => row.key === "script:@mixed/heals/Fix.cs"),
+  ).not.toHaveProperty("mode");
   expect(pod.diagnostics.filter((issue) => issue.code === "InvalidEntrypoint")).toHaveLength(2);
   expect(kindOfMember("pages/tour/checks/census.csx", pod.entrypoints)).toBe("script");
   // `pod.capture` and `pod.list` carry the declared mode on the wire. Mutant, run red once: drop
@@ -141,7 +149,9 @@ test("an entrypoint is any script of the Pod, keeps its declared mode, and gets 
 test("folder rename preserves keys; duplicate manifest identities refuse resolution and capture", async () => {
   const before = await readPackage("mixed", { podsRoots: root });
   await rename(join(root, "Original"), join(root, "Renamed"));
-  expect((await readPackage("mixed", { podsRoots: root })).contributions).toEqual(before.contributions);
+  expect((await readPackage("mixed", { podsRoots: root })).contributions).toEqual(
+    before.contributions,
+  );
   await put("Twin", "pod.json", '{"id":"mixed"}');
   await expect(readPackage("mixed", { podsRoots: root })).rejects.toThrow(
     `is claimed by ${join(root, "Renamed")} and ${join(root, "Twin")}`,

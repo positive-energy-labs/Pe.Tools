@@ -8,7 +8,9 @@ it("a ZodError reads as one line of field problems, not its pretty JSON issue li
   const failed = route.safeParse({ sourcePath: "src/x.cs" });
   expect(failed.success).toBe(false);
   const text = message(failed.error);
-  expect(text).toBe("artifact is missing; fingerprint is missing; (root) has unknown field sourcePath");
+  expect(text).toBe(
+    "artifact is missing; fingerprint is missing; (root) has unknown field sourcePath",
+  );
   expect(text).not.toContain("\n");
 });
 

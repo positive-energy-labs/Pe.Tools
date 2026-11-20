@@ -60,20 +60,34 @@ type ReadView = keyof Reads;
 export type WorkValue<V extends ReadView> = Reads[V];
 
 const revision = z.number().int().nonnegative();
-const raw = z.object({ doc: z.unknown(), revision, handle: workHandleSchema })
+const raw = z
+  .object({ doc: z.unknown(), revision, handle: workHandleSchema })
   .refine((value) => value.revision === value.handle.revision);
 // `view`/`read` also carry route, title, schema and schemaVersion; they pass through as recorded.
-const shaped = raw.safeExtend({
-  route: z.string(), title: z.string(), description: z.string(),
-  schemaVersion: z.number().int().positive().nullable(), schema: z.record(z.string(), z.unknown()),
-}).refine((value) => value.route === value.handle.key.route).passthrough();
+const shaped = raw
+  .safeExtend({
+    route: z.string(),
+    title: z.string(),
+    description: z.string(),
+    schemaVersion: z.number().int().positive().nullable(),
+    schema: z.record(z.string(), z.unknown()),
+  })
+  .refine((value) => value.route === value.handle.key.route)
+  .passthrough();
 const history = <T extends z.ZodType<{ revision: number; handle: WorkHandle }>>(base: T) =>
-  z.intersection(base, z.object({ history: z.object({ from: revision, acks: z.array(workWriteAckSchema) }) }))
-    .refine(({ handle, revision, history }) => history.acks.length
-      ? history.acks.every((ack, index) => ack.revision === history.from + index &&
-          workKey(ack.key) === workKey(handle.key)) &&
-        history.acks.at(-1)!.revision === revision
-      : history.from === revision + 1);
+  z
+    .intersection(
+      base,
+      z.object({ history: z.object({ from: revision, acks: z.array(workWriteAckSchema) }) }),
+    )
+    .refine(({ handle, revision, history }) =>
+      history.acks.length
+        ? history.acks.every(
+            (ack, index) =>
+              ack.revision === history.from + index && workKey(ack.key) === workKey(handle.key),
+          ) && history.acks.at(-1)!.revision === revision
+        : history.from === revision + 1,
+    );
 const contracts: { readonly [V in ReadView | WorkFeedShape]: z.ZodType } = {
   raw: raw.nullable(),
   read: shaped.nullable(),
@@ -86,11 +100,14 @@ const contracts: { readonly [V in ReadView | WorkFeedShape]: z.ZodType } = {
 const codec = <A>(contract: keyof typeof contracts) =>
   Schema.Json.check(
     Schema.makeFilter(
-      (value) => contracts[contract].safeParse(value).success || `Recorded Work ${contract} violates its contract`,
+      (value) =>
+        contracts[contract].safeParse(value).success ||
+        `Recorded Work ${contract} violates its contract`,
     ),
   ) as unknown as Schema.Codec<A, Schema.Json>;
-export const workInputCodecs: { readonly [V in ReadView]: Schema.Codec<WorkValue<V>, Schema.Json> } =
-  { read: codec("read"), raw: codec("raw"), view: codec("view") };
+export const workInputCodecs: {
+  readonly [V in ReadView]: Schema.Codec<WorkValue<V>, Schema.Json>;
+} = { read: codec("read"), raw: codec("raw"), view: codec("view") };
 export const workFeedCodecs: { readonly [S in WorkFeedShape]: Schema.Codec<unknown, Schema.Json> } =
   { work: codec("work"), "work-acks": codec("work-acks") };
 
@@ -122,7 +139,10 @@ const occurrenceOf = (request: WorkReadRequest) =>
  * synchronously at read start; the attempt's runner is the request's captured `run` with that same
  * consumption and the reserved attempt provided, so the Work queue cannot cross-bind requests.
  */
-export const workReadContext = (consumption: InputConsumption, run: WorkInputRunner): WorkReadContext => ({
+export const workReadContext = (
+  consumption: InputConsumption,
+  run: WorkInputRunner,
+): WorkReadContext => ({
   begin: (request) => {
     const { input, scope } = occurrenceOf(request);
     const started = consumption.start(input, scope);
@@ -154,15 +174,21 @@ const noContext = () =>
  * consumer's attempt selects. Without that context it refuses before any access; no root fallback.
  */
 export const recordedWorkSource = (reader: RecordingReader): WorkReadSource => {
-  const replay = <A>(carriage: WorkCarriage | undefined, request: WorkReadRequest, codec: Schema.Codec<A, Schema.Json>) => {
+  const replay = <A>(
+    carriage: WorkCarriage | undefined,
+    request: WorkReadRequest,
+    codec: Schema.Codec<A, Schema.Json>,
+  ) => {
     const attempt = attemptOf(carriage);
     if (!attempt) return Promise.reject(noContext());
     const { input, scope } = occurrenceOf(request);
     return attempt.run(replayInput(reader, input, scope, codec));
   };
   return {
-    begin: (request, context) => (context ? context.begin(request) : { ok: false, error: noContext() }),
-    read: (key, view, carriage) => replay(carriage, { kind: "read", key, view }, workInputCodecs[view]),
+    begin: (request, context) =>
+      context ? context.begin(request) : { ok: false, error: noContext() },
+    read: (key, view, carriage) =>
+      replay(carriage, { kind: "read", key, view }, workInputCodecs[view]),
     feed: (key, admission, shape, carriage) =>
       replay(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape]),
   };
@@ -184,11 +210,18 @@ export const capturedWorkReads = (
   const stopNow = (reason: "backlog" | "unsupported", op: string) => {
     const at = writer.capture.begin();
     if (at === null) return persisting;
-    const persisted = latchRun(writer.capture.stop(at, reason, { site: "work", op })).catch(() => undefined);
+    const persisted = latchRun(writer.capture.stop(at, reason, { site: "work", op })).catch(
+      () => undefined,
+    );
     return (persisting = persisting.then(() => persisted));
   };
   const uncaptured: WorkReadBegin = { ok: true, carriage: undefined };
-  const keep = (carriage: WorkCarriage | undefined, request: WorkReadRequest, codec: Schema.Codec<unknown, Schema.Json>, value: unknown) => {
+  const keep = (
+    carriage: WorkCarriage | undefined,
+    request: WorkReadRequest,
+    codec: Schema.Codec<unknown, Schema.Json>,
+    value: unknown,
+  ) => {
     const attempt = attemptOf(carriage);
     if (!attempt) return Promise.resolve(); // never begun: capture already stopped
     const { input, scope } = occurrenceOf(request);
@@ -204,8 +237,12 @@ export const capturedWorkReads = (
       }).pipe(
         Effect.catchTag(["UnknownError", "SchemaError"], () => {
           const at = writer.capture.begin();
-          return at === null ? Effect.void : writer.capture.stop(at, "encoding",
-            { site: "work", op: request.kind === "read" ? `work.${request.view}` : "work.feed" });
+          return at === null
+            ? Effect.void
+            : writer.capture.stop(at, "encoding", {
+                site: "work",
+                op: request.kind === "read" ? `work.${request.view}` : "work.feed",
+              });
         }),
       ),
     );
@@ -213,12 +250,21 @@ export const capturedWorkReads = (
   // A failed live read, kept through the one store: a supported DoorFailure as its class-faithful
   // taking, anything else stops capture as `unsupported`. Its exit is the failure itself, which the
   // workspace already rethrows as the original; only the taking matters here.
-  const lose = (carriage: WorkCarriage | undefined, request: WorkReadRequest, codec: Schema.Codec<unknown, Schema.Json>, error: unknown) => {
+  const lose = (
+    carriage: WorkCarriage | undefined,
+    request: WorkReadRequest,
+    codec: Schema.Codec<unknown, Schema.Json>,
+    error: unknown,
+  ) => {
     const attempt = attemptOf(carriage);
     if (!attempt) return Promise.resolve();
     const { input, scope } = occurrenceOf(request);
     return attempt.run(
-      Effect.asVoid(Effect.exit(captureInput(writer, input, scope, codec, Effect.fail(error as DoorFailure), observed))),
+      Effect.asVoid(
+        Effect.exit(
+          captureInput(writer, input, scope, codec, Effect.fail(error as DoorFailure), observed),
+        ),
+      ),
     );
   };
   const readCodec = (view: keyof typeof workInputCodecs) =>
@@ -231,10 +277,12 @@ export const capturedWorkReads = (
       void stopNow("unsupported", request.kind === "read" ? `work.${request.view}` : "work.feed");
       return uncaptured;
     },
-    read: (key, view, value, carriage) => keep(carriage, { kind: "read", key, view }, readCodec(view), value),
+    read: (key, view, value, carriage) =>
+      keep(carriage, { kind: "read", key, view }, readCodec(view), value),
     feed: (key, admission, shape, value, carriage) =>
       keep(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape], value),
-    readFailed: (key, view, error, carriage) => lose(carriage, { kind: "read", key, view }, readCodec(view), error),
+    readFailed: (key, view, error, carriage) =>
+      lose(carriage, { kind: "read", key, view }, readCodec(view), error),
     feedFailed: (key, admission, shape, error, carriage) =>
       lose(carriage, { kind: "feed", key, admission, shape }, workFeedCodecs[shape], error),
     stop: (reason) => stopNow(reason, "work.feed"),

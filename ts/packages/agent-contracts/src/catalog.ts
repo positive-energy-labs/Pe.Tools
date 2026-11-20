@@ -38,7 +38,9 @@ function axis<T extends string>(values: Record<string, T>, value: string): T {
   return found;
 }
 /** The native metadata projection shared by host catalog rows and browser read handles. */
-export function nativeAxes(op: Omit<HostOperationDefinition, "intent" | "rollsBack" | "usesTransactions">): CatalogAxes {
+export function nativeAxes(
+  op: Omit<HostOperationDefinition, "intent" | "rollsBack" | "usesTransactions">,
+): CatalogAxes {
   return {
     subject: axis(opSubject, op.subject),
     touches: op.touches.split(", ").map((touch) => axis(opTouches, touch)),
@@ -106,7 +108,9 @@ function check(entries: readonly CatalogLink[]): string[] {
     const preview = byKey.get(entry.previewBy);
     if (!preview) errors.push(`${entry.key}: unknown preview ${entry.previewBy}`);
     else if (preview.effect !== "Read" && preview.effect !== "TransactRead")
-      errors.push(`${entry.key}: plan ${preview.key} is ${preview.effect}, not Read or TransactRead`);
+      errors.push(
+        `${entry.key}: plan ${preview.key} is ${preview.effect}, not Read or TransactRead`,
+      );
     else if ([...preview.touches].sort().join() !== [...entry.touches].sort().join())
       errors.push(`${entry.key}: preview ${preview.key} touches differ`);
   }

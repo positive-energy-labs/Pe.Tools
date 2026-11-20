@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Context } from "effect";
 import type { Caller } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
-import type { RequestIdentity as IdentityKey, RequestIdentityData, ValidatedOwner } from "./request-contracts.d.ts";
+import type {
+  RequestIdentity as IdentityKey,
+  RequestIdentityData,
+  ValidatedOwner,
+} from "./request-contracts.d.ts";
 
 export const RequestIdentity = Context.Service<IdentityKey, RequestIdentityData>("RequestIdentity");
 

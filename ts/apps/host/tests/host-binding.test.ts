@@ -218,7 +218,9 @@ test("an installed launch binds a free port when the owner census fails", async 
       throw Error("a failed census must skip the boot-window wait");
     },
   };
-  expect(await prepareHostBinding(false, "0.7.31", owner("installed", temp()), dependencies)).toBe(0);
+  expect(await prepareHostBinding(false, "0.7.31", owner("installed", temp()), dependencies)).toBe(
+    0,
+  );
 });
 
 test("an installed launch binds a free port after its peer never publishes a record", async () => {
@@ -254,9 +256,13 @@ test("an installed launch refuses an unverifiable recorded peer after the boot-w
   );
   expect(waits).toEqual(Array(60).fill(500));
   expect(dependencies.discover).toHaveBeenCalledTimes(62);
-  expect(dependencies.discover).toHaveBeenLastCalledWith(ownership.rootPath, ownership.serviceName, {
-    verifyOwner: true,
-  });
+  expect(dependencies.discover).toHaveBeenLastCalledWith(
+    ownership.rootPath,
+    ownership.serviceName,
+    {
+      verifyOwner: true,
+    },
+  );
   expect(dependencies.choosePort).not.toHaveBeenCalled();
   expect(dependencies.retire).not.toHaveBeenCalled();
   expect(await readServiceFile(ownership.rootPath, ownership.serviceName)).toEqual(file);

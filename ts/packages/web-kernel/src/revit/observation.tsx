@@ -99,7 +99,8 @@ export async function readFamilyPlacements(
       openId: openId ? decodeURIComponent(openId) : null,
     });
     if (parsed.success) resolved = parsed.data;
-  } catch (error) { console.warn("ts/apps/web/src/revit/observation.tsx: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/revit/observation.tsx: fallback after failure", error);
     // Malformed provenance cannot authorize a follow-up native action.
   }
   if (

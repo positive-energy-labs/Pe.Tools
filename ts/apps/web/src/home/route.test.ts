@@ -46,7 +46,9 @@ test("every thread-list Page uses the shared fields and one encoding", () => {
     expect(encodeField(fields.threadSort, "title"), route.data.key).toBe("title");
     expect(decodeField(fields.threadSort, '"title"'), route.data.key).toBe("");
     expect(decodeField(fields.threadSearch, "broken"), route.data.key).toEqual({
-      v: 0, keywords: "broken", pills: [],
+      v: 0,
+      keywords: "broken",
+      pills: [],
     });
   }
 });
@@ -56,7 +58,9 @@ test("all thread-list address projections use the shared codec for malformed inp
     const at = routeAddress(key);
     expect(at.read({ threadSort: '"title"' }).page.threadSort, key).toBe("");
     expect(at.read({ threadSearch: "broken" }).page.threadSearch, key).toEqual({
-      v: 0, keywords: "broken", pills: [],
+      v: 0,
+      keywords: "broken",
+      pills: [],
     });
     expect(at.write({ threadSort: "title" }).threadSort, key).toBe("title");
   }

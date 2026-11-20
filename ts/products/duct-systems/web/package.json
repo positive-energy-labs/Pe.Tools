@@ -45,24 +45,24 @@
     "@pe/ducts-web": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/kit": "workspace:*",
+    "@pe/web-kernel": "workspace:*",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",
-    "zod": "4.3.6",
-    "@pe/web-kernel": "workspace:*"
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "react-dom": "^19.2.0",
+    "@pe/fans-domain": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
     "@tanstack/react-router": "1.170.31",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^25.6.2",
-    "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
+    "@types/qrcode": "catalog:",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/three": "catalog:",
-    "@types/qrcode": "catalog:",
-    "@pe/fans-domain": "workspace:*",
-    "@pe/host-contracts": "workspace:*",
-    "@testing-library/react": "^16.3.0",
-    "jsdom": "^28.1.0"
+    "jsdom": "^28.1.0",
+    "react-dom": "^19.2.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
   }
 }

@@ -1,4 +1,4 @@
-import { actionStatusSchema,actionReceiptSchema } from "@pe/agent-contracts";
+import { actionStatusSchema, actionReceiptSchema } from "@pe/agent-contracts";
 import { useState } from "react";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -19,7 +19,10 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
     select: "single",
     onPick: (row) => ctx.page.query({ actionId: row.id }),
   });
-  const receipt = actionReceiptSchema.array().parse(data?.receipt??[]).find((row) => row.id === page.actionId),
+  const receipt = actionReceiptSchema
+      .array()
+      .parse(data?.receipt ?? [])
+      .find((row) => row.id === page.actionId),
     Output = receipt ? outputRenderers[receipt.key] : undefined;
   return (
     <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) min-[1100px]:grid-cols-2">
@@ -44,23 +47,24 @@ export function OpsBody({ ctx }: { ctx: OpsContext }) {
               <Output data={receipt.result} opKey={receipt.key} request={receipt.input} />
             ) : null}
             <Code code={stringify(receipt)} lang="json" />
-            {receiptControls.map(
-              (key) => (
-                <Button kind="quiet"
-                  key={key}
-                  label={key}
-                  onClick={() =>
-                    void ctx
-                      .verb(key)
-                      .run({ id: receipt.id })
-                      .then(() => ctx.refresh())
-                      .catch((error) => setFailure(error instanceof Error ? error.message : String(error)))
-                  }
-                >
-                  {key}
-                </Button>
-              ),
-            )}
+            {receiptControls.map((key) => (
+              <Button
+                kind="quiet"
+                key={key}
+                label={key}
+                onClick={() =>
+                  void ctx
+                    .verb(key)
+                    .run({ id: receipt.id })
+                    .then(() => ctx.refresh())
+                    .catch((error) =>
+                      setFailure(error instanceof Error ? error.message : String(error)),
+                    )
+                }
+              >
+                {key}
+              </Button>
+            ))}
           </>
         ) : (
           <p>Choose an action receipt</p>

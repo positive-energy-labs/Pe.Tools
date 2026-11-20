@@ -15,8 +15,21 @@ const code = podMemberCode({ pod: "share-ducts", path: "settings/checks.json" })
 const saved = '{"$schema":"./checks.schema.json","maxSystems":25,"names":["Elbow","Tee"],"a/b":1}';
 const read = (basis: boolean, fields: Record<string, unknown> = {}) => ({
   scope: { pod: "share-ducts", path: "settings/checks.json", runs: "member" as const },
-  member: { member: { pod: "share-ducts", path: "settings/checks.json" }, content: saved, sha256: "f".repeat(64) },
-  work: { basis: basis ? { member: { pod: "share-ducts", path: "settings/checks.json" }, rawContent: saved, sha256: "f".repeat(64) } : null, fields },
+  member: {
+    member: { pod: "share-ducts", path: "settings/checks.json" },
+    content: saved,
+    sha256: "f".repeat(64),
+  },
+  work: {
+    basis: basis
+      ? {
+          member: { pod: "share-ducts", path: "settings/checks.json" },
+          rawContent: saved,
+          sha256: "f".repeat(64),
+        }
+      : null,
+    fields,
+  },
   draft: saved,
   composition: null,
   schemaRef: "./checks.schema.json",
@@ -29,18 +42,27 @@ const read = (basis: boolean, fields: Record<string, unknown> = {}) => ({
 });
 
 test("the member is a name SubjectRef over [pod, path], and only that kind decodes", () => {
-  expect(code).toBe("name:[\"share-ducts\",\"settings%2fchecks.json\"]");
+  expect(code).toBe('name:["share-ducts","settings%2fchecks.json"]');
   expect(podMemberOfCode(code)).toEqual({ pod: "share-ducts", path: "settings/checks.json" });
   expect(podMemberOfCode("workspace:share-ducts")).toBeNull();
-  expect(member({ member: { kind: "ids", ids: [code] } })).toEqual({ pod: "share-ducts", path: "settings/checks.json" });
+  expect(member({ member: { kind: "ids", ids: [code] } })).toEqual({
+    pod: "share-ducts",
+    path: "settings/checks.json",
+  });
 });
 
 test("/pods declares subject, goal and query, and keeps arbitrary JSON outside the sheet grammar", () => {
   const { spec, data } = module;
   expect(spec.subject).toMatchObject({ field: "member", noun: "member", pane: "members" });
   // The member editor occupies the same pane; the subject and Goal remain kernel slots.
-  expect(Object.fromEntries(Object.entries(spec.panes).map(([id, p]) => [id, (p as { kernel?: string }).kernel ?? (p.subjectList ? "subject" : "route")])))
-    .toEqual({ members: "subject", runs: "route", sheet: "route", goal: "goal" });
+  expect(
+    Object.fromEntries(
+      Object.entries(spec.panes).map(([id, p]) => [
+        id,
+        (p as { kernel?: string }).kernel ?? (p.subjectList ? "subject" : "route"),
+      ]),
+    ),
+  ).toEqual({ members: "subject", runs: "route", sheet: "route", goal: "goal" });
   expect(Object.keys(spec.panes)).not.toContain("spec");
   // `runs` is the one query; the member is the subject field; the core read is the Goal.
   expect(data.fields.runs?.role).toBe("query");
@@ -70,7 +92,9 @@ test("the member pane draws one route-local JSON cell per top-level property, ov
 test("before Open saved bytes the cells refuse with the reason, so a save cannot replace the file", () => {
   const cells = memberFields(read(false), null);
   expect(cells.length).toBe(4);
-  expect(new Set(cells.map((c) => c.refusal))).toEqual(new Set(["Open saved bytes before editing: this Work has no saved basis"]));
+  expect(new Set(cells.map((c) => c.refusal))).toEqual(
+    new Set(["Open saved bytes before editing: this Work has no saved basis"]),
+  );
 });
 
 test("the sheet's empty states name their exit", () => {
@@ -79,6 +103,8 @@ test("the sheet's empty states name their exit", () => {
   expect(empty({ ...read(true), scope: { pod: "p", path: "src/Probe.cs", runs: "member" } })).toBe(
     "src/Probe.cs is source, not a JSON spec; pick a .json member",
   );
-  expect(empty({ ...read(true), draft: "[1]" })).toBe("The draft is not a JSON object; Pea can repair it as raw text");
+  expect(empty({ ...read(true), draft: "[1]" })).toBe(
+    "The draft is not a JSON object; Pea can repair it as raw text",
+  );
   expect(empty(read(true))).toBeNull();
 });

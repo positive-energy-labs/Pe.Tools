@@ -131,7 +131,9 @@ export class RouteViewStore {
     if (
       !Object.keys(patch).length ||
       (settable
-        ? Object.entries(patch).some(([key, text]) => !settable.has(key) || typeof text !== "string")
+        ? Object.entries(patch).some(
+            ([key, text]) => !settable.has(key) || typeof text !== "string",
+          )
         : !agent!.patch.safeParse(patch).success) ||
       Object.keys(patch).some((key) => !(key in lease.view.page))
     )
@@ -212,7 +214,8 @@ export class RouteViewStore {
       !same(current.page, input.page) ||
       !same(current.facts, input.facts) ||
       // Admitted owners decode names into identities; only legacy codecs promise wire equality.
-      (!this.admitted(current.route) && Object.entries(pending.patch).some(([key, value]) => input.page[key] !== value))
+      (!this.admitted(current.route) &&
+        Object.entries(pending.patch).some(([key, value]) => input.page[key] !== value))
     )
       return { ok: false, error: "view context changed before acknowledgement" };
     this.finish(input.commandId, {

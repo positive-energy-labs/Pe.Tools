@@ -1,12 +1,7 @@
 {
   "extends": "../../../tsconfig.web.json",
-  "include": [
-    "**/*.ts",
-    "**/*.tsx"
-  ],
-  "exclude": [
-    "node_modules"
-  ],
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"],
   "compilerOptions": {
     "tsBuildInfoFile": "node_modules/.cache/tsc.tsbuildinfo"
   }

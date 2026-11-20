@@ -29,7 +29,10 @@ import {
 import type { LedgerProps, RosterProps } from "./types.ts";
 import { branchesKnown, CalcBreakdown } from "./calc-breakdown-table.tsx";
 
-const rosterState = (row: FanPort) => row.complete ? `ESP ${pressure(row.requiredEspInWg)} in-wg ${espWord(true)}` : espWord(row.complete);
+const rosterState = (row: FanPort) =>
+  row.complete
+    ? `ESP ${pressure(row.requiredEspInWg)} in-wg ${espWord(true)}`
+    : espWord(row.complete);
 const rosterSearch = (row: FanPort) => ({
   text: [row.mark, row.kind, row.side, String(row.portIndex)],
   ids: [row.unitId],
@@ -48,7 +51,9 @@ export function Roster({ props }: { props: RosterProps }) {
     select: "multi",
     state: {
       ...listState,
-      selected: props.roster.filter((row) => props.picked?.includes(stableFanKey(row))).map(stableFanKey),
+      selected: props.roster
+        .filter((row) => props.picked?.includes(stableFanKey(row)))
+        .map(stableFanKey),
     },
     onState: (next) => setListState({ ...next, selected: [] }),
     onPick: (row) => props.open(row),
@@ -137,7 +142,9 @@ function Sides({ props }: { props: LedgerProps }) {
         </span>
         {/* The resolver includes staged Work; a Read plan cannot claim a native write. */}
         {/* Rated ESP is only ever a stated value (P-030, P-033c): unstated, the row says so and shows no number. */}
-        <span className="text-ink-2">{currentEsp?.value == null ? "rated unknown" : `rated (${currentEsp.source})`}</span>
+        <span className="text-ink-2">
+          {currentEsp?.value == null ? "rated unknown" : `rated (${currentEsp.source})`}
+        </span>
         <span className="face-mono">{pressure(currentEsp?.value ?? null)}</span>
       </div>
       {/* L3: one line per cell, ellipsized at the last second; heads never break mid-word. */}
@@ -153,7 +160,11 @@ function Sides({ props }: { props: LedgerProps }) {
             <span>{side}</span>
             {/* F1: a side counts its known branches and names a worst only over complete ones. */}
             <span className={totals[side].worstPath != null ? "" : "text-ink-2"}>
-              {ws ? branchesKnown(ws[side].runs) : totals[side].worstPath != null ? "priced" : "incomplete"}
+              {ws
+                ? branchesKnown(ws[side].runs)
+                : totals[side].worstPath != null
+                  ? "priced"
+                  : "incomplete"}
             </span>
             <span className="face-mono text-right">
               {pressure(totals[side].worstPath ?? ws?.[side].worstKnownInWg)}
@@ -167,9 +178,15 @@ function Sides({ props }: { props: LedgerProps }) {
               <TooltipHint content={props.inputs?.criteria.allowanceInWg[side].ref}>
                 <span
                   className="t-small text-ink-2"
-                  data-input-source={props.inputs ? cellSource(props.inputs.criteria.allowanceInWg[side].source) : "none"}
+                  data-input-source={
+                    props.inputs
+                      ? cellSource(props.inputs.criteria.allowanceInWg[side].source)
+                      : "none"
+                  }
                 >
-                  {props.inputs ? cellSource(props.inputs.criteria.allowanceInWg[side].source) : "none"}
+                  {props.inputs
+                    ? cellSource(props.inputs.criteria.allowanceInWg[side].source)
+                    : "none"}
                 </span>
               </TooltipHint>
             </span>
@@ -288,7 +305,12 @@ export function Ledger({ props }: { props: LedgerProps }) {
       {props.sheet && (
         <CalcBreakdown
           ws={props.sheet.calcBreakdown}
-          editing={{ inputs: props.inputs, subjectFor: props.subjectFor, changeInputs: props.changeInputs, busy: props.busy }}
+          editing={{
+            inputs: props.inputs,
+            subjectFor: props.subjectFor,
+            changeInputs: props.changeInputs,
+            busy: props.busy,
+          }}
         />
       )}
       {props.sheet && (

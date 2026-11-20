@@ -29,12 +29,16 @@ export const fields = {
   card: field(z.string(), "", "pose"),
 };
 export const query = { view: field(address.view, "", "query", "push") };
-export const loaded = read(
-  hostRead(contracts.workspace),
-  (page: { view: string }) => ({ view: page.view }),
-);
+export const loaded = read(hostRead(contracts.workspace), (page: { view: string }) => ({
+  view: page.view,
+}));
 export const edits = z.array(routeStatePatchSchema);
-export type RoomsContext = ContextOf<typeof fields & typeof query, typeof loaded, typeof import("@pe/agent-contracts").roomsRouteState, typeof edits>;
+export type RoomsContext = ContextOf<
+  typeof fields & typeof query,
+  typeof loaded,
+  typeof import("@pe/agent-contracts").roomsRouteState,
+  typeof edits
+>;
 export const module = route({
   key: "rooms",
   name: "Rooms",
@@ -59,7 +63,10 @@ export const module = route({
     pane: "main",
     read: loaded,
     options: (data) =>
-      roomRows(data.snapshot.regions as readonly RoomsRegion[], levelOrder(data.snapshot.levels)).map((row) => ({
+      roomRows(
+        data.snapshot.regions as readonly RoomsRegion[],
+        levelOrder(data.snapshot.levels),
+      ).map((row) => ({
         id: regionCode(row.region.guid),
         label: `${row.label} · ${row.region.level}`,
       })),
