@@ -96,6 +96,11 @@
 - `eval/rhvac/edit-check.ps1:10` reads `.privateixtures` and `project-ahvac`: a token rewrite ate `\f` and `\r`. The script throws on every default run.
 - Four suites `skipIf` when `.private/fixtures` is absent and nothing asserts the root exists; a machine without fixtures reports clean green. One deterministic test asserts the resolver default and names the missing root.
 
+### Tie-up, 2026-11-19 to 2026-11-20
+
+- 2026-11-19, agree on room-type defaults between Rooms and the Takeoffs load model. `takeoff-ops.ts:320` reads a blank as “hall” while Rooms shows “No type”. Partition still writes “hall” on created rooms through `Rooms.cs:454` and `ZoneMaterializer.cs:188`.
+- 2026-11-20, address ambiguous plan names in Takeoffs. `TakeoffAtlas.FindView` still takes the first name match. [Rooms](../rooms/LEDGER.md) now uses view IDs.
+
 ### Carried from the 2026-11-19 census
 
 - Move takeoff and RHVAC engineering rules into the product domain, including room-to-system and opening-to-wall validation. Keep transport, journaling, custody, persistence and native dispatch in the host. [owed-20261119 rooms-1-112, 3 items]

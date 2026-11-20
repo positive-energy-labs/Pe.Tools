@@ -18,6 +18,13 @@
 - 2026-11-19, saving duct rulings preserves a deliberately blank required-pressure setting and records only parameter names the person chose. `02ff7bbe`.
 - 2026-11-19, only the /duct-systems save creates a stored duct rule. A fitting write changes the fitting's coefficient without creating the rule. `56154bc3`.
 
+- 2026-11-19, saved duct rulings come from the model and Work authorship stays on pending edits. The old pricing read projected a saved Ignore as `effectiveDesign.assumptions[...].edit` without the required `by`. Removing `effectiveDesign` from pricing fixed the contract failure. The driver had read the earlier save in `_PE_DuctLosses` with 5,274 fittings unchanged before the page refused pricing. `05877645`, merged in `701320c1`.
+- 2026-11-19, PROVEN[browser and session, 5734987f, 2026-11-19]: duct rulings survive save and reload with no pricing-contract error (RA 37 CD3-21; EX 1 open end 11620957:1 ignored; 5,274 fitting readbacks matched); the 15 systems that failed before each open. The driver's controlled Revit 2025 session was `acc-tieup-products-5734987f` (pid 13420) on a disposable Chadds copy, add-ins off.
+- 2026-11-19, Duct Systems offers All up to sixteen systems. The writer estimated Chadds's 363-system value at at least 47.40 MiB against the 32 MiB bound, with geometry held three times and 152 kB for overview rows and notes alone. Sixteen was the writer's conservative choice. `6db5d963`, merged in `7c21e6cf`.
+- 2026-11-19, a fan repair link replaces the remembered system, choosing another system replaces the repair scope, and Clear empties Picture and Rulings. The old repair URL omitted `system` and the shell restored the remembered selection. `1b28875b` and `a9356af7`, merged in `701320c1` and `7c21e6cf`.
+- 2026-11-20, PROVEN[browser and session, 7c21e6cf, 2026-11-20]: with 363 systems All is dimmed and says "Open up to 16 systems at a time from the Systems list." (8.1 s); sixteen systems including the five largest read in 55.9 s with no refusal; the MA-1 link replaces a remembered SA 21; RA 28 shows in header, Picture and Rulings; Clear empties Picture and Rulings. Custody: the driver's controlled Revit 2025 session `acc-tieup-products-7c21e6cf` (pid 48116), add-ins off, on a disposable Chadds copy.
+- 2026-11-20, the seventeenth roster row explains the limit and leaves the sixteen systems open. An oversized address or Pea navigation keeps the first sixteen IDs in request order, or roster order for All, and rewrites the address to match. All works when the roster fits. `605364aa`, merged in `252d3ccf`. UNPROVEN[Revit drive of the final roster, address and small-roster All paths].
+
 ## Tried & rejected
 
 - 2026-11-16, MAP D2, kaitpw: "yes d2, delete". Do not restore the circuits chain or its five Pea projections as a second system-pricing authority.
@@ -32,7 +39,7 @@
 - MAP L2-4 and deletion criteria: finish the real Chadds tree/bar/encoding and no-fan drives before calling the cutover accepted.
 - P4-fix-seams, implementor instruction 2026-11-17: product-specific preflight and write selection remain in generic admission.ts and slots/sheet.ts. Their removal must shrink the name baseline under [shared-base name cleanup](../ducts/LEDGER.md#owed); see the [shared-base ruling](../ducts/LEDGER.md).
 
-- Decide where a person accepts the inferred MUAS-1 join on Chadds and give that person a way to complete it. On 2026-11-16 the owner said, “ideally on fans, but if this if its convoluted then it can b an occam cut and a is ok”. The [Fans link](../../../ts/products/fans/web/src/calc/closer.ts) goes to the [duct-system inbox](../../../ts/products/duct-systems/domain/src/inbox-rows.ts), where the inferred join currently has no acceptance action. [W-duct-systems-07-005, W-fans-02-062, W-fans-04-080]
+- 2026-11-19, decide where a person accepts the inferred MUAS-1 join on Chadds and give that person a way to complete it. On 2026-11-16 the owner said, “ideally on fans, but if this if its convoluted then it can b an occam cut and a is ok”. The [Fans link](../../../ts/products/fans/web/src/calc/closer.ts) goes to the [duct-system inbox](../../../ts/products/duct-systems/domain/src/inbox-rows.ts), where the inferred join currently has no acceptance action. [W-duct-systems-07-005, W-fans-02-062, W-fans-04-080] The 2026-11-19 drive at `f1b2ac94` found the same incomplete-calc refusal on MA-1 port 1, inferred joins `10052051:1` and `10052051:3`. Across 112 ports, 46 fans on 58 ports showed this blocker and 14 ports were unreadable at that tip.
 
 - Use the same resolved design friction and source in Settings, the network picture, and the equivalent-length readout. Recheck the sizing wheel and worksheet against the same duct and flow. [W-duct-systems-06-164, W-duct-systems-07-015, W-fans-01-126]
 - Decide whether system status and loss bar popovers should open on hover, then give the two controls one readable interaction. [W-duct-systems-01-047]
@@ -54,6 +61,11 @@
 - Use the same airflow formatting in the field and picture, with enough precision to explain the calculated path value. [W-duct-systems-04-136]
 - Make the pressure proof's stated airflow match the exact parameter write it exercises. [W-duct-systems-06-088]
 
+### Tie-up, 2026-11-19 to 2026-11-20
+
+- 2026-11-19, make “This system's rules” reachable without dragging the divider at a 1,192 px tool width. The `5734987f` Chadds drive had to move the divider.
+- 2026-11-20, provide whole-model system losses. Price connected groups in bounded batches, deliver rows and notes with progress, and keep geometry and rulings in the opened scope. The [Fans ledger](../fans/LEDGER.md) owns the decision about interim All limits.
+
 ### Carried from the 2026-11-19 census
 
 - Replace non-null assertions with checked presence or types that establish the invariant, and lower the per-file nonNull allowance as each caller changes. The [guard baseline](../../../ts/tests/repo-guards/src/health.baseline.json) records the file allowances. [owed-20261119 duct-systems-non-null, 13 items]
@@ -70,7 +82,7 @@
 - Verify a named writable terminal-drop slot and document binding and readback on the Chadds louver and grille family. [owed-20261119 duct-systems-1-093, 2 items]
 - Redrive the named filter chassis and fan-coil proximity issue on the original ports. Verify with a real positive-pressure tie-in that the picture shows the structural backflow finding even while the worksheet explains the separate H5 pressure consequence. [owed-20261119 duct-systems-fan-sheet-1, 2 items]
 - Seal the same bound document and resolved input basis across acquisition, worksheet, preview and apply. [owed-20261119 duct-systems-1-120, 1 item]
-- 2026-11-19, drive the /duct-systems save and the Fans refusal on a real model copy. Check the save across systems, then stage and discard another table and verify the stored rule, fitting coefficients and receipt by independent readback. [owed-20261119 fans-1-077, 1 item]
+- 2026-11-19, finish the duct-rulings save drive by staging and discarding another table, then reading back the stored rule, coefficients and receipt. `5734987f` witnessed save and reload with unchanged fittings, and the F1 drive at `f1b2ac94` witnessed the Fans refusal. [owed-20261119 fans-1-077, 1 item]
 - Give inferred taps and split segments stable identities across refresh, pricing and write review. Witness the compact repair row's model name and one-click preview on Chadds. Prove in Revit that the native Heal preview refuses a cap on EX 1's only flowing discharge. Prove the native Heal post-check rejects added harm on an already poorly connected RA 37 network. Census facing gaps on Chadds before extending auto-join or cap-tap acceptance beyond the measured case. Apply the owner's niche-case rule after the census. Check the owner-approved cap eligibility rule on the two RA 37 stubs, whose side taps must retain a path. Drive the sealed Heal review on a disposable Chadds copy without a local plan. Confirm it shows the actual plan, the visible join action and both requested ends without the earlier `flatMap` failure. [owed-20261119 duct-systems-network-repair-2, 11 items]
 - 2026-11-19, drive the intended Greenheck plenum join on a disposable Chadds copy. An earlier Heal plan offered a cap for connector `14122436:1`. Check what Heal offers under the new cap rule and confirm that the repair restores the fan's path and changes only the intended geometry. [owed-20261119 fans-1-103, 1 item]
 - Decide whether duct-end intent needs an interoperable Revit parameter, and choose its author and write behavior if it does. [owed-20261119 duct-systems-1-195, 1 item]
