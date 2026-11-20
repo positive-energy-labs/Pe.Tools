@@ -50,6 +50,7 @@ export class NativeReads extends Context.Service<
       read: PreparedRead<A>,
       session: string,
       owner?: RequestIdentityData,
+      waitForRetirement?: boolean,
     ) => Effect.Effect<NativeAnswer<A>, DoorFailure>;
     readonly state: (owner: RequestIdentityData) => CausalTerminalState;
     readonly settle: (owner: RequestIdentityData) => Effect.Effect<CausalTerminalState>;
@@ -86,6 +87,7 @@ export class NativeReads extends Context.Service<
         read: PreparedRead<A>,
         session: string,
         owner?: RequestIdentityData,
+        waitForRetirement = false,
       ) {
         const descriptor = read.descriptor;
         const identity = canonicalJson(Schema.decodeUnknownSync(Schema.Json)(descriptor));
@@ -94,12 +96,26 @@ export class NativeReads extends Context.Service<
         return yield* Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             let flight = flights.get(identity);
-            if (flight?.retiring)
-              return yield* new ReadRetiring({
-                message: "Native read is retiring; retry after terminal settlement",
-                status: 409,
-                problem: "read.retiring",
-              });
+            while (flight?.retiring) {
+              if (!waitForRetirement)
+                return yield* new ReadRetiring({
+                  message: "Revit is finishing an earlier read. Try again once it finishes.",
+                  status: 409,
+                  problem: "read.retiring",
+                });
+              const retiring = flight;
+              if (retiring.callers >= limits.joiners)
+                return yield* busy("Native read joiner capacity reached");
+              retiring.callers++;
+              yield* restore(Deferred.await(retiring.settled)).pipe(
+                Effect.ensuring(
+                  Effect.sync(() => {
+                    retiring.callers--;
+                  }),
+                ),
+              );
+              flight = flights.get(identity);
+            }
             if (!flight) {
               if (flights.size >= limits.entries)
                 return yield* busy("Native read capacity reached");
@@ -131,10 +147,10 @@ export class NativeReads extends Context.Service<
                 if (Exit.isFailure(acquired)) {
                   created.terminal = true;
                   created.outcome = "never-dispatched";
+                  flights.delete(identity);
                   yield* Deferred.succeed(created.settled, undefined);
                   yield* Deferred.succeed(created.ready, false);
                   yield* Deferred.failCause(created.answer, acquired.cause);
-                  flights.delete(identity);
                   return;
                 }
                 const handle = acquired.value;

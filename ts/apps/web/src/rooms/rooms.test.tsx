@@ -302,6 +302,14 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     expect(screen.queryByText("Showing previous Value; refreshing")).toBeNull();
     await act(async () => emit(0, "Late old floor"));
     expect(ctx().value.value?.snapshot.levels[0]!.name).toBe("Replacement floor");
+    const current = frames.at(-1);
+    if (!current) throw Error("Rooms did not open its reading");
+    await act(async () => current({ kind: "document-changed" }));
+    expect(screen.getByText("The document changed. Refreshing…")).toBeTruthy();
+    expect(ctx().value.value?.snapshot.levels[0]!.name).toBe("Replacement floor");
+    await act(async () => emit(frames.length - 1, "Fresh floor"));
+    expect(ctx().value.state).toBe("ready");
+    expect(ctx().value.value?.snapshot.levels[0]!.name).toBe("Fresh floor");
     await act(async () => mount.refresh());
     await act(async () => frames.at(-1)!({ kind: "failure", error: "Offline" }));
     expect(screen.getByText("Showing previous Value; refresh needed")).toBeTruthy();

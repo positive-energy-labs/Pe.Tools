@@ -24,6 +24,7 @@ export interface Publication<T> {
   readonly value: Value<T> | null;
   readonly state: "current" | "refresh-needed" | "superseded";
   readonly reason?: string;
+  readonly refreshCause?: "document-changed";
 }
 type Dependency = Pick<Trace, "name" | "args">;
 type Pending = { inputs: Dependency[]; superseded: boolean; timelineInvalidated?: boolean };
@@ -122,6 +123,7 @@ export class Publications {
   }
   invalidate(matches: (trace: Dependency) => boolean, subscription?: string) {
     const changesTimeline = (input: Dependency) => input.name === "work-timeline" && matches(input);
+    const documentChanged = (input: Dependency) => input.name === "document-mark" && matches(input);
     const slots =
       subscription === undefined
         ? this.slots
@@ -146,6 +148,7 @@ export class Publications {
           generation: slot.generation,
           version: previous?.version ?? 0,
           state: "refresh-needed",
+          ...(previous?.value?.trace.some(documentChanged) && { refreshCause: "document-changed" }),
           value: previous?.value ? { ...previous.value, freshness: "refresh-needed" } : null,
         });
         // The tab can be refreshing a retained Timeline Value when another receipt lands.
@@ -377,13 +380,19 @@ export class Publications {
           : [];
         const commit = await keep?.(published);
         if (!mine()) return obsolete();
-        if (
-          pending.timelineInvalidated ||
-          dependencies.some(
-            ({ trace, revision }) => port.revision(trace.name, trace.args) !== revision,
-          )
-        )
-          throw new RefreshNeeded("Inputs invalidated while publishing the read");
+        if (pending.timelineInvalidated)
+          throw new RefreshNeeded(
+            "Timeline receipts changed while publishing the read",
+            "work-timeline",
+          );
+        const changed = dependencies.find(
+          ({ trace, revision }) => port.revision(trace.name, trace.args) !== revision,
+        );
+        if (changed)
+          throw new RefreshNeeded(
+            "Inputs invalidated while persisting the publication",
+            changed.trace.name,
+          );
         const retainedBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
         if (retainedBytes > this.byteLimit)
           throw Error("Published Values exceed the shared byte bound; old Value retained");
@@ -407,6 +416,10 @@ export class Publications {
           version: previous?.version ?? 0,
           value: retained,
           state: "refresh-needed",
+          ...(error instanceof RefreshNeeded &&
+            error.input === "document-mark" && {
+              refreshCause: "document-changed",
+            }),
           reason: error instanceof Error ? error.message : String(error),
         });
         // Old data retains its original key/version, but its non-current label is host-owned too.

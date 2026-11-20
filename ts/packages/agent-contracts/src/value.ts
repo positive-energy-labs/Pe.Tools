@@ -17,6 +17,7 @@ export const publicationSchema = <S extends z.ZodType>(data: S) =>
     version: z.number(),
     state: z.enum(["current", "refresh-needed", "superseded"]),
     reason: z.string().optional(),
+    refreshCause: z.literal("document-changed").optional(),
     value: z
       .object({
         data,
@@ -42,6 +43,7 @@ export interface Publication<D = unknown> {
   version: number;
   state: "current" | "refresh-needed" | "superseded";
   reason?: string;
+  refreshCause?: "document-changed";
   value: {
     data: D;
     evaluation: string;

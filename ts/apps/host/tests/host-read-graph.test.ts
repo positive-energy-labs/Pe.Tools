@@ -505,6 +505,9 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
         generation: 2,
         version: before.version,
         state: "refresh-needed",
+        ...(["mark", "same-ms-mark", "all"].includes(cause) && {
+          refreshCause: "document-changed",
+        }),
       });
     } finally {
       hold?.release.resolve();

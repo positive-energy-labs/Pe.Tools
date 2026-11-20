@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { publicationSource } from "./publication-source";
 import { z } from "zod";
 import { Publications } from "../../../host/src/reads/publications.ts";
-import { read, type InputPort } from "@pe/host-internal/reads/evaluator";
+import { leaf, read, type InputPort } from "@pe/host-internal/reads/evaluator";
 import type { Readings } from "./resource-stream";
 import type { ReadingContext } from "@pe/web-kernel/shell/source-contract";
 
@@ -59,6 +59,53 @@ test("the Open route subscribes without specifying what the host watches", () =>
     });
   } finally {
     if (typeof close === "function") close();
+    stream.subscribe = undefined;
+  }
+});
+
+test("a document-mark race retains the last Value and retries even without another event", async () => {
+  const publications = new Publications();
+  const mark = leaf("document-mark", z.number(), z.number());
+  const definition = read("race-probe", {
+    input: z.number(),
+    output: z.number(),
+    run: (ctx, value) => ctx.read(mark, value),
+  });
+  let reads = 0;
+  let revision = 0;
+  const port: InputPort = {
+    evaluation: "race",
+    origin: {},
+    revision: () => revision,
+    take: async () => (reads === 2 ? ++revision : revision),
+  };
+  const frames: string[] = [];
+  stream.subscribe = (request, accept) => {
+    if (request.kind !== "publication") throw Error("Expected publication holder");
+    const send = (value: unknown) => accept({ kind: "snapshot", key: "race", value });
+    const close = publications.observe(request.subscription, send);
+    send({ generation: 0, state: "absent" });
+    return close;
+  };
+  const source = publicationSource({
+    read: async (_ctx, { subscription, generation }, release) => {
+      if (release) publications.release(subscription, generation);
+      else reads++;
+      return publications.publish(subscription, generation, definition, 1, port);
+    },
+  });
+  const stop = source.open({ signal: new AbortController().signal } as never, (frame) =>
+    frames.push(frame.kind),
+  );
+  try {
+    await expect.poll(() => frames.at(-1)).toBe("complete");
+    publications.invalidate((trace) => trace.name === mark.name);
+    await expect
+      .poll(() => frames)
+      .toEqual(["complete", "document-changed", "document-changed", "complete"]);
+    expect(reads).toBe(3);
+  } finally {
+    if (typeof stop === "function") stop();
     stream.subscribe = undefined;
   }
 });

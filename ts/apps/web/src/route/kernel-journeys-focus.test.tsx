@@ -2169,8 +2169,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
         const raced = deliverRead!;
         await act(async () =>
           raced({
-            kind: "failure",
-            error: "The document-mark input changed while this was being read.",
+            kind: "document-changed",
           }),
         );
         expect(f.typed.value()).toMatchObject({
@@ -2186,6 +2185,15 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
       }
       expect(screen.getByText("Write to Revit sent")).toBeTruthy();
       await waitFor(() => expect(f.typed.value().state).toBe("ready"));
+      const refreshed = f.typed.value();
+      await act(async () => deliverRead!({ kind: "document-changed" }));
+      expect(f.typed.value()).toMatchObject({
+        state: "refreshing",
+        reason: "The document changed. Refreshing…",
+        value: "value" in refreshed ? refreshed.value : undefined,
+      });
+      await act(async () => deliverRead!({ kind: "complete", value: capture, revision: 2 }));
+      expect(f.typed.value().state).toBe("ready");
       await act(async () => deliverRead!({ kind: "failure", error: "Offline" }));
       expect(f.typed.value()).toMatchObject({ state: "stale", reason: "Offline" });
     }

@@ -8,6 +8,7 @@ export function publicationSource<
     version: number;
     state: string;
     reason?: string;
+    refreshCause?: "document-changed";
     value: {
       evaluation: string;
       coverage: {
@@ -34,12 +35,15 @@ export function publicationSource<
         held = false,
         observed = false;
       let unfollow: (() => void) | undefined;
+      let retry: ReturnType<typeof setTimeout> | undefined;
+      let delay = 250;
       const refresh = async () => {
-        if (closed) return;
+        if (closed || ctx.signal.aborted) return;
         if (refreshing) {
           invalidated = true;
           return;
         }
+        clearTimeout(retry);
         refreshing = true;
         try {
           const result = await options.read(ctx, publication, false);
@@ -49,6 +53,13 @@ export function publicationSource<
           // 6 sockets). A fence or reconnect of that stream is not this read's staleness: the host
           // answers the key again, and `refresh-needed` then says whether to read.
           if (result.state === "superseded") return;
+          if (!ctx.historyPoint && result.refreshCause === "document-changed") {
+            deliver({ kind: "document-changed" });
+            retry = setTimeout(() => void refresh(), delay);
+            delay = Math.min(delay * 2, 2000);
+            return;
+          }
+          delay = 250;
           // A refusal keeps the host's reason until a host event permits another acquisition.
           held = !!result.value;
           if (!result.value)
@@ -99,7 +110,11 @@ export function publicationSource<
             }
             if (frame.kind === "failure") return deliver({ kind: "stale" });
             const state = z
-              .object({ generation: z.number(), state: z.string() })
+              .object({
+                generation: z.number(),
+                state: z.string(),
+                refreshCause: z.literal("document-changed").optional(),
+              })
               .safeParse(frame.kind === "snapshot" && !frame.stale ? frame.value : null);
             if (!state.success || state.data.generation !== publication.generation) return;
             // The stream must own the slot before HTTP acquires it. Reconnect reacquires the same ID.
@@ -110,13 +125,16 @@ export function publicationSource<
               state.data.state === "refresh-needed" ||
               (state.data.state === "absent" && held)
             ) {
-              if (!first) deliver({ kind: "stale" });
+              if (state.data.refreshCause === "document-changed")
+                deliver({ kind: "document-changed" });
+              else if (!first) deliver({ kind: "stale" });
               void refresh();
             }
           },
         );
       return () => {
         closed = true;
+        clearTimeout(retry);
         unfollow?.();
         if (!ctx.historyPoint)
           void options
