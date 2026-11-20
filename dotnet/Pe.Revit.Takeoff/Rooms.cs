@@ -236,7 +236,7 @@ public static class Rooms
                 },
                 RoomsRerun.ZoneOf(guid, provenance, zone => zones.Contains((view.Id.Value(), zone))),
                 provenance.Flags.Contains(FlagPerson) ? "person" : provenance.RunId == RunDrawn ? "inferred" : null,
-                fields.Name ?? "", fields.Type ?? "hall",
+                fields.Name ?? "", fields.Type ?? "",
                 fields.CeilingFt, fields.People, fields.LightingW,
                 fields.EquipSensible, fields.EquipLatent, fields.VentilationCfm,
                 Sqft(fr, loops), outer, loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),

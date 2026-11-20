@@ -174,8 +174,8 @@ public static class TakeoffCarriers
     public static void WriteRoomType(FilledRegion region, string roomType) =>
         Set(region, RoomTypeGuid, roomType);
 
-    public static string ReadRoomType(FilledRegion region) =>
-        region.get_Parameter(RoomTypeGuid)?.AsString() is { Length: > 0 } value ? value : "hall";
+    public static string? ReadRoomType(FilledRegion region) =>
+        region.get_Parameter(RoomTypeGuid)?.AsString() is { Length: > 0 } value ? value : null;
 
     public static RoomFields ReadRoomFields(FilledRegion region) => new(
         region.get_Parameter(RoomNameGuid)?.AsString() ?? "",

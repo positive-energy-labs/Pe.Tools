@@ -82,7 +82,11 @@ export function RoomsTable({
       field: RoomEditField,
       numeric = false,
     ): StateCellProps | HandleCellProps => {
-      const held = shown(row.region[field]);
+      const format = (next: unknown) => {
+        const text = shown(next as string | number | null);
+        return field === "type" && text === "" ? "No type" : text;
+      };
+      const held = format(row.region[field]);
       if (!cells) return { value: held, cap: "locked", capReason: "No writable owner" };
       const baseline =
         field === "role" && row.region.designation !== "person" ? undefined : row.region[field];
@@ -95,7 +99,7 @@ export function RoomsTable({
         value,
         label: `Edit ${row.label} ${field}`,
         model: row.region[field],
-        format: (next) => shown(next as string | number | null),
+        format,
         ...(numeric ? { numeric: { min: 0, digits: 2 } } : {}),
       };
     };

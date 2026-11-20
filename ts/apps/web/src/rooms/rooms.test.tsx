@@ -29,6 +29,27 @@ test("rooms attention decodes as a region with its stable carrier GUID", () => {
   }
 });
 
+test("the Rooms table distinguishes an unset native room type from a real hall", () => {
+  const [, room, hall] = DEMO_ROOMS.regions;
+  if (!room || !hall) throw Error("The Rooms fixture needs two rooms");
+  const regions = [{ ...room, type: "" }, hall];
+  const view = render(
+    <RoomsTable
+      rows={roomRows(regions, ["Fixture level"])}
+      onSelect={() => {}}
+      empty={{ says: "empty", exit: "none" }}
+    />,
+  );
+  try {
+    const row = (guid: string) =>
+      view.container.querySelector(`tr[data-subject="${regionSubject(guid)}"]`);
+    expect(row(room.guid)?.textContent).toContain("No type");
+    expect(row(hall.guid)?.textContent).toContain("hall");
+  } finally {
+    cleanup();
+  }
+});
+
 test("stagedRoomWrites sends both authors staged values per guid", () => {
   const doc = roomsRouteState.schema.parse({
     edits: {
