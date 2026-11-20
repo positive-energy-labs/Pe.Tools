@@ -1,3 +1,4 @@
+import { timelineReads } from "./product-contracts.generated.ts";
 import { callCatalogRoute } from "@pe/agent-contracts/pe-api";
 import { linkedCatalog } from "./product-catalog.generated.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
@@ -1099,11 +1100,6 @@ async function dispatch(
           );
           return { ok: !("isError" in result), target: scope.target, result };
         }
-        // Ducts Work is keyed by document: an unbound write lands in Work no page reads (wave 3, 2026-10-19).
-        if (parsed.route === "ducts" && !workspaceId && !workTarget && !mountedScope)
-          throw new Error(
-            "route:ducts.edit needs an exact document. Pass target {kind: open, ref: {session, openId}} or set a thread default, then read its Work revision before editing.",
-          );
         return routeWrite(
           parsed.route,
           workTarget,
@@ -1355,10 +1351,6 @@ function parseTarget(value: unknown): ResolvedTarget | null {
  * browser collects them from every publication it holds (`typed-mount.ts` `timelineWorks`); Pea
  * holds none, so it evaluates the route's roster once.
  */
-// ponytail: one row per route with cross-Work reads; the route graph should name this read when a
-// second route needs it (it carries no read names today).
-const PLACE_READS: Record<string, string> = { fans: "fans.roster" };
-
 /** One evaluation of a registered host read; the publication it opened is released. */
 async function valueOnce(read: string, args: unknown) {
   const client = createPeClient(base(), fetch);
@@ -1387,7 +1379,7 @@ async function timelineStep(
     throw new Error(
       `Work changed before restoring. Read route:${route} again and pass its expectedRevision.`,
     );
-  const place = PLACE_READS[route];
+  const place = timelineReads[route];
   // As in the browser, a read with no current publication adds no member: the owner still steps.
   const read =
     place && target.session && target.openId

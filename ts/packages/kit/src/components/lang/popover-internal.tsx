@@ -50,7 +50,7 @@ type Overlay = {
  * contain its anchor, so siblings still replace each other, and a popover whose trigger sits inside
  * another's popup stacks on it instead. DOM containment is the test, not React ancestry: a route
  * portals its settings section into the chrome Settings popover (`RouteControlsOutlet`), so Base
- * UI's context-based nesting never sees that child (2026-10-27, the Ducts airflow slot picker closed
+ * UI's context-based nesting never sees that child (2026-10-27, an airflow slot picker closed
  * the Settings popover on open).
  */
 const overlays: Overlay[] = [];

@@ -26,7 +26,7 @@ import { stateTree } from "@pe/host-contracts/service-identity";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createScheduledTasks } from "../src/scheduled-tasks.ts";
 import { shareIntentFile, shareKind } from "../src/share.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { TakeoffCaptures } from "../src/observation-store.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { createUpdateReader } from "../src/update-reader.ts";
 import { settle, journalAt } from "./effect-test.ts";

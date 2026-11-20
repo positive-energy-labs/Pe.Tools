@@ -184,7 +184,7 @@ import { RunRegistry } from "./run-registry.ts";
 import { createScheduledTasks, scheduledTasksKind } from "./scheduled-tasks.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
-import { CaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { CaptureStore, type TakeoffCaptures } from "./observation-store.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";

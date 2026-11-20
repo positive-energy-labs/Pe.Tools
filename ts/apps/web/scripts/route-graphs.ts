@@ -290,21 +290,20 @@ await emit(registryFile, renderRouteRegistry(registryRows));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {
+  const folder = declarations.get(key)!.folder;
   await emit(
-    new URL(
-      `../src/${declarations.get(key)!.folder}/source-closure.generated.json`,
-      import.meta.url,
-    ),
+    new URL(`../src/${folder}/source-closure.generated.json`, import.meta.url),
     canonicalRouteJson(closure) + "\n",
   );
   if (closureOnly) continue;
   const data = closure.envelope.data;
-  directory.push({ key, directory: projectKernelDirectory(data) });
+  const product = folder.match(/^(?:\.\.\/)+products\/([^/]+)\//)?.[1];
+  directory.push({ key, ...(product && { product }), directory: projectKernelDirectory(data) });
 }
 if (!closureOnly)
   await emit(
     new URL("../../../packages/agent-contracts/src/generated/route-directory.ts", import.meta.url),
-    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
+    `// Generated from web route graphs by codegen:routes.\nimport type { RouteDirectory } from "../route-graph.ts";\nexport const routeDirectory: readonly {key: string; product?: string; directory: RouteDirectory}[] = ${JSON.stringify(directory, null, 2)};\n`,
   );
 if (sourceHashBefore) writeRouteStartupReceipt(checkout, sourceHashBefore, projections);
 console.log(runtime ? JSON.stringify(projections) : `Projected ${directory.length} route graphs`);

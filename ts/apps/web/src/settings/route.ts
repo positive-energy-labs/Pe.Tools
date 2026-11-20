@@ -20,7 +20,7 @@ export const fields = { session: field(z.string(), "", "pose") };
  * ADR 0035 rule 1, as amended by ADR 0037 rule 8 (homes MAP slice 6b): settings has no subject, and
  * its sheet lists every tiered setting a route declares, each with the home tier that served it and
  * "save at" for each tier. With no target model here, the project tier says it has no home; a route
- * with a target (/fans, /ducts) saves at it. The machine pane stays the route's own drawing: it
+ * with a document target saves at it. The machine pane stays the route's own drawing: it
  * holds acts on this machine (Revit sessions, update, sharing, providers), not values in a home.
  */
 type SettingsRead = { settings?: Record<string, readonly SettingTierRead[]> } | null;

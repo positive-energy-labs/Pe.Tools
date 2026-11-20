@@ -157,7 +157,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets and workspace files; build-pod owns scripts that live in a Pod. Not for changing values a route shows (loaded family and type parameters, takeoffs, parameter links); edit those with edit-shared-work and use their semantic apply command.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets and workspace files; build-pod owns scripts that live in a Pod. Not for changing values a route shows (loaded family and type parameters, load calculations, parameter links); edit those with edit-shared-work and use their semantic apply command.
 ---
 
 # Write Revit C# Script
@@ -347,7 +347,7 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "edit-shared-work",
     content: String.raw`---
 name: edit-shared-work
-description: Edit shared tool Work and apply it through the same semantic commands the person uses. Use for parameter values, families, takeoffs, parameter links, and pod members.
+description: Edit shared tool Work and apply it through the same semantic commands the person uses. Use for parameter values, families, load calculations, parameter links, and pod members.
 ---
 
 # Edit shared Work

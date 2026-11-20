@@ -1,3 +1,4 @@
+import { scenarios } from "../journey-fixtures/route-scenarios.ts";
 import { wait as waitFor, exited, stopOwned } from "./owned-runtime.ts";
 // One owned demo runtime, or an explicit borrowed browser/server. Never starts Revit.
 import { spawn, execFile, type ChildProcess } from "node:child_process";
@@ -22,19 +23,17 @@ const { values } = parseArgs({
     seed: { type: "string", default: "20261023" },
     test: { type: "string" },
     require: { type: "string", default: "refresh,reconnect,worker" },
-    // fans only: start the host with Revit, sharing the caller's LOCALAPPDATA/PE_TOOLS_PRODUCT_HOME.
     revit: { type: "boolean" },
   },
 });
-if (!["chaos", "selection", "conversation-work", "fans"].includes(values.suite!))
-  throw new Error("--suite must be chaos, selection, conversation-work or fans");
-if (values.revit && (values.suite !== "fans" || !process.env.PE_TOOLS_PRODUCT_HOME))
-  throw new Error("--revit is fans-only and requires the caller's PE_TOOLS_PRODUCT_HOME");
-if (
-  !["chaos", "fans"].includes(values.suite!) &&
-  (values.attached || values.url || values.port || values.target)
-)
-  throw new Error("The required product suites own their isolated runtime and browser");
+const scenario = scenarios[values.suite!];
+if (!scenario) throw Error("--suite must be " + Object.keys(scenarios).join(", "));
+if (values.revit && (!scenario.revit || !process.env.PE_TOOLS_PRODUCT_HOME))
+  throw Error(
+    "--revit requires a scenario that supports it and the caller's PE_TOOLS_PRODUCT_HOME",
+  );
+if (!scenario.attach && (values.attached || values.url || values.port || values.target))
+  throw Error("The required product suites own their isolated runtime and browser");
 const testTs = resolve(import.meta.dirname, "../..");
 const source = resolve(values.source ?? join(testTs, ".."));
 const leaseThread = "caa00000-0000-4000-8000-000000000001";
@@ -178,7 +177,8 @@ try {
         "ts/apps/host/tests/fake-acp-agent.mjs",
       );
       env.FAKE_ACP_SHAPE = "config";
-      const { seedConversationWork } = await import("./conversation-work.fixture.ts");
+      const { seedConversationWork } =
+        await import("../journey-fixtures/conversation-work.fixture.ts");
       await seedConversationWork(home, dir);
     }
     if (values.suite === "chaos") {
@@ -268,16 +268,7 @@ try {
       "source web origin",
       90_000,
     );
-    web = new URL(
-      conversation
-        ? "/pea"
-        : values.suite === "fans"
-          ? `/fans${values.revit ? "" : "?demo=navigation"}`
-          : values.suite === "selection"
-            ? "/"
-            : `/duct-systems?fixture=navigation&thread=${leaseThread}`,
-      web,
-    ).href;
+    web = new URL(scenario.path({ revit: values.revit, thread: leaseThread }), web).href;
     receipt.web = web;
     await save();
     // A bound Vite port precedes its first SSR import. Keep cold compilation outside
@@ -303,7 +294,7 @@ try {
     )
       throw new Error(`Source document readiness failed: HTTP ${document.status}`);
     browser = await openBrowser({
-      mode: values.suite === "selection" || values.suite === "fans" ? "headless" : "visible",
+      mode: scenario.headless ? "headless" : "visible",
       home: env.PE_BROWSER_HOME,
       args: [
         "--disable-background-timer-throttling",
@@ -336,13 +327,6 @@ try {
     CHAOS_RESULT_PATH: journeyResultPath,
     E2E_RESULT_PATH: journeyResultPath,
   };
-  const config = conversation
-    ? "conversation-work"
-    : values.suite === "selection"
-      ? "product-selection"
-      : values.suite === "fans"
-        ? "fans-reds"
-        : "route-chaos";
   testProcess = spawn(
     process.execPath,
     [
@@ -350,7 +334,7 @@ try {
       "test",
       "run",
       "--config",
-      `tests/e2e/${config}.config.ts`,
+      scenario.config,
       ...(values.test ? ["--testNamePattern", values.test] : []),
     ],
     {
@@ -380,7 +364,7 @@ try {
   process.exitCode = code;
   receipt.result =
     code === 0
-      ? conversation || values.suite === "fans"
+      ? conversation || scenario.revit
         ? "PROVEN_BROWSER_SOURCE"
         : (JSON.parse(await readFile(journeyResultPath, "utf8")) as { result: string }).result
       : "failed";

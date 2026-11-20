@@ -5,7 +5,7 @@ import { emptyListSearch } from "@pe/agent-contracts";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../tests/integration/products/fans/cutover.test-support.ts";
 import { makeAtomRegistry } from "../../../shell/owner.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 

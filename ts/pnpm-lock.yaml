@@ -1327,6 +1327,9 @@ importers:
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../../packages/host-contracts
+      effect:
+        specifier: 4.0.2
+        version: 4.0.2
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -1355,6 +1358,9 @@ importers:
       '@pe/rooms-contract':
         specifier: workspace:*
         version: link:../contract
+      '@pe/runtime':
+        specifier: workspace:*
+        version: link:../../../packages/runtime
       effect:
         specifier: 4.0.2
         version: 4.0.2
@@ -1520,9 +1526,15 @@ importers:
       '@effect/atom-react':
         specifier: 4.0.2
         version: 4.0.2(effect@4.0.2)(react@19.2.7)(scheduler@0.27.0)
+      '@pe/agent-contracts':
+        specifier: workspace:*
+        version: link:../../packages/agent-contracts
       '@pe/browser':
         specifier: workspace:*
         version: link:../../packages/browser
+      '@pe/duct-systems-domain':
+        specifier: workspace:*
+        version: link:../../products/duct-systems/domain
       '@pe/duct-systems-web':
         specifier: workspace:*
         version: link:../../products/duct-systems/web
@@ -1532,6 +1544,36 @@ importers:
       '@pe/ducts-host':
         specifier: workspace:*
         version: link:../../products/ducts/host
+      '@pe/ducts-web':
+        specifier: workspace:*
+        version: link:../../products/ducts/web
+      '@pe/fans-domain':
+        specifier: workspace:*
+        version: link:../../products/fans/domain
+      '@pe/fans-host':
+        specifier: workspace:*
+        version: link:../../products/fans/host
+      '@pe/fans-web':
+        specifier: workspace:*
+        version: link:../../products/fans/web
+      '@pe/host-contracts':
+        specifier: workspace:*
+        version: link:../../packages/host-contracts
+      '@pe/host-internal':
+        specifier: workspace:*
+        version: link:../../packages/host-internal
+      '@pe/web-kernel':
+        specifier: workspace:*
+        version: link:../../packages/web-kernel
+      '@tanstack/react-router':
+        specifier: 1.170.31
+        version: 1.170.31(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@testing-library/react':
+        specifier: ^16.3.0
+        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      effect:
+        specifier: 4.0.2
+        version: 4.0.2
       react-dom:
         specifier: ^19.2.0
         version: 19.2.7(react@19.2.7)

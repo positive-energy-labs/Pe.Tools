@@ -66,6 +66,7 @@
     "generatedProductDependencies": [
       "@pe/duct-systems-contract",
       "@pe/duct-systems-host",
+      "@pe/ducts-contract",
       "@pe/ducts-host",
       "@pe/fans-contract",
       "@pe/fans-host",

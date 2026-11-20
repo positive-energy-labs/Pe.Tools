@@ -220,18 +220,18 @@ export function ChatScale({
             works={[matrixHeadWork(matrix, say)]}
           />
           <span className="pt-2 t-small t-upper text-ink-2">composer width · refused route</span>
-          {/* The 2026-10-22 Ducts case: three lines one route refuses for one reason, at 328px. */}
+          {/* three lines one route refuses for one reason, at 328px. */}
           <div className="w-82 hairline">
             <ProposalHead
               asks={[]}
-              works={["duct-systems", "unitFlows", "parameters"].map((subject) => ({
+              works={["network", "unitFlows", "parameters"].map((subject) => ({
                 ...matrixHeadWork(matrix, say),
-                id: `ducts:${subject}`,
-                route: "Ducts",
+                id: `network:${subject}`,
+                route: "Air network",
                 subject,
-                commit: { word: "open", run: () => say("SIMULATED · Ducts opens") },
+                commit: { word: "open", run: () => say("SIMULATED · Air network opens") },
                 refusal:
-                  "This reading did not record an exact Ducts system name; open Ducts and choose its subject.",
+                  "This reading did not record an exact Air network system name; open Air network and choose its subject.",
               }))}
             />
           </div>

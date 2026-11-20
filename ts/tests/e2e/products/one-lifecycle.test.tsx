@@ -6,7 +6,7 @@ import { historySnapshotSchema } from "../../../apps/web/src/shell/history.ts";
 import { direct, mountTypedRoute, planned } from "../../../apps/web/src/shell/typed-mount.ts";
 import { scrollBody } from "@pe/web-kernel/route/body";
 import type { ReadingContext } from "@pe/agent-contracts/route";
-import { createWitness } from "../fans-witness.test-support.ts";
+import { createWitness } from "../../journey-fixtures/fans-witness.test-support.ts";
 
 test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {
   const closes: (() => void)[] = [];

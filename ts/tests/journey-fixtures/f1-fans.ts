@@ -1,12 +1,12 @@
 // F1 · Find and explain a fan, /fans, reads only. Prose: drive/JOURNEYS.md F1.
-//   node tests/e2e/f1-fans.ts [--seed N] [--walk 30] [--steps open,selectFan,...]
+//   node tests/journey-fixtures/f1-fans.ts [--seed N] [--walk 30] [--steps open,selectFan,...]
 // Env: CDP_PORT, CDP_TARGET (own browser), E2E_WEB, E2E_SESSION (the run's controlled session id;
 // the document picker offers only options in it).
-import { DOCUMENT_CHOOSER, WEB, type Page } from "./cdp.ts";
+import { DOCUMENT_CHOOSER, WEB, type Page } from "../e2e/cdp.ts";
 import { fanPortsAgree, part } from "./fan-ports.ts";
 import { fanRosterLabel } from "./fan-roster.ts";
-import { LAYER, marks, settled, type Marks } from "./marks.ts";
-import { run, type Action, type Rule } from "./walk.ts";
+import { LAYER, marks, settled, type Marks } from "../e2e/marks.ts";
+import { run, type Action, type Rule } from "../e2e/walk.ts";
 
 /** A region by its accessible name: the scope a press may use. */
 const R = (name: string) => `[aria-label="${name}"]`;

@@ -1,6 +1,4 @@
-/**
- * Recorded route exits retain the subject and scope of the call that wrote their Work.
- */
+import { tutorialProducts } from "../route/tutorial-products.generated.ts";
 import {
   routeAddress,
   encode,
@@ -65,11 +63,7 @@ export function capturedPlace(
   scope: WorkKey | null,
   source: unknown,
   named?: DocumentRequest,
-  /**
-   * False for the head's read of live Work: Ducts' Work is document-owned and holds no system (the
-   * system is Page state), so the head opens the route and keeps the system the person chose. A
-   * recorded Pea call still names an exact system or is refused.
-   */
+  /** A live Work head keeps the current Page subject. */
   subject = true,
 ): CapturedPlace {
   const key = routeOf(route);
@@ -84,16 +78,18 @@ export function capturedPlace(
   };
   if (key === "pods" && !podMemberSchema.safeParse({ pod: input.pod, path: input.path }).success)
     return { ok: false, refusal: "This reading did not record an exact pod member." };
-  if (
-    subject &&
-    key === "duct-systems" &&
-    (typeof input.system !== "string" || !input.system.trim())
-  )
-    return {
-      ok: false,
-      refusal:
-        "This reading did not record an exact Ducts system name; open Ducts and choose its subject.",
-    };
+  const field = tutorialProducts.find((product) => Object.hasOwn(product.routes, key))?.routes[key]
+    ?.captureSubject;
+  if (subject && field) {
+    const name = input[field];
+    if (typeof name !== "string" || !name.trim()) {
+      const title = chatPluginTitle(key);
+      return {
+        ok: false,
+        refusal: `This reading did not record an exact ${title} ${field} name; open ${title} and choose its subject.`,
+      };
+    }
+  }
   const target =
     scope.binding === "open"
       ? { kind: "open", ref: scope.open }
@@ -115,10 +111,10 @@ export function capturedPlace(
   const search = Object.fromEntries(
     at.keys.filter((name) => name in input).map((name) => [name, input[name]]),
   );
-  if (key === "duct-systems" && typeof search.system === "string" && search.system.trim()) {
-    const id = encode({ keyKind: "system-name", key: search.system });
+  if (field && typeof search[field] === "string" && search[field].trim()) {
+    const id = encode({ keyKind: "system-name", key: search[field] });
     if (!id.ok) return { ok: false, refusal: id.reason };
-    search.system = { kind: "ids", ids: [id.value] };
+    search[field] = { kind: "ids", ids: [id.value] };
   }
   // The Pods subject is the member as a `name` SubjectRef `[pod, path]` (ADR 0035 rule 2).
   if (key === "pods")
@@ -247,7 +243,7 @@ export function actionCall(toolName: string, args: unknown, result: unknown): Ac
  */
 export const actionRoute = (key: string): ChatPluginRoute | null => publicRoutes.actionRoute(key);
 /**
- * The route a receipt ran in: the route whose Work it consumed (a row verb on /fans binds Fans'),
+ * The route a receipt ran in: the route whose Work it consumed,
  * else the one route that declares the action. Work no route draws (the findings Work) names none.
  */
 export function receiptRoute(
@@ -260,5 +256,5 @@ export function receiptRoute(
   return publicRoutes.get(route) ? (route as ChatPluginRoute) : null;
 }
 
-/** `takeoffs.sync` → `sync`, `schedule.grid.snapshot` → `grid snapshot`. */
+/** The command's local verb, without its owner. */
 export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;

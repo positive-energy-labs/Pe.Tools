@@ -1,10 +1,10 @@
 import { valueOf } from "@pe/web-kernel/route/typed-route";
 import { createElement } from "react";
-import { kernelPane } from "../../../shell/typed-shell.tsx";
-import { SheetPane } from "../../../route/slots/sheet/pane.tsx";
-import { planned, type TypedMount } from "../../../shell/typed-mount.ts";
+import { kernelPane } from "../../../../src/shell/typed-shell.tsx";
+import { SheetPane } from "../../../../src/route/slots/sheet/pane.tsx";
+import { planned, type TypedMount } from "../../../../src/shell/typed-mount.ts";
 import type { FansRouteDocument } from "@pe/fans-contract/fans";
-import { completion } from "../../../shell/work-door-observation.ts";
+import { completion } from "../../../../src/shell/work-door-observation.ts";
 import type {
   WorkJournalDoor,
   WorkWriteOutcome,

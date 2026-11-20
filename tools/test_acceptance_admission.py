@@ -24,7 +24,8 @@ def trapped(*args, **kwargs):
 
 def barriers(stack):
     for name in ("owner_home", "main_checkout", "installed_identity", "pick_models", "owner_files",
-                 "copy_hashed", "sdk", "dev_session", "setup_installed", "adopt_host", "processes", "revit_pids"):
+                 "copy_hashed", "sdk", "dev_session", "setup_installed", "adopt_host", "processes", "listeners",
+                 "revit_pids"):
         stack.enter_context(patch.object(a, name, side_effect=trapped))
     stack.enter_context(patch.object(a.subprocess, "Popen", side_effect=trapped))
     stack.enter_context(patch.object(a.shutil, "copytree", side_effect=trapped))
@@ -62,15 +63,24 @@ class AdmissionTests(unittest.TestCase):
         with ExitStack() as stack:
             sleep = stack.enter_context(patch.object(a.time, "sleep"))
             reading = stack.enter_context(patch.object(a, "admission_refusal", side_effect=["HOLD 1", "HOLD 2", None]))
-            a.require_setup_admission(5)
+            a.require_setup_admission("revit-drive", 5)
             self.assertEqual(reading.call_count, 3)
             self.assertEqual(sleep.call_count, 2)
             reading.side_effect = None
             reading.return_value = "HOLD late"
             stack.enter_context(patch.object(a.time, "time", side_effect=[0, 0, 400]))
             with self.assertRaises(SystemExit) as stop:
-                a.require_setup_admission(5)
+                a.require_setup_admission("revit-drive", 5)
             self.assertEqual(stop.exception.code, "HOLD late")
+
+    def test_host_only_reads_the_browser_floor(self):
+        with ExitStack() as stack:
+            barriers(stack)
+            command = stack.enter_context(patch.object(a.subprocess, "run", return_value=machine_result(
+                0, '{"verdict":"ADMIT","kind":"revit-drive"}')))
+            with self.assertRaises(SystemExit):  # an ADMIT for another kind is a refusal
+                a.setup("guard", ["--host-only"])
+            self.assertEqual(command.call_args.args[0][-2], "browser")
 
     def test_admit_zero_reaches_setup(self):
         for args in ([], ["--web"], ["--installed"]):
@@ -185,8 +195,9 @@ class AdmissionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     if "--hold-probe" in sys.argv:
-        with ExitStack() as stack:
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             barriers(stack)
+            stack.enter_context(patch.object(a, "run_dir", return_value=Path(directory)))
             stack.enter_context(patch.object(a.subprocess, "run", return_value=machine_result()))
             a.main(["setup", "guard"])
     else:

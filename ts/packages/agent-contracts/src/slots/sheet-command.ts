@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { sheetNativeOperations } from "@pe/host-contracts/operation-types";
 import type { Command } from "../command.ts";
 import type { ProductCommand } from "../product.ts";
 import { ANY_ROUTE, workWriteCommands } from "../write-intent.ts";
@@ -13,7 +12,7 @@ import { SHEET_COMMANDS } from "./sheet.ts";
  */
 const sheetActions = {
   [SHEET_COMMANDS.plan]: {
-    native: [...sheetNativeOperations.read, ...sheetNativeOperations.plan],
+    native: ["revit.detail.parameter-values"],
     says: "Plan the staged sheet writes without changing Revit. Pass the route's Work handle { key, revision } as work and any related Work handles as readWorks. The plan reports each write's outcome. Parameter bindings target each row's element by UniqueId and read its current parameter value.",
     needs: "project-document",
     effect: "query",
@@ -21,7 +20,7 @@ const sheetActions = {
     dirties: [],
   },
   [SHEET_COMMANDS.apply]: {
-    native: [...sheetNativeOperations.read, ...sheetNativeOperations.apply],
+    native: ["revit.detail.parameter-values", "revit.apply.parameter-values"],
     says: "Write the planned sheet values to Revit in one transaction. Apply refuses if a value changed since the plan.",
     needs: "project-document",
     effect: "command",

@@ -3,7 +3,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "../fans-witness.test-support.ts";
+import { createWitness } from "../../journey-fixtures/fans-witness.test-support.ts";
 import { makeAtomRegistry } from "../../../apps/web/src/shell/owner.ts";
 import { systemCode } from "@pe/ducts-web/identity";
 import { snapshot } from "@pe/ducts-domain/test-fixture";

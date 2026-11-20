@@ -88,7 +88,7 @@ export interface Verdict {
 interface StateColumn<Row> extends ColumnBase<Row> {
   state: (row: Row) => StateCellProps | HandleCellProps;
   /**
-   * Domain vocabulary override (ruled 2026-08-16, takeoffs finding #1): the word the filter,
+   * Domain vocabulary override (ruled 2026-08-16): the word the filter,
    * facet and readout speak for this row, when the grammar's eight universal words (the
    * `CELL_STATE_ORDER` vocabulary, `never` included) would lie — "clean" where the domain means
    * "no Manual J entered". The MARKS stay universal; only the

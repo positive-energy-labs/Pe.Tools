@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import { Effect, Schema } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { TakeoffCaptures } from "../src/observation-store.ts";
 import { saveMember } from "../src/settings.ts";
 import { podMemberSaveRequestSchema } from "@pe/host-contracts/operation-types";
 
@@ -102,7 +102,10 @@ test("Pea's real member saves ask nobody, freeze input and preserve identity thr
     await f.journal.invoke(b, crossing);
     a.input.content = "caller mutation";
     const [done, other] = await Promise.all([f.journal.wait("a"), f.journal.wait("b")]);
-    expect([done.state, other.state]).toEqual(["succeeded", "succeeded"]);
+    expect([done.state, other.state], JSON.stringify([done, other])).toEqual([
+      "succeeded",
+      "succeeded",
+    ]);
     if (done.state !== "succeeded" || other.state !== "succeeded")
       throw Error("Member saves did not commit");
     await f.journal.invoke(f.request("a"), crossing);

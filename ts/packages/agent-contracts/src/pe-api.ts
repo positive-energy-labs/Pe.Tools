@@ -45,6 +45,7 @@ const routeCatalog: Record<
 import {
   definePeApi,
   definePeRouteApi,
+  type route,
   type PeApi,
   type PeApiSchemas,
   type PeRouteTable,
@@ -89,17 +90,21 @@ export function assertProductCatalogKeys(
   }
 }
 
-type PeCatalog = PeApi<Routes> & {
-  peRoutes: { [K in keyof Routes]: Routes[K] & { catalog: CatalogRow } };
+export type HttpRead = ReturnType<typeof route> & { axes: CatalogAxes };
+type HttpReads = Readonly<Record<string, HttpRead>>;
+export type PeCatalog<Extra extends HttpReads = Record<never, never>> = PeApi<Routes & Extra> & {
+  peRoutes: { [K in keyof (Routes & Extra)]: (Routes & Extra)[K] & { catalog: CatalogRow } };
   linkedCatalog(): LinkedCatalog<CatalogRow>;
 };
 
-export function createPeCatalog(
+export function createPeCatalog<const Extra extends HttpReads = Record<never, never>>(
   actions: Readonly<Record<string, Command>>,
   reads?: { inputs: Readonly<Record<string, z.ZodType>>; help: string },
   productPolicies: Readonly<Record<string, CallPolicy>> = {},
-): PeCatalog {
-  const routes = httpRoutes;
+  extra?: Extra,
+): PeCatalog<Extra> {
+  assertProductCatalogKeys("HTTP readings", "route axes", extra ?? {});
+  const routes = Object.assign({}, httpRoutes, extra);
   const transport = definePeRouteApi(routes);
   const opEntry = (op: HostOperationDefinition) =>
     nativeEntry(op, productPolicies[op.key] ?? callPolicies[op.key]);
@@ -137,7 +142,7 @@ export function createPeCatalog(
         {
           ...row,
           catalog: {
-            ...routeAxes[key as keyof Routes],
+            ...(extra?.[key] ? { ...extra[key].axes, uses: [] } : routeAxes[key as keyof Routes]),
             key: `route:${key}`,
             ...(routeCatalog[key]
               ? {
@@ -324,7 +329,6 @@ function hostRouteAxes(
     "family.readings": routedCommandAxes("family.readings"),
     "schedules.readings": routedCommandAxes("schedules.readings"),
     "families.readings": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
-    "takeoffs.observations": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "captures.list": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
     "notices.presence": axes("Session", "One", ["Metadata"], "SessionWrite", "Cheap", []),
     "features.get": axes("None", "One", ["Metadata"], "Read", "Cheap", []),
@@ -445,7 +449,6 @@ function hostRouteAxes(
         "revit.catalog.field-options",
         "families.capture",
         "family.capture",
-        "takeoffs.snapshot",
         "revit.detail.schedules",
       ],
     ),
@@ -461,7 +464,6 @@ function hostRouteAxes(
         "revit.catalog.field-options",
         "families.capture",
         "family.capture",
-        "takeoffs.snapshot",
         "revit.detail.schedules",
       ],
     ),

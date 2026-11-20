@@ -28,8 +28,11 @@ const unreadable = (rows: readonly { parameter: string; reason: string }[] | nul
 const savedCapture = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
 const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
 const savedCaptures = leaf("resource", readingRequestSchema, z.array(takeoffCaptureSummarySchema));
+const observations = product.readings.observations.handle;
 
 export const readings: HostBodies<typeof product, ReadContext, never>["readings"] = {
+  observations: (ctx, args) =>
+    ctx.read(leaf("file:observation", observations.input, observations.data), args),
   async plans(ctx, { target }) {
     const { body } = await ctx.read(native("rooms.roster"), { target: doc(target), request: {} });
     return {

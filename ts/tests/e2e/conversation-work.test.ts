@@ -10,7 +10,7 @@ import {
   CONVERSATION_THREADS,
   UNSAVED_REF,
   NAMES_TURN,
-} from "./conversation-work.fixture.ts";
+} from "../journey-fixtures/conversation-work.fixture.ts";
 import {
   address,
   sameAddress,

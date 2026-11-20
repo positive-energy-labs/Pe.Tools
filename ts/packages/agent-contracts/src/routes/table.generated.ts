@@ -39,7 +39,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 "density": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"number"}) as z.ZodType<Immutable<number>>).default(0.075), "replace"),
 "face": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["commercial","residential"]}) as z.ZodType<Immutable<"commercial" | "residential">>).default("commercial"), "push"),
 selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
-}, agent: { policy: "Use the route fields as declared." }, module: "duct-loss" },
+}, agent: { policy: "Use the route fields as declared." }, module: "../../../products/ducts/web/routes/duct-loss" },
 "duct-systems": { path: "/duct-systems" as const, title: "Ducts", fields: {
 "contextRadiusFt": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":10,"type":"number","minimum":0,"maximum":64}) as z.ZodType<Immutable<number>>).default(10), "replace"),
 "sceneView": field(sceneViewSchema.default({"preset":"all","section":null}), "replace"),

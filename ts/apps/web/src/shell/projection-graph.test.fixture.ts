@@ -6,6 +6,23 @@ import type { RouteDeclaration } from "../../../../packages/agent-contracts/src/
 
 /** Galvanized steel's absolute roughness in feet: the duct-loss default and its material row. */
 import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/ducts-contract/duct-loss-read";
+import { solve, type DuctInput } from "@pe/ducts-domain/duct-loss-math";
+
+const example = {
+  page: {
+    shape: "round" as const,
+    a: 16,
+    b: 12,
+    cfm: 1200,
+    length: 100,
+    roughness: 0.0003,
+    density: 0.075,
+  },
+  readings: {
+    case: [{ id: "duct", label: "Hypothetical duct case" }],
+    result: (page: DuctInput) => solve(page),
+  },
+};
 
 const ductLossAddress = {
   path: "/duct-loss",
@@ -44,7 +61,7 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
   seeds: {
     calculate: {
       title: "calculate",
-      load: () => import("#/shell/fixture-examples").then((m) => m.routeExamples["duct-loss"]),
+      load: async () => example,
     },
   },
   directory: {

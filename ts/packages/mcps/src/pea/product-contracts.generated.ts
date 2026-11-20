@@ -8,6 +8,7 @@ import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
 import { product as product3 } from "@pe/rooms-contract/product";
 const products = [product0, product1, product2, product3] as const;
+export const timelineReads: Readonly<Record<string, string>> = Object.assign({}, ...products.map(product => product.timelineReads));
 export const resourceReadingSchema = z.union([readingRequestSchema, ...products.flatMap(product => [...product.resourceInputs])]);
 const owners = products.map(product => product.settingOwners);
 assertUniqueProductKeys("settings owner", owners);

@@ -1,3 +1,4 @@
+import { productGateway } from "./product-executors.generated.ts";
 import { hostOwnership } from "./host-ownership.ts";
 import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
@@ -10,18 +11,12 @@ import { receiptsForWork } from "@pe/agent-contracts";
 import { commandTool } from "@pe/mcps/product-actions";
 import type { Caller } from "@pe/agent-contracts";
 import { ADMISSION_RESEND_HEADER, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
-import {
-  addressSchema,
-  sameAddress,
-  documentRefSchema,
-  actionStatusSchema,
-} from "@pe/agent-contracts";
+import { addressSchema, documentRefSchema, actionStatusSchema } from "@pe/agent-contracts";
 
 import { peRoutes, linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import type { OpResponseOf } from "@pe/host-contracts/operation-types";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
@@ -29,6 +24,7 @@ import {
   isTsOnlyOperationKey,
   tsOnlyOperationSchemas,
   type TsOnlyOperationKey,
+  type TsOnlyRequest,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
 
@@ -41,11 +37,6 @@ import { HttpRouter, type HttpServerRequest, HttpServerResponse as Response } fr
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
-import {
-  projectTakeoffSnapshot,
-  projectTakeoffViews,
-  takeoffProjectIndexRequest,
-} from "@pe/rooms-host/takeoff-projection";
 import { ActionJournal } from "./action-journal.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import { RevitBridge, BridgeError, NoRevitSession } from "@pe/host-internal/bridge";
@@ -66,10 +57,6 @@ import {
 } from "./control.ts";
 import { Refused } from "@pe/host-internal/refused";
 import { HostDocumentMarks } from "./document-marks.ts";
-import { ductBodySubject, type DuctsBodyBasisSource } from "@pe/ducts-host/ducts-body-basis";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
-import type { DuctsReadings } from "@pe/ducts-host/ducts-readings";
-import { ductsReadings, isRetainedReadFailure } from "@pe/ducts-host/ducts-readings";
 
 import type { FamiliesReader } from "./families-reader.ts";
 import { readFamily, type FamilyActionDependencies } from "./family-actions.ts";
@@ -93,15 +80,6 @@ import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { recordHostFact } from "./receipt-export.ts";
 import { ReadFreshness } from "./request-services.ts";
 import { RequestIdentity } from "@pe/host-internal/request-identity";
-import {
-  fileVersion,
-  rhvacAssemblies,
-  rhvacLaunch,
-  rhvacList,
-  rhvacOpen,
-  rhvacSync,
-  rhvacTakeoff,
-} from "@pe/rooms-host/rhvac";
 import { readSchedule } from "./schedule-actions.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { HostSessionInventory } from "./session-inventory.ts";
@@ -117,7 +95,7 @@ import {
 } from "./settings.ts";
 import { readSettingTiers } from "@pe/host-internal/settings-files";
 import { writeSettingTier } from "./tiered-settings.ts";
-import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./observation-store.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
 
 /** A door refusal: 403, named, and never dispatched. */
@@ -159,6 +137,7 @@ function callRoutes(
   operations: ActionJournal,
   captures?: TakeoffCaptures,
   actionDeps: FamilyActionDependencies &
+    Parameters<typeof productGateway.commandFiles>[1] &
     InstancesActionDependencies & {
       launchShell?: (path: string) => Promise<void>;
     } = {},
@@ -172,11 +151,11 @@ function callRoutes(
     readonly families?: FamiliesReader["Service"];
     /** Thread meta's pointer surface; pointer ops refuse without it. */
     readonly pointers?: ThreadPointers;
-    readonly retainedBasis?: DuctsBodyBasisSource;
+    readonly retainedBasis?: ReturnType<typeof productGateway.retainedBasis>;
     readonly retainedRead?: (
       input: NativeReadInput,
       options: { version?: string; refresh?: string },
-    ) => ReturnType<typeof retainedDuctsRead>;
+    ) => ReturnType<typeof retainedNativeRead>;
     readonly nativeBody?: (
       input: NativeReadInput,
       read: ReturnType<typeof readNativeCall>,
@@ -304,7 +283,7 @@ function callRoutes(
 
       if (entry.saved) {
         op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
-        const value = yield* savedTakeoffs(request, observations());
+        const value = yield* productGateway.saved(request, observations(), decodeRequest);
         recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
@@ -336,7 +315,8 @@ function callRoutes(
         requestId,
       };
       let effect: string | undefined;
-      if (entry.admission !== "intrinsic") {
+      // A snapshot's product body takes both leaves through HostNativeRead, which admits them.
+      if (entry.admission !== "intrinsic" && !entry.snapshot) {
         const definition = isTsOnlyOperationKey(key)
           ? yield* Effect.tryPromise({
               try: () => operationDefinition(key, bridge, resolvedSession),
@@ -402,8 +382,8 @@ function callRoutes(
         }
       }
       if (entry.reading) {
-        const response = yield* retainedDuctsRead(
-          ductsReadings(bridge),
+        const response = yield* retainedNativeRead(
+          productGateway.retainedReadings(bridge),
           {
             key,
             input: request ?? {},
@@ -428,7 +408,7 @@ function callRoutes(
                     })
                   : Effect.fail(
                       new InvalidRead({
-                        message: "Exact Ducts document is unavailable",
+                        message: "Exact open document is unavailable",
                         status: 409,
                         problem: "read.target",
                       }),
@@ -462,55 +442,16 @@ function callRoutes(
               const selected = Effect.map(sessions.resolve(readScope), (session) =>
                 session.state?.openDocuments.find((doc) => doc.openId === target.openId),
               );
-              const document = yield* selected;
-              if (!document?.address)
-                return yield* new BridgeError(
-                  "Snapshot requires an exact open saved document",
-                  409,
-                );
-              const at = addressSchema.parse(document.address);
-              const native = yield* HostNativeRead;
-              // Both natives are per-caller admitted and joined by NativeReads: a peer fetch shares them.
-              const published = yield* observations().refresh(
+              const { captureId: publishedId, ...result } = yield* productGateway.snapshot(
+                observations(),
                 target,
-                Effect.gen(function* () {
-                  const [result, index] = yield* Effect.all(
-                    [
-                      native.read({ key, input: request ?? {}, scope: readScope }),
-                      native.read({
-                        key: "revit.catalog.project-index",
-                        input: takeoffProjectIndexRequest,
-                        scope: readScope,
-                      }),
-                    ],
-                    { concurrency: "unbounded" },
-                  );
-                  const snapshot = projectTakeoffSnapshot(
-                    result.value as unknown as OpResponseOf<"takeoffs.snapshot">,
-                    document.title,
-                    projectTakeoffViews(
-                      index.value as unknown as OpResponseOf<"revit.catalog.project-index">,
-                    ),
-                  );
-                  if (!sameAddress(snapshot.reading.at, at))
-                    return yield* new BridgeError("Snapshot returned a different document", 409);
-                  return { result, snapshot };
-                }),
-                Effect.map(
-                  selected,
-                  (now) => !!now?.address && sameAddress(addressSchema.parse(now.address), at),
-                ),
+                key,
+                request,
+                readScope,
+                selected,
               );
-              captureId = published.capture.id;
-              return {
-                value: published.result.value,
-                nativeRequestId: published.result.nativeRequestId,
-                target: {
-                  session: target.session,
-                  document: document.address,
-                  documentRef: target,
-                },
-              };
+              captureId = publishedId;
+              return result;
             }).pipe(
               Effect.mapError((error) =>
                 isDoorFailure(error) || error instanceof BridgeError
@@ -608,7 +549,7 @@ function callRoutes(
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
       if (!op.tsOnly && !entry.cancel) headers["x-pe-native-request-id"] = nativeRequestId;
-      if (captureId) headers["x-pe-takeoff-capture-id"] = captureId;
+      if (captureId) headers[productGateway.captureHeader] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });
@@ -686,42 +627,7 @@ function callRoutes(
       ),
     );
   });
-  const captured = HttpRouter.add("GET", "/takeoffs/observations", (req) =>
-    Effect.tryPromise({
-      try: async () => {
-        const query = new URL(req.url, "http://host").searchParams;
-        const id = query.get("capture");
-        if (id && query.has("text")) return Response.jsonUnsafe(await observations().savedText(id));
-        if (id) return Response.jsonUnsafe(await observations().saved(id));
-        if (query.has("saved")) {
-          const document = query.get("document");
-          const rows = await observations().list(
-            document ? addressSchema.parse(document) : undefined,
-          );
-          return Response.jsonUnsafe(
-            rows.map(({ snapshot, ...capture }) => ({
-              ...capture,
-              document: snapshot.reading.at,
-              title: snapshot.world.docName,
-            })),
-          );
-        }
-        return Response.jsonUnsafe(
-          observations().status(
-            documentRefSchema.parse({
-              session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
-              openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
-            }),
-          ),
-        );
-      },
-      catch: (error) => error,
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })),
-      ),
-    ),
-  );
+  const captured = productGateway.observationRoute(observations);
   const uploads = HttpRouter.add(peRoutes["blobs.put"].method, peRoutes["blobs.put"].path, (req) =>
     Effect.gen(function* () {
       const caller = currentCaller();
@@ -808,7 +714,7 @@ function callRoutes(
           const path = query.get("file")!;
           return Response.jsonUnsafe({
             path,
-            fileVersion: await (actionDeps.fileVersion ?? fileVersion)(path),
+            fileVersion: await (actionDeps.fileVersion ?? productGateway.fileVersion)(path),
           });
         }
         // Exported inputs by original action ID; the receipt, not this, says how the action settled.
@@ -964,7 +870,7 @@ function callRoutes(
             ...actionDeps,
             marks: yield* HostDocumentMarks,
             pictures: yield* PictureCaptureStore,
-            files: yield* DuctFiles,
+            files: yield* productGateway.files,
           };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
@@ -1046,25 +952,6 @@ function callRoutes(
     ),
   );
 }
-
-const savedTakeoffs = Effect.fnUntraced(function* (request: unknown, captures: TakeoffCaptures) {
-  const input = yield* decodeRequest("takeoffs.saved", request ?? {});
-  return yield* Effect.tryPromise({
-    try: async () =>
-      input.captureId && input.text
-        ? captures.savedText(input.captureId)
-        : input.captureId
-          ? captures.saved(input.captureId)
-          : (
-              await captures.list(input.document ? addressSchema.parse(input.document) : undefined)
-            ).map(({ snapshot, ...capture }) => ({
-              ...capture,
-              document: snapshot.reading.at,
-              title: snapshot.world.docName,
-            })),
-    catch: (error) => new BridgeError(String(error), 400),
-  });
-});
 
 /** Reads are observations joined to the exact dispatch UUID; inputs and errors stay local. */
 function recordHostOp(
@@ -1186,9 +1073,6 @@ const localEntries = {
     const input = yield* decodeRequest("pointers.dismiss", request);
     return pointerOwner(pointers).dismiss(pointerThread(caller, input.thread), input.id);
   }),
-  "takeoffs.saved": Effect.fnUntraced(function* ({ request, captures }: LocalCall) {
-    return yield* savedTakeoffs(request, captures);
-  }),
   "host.status": Effect.fnUntraced(function* ({ bridge }: LocalCall) {
     return yield* Effect.flatMap(
       Effect.map(bridge.list, (sessions) => ({ connected: sessions.some((s) => s.connected) })),
@@ -1305,24 +1189,6 @@ const localEntries = {
       ...(yield* targetHomes(bridge, scope)),
     });
   }),
-  "rhvac.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacOpen(hostOwnership, yield* decodeRequest("rhvac.open", request));
-  }),
-  "rhvac.assemblies": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacAssemblies(hostOwnership, yield* decodeRequest("rhvac.assemblies", request));
-  }),
-  "rhvac.sync": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacSync(hostOwnership, yield* decodeRequest("rhvac.sync", request));
-  }),
-  "rhvac.launch": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacLaunch(yield* decodeRequest("rhvac.launch", request));
-  }),
-  "rhvac.takeoff": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacTakeoff(yield* decodeRequest("rhvac.takeoff", request));
-  }),
-  "rhvac.list": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacList(yield* decodeRequest("rhvac.list", request));
-  }),
   "aps.auth.status": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* apsAuthStatus(yield* decodeRequest("aps.auth.status", request));
   }),
@@ -1335,6 +1201,7 @@ const localEntries = {
   "aps.auth.token": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* apsAuthToken(yield* decodeRequest("aps.auth.token", request));
   }),
+  ...productGateway.calls(hostOwnership, (key, request) => decodeRequest(key, request)),
 };
 
 /** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
@@ -1364,12 +1231,6 @@ const podContext = Effect.fnUntraced(function* (
   } satisfies PodContext;
 });
 
-type RequestSchemaOf<K extends TsOnlyOperationKey> = (typeof tsOnlyOperationSchemas)[K] extends {
-  readonly request: infer S extends Schema.Codec<any>;
-}
-  ? S
-  : never;
-
 const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>(
   key: K,
   request: unknown,
@@ -1380,7 +1241,7 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
     request ?? {},
   ).pipe(
     Effect.mapError((error) => new InvalidHostRequest(key, error.message)),
-  )) as Schema.Schema.Type<RequestSchemaOf<K>>;
+  )) as TsOnlyRequest<K>;
 });
 
 function toProblem(error: unknown): {
@@ -1544,11 +1405,14 @@ const readNativeCall = (key: string, input: unknown, scope: HostSessionScope) =>
   HostNativeRead.use((reads) => reads.read({ key, input, scope }));
 
 /** The retained acquisition path shared by live /call and explicit historical read sets. */
-export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
-  owner: DuctsReadings,
+export const retainedNativeRead = Effect.fn("Call.retainedNative")(function* (
+  owner: InstanceType<typeof productGateway.retainedOwner>,
   rawInput: NativeReadInput,
   options: { version?: string; refresh?: string },
-  source: { document: HostSessionInventory["Service"]["document"]; basis?: DuctsBodyBasisSource },
+  source: {
+    document: HostSessionInventory["Service"]["document"];
+    basis?: ReturnType<typeof productGateway.retainedBasis>;
+  },
 ) {
   const native = yield* HostNativeRead;
   const input: NativeReadInput = { ...rawInput, scope: JSON.parse(JSON.stringify(rawInput.scope)) };
@@ -1557,7 +1421,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   if (replaying) yield* admitNativeCaller(input.key);
   const resolved = !replaying ? yield* native.resolve(input) : undefined;
   const subject = yield* Effect.try({
-    try: () => ductBodySubject(input),
+    try: () => productGateway.retainedSubject(input),
     catch: (error) =>
       isDoorFailure(error)
         ? error
@@ -1576,7 +1440,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
         const answer = yield* native.read(input);
         if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput(target))
           return yield* new InvalidRead({
-            message: "Ducts native response changed its admitted target",
+            message: "Retained response changed its admitted target",
             status: 409,
             problem: "read.target",
           });
@@ -1619,7 +1483,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
     )
     .pipe(
       Effect.catch((error) =>
-        basis && options.version && isRetainedReadFailure(error)
+        basis && options.version && productGateway.retainedFailure(error)
           ? basis.refuse(error)
           : Effect.fail(error),
       ),
@@ -1635,7 +1499,7 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
       ...resolvedTargetHeaders(shared.target),
       "x-pe-native-request-id": shared.nativeRequestId,
       [NATIVE_BODY_VERSION_HEADER]: shared.version,
-      "x-pe-ducts-reused": String(shared.reused),
+      [productGateway.retainedHeader]: String(shared.reused),
     },
   });
 });
@@ -1655,8 +1519,8 @@ export const nativeCallRouteFor = (
   retained?: (
     input: NativeReadInput,
     options: { version?: string; refresh?: string },
-  ) => ReturnType<typeof retainedDuctsRead>,
-  normal?: (input: NativeReadInput) => ReturnType<typeof retainedDuctsRead>,
+  ) => ReturnType<typeof retainedNativeRead>,
+  normal?: (input: NativeReadInput) => ReturnType<typeof retainedNativeRead>,
 ) =>
   HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
     Effect.gen(function* () {
@@ -1671,7 +1535,7 @@ export const nativeCallRouteFor = (
       const inputs = yield* HostInputContext;
       const refusal = inputs.check({ kind: "native", key: body.key });
       if (refusal) return yield* refusal;
-      // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
+      // Retained HTTP bodies also need source metadata and version ownership, not just a native taking.
       if (linkedCatalog().entries.get(body.key)?.call?.reading) {
         if (retained)
           return yield* retained(

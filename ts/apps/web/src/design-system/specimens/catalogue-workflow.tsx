@@ -85,7 +85,7 @@ function HandleCells() {
     return null;
   };
   const cell: CellHandle = {
-    owner: { route: "fans", label: "from /fans" },
+    owner: { route: "families", label: "from /families" },
     value: draft,
     refusal: null,
     stage: async (value) => {
@@ -113,7 +113,7 @@ function HandleCells() {
   return (
     <Demo
       label="Value and owner handles · fixture"
-      consumers="Fans and Ducts"
+      consumers="Work sheets"
       spec="One owner handle supplies attribution, staging, refusal and clear to a cell and a table. A retained stale Value locks both. The fixture plan is deliberately unsealed; it cannot write to Revit."
     >
       <div className="flex items-center gap-2">

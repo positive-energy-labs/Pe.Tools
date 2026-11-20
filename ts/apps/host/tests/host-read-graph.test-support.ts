@@ -7,7 +7,7 @@ import { RevitBridgeLive } from "../src/bridge.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { NodeServices, NodeHttpClient } from "@effect/platform-node";
-import { CaptureStore } from "../src/takeoff-captures.ts";
+import { CaptureStore } from "../src/observation-store.ts";
 import type { NativeReadInput } from "@pe/host-internal/native-read";
 import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
 import { unavailableFieldOptions, journalAt, callRouteOver } from "./effect-test.ts";

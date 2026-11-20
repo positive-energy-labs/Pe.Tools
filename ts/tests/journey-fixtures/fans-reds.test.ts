@@ -9,11 +9,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { decode } from "../../packages/agent-contracts/src/subject-ref.ts";
-import { FANS_ESP_ROW } from "./cdp.ts";
+import { FANS_ESP_ROW } from "./fan-selectors.ts";
 import { pickFansWriteScope } from "./fans-write-scope.ts";
 import { workEvidence } from "./conversation-work.fixture.ts";
-import { marks, settled } from "./marks.ts";
-import { connectTypedPage, type TypedPage } from "./typed-page.ts";
+import { marks, settled } from "../e2e/marks.ts";
+import { connectTypedPage, type TypedPage } from "../e2e/typed-page.ts";
 
 const FANS_PANES = [fansPanes.roster, fansPanes.inputs, fansPanes.picture, fansPanes.ledger];
 // Rulings (e-inbox) folds to a rail at the 1600 px owned viewport; case 2 unfolds it.

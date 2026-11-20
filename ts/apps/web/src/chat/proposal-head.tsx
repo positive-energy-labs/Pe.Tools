@@ -79,7 +79,7 @@ export function ProposalHead({ asks, works }: { asks: readonly ReactNode[]; work
   if (!asks.length && !live.length) return null;
   const shown = all || live.length <= REST_WORKS ? live : live.slice(0, REST_WORKS);
   const rest = live.slice(shown.length).map((parts) => tally(parts.flatMap(headGroups)));
-  // A refusal belongs to the route, not the line: three Ducts lines refused for one reason say it once.
+  // A refusal belongs to the route, not the line: three proposal lines refused for one reason say it once.
   const refusals = new Map<string, string>();
   for (const parts of shown)
     if (parts[0]!.refusal) refusals.set(parts[0]!.route, parts[0]!.refusal);

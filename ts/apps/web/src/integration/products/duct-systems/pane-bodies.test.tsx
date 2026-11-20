@@ -5,7 +5,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { isValidElement } from "react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../tests/integration/products/duct-systems/cutover.test-support.ts";
 import { typedSubjectDoor } from "../../../shell/typed-mount.ts";
 import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 import { makeAtomRegistry } from "../../../shell/owner.ts";

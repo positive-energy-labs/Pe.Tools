@@ -58,7 +58,7 @@ const FIELD_OPTION_STATES: FieldOptionState[] = [
     isLoading: false,
     source: "remote",
     changed: true,
-    dependencies: [{ key: "CategoryName", scope: "sibling", value: "Ducts" }],
+    dependencies: [{ key: "CategoryName", scope: "sibling", value: "Mechanical Equipment" }],
   },
 ];
 

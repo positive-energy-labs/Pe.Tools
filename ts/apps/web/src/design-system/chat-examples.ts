@@ -98,7 +98,7 @@ export const CHAT_SEED_STATE: ChatState = {
       visibleElements: 47,
     }),
     say("Receipt op-20260830-1842 captured 47 visible elements "),
-    say("across Ducts, Duct Fittings, and Air Terminals."),
+    say("across Mechanical Equipment, Pipe Fittings, and Plumbing Fixtures."),
     { kind: "turn_end", stopReason: "end_turn" },
     { kind: "prompt", text: "Draft the schedule update, but ask before anything writes." },
     {
@@ -456,6 +456,12 @@ const CATALOG = {
       "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored links.",
     ),
     row(
+      "op:revit.context.document-session",
+      "op",
+      "revit.context.document-session",
+      "Read the active document and its session.",
+    ),
+    row(
       "op:parameters.list",
       "op",
       "parameters.list",
@@ -647,7 +653,7 @@ export const CHAT_SEED_THREAD_WORK = {
         {
           id: "w-1",
           documentId: "doc-ops",
-          route: "duct-systems",
+          route: "families",
           intent: "duct resize",
           unfinished: 2,
         },
@@ -671,7 +677,7 @@ export const CHAT_SEED_THREAD_WORK = {
         {
           id: "w-3",
           documentId: "doc-l2",
-          route: "duct-systems",
+          route: "families",
           intent: "supply path",
           unfinished: 0,
         },
@@ -684,7 +690,7 @@ export const CHAT_SEED_THREAD_WORK = {
         {
           id: "w-4",
           documentId: "doc-l1",
-          route: "duct-systems",
+          route: "families",
           intent: "duct resize",
           unfinished: 4,
         },

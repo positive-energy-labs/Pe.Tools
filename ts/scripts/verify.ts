@@ -38,7 +38,8 @@ for (const entry of workspaces) {
 }
 if (!tested.length) throw new Error("no @pe/* package declares a test script");
 
-const steps: [name: string, cwd: string, cmd: string[]][] = [
+type Step = [name: string, cwd: string, cmd: [string, ...string[]]];
+const steps: Step[] = [
   ["source gate", TS, [process.execPath, "scripts/gate.ts"]],
   ["knip", TS, ["vp", "exec", "knip", "--no-progress"]],
   // @pe/host test owns kit preparation, including when run outside verify.
@@ -46,21 +47,23 @@ const steps: [name: string, cwd: string, cmd: string[]][] = [
   // and tripped its timeout), and with the task cache on, `vp run` sat idle with no children
   // after the host suite finished (observed solo: 2+ min, until killed) while the same run
   // with --no-cache exits at once. A test verdict must never be replayed from a cache either.
-  ...tested.map((name): [string, string, string[]] => [
-    `test ${name}`,
-    TS,
-    [
-      "vp",
-      "run",
-      "--concurrency-limit",
-      "1",
-      "--no-cache",
-      "--filter",
-      name,
-      "--fail-if-no-match",
-      "test",
+  ...tested.map(
+    (name): Step => [
+      `test ${name}`,
+      TS,
+      [
+        "vp",
+        "run",
+        "--concurrency-limit",
+        "1",
+        "--no-cache",
+        "--filter",
+        name,
+        "--fail-if-no-match",
+        "test",
+      ],
     ],
-  ]),
+  ),
   ["native catalog projection", resolve(TS, "packages/host-contracts"), ["pnpm", "codegen:check"]],
   ["browser", TS, ["pnpm", "test:browser:product"]],
   [
@@ -74,7 +77,7 @@ const failures: string[] = [];
 for (const [name, cwd, [bin, ...args]] of steps) {
   const started = Date.now();
   console.log(`\n== verify: ${name}  (${[bin, ...args].join(" ")})`);
-  const r = spawnSync(bin!, args, { cwd, stdio: "inherit", shell });
+  const r = spawnSync(bin, args, { cwd, stdio: "inherit", shell });
   if (r.error) console.error(r.error);
   const seconds = ((Date.now() - started) / 1000).toFixed(0);
   if (r.status !== 0) failures.push(name);

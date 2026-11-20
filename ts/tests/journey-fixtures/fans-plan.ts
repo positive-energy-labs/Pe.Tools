@@ -1,4 +1,4 @@
-import type { Page } from "./cdp.ts";
+import type { Page } from "../e2e/cdp.ts";
 
 /** Plan through the visible control and return the popover's text once it names an outcome. */
 export async function plan(page: Page) {

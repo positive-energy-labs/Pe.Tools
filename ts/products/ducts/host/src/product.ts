@@ -1,9 +1,16 @@
+import { ductLossData } from "@pe/ducts-contract/duct-loss-read";
+import { ductInputError, solve } from "@pe/ducts-domain/duct-loss-math";
 import { product } from "@pe/ducts-contract/product";
 import { implement } from "@pe/host-internal/product";
 import { catalogs } from "./ducts-files.ts";
 
 export const host = implement(product, {
   readings: {
+    ductLoss: (ctx, { target: _target, ...args }) =>
+      ctx.compute(ductLossData, args, (input) => {
+        const error = ductInputError(input);
+        return { error, result: error ? null : solve(input) };
+      }),
     snapshot: (ctx, { kind: _, target, ...request }) =>
       request.selector.kind === "roster"
         ? ctx.native("ducts.snapshot.roster", {
@@ -26,3 +33,4 @@ export const host = implement(product, {
   },
   commands: {},
 });
+export const reads = host.reads;

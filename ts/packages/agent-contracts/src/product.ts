@@ -6,6 +6,8 @@
  * missing or extra body is a compile error. Runtime-neutral: nothing here imports a host or web package.
  */
 import { z } from "zod";
+import type { HttpRead } from "./pe-api.ts";
+import type { AnyOperationKey } from "@pe/host-contracts/operation-types";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
@@ -171,7 +173,7 @@ export type ReadingLoad = Readonly<{
   alone?: true;
   freshBy?: readonly ["document-mark"];
   slow?: string;
-  calls?: Readonly<Partial<Record<HostOperationKey, CallPolicy>>>;
+  calls?: Readonly<Partial<Record<AnyOperationKey, CallPolicy>>>;
   resource?: true;
   basisHeaders?: Readonly<Record<string, string>>;
 }>;
@@ -182,6 +184,7 @@ export type Reading<Source extends PropertyKey = string> = {
   readonly load?: ReadingLoad;
   /** One sentence for Pea's read discovery. */
   readonly says?: string;
+  readonly timelineRoute?: string;
 };
 /** The cells one home can take, by name. */
 type Lands<H extends Home, C extends Cells> = {
@@ -246,6 +249,8 @@ export type ProductRoute<R extends string = string> = {
   readonly core?: Named<R>;
   readonly reads?: Readonly<Record<string, Named<R>>>;
   readonly panes: readonly string[];
+  readonly captureSubject?: string;
+  readonly demoPlace?: { readonly id: string; readonly link: string };
 };
 type Readings = Readonly<Record<string, Reading<PropertyKey>>>;
 type DataOf<R extends Readings, N> = z.output<
@@ -315,9 +320,17 @@ export type ProductDeclaration = {
   readonly cells: Cells;
   readonly readings: Readonly<Record<string, Reading>>;
   readonly commands: Readonly<Record<string, ProductCommand>>;
-  readonly sheetWrites?: { readonly route: string; readonly writes: ProductCommand["writes"] };
-  readonly routes: Readonly<Record<string, { readonly key: string }>>;
+  readonly sheetWrites?: SheetNative & {
+    readonly route: string;
+    readonly writes: ProductCommand["writes"];
+  };
+  readonly routes: Readonly<
+    Record<string, { readonly key: string } & Pick<ProductRoute, "captureSubject" | "demoPlace">>
+  >;
   readonly guide?: Guide;
+};
+type SheetNative = {
+  readonly native?: Readonly<Partial<Record<"plan" | "apply", readonly HostOperationKey[]>>>;
 };
 type Stored = Pick<ProductDeclaration, "homes" | "cells" | "commands" | "sheetWrites">;
 /** Platform commands and product commands use the same home-to-cells map. */
@@ -410,6 +423,7 @@ export function product<
   const ToolName extends string = Id,
   const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
+  const Http extends Readonly<Record<string, HttpRead>> = Record<never, never>,
 >(declaration: {
   /** The product folder, Work route and default name of its Pea tool. */
   readonly id: Id;
@@ -438,7 +452,7 @@ export function product<
       };
     };
   };
-  readonly sheetWrites?: {
+  readonly sheetWrites?: SheetNative & {
     readonly route: keyof NoInfer<Works> extends never
       ? NoInfer<Id>
       : keyof NoInfer<Works> & string;
@@ -447,6 +461,7 @@ export function product<
   /** Zero or several, keyed by the route key. A subject's pane is one of the route's panes. */
   readonly routes: Routes & {
     readonly [K in keyof Routes]: NoExtras<Routes[K], ProductRoute> & {
+      readonly captureSubject?: keyof Routes[K]["fields"] & string;
       readonly subject?: NoExtras<
         NonNullable<Routes[K]["subject"]>,
         NonNullable<ProductRoute["subject"]>
@@ -456,6 +471,7 @@ export function product<
     };
   };
   readonly guide?: Guide;
+  readonly http?: Http;
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
 }) {
@@ -488,6 +504,7 @@ export function product<
   );
   return {
     ...declaration,
+    http: Object.assign({}, declaration.http),
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,
     actions: declaration.commands,
@@ -505,6 +522,11 @@ export function product<
     ),
     callPolicies,
     resourceInputs: resourceInputs<R>(declaration.readings),
+    timelineReads: Object.fromEntries(
+      readings.flatMap(({ handle, timelineRoute }) =>
+        timelineRoute ? [[timelineRoute, handle.key]] : [],
+      ),
+    ),
     work,
     tool,
     reads: {

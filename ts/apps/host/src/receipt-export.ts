@@ -1,3 +1,4 @@
+import { productGateway } from "./product-executors.generated.ts";
 import { peRoutes } from "@pe/mcps/product-catalog";
 import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
@@ -125,7 +126,7 @@ export const commandCodes = new Set([
   "CmdPeToolsHome",
   "CmdPea",
   "CmdFamilyAudit",
-  "CmdTakeoffsWeb",
+  ...productGateway.ribbonTelemetry,
   "CmdPodsWeb",
   "CmdPltMruViews",
   "CmdFFMigrator",

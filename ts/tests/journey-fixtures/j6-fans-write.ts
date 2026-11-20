@@ -1,3 +1,4 @@
+import { FANS_LEDGER_ESP } from "./fan-selectors.ts";
 import { plan } from "./fans-plan.ts";
 // E2E-J6 · Fans mutation: Pea stages ESP for a fan, the human plans, Write consumes
 // the stage, and a re-plan refuses with "no staged edit". Real host, real Pea, real Revit.
@@ -11,17 +12,16 @@ import { plan } from "./fans-plan.ts";
 //   cold          close and reconnect the browser page between the Pea turn and Plan
 import {
   expectText,
-  FANS_LEDGER_ESP,
   journey,
   requirePea,
   requireRevit,
   revit,
   sendChat,
   setPea,
-} from "./cdp.ts";
+} from "../e2e/cdp.ts";
 import { fansPanes } from "../../products/fans/web/src/panes.ts";
-import type { Page } from "./cdp.ts";
-import { marks, settled } from "./marks.ts";
+import type { Page } from "../e2e/cdp.ts";
+import { marks, settled } from "../e2e/marks.ts";
 import { pickFansWriteScope } from "./fans-write-scope.ts";
 import { fanRosterRow } from "./fan-roster.ts";
 
