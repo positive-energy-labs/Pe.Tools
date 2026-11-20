@@ -529,7 +529,8 @@ export function RoomsPlan({
                         {...mention({ doc, key: regionSubject(region.uniqueId) })}
                         onClick={(event) => {
                           event.stopPropagation();
-                          if (dragDist.current < CLICK_PX) onSelect(region.uniqueId, event.shiftKey);
+                          if (dragDist.current < CLICK_PX)
+                            onSelect(region.uniqueId, event.shiftKey);
                         }}
                       >
                         <SvgTip content={stale ? "locked · stale" : state} />
@@ -567,8 +568,8 @@ export function RoomsPlan({
                       <g
                         key={callout.guid}
                         {...revitTarget([
-                          world.shapes.find((shape) => shape.region.uniqueId === callout.guid)!.region
-                            .elementId,
+                          world.shapes.find((shape) => shape.region.uniqueId === callout.guid)!
+                            .region.elementId,
                         ])}
                         data-callout={callout.label}
                         style={{ pointerEvents: "auto", cursor: "pointer" }}

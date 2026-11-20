@@ -5,8 +5,7 @@ import { scrollBody } from "../body.ts";
 import { paneLayout } from "../defaults.ts";
 import { screen } from "../screen.ts";
 
-const tiny = {
-  key: "tiny",
+const tinyDeclaration = {
   name: "Tiny",
   directory: {
     aliases: [],
@@ -24,6 +23,7 @@ const tiny = {
   fields: {},
   panes: ["list", "detail"],
 } as const;
+const tiny = { ...tinyDeclaration, key: "tiny" } as const;
 const pane = {
   title: "Pane",
   purpose: "Draw",
@@ -48,7 +48,11 @@ const declared = product({
   readings: { roster: { handle: roster, sources: [] } },
   commands: {},
   routes: {
-    tiny: { ...tiny, core: ["roster", () => ({ level: "" })], reads: { list: "roster" } },
+    tiny: {
+      ...tinyDeclaration,
+      core: ["roster", () => ({ level: "" })],
+      reads: { list: "roster" },
+    },
   },
 });
 const drawn = screen(declared.routes.tiny, { panes: { list: pane, detail: pane }, layout });

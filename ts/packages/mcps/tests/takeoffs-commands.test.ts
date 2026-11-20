@@ -69,16 +69,19 @@ const rawSnapshot = {
   },
 };
 
+const recordedSnapshot = (snapshot: typeof rawSnapshot, path: string) =>
+  ({
+    reading: {
+      at: address(path),
+      version: "v1",
+      observedAt: "2026-08-25T12:00:00.000Z",
+    },
+    snapshot,
+  }) as unknown as Parameters<typeof projectTakeoffSnapshot>[0];
+
 test("snapshot projection preserves held regions and saved review after partition", () => {
   const snapshot = projectTakeoffSnapshot(
-    {
-      reading: {
-        at: address("C:\\Models\\Harness.rvt"),
-        version: "v1",
-        observedAt: "2026-08-25T12:00:00.000Z",
-      },
-      snapshot: rawSnapshot,
-    } as unknown as Parameters<typeof projectTakeoffSnapshot>[0],
+    recordedSnapshot(rawSnapshot, "C:\\Models\\Harness.rvt"),
     "Harness.rvt",
     [
       { name: "Zoning", level: "Main" },
@@ -151,18 +154,9 @@ test("a machine-local original missing from a residue is neither held nor void",
     blob: JSON.stringify({ ...JSON.parse(residue.blob), sourceSqft: 100 }),
   };
   state.regionsByZone["zone-1"].push(room);
-  const result = projectTakeoffSnapshot(
-    {
-      reading: {
-        at: address("C:/Harness.rvt"),
-        version: "v1",
-        observedAt: "2026-08-25T12:00:00.000Z",
-      },
-      snapshot: state,
-    } as unknown as Parameters<typeof projectTakeoffSnapshot>[0],
-    "Harness.rvt",
-    [{ name: "Zoning", level: "Main" }],
-  );
+  const result = projectTakeoffSnapshot(recordedSnapshot(state, "C:/Harness.rvt"), "Harness.rvt", [
+    { name: "Zoning", level: "Main" },
+  ]);
   expect(result.world.zones[0]).toMatchObject({
     heldSqft: 25,
     rooms: [{ provenance: { originalIssue: "original not on this machine" } }],

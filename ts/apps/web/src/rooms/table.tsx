@@ -65,7 +65,8 @@ export function RoomsTable({
       .map((row) => row.region.uniqueId),
   );
   const hovered =
-    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.uniqueId ?? null;
+    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.uniqueId ??
+    null;
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(
       // A zone that flipped to a room is its own zone.

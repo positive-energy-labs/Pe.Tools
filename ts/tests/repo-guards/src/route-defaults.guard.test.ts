@@ -4,7 +4,7 @@ import ts from "typescript";
 import { expect, test } from "vite-plus/test";
 import { files, root, syntax, walk } from "./unification-2-census.ts";
 
-/** Each `route({...})` declaration in a route module, with its `core` and each pane's `read`. */
+/** Route and screen declarations, with their `core` and each pane's `read`. */
 export function paneReadCopies(
   file: string,
   text: string,
@@ -18,13 +18,16 @@ export function paneReadCopies(
         ts.isPropertyAssignment(p) && p.name.getText(source) === name,
     );
   walk(source, (node) => {
-    if (!ts.isCallExpression(node) || node.expression.getText(source) !== "route") return;
-    const spec = node.arguments[0];
-    if (!spec || !ts.isObjectLiteralExpression(spec))
+    if (!ts.isCallExpression(node)) return;
+    const builder = node.expression.getText(source);
+    if (builder !== "route" && builder !== "screen") return;
+    const [spec, drawing = spec] = node.arguments;
+    if (!spec || !drawing || !ts.isObjectLiteralExpression(drawing))
       throw Error(`${file}: declare the route inline`);
     declarations++;
+    if (!ts.isObjectLiteralExpression(spec)) return;
     const core = property(spec, "core")?.initializer.getText(source);
-    const panes = property(spec, "panes")?.initializer;
+    const panes = property(drawing, "panes")?.initializer;
     if (!core || !panes || !ts.isObjectLiteralExpression(panes)) return;
     for (const pane of panes.properties)
       if (ts.isPropertyAssignment(pane) && ts.isObjectLiteralExpression(pane.initializer)) {
@@ -52,11 +55,14 @@ test("route modules do not copy the kernel's pane read default", () => {
   expect(results.flatMap((r) => r.copies)).toEqual([]);
 });
 
-test("a pane that restates core is red; one that names another read is not", () => {
-  const text = `export const module = route({ core: reads.sheet, panes: {
+test.each(["route({ core: reads.sheet,", "screen({ core: reads.sheet }, {"])(
+  "a pane that restates core is red in %s",
+  (start) => {
+    const text = `export const module = ${start} panes: {
     a: { draw: A, read: reads.sheet }, b: { draw: B, read: reads.other }, c: { draw: C } } });`;
-  expect(paneReadCopies("x/route.ts", text)).toEqual({
-    declarations: 1,
-    copies: ["x/route.ts:2: panes.a.read"],
-  });
-});
+    expect(paneReadCopies("x/route.ts", text)).toEqual({
+      declarations: 1,
+      copies: ["x/route.ts:2: panes.a.read"],
+    });
+  },
+);

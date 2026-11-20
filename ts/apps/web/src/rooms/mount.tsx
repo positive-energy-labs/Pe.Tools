@@ -258,7 +258,9 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
                 [
                   {
                     path: ["writeIntent", "rooms.merge"],
-                    value: { edit: { value: { view: mark.anchor.view, uniqueIds: mark.guids ?? [] } } },
+                    value: {
+                      edit: { value: { view: mark.anchor.view, uniqueIds: mark.guids ?? [] } },
+                    },
                   },
                 ],
                 { label: "Choose marked room merge" },

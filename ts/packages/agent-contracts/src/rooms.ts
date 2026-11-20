@@ -5,14 +5,14 @@ import { writeIntentSchema } from "./write-intent.ts";
  * Region and op shapes are the generated host catalog's (`@pe/host-contracts/generated`).
  */
 import { z } from "zod";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 
 import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { roomEditSchema, type RoomEdit, type RoomEditField } from "./takeoffs.ts";
 import { draftCellSchema, type CellLike } from "./draft.ts";
 
 /** One canonical JSON tuple per cell address: `[uniqueId, field]`. */
-export const roomEditKey = (uniqueId: string, field: RoomEditField) => JSON.stringify([uniqueId, field]);
+export const roomEditKey = (uniqueId: string, field: RoomEditField) =>
+  JSON.stringify([uniqueId, field]);
 const addressOf = (key: string): { uniqueId: string; field: RoomEditField } | null => {
   try {
     const parts = JSON.parse(key) as unknown;
@@ -34,12 +34,9 @@ export const roomEditAddress = (key: string) => {
 };
 
 // FilledRegion UniqueId includes the native element suffix after the episode GUID.
-export const roomRegionUniqueId = z.string().regex(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-[0-9a-f]{8}$/i);
-
-export const roomsWriteReceiptSchema = nativeResponseSchema("rooms.write").and(
-  z.object({ cells: z.array(z.object({ value: z.union([z.string(), z.number(), z.null()]) })) }),
-);
-export type RoomsWriteReceipt = z.infer<typeof roomsWriteReceiptSchema>;
+export const roomRegionUniqueId = z
+  .string()
+  .regex(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-[0-9a-f]{8}$/i);
 
 const choosePlan = "Choose a plan view.";
 const choosePlanId = "Choose a plan view by its Revit view id.";

@@ -142,18 +142,14 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   expect(path.getAttribute("stroke")).not.toBe(path.getAttribute("fill"));
   expect(path.getAttribute("fill")).toContain(
     view.container
-      .querySelector(
-        `path[data-subject="${regionSubject(staleId)}"]`,
-      )!
+      .querySelector(`path[data-subject="${regionSubject(staleId)}"]`)!
       .getAttribute("stroke"),
   );
   const legend = view.container.querySelector('[aria-label="rooms legend"]')!.textContent!;
   expect(legend).toMatch(/locked\D*1/);
   expect(legend).toMatch(/stale\D*2/);
   expect(
-    view.container.querySelector(
-      `tr[data-subject="${regionSubject(lockedId)}"]`,
-    )!.textContent,
+    view.container.querySelector(`tr[data-subject="${regionSubject(lockedId)}"]`)!.textContent,
   ).toContain("locked · stale");
   fireEvent.click(path);
   expect(onSelect).toHaveBeenCalledWith(lockedId, false);
