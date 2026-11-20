@@ -1,4 +1,4 @@
-import type { Mark, PictureScope, PictureSlot, Vec3 } from "@pe/agent-contracts/slots";
+import type { Mark, ModelPictureSlot, PictureScope, Vec3 } from "@pe/agent-contracts/slots";
 import { subjectCode, subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 
 /*
@@ -94,7 +94,11 @@ function within(scope: PictureScope, c: Captured): boolean {
   return inside;
 }
 
-export function pictureSlot<C>(slot: PictureSlot<C>, ctx: C, input: PictureInput): PictureHandle {
+export function pictureSlot<C>(
+  slot: ModelPictureSlot<C>,
+  ctx: C,
+  input: PictureInput,
+): PictureHandle {
   const scope: PictureScope =
     slot.scope === "subject" ? { kind: "subjects", refs: input.subject } : slot.scope.derive(ctx);
   let state: PictureState = { scope, pointed: [], selected: [], viewport: null };

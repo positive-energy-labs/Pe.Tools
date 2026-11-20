@@ -54,10 +54,34 @@ export interface Mark {
  * Method signatures, not function properties: a route's concrete context must assign to the
  * kernel's `TypedRoute` (ADR 0035 rule 4: inferred, never generated), which needs bivariance here.
  */
-export interface PictureSlot<C = unknown> {
+export interface ModelPictureSlot<C = unknown> {
+  readonly mode?: "model";
   readonly scope: "subject" | { derive(ctx: C): PictureScope };
   marks?(ctx: C): readonly Mark[];
 }
+
+/** Plan coordinates are model XY in feet. Registration locates three corners of the PNG. */
+export type XY = readonly [number, number];
+export type PlanRaster = {
+  readonly href: string;
+  readonly registration: {
+    readonly width: number;
+    readonly height: number;
+    readonly topLeft: XY;
+    readonly topRight: XY;
+    readonly bottomLeft: XY;
+  };
+};
+export type PlanPicture = {
+  readonly raster: PlanRaster | null;
+  readonly polygons: readonly {
+    readonly subject: SubjectRefCode;
+    readonly rings: readonly (readonly XY[])[];
+    readonly ink?: string;
+  }[];
+};
+export type PlanPictureSlot<C> = { readonly mode: "plan"; plan(ctx: C): PlanPicture };
+export type PictureSlot<C = unknown> = ModelPictureSlot<C> | PlanPictureSlot<C>;
 
 const vec3 = z.tuple([z.number(), z.number(), z.number()]).readonly();
 const vec2 = z.tuple([z.number(), z.number()]).readonly();
@@ -81,17 +105,23 @@ export const markSchema = z.strictObject({
   ink: z.string().min(1).optional(),
   says: z.string().optional(),
 });
-/** The data projection a Pod decodes at the boundary: the subject or a derived scope, and which mark kinds it draws. */
-export const pictureSlotDataSchema = z.strictObject({
-  scope: z.enum(["subject", "derived"]),
-  marks: z.array(z.enum(MARK_KINDS)).readonly(),
-});
+/** Plan geometry comes from the draw context. Only its mode belongs in the route data. */
+export const pictureSlotDataSchema = z.union([
+  z.strictObject({
+    scope: z.enum(["subject", "derived"]),
+    marks: z.array(z.enum(MARK_KINDS)).readonly(),
+  }),
+  z.strictObject({ mode: z.literal("plan"), marks: z.never().optional() }),
+]);
 export type PictureSlotData = z.output<typeof pictureSlotDataSchema>;
 /** The declaration's data projection. ponytail: `marks` names the whole closed set when the route draws any, since `marks(ctx)` is a function; narrow it when a reader needs the kinds. */
-export const pictureSlotData = (slot: PictureSlot<never>): PictureSlotData => ({
-  scope: slot.scope === "subject" ? "subject" : "derived",
-  marks: slot.marks ? MARK_KINDS : [],
-});
+export const pictureSlotData = (slot: PictureSlot<never>): PictureSlotData =>
+  slot.mode === "plan"
+    ? { mode: "plan" }
+    : {
+        scope: slot.scope === "subject" ? "subject" : "derived",
+        marks: slot.marks ? MARK_KINDS : [],
+      };
 
 /** How context around the scope draws: off, as lines, or as glass surfaces. One key; no layer aliases it. */
 export const PICTURE_CONTEXT = ["off", "lines", "glass"] as const;
