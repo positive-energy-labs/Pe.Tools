@@ -295,7 +295,7 @@ function PatchBayBody({
     tokens: (typed) => {
       const out: { key: string; label: string; hint?: string; take: () => void }[] = [];
       if (!draft.target) {
-        for (const session of sessions)
+        for (const session of sessions.filter(({ row }) => row.case !== "controlled-pending"))
           out.push({
             key: keyOf(session),
             label: socketLabels.get(keyOf(session))!,
@@ -786,6 +786,8 @@ function Socket({
   const { verbs, strip: lifecycle } = useLifecycle({ session, refusal, hr });
   const pea = session.whose === "pea";
   const facts = { ...factsOf(session), ...(pea ? { whose: "pea" as const } : {}) };
+  if (session.row.case === "controlled-pending")
+    return <SessionCard session={session} facts={facts} anchor={keyOf(session)} />;
   return (
     <SessionCard
       session={session}

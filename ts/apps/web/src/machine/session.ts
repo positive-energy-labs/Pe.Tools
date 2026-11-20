@@ -65,7 +65,7 @@ export function sessionReadStatus(session: MachineSession): string {
   const phase = phaseOf(row);
   if (phase === "gone" || phase === "failed") return phase;
   if (row.execution?.allowed !== true) return "outside this host’s scope";
-  if (phase === "booting") return "starting";
+  if (phase === "booting") return "Starting";
   if (session.holdingsLeg.error) return "document details unavailable";
   return phase;
 }
