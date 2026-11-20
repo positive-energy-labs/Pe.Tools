@@ -52,6 +52,16 @@ export function roomsGoal(
             ]),
         ...cards.filter((card) => WANTS_A_PERSON.has(card.state)).map(closer),
       ];
+  const unbound = Object.values(work.marks).filter((cell) => cell.edit?.value.anchor.view === null);
+  if (unbound.length)
+    unresolved.unshift({
+      id: "unbound-marks",
+      says:
+        unbound.length === 1
+          ? "1 mark has no plan view; redraw it."
+          : `${unbound.length} marks have no plan view; redraw them.`,
+      resolver: "person",
+    });
   return {
     unresolved,
     assumed: cards.filter((card) => card.state === "accepted").map(closer),

@@ -72,6 +72,9 @@ const workStateFields = {
   schema: hostZ.custom<z.ZodType>((v) => v instanceof hostZ.ZodType),
   schemaVersion: hostZ.number().int().positive().optional(),
   editable: hostZ.array(hostZ.array(hostZ.union([hostZ.string(), hostZ.number()]))).optional(),
+  validateEdit: hostZ
+    .custom<RouteStateSpec<z.ZodType>["validateEdit"]>((v) => typeof v === "function")
+    .optional(),
   reconcileEdit: hostZ
     .custom<RouteStateSpec<z.ZodType>["reconcileEdit"]>((v) => typeof v === "function")
     .optional(),

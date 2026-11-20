@@ -1,8 +1,48 @@
 import { expect, it } from "vite-plus/test";
 import { builtinCommands as commands } from "../src/semantic-actions.ts";
-import { bindWork, message } from "../src/route-state.ts";
+import { bindWork, message, type RouteStatePatch } from "../src/route-state.ts";
+import { applyPatches } from "../src/route-doc.ts";
 import { address } from "../src/target.ts";
-import { roomsDocumentSchema } from "../src/rooms.ts";
+import { roomsDocumentSchema, roomsRouteState } from "../src/rooms.ts";
+
+it("keeps saved unbound marks editable and refuses newly authored plan names", () => {
+  const mark = {
+    kind: "reject",
+    anchor: {
+      view: "L2",
+      level: "Level 2",
+      polygon: [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+      ],
+    },
+    run: "prior",
+  };
+  const doc = roomsDocumentSchema.parse({
+    marks: { old: { edit: { by: "human", value: mark } } },
+  });
+  const envelope = { version: 1 as const, revision: 0, doc };
+  const patch = (path: string[], value: RouteStatePatch["value"], by: "pea" | "human" = "pea") =>
+    applyPatches(roomsRouteState, envelope, by, [{ path, value }], 0);
+  expect(doc.marks.old?.edit?.value.anchor.view).toBeNull();
+  expect(patch(["marks", "new"], { edit: { value: mark } })).toMatchObject({
+    ok: false,
+    error: "Choose a plan view by its Revit view id.",
+  });
+  expect(patch(["marks", "old", "edit", "value", "anchor", "view"], "L2")).toMatchObject({
+    ok: false,
+  });
+  expect(patch(["marks", "new"], { edit: { value: mark } }, "human")).toMatchObject({
+    ok: false,
+    error: "Choose a plan view.",
+  });
+  expect(patch(["marks", "old", "edit", "value", "anchor", "view"], 9948)).toMatchObject({
+    ok: true,
+    envelope: { doc: { marks: { old: { edit: { value: { anchor: { view: 9948 } } } } } } },
+  });
+  expect(patch(["marks", "old"], { edit: null })).toMatchObject({ ok: true });
+});
 
 it("a name-only Rooms intent stays editable but asks for a plan id before dispatch", () => {
   const work = roomsDocumentSchema.parse({

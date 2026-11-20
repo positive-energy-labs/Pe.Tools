@@ -16,6 +16,36 @@ import { module } from "./route.ts";
 import { regionOf } from "./rows.ts";
 import { regionSubject } from "./subject.ts";
 
+test("the Rooms goal counts unbound marks even before a plan is chosen", () => {
+  const mark = {
+    kind: "reject",
+    run: "old",
+    anchor: {
+      view: "L2",
+      level: "Fixture level",
+      polygon: [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+      ],
+    },
+  };
+  const work = roomsRouteState.schema.parse({
+    marks: {
+      first: { edit: { by: "human", value: mark } },
+      second: { edit: { by: "pea", value: mark } },
+      removed: { edit: null },
+    },
+  });
+  const notice = {
+    id: "unbound-marks",
+    says: "2 marks have no plan view; redraw them.",
+    resolver: "person",
+  };
+  expect(roomsGoal(work, DEMO_ROOMS, null).unresolved).toContainEqual(notice);
+  expect(roomsGoal(work, DEMO_ROOMS, DEMO_VIEW).unresolved).toEqual([notice]);
+});
+
 const here = (file: string) => new URL(file, import.meta.url);
 const CARRY = ["thread", "target", "work", "fixture", "open", "at", "atInstance", "compare"];
 const [zone, room, , held] = DEMO_ROOMS.regions;
