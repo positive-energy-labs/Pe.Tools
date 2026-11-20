@@ -195,7 +195,10 @@ function TypedPlace({
     if (
       (snapshot && !pose) ||
       (needs !== "browser" && !input.target && !input.work.address && !input.work.open) ||
-      !place.enter(targetOwner(input), [...Object.keys(module.spec.fields), "selected"])
+      !place.enter(fixture === null ? targetOwner(input) : null, [
+        ...Object.keys(module.spec.fields),
+        "selected",
+      ])
     ) {
       setMount(null);
       setProblem(null);
