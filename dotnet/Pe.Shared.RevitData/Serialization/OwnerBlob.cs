@@ -27,8 +27,10 @@ public enum OwnerBlobStatus {
     Ok,
     /// <summary>An envelope that is broken or another owner's, or text that is not JSON. Replacement requires preview evidence.</summary>
     Invalid,
-    /// <summary>This owner's envelope at a version this build does not read. Replacement requires preview evidence.</summary>
-    UnknownVersion
+    /// <summary>This owner's older envelope. Replacement requires preview evidence.</summary>
+    UnknownVersion,
+    /// <summary>This owner's newer envelope. Writes are refused until Pe is updated.</summary>
+    NewerVersion
 }
 
 public sealed record OwnerBlobReplacement(string Owner, OwnerBlobStatus Status, string Reason, string RawUtf8Sha256);
@@ -42,7 +44,7 @@ public sealed record OwnerBlobRead(OwnerDescriptor Owner, OwnerBlobStatus Status
 
 /// <summary>
 ///     The one codec for every Pe blob stored in a model: <c>{"owner":"…","version":N,"data":{…}}</c>. There is no
-///     migration. Unknown versions, broken envelopes and unreadable owner data require sealed replacement.
+///     migration. Older versions, broken envelopes and unreadable owner data require sealed replacement.
 ///     An old un-enveloped shape reads as absent
 ///     (kaitpw, 2026-11-11: no client model carries one).
 /// </summary>
@@ -83,6 +85,8 @@ public static class OwnerBlob {
             return Refused(OwnerBlobStatus.Invalid, "is not an {owner, version, data} envelope");
         if (!string.Equals((string?)storedOwner, owner.Owner, StringComparison.Ordinal))
             return Refused(OwnerBlobStatus.Invalid, $"belongs to owner '{(string?)storedOwner}', not '{owner.Owner}'");
+        if ((storedVersion.Value is System.Numerics.BigInteger large ? large : (long)storedVersion) > owner.Version)
+            return Refused(OwnerBlobStatus.NewerVersion, $"a newer Pe wrote version {storedVersion}; update Pe");
         if (storedVersion.Value is not long version || version != owner.Version)
             return Refused(OwnerBlobStatus.UnknownVersion, $"is version {storedVersion}; this build reads version {owner.Version}");
         var read = new OwnerBlobRead(owner, OwnerBlobStatus.Ok, data, raw, null);
@@ -111,6 +115,8 @@ public static class OwnerBlob {
     /// <summary>Validates the next envelope and completes recovery before returning replacement text.</summary>
     public static string? Replace(OwnerBlobRead stored, JObject data, Action<OwnerBlobReplacement, string> recover,
         OwnerBlobReplacement? replacing = null) {
+        if (stored.Status == OwnerBlobStatus.NewerVersion)
+            throw new InvalidOperationException(stored.Error);
         if (replacing is not null && (stored.Raw is null || replacing.Owner != stored.Owner.Owner ||
             !string.Equals(HashRaw(stored.Raw), replacing.RawUtf8Sha256, StringComparison.Ordinal)))
             throw new InvalidOperationException($"The stored '{stored.Owner.Name}' changed since replacement was planned.");

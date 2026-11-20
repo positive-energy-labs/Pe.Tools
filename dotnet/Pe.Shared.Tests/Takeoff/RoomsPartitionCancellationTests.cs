@@ -60,7 +60,7 @@ public sealed class RoomsPartitionCancellationTests
     }
 
     [TestCase(1, OwnerBlobStatus.Invalid, "regions map")]
-    [TestCase(99, OwnerBlobStatus.UnknownVersion, "version")]
+    [TestCase(0, OwnerBlobStatus.UnknownVersion, "version")]
     public void An_unreadable_record_requires_its_current_preview_before_partition_can_stage(
         int version, OwnerBlobStatus status, string reason)
     {
@@ -84,6 +84,16 @@ public sealed class RoomsPartitionCancellationTests
         var updated = OwnerBlob.Replace(stored, record.ToData(), (_, bytes) => kept.Add(bytes), evidence);
         Assert.That(kept, Is.EqualTo(new[] { raw }));
         Assert.That(OwnerBlob.Decode(owner, updated).Replacement, Is.Null);
+    }
+
+    [Test]
+    public void A_newer_rooms_record_refuses_partition_staging()
+    {
+        var owner = RoomsRegionRecord.Owner;
+        var stored = OwnerBlob.Decode(owner, $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 1}}},"data":{}}""");
+        Assert.That(stored.Replacement, Is.Null);
+        Assert.That(() => RoomsRegionRecord.Stage(stored, null),
+            Throws.InvalidOperationException.With.Message.Contains("update Pe"));
     }
 
     [TestCase(1)]

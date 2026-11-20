@@ -86,10 +86,9 @@ public sealed class OwnerBlobTests {
         });
     }
 
-    [TestCase(4, Description = "a future version")]
     [TestCase(2, Description = "an older version: there is no migration")]
     [TestCase(0)]
-    public void Any_other_version_is_unknown_and_kept(int version) {
+    public void An_older_version_can_be_replaced_after_keeping_its_bytes(int version) {
         var raw = Stored("""{"future":true}""", version);
         var read = OwnerBlob.Decode(Owner, raw);
 
@@ -98,6 +97,25 @@ public sealed class OwnerBlobTests {
             Assert.That(read.Raw, Is.EqualTo(raw));
             Assert.That(read.Error, Does.Contain($"version {version}").And.Contain("version 3"));
         });
+        var kept = new List<string>();
+        var updated = OwnerBlob.Replace(read, new JObject(), (_, bytes) => kept.Add(bytes), read.Replacement);
+        Assert.That(kept, Is.EqualTo(new[] { raw }));
+        Assert.That(OwnerBlob.Decode(Owner, updated).Status, Is.EqualTo(OwnerBlobStatus.Ok));
+    }
+
+    [TestCase("4")]
+    [TestCase("9223372036854775808")]
+    public void A_newer_version_refuses_even_with_matching_replacement_evidence(string version) {
+        var raw = $$$"""{"owner":"{{{Owner.Owner}}}","version":{{{version}}},"data":{"future":true}}""";
+        var read = OwnerBlob.Decode(Owner, raw);
+        var evidence = OwnerBlob.Decode(Owner with { Owner = "another-owner" }, raw).Replacement! with { Owner = Owner.Owner };
+
+        Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.NewerVersion));
+        Assert.That(read.Raw, Is.EqualTo(raw));
+        Assert.That(read.Replacement, Is.Null);
+        foreach (var replacing in new[] { null, evidence })
+            Assert.That(() => OwnerBlob.Replace(read, new JObject(), (_, _) => Assert.Fail("Recovery must not run"), replacing),
+                Throws.InvalidOperationException.With.Message.Contains("a newer Pe wrote").And.Message.Contains("update Pe"));
     }
 
     [Test]

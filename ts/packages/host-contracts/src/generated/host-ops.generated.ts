@@ -186,7 +186,7 @@ export namespace DuctsApply {
      * Consume host results in Pe's server, or freeze one coefficient for export.
      */
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     /**
      * Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.
@@ -366,7 +366,7 @@ export namespace DuctsApply {
     }
   }
   export namespace Res {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     /**
      * StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
@@ -483,7 +483,7 @@ export namespace DuctsApplyPlan {
      * Consume host results in Pe's server, or freeze one coefficient for export.
      */
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     /**
      * Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.
@@ -663,7 +663,7 @@ export namespace DuctsApplyPlan {
     }
   }
   export namespace Res {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     /**
      * StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
@@ -1332,7 +1332,7 @@ export namespace DuctsSnapshotRoster {
       | "no-terminal-flow"
       | "high-velocity";
     export type DuctParameterOwnerKind = "instance" | "type";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
     export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
     export type FanBlockerKind =
       | "open-end"
@@ -2025,7 +2025,7 @@ export namespace DuctsSnapshotWalk {
       | "no-terminal-flow"
       | "high-velocity";
     export type DuctParameterOwnerKind = "instance" | "type";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
     export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
     export type FanBlockerKind =
       | "open-end"
@@ -3774,7 +3774,7 @@ export namespace RevitApplyParameterLinks {
     export type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       profile?: null | ParameterLinkProfile;
@@ -3832,7 +3832,7 @@ export namespace RevitApplyParameterLinks {
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
     export type ParameterLinkIssueSeverity = "warning" | "error";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Response {
       profile?: null | ParameterLinkProfile;
@@ -3941,7 +3941,7 @@ export namespace RevitApplyParameterLinksPreview {
     export type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       profile?: null | ParameterLinkProfile;
@@ -3999,7 +3999,7 @@ export namespace RevitApplyParameterLinksPreview {
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
     export type ParameterLinkIssueSeverity = "warning" | "error";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Response {
       profile?: null | ParameterLinkProfile;
@@ -7351,7 +7351,7 @@ export namespace RevitDetailParameterLinks {
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
     export type ParameterLinkIssueSeverity = "warning" | "error";
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Response {
       profile?: null | ParameterLinkProfile;
@@ -11070,7 +11070,7 @@ export namespace RevitResolveUnitValue {
 /** Draw one room or zone region from loops on a plan view by view UniqueId; a person's designation, so a room is locked. */
 export namespace RoomsDraw {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       view: string;
@@ -11097,7 +11097,7 @@ export namespace RoomsDraw {
 /** Combine two or more rooms or held regions of one zone on one plan view by view UniqueId into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
 export namespace RoomsMerge {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       view: string;
@@ -11125,7 +11125,7 @@ export namespace RoomsMerge {
 /** Partition each zone drawn on one plan view by view UniqueId into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record. */
 export namespace RoomsPartition {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       view: string;
@@ -11356,7 +11356,7 @@ export namespace RoomsTrace {
 /** Write submitted Rooms fields by FilledRegion UniqueId and return cells confirmed by committed readback. */
 export namespace RoomsWrite {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       regions: RoomsWriteRegion[];
@@ -11911,7 +11911,7 @@ export namespace SettingsValidate {
 /** Adopt Filled Regions as Zoning Regions and register their System tags in one transaction. */
 export namespace TakeoffsAdopt {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       view: string;
@@ -12003,7 +12003,7 @@ export namespace TakeoffsInitializeCarrier {
 /** Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction. */
 export namespace TakeoffsPartition {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       zoneRegion: number;
@@ -12116,7 +12116,7 @@ export namespace TakeoffsRecordReplacements {
     export interface Request {}
   }
   export namespace Res {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Response {
       regions?: null | OwnerBlobReplacement;
@@ -12134,7 +12134,7 @@ export namespace TakeoffsRecordReplacements {
 /** Write RHVAC file and room links to Room Region provenance in one transaction. */
 export namespace TakeoffsRhvacLinks {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       writes: TakeoffRhvacLinkWrite[];
@@ -12175,7 +12175,7 @@ export namespace TakeoffsRhvacLinks {
 /** Check that the proposed RHVAC links fit the staged Rooms record without writing. */
 export namespace TakeoffsRhvacLinksPreflight {
   export namespace Req {
-    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 
     export interface Request {
       writes: TakeoffRhvacLinkWrite[];
