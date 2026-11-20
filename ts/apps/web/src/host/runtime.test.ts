@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
-import { webBuildStamp } from "./build-stamp";
-import { hostFetch, runtimeStreamUrl } from "./runtime";
+import { webBuildStamp } from "@pe/web-kernel/host/build-stamp";
+import { hostFetch, runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 
 test("HTTP and SSE retain the page's build owner across a changed destination", async () => {
   const fetcher = vi.fn().mockResolvedValue(new Response());

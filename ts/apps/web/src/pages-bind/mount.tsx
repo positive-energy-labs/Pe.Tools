@@ -5,8 +5,8 @@ import { inventoryOf } from "../host/resource-state";
 import { peReadings } from "../host/resource-stream";
 import { BindPicker } from "./bind-picker";
 import { PageBindingChip } from "../navigation/chip";
-import { useRouteSearch } from "../route/activity";
-import { nameOf, oneName } from "#/route/typed-route";
+import { useRouteSearch } from "@pe/web-kernel/route/activity";
+import { nameOf, oneName } from "@pe/web-kernel/route/typed-route";
 import type { BindContext } from "./route";
 export function BindBody({ ctx }: { ctx: BindContext }) {
   const page = ctx.page.read(),

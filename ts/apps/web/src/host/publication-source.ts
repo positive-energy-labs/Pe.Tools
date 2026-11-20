@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { peReadings } from "./resource-stream";
-import type { ReadingContext, UseSource } from "../shell/source-contract";
+import type { ReadingContext, UseSource } from "@pe/web-kernel/shell/source-contract";
 
 export function publicationSource<T extends { generation: number; version: number; state: string; reason?: string; value: { evaluation: string; coverage: { refused: readonly { keys: readonly string[]; reason: string }[]; unknown: readonly string[] } } | null }>(options: {
   read(ctx: ReadingContext, publication: { subscription: string; generation: number }, release: boolean): Promise<T>;

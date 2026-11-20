@@ -2,13 +2,13 @@
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ElementMenu, SelectionBoxButton, showInRevit } from "./element-menu";
+import { ElementMenu, SelectionBoxButton, showInRevit } from "@pe/web-kernel/revit/element-menu";
 import {
   elementTargetOf,
   prepareElements,
   revitReferences,
   showElementsMessage,
-} from "./element-target";
+} from "@pe/web-kernel/revit/element-target";
 
 const { submit } = vi.hoisted(() => ({ submit: vi.fn() }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({

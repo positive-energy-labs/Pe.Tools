@@ -1,7 +1,7 @@
-import { route, read, type TypedRoute } from "@pe/web/route";
-import { hostRead } from "@pe/web/host-read";
+import { route, read, type TypedRoute } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
 import { contract } from "@pe/agent-contracts/handle";
-import { scrollBody } from "@pe/web/route/body";
+import { scrollBody } from "@pe/web-kernel/route/body";
 import type { RouteStateSpec } from "@pe/agent-contracts/route-state";
 import { ductsCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
 import { editPatches } from "@pe/ducts-domain/calc/edits";

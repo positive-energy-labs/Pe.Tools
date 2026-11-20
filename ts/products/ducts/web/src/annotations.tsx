@@ -11,9 +11,9 @@ import { useContext, useMemo } from "react";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { token } from "@pe/kit/lib/token";
 import type { DuctFinding } from "@pe/duct-systems-contract/ducts-pricing-read";
-import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
+import { observedElements, useNativeObservation } from "@pe/web-kernel/revit/observation";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";
-import type { Project, Size } from "@pe/web/scene/projection";
+import type { Project, Size } from "@pe/web-kernel/scene/projection";
 
 import {
   DASH_CLASS,
@@ -27,10 +27,10 @@ import {
 import type { Scene } from "./scene.ts";
 import { pathOf, SubjectLabels } from "./subject-labels.tsx";
 import { reachProps, SubjectTextContext } from "@pe/kit/lang/reach";
-import { Footnotes, useFootnotes, type FootnoteProject } from "@pe/web/scene/footnotes";
-import { useElementAttention } from "@pe/web/attention";
+import { Footnotes, useFootnotes, type FootnoteProject } from "@pe/web-kernel/scene/footnotes";
+import { useElementAttention } from "@pe/web-kernel/attention";
 import { useMention } from "@pe/kit/lang/attention";
-import { useElementIndex } from "@pe/web/element-index";
+import { useElementIndex } from "@pe/web-kernel/element-index";
 
 export type Ruling =
   | { kind: "inferred"; n: number; at: number; finding: DuctFinding }

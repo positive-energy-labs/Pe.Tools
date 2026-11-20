@@ -1,10 +1,10 @@
 import type { Many } from "@pe/agent-contracts/route-kernel-page";
 import { subjectCode, subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
-import { elementIndex } from "@pe/web/element-index";
-import { openSet } from "@pe/web/shell/open-set.neutral";
+import { elementIndex } from "@pe/web-kernel/element-index";
+import { openSet } from "@pe/web-kernel/shell/open-set.neutral";
 import type { FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 export { fanScopeSchema, fanSystems, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
-export { namesOf } from "@pe/web/route/typed-route";
+export { namesOf } from "@pe/web-kernel/route/typed-route";
 /** A duct system is the SubjectRef `system-name:<name>` (ADR 0035 rule 2). */
 export const systemCode = (name: string) => subjectCode({ keyKind: "system-name", key: name });
 export const activeName = (value: Many<SubjectRefCode>, roster: readonly string[]) => {

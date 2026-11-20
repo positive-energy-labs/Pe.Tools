@@ -8,7 +8,7 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { cellFromDraft } from "@pe/kit/lang/cell";
 import { Section } from "@pe/kit/lang/section";
-import { reviewAddresses } from "#/components/work/band";
+import { reviewAddresses } from "@pe/web-kernel/components/work/band";
 import { WorkLines, type WorkTab } from "#/components/work/lines";
 import { StaleResolve } from "#/route/schedules/stale-resolve";
 

@@ -21,7 +21,7 @@ import { SubjectText } from "@pe/kit/lang/subject-text";
 import { Row } from "@pe/kit/lang/row";
 import { makeAtomRegistry } from "#/shell/owner";
 import { inspectAtomRegistry } from "#/state/atom-inspect";
-import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "#/attention";
+import { AttentionScope, AttentionRoot, useElementAttention, useHoveredIssue } from "@pe/web-kernel/attention";
 import { Annotations } from "@pe/ducts-web/annotations";
 import { eKey, testElements, uid } from "#/test-attention";
 

@@ -1,7 +1,7 @@
 import { peClient } from "#/host/pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 /**
  * The harness-thread wire, typed (`@pe/agent-contracts` harness-thread.ts lists every route). The
  * web never talks to a harness: it reads the host's event log and posts the user's verbs.

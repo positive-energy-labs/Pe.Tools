@@ -4,8 +4,8 @@ import {
   routeAddress,
   type PageTargetReading,
 } from "@pe/agent-contracts";
-import { useRouteSearch } from "../route/activity";
-import { oneName } from "../route/typed-route";
+import { useRouteSearch } from "@pe/web-kernel/route/activity";
+import { oneName } from "@pe/web-kernel/route/typed-route";
 import { peReadings } from "../host/resource-stream";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 

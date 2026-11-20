@@ -7,7 +7,7 @@
  * itself and its outline read the kit's F10 attention colours. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
-import { BLACK } from "./grounds";
+import { BLACK } from "@pe/web-kernel/scene/grounds";
 import type { attentionColours } from "./attention";
 import { veilMaterial, type VeilUniforms } from "./veil";
 

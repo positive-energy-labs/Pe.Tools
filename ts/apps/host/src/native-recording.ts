@@ -1,7 +1,7 @@
 import {
   FORMAT, sha256Name, readSetIdName, recordedNativeJson, recordedNativeArgs, selectedFor, takingSchema, readSetRecordSchema, unobserved, refuse, chooseTaking, replayFailure, captured, failedOutcome,
   type RecordingIdentity, type RecordingReader, type RecordingWriter, type HostInputLane,
-  type Occurrence, type Taking, type TakingObserver, type TakingInput, type Answered, type InputReadSetRecord, type Outcome,
+  type Occurrence, type Taking, type TakingObserver, type TakingInput, type InputReadSetRecord, type Outcome,
 } from "@pe/host-internal/input-recording";
 import { writeArtifact } from "./page-artifacts.ts";
 /**
@@ -21,18 +21,16 @@ const recordingMetadataKind = stateKind({
   segments: (folder: string,
   id: string) => [folder, `${id}.json`],
 });
-import { Cause, Clock, Effect, Exit, Layer, Option, Result, Schema } from "effect";
-import { attemptFor, CurrentInputConsumption, inputIdentity } from "@pe/host-internal/input-occurrence";
+import { Clock, Effect, Exit, Layer, Option, Schema } from "effect";
+import { CurrentInputConsumption, inputIdentity } from "@pe/host-internal/input-occurrence";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { nativeOutputSchema } from "@pe/agent-contracts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { HostNativeRead, canonicalJson, type NativeReadInput } from "@pe/host-internal/native-read";
-import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import {
   truncationSchema,
   type InputKind,
-  type Truncation,
 } from "@pe/agent-contracts";
 import type { InvalidRead } from "@pe/host-internal/read-errors";
 import { readSchemas } from "./request-services.ts";

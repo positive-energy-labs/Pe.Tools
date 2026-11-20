@@ -1,4 +1,4 @@
-import { reasonOf, refusalOf } from "#/route/typed-route";
+import { reasonOf, refusalOf } from "@pe/web-kernel/route/typed-route";
 import { actionScopeKeys, useScopeKeys } from "@pe/kit/keys";
 import { useEffect, useState } from "react";
 import { routeAddress, canonicalRouteInput } from "@pe/agent-contracts";

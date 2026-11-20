@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { clipMeshes } from "./clip";
-import { SceneMeshes, type SceneInstance } from "./types";
+import { SceneMeshes, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 test("clips crossing triangles at the duct cut and keeps element identity and unrelated geometry", () => {
   const instance = (id: number, firstVertex: number): SceneInstance => ({

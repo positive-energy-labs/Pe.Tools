@@ -1,4 +1,4 @@
-import { refusalOf } from "#/route/typed-route";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { useContext, useState } from "react";
 import { AttentionDocument, elementKey, useAttention } from "@pe/kit/lang/attention";
 import { type Mark } from "@pe/agent-contracts";

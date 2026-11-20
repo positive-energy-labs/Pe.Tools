@@ -1,4 +1,4 @@
-import { inputBindingKey, inputIdentity, type InputAttempt, type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import { inputBindingKey, inputIdentity, type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
 /**
  * Host input occurrences (docs/features/routes/GLOSSARY.md): which exact taking each consumer read. An
  * admitted consumer opens one context; every input it starts reserves its occurrence synchronously,

@@ -1,4 +1,4 @@
-import { subjectState, useSubjects } from "../shell/subject";
+import { subjectState, useSubjects } from "@pe/web-kernel/shell/subject";
 import { commitAddress, rawQuery, restorePageSearch, tabPageSearch } from "../route/url";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { z } from "zod";

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type {HostRead} from "../route/host-read.ts";
-import type {ReadingContext,UseSource} from "./source-contract.ts";
+import type {HostRead} from "@pe/web-kernel/host-read";
+import type {ReadingContext,UseSource} from "@pe/web-kernel/shell/source-contract";
 // Transport inspects the frame only; the mount is the sole decoder of Value data.
 const publicationFrame=z.looseObject({
   generation:z.number(),version:z.number(),state:z.string(),reason:z.string().optional(),

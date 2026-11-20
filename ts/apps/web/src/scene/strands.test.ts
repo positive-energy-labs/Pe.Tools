@@ -3,7 +3,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, test } from "vite-plus/test";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { chain, lanes, segments, strandLayers, type Strand } from "./strands";
-import type { LayerFrame } from "./types";
+import type { LayerFrame } from "@pe/web-kernel/scene/types";
 import { eKey, testElements } from "#/test-attention";
 
 const lines = [

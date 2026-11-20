@@ -9,8 +9,8 @@ import { sceneDiagnostics } from "./scene-diagnostics";
 import { SceneGpuMemory } from "./scene-gpu";
 import { sceneMemory } from "./scene-memory";
 import { planPaint, type ScenePlan } from "./scene-plan";
-import { SceneMeshes } from "./types";
-import { instancePositions } from "./primitives";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
+import { instancePositions } from "@pe/web-kernel/scene/primitives";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { createGlow, GLOW_LAYER, OCCLUDER_LAYER } from "./glow";
@@ -26,7 +26,7 @@ import {
   paintOf,
   sceneGrounds,
   type Look,
-} from "./grounds";
+} from "@pe/web-kernel/scene/grounds";
 import {
   setVeilField,
   setVeilLook,
@@ -41,11 +41,11 @@ import {
   pointerIntent,
   wheelPixels,
   wheelPlane,
-} from "./gestures";
+} from "@pe/web-kernel/scene/gestures";
 import { contextPickable, createFacePicker } from "./picking";
 import { FaceBatches, prepareFaceBatches, uploadFaceBatches } from "./face-batches";
 import { contextVisible } from "./context";
-import { clipContains, rebaseCaps, rebaseClip, sectionPlanes, type Section } from "./section";
+import { clipContains, rebaseCaps, rebaseClip, sectionPlanes } from "@pe/web-kernel/scene/section";
 import { sectionCaps } from "./section-caps";
 import { createOrbitControls } from "./orbit-controls";
 import {
@@ -62,7 +62,7 @@ import {
   HALF_FOV_TAN,
   type CameraBounds,
   type OrbitViewport,
-} from "./orbit";
+} from "@pe/web-kernel/scene/orbit";
 import {
   fitPlane,
   frameRect,
@@ -71,7 +71,7 @@ import {
   planeCentre,
   type PlaneAxis,
   type PlaneViewport,
-} from "./plane";
+} from "@pe/web-kernel/scene/plane";
 import {
   newCamera,
   placeCamera,
@@ -82,10 +82,10 @@ import {
   type Project,
   type Ray,
   type Size,
-} from "./projection";
-import { setDamageHue } from "./damage";
-import { kindHue, kindL } from "./kinds";
-import { routeColour, routeLines, surfaceEdges, shellLines, surfaceAlpha } from "./surfaces";
+} from "@pe/web-kernel/scene/projection";
+import { setDamageHue } from "@pe/web-kernel/scene/damage";
+import { kindHue, kindL } from "@pe/web-kernel/scene/kinds";
+import { routeColour, routeLines, surfaceEdges, shellLines, surfaceAlpha } from "@pe/web-kernel/scene/surfaces";
 import type {
   IssueState,
   IssueTarget,
@@ -96,7 +96,10 @@ import type {
   PaintOf,
   Pick,
   SceneInstance,
-} from "./types";
+  ClipVolume,
+  ColourMode,
+  ContextMode,
+} from "@pe/web-kernel/scene/types";
 
 /** Opt-in timing marks (`?scenePerf`), including GPU completion rather than a bare RAF tick. */
 const timing = () =>
@@ -105,17 +108,6 @@ const mark = (phase: string, detail: Record<string, unknown> = {}) => {
   if (timing()) performance.mark(`scene:${phase}`, { detail });
 };
 
-/** Up to three extruded even-odd polygons plus an optional world-foot section. Polygon frames
- * (u, v): 0 = (x, y), 1 = (-x, z), 2 = (y, z), batch-local (relative to `origin`). */
-export type ClipVolume = {
-  data: Float32Array;
-  counts: number[];
-  keepInside: boolean[];
-  section?: Section;
-  preview?: boolean;
-};
-export type ContextMode = "off" | "lines" | "glass";
-export type ColourMode = "firm" | "mono";
 /** Optional translucent faces share a pass after the subject has established occlusion depth. */
 const CONTEXT_LAYER = 5;
 const SHELL_LAYER = 6;

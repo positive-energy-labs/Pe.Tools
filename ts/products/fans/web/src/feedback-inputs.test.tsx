@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Roster } from "./calc/view.tsx";
-import { SubjectDoor } from "../../../../apps/web/src/shell/subject.ts";
+import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { ductsRosterResponseSchema } from "@pe/fans-contract/calc-read";
 

@@ -5,7 +5,7 @@ import type { ExecutionTarget } from "@pe/agent-contracts";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER, HOST_RPC_ORIGIN_HEADER,
   HostCallError, type OpKey, type OpRequestOf, type OpResponseOf } from "@pe/host-contracts/operation-types";
-import { hostFetch } from "./runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 
 /** A reading's host request; `headers` carry the exact document a route-scoped read needs. */
 interface JsonRequest {

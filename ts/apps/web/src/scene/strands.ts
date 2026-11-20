@@ -12,10 +12,10 @@ import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { SubjectKey } from "@pe/kit/lang/attention";
-import type { ElementIndex } from "#/element-index";
-import { damageColors } from "./damage";
-import { BLACK, LOOK, markAlpha, sceneLineMaterial, WHITE } from "./grounds";
-import type { IssueState, Layer3D, LayerFrame } from "./types";
+import type { ElementIndex } from "@pe/web-kernel/element-index";
+import { damageColors } from "@pe/web-kernel/scene/damage";
+import { BLACK, LOOK, markAlpha, sceneLineMaterial, WHITE } from "@pe/web-kernel/scene/grounds";
+import type { IssueState, Layer3D, LayerFrame } from "@pe/web-kernel/scene/types";
 
 type Point = readonly number[];
 /** Structurally the picture's `PictureStrand`; kept here so the core needs no picture import. */

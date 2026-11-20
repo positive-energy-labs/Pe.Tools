@@ -1,5 +1,6 @@
 import { cachedRuntimeRoutes, routeModuleHash } from "./route-module-hash.ts";
 import { isBuiltin } from "node:module";
+import { fileURLToPath } from "node:url";
 import path, { dirname, resolve } from "node:path";
 import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
@@ -183,7 +184,7 @@ const config = defineConfig(({ mode, command }) => {
     // Vitest's 5 s default fails honest tests when this box runs several suites at once (a 1.2 s grid
     // test took 5 s). 15 s still fails a hang within the minute.
     test: {
-      setupFiles: ["../../tests/isolated-home/setup.ts", "./src/test-setup.ts"],
+      setupFiles: ["../../tests/isolated-home/setup.ts", fileURLToPath(import.meta.resolve("@pe/web-kernel/test-setup"))],
       testTimeout: 15_000,
       globalSetup: ["../../tests/isolated-home/global-setup.ts"],
     },

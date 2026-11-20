@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { routeAddress } from "@pe/agent-contracts";
-import { oneName } from "#/route/typed-route";
+import { oneName } from "@pe/web-kernel/route/typed-route";
 import { pageLink } from "./page-link";
 
 test("Page links use the existing viewer only for this frontend or its exact runtime owner", () => {

@@ -1,4 +1,4 @@
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import { peClient } from "./pe-client";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { hostDescriptorSchema } from "@pe/host-contracts/host-descriptor";

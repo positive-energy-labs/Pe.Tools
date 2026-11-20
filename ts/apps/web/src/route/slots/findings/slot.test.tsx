@@ -5,7 +5,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { local } from "@pe/agent-contracts/slots";
-import { route, paneLayout, scrollBody } from "@pe/web/route";
+import { route, paneLayout, scrollBody } from "@pe/web-kernel/route";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { makeAtomRegistry } from "../../../shell/owner";
 import { SheetPane } from "../sheet/pane.tsx";

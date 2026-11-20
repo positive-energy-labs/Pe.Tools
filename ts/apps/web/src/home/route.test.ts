@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { module, query } from "./route";
 import { module as chat } from "../chat/route";
 import { module as takeoff } from "../takeoff/route";
-import { decodeField, encodeField } from "../route/field-codec";
+import { decodeField, encodeField } from "@pe/web-kernel/route/field-codec";
 import { routeAddress, routeKeys, threadListFields } from "@pe/agent-contracts";
 
 /*

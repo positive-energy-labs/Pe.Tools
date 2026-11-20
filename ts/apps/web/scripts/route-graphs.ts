@@ -43,7 +43,7 @@ const jiti = createJiti(import.meta.url, {
       new URL("./route-projection-runtime.ts", import.meta.url),
     ),
     "./build-stamp": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
-    "#/host/runtime": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
+    "@pe/web-kernel/host/runtime": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
     "#/": fileURLToPath(new URL("../src/", import.meta.url)),
   },
 });
@@ -157,7 +157,7 @@ for (const key of keys) {
     router?: { contract?: string };
   }>(entry);
   if ("spec" in module) {
-    const typed = module as unknown as import("../src/route/typed-route.ts").TypedRoute;
+    const typed = module as unknown as import("@pe/web-kernel/route/typed-route").TypedRoute;
     if (!(typed.data.directory.icon in icons))
       throw Error(`${key}: icon ${typed.data.directory.icon} is not a lucide-react icon name`);
     const contract = router?.contract ?? key;

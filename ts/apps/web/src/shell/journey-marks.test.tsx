@@ -8,14 +8,14 @@ import { roomsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
 import { module } from "../rooms/route";
 import { DEMO_ROOMS } from "../rooms/demo";
 import { roomsGoal } from "../rooms/goal";
-import { scrollBody } from "../route/body";
+import { scrollBody } from "@pe/web-kernel/route/body";
 import { mountTypedRoute } from "./typed-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { TypedChrome } from "./typed-shell";
 import { settled } from "../test-journey";
-import type { UseSource } from "./source-contract";
-import { route } from "../route/typed-route";
-import { RouteVisibility } from "../route/activity";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import { route } from "@pe/web-kernel/route/typed-route";
+import { RouteVisibility } from "@pe/web-kernel/route/activity";
 
 const call = vi.hoisted(() => vi.fn(async (door: unknown, ..._: unknown[]) => (door === "view.publish" ? { revision: 1 } : {})));
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));

@@ -6,7 +6,7 @@ export interface DeclaredZone {
   comments: string | null;
   loops: [number, number][][];
 }
-import { boundsOf, type AffineFrame, type Bounds2 } from "#/lib/affine-frame";
+import { boundsOf, type AffineFrame, type Bounds2 } from "@pe/web-kernel/lib/affine-frame";
 
 export type { CandidateRegion } from "@pe/agent-contracts";
 

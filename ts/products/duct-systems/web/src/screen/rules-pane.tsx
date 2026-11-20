@@ -1,6 +1,6 @@
 import { unpriced, type Priced } from "@pe/ducts-web/priced";
 import { AttentionDocument, useMembers, type SubjectKey } from "@pe/kit/lang/attention";
-import { useElementIndex } from "@pe/web/element-index";
+import { useElementIndex } from "@pe/web-kernel/element-index";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";

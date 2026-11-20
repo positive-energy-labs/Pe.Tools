@@ -9,7 +9,7 @@ import {
   workSummary,
   type CellWire,
   type ClearOutcome,
-} from "#/components/work/band";
+} from "@pe/web-kernel/components/work/band";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 export interface HeadWork {
   id: string;

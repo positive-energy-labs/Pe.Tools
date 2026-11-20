@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { createWheelReader, pointerIntent, wheelPlane } from "./gestures";
+import { createWheelReader, pointerIntent, wheelPlane } from "@pe/web-kernel/scene/gestures";
 
 const press = (
   button: number,

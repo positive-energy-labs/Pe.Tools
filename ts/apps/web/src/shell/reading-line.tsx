@@ -1,6 +1,6 @@
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { ReadingState } from "@pe/agent-contracts";
-import { reasonOf, type Absent } from "../route/typed-route";
+import { reasonOf, type Absent } from "@pe/web-kernel/route/typed-route";
 
 /** The shell's one line for a value-less reading (routes CONTRACTS.md, "Reading state"): reading, refused,
  *  or not yet run. Every pane, the subject and a body's second reading draw this same line. */

@@ -1,8 +1,8 @@
 /** Chrome reads the same mounted seed as its route. No independent fixture maps. */
 import { useEffect, useMemo, useState } from "react";
 import type { Reading, ReadingRequest } from "@pe/agent-contracts";
-import { useRouteSearchSlice } from "../route/activity";
-import { fixtureName } from "../shell/fixture-name";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
+import { fixtureName } from "@pe/web-kernel/shell/fixture-name";
 import { useReadingSlice } from "./resource-state";
 
 export function useEnvironmentAccess() {

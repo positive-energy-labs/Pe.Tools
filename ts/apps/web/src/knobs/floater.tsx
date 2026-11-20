@@ -17,7 +17,7 @@ import {
   setKnob,
   subscribe,
   type Knob,
-} from "./knobs";
+} from "@pe/web-kernel/knobs/knobs";
 
 const TOOL: CSSProperties = {
   position: "fixed",

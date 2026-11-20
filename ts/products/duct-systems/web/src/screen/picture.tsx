@@ -8,14 +8,14 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ductElements } from "@pe/ducts-web/identity";
 import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 
-import { VisibleRouteResource } from "@pe/web/route/activity";
-import { damageLayers } from "@pe/web/scene/damage";
+import { VisibleRouteResource } from "@pe/web-kernel/route/activity";
+import { damageLayers } from "@pe/web-kernel/scene/damage";
 import {
   layersOn,
   type PictureLayer,
   type PictureOverlayFrame,
-} from "@pe/web/scene/picture/picture";
-import type { Layer3D, SceneMeshes } from "@pe/web/scene/types";
+} from "@pe/web-kernel/scene/picture/content";
+import type { Layer3D, SceneMeshes } from "@pe/web-kernel/scene/types";
 import { emptyListSearch } from "@pe/agent-contracts";
 import { runsOf, worstRun } from "@pe/ducts-domain/calc-runs";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
@@ -24,10 +24,10 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import type { PictureParts } from "@pe/web/route/slots/picture/overlay";
+import type { PictureParts } from "@pe/web-kernel/route/slots/picture/overlay";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/duct-systems-domain/equivalent-length";
 import type { Priced } from "@pe/ducts-web/priced";
 import { fanFacts } from "./fan-sections.tsx";

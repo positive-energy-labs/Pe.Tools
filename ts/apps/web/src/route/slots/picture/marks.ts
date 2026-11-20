@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import type { Mark, Vec3 } from "@pe/agent-contracts/slots";
-import { inkOf } from "#/scene/ink";
-import { markFrame, markLines, markVolume } from "#/scene/marks";
-import type { Layer3D } from "#/scene/types";
+import { inkOf } from "@pe/web-kernel/scene/ink";
+import { markFrame, markLines, markVolume } from "@pe/web-kernel/scene/marks";
+import type { Layer3D } from "@pe/web-kernel/scene/types";
 
 /** The kernel's drawing of the closed mark set (ADR 0035 rule 2), in model feet. A `label` is DOM, drawn by the pane. */
 type Edge = readonly [Vec3, Vec3];

@@ -1,6 +1,6 @@
-import { currentFixture } from "../shell/fixture-name";
+import { currentFixture } from "@pe/web-kernel/shell/fixture-name";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { hostFetch, runtimeStreamUrl } from "#/host/runtime";
+import { hostFetch, runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 /**
  * The wire. One EventSource per tab: SSE frames, fences, reconnect backoff. The host speaks
  * HTTP/1.1, so a browser gives the whole origin 6 sockets across every tab and every page held in

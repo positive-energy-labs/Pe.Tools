@@ -6,9 +6,9 @@
  * Unjoined lines (the colours demo's loose ducts) get overlapping windows of three instead.
  */
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
-import { boundsOfInstances } from "#/scene/orbit";
-import type { SceneMeshes } from "#/scene/types";
-import type { PictureLine, PictureStrand } from "./model";
+import { boundsOfInstances } from "@pe/web-kernel/scene/orbit";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
+import type { PictureLine, PictureStrand } from "@pe/web-kernel/scene/picture/content";
 
 const TOUCH_FT = 1.5;
 

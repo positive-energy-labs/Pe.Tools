@@ -12,11 +12,12 @@ import { module as ducts, roster, network } from "@pe/duct-systems-web/route";
 import { SystemsPane } from "@pe/duct-systems-web/screen/screen";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { makeAtomRegistry } from "../shell/owner";
-import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
+import { SubjectDoor } from "@pe/web-kernel/shell/subject";
+import { typedSubjectDoor } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { workFingerprintSchema } from "@pe/agent-contracts";
-import type { ReadingDelivery } from "../shell/source-contract";
+import type { ReadingDelivery } from "@pe/web-kernel/shell/source-contract";
 
 // Native boundary: replay the committed Chadds roster, holding network completion
 // until the instrument has measured the usable chooser during Reading.

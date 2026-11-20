@@ -27,7 +27,7 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { CausalParentId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { commandTable } from "@pe/agent-contracts/command-axes";
-import { hostFetch } from "../host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import { opResponseSchema } from "../host/catalog-client";
 import type { ActionAdmission } from "@pe/agent-contracts/semantic-actions";
 import type { CommandHandle } from "@pe/agent-contracts/handle";

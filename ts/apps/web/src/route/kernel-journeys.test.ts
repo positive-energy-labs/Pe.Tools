@@ -1,4 +1,4 @@
-import { valueOf } from "./typed-route";
+import { valueOf } from "@pe/web-kernel/route/typed-route";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
@@ -9,7 +9,7 @@ import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.te
 import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 
 // Reuse the existing host HTTP fixture. Only native input and the address bar are recorded adapters.
 async function journey() {

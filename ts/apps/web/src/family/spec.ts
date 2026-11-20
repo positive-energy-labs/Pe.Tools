@@ -1,4 +1,4 @@
-import { runtimeStreamUrl } from "../host/runtime";
+import { runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import type { ParsedDocView, PodMember } from "@pe/agent-contracts";
 

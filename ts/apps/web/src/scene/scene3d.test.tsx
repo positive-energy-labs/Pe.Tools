@@ -3,16 +3,16 @@ import { TestAttention, uid } from "#/test-attention";
 // @vitest-environment jsdom
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vite-plus/test";
-import { SceneMeshes } from "./types";
-import { type OrbitViewport } from "./orbit";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
+import { type OrbitViewport } from "@pe/web-kernel/scene/orbit";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OrbitMinimap } from "@pe/kit/lang/minimap";
 import { Scene3D } from "./scene3d";
 import { usePictureRead } from "#/scene/picture/read";
 import type { SceneRead } from "./use-scene";
 import { Row } from "@pe/kit/lang/row";
-import type { Pick, PaintOf } from "./types";
-import type { ContextMode } from "./renderer";
+import type { Pick, PaintOf } from "@pe/web-kernel/scene/types";
+import type { ContextMode } from "@pe/web-kernel/scene/types";
 
 const picking = vi.hoisted(() => ({ current: null as Pick | null }));
 vi.mock("./picking", async (original) => ({
@@ -44,7 +44,7 @@ vi.mock("./renderer", () => ({
     return renderer.current;
   },
 }));
-vi.mock("#/revit/observation", () => ({ useNativeObservation: () => ({ scope: null }) }));
+vi.mock("@pe/web-kernel/revit/observation", () => ({ useNativeObservation: () => ({ scope: null }) }));
 
 it("keeps camera gestures local and the viewport mounted across membership and native re-reads", async () => {
   const frames: FrameRequestCallback[] = [];

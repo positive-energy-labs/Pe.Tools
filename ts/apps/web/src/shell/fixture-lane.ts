@@ -1,4 +1,4 @@
-import { fixtureName } from "./fixture-name";
+import { fixtureName } from "@pe/web-kernel/shell/fixture-name";
 
 /** Presence, including empty/unknown names, always selects the refusing fixture implementation.
  * The legacy composition root selects the lane before drawing its bodies. */

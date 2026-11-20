@@ -1,7 +1,7 @@
 import { CATEGORY_OPTIONS } from "#/design-system/specimens-data";
 import { FieldOptionPicker,FieldOptionSelect,type FieldOption } from "#/host/field-options";
 import { previousOf,useInventory,useReading } from "#/host/resource-state";
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import type { Machine } from "@pe/agent-contracts";
 import type { HostActiveDocumentSummary } from "@pe/host-contracts/operation-types";
 import { Button } from "@pe/kit/lang/button";

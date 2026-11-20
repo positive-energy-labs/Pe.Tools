@@ -22,7 +22,7 @@ import { useRouteTabs } from "./tabs";
 import { RouteTabActions, RouteTabs } from "./route-tabs";
 import { RouteRetention } from "./route-retention";
 import { DOCK_PANES } from "./dock-layout";
-import { paneFrame } from "#/route/body";
+import { paneFrame } from "@pe/web-kernel/route/body";
 import { readLayoutState, writeLayoutState } from "#/shell/layout-state";
 
 /** Where the dock keeps its device layout (the Pea fold); the tools width keeps its own key. */

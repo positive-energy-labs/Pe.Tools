@@ -8,7 +8,7 @@ import { TestAttention, eKey, uid } from "#/test-attention";
 import { mention } from "@pe/kit/lang/attention";
 import { Row } from "@pe/kit/lang/row";
 import { revitTarget } from "@pe/kit/lang/revit-target";
-import { frame } from "./orbit";
+import { frame } from "@pe/web-kernel/scene/orbit";
 import { Pane } from "@pe/kit/lang/pane";
 import { viewportCodec } from "@pe/agent-contracts";
 import { Profiler, useState } from "react";

@@ -1,5 +1,5 @@
 import { peClient } from "./pe-client";
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 /**
  * The machine's mutations other than update (`install.ts`): the share switch, and the tray's two
  * host verbs. Each is a plain call; the Machine reading is the only state, so success dirties it.

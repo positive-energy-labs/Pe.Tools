@@ -10,8 +10,8 @@ import {
   toFrame,
   zoomPlane,
   boundPlane,
-} from "./plane";
-import { cameraBounds } from "./orbit";
+} from "@pe/web-kernel/scene/plane";
+import { cameraBounds } from "@pe/web-kernel/scene/orbit";
 
 const bounds = { minX: -2, minY: -2, minZ: -100, maxX: 8, maxY: 9, maxZ: 100 };
 

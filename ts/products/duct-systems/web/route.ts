@@ -1,10 +1,10 @@
-import type { ContextOf } from "@pe/web/route";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { systemCode } from "@pe/ducts-web/identity";
 import { fanScopeSchema, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./src/bindings.ts";
-import { read } from "@pe/web/route";
-import { stageField } from "@pe/web/route";
+import { read } from "@pe/web-kernel/route";
+import { stageField } from "@pe/web-kernel/route";
 import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { z } from "zod";
 import { listSearchSchema } from "@pe/agent-contracts";
@@ -19,11 +19,11 @@ import {
   namesOf,
   split,
   whenSubject,
-} from "@pe/web/route";
-import { hostRead } from "@pe/web/host-read";
-import { draw } from "@pe/web/route/draw";
-import { fillBody, scrollBody } from "@pe/web/route/body";
-import { overlay } from "@pe/web/route/slots/picture/overlay";
+} from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
+import { fillBody, scrollBody } from "@pe/web-kernel/route/body";
+import { overlay } from "@pe/web-kernel/route/slots/picture/overlay";
 import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
 import * as reads from "@pe/duct-systems-contract/contract";
 import { presentLosses, presentHeal, presentFan } from "@pe/ducts-web/reviews";

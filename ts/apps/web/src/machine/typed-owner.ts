@@ -1,8 +1,8 @@
 import { useRef, useMemo } from "react";
 import type { ReadingState } from "@pe/agent-contracts";
-import { refusalOf } from "../route/typed-route";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import type { OpenContext } from "./open-fields";
-import type { RunVerb } from "../route/typed-route";
+import type { RunVerb } from "@pe/web-kernel/route/typed-route";
 type OpenVerb = "start" | "open" | "close" | "stop" | "restart";
 /** What the owner reads: a pane's draw context, or the mount itself where no pane is drawn (the companion
  *  controls), so the reading may be value-less. `/sessions` passes the three verbs it declares. */

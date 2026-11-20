@@ -1,5 +1,5 @@
 import { useContext, useRef, useState, useEffect, type ReactNode } from "react";
-import { RouteVisibility, useRouteActivity } from "../route/activity";
+import { RouteVisibility, useRouteActivity } from "@pe/web-kernel/route/activity";
 import { createAdmittedPlace, type AdmittedPlace } from "./typed-place";
 import type { AdmittedAddressPort } from "./typed-address";
 

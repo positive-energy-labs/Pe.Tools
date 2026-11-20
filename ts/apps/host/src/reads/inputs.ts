@@ -7,7 +7,7 @@ import {
   NATIVE_BODY_VERSION_HEADER,
 } from "@pe/agent-contracts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
-import { leaf, read, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "@pe/host-internal/reads/evaluator";
+import { leaf, nativeArgs, nativeRead, type InputPort, RefusedPartition } from "@pe/host-internal/reads/evaluator";
 import { workBinding } from "@pe/host-internal/reads/work";
 import type { RouteWorkspace, WorkReadContext } from "@pe/runtime";
 import { workTimelineInput } from "./work-timeline.ts";

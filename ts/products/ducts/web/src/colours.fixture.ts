@@ -1,6 +1,6 @@
 /** Explicit no-Revit mesh fixture for /ducts?fixture=colours. Geometry and names are synthetic. */
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { SceneMeshes, type SceneInstance } from "../../../../apps/web/src/scene/types.ts";
+import { SceneMeshes, type SceneInstance } from "@pe/web-kernel/scene/types";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
 
 const kinds = [

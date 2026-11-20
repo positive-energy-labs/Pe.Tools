@@ -1,7 +1,7 @@
 import { ShapeUtils, Vector2 } from "three";
-import type { Section } from "./section";
-import type { SceneInstance, SceneMeshes } from "./types";
-import { instancePositions } from "./primitives";
+import type { Section } from "@pe/web-kernel/scene/section";
+import type { SceneInstance, SceneMeshes } from "@pe/web-kernel/scene/types";
+import { instancePositions } from "@pe/web-kernel/scene/primitives";
 
 type Face = { axis: number; offset: number; normal: number };
 type Loop = { points: Vector2[]; area: number; parent: number };

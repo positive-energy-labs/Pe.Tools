@@ -21,12 +21,12 @@ import { Legend, legendWord } from "@pe/kit/lang/legend";
 // The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { revitTarget } from "@pe/kit/lang/revit-target";
-import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "#/scene/use-plane-viewport";
+import { PLAN_CLICK_PX as CLICK_PX, usePlaneViewport } from "@pe/web-kernel/scene/use-plane-viewport";
 import { usePlanMap } from "#/lib/plan-map";
 
 import { EmptyState } from "@pe/kit/lang/empty";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "#/lib/affine-frame";
+import { boundsOf, contentViewport, fitFrame, type Bounds2, type Point2 } from "@pe/web-kernel/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, planCorners } from "#/scene/plan-image";
 import { pathD, PLAN_REFUSAL } from "./plan-drawing";

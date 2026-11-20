@@ -1,8 +1,8 @@
-import type { ContextOf, Verbs } from "../route/defaults";
+import type { ContextOf, Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
-import { read } from "../route/defaults";
-import { paneLayout } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
+import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
 import {
   scheduleGridRouteState,
@@ -11,10 +11,10 @@ import {
   showCellValue,
 } from "@pe/agent-contracts";
 import * as reads from "./contract.ts";
-import { route, field, subjectSchema, namesOf } from "../route/defaults";
+import { route, field, subjectSchema, namesOf } from "@pe/web-kernel/route";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
-import { hostRead } from "../route/host-read.ts";
-import { draw } from "../route/draw.tsx";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 export const fields = {
   workspaceId: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
   table: field(

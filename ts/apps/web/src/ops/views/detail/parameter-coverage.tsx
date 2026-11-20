@@ -1,4 +1,4 @@
-import { useNativeObservation } from "#/revit/observation";
+import { useNativeObservation } from "@pe/web-kernel/revit/observation";
 import type {
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
@@ -9,7 +9,7 @@ import { Provenance, Section } from "@pe/kit/lang/section";
 import { FactChip } from "@pe/kit/lang/chip";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { useRevitSubjectProps } from "#/revit/element-menu";
+import { useRevitSubjectProps } from "@pe/web-kernel/revit/element-menu";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { issueLine, pageNote } from "./schedules";
 

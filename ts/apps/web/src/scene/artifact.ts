@@ -1,5 +1,5 @@
 /** The PSC1 bytes of one captured scene, by its artifact id (a SHA-256). */
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 
 export async function fetchSceneArtifact(id: string, signal?: AbortSignal): Promise<ArrayBuffer> {
   if (!/^[a-f0-9]{64}$/.test(id)) throw Error("Scene id must be a SHA-256 artifact id");

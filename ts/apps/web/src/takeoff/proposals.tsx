@@ -1,7 +1,7 @@
 import { takeoffEditKey, type RoomEditField, type CellLike } from "@pe/agent-contracts";
 import type { ReactNode } from "react";
 
-import { ReviewRow, reviewTransitions, type CellWire } from "#/components/work/band";
+import { ReviewRow, reviewTransitions, type CellWire } from "@pe/web-kernel/components/work/band";
 import { cellFromDraft, fmtNum, StateCell } from "@pe/kit/lang/cell";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 import { useTakeoffKernel } from "./kernel-context";

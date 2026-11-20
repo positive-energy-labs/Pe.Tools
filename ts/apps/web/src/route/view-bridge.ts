@@ -22,7 +22,7 @@ import { reportFault } from "#/host/diagnostics";
 import { followBeat, useHostEvents } from "#/host/resource-stream";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
-import { useRouteCurrent, useRouteSearchSlice } from "./activity";
+import { useRouteCurrent, useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 
 type ReadyViewCodec = ViewCodec & { subjectReady?: (patch: Record<string, string>) => Promise<void> };
 

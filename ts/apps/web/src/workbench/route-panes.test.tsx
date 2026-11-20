@@ -1,11 +1,11 @@
 import { host, seedPlaces } from "./places.test-support";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
-import {route as declareRoute, scrollBody} from "../route/typed-route";
+import {route as declareRoute, scrollBody} from "@pe/web-kernel/route/typed-route";
 import {module as familiesDeclaration} from "../families/route";
 import {workFingerprintSchema} from "@pe/agent-contracts";
 import { systemCode } from "@pe/ducts-web/identity";
-import { namesOf } from "../route/typed-route";
-import type {TypedRoute} from "../route/typed-route";
+import { namesOf } from "@pe/web-kernel/route/typed-route";
+import type {TypedRoute} from "@pe/web-kernel/route/typed-route";
 import type {RouteFingerprint} from "@pe/agent-contracts";
 import { TypedShell } from "../shell/typed-shell";
 // @vitest-environment jsdom
@@ -25,7 +25,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { appAtomRegistry, routeSearch } from "#/shell/owner";
 import { createChatPageStore } from "./store";
 import { RouteDock } from "./route-panes";
-import { RouteVisibility, useRouteCurrent } from "#/route/activity";
+import { RouteVisibility, useRouteCurrent } from "@pe/web-kernel/route/activity";
 import { admittedRouterAddress } from "#/shell/typed-place-boundary";
 import { searchCodec } from "#/route/address-transport";
 import { SHOWN, urlSettled } from "#/test-journey";
@@ -766,7 +766,7 @@ test("a route picture link leaves the conversation pane open", async () => {
 });
 
 test("subject availability does not fold an expanded Pea pane in the same Place", async () => {
-  const { observeSubject } = await import("#/shell/subject");
+  const { observeSubject } = await import("@pe/web-kernel/shell/subject");
   await mount("/fans?picture=%22model%22&fixture=layout");
   await settle();
   expect(screen.queryByRole("button", { name: "Expand pea" })).toBeNull();

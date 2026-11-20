@@ -3,7 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { CATEGORY_IDS } from "./categories";
 import { contextVisible } from "./context";
-import { LOOK } from "./grounds";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
 import { spaceElementKey } from "@pe/agent-contracts";
 
 const BOX = { minX: 0, minY: 0, minZ: 0, maxX: 1, maxY: 1, maxZ: 1 };

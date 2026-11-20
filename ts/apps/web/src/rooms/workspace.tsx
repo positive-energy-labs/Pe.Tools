@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useValue } from "@pe/kit/lang/collection";
 import { inboxCards } from "./cards";
 import { roomsPageSchema, type RoomsPage } from "./page";
-import { useAdmittedSubject } from "#/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { regionOf } from "./rows";
 import { regionSubject } from "./subject";
 import type { RoomsContext } from "./route";

@@ -2,7 +2,7 @@
  * only the glow pass sees GLOW_LAYER, and the renderer skips it when there are no sources. */
 import * as THREE from "three";
 import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
-import { BLACK } from "./grounds";
+import { BLACK } from "@pe/web-kernel/scene/grounds";
 
 export const GLOW_LAYER = 1;
 /** Model geometry seeds the masks' depth without painting their colour. */

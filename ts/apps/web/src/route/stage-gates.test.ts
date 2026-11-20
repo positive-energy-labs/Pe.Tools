@@ -1,9 +1,9 @@
 import { contract } from "@pe/agent-contracts/handle";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { field, when, split, route, scrollBody } from "./defaults";
+import { field, when, split, route, scrollBody } from "@pe/web-kernel/route";
 import { mountTypedRoute } from "../shell/typed-mount";
-import { hostRead } from "./host-read";
+import { hostRead } from "@pe/web-kernel/host-read";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { module as ducts } from "@pe/duct-systems-web/route";
 

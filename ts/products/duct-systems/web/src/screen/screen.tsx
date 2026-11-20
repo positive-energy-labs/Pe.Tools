@@ -5,13 +5,13 @@ import {
   PopoverTrigger,
   SubjectPopoverContent as PopoverContent,
 } from "@pe/kit/lang/popover";
-import { useRouteSearchSlice } from "@pe/web/route/activity";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 import { fansLink } from "@pe/fans-contract/link";
-import { useHoveredIssue } from "@pe/web/attention";
+import { useHoveredIssue } from "@pe/web-kernel/attention";
 import { ductElements } from "@pe/ducts-web/identity";
-import { subscribe as knobsChanged } from "@pe/web/knobs/knobs";
-import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { subscribe as knobsChanged } from "@pe/web-kernel/knobs/knobs";
+import { useRevitSubjectProps } from "@pe/web-kernel/revit/element-menu";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { subjectCode, type RouteStatePatch } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { neutralFansWork } from "@pe/fans-contract/fans";
@@ -49,7 +49,7 @@ import {
 import { z } from "zod";
 import type { DuctsDrawContext, DuctsReads, DuctsSystemsContext } from "../../route.ts";
 import { roster as rosterRead, network as networkSource, pricing as pricingSource } from "../../route.ts";
-import { refusalOf } from "@pe/web/route/typed-route";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { airflowOptions } from "@pe/ducts-web/airflow";
 import { cellFocusOf, cellFocusSubject, focusedElement, issueOf, issueSubject, selectedKeys } from "@pe/ducts-web/cell-focus";
 import {
@@ -77,7 +77,7 @@ import { FanFacts, fanFacts, type FanFact } from "./fan-sections.tsx";
 import { Inbox, type FanVerbs } from "./inbox.tsx";
 import { grilleLabels } from "./labels.ts";
 import { DuctsPicture } from "./picture.tsx";
-import type { PictureOverlayProps } from "@pe/web/route/slots/picture/overlay";
+import type { PictureOverlayProps } from "@pe/web-kernel/route/slots/picture/overlay";
 import { RulesTree, ruleOfIds } from "./rules-pane.tsx";
 import { SystemColours } from "./settings.tsx";
 import { SystemTree } from "./tree-sidebar.tsx";

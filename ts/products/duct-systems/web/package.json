@@ -45,10 +45,10 @@
     "@pe/ducts-web": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/kit": "workspace:*",
-    "@pe/web": "workspace:*",
     "lucide-react": "1.21.0",
     "react": "^19.2.0",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/web-kernel": "workspace:*"
   },
   "devDependencies": {
     "react-dom": "^19.2.0",
@@ -62,6 +62,7 @@
     "@types/qrcode": "catalog:",
     "@pe/fans-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
-    "@testing-library/react": "^16.3.0"
+    "@testing-library/react": "^16.3.0",
+    "jsdom": "^28.1.0"
   }
 }

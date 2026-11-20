@@ -13,7 +13,7 @@ import {
 } from "@pe/agent-contracts";
 import { useValue } from "@pe/kit/lang/collection";
 import type { TableState } from "@pe/kit/table/model";
-import type { CellWire } from "#/components/work/band";
+import type { CellWire } from "@pe/web-kernel/components/work/band";
 import { useWork } from "@pe/kit/lang/work";
 import { familySource } from "./source";
 import { initialDraft, savedFrom, type Draft, type Focus, type Overlay } from "./model";

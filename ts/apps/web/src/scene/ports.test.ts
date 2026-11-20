@@ -3,11 +3,11 @@ import * as THREE from "three";
 import type { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { equipmentPaint, equipmentPorts } from "@pe/ducts-web/paint";
 import type { Scene } from "@pe/ducts-web/scene";
-import { LOOK } from "./grounds";
-import { portLayer, portSegments, type SurfacePort } from "./ports";
-import { sectionContains } from "./section";
-import { SceneMeshes, type LayerFrame, type PaintOf, type SceneInstance } from "./types";
-import { surfaceEdges, surfaceAlpha } from "./surfaces";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
+import { portLayer, portSegments, type SurfacePort } from "@pe/web-kernel/scene/ports";
+import { sectionContains } from "@pe/web-kernel/scene/section";
+import { SceneMeshes, type LayerFrame, type PaintOf, type SceneInstance } from "@pe/web-kernel/scene/types";
+import { surfaceEdges, surfaceAlpha } from "@pe/web-kernel/scene/surfaces";
 
 const instance = (id: number, category = "not a duct category"): SceneInstance => ({
   key: String(id),

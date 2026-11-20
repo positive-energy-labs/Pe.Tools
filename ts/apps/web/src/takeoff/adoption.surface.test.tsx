@@ -1,4 +1,4 @@
-import { valueOf } from "../route/typed-route";
+import { valueOf } from "@pe/web-kernel/route/typed-route";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";

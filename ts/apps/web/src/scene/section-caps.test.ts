@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { sectionCaps } from "./section-caps";
-import { SceneMeshes, type Bounds, type SceneInstance } from "./types";
+import { SceneMeshes, type Bounds, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 type Point = [number, number];
 const square = (lo: number, hi: number): Point[] => [

@@ -8,11 +8,11 @@ import {
   heartbeat,
   setDamageHue,
   damageAppearance,
-} from "./damage";
+} from "@pe/web-kernel/scene/damage";
 import { createDamageBatch } from "./damage-batch";
-import { landing, markFrame, markLines } from "./marks";
-import { BLACK, WHITE, paintOf, GROUND_MATERIAL } from "./grounds";
-import { SceneMeshes, type LayerFrame, type SceneInstance } from "./types";
+import { landing, markFrame, markLines } from "@pe/web-kernel/scene/marks";
+import { BLACK, WHITE, paintOf, GROUND_MATERIAL } from "@pe/web-kernel/scene/grounds";
+import { SceneMeshes, type LayerFrame, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 const instance: SceneInstance = {
   key: "unit",

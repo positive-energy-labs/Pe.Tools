@@ -6,8 +6,9 @@ import { useWorkOwner, WorkContext } from "@pe/kit/lang/work";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { TestAttention, eKey } from "#/test-attention";
 import { makeAtomRegistry } from "#/shell/owner";
-import { SceneMeshes } from "../types";
-import { Picture, renderPicturePane, type PictureContent } from "./picture";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
+import { Picture, renderPicturePane } from "./picture";
+import { type PictureContent } from "@pe/web-kernel/scene/picture/content";
 import type { Scene3DProps } from "../scene3d";
 import { ductsData as ductsGraph } from "@pe/duct-systems-web/route";
 import { reduceLayout } from "../../../../../packages/kit/src/components/lang/layout-graph";
@@ -70,7 +71,7 @@ function Owner({ children }: { children: React.ReactNode }) {
 function mount(
   revision: string,
   refreshing = false,
-  viewport: import("../orbit").OrbitViewport | null = null,
+  viewport: import("@pe/web-kernel/scene/orbit").OrbitViewport | null = null,
   ownContent = content,
   full = false,
   selected = "",
@@ -216,7 +217,7 @@ it("reserves the network picture's width at 1600px even with expanded side panes
 
 it("keeps an in-flight orbit through equal Page re-projections and commits its released pose", async () => {
   io.call.mockResolvedValue({ id: "orbit-rerender" });
-  const pose: import("../orbit").OrbitViewport = {
+  const pose: import("@pe/web-kernel/scene/orbit").OrbitViewport = {
     kind: "orbit",
     yaw: 225,
     elev: 32,

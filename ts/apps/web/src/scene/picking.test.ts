@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vite-plus/test";
 import { contextPickable, createMeshPicker } from "./picking";
-import type { Pick, SceneInstance } from "./types";
+import type { Pick, SceneInstance } from "@pe/web-kernel/scene/types";
 
 function fixture() {
   const batch = new THREE.BatchedMesh(

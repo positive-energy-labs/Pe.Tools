@@ -22,7 +22,6 @@
     "./calc/view": "./src/calc/view.tsx",
     "./mount": "./src/mount.tsx",
     "./picture": "./src/picture.tsx",
-    "./cutover.test-support": "./src/cutover.test-support.ts",
     "./admission.fixture": "./src/admission.fixture.ts"
   },
   "scripts": {
@@ -37,9 +36,9 @@
     "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
     "@pe/kit": "workspace:*",
-    "@pe/web": "workspace:*",
     "react": "^19.2.0",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/web-kernel": "workspace:*"
   },
   "devDependencies": {
     "jsdom": "^28.1.0",

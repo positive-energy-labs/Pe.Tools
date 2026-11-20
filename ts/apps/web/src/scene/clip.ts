@@ -1,5 +1,5 @@
-import { SceneMeshes } from "./types";
-import { instancePositions } from "./primitives";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
+import { instancePositions } from "@pe/web-kernel/scene/primitives";
 
 /** Keep the union of these half spaces for an instance; absent instances retain their mesh. */
 export type MeshCut = { from: readonly number[]; at: readonly number[] };

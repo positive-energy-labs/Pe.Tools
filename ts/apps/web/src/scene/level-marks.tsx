@@ -2,8 +2,8 @@ import { ListPopup } from "@pe/kit/lang/list-popup";
 import { token } from "@pe/kit/lib/token";
 import { useMemo } from "react";
 import { levelExtents, levelNames, type SceneLevels } from "./levels";
-import type { Bounds } from "./types";
-import type { Project, Size } from "./projection";
+import type { Bounds } from "@pe/web-kernel/scene/types";
+import type { Project, Size } from "@pe/web-kernel/scene/projection";
 
 // Link names need not distinguish repeated placements of the same house file.
 const sourceName = (source: SceneLevels["sources"][number]) =>

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { callOp, callCompose } from "../host/catalog-client";
 const fetched = vi.hoisted(() => ({ host: vi.fn() }));
-vi.mock("../host/runtime", () => ({ hostFetch: fetched.host }));
+vi.mock("@pe/web-kernel/host/runtime", () => ({ hostFetch: fetched.host }));
 afterEach(() => fetched.host.mockReset());
 const signal = new AbortController().signal;
 const answer = (value: unknown) =>

@@ -4,7 +4,7 @@ import { routeAddress, settingsRouteState } from "@pe/agent-contracts";
 import { podsValue, podMemberCode } from "../../../../packages/agent-contracts/src/pods-read.ts";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
-import { useRouteSearchSlice } from "../route/activity";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 import { isSpecOf } from "../route/workflow";
 import type { PodsContext } from "./route.ts";
 

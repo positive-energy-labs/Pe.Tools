@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import ts from "typescript";
 import { z } from "zod";
-import type { TypedRoute } from "../src/route/typed-route.ts";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 /** Preserve imported Work functions and refinements in either builtin or Pod host projection. */
 export async function projectWork(
   entry: string,

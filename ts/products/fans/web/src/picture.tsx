@@ -10,7 +10,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { useRef } from "react";
 import { CalcPicture } from "./calc/picture.tsx";
-import type { PictureOverlayProps } from "@pe/web/route/slots/picture/overlay";
+import type { PictureOverlayProps } from "@pe/web-kernel/route/slots/picture/overlay";
 import { CalcEmpty, CalcFrame, calcSnapshot, useCalcData } from "./mount.tsx";
 import type { FansDrawContext } from "../route.ts";
 import type { FanEspValues } from "@pe/fans-contract/fans-inputs";

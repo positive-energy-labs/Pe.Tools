@@ -1,16 +1,16 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf } from "../route/defaults";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
-import { read } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { roomsRouteState, routeStatePatchSchema } from "@pe/agent-contracts";
 import { roomsPageSchema } from "./page";
-import { route, field } from "../route/defaults";
-import { hostRead } from "../route/host-read";
-import { draw } from "../route/draw";
+import { route, field } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
-import { split, subjectSchema } from "../route/defaults";
+import { split, subjectSchema } from "@pe/web-kernel/route";
 import { levelOrder, regionCode, roomRows, type RoomsRegion } from "./rows.ts";
 const address = roomsPageSchema.shape;
 /** The rooms a person or Pea may hold open at once; "all" is the whole roster. */

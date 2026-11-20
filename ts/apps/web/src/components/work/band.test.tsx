@@ -8,7 +8,7 @@ import {
   type CellLike,
   type RouteStatePatch,
 } from "@pe/agent-contracts";
-import { reviewTransitions, UnstageAll } from "./band";
+import { reviewTransitions, UnstageAll } from "@pe/web-kernel/components/work/band";
 
 afterEach(cleanup);
 

@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { useRouteNavigate, useRouteSearchSlice } from "../route/activity";
+import { useRouteNavigate, useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 
 /**
  * The one `?target` reader/writer every shell and route shares. Grammar lives in `parseTarget`.

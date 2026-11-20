@@ -3,7 +3,7 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { module as ops } from "../ops/route";
 import { module as schedules } from "../schedules/route";
-import { field, paneLayout, route, scrollBody } from "./defaults";
+import { field, paneLayout, route, scrollBody } from "@pe/web-kernel/route";
 
 /*
  * Map slice 4's falsifiers for verbs (docs/features/routes/MAP.md). The three `@ts-expect-error`

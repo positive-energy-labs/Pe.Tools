@@ -7,7 +7,7 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { useRouteSearchSlice } from "./activity";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 
 afterEach(cleanup);
 

@@ -3,10 +3,10 @@
  * metadata JSON, padding to 4 bytes, then float32 xyz positions, nine per triangle, unindexed.
  * Space and ducts fetch the same artifact; both decode it here.
  */
-import { SceneMeshes, type SceneInstance } from "./types";
+import { SceneMeshes, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
-import type { Bounds, ScenePrimitive } from "./types";
+import type { Bounds, ScenePrimitive } from "@pe/web-kernel/scene/types";
 import { assertLevels } from "./levels";
 import { spaceElementKey } from "@pe/agent-contracts";
 

@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { contract } from "@pe/agent-contracts/handle";
-import { hostRead } from "./host-read.ts";
+import { hostRead } from "@pe/web-kernel/host-read";
 
 test("lazy fixture providers load on demand and refuse unregistered names", async () => {
   let loaded = 0;

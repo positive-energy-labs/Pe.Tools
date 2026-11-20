@@ -18,10 +18,10 @@ import { createPeRoutes } from "../../../../../host/src/pe-routes";
 import { createWitness } from "../../../../../../tests/e2e/fans-witness.test-support.ts";
 import { Notes } from "../findings/notes.tsx";
 import type { ModelPicture } from "#/scene/picture/model";
-import { SceneMeshes } from "#/scene/types";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { makeAtomRegistry } from "../../../shell/owner";
 import { TypedPane } from "../../../shell/typed-shell";
-import { elementOf } from "./index.ts";
+import { elementOf } from "@pe/web-kernel/route/slots/picture";
 
 /*
  * Slice 9's mark clause, through the mounted pane (drive gate-b2caafd3: "a person's finding on FC-11

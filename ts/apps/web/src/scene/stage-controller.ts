@@ -16,16 +16,16 @@ import {
 } from "react";
 import { ScopeGestures, actionScopeKeys, type ScopeKey } from "@pe/kit/keys";
 import type { PlaneViewport } from "@pe/agent-contracts";
-import type { PictureBounds } from "./framing";
-import { viewportProject, type Project } from "./projection";
+import type { PictureBounds } from "@pe/web-kernel/scene/framing";
+import { viewportProject, type Project } from "@pe/web-kernel/scene/projection";
 import { useStageKeys } from "./stage-keys";
 import { flyTo, glideLook, wiggle, type LiveOrbit } from "@pe/kit/lang/live-orbit";
-import { LOOK } from "./grounds";
-import { applyLook, center, frame, shiftOnScreen, type OrbitViewport } from "./orbit";
-import type { Bounds } from "./types";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
+import { applyLook, center, frame, shiftOnScreen, type OrbitViewport } from "@pe/web-kernel/scene/orbit";
+import type { Bounds } from "@pe/web-kernel/scene/types";
 import { useViewHistory } from "./view-history";
-import type { Bounds2 } from "#/lib/affine-frame";
-import type { usePlaneViewport } from "./use-plane-viewport";
+import type { Bounds2 } from "@pe/web-kernel/lib/affine-frame";
+import type { usePlaneViewport } from "@pe/web-kernel/scene/use-plane-viewport";
 
 import { STAGE_ACTIONS } from "./stage-teaching";
 

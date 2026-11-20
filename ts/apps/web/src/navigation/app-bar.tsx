@@ -1,4 +1,4 @@
-import { subjectState, useSubjects } from "../shell/subject";
+import { subjectState, useSubjects } from "@pe/web-kernel/shell/subject";
 import { routeAt } from "@pe/agent-contracts";
 import { SHELL_REGIONS } from "#/route/teaching";
 import { useEffect, useRef, useState, type CSSProperties } from "react";

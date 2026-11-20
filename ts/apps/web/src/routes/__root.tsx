@@ -36,10 +36,10 @@ import { Button } from "@pe/kit/lang/button";
 import { RemoteDeviceGate } from "#/machine/devices";
 
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
-import { ElementMenu } from "#/revit/element-menu";
+import { ElementMenu } from "@pe/web-kernel/revit/element-menu";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
-import { useRouteActivity } from "#/route/activity";
+import { useRouteActivity } from "@pe/web-kernel/route/activity";
 import { bindActionReadings } from "#/host/resource-stream";
 
 import { startupWatch } from "#/route/startup-watch";

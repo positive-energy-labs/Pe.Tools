@@ -1,9 +1,9 @@
 import * as contracts from "./contract.ts";
 import { z } from "zod";
-import { route, field, read, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
+import { route, field, read, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import type { ReadingState } from "@pe/agent-contracts";
-import { hostRead } from "../route/host-read";
-import { draw } from "../route/draw";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 import { handle } from "@pe/agent-contracts/handle";
 import { takeoffsRouteState,
   routeStatePatchSchema,

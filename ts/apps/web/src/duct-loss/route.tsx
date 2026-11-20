@@ -1,4 +1,4 @@
-import { reasonOf } from "#/route/typed-route";
+import { reasonOf } from "@pe/web-kernel/route/typed-route";
 /** The graph owns state, acquisition, layout and keys; these adapters supply pane content. */
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { DuctLossContext } from "./route";

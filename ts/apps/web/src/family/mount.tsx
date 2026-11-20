@@ -1,4 +1,4 @@
-import { refusalOf } from "#/route/typed-route";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { settingsCandidate, familyDraftSchema } from "@pe/agent-contracts";
 import { useState } from "react";
 import { Button } from "@pe/kit/lang/button";
@@ -10,7 +10,7 @@ import { FamilyWorkspaceAnatomy } from "./workspace-anatomy";
 import { FamilyWorkspaceTable } from "./workspace-table";
 import { FamilyWorkspaceDocPane } from "./workspace-doc-pane";
 import { useFamilyWorkspace } from "./workspace-context";
-import { useAdmittedSubject } from "#/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { member, type FamilyContext } from "./route";
 export function FamilyBody({ ctx }: { ctx: FamilyContext }) {
   return (

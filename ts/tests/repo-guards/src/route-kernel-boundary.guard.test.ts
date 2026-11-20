@@ -47,7 +47,7 @@ it("keeps admitted Place composition private without permitting body or re-expor
     "ts/apps/web/src/workbench/provider/view.tsx": `import { useWorkbench } from 'provider.ts'; export const WorkbenchOwner = () => null;`,
     "ts/apps/web/src/workbench/thread-view.tsx": `import { WorkbenchOwner } from '#/workbench/provider/view';`,
     "ts/apps/web/src/route/builtin-routes.tsx": `const WorkbenchRoute = () => import('#/workbench/thread-view');`,
-    "ts/apps/web/src/shell/typed-mount.ts": `const mode = place.fixture;`,
+    "../../../apps/web/src/shell/typed-mount.ts": `const mode = place.fixture;`,
     "provider.ts": `import { appAtomRegistry } from '#/shell/owner'; export const useWorkbench = () => appAtomRegistry;`,
     "ts/apps/web/src/example/body.ts": `import { useWorkbench } from 'provider.ts'; const mode = state.fixture;`,
   });

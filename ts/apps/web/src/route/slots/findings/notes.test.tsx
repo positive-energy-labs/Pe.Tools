@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "vite-plus/test";
 import { findingsCommands, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { Notes } from "./notes.tsx";
-import { ElementMenu } from "../../../revit/element-menu.tsx";
+import { ElementMenu } from "@pe/web-kernel/revit/element-menu";
 import type { ComponentProps } from "react";
 afterEach(cleanup);
 const type = subjectCode({ keyKind: "name", key: ["Fam", "Type"] });

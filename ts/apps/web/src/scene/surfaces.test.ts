@@ -1,9 +1,9 @@
 import { expect, test } from "vite-plus/test";
 import * as THREE from "three";
-import { LOOK, SYSTEM_LIGHTNESS } from "./grounds";
-import { toOklch } from "./oklch";
-import { routeColour, routeLines, systemPaint } from "./surfaces";
-import { SceneMeshes, type Paint, type SceneInstance } from "./types";
+import { LOOK, SYSTEM_LIGHTNESS } from "@pe/web-kernel/scene/grounds";
+import { toOklch } from "@pe/web-kernel/scene/oklch";
+import { routeColour, routeLines, systemPaint } from "@pe/web-kernel/scene/surfaces";
+import { SceneMeshes, type Paint, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 test("same-type opened systems take fixed lightness rungs in natural order; stubs and shells cannot reshuffle them", () => {
   const paints: Paint[] = [

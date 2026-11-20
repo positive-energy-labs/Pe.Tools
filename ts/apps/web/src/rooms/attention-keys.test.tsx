@@ -6,7 +6,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { setHovered } from "@pe/kit/lang/attention";
 import { Pane } from "@pe/kit/lang/pane";
 import { makeAtomRegistry } from "#/shell/owner";
-import { AttentionScope } from "#/attention";
+import { AttentionScope } from "@pe/web-kernel/attention";
 import { DEMO_PLAN, DEMO_ROOMS, DEMO_VIEW } from "./demo";
 import { roomsPageSchema } from "./page";
 import { RoomsPlan } from "./plan";

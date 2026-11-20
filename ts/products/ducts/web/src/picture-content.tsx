@@ -4,17 +4,17 @@
  * ruling pins). Picture behaviour stays in `scene/picture`; these are only marks.
  */
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import { useElementAttention } from "@pe/web/attention";
-import { LOOK, paintOf as resolvePaint } from "@pe/web/scene/grounds";
-import { subscribe as knobsChanged } from "@pe/web/knobs/knobs";
-import { captionObstacles } from "@pe/web/scene/framing";
-import { continuationAnchor } from "@pe/web/scene/continuations";
-import { portLayer } from "@pe/web/scene/ports";
-import type { ColourMode } from "@pe/web/scene/renderer";
-import { systemPaint } from "@pe/web/scene/surfaces";
-import type { Kinds, Layer3D, PaintOf, SceneMeshes } from "@pe/web/scene/types";
-import type { ElementIndex } from "@pe/web/element-index";
-import type { PictureLayer, PictureLine, PictureOverlayFrame } from "@pe/web/scene/picture/picture";
+import { useElementAttention } from "@pe/web-kernel/attention";
+import { LOOK, paintOf as resolvePaint } from "@pe/web-kernel/scene/grounds";
+import { subscribe as knobsChanged } from "@pe/web-kernel/knobs/knobs";
+import { captionObstacles } from "@pe/web-kernel/scene/framing";
+import { continuationAnchor } from "@pe/web-kernel/scene/continuations";
+import { portLayer } from "@pe/web-kernel/scene/ports";
+import type { ColourMode } from "@pe/web-kernel/scene/types";
+import { systemPaint } from "@pe/web-kernel/scene/surfaces";
+import type { Kinds, Layer3D, PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
+import type { ElementIndex } from "@pe/web-kernel/element-index";
+import type { PictureLayer, PictureLine, PictureOverlayFrame } from "@pe/web-kernel/scene/picture/content";
 import { Annotations, type Label, type Ruling } from "./annotations.tsx";
 import type { Encoding } from "./encoding.tsx";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";

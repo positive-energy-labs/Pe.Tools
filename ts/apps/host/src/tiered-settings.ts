@@ -1,4 +1,4 @@
-import { readSettingTiers, readTier, tierHome } from "@pe/host-internal/settings-files";
+import { readSettingTiers, readTier } from "@pe/host-internal/settings-files";
 import { settingOwners } from "./product-contracts.ts";
 /**
  * Tiered settings (ADR 0037 rule 8; homes MAP slice 6b): `Settings/<owner>.json` in the user home,
@@ -9,9 +9,9 @@ import { settingOwners } from "./product-contracts.ts";
  */
 import { existsSync, readFileSync, watch } from "node:fs";
 import { userInfo } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import type { Caller, HomeWriteRow, SettingTier } from "@pe/agent-contracts";
-import { SETTING_TIERS, homeWriteRowSchema, callerSchema, sameAddress } from "@pe/agent-contracts";
+import { homeWriteRowSchema, callerSchema, sameAddress } from "@pe/agent-contracts";
 import { z } from "zod";
 import {
   projectHome,

@@ -1,7 +1,7 @@
-import type { ContextOf, Verbs } from "../route/defaults";
+import type { ContextOf, Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { read } from "../route/defaults";
-import { paneLayout } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
+import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
 import {
   familiesRouteState,
@@ -12,9 +12,9 @@ import {
   showFamilyCell,
 } from "@pe/agent-contracts";
 import * as reads from "./contract.ts";
-import { route, field } from "../route/defaults";
-import { hostRead } from "../route/host-read.ts";
-import { draw } from "../route/draw.tsx";
+import { route, field } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 export const fields = {
   readId: field(z.string(), "", "pose"),
   focus: field(

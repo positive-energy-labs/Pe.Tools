@@ -1,4 +1,4 @@
-import { inkOf } from "./ink";
+import { inkOf } from "@pe/web-kernel/scene/ink";
 
 /** F10: the kit owns attention colours, including their theme and mixing ratios. */
 export const attentionRoles = { selected: "select", hover: "hover", lit: "indirect" } as const;

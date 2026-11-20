@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { expect, test } from "vite-plus/test";
 import fixture from "./fixtures/chadds-flat-overview.json";
 import { decodeScene, SCENE_FORMAT } from "./psc1";
-import { primitiveEdges, instancePositions } from "./primitives";
+import { primitiveEdges, instancePositions } from "@pe/web-kernel/scene/primitives";
 import { prepareGeometry } from "./prepare-geometry";
 import { prepareFaceBatches } from "./face-batches";
 import { createFacePicker } from "./picking";

@@ -5,7 +5,7 @@ import { attentionColours, attentionMark } from "./attention";
 import { createOutline } from "./outline";
 
 const { readInk } = vi.hoisted(() => ({ readInk: vi.fn() }));
-vi.mock("./ink", () => ({ inkOf: readInk }));
+vi.mock("@pe/web-kernel/scene/ink", () => ({ inkOf: readInk }));
 
 test("picture fill and outline consume the kit's select, hover and indirect ladder", () => {
   const css = readFileSync(new URL("../../../../packages/kit/src/base.css", import.meta.url), "utf8");

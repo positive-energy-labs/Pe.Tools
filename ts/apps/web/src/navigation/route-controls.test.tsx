@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-router";
 import { RouteBand, BandOutlet, RouteControlsProvider } from "./route-controls";
 import { TypedShell } from "../shell/typed-shell";
-import { route, paneLayout, scrollBody } from "../route/defaults";
+import { route, paneLayout, scrollBody } from "@pe/web-kernel/route";
 import { module as schedules } from "../schedules/route";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 

@@ -44,7 +44,7 @@ const server = await createServer({ configFile: false, root: resolve("."),
       if (req.url === "/jv3-inputs") { res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ read, work })); return; }
       if (req.url?.startsWith("/duct-systems")) {
         res.setHeader("Content-Type", "text/html");
-        res.end(await s.transformIndexHtml("/duct-systems", '<html><body><div id="root"></div><script type="module" src="/products/duct-systems/web/journeys/jv3-field-fixture.tsx"></script></body></html>')); return;
+        res.end(await s.transformIndexHtml("/duct-systems", '<html><body><div id="root"></div><script type="module" src="/tests/journey-fixtures/jv3-field-fixture.tsx"></script></body></html>')); return;
       }
       next();
     });

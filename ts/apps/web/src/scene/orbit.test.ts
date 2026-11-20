@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { Quaternion, Vector3 } from "three";
-import { newCamera, viewportProject } from "./projection";
+import { newCamera, viewportProject } from "@pe/web-kernel/scene/projection";
 import {
   shiftOnScreen,
   applyLook,
@@ -18,9 +18,9 @@ import {
   HALF_FOV_TAN,
   boundsOfInstances,
   type OrbitViewport,
-} from "./orbit";
-import { SceneMeshes } from "./types";
-import { paintOf } from "./grounds";
+} from "@pe/web-kernel/scene/orbit";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
+import { paintOf } from "@pe/web-kernel/scene/grounds";
 
 const bounds = { minX: 100, minY: 200, minZ: 0, maxX: 140, maxY: 230, maxZ: 12 };
 

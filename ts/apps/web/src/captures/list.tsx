@@ -13,7 +13,7 @@ import { Button } from "@pe/kit/lang/button";
 import { emptyListState, useList, type ValueHandle } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { useCopy } from "@pe/kit/lib/use-copy";
-import { runtimeStreamUrl } from "#/host/runtime";
+import { runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 import { useState } from "react";
 
 /** Image requests cannot carry hostFetch's runtime header; bind their URL to the same owner. */

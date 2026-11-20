@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
-import type { Bounds, Layer3D } from "./types";
-import type { Section } from "./section";
-import { datumMaterial } from "./grounds";
+import type { Bounds, Layer3D } from "@pe/web-kernel/scene/types";
+import type { Section } from "@pe/web-kernel/scene/section";
+import { datumMaterial } from "@pe/web-kernel/scene/grounds";
 
 const SOURCE_STATES = { loaded: true, unloaded: true, unavailable: true } satisfies Record<
   RevitDetailSpaceScene.Artifact.SceneSourceState,

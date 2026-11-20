@@ -9,7 +9,7 @@ import { module as families } from "../families/route";
 import { TypedChrome } from "./typed-shell";
 import * as mounts from "./typed-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
-import type { UseSource } from "./source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 
 afterEach(cleanup);
 

@@ -6,16 +6,16 @@
  */
 import type { Neighbour, Hop } from "@pe/ducts-domain/neighbours";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import type { PaintOf, Tier } from "@pe/web/scene/types";
+import type { PaintOf, Tier } from "@pe/web-kernel/scene/types";
 import { airTypesOf } from "@pe/ducts-domain/air-types";
-import { choice, defineKnobs, num } from "@pe/web/knobs/knobs";
+import { choice, defineKnobs, num } from "@pe/web-kernel/knobs/knobs";
 
 /**
  * The multi-system defaults, each a judgment call kaitpw re-rules once he has felt it.
  * Each can change the captured element set. Equipment hops keep to the same classification by
  * default; plenums and shared ducts use their physical connections.
  */
-export const DUCTS_MULTI = defineKnobs("duct-systems", "ts/apps/web/src/ducts/selection.ts", {
+export const DUCTS_MULTI = defineKnobs("duct-systems", "ts/products/ducts/web/src/selection.ts", {
   selection: {
     stubFt: num("Stub reach (ft)", 10, [0, 50, 1], "refetch"),
     hop: choice<Hop>(

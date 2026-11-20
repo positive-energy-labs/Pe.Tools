@@ -8,7 +8,7 @@
 import { expect, test } from "vite-plus/test";
 import { module as chat } from "../chat/route";
 import { DOCK_PANES } from "../workbench/dock-layout";
-import { fillBody, isBody, scrollBody, scrollTracks } from "./body";
+import { fillBody, isBody, scrollBody, scrollTracks } from "@pe/web-kernel/route/body";
 
 test("the brand is the only way to make a Body", () => {
   expect(isBody(scrollBody("a"))).toBe(true);

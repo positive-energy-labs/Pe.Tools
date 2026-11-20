@@ -25,7 +25,7 @@ import {
   type ScheduleCellWrites,
 } from "./columns";
 import type { Refusal } from "#/route/refusal";
-import { useNativeObservation, type NativeObservation } from "#/revit/observation";
+import { useNativeObservation, type NativeObservation } from "@pe/web-kernel/revit/observation";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;

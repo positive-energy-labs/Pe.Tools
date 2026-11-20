@@ -18,7 +18,7 @@ import { places } from "../workbench/places";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
-import { useRouteActivity } from "./activity";
+import { useRouteActivity } from "@pe/web-kernel/route/activity";
 
 import { commitAddress, rawQuery } from "./address-transport";
 export { commitAddress, rawQuery } from "./address-transport";

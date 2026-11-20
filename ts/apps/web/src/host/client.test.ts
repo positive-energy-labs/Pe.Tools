@@ -18,7 +18,7 @@ it("direct and target-bound calls reject undeclared keys and malformed requests"
 });
 
 const io = vi.hoisted(() => ({ fetch: vi.fn() }));
-vi.mock("./runtime", () => ({ hostFetch: io.fetch }));
+vi.mock("@pe/web-kernel/host/runtime", () => ({ hostFetch: io.fetch }));
 it("retains validation issues in the host problem", async () => {
   const issues = [{ path: ["region"], message: "required" }];
   io.fetch.mockResolvedValue(

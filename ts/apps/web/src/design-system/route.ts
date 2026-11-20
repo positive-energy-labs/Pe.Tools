@@ -1,6 +1,6 @@
-import { paneLayout } from "../route/defaults";
-import { route } from "../route/defaults";
-import { draw } from "../route/draw";
+import { paneLayout } from "@pe/web-kernel/route";
+import { route } from "@pe/web-kernel/route";
+import { draw } from "@pe/web-kernel/route/draw";
 export const module = route({
   key: "design-system",
   name: "Design System",

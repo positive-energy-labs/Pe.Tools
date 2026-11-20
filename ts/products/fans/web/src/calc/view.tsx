@@ -1,4 +1,4 @@
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { cellSource, espWord } from "@pe/agent-contracts/slots";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"

@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
-import { CONTEXT_OPACITY_LIMIT, LOOK } from "./grounds";
-import { SceneMeshes, type SceneInstance } from "./types";
+import { CONTEXT_OPACITY_LIMIT, LOOK } from "@pe/web-kernel/scene/grounds";
+import { SceneMeshes, type SceneInstance } from "@pe/web-kernel/scene/types";
 import { bakeVeil, falloff, setVeilLook, veilDistance, veilUniforms, VEIL_REACH_FT } from "./veil";
 
 it("context fill cannot become opaque when the fill is set past the limit", () => {

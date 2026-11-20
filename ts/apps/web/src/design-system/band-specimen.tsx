@@ -11,7 +11,7 @@ import {
   runClear,
   type CellWire,
   type ClearOutcome,
-} from "#/components/work/band";
+} from "@pe/web-kernel/components/work/band";
 import { cellFromDraft, StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { ArtifactFrame } from "@pe/kit/lang/artifact-frame";
 import { Section } from "@pe/kit/lang/section";

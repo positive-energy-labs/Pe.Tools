@@ -1,4 +1,4 @@
-import type { SceneMeshes } from "./types";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { PreparedGeometry } from "./prepare-geometry";
 import { sceneMemory, type SceneFootprint, type SceneMemoryRetention } from "./scene-memory";
 

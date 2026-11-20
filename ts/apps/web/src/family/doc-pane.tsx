@@ -1,4 +1,4 @@
-import type { OwnedCell } from "../route/typed-route";
+import type { OwnedCell } from "@pe/web-kernel/route/typed-route";
 import type { SettingsFieldState } from "@pe/agent-contracts";
 import { token } from "@pe/kit/lib/token";
 import { EmptyState } from "@pe/kit/lang/empty";
@@ -7,7 +7,7 @@ import { FactChip, Tag } from "@pe/kit/lang/chip";
 import { useEffect, useRef } from "react";
 import { useGroundedDoc } from "#/grounded-doc/engine";
 import { PagePane } from "#/grounded-doc/view/page-pane";
-import { ReviewRow, type CellWire } from "#/components/work/band";
+import { ReviewRow, type CellWire } from "@pe/web-kernel/components/work/band";
 import { Switcher } from "@pe/kit/lang/switcher";
 
 import type { ProtoProposal, ProtoSpec } from "#/family/world";

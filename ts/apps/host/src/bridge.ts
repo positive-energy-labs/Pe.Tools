@@ -14,13 +14,13 @@ import { admittedRouteEntries, addressSchema } from "@pe/agent-contracts";
 import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { catalogCommandContext } from "@pe/host-internal/catalog-command-context";
 import { StepFailure } from "@pe/host-internal/command-executor";
-import { Context, Deferred, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";
+import { Deferred, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";
 import type { HttpServerRequest } from "effect/http";
 import { Socket } from "effect/socket";
 import { HttpServerResponse as Response } from "effect/http";
 import { dispatchRefusal, markDispatched, validateDispatch, recordNativeTerminal, recordNativeUncertainty } from "./action-dispatch.ts";
 import { ActionJournalService } from "./receipt-services.ts";
-import { receiptProducerSchema, type DocumentRef, type ReceiptProducer } from "@pe/agent-contracts";
+import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
 /** Decode native inventory once: detached PathName values are labels, not file addresses. */

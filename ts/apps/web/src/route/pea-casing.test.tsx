@@ -8,8 +8,8 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { emptyThreadHead, roomsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
 import { machineFixture } from "../../../../packages/agent-contracts/tests/machine-fixture";
 import { RouteViewStore } from "@pe/runtime";
-import { route, namesOf, type TypedRoute } from "./typed-route";
-import { scrollBody } from "./defaults";
+import { route, namesOf, type TypedRoute } from "@pe/web-kernel/route/typed-route";
+import { scrollBody } from "@pe/web-kernel/route";
 import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";

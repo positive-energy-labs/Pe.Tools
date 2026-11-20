@@ -54,7 +54,7 @@ vi.mock("../../apps/host/src/command-executor.ts",async actual=>{
  return {...real,nativeStep:(...args:Parameters<typeof real.nativeStep>)=>real.nativeStep(...args).pipe(
    Effect.tap(()=>args[2]==="ducts.apply.plan"?Effect.promise(()=>trace.holdPlan()):Effect.void))};
 });
-vi.mock("../../apps/web/src/host/runtime.ts",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
+vi.mock("@pe/web-kernel/host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
 vi.mock("../../apps/host/src/session-route.ts",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../apps/host/tests/native-receipt-fixture.ts");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
 vi.mock("../../packages/mcps/src/shared/takeoff-action-client.ts", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
 vi.mock("../../packages/runtime/src/route-scope-gate.ts",async actual=>{

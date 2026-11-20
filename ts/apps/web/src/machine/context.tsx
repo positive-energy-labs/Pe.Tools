@@ -6,7 +6,7 @@ import {
   type ComponentType,
 } from "react";
 import type { OpenPageState } from "./open-page";
-import type { ReadingState } from "../shell/source-contract";
+import type { ReadingState } from "@pe/web-kernel/shell/source-contract";
 export interface OpenOutcome { state: string; outcome?: { state: string }; receipt?: { key: string }; refusal?: { message: string } }
 export interface OpenOwner {
   subscribe(listener: () => void): () => void;

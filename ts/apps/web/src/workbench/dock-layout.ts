@@ -3,7 +3,7 @@
  * the tools pane's head. `RouteDock` (route-panes.tsx) derives its chrome from this. Both panes
  * host a route surface whose own panes declare their bodies and carry their heads, so both fill.
  */
-import type { PaneBodyDecl } from "#/route/body";
+import type { PaneBodyDecl } from "@pe/web-kernel/route/body";
 
 export const DOCK_PANES = {
   pea: { body: "fill" },

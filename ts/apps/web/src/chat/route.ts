@@ -1,13 +1,13 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf } from "../route/defaults";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared.ts";
 import { textCodec } from "../../../../packages/agent-contracts/src/route-field.ts";
-import { field } from "../route/defaults";
-import { read } from "../route/defaults";
-import { route } from "../route/defaults";
-import { hostRead } from "../route/host-read.ts";
-import { draw } from "../route/draw.tsx";
+import { field } from "@pe/web-kernel/route";
+import { read } from "@pe/web-kernel/route";
+import { route } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
 export const loaded = read(hostRead(contracts.context, () => import("./value-fixtures.ts").then(m => m.contextFixtures)));
 export const fields = {

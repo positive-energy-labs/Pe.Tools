@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { CapturesList } from "./list";
-vi.mock("#/host/runtime", () => ({
+vi.mock("@pe/web-kernel/host/runtime", () => ({
   runtimeStreamUrl: (path: string) => `${path}?pe-runtime=checkout`,
 }));
 afterEach(cleanup);

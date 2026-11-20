@@ -1,7 +1,7 @@
 /// <reference path="./source-closure.d.ts" />
 import { workFingerprintSchema, type RouteFingerprint } from "@pe/agent-contracts";
 import { closureSchema } from "./builtin-closure.ts";
-import type { TypedRoute } from "./typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 
 /**
  * The web's builtin routes, discovered (ADR 0035 rule 4): Vite expands both globs at build and test

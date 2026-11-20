@@ -6,7 +6,7 @@ import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { scheduleGridRouteState, scheduleReadingSchema } from "@pe/agent-contracts";
 import { ScheduleGridWorkspace, type ScheduleGridState } from "../route/schedules/workspace";
 import type { SchedulesDrawContext } from "./route";
-import { namesOf, refusalOf } from "../route/typed-route";
+import { namesOf, refusalOf } from "@pe/web-kernel/route/typed-route";
 
 export function SchedulesGrid({ ctx }: { ctx: SchedulesDrawContext }) {
   const [failure, setFailure] = useState<string | null>(null);

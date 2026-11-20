@@ -4,7 +4,7 @@ import {
   type RouteGraph,
   type RouteFingerprint,
 } from "@pe/agent-contracts";
-import type { TypedRoute } from "./typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 export type WorkAdmission = { routeKey: string; fingerprint: RouteFingerprint };
 /** The typed Work declaration is also the chat head's cell contract. */
 export interface DiscoveredWork<W = any> {
@@ -29,7 +29,7 @@ export interface RegisteredRoute {
 export type DiscoveredRoute = RegisteredRoute;
 /** Typed Work describes its cell containers once; the chat head consumes the same schema. */
 export function typedWorkCells(
-  module: import("./typed-route").TypedRoute,
+  module: import("@pe/web-kernel/route/typed-route").TypedRoute,
 ): readonly CellsDecl<any>[] {
   const work = module.spec.edits?.work;
   if (!work) return [];

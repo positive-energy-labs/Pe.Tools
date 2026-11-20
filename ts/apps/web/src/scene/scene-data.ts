@@ -4,7 +4,7 @@ import { fetchSceneArtifact } from "./artifact";
 import { decodeScene, SCENE_FORMAT, type Psc1Metadata } from "./psc1";
 import { SceneCache, sceneFootprint } from "./scene-cache";
 import { sceneMemory, type SceneMemoryLease } from "./scene-memory";
-import type { SceneMeshes } from "./types";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { sceneRequest } from "./host";
 
 export type SceneSource =

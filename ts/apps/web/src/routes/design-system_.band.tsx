@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Button } from "@pe/kit/lang/button";
-import { clearWord, WorkSentence, workSummary, type ClearOutcome } from "#/components/work/band";
+import { clearWord, WorkSentence, workSummary, type ClearOutcome } from "@pe/web-kernel/components/work/band";
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Section } from "@pe/kit/lang/section";

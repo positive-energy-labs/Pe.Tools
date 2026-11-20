@@ -1,24 +1,25 @@
 import { hostState } from "../../../host/src/host-ownership.ts";
 // These witnesses test capture and camera ownership; resolve the lazy module before their timed gestures.
 import "./slots/picture/pane.tsx";
-import { valueOf } from "./typed-route";
+import { valueOf } from "@pe/web-kernel/route/typed-route";
 // @vitest-environment jsdom
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { SceneMeshes } from "../scene/types";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { Scene3DProps } from "../scene/scene3d";
 import { TestAttention } from "../test-attention";
 import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { hostEventSource } from "../host/event-source.test-support";
-import { route } from "./typed-route";
+import { route } from "@pe/web-kernel/route/typed-route";
 import { module as fans } from "@pe/fans-web/route";
 import { RosterBody } from "@pe/fans-web/mount";
 import { kernelPane } from "../shell/typed-shell";
-import { SubjectDoor, typedSubjectDoor } from "../shell/subject";
+import { SubjectDoor } from "@pe/web-kernel/shell/subject";
+import { typedSubjectDoor } from "../shell/typed-mount.ts";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 const io = vi.hoisted(() => ({ call: vi.fn(), orbit: null as Scene3DProps["orbit"] | null }));
 vi.mock("#/host/client", () => ({ callHostRpc: io.call }));
@@ -131,7 +132,7 @@ test("JM B03/B14/B18 named Fans roster and a live gesture survive typed Page pro
     const view = render(tree(a));
     await waitFor(() => { resize(); expect(io.orbit?.read()).toBeTruthy(); });
     const orbit = io.orbit!;
-    const pose: import("../scene/orbit").OrbitViewport = { kind: "orbit", yaw: 170, elev: 17, zoom: 2, pivot: [0, 0, 0] };
+    const pose: import("@pe/web-kernel/scene/orbit").OrbitViewport = { kind: "orbit", yaw: 170, elev: 17, zoom: 2, pivot: [0, 0, 0] };
     const gesture = orbit.begin();
     const committed = a.page.read().viewport;
     act(() => orbit.preview(gesture, pose));
@@ -191,7 +192,7 @@ import { routeRegistry } from "../route/registry";
 import { bindActionReadings } from "../host/resource-stream";
 
 const trace = vi.hoisted(()=>({submit:vi.fn(),fetch:vi.fn(),base:"",target:null as any,results:[] as any[]}));
-vi.mock("../host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
+vi.mock("@pe/web-kernel/host/runtime",()=>({hostFetch:trace.fetch,runtimeStreamUrl:(url:string)=>new URL(url,trace.base).toString()}));
 vi.mock("../../../host/src/session-route",async actual=>{const real=await actual<any>();const {Effect}=await import("effect");const {sdkSessions}=await import("../../../host/tests/native-receipt-fixture");return {...real,runPeRevitCli:(args:any)=>Effect.promise(()=>sdkSessions(args))};});
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async actual => {const real=await actual<any>(); trace.submit.mockImplementation(async(...args:any[])=>{const row=await real.submitAction(...args);((trace as any).results??=[]).push(row);return row;}); return {...real,submitAction:trace.submit};});
 const ambient = <S,I>(tag:Context.Key<S,I>)=>Layer.effect(tag,Effect.serviceOption(tag).pipe(Effect.map(Option.getOrThrow)));
@@ -243,7 +244,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
  let generation=0;
  const { fansReadResponse } = await import("@pe/fans-contract/fans-read");
 const { address:workAddress } = await import("@pe/agent-contracts");
- const source: import("../shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
+ const source: import("@pe/web-kernel/shell/source-contract").UseSource={kind:"use",open(ctx,deliver){
    const subscription=crypto.randomUUID(),current=++generation;
    const body={read:"fans.calc",subscription,generation:current,args:{target:trace.target,...ctx.args as object}};
    void forward("/pe/reads/value",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)}).then(async response=>{

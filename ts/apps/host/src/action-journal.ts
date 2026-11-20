@@ -38,7 +38,6 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
 import type { CausalParentId } from "../../../packages/agent-contracts/src/route-kernel-page.ts";
 import type {
-  RequestIdentity as IdentityKey,
   RequestIdentityData,
   ValidatedOwner,
 } from "@pe/host-internal/request-contracts";
@@ -58,11 +57,8 @@ import {
   type ActionAdmission,
   type Consumed,
   type Claim,
-  type NativeProcess,
-  type Effect as RouteEffect,
   type WorkKey,
   type RouteStatePatch,
-  type RouteStateWriteResult,
   editableCells,
   type Command,
   workKey,

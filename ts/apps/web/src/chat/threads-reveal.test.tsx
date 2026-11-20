@@ -39,7 +39,7 @@ vi.mock("#/workbench/provider", () => ({
   useTranscriptAtom: () => null,
 }));
 vi.mock("#/chat/composer-head", () => ({ useChatSituation: () => ({ inventory: [] }) }));
-vi.mock("#/route/activity", () => ({
+vi.mock("@pe/web-kernel/route/activity", () => ({
   useRouteSearchSlice: () => ({ threadSearch: undefined, threadSort: "" }),
 }));
 let palette: (open: boolean) => void = () => {};

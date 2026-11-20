@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { SceneMeshes, type Bounds, type SceneInstance } from "./types";
+import { SceneMeshes, type Bounds, type SceneInstance } from "@pe/web-kernel/scene/types";
 import { bakeVeil, type VeilField } from "./veil-field";
 
 export type PreparationInput = {

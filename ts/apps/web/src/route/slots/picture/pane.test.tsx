@@ -4,14 +4,14 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { MARK_KINDS, type Finding } from "@pe/agent-contracts/slots";
 import { z } from "zod";
-import { field, route, paneLayout, picturePose, scrollBody, split } from "@pe/web/route";
+import { field, route, paneLayout, picturePose, scrollBody, split } from "@pe/web-kernel/route";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import { AttentionRoot } from "#/attention";
-import { ElementIndexContext, elementIndex } from "#/element-index";
+import { AttentionRoot } from "@pe/web-kernel/attention";
+import { ElementIndexContext, elementIndex } from "@pe/web-kernel/element-index";
 import type { ModelPicture } from "#/scene/picture/model";
-import { SceneMeshes } from "#/scene/types";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { makeAtomRegistry } from "../../../shell/owner";
-import type { PictureParts } from "./overlay.tsx";
+import type { PictureParts } from "@pe/web-kernel/route/slots/picture/overlay";
 import { PicturePane } from "./pane.tsx";
 
 /*

@@ -27,21 +27,22 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { useElementAttention } from "#/attention";
-import { useNativeObservation } from "#/revit/observation";
+import { useElementAttention } from "@pe/web-kernel/attention";
+import { useNativeObservation } from "@pe/web-kernel/revit/observation";
 import type { LiveOrbit } from "@pe/kit/lang/live-orbit";
-import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { LOOK } from "./grounds";
+import { subscribe as knobsChanged } from "@pe/web-kernel/knobs/knobs";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
 import { presetLook, type ScenePreset } from "./presets";
-import { type OrbitViewport } from "./orbit";
-import { samePlane, type PlaneAxis, type PlaneViewport } from "./plane";
-import type { Project, Ray, Size } from "./projection";
-import { type ClipVolume, type ColourMode, type ContextMode, type SceneRenderer } from "./renderer";
-import type { SceneMeshes } from "./types";
+import { type OrbitViewport } from "@pe/web-kernel/scene/orbit";
+import { samePlane, type PlaneAxis, type PlaneViewport } from "@pe/web-kernel/scene/plane";
+import type { Project, Ray, Size } from "@pe/web-kernel/scene/projection";
+import { type ClipVolume, type ColourMode, type ContextMode } from "@pe/web-kernel/scene/types";
+import { type SceneRenderer } from "./renderer";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { mountViewport, ATTRS } from "./scene-viewport";
 import { SceneController } from "./scene-controller";
 import { scenePlan } from "./scene-plan";
-import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, Pick } from "./types";
+import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, Pick } from "@pe/web-kernel/scene/types";
 
 export type Scene3DProps = {
   /** Fixed picture state; null explicitly shares a parent readout in an inset. */

@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { THREAD_TABS_MAX, routeOf, routeAddress, type ThreadTab } from "@pe/agent-contracts";
-import { RouteActivity, RouteVisibility, type RouteActivityScope } from "#/route/activity";
+import { RouteActivity, RouteVisibility, type RouteActivityScope } from "@pe/web-kernel/route/activity";
 import { useSyncExternalStore } from "react";
 import { publicRoutes } from "#/route/route-discovery";
 import { currentLocation, rawQuery } from "#/route/url";

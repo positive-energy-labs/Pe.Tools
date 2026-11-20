@@ -7,7 +7,7 @@ import { module as family } from "../family/route";
 import { familyEditBuffer } from "../family/edit-buffer";
 import { TypedChrome } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
 import { settled } from "../test-journey";
 import { evaluate } from "@pe/host-internal/reads/evaluator";

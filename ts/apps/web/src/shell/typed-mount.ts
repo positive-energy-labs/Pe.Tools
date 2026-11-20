@@ -1,6 +1,7 @@
+import { openSet } from "@pe/web-kernel/shell/open-set.neutral";
 import { homeHandle } from "../route/slots/sheet/index.ts";
 import { peReadings, type Readings } from "#/host/resource-stream";
-import { kernelVerbs, type KernelVerbKey } from "../route/slots/findings/index.ts";
+import { kernelVerbs, type KernelVerbKey } from "@pe/web-kernel/route/slots/findings";
 import { FINDINGS_OWNER, findingsWorkSchema, type Finding } from "@pe/agent-contracts/slots";
 import { hostReadSource } from "./host-read-source.ts";
 import { z } from "zod";
@@ -12,8 +13,8 @@ const missingSubjects = (options: readonly { id: string }[], ids: readonly strin
 function valueRefusal(error: unknown, read: string): string {
   return readableRefusal(error, `Value unavailable (${read}): the model reading does not match its contract. Refresh to try again.`);
 }
-import { decodeField, encodeField } from "../route/field-codec";
-import { visibleReads } from "../route/typed-route";
+import { decodeField, encodeField } from "@pe/web-kernel/route/field-codec";
+import { visibleReads } from "@pe/web-kernel/route/typed-route";
 import {
   applyPatches,
   bindWork,
@@ -44,15 +45,15 @@ import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
-import type { ReadingContext, UseSource } from "./source-contract";
-import type { AnyVerb, DrawContext, EditFailure, EditHistory, PlannedVerb, RunVerb, TypedRoute, VerbContext, VerbHandle } from "../route/typed-route";
+import type { ReadingContext, UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { AnyVerb, DrawContext, EditFailure, EditHistory, PlannedVerb, RunVerb, TypedRoute, VerbContext, VerbHandle } from "@pe/web-kernel/route/typed-route";
 import { handle } from "@pe/agent-contracts/handle";
 import type { Command } from "../../../../packages/agent-contracts/src/command.ts";
-import { reasonOf, refusalOf, valueOf } from "../route/typed-route";
+import { reasonOf, refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
 import { absentLine, failureLine, retainedLine } from "./reading-line";
 import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
-import { observeSubject, subjectScopeKey, type SubjectState } from "./subject";
+import { observeSubject, subjectScopeKey, type SubjectState } from "@pe/web-kernel/shell/subject";
 
 
 
@@ -111,7 +112,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     })), selected: decodeField({ schema: focusSelectionSchema, initial: [] }, search.has("selected") ? search.get("selected") : memory.selected ?? []) });
   };
   const owners = new Map<string, {
-    scope: WorkScope; config: import("../route/typed-route").Owners[string]; handle: WorkHandle | null;
+    scope: WorkScope; config: import("@pe/web-kernel/route/typed-route").Owners[string]; handle: WorkHandle | null;
     doc: any; ready: boolean; absent:boolean; problem: string | null; failure: WorkFeedFailure | null; failed: boolean;
     lease: ReturnType<typeof registry.acquire>;
   }>();
@@ -132,12 +133,12 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
     value.rows.flatMap(row => "revision" in row ? [{ work: row.work, revision: row.revision }] : []),
   ]);
   let stopTimeline = () => {};
-  const reads = new Map<import("../route/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
-  const readInput = (read: import("../route/host-read").HostRead) => {
+  const reads = new Map<import("@pe/web-kernel/host-read").HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+  const readInput = (read: import("@pe/web-kernel/host-read").HostRead) => {
     const project = "args" in read && typeof read.args === "function" ? read.args : spec.core?.args ?? (() => ({}));
     return read.input.parse(project(page as never));
   };
-  const currentPublication = (read: import("../route/host-read").HostRead) => {
+  const currentPublication = (read: import("@pe/web-kernel/host-read").HostRead) => {
     const record = reads.get(read);
     return record?.snapshot.state === "ready" && record.args === canonicalRouteInput(readInput(read))
       ? record.snapshot.publication : null;
@@ -755,7 +756,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       })),
     }, current: (token:InvocationToken) => gate.current(token),
     // ponytail: a read the route never declared has not run; no caller draws this state (a pane with no read always draws).
-    value: (read: import("../route/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
+    value: (read: import("@pe/web-kernel/host-read").HostRead | undefined = spec.core): Snapshot => read ? reads.get(read)?.snapshot ?? reading() : { state: "not-yet-run", publication: null },
     owner: (id = own) => owners.get(id),
     page: { read: () => page, pose: (patch: any, intent?: "gesture"|"named") => moveRole("pose",patch,intent === "gesture"?"replace":intent === "named"?"push":undefined), query: (patch: any) => moveRole("query",patch), select: (selected: any) => move({selected}), subject: (subject: any) => {if(!spec.subject) throw Error("No subject declared");return move({ [spec.subject.field]: subject },"push");} },
     subscribe(listener: () => void) { const resume = released; released = false; listeners.add(listener); if (resume) connectTimeline(true); syncReads(); return () => { listeners.delete(listener); }; },
@@ -772,7 +773,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
       return owner ? owner.problem : null;
     },
     // A named read refreshes with the rest: every read is demanded at mount.
-    refresh: (_read?:import("../route/host-read").HostRead) => {
+    refresh: (_read?:import("@pe/web-kernel/host-read").HostRead) => {
       requireCurrent(); syncReads(true);
     },
     review: (id: string) => { const r=reviews.get(id)??applyingReviews.get(id); if(!r) return null;
@@ -877,7 +878,7 @@ export function mountTypedRoute(module: TypedRoute, input: PlaceInput, fingerpri
         patch,
         edit: (edit,detail)=>patch(()=>edits!.patches(edits!.input.parse(edit),valueOf(core)),detail),
       };
-      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("../route/host-read").HostRead)=>mounted.value(read), absent:absentLine, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
+      return (render ?? ((ctx: DrawContext<any,any,any,any>) => pane.draw(ctx).node))({ target: input.target, refresh:mounted.refresh, read:(read:import("@pe/web-kernel/host-read").HostRead)=>mounted.value(read), absent:absentLine, value, page: mounted.page, cells, selection:{read:()=>page.selected,set:(selected:any)=>move({selected})},
         // A route's own id wins over a kernel verb of the same name.
         verb:(id:string)=>Object.hasOwn(spec.verbs,id)||!Object.hasOwn(kernelVerbs,id)?mounted.verb(id):mounted.kernelVerb(id as KernelVerbKey) } as any);
     },
@@ -902,4 +903,20 @@ async function settleNative(submission: ReturnType<WorkJournalDoor["submit"]>,re
     if(outcome.kind==="accepted-native"&&outcome.outcome==="committed") resolve(receipt?{receiptId:outcome.receiptId,result:outcome.result}:outcome.result);
     else reject(Error(outcome.kind==="rejected"?outcome.problem:"Outcome unknown; inspect History"));
   },()=>reject(Error("Command detached; inspect History before retrying"))));
+}
+
+/** The typed mount owns every subject move and the current roster. */
+export function typedSubjectDoor(mount: TypedMount) {
+  const { spec } = mount;
+    if(!spec.subject) return null;
+    const subjectSpec=spec.subject;
+    const update=(op:(set:ReturnType<typeof openSet<unknown>>,value:any)=>unknown)=>{
+      const roster=mount.value(subjectSpec.read ?? spec.core),value="value" in roster?roster.value:undefined;
+      const set=openSet<unknown>(canonicalRouteInput,value?subjectSpec.options(value).map(o=>o.id):[]);
+      mount.page.subject(op(set,mount.page.read()[subjectSpec.field]));
+    };
+    return { toggle:(id:unknown)=>update((set,value)=>set.toggle(value,id)), add:(ids:readonly unknown[])=>update((set,value)=>set.add(value,ids)),
+      remove:(id:unknown)=>update((set,value)=>set.remove(value,id)),select:(ids:readonly unknown[])=>update((set,value)=>set.select(value,ids)),setActive:(id:unknown)=>update((set,value)=>set.setActive(value,id)),
+      all:()=>mount.page.subject({kind:"all"}),clear:()=>mount.page.subject({kind:"ids",ids:[]}) };
+
 }

@@ -42,7 +42,7 @@ test("Fans declares picture and the kernel draws its pane", () => {
 test("the borrowed body is gone: no route file mounts a Picture, and the picture's cross-imports are cut", () => {
   expect(productFiles()).toContain(`${products}/duct-systems/web/src/screen/screen.tsx`);
   const mountsPicture = (i: { from: string; names: string[] }) => /scene\/picture\/picture(?:\.tsx?)?$/.test(i.from) && i.names.includes("Picture");
-  expect(imports("planted.tsx", 'import { Picture } from "@pe/web/scene/picture/picture";').some(mountsPicture)).toBe(true);
+  expect(imports("planted.tsx", 'import { Picture } from "./shared/scene/picture/picture";').some(mountsPicture)).toBe(true);
   // Only the kernel pane mounts the one `Picture`.
   const mounts = productFiles()
     .filter((file) => !/\.test\.|test-support|\.fixture\./.test(file))

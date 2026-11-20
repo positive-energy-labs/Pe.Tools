@@ -1,6 +1,6 @@
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import {
   HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_BRIDGE_SESSION_HEADER,

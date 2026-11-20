@@ -1,7 +1,7 @@
 import { stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { timelineReceipts } from "../../../host/src/reads/work-timeline";
-import { refusalOf, valueOf } from "./typed-route";
+import { refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { host as placesHost, seedPlaces } from "../workbench/places.test-support";
 // @vitest-environment jsdom
@@ -16,7 +16,7 @@ import { act, cleanup, fireEvent, render as renderView, screen, waitFor, within 
 import { StandaloneBand } from "../shell/band.test-support";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
-import { route, scrollBody, type TypedRoute } from "./typed-route";
+import { route, scrollBody, type TypedRoute } from "@pe/web-kernel/route/typed-route";
 import { module as fans } from "@pe/fans-web/route";
 import { module as ducts } from "@pe/duct-systems-web/route";
 import { TypedChrome, TypedShell } from "../shell/typed-shell";
@@ -24,12 +24,12 @@ import * as mounts from "../shell/typed-mount";
 import { planned } from "../shell/typed-mount";
 import { familiesRouteState, address, workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ReviewSurface } from "../shell/review-surface";
-import { RouteActivity, RouteVisibility } from "./activity";
+import { RouteActivity, RouteVisibility } from "@pe/web-kernel/route/activity";
 import { setup as scheduleHost, cellsApplied } from "../../../host/tests/schedule-test-fixture";
 import { module as schedules } from "../schedules/route";
-import { namesOf } from "./typed-route";
+import { namesOf } from "@pe/web-kernel/route/typed-route";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
 import { familyDraftRouteState, podMemberCode } from "@pe/agent-contracts";
@@ -1007,7 +1007,7 @@ const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, 
 import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
-import type { ReadingDelivery } from "../shell/source-contract";
+import type { ReadingDelivery } from "@pe/web-kernel/shell/source-contract";
 const native = vi.hoisted(() => ({ submit: vi.fn(), retained: [] as unknown[] }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
   ...(await actual<object>()),
@@ -1778,7 +1778,7 @@ test("JZ E8-03 a typed Fans refused Plan explains the atomic Apply hold at the a
 
 // The declared roster is the route's sole subject-choice surface, even on another pane.
 test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppresses the header chooser across panes", async name => {
-  const { useAdmittedSubject } = await import("../shell/subject");
+  const { useAdmittedSubject } = await import("@pe/web-kernel/shell/subject");
   const read = fans.spec.core!;
   const declared = name === "Fans" ? fans.spec.panes["calc-roster"] : ducts.spec.panes["e-systems"];
   function Roster({ ctx }: { ctx: any }) {
@@ -1816,7 +1816,7 @@ test.each(["Fans", "Ducts"] as const)("JZ C042 %s subject-list declaration suppr
 
 test("JZ audit named subject choices preserve all none add and toggle without raw ids", async () => {
   const { fixture, ref, path: documentPath } = await import("../../../host/tests/host-read-graph.test-support");
-  const { typedSubjectDoor } = await import("../shell/subject");
+  const { typedSubjectDoor } = await import("../shell/typed-mount");
   const host = await fixture(true), tasks = new Set<Promise<unknown>>();
   const roster = fans.spec.subject!.read!;
   const module = route({ ...fans.spec, core: roster, edits: undefined, verbs: {}, band: [],

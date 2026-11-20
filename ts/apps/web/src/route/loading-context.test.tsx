@@ -19,7 +19,7 @@ const DUCTS_TEACHING = referenceTeaching("/duct-systems");
 import { useLocalDevice, RemoteDeviceGate, RecordedSourceChip } from "#/machine/devices";
 
 const host = vi.hoisted(() => ({ call: vi.fn(), fetch: vi.fn() }));
-vi.mock("#/host/runtime", () => ({ hostFetch: host.fetch }));
+vi.mock("@pe/web-kernel/host/runtime", () => ({ hostFetch: host.fetch }));
 host.fetch.mockImplementation(async () => new Response(null, { status: 403 }));
 vi.mock("#/host/pe-client", async () => {
   const { createPeClient } = await import("@pe/agent-contracts/pe-api");

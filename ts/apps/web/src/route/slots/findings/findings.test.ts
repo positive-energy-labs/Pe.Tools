@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { FINDING_KINDS, FINDINGS_DOORS, findingSchema, findingsWork, type Finding } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import { findingMark, kernelVerbs } from "./index.ts";
+import { findingMark, kernelVerbs } from "@pe/web-kernel/route/slots/findings";
 
 /*
  * Slice 9's web half (routes MAP row 9): a `note` with a verdict has no shape, one mark draws on

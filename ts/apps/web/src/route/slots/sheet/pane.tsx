@@ -6,8 +6,8 @@ import { schemaOf, type SheetSlot } from "@pe/agent-contracts/slots";
 import { useMention } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
 import { StateCell } from "@pe/kit/lang/cell";
-import { useRouteSearchSlice } from "../../activity";
-import type { DrawContext, Fields } from "../../typed-route.ts";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
+import type { DrawContext, Fields } from "@pe/web-kernel/route/typed-route";
 import { bindingPath, sheetCells, typedCells, type CalcCell } from "./index.ts";
 
 /*

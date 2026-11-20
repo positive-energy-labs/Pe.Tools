@@ -10,7 +10,7 @@ import type { RoomsTrace } from "@pe/host-contracts/generated";
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import { FactChip } from "@pe/kit/lang/chip";
 import { tokenRef } from "@pe/kit/lib/token";
-import type { Point2 } from "#/lib/affine-frame";
+import type { Point2 } from "@pe/web-kernel/lib/affine-frame";
 
 export type TraceData = RoomsTrace.Res.Response;
 /** The trace as read: the data, or (`none`) why there is none; both null while reading. */

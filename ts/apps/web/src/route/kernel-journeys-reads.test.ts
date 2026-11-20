@@ -1,6 +1,6 @@
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
-import { refusalOf, valueOf } from "./typed-route";
+import { refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { systemCode } from "@pe/ducts-web/identity";
@@ -62,7 +62,7 @@ import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/
 import { module as fans } from "@pe/fans-web/route";
 import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
@@ -77,7 +77,7 @@ import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/h
 import { fansCalc } from "@pe/fans-host/host";
 import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as families } from "../families/route";
-import type { TypedRoute } from "./typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 import { handle } from "@pe/agent-contracts/handle";
 import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
@@ -1001,7 +1001,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
   const { nativeFixture } = await import("../../../host/tests/fans/fans-native.fixture.ts");
-  const { BridgeError } = await import("../../../host/src/bridge");
+  const { BridgeError } = await import("@pe/host-internal/bridge");
   const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");
   const { Effect, Layer } = await import("effect");

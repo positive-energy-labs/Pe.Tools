@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter,
   RouterProvider, RouterContextProvider, useRouterState, useRouter } from "@tanstack/react-router";
-import { useRouteActivity, type RouteActivityScope } from "#/route/activity";
+import { useRouteActivity, type RouteActivityScope } from "@pe/web-kernel/route/activity";
 import { RouteRetention } from "./route-retention";
 import { PlaceBoundary, admittedRouterAddress } from "#/shell/typed-place-boundary";
 import type { AdmittedPlace } from "#/shell/typed-place";

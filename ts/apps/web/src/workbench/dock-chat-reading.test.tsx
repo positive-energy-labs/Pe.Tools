@@ -13,7 +13,7 @@ import { StandaloneBand } from "../shell/band.test-support";
 import { dockChatAddress } from "./hosted-route";
 import { WorkbenchProvider } from "./provider";
 import { PaneActionSlots } from "../shell/pane-actions";
-import type { DrawContext } from "../route/typed-route";
+import type { DrawContext } from "@pe/web-kernel/route/typed-route";
 
 afterEach(() => {cleanup(); vi.unstubAllGlobals(); window.history.replaceState({}, "", "/");});
 test.each([

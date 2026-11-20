@@ -1,5 +1,5 @@
 import type { SceneView } from "@pe/agent-contracts";
-import type { Look } from "./grounds";
+import type { Look } from "@pe/web-kernel/scene/grounds";
 
 export const PRESETS = [
   { value: "all", label: "All context", title: "All captured context" },

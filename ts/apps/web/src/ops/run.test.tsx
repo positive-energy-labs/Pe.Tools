@@ -6,15 +6,15 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { KeyScopeHost } from "@pe/kit/keys";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { oneName } from "../route/typed-route";
+import { oneName } from "@pe/web-kernel/route/typed-route";
 import { TypedChrome } from "../shell/typed-shell";
 import * as mounts from "../shell/typed-mount";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { module as ops } from "./route";
 
 const io = vi.hoisted(() => ({ fetch: vi.fn(), fault: vi.fn() }));
-vi.mock("#/host/runtime", () => ({ hostFetch: io.fetch }));
+vi.mock("@pe/web-kernel/host/runtime", () => ({ hostFetch: io.fetch }));
 vi.mock("#/host/diagnostics", () => ({ reportFault: io.fault }));
 
 beforeEach(() => {

@@ -1,7 +1,7 @@
 import { hostState } from "../../../host/src/host-ownership.ts";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { fixtureTimeline } from "../shell/fixture-work-door";
-import { refusalOf, valueOf } from "./typed-route";
+import { refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
@@ -44,8 +44,8 @@ import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import type { Readings } from "../host/resource-stream";
-import type { UseSource } from "../shell/source-contract";
-import { scrollBody, type DrawContext, type TypedRoute } from "./typed-route";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import { scrollBody, type DrawContext, type TypedRoute } from "@pe/web-kernel/route/typed-route";
 
 const terminals = workSnapshot.nodes.filter(node => node.kind === "terminal");
 const terminalA = elementSubject(terminals[0]!);
@@ -927,7 +927,7 @@ test("JZ released reads resume once after custody returns through an unchanged a
 
 test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late %s Work outcome out of the replacement", async outcome => {
   const { z } = await import("zod");
-  const { route, field } = await import("./typed-route");
+  const { route, field } = await import("@pe/web-kernel/route/typed-route");
   const j = await journey();
   let held: ReturnType<typeof gate> | undefined;
   try {
@@ -967,7 +967,7 @@ test.each(["accepted", "refused"] as const)("JZ audit member switch keeps a late
 }, 60_000);
 
 test("JZ audit a read refuses malformed HTTP Value data and recovers without exposing it", async () => {
-  const { route } = await import("./typed-route");
+  const { route } = await import("@pe/web-kernel/route/typed-route");
   const j = await journey(), tasks = new Set<Promise<unknown>>();
   let opened = 0, corrupt = true;
   const read = { ...fans.spec.core! };

@@ -9,8 +9,8 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { readMarks, settled as marksSettled, LAYER } from "../../../../tests/e2e/marks.ts";
 import { settled } from "../test-journey";
-import { draw } from "./draw";
-import { overlay, type PictureOverlayProps } from "./slots/picture/overlay";
+import { draw } from "@pe/web-kernel/route/draw";
+import { overlay, type PictureOverlayProps } from "@pe/web-kernel/route/slots/picture/overlay";
 
 afterEach(cleanup);
 

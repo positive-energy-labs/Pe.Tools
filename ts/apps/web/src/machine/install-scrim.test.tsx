@@ -10,7 +10,7 @@ import { MACHINE_SEEDS } from "./open-examples";
 
 import { InstallGate, SUCCESSOR_POLL_MS, SUCCESSOR_WAIT_MS } from "./install-scrim";
 
-vi.mock("#/host/runtime", () => ({
+vi.mock("@pe/web-kernel/host/runtime", () => ({
   hostFetch: (url: string, init?: RequestInit) => fetch(url, init),
 }));
 

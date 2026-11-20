@@ -8,13 +8,13 @@ import { Button } from "@pe/kit/lang/button";
 import type { FloaterSpec } from "@pe/kit/lang/floater";
 import type { PicturePage } from "@pe/agent-contracts";
 import { StageGlobe } from "#/scene/stage-globe";
-import type { OrbitViewport } from "#/scene/orbit";
+import type { OrbitViewport } from "@pe/web-kernel/scene/orbit";
 import type { LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { Scene3D } from "#/scene/scene3d";
-import type { SceneMeshes } from "#/scene/types";
-import type { PictureBounds } from "#/scene/framing";
-import { useElementIndex } from "#/element-index";
-import type { PictureLine } from "./model";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
+import type { PictureBounds } from "@pe/web-kernel/scene/framing";
+import { useElementIndex } from "@pe/web-kernel/element-index";
+import type { PictureLine } from "@pe/web-kernel/scene/picture/content";
 
 const CORNER = { width: 300, height: 176 } as const;
 

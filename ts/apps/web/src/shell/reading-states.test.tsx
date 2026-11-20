@@ -8,13 +8,13 @@ import { z } from "zod";
 import { KeyScopeHost } from "@pe/kit/keys";
 import {  workFingerprintSchema } from "@pe/agent-contracts";
 import { module as families } from "../families/route";
-import { route, type ContextOf } from "../route/defaults";
-import { hostRead } from "../route/host-read";
-import { scrollBody } from "../route/body";
-import { refusalOf } from "../route/typed-route";
+import { route, type ContextOf } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { scrollBody } from "@pe/web-kernel/route/body";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { TypedChrome } from "./typed-shell";
 import { mountTypedRoute } from "./typed-mount";
-import type { UseSource } from "./source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 
 afterEach(cleanup);
 

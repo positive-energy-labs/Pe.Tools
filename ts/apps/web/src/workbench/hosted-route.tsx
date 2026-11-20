@@ -2,7 +2,7 @@ import { createContext, useSyncExternalStore } from "react";
 import { publicRoutes } from "../route/route-discovery";
 import type { AdmittedAddressPort } from "../shell/typed-address";
 import { subjectCode } from "@pe/agent-contracts";
-import type { TypedRoute } from "../route/typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 export type DockSurfaceProps = { target?: string; docked?: boolean };
 export const DockSurface = createContext<DockSurfaceProps>({});
 export function dockChatAddress(address: AdmittedAddressPort): AdmittedAddressPort {

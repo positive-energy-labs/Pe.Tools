@@ -3,7 +3,7 @@ import { publicRoutes, typedWorkCells } from "../route/route-discovery";
 
 const HostedTypedRoute = lazy(() => import("./typed-shell").then(m => ({default:m.HostedTypedRoute})));
 /** Same mount/discovery registration for builtin declarations and verified Pod declarations. */
-export function registerTypedRoute(typed: import("../route/typed-route").TypedRoute,
+export function registerTypedRoute(typed: import("@pe/web-kernel/route/typed-route").TypedRoute,
   fingerprint: import("@pe/agent-contracts").RouteFingerprint) {
   const key=typed.data.key;
   return publicRoutes.register({manifest:typed.data, typed,

@@ -1,4 +1,4 @@
-import { refusalOf } from "../route/typed-route";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 ﻿import { useSyncExternalStore } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
 import { expect } from "vite-plus/test";
@@ -17,7 +17,7 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { completion } from "../shell/work-door-observation";
 import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { routeRegistry } from "../route/registry";
 import { module, viewCatalogue } from "./route";
 import { AdoptionBody } from "./typed-adoption";

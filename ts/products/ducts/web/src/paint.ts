@@ -1,7 +1,7 @@
 import type { DuctGraph } from "@pe/ducts-domain/drawn-graph";
-import { paintOf as resolvePaint } from "@pe/web/scene/grounds";
-import type { Paint, PaintOf, SceneMeshes } from "@pe/web/scene/types";
-import type { SurfacePort } from "@pe/web/scene/ports";
+import { paintOf as resolvePaint } from "@pe/web-kernel/scene/grounds";
+import type { Paint, PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
+import type { SurfacePort } from "@pe/web-kernel/scene/ports";
 
 /** Autodesk BuiltInCategory.OST_MechanicalEquipment; PSC1 keeps this stable numeric identity. */
 const EQUIPMENT_CATEGORY_ID = -2001140;

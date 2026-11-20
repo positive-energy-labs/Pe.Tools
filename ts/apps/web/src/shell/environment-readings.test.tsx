@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Machine, ReadingRequest } from "@pe/agent-contracts";
 import { useEnvironmentReading } from "../host/environment-state";
 const selection = vi.hoisted(() => ({ name: "missing", calls: [] as (ReadingRequest | null)[] }));
-vi.mock("../route/activity", () => ({
+vi.mock("@pe/web-kernel/route/activity", () => ({
   useRouteSearchSlice: (select: (search: Record<string, unknown>) => unknown) =>
     select({ fixture: selection.name }),
 }));

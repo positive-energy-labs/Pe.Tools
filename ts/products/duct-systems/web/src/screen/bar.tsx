@@ -4,7 +4,7 @@ import {
   useMention,
   type SubjectKey,
 } from "@pe/kit/lang/attention";
-import { useElementIndex } from "@pe/web/element-index";
+import { useElementIndex } from "@pe/web-kernel/element-index";
 import type { SystemNote } from "../system-list-search.ts";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
@@ -46,7 +46,7 @@ import {
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
-import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
+import { observedElements, useNativeObservation } from "@pe/web-kernel/revit/observation";
 
 import type { Split, SplitPart } from "../loss-split.ts";
 import type { systemList } from "../system-list.ts";

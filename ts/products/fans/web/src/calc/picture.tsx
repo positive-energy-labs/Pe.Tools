@@ -5,20 +5,20 @@
  * The focused blocker is the page's `issue`, so a mark picked here focuses its row and a row's hover
  * lights its mark.
  */
-import { useElementAttention } from "@pe/web/attention";
+import { useElementAttention } from "@pe/web-kernel/attention";
 import {
   layersOn,
   type PictureLayer,
   type PictureOverlayFrame,
   type PictureStrand,
-} from "@pe/web/scene/picture/picture";
-import type { PictureParts } from "@pe/web/route/slots/picture/overlay";
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+} from "@pe/web-kernel/scene/picture/content";
+import type { PictureParts } from "@pe/web-kernel/route/slots/picture/overlay";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import type { PicturePage } from "@pe/agent-contracts";
 import { snapshotById } from "@pe/ducts-domain/readiness";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Members, SubjectKey } from "@pe/kit/lang/attention";
-import type { ElementIndex } from "@pe/web/element-index";
+import type { ElementIndex } from "@pe/web-kernel/element-index";
 import { ductElements } from "@pe/ducts-web/identity";
 import { useMemo, type ReactNode, type RefObject } from "react";
 import { coloursOf } from "@pe/ducts-web/colours";

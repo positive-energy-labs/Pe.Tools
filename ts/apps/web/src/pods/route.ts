@@ -1,12 +1,12 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf } from "../route/defaults";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { read } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { memberWork, settingsRouteState, type Immutable } from "@pe/agent-contracts";
-import { field, route, split, subjectSchema } from "../route/defaults";
-import { hostRead } from "../route/host-read.ts";
-import { draw } from "../route/draw.tsx";
+import { field, route, split, subjectSchema } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
 import { podsArgs,
   podMemberCode,

@@ -47,7 +47,8 @@
     "@pe/web": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
     "@pe/fans-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*"
+    "@pe/fans-domain": "workspace:*",
+    "@pe/web-kernel": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -62,25 +63,5 @@
       "where": "where.exe",
       "attrib": "attrib.exe"
     }
-  },
-  "exports": {
-    "./settings": "./src/settings.ts",
-    "./family-actions": "./src/family-actions.ts",
-    "./family-spec": "./src/family-spec.ts",
-    "./ducts-files": "./src/ducts-files.ts",
-    "./ducts-inputs": "./src/ducts-inputs.ts",
-    "./reads/inputs": "./src/reads/inputs.ts",
-    "./bridge": "./src/bridge.ts",
-    "./command-executor": "./src/command-executor.ts",
-    "./vite.config": "./vite.config.ts",
-    "./request-services": "./src/request-services.ts",
-    "./action-journal": "./src/action-journal.ts",
-    "./document-lifetime": "./src/document-lifetime.ts",
-    "./tiered-settings": "./src/tiered-settings.ts",
-    "./host-ownership": "./src/host-ownership.ts",
-    "./input-occurrence": "./src/input-occurrence.ts",
-    "./native-reads": "./src/native-reads.ts",
-    "./native-recording": "./src/native-recording.ts",
-    "./call-route": "./src/call-route.ts"
   }
 }

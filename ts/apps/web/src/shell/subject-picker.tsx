@@ -6,7 +6,7 @@ import { NarrowChip } from "@pe/kit/lang/chip";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import type { RouteGraphWire as RouteGraphJson } from "@pe/agent-contracts";
 import { canonicalEnvironmentInput as identity } from "../../../../packages/agent-contracts/src/route-kernel-environment";
-import { openSet, type OpenSet } from "./open-set.neutral";
+import { openSet, type OpenSet } from "@pe/web-kernel/shell/open-set.neutral";
 const rosterSchema = z.array(z.object({ id: z.unknown(), label: z.string() }));
 interface SubjectMount {
   picker(field: string): unknown;

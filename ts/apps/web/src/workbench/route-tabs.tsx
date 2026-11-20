@@ -1,4 +1,4 @@
-import { subjectState, useSubjects } from "../shell/subject";
+import { subjectState, useSubjects } from "@pe/web-kernel/shell/subject";
 import { useSyncExternalStore } from "react";
 import { Plus, X } from "lucide-react";
 import { appRouteByKey, type ThreadTab } from "@pe/agent-contracts";

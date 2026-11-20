@@ -6,8 +6,8 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { module as families } from "../families/route";
-import { route, scrollBody } from "../route/typed-route";
-import { ElementMenu } from "../revit/element-menu";
+import { route, scrollBody } from "@pe/web-kernel/route/typed-route";
+import { ElementMenu } from "@pe/web-kernel/revit/element-menu";
 import { appAtomRegistry } from "./owner";
 import { TypedShell } from "./typed-shell";
 

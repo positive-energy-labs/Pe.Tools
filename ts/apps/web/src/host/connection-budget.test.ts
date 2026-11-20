@@ -12,7 +12,7 @@
  * host read, since folded into the readings stream as the `publication` kind).
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import type { ReadingContext } from "../shell/source-contract";
+import type { ReadingContext } from "@pe/web-kernel/shell/source-contract";
 import { publicationSource } from "./publication-source";
 import { PeReadings, peReadings } from "./resource-stream";
 

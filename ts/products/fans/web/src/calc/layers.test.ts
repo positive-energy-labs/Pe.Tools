@@ -22,7 +22,7 @@ import {
 } from "./layers.ts";
 import { detailOf, type CalcBlocker } from "./tiers.ts";
 
-vi.mock("../../../../../apps/web/src/scene/ink.ts", () => ({ inkOf: () => new THREE.Color(0xffffff) }));
+vi.mock("@pe/web-kernel/scene/ink", () => ({ inkOf: () => new THREE.Color(0xffffff) }));
 
 const IN = 1 / 12;
 const conn = (

@@ -8,7 +8,7 @@ import { type Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
 import { type VizIndex, vizVar } from "#/ops/primitives";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
-import { contentViewport, fitFrame } from "#/lib/affine-frame";
+import { contentViewport, fitFrame } from "@pe/web-kernel/lib/affine-frame";
 
 function numericish(value: string): boolean {
   const v = value.trim();

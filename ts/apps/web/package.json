@@ -56,7 +56,8 @@
     "@pe/fans-web": "workspace:*",
     "jiti": "^2.7.0",
     "@pe/browser": "workspace:*",
-    "@pe/host-internal": "workspace:*"
+    "@pe/host-internal": "workspace:*",
+    "@pe/web-kernel": "workspace:*"
   },
   "devDependencies": {
     "@pe/ducts-contract": "workspace:*",
@@ -86,36 +87,6 @@
     ]
   },
   "exports": {
-    "./route": "./src/route/defaults.ts",
-    "./host-read": "./src/route/host-read.ts",
-    "./route/draw": "./src/route/draw.tsx",
-    "./route/body": "./src/route/body.ts",
-    "./route/slots/picture/overlay": "./src/route/slots/picture/overlay.tsx",
-    "./scene/types": "./src/scene/types.ts",
-    "./element-index": "./src/element-index.ts",
-    "./revit/observation": "./src/revit/observation.tsx",
-    "./route/activity": "./src/route/activity.tsx",
-    "./revit/element-menu": "./src/revit/element-menu.tsx",
-    "./revit/element-target": "./src/revit/element-target.ts",
-    "./scene/damage": "./src/scene/damage.ts",
-    "./scene/picture/picture": "./src/scene/picture/picture.tsx",
-    "./shell/subject": "./src/shell/subject.ts",
-    "./attention": "./src/attention.tsx",
-    "./knobs/knobs": "./src/knobs/knobs.ts",
-    "./route/typed-route": "./src/route/typed-route.ts",
-    "./vite.config": "./vite.config.ts",
-    "./scene/projection": "./src/scene/projection.ts",
-    "./scene/footnotes": "./src/scene/footnotes.tsx",
-    "./scene/ink": "./src/scene/ink.ts",
-    "./scene/marks": "./src/scene/marks.ts",
-    "./shell/open-set.neutral": "./src/shell/open-set.neutral.ts",
-    "./scene/grounds": "./src/scene/grounds.ts",
-    "./scene/ports": "./src/scene/ports.ts",
-    "./scene/framing": "./src/scene/framing.ts",
-    "./scene/continuations": "./src/scene/continuations.tsx",
-    "./scene/renderer": "./src/scene/renderer.ts",
-    "./scene/surfaces": "./src/scene/surfaces.ts",
-    "./scene/pan-zoom": "./src/scene/pan-zoom.tsx",
-    "./components/work/band": "./src/components/work/band.tsx"
+    "./vite.config": "./vite.config.ts"
   }
 }

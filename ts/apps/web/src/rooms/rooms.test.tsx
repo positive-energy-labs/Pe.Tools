@@ -9,7 +9,7 @@ import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable } from "./table";
 import { roomRows } from "./rows";
 import { roomsGoal } from "./goal";
-import { scrollBody } from "../route/body";
+import { scrollBody } from "@pe/web-kernel/route/body";
 import { regionSubject } from "./subject";
 
 test("rooms attention decodes as a region with its stable carrier GUID", () => {
@@ -134,7 +134,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const {createFixtureWorkDoor}=await import("../shell/fixture-work-door");
   const {retainedLine}=await import("../shell/reading-line");
   const {workFingerprintSchema}=await import("@pe/agent-contracts");
-  const frames:Parameters<import("../shell/source-contract").UseSource["open"]>[1][]=[];
+  const frames:Parameters<import("@pe/web-kernel/shell/source-contract").UseSource["open"]>[1][]=[];
   let search=new URLSearchParams();
   const mount=mountTypedRoute({...module,spec:{...module.spec,panes:{main:{...module.spec.panes.main,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}}}},
     {address:{read:()=>search,write:next=>{search=next;},subscribe:()=>()=>{}},fixture:null,target:{kind:"document",ref:{session:"retained",openId:"rooms"}},

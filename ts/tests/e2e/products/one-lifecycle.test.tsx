@@ -4,8 +4,8 @@ import { expect, test, vi } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../../../apps/web/src/shell/history.ts";
 import { direct, mountTypedRoute, planned } from "../../../apps/web/src/shell/typed-mount.ts";
-import { scrollBody } from "../../../apps/web/src/route/body.ts";
-import type { ReadingContext } from "../../../apps/web/src/shell/source-contract.ts";
+import { scrollBody } from "@pe/web-kernel/route/body";
+import type { ReadingContext } from "@pe/web-kernel/shell/source-contract";
 import { createWitness } from "../fans-witness.test-support.ts";
 
 test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {
@@ -47,10 +47,10 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 
 test("optional Work and invocation arguments share one typed scope", async () => {
   const {z}=await import("zod");
-  const {route,field}=await import("../../../apps/web/src/route/typed-route.ts");
+  const {route,field}=await import("@pe/web-kernel/route/typed-route");
   const {handle}=await import("@pe/agent-contracts/handle");
   const {module:reference}=await import("@pe/fans-web/route");
-  const {hostRead}=await import("@pe/web/host-read");
+  const {hostRead}=await import("@pe/web-kernel/host-read");
   const {workFingerprintSchema}=await import("@pe/agent-contracts");
   const source=vi.fn();
   const read=hostRead({...contract("probe.value", { input: z.object({}), data: z.object({answer:z.number()}), uses: [] })});
@@ -105,7 +105,7 @@ test("optional Work and invocation arguments share one typed scope", async () =>
 test("Timeline undo takes the latest owner step, then the prior owner",async()=>{
   const {z}=await import("zod");
   const {draftCellSchema,workFingerprintSchema}=await import("@pe/agent-contracts");
-  const {route}=await import("../../../apps/web/src/route/typed-route.ts");
+  const {route}=await import("@pe/web-kernel/route/typed-route");
   const {module:reference}=await import("@pe/fans-web/route");
   const {createFixtureWorkDoor}=await import("../../../apps/web/src/shell/fixture-work-door.ts");
   const schema=z.object({cells:z.record(z.string(),draftCellSchema(z.number())).default({})});
@@ -118,7 +118,7 @@ test("Timeline undo takes the latest owner step, then the prior owner",async()=>
   const mount=mountTypedRoute(module,{address:{read:()=>new URLSearchParams(),write:()=>{},subscribe:()=>()=>{}},fixture:null,
     target:{kind:"host"},work:{address:null,open:{session:"undo",openId:"cells"}},custody:{current:()=>true},memory:()=>({})},
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:door,timeline:door.timeline});
-  const ctx=()=>mount.draw("main") as import("../../../apps/web/src/route/typed-route.ts").DrawContext<unknown,{},import("zod").z.output<typeof schema>,never>;
+  const ctx=()=>mount.draw("main") as import("@pe/web-kernel/route/typed-route").DrawContext<unknown,{},import("zod").z.output<typeof schema>,never>;
   try {
     await vi.waitFor(()=>expect(ctx().cells.state.state).toBe("ready"));
     expect(await ctx().cells.at(["cells","one"],"undo-a").stage(1,{label:"First owner"})).toBeNull();

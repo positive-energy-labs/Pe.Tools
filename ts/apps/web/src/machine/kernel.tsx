@@ -1,5 +1,5 @@
 import { direct, mountTypedRoute, type TypedMount } from "../shell/typed-mount";
-import { currentFixture } from "../shell/fixture-name";
+import { currentFixture } from "@pe/web-kernel/shell/fixture-name";
 import { routeRegistry } from "../route/registry";
 import { useOpenTypedOwner, type OpenSource } from "./typed-owner";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";

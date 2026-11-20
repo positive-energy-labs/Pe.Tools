@@ -5,17 +5,18 @@ import type { Finding, Mark, PictureScope, PictureSlot } from "@pe/agent-contrac
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { Pane } from "@pe/kit/lang/pane";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
-import { useElementIndex } from "#/element-index";
-import { boundsOfInstances, boundsOfPoints, center } from "#/scene/orbit";
-import { Picture, type LayerOption, type PictureLayer, type PictureLine, type PictureOverlayFrame } from "#/scene/picture/picture";
-import type { SceneMeshes } from "#/scene/types";
+import { useElementIndex } from "@pe/web-kernel/element-index";
+import { boundsOfInstances, boundsOfPoints, center } from "@pe/web-kernel/scene/orbit";
+import { Picture } from "#/scene/picture/picture";
+import { type LayerOption, type PictureLayer, type PictureLine, type PictureOverlayFrame } from "@pe/web-kernel/scene/picture/content";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import type { DrawContext, picturePose } from "../../typed-route.ts";
-import { findingMark } from "../findings/index.ts";
+import type { DrawContext, picturePose } from "@pe/web-kernel/route/typed-route";
+import { findingMark } from "@pe/web-kernel/route/slots/findings";
 import { subjectName } from "../subject-name.ts";
-import { elementOf, pictureSlot, type Captured } from "./index.ts";
+import { elementOf, pictureSlot, type Captured } from "@pe/web-kernel/route/slots/picture";
 import { markLayer } from "./marks.ts";
-import type { PictureOverlayProps, PictureParts } from "./overlay.tsx";
+import type { PictureOverlayProps, PictureParts } from "@pe/web-kernel/route/slots/picture/overlay";
 
 /*
  * The kernel's picture pane (ADR 0035 rules 1, 2 and 9; owner ruling 2026-11-11). A route that

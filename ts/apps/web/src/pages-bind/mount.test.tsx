@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { oneName } from "#/route/typed-route";
+import { oneName } from "@pe/web-kernel/route/typed-route";
 import { routeAddress, type PageTargetReading } from "@pe/agent-contracts";
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { workFingerprintSchema } from "@pe/agent-contracts";

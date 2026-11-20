@@ -5,10 +5,10 @@ import { Input } from "@pe/kit/lang/input";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Switcher } from "@pe/kit/lang/switcher";
 import type { SceneView } from "@pe/agent-contracts";
-import type { Bounds } from "./types";
-import type { Project } from "./projection";
+import type { Bounds } from "@pe/web-kernel/scene/types";
+import type { Project } from "@pe/web-kernel/scene/projection";
 import { PRESETS } from "./presets";
-import { fitSection, limitsOf, SECTION_AXES, type Section, type SectionAxis } from "./section";
+import { fitSection, limitsOf, SECTION_AXES, type Section, type SectionAxis } from "@pe/web-kernel/scene/section";
 
 export function SectionControls({
   view,

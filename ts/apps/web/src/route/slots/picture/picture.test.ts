@@ -2,8 +2,8 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { MARK_KINDS, PICTURE_CONTEXT, markSchema, picturePoseSchemas, pictureScopeSchema, pictureSlotDataSchema } from "@pe/agent-contracts/slots";
 import { documentKeyOf, subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import { pictureSlot, resolveMark } from "./index.ts";
-import { picturePose, poseFields } from "../../typed-route.ts";
+import { pictureSlot, resolveMark } from "@pe/web-kernel/route/slots/picture";
+import { picturePose, poseFields } from "@pe/web-kernel/route/typed-route";
 
 /*
  * Slice 8's red falsifier (routes MAP row 8). The Pod half is the Pod author's red test on

@@ -49,10 +49,8 @@
     "./subject-text": "./src/subject-text.ts",
     "./work": "./src/work.ts",
     "./fixtures/fan-sheet.json": "./src/fixtures/fan-sheet.json",
-    "./cutover.test-support": "./src/cutover.test-support.ts",
     "./calcs.test-support": "./src/calcs.test-support.ts",
     "./admission.test-support": "./src/admission.test-support.ts",
-    "./native.test-support": "./src/native.test-support.ts",
     "./work-owner.test-support": "./src/work-owner.test-support.ts"
   },
   "scripts": {
@@ -65,10 +63,10 @@
     "@pe/ducts-domain": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/kit": "workspace:*",
-    "@pe/web": "workspace:*",
     "react": "^19.2.0",
     "three": "catalog:",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/web-kernel": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -81,6 +79,7 @@
     "@testing-library/react": "^16.3.0",
     "@pe/runtime": "workspace:*",
     "@pe/fans-contract": "workspace:*",
-    "@pe/duct-systems-contract": "workspace:*"
+    "@pe/duct-systems-contract": "workspace:*",
+    "jsdom": "^28.1.0"
   }
 }

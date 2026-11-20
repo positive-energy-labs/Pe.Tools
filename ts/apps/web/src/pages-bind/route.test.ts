@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
 import { decode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
-import { nameOf, oneName } from "../route/typed-route.ts";
+import { nameOf, oneName } from "@pe/web-kernel/route/typed-route";
 import { module } from "./route";
 
 /*

@@ -6,7 +6,7 @@ import { CatalogWorkReview, type CatalogWorkClient } from "../components/work/ca
 import { peReadings } from "#/host/resource-stream";
 import { browserWorkPorts } from "./work-feed-client";
 import type { TypedMount } from "./typed-mount";
-import { RouteVisibility } from "../route/activity";
+import { RouteVisibility } from "@pe/web-kernel/route/activity";
 
 const catalogSnapshot = z.object({ doc: z.unknown(), handle: workHandleSchema });
 const catalogClient: CatalogWorkClient = {
