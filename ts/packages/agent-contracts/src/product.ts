@@ -411,6 +411,22 @@ function toolTable(
   return publish === false ? {} : { [alias ?? id]: value };
 }
 
+/**
+ * The sheet names its Work by route and may hold only that Work's cells. A product of one Work
+ * routes by its id, and its Work holds every cell.
+ */
+type SheetWrites<Id, H, Sheet, Works extends RouteWorks<Cells>> = keyof Works extends never
+  ? { readonly route: Id; readonly writes: Sheet & NoExtras<NonNullable<Sheet>, H> }
+  : {
+      readonly [R in keyof Works & string]: {
+        readonly route: R;
+        readonly writes: Sheet &
+          NoExtras<NonNullable<Sheet>, H> & {
+            readonly [N in keyof Sheet]?: readonly Works[R][number][];
+          };
+      };
+    }[keyof Works & string];
+
 /** The declaration, plus what derives from it: the Work, Pea's tool, the named reads and the guide. */
 export function product<
   const Id extends string,
@@ -452,12 +468,7 @@ export function product<
       };
     };
   };
-  readonly sheetWrites?: SheetNative & {
-    readonly route: keyof NoInfer<Works> extends never
-      ? NoInfer<Id>
-      : keyof NoInfer<Works> & string;
-    readonly writes: Sheet & NoExtras<NonNullable<Sheet>, H>;
-  };
+  readonly sheetWrites?: SheetNative & SheetWrites<NoInfer<Id>, H, Sheet, NoInfer<Works>>;
   /** Zero or several, keyed by the route key. A subject's pane is one of the route's panes. */
   readonly routes: Routes & {
     readonly [K in keyof Routes]: NoExtras<Routes[K], ProductRoute> & {
