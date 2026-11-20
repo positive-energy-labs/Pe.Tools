@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
+import { BridgeError } from "@pe/host-internal/bridge";
 import { AdoptionBody } from "../src/takeoffs.tsx";
 import { captures } from "../routes/takeoffs/route.ts";
-import { CEILING, FLOOR, levels, reading, journey } from "./fixtures.ts";
+import { CEILING, FLOOR, GONE, levels, reading, journey } from "./fixtures.ts";
 import { Pane, type Native } from "../../../../tests/e2e/mounted.test-support.tsx";
 
 const MISSING = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"];
@@ -15,6 +16,21 @@ function model() {
   };
   const native: Native = (key, input) => {
     if (key === "rooms.roster") return { levels, regions: [] };
+    if (
+      key === "takeoffs.snapshot" &&
+      input.views.some((view: string) => view !== FLOOR && view !== CEILING)
+    )
+      throw new BridgeError("That view is not in this document.", 400, {
+        dispatched: true,
+        issues: [
+          {
+            instancePath: "$.view",
+            code: "RoomsViewMissing",
+            message: "Plan missing",
+            severity: "error",
+          },
+        ],
+      });
     if (key === "takeoffs.snapshot")
       return {
         reading,
@@ -77,11 +93,13 @@ test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, initial
     // No plan chosen: nothing to adopt, and the document says what it is missing.
     expect(await screen.findByText("No regions on the chosen plans")).toBeTruthy();
     expect(screen.getByText("Adoption: 2 shared parameters are missing.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "adopt" }).getAttribute("aria-description")).toBe(
-      "Select regions to adopt",
-    );
+    expect(
+      screen.getByRole("button", { name: "plan adopt" }).getAttribute("aria-description"),
+    ).toBe("Select regions to adopt");
     // Two plans named L2: the ceiling plan is chosen, and only its UniqueId reaches the model.
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Snowdon level · L2 · CeilingPlan" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", { name: "Snowdon level · L2 · CeilingPlan" }),
+    );
     await j.ready();
     const tick = await screen.findByRole("checkbox", { name: "Select Office zone in L2" });
     expect(j.search().get("views")).toContain(CEILING);
@@ -99,36 +117,56 @@ test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, initial
     const name = await screen.findByRole("textbox", { name: "Name of Office zone" });
     fireEvent.change(name, { target: { value: "West office" } });
     fireEvent.blur(name);
-    await waitFor(() => expect(j.mount.owner()?.doc.adopt[cell]?.edit?.value.name).toBe("West office"));
+    await waitFor(() =>
+      expect(j.mount.owner()?.doc.adopt[cell]?.edit?.value.name).toBe("West office"),
+    );
     await j.ready();
     // Initialize: planned, then applied; afterwards the document carries every shared parameter.
+    fireEvent.click(screen.getByRole("button", { name: "plan initialize" }));
+    await waitFor(() => expect(keys(j)).toContain("takeoffs.initialize.preview"));
+    expect(keys(j)).toEqual(["takeoffs.initialize.preview"]);
+    expect(await screen.findByText("Initialize the missing shared parameters.")).toBeTruthy();
+    expect(keys(j)).toEqual(["takeoffs.initialize.preview"]);
     fireEvent.click(screen.getByRole("button", { name: "initialize" }));
     await waitFor(() => expect(keys(j)).toContain("takeoffs.initialize"), { timeout: 20000 });
     expect(keys(j).indexOf("takeoffs.initialize.preview")).toBe(0);
-    expect(j.mount.owner()?.doc.writeIntent["takeoffs.initialize"].edit.value).toEqual({ stage: "Adoption" });
+    expect(j.mount.owner()?.doc.writeIntent["takeoffs.initialize"].edit.value).toEqual({
+      stage: "Adoption",
+    });
     await waitFor(() => expect(screen.queryByText(/shared parameters are missing/)).toBeNull(), {
       timeout: 20000,
     });
     await j.ready();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "adopt" }).getAttribute("aria-disabled")).toBeNull(),
+      expect(
+        screen.getByRole("button", { name: "plan adopt" }).getAttribute("aria-disabled"),
+      ).toBeNull(),
     );
-    expect(screen.getByRole("button", { name: "initialize" }).getAttribute("aria-description")).toBe(
-      "The document already carries every shared parameter",
-    );
+    expect(
+      screen.getByRole("button", { name: "plan initialize" }).getAttribute("aria-description"),
+    ).toBe("The document already carries every shared parameter");
     // Adopt: the sealed command reads its request from Work, the plan named by UniqueId.
-    fireEvent.click(screen.getByRole("button", { name: "adopt" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan adopt" }));
+    fireEvent.click(await screen.findByRole("button", { name: "adopt" }));
     await waitFor(() => expect(keys(j)).toContain("takeoffs.adopt"), { timeout: 20000 });
     expect(keys(j)).toContain("takeoffs.adopt.preview");
     expect(j.mount.owner()?.doc.writeIntent["takeoffs.adopt"].edit.value).toEqual({
-      views: [{ view: CEILING, items: [
+      views: [
+        {
+          view: CEILING,
+          items: [
             { elementId: 22, uniqueId: "office-zone-00000016", name: "West office", systemTag: "" },
-          ], }],
+          ],
+        },
+      ],
     });
     // Every read of chosen plans was kept by the host: the saved capture opens without the model.
     await j.ready();
     await waitFor(
-      () => expect(screen.getByRole("combobox", { name: "Saved capture" }).querySelectorAll("option").length).toBeGreaterThan(1),
+      () =>
+        expect(
+          screen.getByRole("combobox", { name: "Saved capture" }).querySelectorAll("option").length,
+        ).toBeGreaterThan(1),
       { timeout: 20000 },
     );
     const saved = screen.getByRole("combobox", { name: "Saved capture" }) as HTMLSelectElement;
@@ -147,10 +185,16 @@ test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, initial
   }
 });
 
-test("Takeoffs: a record the build cannot read is named and kept beside the rows", async () => {
+test("Takeoffs: a record the build cannot read is named beside the rows", async () => {
   const { native, state } = model();
-  state.unreadable = [{ elementId: null, parameter: "rooms-regions", reason: "Rooms data needs a regions map" }];
-  const j = await journey("takeoffs", native, new URLSearchParams({ views: JSON.stringify([FLOOR]) }));
+  state.unreadable = [
+    { elementId: null, parameter: "rooms-regions", reason: "Rooms data needs a regions map" },
+  ];
+  const j = await journey(
+    "takeoffs",
+    native,
+    new URLSearchParams({ views: JSON.stringify([FLOOR]) }),
+  );
   try {
     render(<Screen mount={j.mount} />);
     await j.ready();
@@ -160,3 +204,33 @@ test("Takeoffs: a record the build cannot read is named and kept beside the rows
     await j.close();
   }
 });
+
+test.each([GONE, "Old saved plan name", "123"])(
+  "Takeoffs: a gone selection %s can be unticked while a live plan loads",
+  async (gone) => {
+    const { native } = model();
+    const j = await journey(
+      "takeoffs",
+      native,
+      new URLSearchParams({ views: JSON.stringify([gone, FLOOR]) }),
+    );
+    try {
+      render(<Screen mount={j.mount} />);
+      await j.ready();
+      expect(
+        await screen.findByRole("checkbox", { name: "Select Office zone in L2" }),
+      ).toBeTruthy();
+      const missing = screen.getByRole("checkbox", { name: `Missing plan: ${gone}` });
+      expect(missing).toHaveProperty("checked", true);
+      fireEvent.click(missing);
+      await j.ready();
+      expect(JSON.parse(j.search().get("views")!)).toEqual([FLOOR]);
+      expect(screen.getByRole("checkbox", { name: "Select Office zone in L2" })).toHaveProperty(
+        "disabled",
+        false,
+      );
+    } finally {
+      await j.close();
+    }
+  },
+);

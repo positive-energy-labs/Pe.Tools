@@ -17,6 +17,9 @@ import { workBinding, workRead } from "@pe/host-internal/reads/work";
 import { product, regionCode, takeoffsWork } from "@pe/rooms-contract/product";
 
 const doc = (ref: DocumentRef) => ({ kind: "document" as const, ref });
+const planGone = (error: unknown): error is BridgeError =>
+  error instanceof BridgeError &&
+  (error.evidence.issues?.some((issue) => issue.code === "RoomsViewMissing") ?? false);
 const point2 = z.tuple([z.number(), z.number()]);
 /** A native point is a list; fewer than two numbers is refused, never read as zero. */
 const xy = (point: readonly number[]) => point2.parse(point.slice(0, 2));
@@ -31,6 +34,7 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
   async plans(ctx, { target }) {
     const { body } = await ctx.read(native("rooms.roster"), { target: doc(target), request: {} });
     return {
+      trackedRegionIds: body.trackedRegionIds ?? null,
       levels: body.levels.map((level) => ({
         name: level.name,
         elevationFt: level.elevation,
@@ -44,11 +48,7 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
       .read(native("rooms.snapshot"), { target: doc(target), request: { view } })
       .catch((error: unknown) => {
         // Only the native "this plan left the document" answer, by its typed issue code.
-        if (
-          error instanceof BridgeError &&
-          error.evidence.issues?.some((issue) => issue.code === "RoomsViewMissing")
-        )
-          return error.message;
+        if (planGone(error)) return error.message;
         throw error;
       });
     if (typeof read === "string") return { missing: read, regions: [], unreadable: [] };
@@ -143,34 +143,79 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
     const key = await ctx.read(workBinding, { route: "takeoffs", target: doc(target) });
     const work = key && (await ctx.read(workRead("takeoffs", takeoffsWork.schema), key));
     const choices = stagedAdoptChoices(takeoffsWork.schema.parse(work?.doc ?? {}));
-    const response = (
-      await ctx.read(native("takeoffs.snapshot"), {
-        target: doc(target),
-        request: { views, zoneUniqueIds: [] },
-      })
-    ).body;
+    const roster = views.length
+      ? await ctx.read(native("rooms.roster"), { target: doc(target), request: {} })
+      : null;
+    const listed = new Map(
+      roster?.body.levels.flatMap((level) =>
+        level.views.map((row) => [row.uniqueId, { name: row.name, level: level.name }] as const),
+      ),
+    );
+    // Resolve candidates first: a plan can disappear between the roster and its request.
+    const requested = [...new Set(views)];
+    const read = await Promise.all(
+      requested.map(async (view) => {
+        const plan = listed.get(view);
+        if (!plan) return { view, body: null };
+        try {
+          const { body } = await ctx.read(native("takeoffs.candidates"), {
+            target: doc(target),
+            request: { view },
+          });
+          return { view, body, plan };
+        } catch (error) {
+          if (planGone(error)) return { view, body: null };
+          throw error;
+        }
+      }),
+    );
+    let candidates = read.filter((row) => row.body !== null);
+    const snapshotFor = async (views: string[]) =>
+      (
+        await ctx.read(native("takeoffs.snapshot"), {
+          target: doc(target),
+          request: { views, zoneUniqueIds: [] },
+        })
+      ).body;
+    let response: Awaited<ReturnType<typeof snapshotFor>>;
+    for (;;) {
+      try {
+        response = await snapshotFor(candidates.map(({ view }) => view));
+        break;
+      } catch (error) {
+        if (!planGone(error) || !candidates.length) throw error;
+        // Revit may delete a plan between the candidate and snapshot reads. Isolate the typed
+        // refusal by plan, then retry the combined snapshot only with a strictly smaller scope.
+        const surviving =
+          candidates.length === 1
+            ? []
+            : await Promise.all(
+                candidates.map(async (candidate) => {
+                  try {
+                    await snapshotFor([candidate.view]);
+                    return candidate;
+                  } catch (error) {
+                    if (planGone(error)) return null;
+                    throw error;
+                  }
+                }),
+              );
+        const remaining = surviving.filter((row) => row !== null);
+        if (remaining.length === candidates.length) throw error;
+        candidates = remaining;
+      }
+    }
     const { snapshot } = response;
-    // Every read of chosen plans is kept as a capture: `takeoffs.sync` and the saved list read it.
-    if (views.length) {
-      const roster = await ctx.read(native("rooms.roster"), { target: doc(target), request: {} });
+    const liveViews = new Set(candidates.map(({ view }) => view));
+    if (liveViews.size)
       await ctx.read(retained, {
         target,
         snapshot: response,
-        views: roster.body.levels.flatMap((level) =>
-          level.views
-            .filter((row) => views.includes(row.uniqueId))
-            .map((row) => ({ name: row.name, level: level.name })),
-        ),
+        views: candidates.map(({ plan }) => plan),
       });
-    }
-    const candidates = await Promise.all(
-      views.map(async (view) => ({
-        view,
-        ...(await ctx.read(native("takeoffs.candidates"), { target: doc(target), request: { view } })),
-      })),
-    );
     const { carriers } = snapshot.status;
     return {
+      missingViews: requested.filter((view) => !liveViews.has(view)),
       rows: candidates.flatMap(({ body, view }) =>
         body.regions.map((row) => {
           const adopted = row.role === "zoning-region";

@@ -3,10 +3,12 @@ import { routeStatePatchSchema } from "@pe/agent-contracts";
 import { handle } from "@pe/agent-contracts/handle";
 import { sheetCells } from "@pe/agent-contracts/product";
 import type { SheetBinding } from "@pe/agent-contracts/slots";
-import { product, ROOM_FIELDS, roomsWork } from "@pe/rooms-contract/product";
+import { product, regionId, ROOM_FIELDS, roomsWork } from "@pe/rooms-contract/product";
 import { fillBody, scrollBody, split, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { screen } from "@pe/web-kernel/route/screen";
+
+import { presentIntent, stageIntent } from "../../src/staged.ts";
 
 const declared = product.routes.rooms;
 export const patches = z.array(routeStatePatchSchema);
@@ -18,7 +20,6 @@ export type RoomsContext = ContextOf<
   typeof patches,
   Verbs<never, "partition" | "merge">
 >;
-const says = (sentence: string) => () => ({ sentence, rows: [] });
 
 // Hoisted: a generic call inside the `screen()` argument defers the inference of its pane keys.
 const rosterBody = draw("scroll", () => import("../../src/rooms.tsx"), "RosterBody");
@@ -67,12 +68,50 @@ export const module = screen(
       partition: {
         handle: handle("rooms.partition"),
         label: "Partition",
-        present: says("Partition every zone on this plan, keeping locked and matched rooms."),
+        stageForPlan: ({ page, doc, value }) => {
+          if (!page.view || value?.missing) throw Error("Choose a plan");
+          return stageIntent(
+            "roster",
+            "rooms.partition",
+            "Prepare partition",
+            { view: page.view },
+            doc,
+          );
+        },
+        present: (preview) =>
+          presentIntent(
+            preview,
+            "Create rooms and held regions from the partition, removing prior regions that do not match. Keep locked and matched rooms.",
+          ),
       },
       merge: {
         handle: handle("rooms.merge"),
         label: "Merge",
-        present: says("Combine the selected rooms into one locked room."),
+        stageForPlan: ({ page, doc, value }) => {
+          const ids = new Set(page.room.kind === "all" ? [] : page.room.ids);
+          const regions = (value?.regions ?? [])
+            .filter((row) => row.role === "room" && ids.has(row.subject))
+            .map((row) => row.subject);
+          if (regions.length < 2) throw Error("Pick two or more rooms on the plan");
+          return stageIntent(
+            "roster",
+            "rooms.merge",
+            "Prepare merge",
+            { view: page.view, regions },
+            doc,
+          );
+        },
+        present: (preview) =>
+          presentIntent(
+            preview,
+            "Delete the selected room regions and create one locked room.",
+            (authored) => {
+              const intent = product.commands["rooms.merge"].authoredInput.safeParse(authored);
+              return intent.success
+                ? intent.data.regions.map((region) => `Delete region ${regionId(region)}`)
+                : [];
+            },
+          ),
       },
     },
     // The kernel draws the sheet pane and its `sheet` verb: `sheet.plan`, then `sheet.apply`.
@@ -126,11 +165,15 @@ export const module = screen(
         draw: () => scrollBody(null),
       },
     },
-    layout: split("h", [split("v", ["roster", "fields"], { id: "rooms-side", size: 320, sized: "end" }), "plan"], {
-      id: "rooms-layout",
-      size: 520,
-      sized: "start",
-      minSize: 320,
-    }),
+    layout: split(
+      "h",
+      [split("v", ["roster", "fields"], { id: "rooms-side", size: 320, sized: "end" }), "plan"],
+      {
+        id: "rooms-layout",
+        size: 520,
+        sized: "start",
+        minSize: 320,
+      },
+    ),
   },
 );

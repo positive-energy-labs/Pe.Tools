@@ -189,7 +189,13 @@ public static class Rooms
     // FOOTGUN: kaitpw tie-break (rooms LEDGER 2026-09-24), used only when no knee piece is near the region at all.
     private const double ZoneTieBreakSqft = 300.0;
 
-    public static RoomsSnapshotData Roster(Document doc) => new(Levels(doc), []);
+    public static RoomsSnapshotData Roster(Document doc)
+    {
+        var read = RoomsRegionRecord.Read(doc);
+        return new(Levels(doc), [], TrackedRegionIds: read.Refusal is null
+            ? read.Value?.Regions.Keys.Where(id => doc.GetElement(id) is FilledRegion).ToList() ?? []
+            : null);
+    }
 
     private static List<RoomsLevel> Levels(Document doc)
     {
@@ -834,7 +840,7 @@ public static class Rooms
     // A plan is its view UniqueId (TakeoffAtlas.PlanView); Rooms also needs its level, and answers the typed
     // refusal the route recovers from for a missing, template or non-plan element alike.
     private static ViewPlan LevelView(Document doc, string uniqueId) =>
-        (string.IsNullOrWhiteSpace(uniqueId) ? null : doc.GetElement(uniqueId)) is ViewPlan { IsTemplate: false, GenLevel: not null } view
+        TakeoffAtlas.PlanView(doc, uniqueId) is { GenLevel: not null } view
             ? view
             : throw new RoomsViewMissingException();
 

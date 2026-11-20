@@ -28,7 +28,8 @@ const port = (native: Native, work: unknown = null, taken: string[] = []): Input
   async take(name, args) {
     taken.push(name);
     if (name === "document-mark") return { observedSince: 1, changedAt: null, generation: 0 };
-    if (name === "work-scope") return { binding: "open", route: "takeoffs", target: null, open: ref };
+    if (name === "work-scope")
+      return { binding: "open", route: "takeoffs", target: null, open: ref };
     if (name === "work") return work;
     if (name === "file:takeoff-capture") {
       kept.push(args);
@@ -37,7 +38,11 @@ const port = (native: Native, work: unknown = null, taken: string[] = []): Input
         provenance: { kind: "live", target: ref },
         capturedAt: "2026-11-20T00:00:00.000Z",
         snapshot: {
-          reading: { at: "C:/Models/Snowdon.rvt", version: null, observedAt: "2026-11-20T00:00:00.000Z" },
+          reading: {
+            at: "C:/Models/Snowdon.rvt",
+            version: null,
+            observedAt: "2026-11-20T00:00:00.000Z",
+          },
           carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
           world: { docName: "Snowdon", r10Path: null, lanes: [], zones: [], systems: [] },
           zoneFrs: [],
@@ -45,13 +50,19 @@ const port = (native: Native, work: unknown = null, taken: string[] = []): Input
         },
       };
     }
-    const call = args as { key: string; input?: { request?: Record<string, unknown> }; request?: Record<string, unknown> };
+    const call = args as {
+      key: string;
+      input?: { request?: Record<string, unknown> };
+      request?: Record<string, unknown>;
+    };
     if (name !== "native") throw Error(`Unexpected input: ${name}`);
     return { body: native(call.key, call.request ?? call.input?.request ?? {}), version: null };
   },
 });
 const { plans, regions, adoption } = product.readings;
-type Data<K extends keyof typeof product.readings> = import("zod").output<(typeof product.readings)[K]["handle"]["data"]>;
+type Data<K extends keyof typeof product.readings> = import("zod").output<
+  (typeof product.readings)[K]["handle"]["data"]
+>;
 
 test("a plan that left the document refuses that selection, and the same document still lists its plans", async () => {
   const asked: string[] = [];
@@ -99,16 +110,41 @@ test("no plan chosen reads nothing from the model, and another failure is never 
 
 test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, and each read of chosen plans is kept as a capture", async () => {
   const requests: [string, unknown][] = [];
+  let removedAfterCandidates = false;
   const native: Native = (key, request) => {
     requests.push([key, request]);
     if (key === "rooms.roster") return { levels, regions: [] };
+    if (
+      key === "takeoffs.snapshot" &&
+      removedAfterCandidates &&
+      (request.views as string[]).includes(CEILING)
+    )
+      throw new BridgeError("That view is not in this document.", 400, {
+        dispatched: true,
+        issues: [
+          {
+            instancePath: "$.view",
+            code: "RoomsViewMissing",
+            message: "Plan missing",
+            severity: "error",
+          },
+        ],
+      });
     if (key === "takeoffs.snapshot")
       return {
-        reading: { at: "C:/Models/Snowdon.rvt", version: null, observedAt: "2026-11-20T00:00:00.000Z" },
+        reading: {
+          at: "C:/Models/Snowdon.rvt",
+          version: null,
+          observedAt: "2026-11-20T00:00:00.000Z",
+        },
         snapshot: {
           status: {
             systems: [],
-            carriers: { stage: "Adoption", status: "needs-initialization", missingCarrierGuids: ["00000000-0000-4000-8000-000000000001"] },
+            carriers: {
+              stage: "Adoption",
+              status: "needs-initialization",
+              missingCarrierGuids: ["00000000-0000-4000-8000-000000000001"],
+            },
           },
           unreadable: [],
           zoneFrs: [],
@@ -135,7 +171,13 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
   };
   const taken: string[] = [];
   const staged = {
-    doc: { adopt: { [`${CEILING}:21`]: { edit: { by: "human", value: { checked: true, name: "West office", systemTag: "AHU-1" } } } } },
+    doc: {
+      adopt: {
+        [`${CEILING}:21`]: {
+          edit: { by: "human", value: { checked: true, name: "West office", systemTag: "AHU-1" } },
+        },
+      },
+    },
     revision: 1,
   };
   const read = await evaluate(
@@ -148,7 +190,11 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
     [`${FLOOR}:21`, false, "Office zone", ""],
     [`${CEILING}:21`, true, "West office", "AHU-1"],
   ]);
-  expect(data.carriers).toEqual({ stage: "Adoption", status: "needs-initialization", missing: ["00000000-0000-4000-8000-000000000001"] });
+  expect(data.carriers).toEqual({
+    stage: "Adoption",
+    status: "needs-initialization",
+    missing: ["00000000-0000-4000-8000-000000000001"],
+  });
   // The native boundary is asked by UniqueId, never by the shared name "L2".
   expect(requests.filter(([key]) => key === "takeoffs.candidates")).toEqual([
     ["takeoffs.candidates", { view: FLOOR }],
@@ -156,9 +202,29 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
   ]);
   // The capture names each chosen plan with its display facts; the two L2 plans stay two.
   expect(kept).toMatchObject([
-    { target: ref, views: [{ name: "L2", level: "Snowdon level" }, { name: "L2", level: "Snowdon level" }] },
+    {
+      target: ref,
+      views: [
+        { name: "L2", level: "Snowdon level" },
+        { name: "L2", level: "Snowdon level" },
+      ],
+    },
   ]);
-  const none = await evaluate(bodyOf(adoption.handle), { target: ref, views: [] }, port(native, null, (taken.length = 0, taken)));
+  removedAfterCandidates = true;
+  const raced = await evaluate(
+    bodyOf(adoption.handle),
+    { target: ref, views: [FLOOR, CEILING] },
+    port(native, staged),
+  );
+  expect(raced.data).toMatchObject({
+    missingViews: [CEILING],
+    rows: [{ view: FLOOR, name: "Office zone" }],
+  });
+  const none = await evaluate(
+    bodyOf(adoption.handle),
+    { target: ref, views: [] },
+    port(native, null, ((taken.length = 0), taken)),
+  );
   expect((none.data as Data<"adoption">).rows).toEqual([]);
   expect(taken).not.toContain("file:takeoff-capture");
 });

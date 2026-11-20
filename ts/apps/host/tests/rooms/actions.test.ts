@@ -33,16 +33,18 @@ test.each([null, unreadableRooms])(
     const socket = await native.connect();
     native.reportTakeoffReplacements({ regions: replacing, registry: null });
     let state: unknown;
-    const workspace = withRoomsSheet(new RouteWorkspace({
-      publicationAuthor: () => "human",
-      registrations: [{ spec: roomsWork }],
-      store: {
-        getState: async () => state,
-        setState: async ({ value }) => {
-          state = structuredClone(value);
+    const workspace = withRoomsSheet(
+      new RouteWorkspace({
+        publicationAuthor: () => "human",
+        registrations: [{ spec: roomsWork }],
+        store: {
+          getState: async () => state,
+          setState: async ({ value }) => {
+            state = structuredClone(value);
+          },
         },
-      },
-    }));
+      }),
+    );
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
     const post = native.actions(
       { workspace, marks: testDocumentMarks(native.bridge) },
@@ -193,7 +195,7 @@ test.each(["initialize", "adopt", "partition"])(
   },
 );
 
-test.each(["selected", "unrelated", "none"] as const)(
+test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
   "recorded Rooms sheet admission fences %s changes and a current preview retires only confirmed field values",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
@@ -201,6 +203,7 @@ test.each(["selected", "unrelated", "none"] as const)(
       join(directory, "native"),
       "fresh-takeoffs.initialize-carrier",
       "fresh-rooms.write",
+      "fresh-rooms.partition",
     );
     const socket = await native.connect();
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
@@ -208,19 +211,22 @@ test.each(["selected", "unrelated", "none"] as const)(
       uniqueId: string;
       name: string;
     }[];
+    native.reportTrackedRooms(regions.map(({ uniqueId }) => uniqueId));
     const a = regionCode(regions[0]!.uniqueId),
       b = regionCode(regions[1]!.uniqueId);
     let state: unknown;
-    const work = withRoomsSheet(new RouteWorkspace({
-      publicationAuthor: () => "human",
-      registrations: [{ spec: roomsWork }],
-      store: {
-        getState: async () => state,
-        setState: async ({ value }) => {
-          state = structuredClone(value);
+    const work = withRoomsSheet(
+      new RouteWorkspace({
+        publicationAuthor: () => "human",
+        registrations: [{ spec: roomsWork }],
+        store: {
+          getState: async () => state,
+          setState: async ({ value }) => {
+            state = structuredClone(value);
+          },
         },
-      },
-    }));
+      }),
+    );
     const runs = testRegistry();
     const run = { thread: "rooms-recorded", turn: "write" };
     runs.open(run);
@@ -247,29 +253,84 @@ test.each(["selected", "unrelated", "none"] as const)(
       expect([200, 202], await response.clone().text()).toContain(response.status);
       return native.journal.wait(id);
     };
+    const gone = "8a0c1e3f-0000-4000-8000-000000000001-00715157";
     try {
+      if (changed === "unreadable")
+        native.reportTakeoffReplacements({ regions: unreadableRooms, registry: null });
       await work.publish(
         key,
         "rooms",
-        regions.map((region) => ({
-          path: ["name", regionCode(region.uniqueId)],
-          value: { edit: { value: region.name } },
-        })),
+        [...regions, ...(changed === "gone" ? [{ uniqueId: gone, name: "Gone" }] : [])].map(
+          (region) => ({
+            path: ["name", regionCode(region.uniqueId)],
+            value: { edit: { value: region.name } },
+          }),
+        ),
         0,
       );
       const revision = (await work.read(key, "rooms"))!.revision;
-      expect(
-        await submit("preview", "sheet.plan", revision, {
-          kind: "pea",
-          context: "rooms-recorded",
-          thread: run.thread,
-          run,
-          root: run,
-        }),
-      ).toMatchObject({ state: "succeeded" });
+      const preview = await submit("preview", "sheet.plan", revision, {
+        kind: "pea",
+        context: "rooms-recorded",
+        thread: run.thread,
+        run,
+        root: run,
+      });
+      if (changed === "unreadable") {
+        expect(preview).toMatchObject({
+          state: "failed",
+          notDispatched: true,
+          error: expect.stringMatching(/rooms.draw.*rooms.partition.*takeoffs.adopt/),
+        });
+        expect(await submit("refused-apply", "sheet.apply", revision)).toMatchObject({
+          state: "failed",
+          notDispatched: true,
+        });
+        expect(native.calls).toEqual([]);
+        const partition = nativeRecordingRequest("fresh-rooms.partition");
+        await work.publish(
+          key,
+          "rooms",
+          [
+            {
+              path: ["writeIntent", "rooms.partition"],
+              value: { edit: { value: { view: partition.view } } },
+            },
+          ],
+          revision,
+        );
+        const recoveryRevision = (await work.read(key, "rooms"))!.revision;
+        expect(
+          await submit("partition-plan", "rooms.partition.preview", recoveryRevision),
+        ).toMatchObject({
+          state: "succeeded",
+          result: { evidence: { regions: unreadableRooms } },
+        });
+        expect(await submit("partition", "rooms.partition", recoveryRevision)).toMatchObject({
+          state: "succeeded",
+        });
+        expect(native.calls).toEqual([
+          expect.objectContaining({
+            key: "rooms.partition",
+            input: expect.objectContaining({ replacing: unreadableRooms }),
+          }),
+        ]);
+        return;
+      }
+      expect(preview).toMatchObject({
+        state: "succeeded",
+        ...(changed === "gone"
+          ? {
+              result: {
+                writes: regions.map(({ uniqueId, name }) => ({ uniqueId, name })),
+                refused: [{ uniqueId: gone, field: "name" }],
+              },
+            }
+          : {}),
+      });
       expect(native.calls).toEqual([]);
       // Pea's write asks nobody (ADR 0038); Work that moved after its preview refuses it at admission.
-      if (changed !== "none")
+      if (changed === "selected" || changed === "unrelated")
         await work.publish(
           key,
           "rooms",
@@ -283,7 +344,7 @@ test.each(["selected", "unrelated", "none"] as const)(
         run,
         root: run,
       });
-      if (changed === "none")
+      if (changed !== "selected" && changed !== "unrelated")
         expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
       else {
         expect(receipt).toMatchObject({
@@ -304,14 +365,16 @@ test.each(["selected", "unrelated", "none"] as const)(
       const current = roomsWork.schema.parse((await work.read(key, "rooms"))!.doc);
       for (const [index, key] of [a, b].entries())
         expect(current.name[key]?.edit ?? null).toEqual(
-          changed !== "none" && index === (changed === "selected" ? 0 : 1)
+          (changed === "selected" || changed === "unrelated") &&
+            index === (changed === "selected" ? 0 : 1)
             ? expect.objectContaining({ value: "newer" })
             : null,
         );
+      if (changed === "gone") expect(current.name[regionCode(gone)]?.edit?.value).toBe("Gone");
       const values = regions.map((region) => ({
         uniqueId: region.uniqueId,
         name:
-          changed !== "none" &&
+          (changed === "selected" || changed === "unrelated") &&
           region.uniqueId === regions[changed === "selected" ? 0 : 1]!.uniqueId
             ? "newer"
             : region.name,
@@ -335,16 +398,18 @@ test("a room field under a key that is no region is refused by Work before any n
   );
   const socket = await native.connect();
   let state: unknown;
-  const work = withRoomsSheet(new RouteWorkspace({
-    publicationAuthor: () => "human",
-    registrations: [{ spec: roomsWork }],
-    store: {
-      getState: async () => state,
-      setState: async ({ value }) => {
-        state = value;
+  const work = withRoomsSheet(
+    new RouteWorkspace({
+      publicationAuthor: () => "human",
+      registrations: [{ spec: roomsWork }],
+      store: {
+        getState: async () => state,
+        setState: async ({ value }) => {
+          state = value;
+        },
       },
-    },
-  }));
+    }),
+  );
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
   try {
     // A region is keyed by its SubjectRef: Work refuses any other key, so no command ever derives it.
@@ -354,7 +419,10 @@ test("a room field under a key that is no region is refused by Work before any n
       [{ path: ["name", "invalid-guid"], value: { edit: { value: "Authored room" } } }],
       0,
     );
-    expect(published).toMatchObject({ ok: false, hint: expect.stringContaining("name.invalid-guid") });
+    expect(published).toMatchObject({
+      ok: false,
+      hint: expect.stringContaining("name.invalid-guid"),
+    });
     expect((await work.read(key, "rooms"))?.revision ?? 0).toBe(0);
     expect(native.calls).toEqual([]);
   } finally {
@@ -368,16 +436,18 @@ test("foreign Rooms Work is refused by real action admission before native prepa
   const native = await fixtureNative(join(directory, "native"));
   const socket = await native.connect();
   let state: unknown;
-  const workspace = withRoomsSheet(new RouteWorkspace({
-    publicationAuthor: () => "human",
-    registrations: [{ spec: roomsWork }],
-    store: {
-      getState: async () => state,
-      setState: async ({ value }) => {
-        state = value;
+  const workspace = withRoomsSheet(
+    new RouteWorkspace({
+      publicationAuthor: () => "human",
+      registrations: [{ spec: roomsWork }],
+      store: {
+        getState: async () => state,
+        setState: async ({ value }) => {
+          state = value;
+        },
       },
-    },
-  }));
+    }),
+  );
   const key = { binding: "address" as const, route: "rooms", target: address("C:/another.rvt") };
   try {
     await workspace.publish(
@@ -385,7 +455,10 @@ test("foreign Rooms Work is refused by real action admission before native prepa
       "rooms",
       [
         {
-          path: ["name", regionCode(nativeRecordingRequest("fresh-rooms.write").regions[0].uniqueId)],
+          path: [
+            "name",
+            regionCode(nativeRecordingRequest("fresh-rooms.write").regions[0].uniqueId),
+          ],
           value: { edit: { value: "Intent" } },
         },
       ],

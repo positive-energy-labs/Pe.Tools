@@ -4,32 +4,17 @@ import { useList } from "@pe/kit/lang/collection";
 import { Input } from "@pe/kit/lang/input";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { captures, plans, type AdoptionContext } from "../routes/takeoffs/route.ts";
-import { useStaged } from "./staged.ts";
+import { PreviewAction } from "@pe/kit/lang/write-action";
 
 type Row = AdoptionContext["value"]["value"]["rows"][number];
-/** The ticked rows as the adopt command takes them: one entry per plan, by its UniqueId. */
-export function adoptRequest(rows: readonly Row[]) {
-  const views = new Map<string, Pick<Row, "elementId" | "uniqueId" | "name" | "systemTag">[]>();
-  for (const row of rows.filter((row) => row.checked))
-    views.set(row.view, [
-      ...(views.get(row.view) ?? []),
-      { elementId: row.elementId, uniqueId: row.uniqueId, name: row.name, systemTag: row.systemTag },
-    ]);
-  return views.size ? { views: [...views].map(([view, items]) => ({ view, items })) } : null;
-}
-
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   const page = ctx.page.read();
-  const { rows, carriers, unreadable } = ctx.value.value;
+  const { rows, carriers, unreadable, missingViews } = ctx.value.value;
   const catalogue = ctx.read(plans);
   const levels = "value" in catalogue ? (catalogue.value?.levels ?? []) : [];
   const saved = ctx.read(captures);
   const archive = "value" in saved ? saved.value : undefined;
-  const staged = useStaged(ctx.cells);
-  const request = adoptRequest(rows);
-  const blocked = staged.pending ? "Preparing Work" : refusalOf(ctx.cells.state);
   const choose = (row: Row, patch: Partial<Pick<Row, "checked" | "name" | "systemTag">>) =>
     void ctx.cells
       .at(["adopt", row.key])
@@ -43,67 +28,62 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         <OutcomeLine
           key={index}
           kind="refused"
-          label="can't read, kept"
+          label="Unreadable record"
           says={`${row.parameter}: ${row.reason}`}
         />
       ))}
-      {staged.problem && <OutcomeLine kind="error" label="Adoption" says={staged.problem} />}
       {"value" in catalogue ? null : ctx.absent(catalogue)}
       <fieldset>
         <legend>Plans</legend>
         {levels.flatMap((level) =>
-          level.views.map((plan) => (
-            <label key={plan.view} className="flex items-center gap-2">
-              <Input
-                type="checkbox"
-                checked={page.views.includes(plan.view)}
-                onChange={(event) =>
-                  ctx.page.query({
-                    views: event.target.checked
-                      ? [...page.views, plan.view]
-                      : page.views.filter((view) => view !== plan.view),
-                  })
-                }
-              />
-              {level.name} · {plan.name} · {plan.type}
-            </label>
-          )),
+          level.views
+            .filter((plan) => !missingViews.includes(plan.view))
+            .map((plan) => (
+              <label key={plan.view} className="flex items-center gap-2">
+                <Input
+                  type="checkbox"
+                  checked={page.views.includes(plan.view)}
+                  onChange={(event) =>
+                    ctx.page.query({
+                      views: event.target.checked
+                        ? [...page.views, plan.view]
+                        : page.views.filter((view) => view !== plan.view),
+                    })
+                  }
+                />
+                {level.name} · {plan.name} · {plan.type}
+              </label>
+            )),
         )}
+        {missingViews.map((view) => (
+          <label key={view} className="flex items-center gap-2">
+            <Input
+              type="checkbox"
+              checked={page.views.includes(view)}
+              onChange={() => ctx.page.query({ views: page.views.filter((id) => id !== view) })}
+            />
+            Missing plan: {view}
+          </label>
+        ))}
       </fieldset>
       <div className="flex gap-2 py-1">
         <Button label="refresh" onClick={() => ctx.refresh()}>
           refresh
         </Button>
-        <Button
+        <PreviewAction
+          handle={ctx.verb("initialize")}
           label="initialize"
-          busy={staged.pending === "takeoffs.initialize" || ctx.verb("initialize").pending}
           refusal={
-            blocked ??
-            (carriers.status === "needs-initialization"
+            carriers.status === "needs-initialization"
               ? null
-              : "The document already carries every shared parameter")
+              : "The document already carries every shared parameter"
           }
-          onClick={() =>
-            void staged.run(
-              "takeoffs.initialize",
-              { stage: carriers.stage },
-              ctx.verb("initialize"),
-              "Prepare initialize",
-            )
-          }
-        >
-          initialize
-        </Button>
-        <Button
+        />
+        <PreviewAction
+          handle={ctx.verb("adopt")}
           label="adopt"
-          busy={staged.pending === "takeoffs.adopt" || ctx.verb("adopt").pending}
-          refusal={blocked ?? (request ? null : "Select regions to adopt")}
-          onClick={() =>
-            void staged.run("takeoffs.adopt", request, ctx.verb("adopt"), "Prepare adopt")
-          }
-        >
-          adopt
-        </Button>
+          refusal={rows.some((row) => row.checked) ? null : "Select regions to adopt"}
+        />
       </div>
       {carriers.missing.length > 0 && (
         <p>
@@ -162,9 +142,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
             </option>
           ))}
         </select>
-        {archive?.saved && (
-          <SavedZones zones={archive.saved.snapshot.world.zones} />
-        )}
+        {archive?.saved && <SavedZones zones={archive.saved.snapshot.world.zones} />}
       </fieldset>
     </section>
   );

@@ -9,7 +9,11 @@ import { Pane, Sheet, planned, type Native } from "../../../../tests/e2e/mounted
 /** A model of two plans. Each plan holds its own regions, so a wrong plan key shows at once. */
 function model() {
   const regions: Record<string, ReturnType<typeof region>[]> = {
-    [FLOOR]: [zone, region(1, { name: "Office", locked: true, stale: true }), region(2, { name: "Hall", type: "hall" })],
+    [FLOOR]: [
+      zone,
+      region(1, { name: "Office", locked: true, stale: true }),
+      region(2, { name: "Hall", type: "hall" }),
+    ],
     [CEILING]: [region(3, { name: "Plenum" })],
   };
   const state = {
@@ -18,7 +22,16 @@ function model() {
     hold: null as Promise<void> | null,
   };
   const native: Native = async (key, input) => {
-    if (key === "rooms.roster") return { levels, regions: [] };
+    if (key === "rooms.roster")
+      return {
+        levels,
+        regions: [],
+        trackedRegionIds: state.unreadable.length
+          ? null
+          : Object.values(state.regions)
+              .flat()
+              .map((region) => region.uniqueId),
+      };
     if (key === "rooms.snapshot") {
       await state.hold;
       const regions = state.regions[input.view];
@@ -54,20 +67,24 @@ const plan = () => screen.getByRole("combobox", { name: "Plan" }) as HTMLSelectE
 const choose = (view: string) => fireEvent.change(plan(), { target: { value: view } });
 const keys = (j: { actions: { key: string }[] }) => j.actions.map((row) => row.key);
 
-test("Rooms: choose one of two plans of one name, state a field on the sheet, write it, partition and merge", async () => {
+test("Rooms: choose one of two plans of one name, stage a field and submit the sheet, partition and merge commands", async () => {
   const { native } = model();
   const j = await journey("rooms", native);
   try {
     render(<Screen mount={j.mount} />);
     // Two plans named L2 are two choices: the type tells them apart and each carries its own UniqueId.
     await waitFor(() => expect(within(plan()).getAllByRole("option")).toHaveLength(3));
-    expect(within(plan()).getByRole("option", { name: "Snowdon level · L2 · FloorPlan" })).toHaveProperty("value", FLOOR);
-    expect(within(plan()).getByRole("option", { name: "Snowdon level · L2 · CeilingPlan" })).toHaveProperty("value", CEILING);
+    expect(
+      within(plan()).getByRole("option", { name: "Snowdon level · L2 · FloorPlan" }),
+    ).toHaveProperty("value", FLOOR);
+    expect(
+      within(plan()).getByRole("option", { name: "Snowdon level · L2 · CeilingPlan" }),
+    ).toHaveProperty("value", CEILING);
     // No plan chosen: the model is not read for rooms, and the partition says why it cannot run.
     expect(j.nativeCalls.some((call) => call.key === "rooms.snapshot")).toBe(false);
-    expect(screen.getByRole("button", { name: "Partition" }).getAttribute("aria-description")).toBe(
-      "Choose a plan",
-    );
+    expect(
+      screen.getByRole("button", { name: "plan Partition" }).getAttribute("aria-description"),
+    ).toBe("Choose a plan");
     choose(FLOOR);
     await j.ready();
     // The plan is in the address by its UniqueId, in one history entry.
@@ -75,11 +92,16 @@ test("Rooms: choose one of two plans of one name, state a field on the sheet, wr
     expect(j.writes.filter((write) => write.search.includes(FLOOR.slice(0, 8)))).toHaveLength(1);
     expect(j.nativeCalls).toContainEqual({ key: "rooms.snapshot", input: { view: FLOOR } });
     // Locked and stale are two facts of one room.
-    expect((await screen.findByRole("option", { name: /^Room Office/ })).textContent).toContain("locked · stale");
+    expect((await screen.findByRole("option", { name: /^Room Office/ })).textContent).toContain(
+      "locked · stale",
+    );
     // No room picked: the sheet lists no cell. A picked room's fields are the sheet's cells.
     expect(screen.getByText(/open a subject to list its cells/)).toBeTruthy();
     fireEvent.click(screen.getByRole("option", { name: /^Room Hall/ }));
-    expect(await screen.findByRole("textbox", { name: "Type of Hall" })).toHaveProperty("value", "hall");
+    expect(await screen.findByRole("textbox", { name: "Type of Hall" })).toHaveProperty(
+      "value",
+      "hall",
+    );
     fireEvent.click(screen.getByRole("option", { name: /^Room Office/ }));
     // A stated field is a cell in Work, keyed by the region's UniqueId SubjectRef.
     const name = await screen.findByRole("textbox", { name: "Name of Office" });
@@ -95,7 +117,14 @@ test("Rooms: choose one of two plans of one name, state a field on the sheet, wr
     await waitFor(() => expect(keys(j)).toContain("sheet.apply"));
     // Partition names this plan in Work; the sealed command reads it from there.
     await j.ready();
-    fireEvent.click(screen.getByRole("button", { name: "Partition" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan Partition" }));
+    await waitFor(() =>
+      expect(
+        keys(j),
+        j.mount.verb("partition").failure ?? document.body.textContent ?? "",
+      ).toContain("rooms.partition.preview"),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Partition" }));
     await waitFor(() => expect(keys(j)).toContain("rooms.partition"), { timeout: 20000 });
     expect(keys(j)).toContain("rooms.partition.preview");
     expect(j.mount.owner()?.doc.writeIntent["rooms.partition"].edit.value).toEqual({ view: FLOOR });
@@ -105,9 +134,17 @@ test("Rooms: choose one of two plans of one name, state a field on the sheet, wr
     // A second pick adds to the first the way any list does: with Ctrl.
     fireEvent.click(await screen.findByRole("option", { name: /^Room Hall/ }), { ctrlKey: true });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Merge" }).getAttribute("aria-disabled")).toBeNull(),
+      expect(
+        screen.getByRole("button", { name: "plan Merge" }).getAttribute("aria-disabled"),
+      ).toBeNull(),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Merge" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan Merge" }));
+    await waitFor(() =>
+      expect(keys(j), j.mount.verb("merge").failure ?? document.body.textContent ?? "").toContain(
+        "rooms.merge.preview",
+      ),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Merge" }));
     await waitFor(() => expect(keys(j)).toContain("rooms.merge"), { timeout: 20000 });
     expect(j.mount.owner()?.doc.writeIntent["rooms.merge"].edit.value).toEqual({
       view: FLOOR,
@@ -129,9 +166,15 @@ test("Rooms: a link to a plan that left the document says so and returns to an e
   const j = await journey("rooms", native, new URLSearchParams({ view: JSON.stringify(GONE) }));
   try {
     render(<Screen mount={j.mount} />);
-    await waitFor(() => expect(document.body.textContent).toContain("That view is not in this document. Choose a plan."), {
-      timeout: 20000,
-    });
+    await waitFor(
+      () =>
+        expect(document.body.textContent).toContain(
+          "That view is not in this document. Choose a plan.",
+        ),
+      {
+        timeout: 20000,
+      },
+    );
     // The same document still lists its plans, and choosing one recovers.
     await waitFor(() => expect(within(plan()).getAllByRole("option")).toHaveLength(3));
     choose(FLOOR);
@@ -142,26 +185,33 @@ test("Rooms: a link to a plan that left the document says so and returns to an e
   }
 });
 
-test("Rooms: a record the build cannot read is named and kept, and an outside edit is read again", async () => {
+test("Rooms: a record the build cannot read is named, and an outside edit is read again", async () => {
   const { native, state } = model();
-  state.unreadable = [{ elementId: null, parameter: "rooms-regions", reason: "Rooms data needs a regions map" }];
+  state.unreadable = [
+    { elementId: null, parameter: "rooms-regions", reason: "Rooms data needs a regions map" },
+  ];
   const j = await journey("rooms", native, new URLSearchParams({ view: JSON.stringify(FLOOR) }));
   try {
     render(<Screen mount={j.mount} />);
     await j.ready();
     expect(await screen.findByText(/rooms-regions: Rooms data needs a regions map/)).toBeTruthy();
-    expect(screen.getAllByText(/can't read, kept/)).toHaveLength(1);
     // Another writer renames a room while this screen is open. The last rooms stay drawn while the
     // plan is read again, and editing is blocked only by Work, never by the reading.
     const release = Promise.withResolvers<void>();
     state.hold = release.promise;
-    state.regions[FLOOR] = [zone, region(1, { name: "Study" }), region(2, { name: "Hall", type: "hall" })];
+    state.regions[FLOOR] = [
+      zone,
+      region(1, { name: "Study" }),
+      region(2, { name: "Hall", type: "hall" }),
+    ];
     j.reread();
     expect(await screen.findByText("Reading the plan; showing the last rooms")).toBeTruthy();
     expect(screen.getByRole("option", { name: /^Room Office/ })).toBeTruthy();
     expect(plan()).toHaveProperty("disabled", false);
     release.resolve();
-    expect(await screen.findByRole("option", { name: /^Room Study/ }, { timeout: 20000 })).toBeTruthy();
+    expect(
+      await screen.findByRole("option", { name: /^Room Study/ }, { timeout: 20000 }),
+    ).toBeTruthy();
     expect(screen.queryByRole("option", { name: /^Room Office/ })).toBeNull();
   } finally {
     await j.close();
@@ -199,7 +249,35 @@ test("Rooms: the sheet holds every field of each picked room, and seven rooms st
     );
     expect(labels).toContain("Role of West zone");
     // Each cell stands on what the region record holds until Work states otherwise.
-    expect(within(sheet).getByRole("textbox", { name: "Name of Room 3" })).toHaveProperty("value", "Room 3");
+    expect(within(sheet).getByRole("textbox", { name: "Name of Room 3" })).toHaveProperty(
+      "value",
+      "Room 3",
+    );
+  } finally {
+    await j.close();
+  }
+});
+
+test("Rooms: a staged field on a deleted region stays removable", async () => {
+  const { native, state } = model();
+  const j = await journey("rooms", native, new URLSearchParams({ view: JSON.stringify(FLOOR) }));
+  try {
+    render(<Screen mount={j.mount} />);
+    await j.ready();
+    fireEvent.click(await screen.findByRole("option", { name: /^Room Office/ }));
+    const name = await screen.findByRole("textbox", { name: "Name of Office" });
+    fireEvent.change(name, { target: { value: "Pantry" } });
+    fireEvent.keyDown(name, { key: "Enter" });
+    await waitFor(() => expect(j.mount.owner()?.doc.name[code(1)]?.edit?.value).toBe("Pantry"));
+    state.regions[FLOOR] = [zone, region(2, { name: "Hall" })];
+    j.reread();
+    expect(await screen.findByRole("option", { name: /^Room Hall/ })).toBeTruthy();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Discard Name for missing region " + region(1).uniqueId,
+      }),
+    );
+    await waitFor(() => expect(j.mount.owner()?.doc.name[code(1)]?.edit).toBeNull());
   } finally {
     await j.close();
   }

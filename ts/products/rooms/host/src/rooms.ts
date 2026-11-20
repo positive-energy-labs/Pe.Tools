@@ -1,13 +1,18 @@
 /** The Rooms model writes. Each is one native leaf behind the carrier pattern of `takeoffs.ts`. */
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import { command, refused } from "@pe/host-internal/command-executor";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import { command, nativeStep, refused } from "@pe/host-internal/command-executor";
+import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { Effect } from "effect";
 import { z } from "zod";
 import { builtinCommands } from "@pe/agent-contracts/semantic-actions";
 import type { CommandBody } from "@pe/host-internal/product";
-import type { WorkKey } from "@pe/agent-contracts";
-import { product, regionCode, regionId, stagedRegions } from "@pe/rooms-contract/product";
+import {
+  product,
+  regionCode,
+  regionId,
+  roomsWork,
+  stagedRegions,
+} from "@pe/rooms-contract/product";
 import {
   carrier,
   preparedCarrierSchema,
@@ -83,9 +88,15 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
   };
 }
 
-const sheetInput = z.looseObject({
-  work: z.looseObject({ key: z.custom<WorkKey>((value) => value !== null && typeof value === "object") }),
-  doc: z.unknown(),
+const sheetInput = builtinCommands["sheet.plan"].input
+  .pick({ work: true })
+  .extend({
+    doc: roomsWork.schema,
+  })
+  .loose();
+const preparedSheet = preparedCarrierSchema.extend({
+  request: nativeRequestSchema("rooms.write"),
+  refused: z.array(z.object({ uniqueId: z.string(), field: z.string(), reason: z.string() })),
 });
 /**
  * The Rooms body of the platform's sheet pair: the staged field cells of the admitted Work, one
@@ -95,26 +106,79 @@ export const roomsSheet =
   (key: "sheet.plan" | "sheet.apply"): CommandBody =>
   (bridge, deps) => {
     const { bind } = carrier(bridge, deps);
-    const staged = (input: unknown) => stagedRegions(sheetInput.parse(input).doc).regions;
-    return command(builtinCommands[key], preparedCarrierSchema, {
-      seal: sealCarrier,
-      bind: (ctx) => {
-        const regions = staged(ctx.admission.input);
+    return command(builtinCommands[key], preparedSheet, {
+      seal: ({ request, refused: held, ...carrier }) => ({
+        request: { ...sealCarrier(carrier).request, ...request },
+        evidence: { ...carrier.replacement, refused: held },
+      }),
+      bind: async (ctx) => {
+        const { doc } = sheetInput.parse(ctx.admission.input);
+        const { regions } = stagedRegions(doc);
         if (!regions.length) throw refused("No room field is staged. Nothing was written.");
-        return bind(ctx, "rooms.write", [{ regions }]);
+        const bound = await bind(ctx, "rooms.write", [{ regions }]);
+        return {
+          ...bound,
+          prepare: async () => {
+            const prepared = await bound.prepare();
+            const replacement = replacing(prepared);
+            if (replacement)
+              throw refused(
+                `${replacement.reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.`,
+                "sheet.plan-refused",
+              );
+            const { target } = ctx.admission;
+            if (target.kind !== "document") throw refused("Exact document target required");
+            const roster = await Effect.runPromise(
+              nativeStep(bridge, target.ref, "rooms.roster", {}),
+            );
+            const { trackedRegionIds } = nativeResponseSchema("rooms.roster").parse(roster);
+            if (!trackedRegionIds)
+              throw refused(
+                "The Rooms record is unreadable. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.",
+                "sheet.plan-refused",
+              );
+            const tracked = new Set(trackedRegionIds);
+            const held = regions.flatMap(({ uniqueId, ...values }) =>
+              tracked.has(uniqueId)
+                ? []
+                : Object.keys(values).map((field) => ({
+                    uniqueId,
+                    field,
+                    reason: "The region is missing from the document.",
+                  })),
+            );
+            return {
+              ...prepared,
+              request: { regions: regions.filter(({ uniqueId }) => tracked.has(uniqueId)) },
+              refused: held,
+            };
+          },
+        };
       },
       run: (ctx, execution) => {
-        const regions = staged(ctx.admission.input);
-        // The plan answers with what it saw of the records, so the apply replaces exactly that.
+        const {
+          request: { regions },
+          refused: held,
+        } = execution.prepared;
         if (key === "sheet.plan")
-          return Effect.succeed({ writes: regions, evidence: execution.prepared.replacement });
+          return Effect.succeed({
+            writes: regions,
+            refused: held,
+            evidence: execution.prepared.replacement,
+            ...(!regions.length && {
+              planRefusal: "All staged room fields are on missing regions. Remove them from Work.",
+            }),
+          });
+        if (!regions.length)
+          return Effect.fail(
+            refused("All staged room fields are on missing regions. Remove them from Work."),
+          );
         const asked = new Map(regions.map((row) => [row.uniqueId, new Map(Object.entries(row))]));
         const { key: work } = sheetInput.parse(ctx.admission.input).work;
         return runModel(ctx, execution, deps, bridge, null, (native) =>
           Effect.gen(function* () {
             const value = yield* native("rooms.write", {
               regions,
-              replacing: replacing(execution.prepared),
             });
             // Ruling 7: a cell retires only when the model answers with the value it was asked for.
             const confirmed = written
@@ -127,7 +191,7 @@ export const roomsSheet =
                 work.route,
                 confirmed.map((cell) => [cell.field, regionCode(cell.uniqueId)]),
               );
-            return { ...z.record(z.string(), z.unknown()).parse(value), confirmed };
+            return { ...z.record(z.string(), z.unknown()).parse(value), confirmed, refused: held };
           }),
         );
       },

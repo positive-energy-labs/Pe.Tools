@@ -3,12 +3,20 @@ import { useState } from "react";
 import { emptyListState, useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { refusalOf } from "@pe/web-kernel/route/typed-route";
+import {
+  product,
+  ROOM_FIELDS,
+  regionCode,
+  roomsWork,
+  stagedRegions,
+} from "@pe/rooms-contract/product";
+import { sheetCells } from "@pe/agent-contracts/product";
 import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { plans, type RoomsContext } from "../routes/rooms/route.ts";
-import { useStaged } from "./staged.ts";
+import { PreviewAction } from "@pe/kit/lang/write-action";
 
 type Region = RoomsContext["value"]["value"]["regions"][number];
+const fieldLabels = sheetCells(product);
 const roleWord = { zone: "Zone", room: "Room", held: "Held" } as const;
 /** Locked and stale are separate facts: a locked room can also be stale. */
 export const factsOf = (row: Pick<Region, "locked" | "stale" | "touched" | "reason">) =>
@@ -23,7 +31,6 @@ export function RosterBody({ ctx }: { ctx: RoomsContext }) {
   const page = ctx.page.read();
   const catalogue = ctx.read(plans);
   const levels = "value" in catalogue ? (catalogue.value?.levels ?? []) : [];
-  const staged = useStaged(ctx.cells);
   // The picked rooms are the open subjects: the roster, the sheet and the plan picture share them.
   const subject = useAdmittedSubject();
   const selected = new Set<string>(page.room.kind === "all" ? [] : page.room.ids);
@@ -44,7 +51,12 @@ export function RosterBody({ ctx }: { ctx: RoomsContext }) {
     },
   });
   const busy = ctx.value.state === "refreshing";
-  const blocked = staged.pending ? "Preparing Work" : refusalOf(ctx.cells.state);
+  const tracked = catalogue.state === "ready" ? catalogue.value.trackedRegionIds : null;
+  const work = roomsWork.schema.safeParse(ctx.cells.doc).data;
+  const missing =
+    tracked && work && ctx.cells.state.state === "ready"
+      ? stagedRegions(work).regions.filter(({ uniqueId }) => !tracked.includes(uniqueId))
+      : [];
   return (
     <section aria-label="Rooms" className="py-2 whitespace-normal">
       <label>
@@ -71,48 +83,48 @@ export function RosterBody({ ctx }: { ctx: RoomsContext }) {
       </label>
       {"value" in catalogue ? null : ctx.absent(catalogue)}
       {ctx.value.value.missing && (
-        <OutcomeLine kind="refused" label="Plan" says={`${ctx.value.value.missing} Choose a plan.`} />
+        <OutcomeLine
+          kind="refused"
+          label="Plan"
+          says={`${ctx.value.value.missing} Choose a plan.`}
+        />
       )}
       {ctx.value.value.unreadable.map((row, index) => (
         <OutcomeLine
           key={index}
           kind="refused"
-          label="can't read, kept"
+          label="Unreadable record"
           says={`${row.parameter}: ${row.reason}`}
         />
       ))}
-      {staged.problem && <OutcomeLine kind="error" label="Rooms" says={staged.problem} />}
+      {missing.map(({ uniqueId, ...fields }) => (
+        <div key={uniqueId}>
+          <OutcomeLine kind="refused" label="Missing region" says={uniqueId} />
+          {ROOM_FIELDS.filter((field) => fields[field] !== undefined).map((field) => {
+            const label = `Discard ${fieldLabels[field].label} for missing region ${uniqueId}`;
+            return (
+              <Button
+                key={field}
+                label={label}
+                onPress={() => ctx.cells.at([field, regionCode(uniqueId)]).clear({ label })}
+              >
+                Discard {fieldLabels[field].label}: {fields[field]}
+              </Button>
+            );
+          })}
+        </div>
+      ))}
       <div className="flex gap-2 py-1">
-        <Button
+        <PreviewAction
+          handle={ctx.verb("partition")}
           label="Partition"
-          busy={staged.pending === "rooms.partition" || ctx.verb("partition").pending}
-          refusal={blocked ?? (page.view ? null : "Choose a plan")}
-          onClick={() =>
-            void staged.run(
-              "rooms.partition",
-              { view: page.view },
-              ctx.verb("partition"),
-              "Prepare partition",
-            )
-          }
-        >
-          Partition
-        </Button>
-        <Button
+          refusal={page.view && !ctx.value.value.missing ? null : "Choose a plan"}
+        />
+        <PreviewAction
+          handle={ctx.verb("merge")}
           label="Merge"
-          busy={staged.pending === "rooms.merge" || ctx.verb("merge").pending}
-          refusal={blocked ?? (merging.length >= 2 ? null : "Pick two or more rooms on the plan")}
-          onClick={() =>
-            void staged.run(
-              "rooms.merge",
-              { view: page.view, regions: merging.map((row) => row.subject) },
-              ctx.verb("merge"),
-              "Prepare merge",
-            )
-          }
-        >
-          Merge
-        </Button>
+          refusal={merging.length >= 2 ? null : "Pick two or more rooms on the plan"}
+        />
       </div>
       {busy && <p role="status">Reading the plan; showing the last rooms</p>}
       <PlainList

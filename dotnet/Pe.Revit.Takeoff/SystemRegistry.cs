@@ -20,6 +20,7 @@ namespace Pe.Revit.Takeoff;
 public sealed class SystemRegistry
 {
     /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
+    [Pe.Shared.Product.NativeHome("takeoffRegistry")]
     public static readonly OwnerDescriptor Owner = new("takeoff-systems", 1,
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9004"), "_PE_TakeoffSystemRegistry",
         "Versioned Pe takeoff System registry (GUID <-> tag).",

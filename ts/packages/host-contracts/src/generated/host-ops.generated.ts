@@ -11167,6 +11167,7 @@ export namespace RoomsRoster {
       levels: RoomsLevel[];
       regions: RoomsRegion[];
       unreadable?: TakeoffUnreadableBlob[] | null;
+      trackedRegionIds?: string[] | null;
     }
     export interface RoomsLevel {
       name: string;
@@ -11229,6 +11230,7 @@ export namespace RoomsSnapshot {
       levels: RoomsLevel[];
       regions: RoomsRegion[];
       unreadable?: TakeoffUnreadableBlob[] | null;
+      trackedRegionIds?: string[] | null;
     }
     export interface RoomsLevel {
       name: string;

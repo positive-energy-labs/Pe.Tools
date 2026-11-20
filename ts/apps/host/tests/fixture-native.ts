@@ -33,6 +33,7 @@ const fetchRecorded = globalThis.fetch;
 /** Socket adaptation only: all native replies and checks belong to the one fixture transport. */
 export async function fixtureNative(directory: string, ...recordings: string[]) {
   let selected = nativeRecordings(...recordings);
+  let trackedRegionIds: readonly string[] | undefined;
   let linkCapacityRefusal: string | undefined;
   let replacementEvidence: HostOpResponse<"takeoffs.record-replacements"> = {
     regions: null,
@@ -105,6 +106,9 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
     calls,
     reportLinkCapacityRefusal(reason: string) {
       linkCapacityRefusal = reason;
+    },
+    reportTrackedRooms(ids: readonly string[]) {
+      trackedRegionIds = ids;
     },
     reportTakeoffReplacements(evidence: HostOpResponse<"takeoffs.record-replacements">) {
       replacementEvidence = evidence;
@@ -296,7 +300,9 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
               const req = frame.request!;
               const input: unknown = JSON.parse(req.payloadJson);
               const takeoffReplacementRead = req.operationKey === "takeoffs.record-replacements";
-              if (!takeoffReplacementRead)
+              const modeledRoster =
+                req.operationKey === "rooms.roster" && trackedRegionIds !== undefined;
+              if (!takeoffReplacementRead && !modeledRoster)
                 calls.push({ key: req.operationKey, input, action: req.derivedCommand });
               yield* Effect.promise(() => beforeReply(req.operationKey));
               let response: object;
@@ -320,9 +326,16 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
                 }
                 const value = takeoffReplacementRead
                   ? nativeResponseSchema("takeoffs.record-replacements").parse(replacementEvidence)
-                  : linkCapacity
-                    ? { writes: [] }
-                    : transport.reply(action, req.operationKey, input);
+                  : modeledRoster
+                    ? (transport.admit(action, req.operationKey, input),
+                      nativeResponseSchema("rooms.roster").parse({
+                        levels: [],
+                        regions: [],
+                        trackedRegionIds,
+                      }))
+                    : linkCapacity
+                      ? { writes: [] }
+                      : transport.reply(action, req.operationKey, input);
                 if (loseReply === req.operationKey || refuseDeliveredReply === req.operationKey) {
                   // Drop a validated recorded answer only after production persisted delivery evidence.
                   yield* Effect.promise(async () => {

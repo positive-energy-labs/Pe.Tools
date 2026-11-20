@@ -142,16 +142,18 @@ test.each([
     const route = commandKey.startsWith("takeoffs.") ? "takeoffs" : "rooms";
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
     let saved: unknown;
-    const workspace = withRoomsSheet(new RouteWorkspace({
-      publicationAuthor: () => "human",
-      registrations: [{ spec: works[route] }],
-      store: {
-        getState: async () => saved,
-        setState: async ({ value }) => {
-          saved = structuredClone(value);
+    const workspace = withRoomsSheet(
+      new RouteWorkspace({
+        publicationAuthor: () => "human",
+        registrations: [{ spec: works[route] }],
+        store: {
+          getState: async () => saved,
+          setState: async ({ value }) => {
+            saved = structuredClone(value);
+          },
         },
-      },
-    }));
+      }),
+    );
     const native = await fixtureNative(
       join(dir, "native"),
       "fresh-takeoffs.initialize-carrier",
@@ -163,6 +165,7 @@ test.each([
       "fresh-rooms.merge",
       "fresh-takeoffs.rhvac-links",
     );
+    native.reportTrackedRooms(recordedRoomWrites.map(({ uniqueId }) => uniqueId));
     const socket = await native.connect();
     const { calls } = native;
     const ref = socket.target;
@@ -325,9 +328,11 @@ test.each([
           action: commandKey,
         });
       expect(calls.map((row) => row.key)).toEqual(
-        initialize ? ["takeoffs.initialize-carrier"]
-          : adopt ? ["takeoffs.initialize-carrier", commandKey]
-          : [commandKey === "sheet.apply" ? "rooms.write" : commandKey],
+        initialize
+          ? ["takeoffs.initialize-carrier"]
+          : adopt
+            ? ["takeoffs.initialize-carrier", commandKey]
+            : [commandKey === "sheet.apply" ? "rooms.write" : commandKey],
       );
       if (commandKey === "sheet.apply") {
         expect(calls[0]).toEqual({
@@ -348,4 +353,3 @@ test.each([
   },
   60_000,
 );
-

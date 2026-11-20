@@ -274,7 +274,10 @@ function bind(readings: Readings, routes: Readonly<Record<string, ProductRoute>>
     const [name, args] = typeof named === "string" ? [named] : named;
     const reading = readings[name];
     if (!reading) throw Error(`No reading ${name}`);
-    return read(hostRead(reading.handle), args);
+    const handle = hostRead(reading.handle);
+    if (!reading.load) return read(handle, args);
+    const { alone, freshBy, slow } = { ...handle.load, ...reading.load };
+    return read({ ...handle, load: { alone, freshBy, slow } }, args);
   };
   return Object.fromEntries(
     Object.entries(routes).map(([key, { core, reads, subject, ...route }]) => [

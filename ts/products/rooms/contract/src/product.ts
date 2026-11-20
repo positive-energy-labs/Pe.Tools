@@ -47,6 +47,7 @@ export const regionId = (code: string) => String(subjectOf(subjectRefCodeSchema.
 const plans = contract("rooms.plans", {
   input: z.object({ target }),
   data: z.object({
+    trackedRegionIds: z.array(z.string()).nullable(),
     levels: z.array(
       z.object({
         name: z.string(),
@@ -147,8 +148,9 @@ const planImage = contract("rooms.plan-image", {
   uses: ["revit.context.view-image"],
 });
 const adoption = contract("takeoffs.adoption", {
-  input: z.object({ target, views: z.array(view) }),
+  input: z.object({ target, views: z.array(z.string()) }),
   data: z.object({
+    missingViews: z.array(z.string()),
     /** One row per designer region on the chosen plans, with the staged choice over its default. */
     rows: z.array(
       z.object({
@@ -175,7 +177,7 @@ const adoption = contract("takeoffs.adoption", {
     }),
     unreadable,
   }),
-  uses: ["takeoffs.candidates", "takeoffs.snapshot"],
+  uses: ["rooms.roster", "takeoffs.candidates", "takeoffs.snapshot"],
 });
 const captures = contract("takeoffs.captures", {
   input: z.object({ target, capture: z.string() }),
@@ -226,13 +228,10 @@ const writeRegion = z.object({
   ventilationCfm: amount.optional(),
   role: z.enum(["room", "zone"]).optional(),
 });
-const stagedCells = z.record(
-  z.string(),
-  z.record(z.string(), z.object({ edit: z.object({ value: z.unknown() }).nullish() })),
-);
 /** Every staged field cell of the Rooms Work, one native `rooms.write` row per region. */
-export function stagedRegions(work: unknown): { regions: z.output<typeof writeRegion>[] } {
-  const doc = stagedCells.parse(work);
+export function stagedRegions(doc: z.output<typeof roomsWork.schema>): {
+  regions: z.output<typeof writeRegion>[];
+} {
   const rows = new Map<string, Record<string, unknown>>();
   for (const name of ROOM_FIELDS)
     for (const [code, staged] of Object.entries(doc[name] ?? {})) {
@@ -257,6 +256,8 @@ export const product = define({
   homes: {
     /** Role, provenance and the eight fields of every region, in one document record (ruling 14). */
     regions: documentRecord(ownerBlob("regionRecord")),
+    enclosure: documentRecord(ownerBlob("partitionEnclosure")),
+    registry: documentRecord(ownerBlob("takeoffRegistry")),
     /** One solve's evidence per zone, kept by the native partition. */
     traces: machineFile(machineFileHandle("runTraces")),
   },
@@ -334,7 +335,11 @@ export const product = define({
     takeoffs: ["edits", "adopt", "decisions", "reviewFlags"],
   },
   readings: {
-    plans: { handle: plans, sources: [], says: "rooms.plans lists each level's plan views." },
+    plans: {
+      handle: plans,
+      sources: ["regions"],
+      says: "rooms.plans lists each level's plan views.",
+    },
     regions: {
       handle: regions,
       sources: ["regions"],
@@ -348,7 +353,7 @@ export const product = define({
     },
     adoption: {
       handle: adoption,
-      sources: ["regions"],
+      sources: ["regions", "registry"],
       says: "takeoffs.adoption reads the designer regions of chosen plans with their staged adoption choices.",
     },
     captures: { handle: captures, sources: [] },
@@ -380,14 +385,13 @@ export const product = define({
       native: ["takeoffs.record-replacements", "rooms.merge"],
       writes: { regions: [] },
     }),
-    // The shared parameters and the system registry have no generated home handle yet, so these
-    // name only the region record they also touch.
+    // Setup binds the registry and enclosure carriers on Project Information.
     ...workWriteCommands("takeoffs", "takeoffs.initialize", {
       ...edit,
       says: "Write the shared parameters this document is missing before any takeoff runs.",
       input: z.object({ stage: z.string().min(1) }),
       native: ["takeoffs.initialize-carrier"],
-      writes: {},
+      writes: { registry: [], enclosure: [] },
     }),
     ...workWriteCommands("takeoffs", "takeoffs.adopt", {
       ...edit,
@@ -397,7 +401,7 @@ export const product = define({
       }),
       dirties: ["snapshot", "takeoff-views", "candidates"],
       native: ["takeoffs.record-replacements", "takeoffs.initialize-carrier", "takeoffs.adopt"],
-      writes: { regions: [] },
+      writes: { regions: [], registry: [], enclosure: [] },
     }),
     ...workWriteCommands("takeoffs", "takeoffs.partition", {
       ...edit,
@@ -413,6 +417,7 @@ export const product = define({
       native: ["takeoffs.record-replacements", "takeoffs.partition"],
       writes: { regions: [] },
     }),
+    // The selected RHVAC file is an external application document with its own authority.
     ...workWriteCommands("takeoffs", "takeoffs.sync", {
       ...edit,
       says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",

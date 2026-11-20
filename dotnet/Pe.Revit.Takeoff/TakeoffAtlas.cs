@@ -295,13 +295,9 @@ public static class TakeoffAtlas
     ///     display metadata, so two plans of one name never resolve by collector order.
     /// </summary>
     internal static ViewPlan PlanView(Document doc, string uniqueId) =>
-        (string.IsNullOrWhiteSpace(uniqueId) ? null : doc.GetElement(uniqueId)) switch
-        {
-            ViewPlan { IsTemplate: false } view => view,
-            ViewPlan => throw new InvalidOperationException($"plan '{uniqueId}' is a view template"),
-            null => throw new InvalidOperationException($"no plan view '{uniqueId}' in this document"),
-            var other => throw new InvalidOperationException($"'{uniqueId}' is a {other.GetType().Name}, not a plan view"),
-        };
+        (string.IsNullOrWhiteSpace(uniqueId) ? null : doc.GetElement(uniqueId)) is ViewPlan { IsTemplate: false } view
+            ? view
+            : throw new RoomsViewMissingException();
 
     private static TakeoffRegionFacts ToRegionFacts(Document doc, FilledRegion fr, RegionRow? row, string? refusal = null)
     {

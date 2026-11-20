@@ -18,6 +18,7 @@ export const sheetNativeOperations = {
     "ducts.snapshot.roster",
     "ducts.tables",
     "takeoffs.record-replacements",
+    "rooms.roster",
   ],
   plan: ["ducts.apply.plan"],
   apply: ["revit.apply.parameter-values", "ducts.apply", "rooms.write"],
