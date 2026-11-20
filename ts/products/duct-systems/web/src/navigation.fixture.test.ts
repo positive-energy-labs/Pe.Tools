@@ -7,6 +7,26 @@ import { NAVIGATION_FIXTURE } from "@pe/ducts-web/navigation.fixture";
 import { SCENE_FIXTURE } from "@pe/ducts-web/scene.fixture";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
+import { ductsLink, systemCode } from "@pe/ducts-web/identity";
+import { fields, network, pricing } from "../route.ts";
+
+test("selecting a system replaces the MA-1 repair link's read scope", () => {
+  const link = new URL(
+    ductsLink({ unitId: 10052051, portIndex: 1 }, {}),
+    "https://fixture.invalid",
+  );
+  const fan = fields.fan.schema.parse(JSON.parse(link.searchParams.get("fan") ?? "null"));
+  const arrival = { system: { kind: "ids" as const, ids: [] }, fan };
+  const selected = { ...arrival, system: { kind: "ids" as const, ids: [systemCode("RA 28")] } };
+  for (const read of [network, pricing]) {
+    expect(read.args(arrival)).toEqual({ system: [], fan });
+    expect(read.args(selected)).toEqual({ system: ["RA 28"], fan: null });
+    expect(read.args({ ...arrival, system: { kind: "all" } })).toEqual({
+      system: "all",
+      fan: null,
+    });
+  }
+});
 
 test("navigation fixture reaches production pricing with three systems, long lists and a shared finding", () => {
   const { snapshot, grids } = NAVIGATION_FIXTURE;

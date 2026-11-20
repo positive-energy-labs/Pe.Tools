@@ -45,7 +45,13 @@ export interface ImplausibleLoss {
 }
 
 export type LegSource =
-  | { kind: "friction"; f: number; roughnessFt: number; rateInWgPer100Ft: number | null }
+  | {
+      kind: "friction";
+      f: number;
+      roughnessFt: number;
+      hydraulicDiameterFt: number;
+      rateInWgPer100Ft: number | null;
+    }
   | {
       kind: "rule";
       rule: string;
@@ -117,6 +123,7 @@ export function priceLeg(input: LegInput, grids: Grids, choices: Choices = {}): 
         kind: "friction",
         f: f.f,
         roughnessFt: s.roughness.valueFt,
+        hydraulicDiameterFt: section.dhIn / 12,
         rateInWgPer100Ft: rate,
       },
       unpriced: null,

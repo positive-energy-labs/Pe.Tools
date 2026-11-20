@@ -50,7 +50,6 @@ export const pricingFixtures = providers((snapshot) => {
     ductSystemsWork,
     fansWork,
     design,
-    effectiveDesign: design,
     fanRows: [],
     catalogFindings: [],
     criteria: resolveCriteria(null, FIRM_SEED),

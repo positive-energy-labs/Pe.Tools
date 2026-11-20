@@ -1,0 +1,141 @@
+import { expect, test } from "vite-plus/test";
+import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
+import { nodeOf, snapshotOf, uniqueIdOf } from "@pe/ducts-domain/test-snapshot";
+import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts";
+import { fansDocumentSchema } from "@pe/fans-contract/fans";
+import { type ReadContext } from "@pe/host-internal/read-graph";
+import { nativeRead } from "@pe/host-internal/reads/evaluator";
+import { fansCalc } from "../host.ts";
+
+test.each(["all", "all but one"] as const)(
+  "Fans opens %s of a Chadds-sized roster",
+  async (scope) => {
+    const target = { session: "test", openId: "document" };
+    const rows = Array.from({ length: 112 }, (_, index) => ({
+      unitId: index + 1,
+      uniqueId: uniqueIdSchema.parse(uniqueIdOf(index + 1)),
+      portIndex: 1,
+      mark: `FC-${index + 1}`,
+      kind: "air-handler",
+      side: "supply",
+      ratedEspInWg: null,
+    }));
+    const selected = scope === "all" ? rows : rows.slice(1);
+    const fan =
+      scope === "all"
+        ? "all"
+        : selected.map((row) =>
+            subjectCode({ keyKind: "UniqueId", key: row.uniqueId, sub: { port: row.portIndex } }),
+          );
+    const empty = snapshotOf();
+    const snapshot = { ...empty, document: { ...empty.document, readAt: "2026-11-19T00:00:00Z" } };
+    const batches: number[][] = [];
+    const reads = new Map<string, unknown>([
+      ["fans.roster", { target, slots: [], activeSlot: "", rows }],
+      [
+        "ducts.inputs",
+        {
+          snapshot,
+          version: "roster",
+          flow: {
+            slotSources: {},
+            slots: { terminalFlow: "revit:Flow" },
+            coverage: [],
+            terminalFlow: { slot: "revit:Flow", ref: "fixture" },
+          },
+        },
+      ],
+      [
+        "ducts.design-layers",
+        {
+          ducts: ductsDocumentSchema.parse({}),
+          fans: fansDocumentSchema.parse({}),
+          revision: 0,
+          fansRevision: 0,
+          settings: [],
+          firm: { refused: "no-shared-root" },
+        },
+      ],
+    ]);
+    const unexpected = () => {
+      throw Error("Unexpected read-context call");
+    };
+    const ctx: ReadContext = {
+      work: unexpected,
+      native: unexpected,
+      files: { firm: unexpected, tiers: unexpected },
+      compute: (schema, inputs, pure) => schema.parse(pure(inputs)),
+      read: async (node, args) => {
+        if ("key" in node && node.key === "ducts.snapshot.walk") {
+          const { input, output } = nativeRead("ducts.snapshot.walk");
+          const { request } = input.parse(args);
+          const chooser = request.selector;
+          if (chooser?.kind !== "ids" || !chooser.ids) throw Error("Expected geometry by id");
+          batches.push(chooser.ids);
+          return output.parse({
+            body: { ...snapshot, nodes: chooser.ids.map((id) => nodeOf(id, "equipment")) },
+            version: `geometry-${batches.length}`,
+          });
+        }
+        const key = "name" in node ? node.name : node.key;
+        if (!reads.has(key)) throw Error(`Unexpected read: ${key}`);
+        return ("data" in node ? node.data : node.output).parse(reads.get(key));
+      },
+      collect: async (keys, options) => {
+        expect(keys).toEqual(selected);
+        expect(options.batch).toBe(1);
+        const basis = "walk";
+        const paths = { paths: [], rest: 0 };
+        return selected.map((row) =>
+          options.read.output.parse({
+            overview: {
+              target,
+              basis,
+              kind: "overview",
+              mode: "fan",
+              fan: {
+                ...row,
+                inletPortIndex: null,
+                dischargePortIndex: 1,
+                directionMismatch: null,
+                flowCfm: null,
+              },
+              totals: null,
+              paths: { supply: paths, return: paths },
+              blockers: [],
+              assumedBlockers: [],
+              next: {
+                hint: "",
+                legs: [],
+                elements: { kind: "elements" },
+                inputs: { kind: "inputs" },
+                calcBreakdown: { kind: "worksheet" },
+              },
+            },
+            elements: {
+              target,
+              basis,
+              kind: "elements",
+              beyond: [],
+              walkedElementIds: Array.from(
+                { length: 40 },
+                (_, index) => row.unitId * 40 + index + rows.length,
+              ),
+            },
+            inputs: null,
+            legs: null,
+            worstLegs: [],
+            calcBreakdown: null,
+          }),
+        );
+      },
+    };
+    const result = await fansCalc.run(ctx, fansCalc.input.parse({ target, fan }));
+    expect(result.opened).toHaveLength(selected.length);
+    expect(batches.map((ids) => ids.length)).toEqual([4096, selected.length * 41 - 4096]);
+    expect(result.calcSnapshot).toMatchObject({ sourceVersion: "geometry-1+geometry-2" });
+    expect("nodes" in result.calcSnapshot && result.calcSnapshot.nodes.map(({ id }) => id)).toEqual(
+      batches.flat(),
+    );
+  },
+);
