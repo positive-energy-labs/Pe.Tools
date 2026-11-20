@@ -3557,14 +3557,21 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
   const { typedSubjectDoor } = await import("../shell/typed-mount");
   const host = await fixture(true),
     tasks = new Set<Promise<unknown>>();
-  const roster = fans.spec.subject!.read!;
+  const subject = fans.spec.subject;
+  if (!subject?.read) throw Error("Fans must declare its roster read");
+  const roster = subject.read;
   const module = route({
     ...fans.spec,
     core: roster,
     edits: undefined,
     verbs: {},
     band: [],
-    subject: { ...fans.spec.subject!, pane: "detail" },
+    subject: {
+      ...subject,
+      pane: "detail",
+      // This journey checks chooser gestures. Use a roster that All can open under the Fans limit.
+      options: (value) => subject.options(value).slice(0, 2),
+    },
     panes: {
       detail: {
         title: "Subject choices",
@@ -3625,7 +3632,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     expect(document.body.textContent).not.toContain(unknown);
     expect(screen.getByText(/outside the current roster/)).toBeTruthy();
     const options = module.spec.subject!.options(valueOf(mount.value(roster)));
-    expect(options.length).toBeGreaterThan(1);
+    expect(options).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "No fan" }));
     expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [] });
     expect(moves).toBe(1);
