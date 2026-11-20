@@ -61,7 +61,7 @@ export type Deps = Parameters<CommandBody>[1] & {
 };
 
 /** Admission context is no native field. */
-export const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
+const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(input).filter(([key]) => !Object.hasOwn(workAdmissionSchema.shape, key)),
   );

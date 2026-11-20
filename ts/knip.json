@@ -70,6 +70,9 @@
     "products/fans/web": {
       "entry": ["journeys/*.ts"]
     },
+    "products/rooms/web": {
+      "entry": ["journeys/*.journey.test.tsx", "vite.test.config.ts"]
+    },
     "products/duct-systems/web": {
       "entry": ["journeys/*.{ts,tsx}"]
     },

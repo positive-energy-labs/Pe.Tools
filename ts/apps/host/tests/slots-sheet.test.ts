@@ -152,7 +152,9 @@ test("Rooms dispatches by Work route even when the product id differs", async ()
     refusal: { code: "sheet.executor-unknown" },
   });
   const generic = await executors["sheet.plan"]!.bind(context("pod.other"));
-  await expect(generic.prepare!()).rejects.toThrow("Nothing to write: stage a parameter cell first");
+  await expect(generic.prepare!()).rejects.toThrow(
+    "Nothing to write: stage a parameter cell first",
+  );
   expect(bind).toHaveBeenCalledTimes(1);
 });
 

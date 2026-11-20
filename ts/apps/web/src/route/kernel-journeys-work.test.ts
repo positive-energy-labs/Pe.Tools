@@ -17,10 +17,7 @@ import {
 import { expect, test, vi } from "vite-plus/test";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import {
-  journalAt,
-  callRouteOver,
-} from "../../../host/tests/effect-test";
+import { journalAt, callRouteOver } from "../../../host/tests/effect-test";
 import { fixtureNative } from "../../../host/tests/fixture-native";
 import {
   actionReceiptSchema,

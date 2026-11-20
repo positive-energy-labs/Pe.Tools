@@ -4,9 +4,11 @@ import { expect, test, vi } from "vite-plus/test";
 import { routeModuleHash } from "./route-module-hash.ts";
 import { routeSourceHash } from "./route-source-hash.ts";
 
-const id = fileURLToPath(new URL("./src/rooms/route.ts", import.meta.url));
+const id = fileURLToPath(
+  new URL("../../products/rooms/web/routes/rooms/route.ts", import.meta.url),
+);
 const closure = fileURLToPath(
-  new URL("./src/rooms/source-closure.generated.json", import.meta.url),
+  new URL("../../products/rooms/web/routes/rooms/source-closure.generated.json", import.meta.url),
 );
 
 test("the retired graph-only transform never injects moduleHash", async () => {
@@ -116,7 +118,7 @@ test("tests project lazily on the first closure import; dev and build project at
 
 test("a closure import resolves without a disk copy", () => {
   const resolve = routeModuleHash().resolveId as Function;
-  expect(resolve("../rooms/source-closure.generated.json", id)).toBe(closure);
+  expect(resolve("./source-closure.generated.json", id)).toBe(closure);
   expect(resolve("./graph.ts", id)).toBeUndefined();
 });
 

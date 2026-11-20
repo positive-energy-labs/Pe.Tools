@@ -9,7 +9,7 @@
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
-    "test": "vp test"
+    "test": "vp test --config vite.test.config.ts"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
@@ -21,7 +21,6 @@
   },
   "devDependencies": {
     "@pe/host-internal": "workspace:*",
-    "@pe/rooms-host": "workspace:*",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^25.6.2",
     "@types/react": "^19.2.7",

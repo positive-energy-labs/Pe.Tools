@@ -121,11 +121,8 @@ const folders = (path: string) =>
 export const routeFolderCandidates = (root: string) => {
   const products = resolve(root, "ts/products");
   const webs = existsSync(products) ? folders(products).map((product) => join(product, "web")) : [];
-  return [
-    ...folders(resolve(root, "ts/apps/web/src")),
-    ...webs,
-    ...webs.map((web) => join(web, "routes")).filter(existsSync).flatMap(folders),
-  ];
+  const routes = webs.map((web) => join(web, "routes")).filter(existsSync);
+  return [...folders(resolve(root, "ts/apps/web/src")), ...webs, ...routes.flatMap(folders)];
 };
 
 /** The stored receipt while it is still current, else undefined: the producer remains authority. */
