@@ -558,5 +558,7 @@ if (
       sites.filter((site) => actual[law]?.includes(site)),
     ]),
   );
-  writeFileSync(resolve(root, baselinePath), `${JSON.stringify(next, null, 2)}\n`);
+  const file = resolve(root, baselinePath);
+  writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
+  execFileSync("vp", ["fmt", file], { cwd: resolve(root, "ts"), stdio: "inherit" });
 }
