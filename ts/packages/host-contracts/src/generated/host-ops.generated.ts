@@ -10979,7 +10979,7 @@ export namespace RevitResolveUnitValue {
 export namespace RoomsDraw {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       loops: number[][][];
       name?: null | string;
       role?: null | string;
@@ -10997,7 +10997,7 @@ export namespace RoomsDraw {
 export namespace RoomsMerge {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       guids: string[];
       name?: null | string;
     }
@@ -11016,7 +11016,7 @@ export namespace RoomsMerge {
 export namespace RoomsPartition {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       runId?: null | string;
       rejected?: number[][][] | null;
     }
@@ -11052,13 +11052,18 @@ export namespace RoomsRoster {
     export interface RoomsLevel {
       name: string;
       elevation: number;
-      views: string[];
+      views: RoomsPlanView[];
+    }
+    export interface RoomsPlanView {
+      id: number;
+      name: string;
+      type: string;
     }
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
       guid: string;
-      view: string;
+      view: number;
       level: string;
       role: string;
       zone?: null | string;
@@ -11095,11 +11100,11 @@ export namespace RoomsRoster {
   }
 }
 
-/** Read zones, rooms and held regions on one named plan view, with geometry and provenance. rooms.roster lists available views without geometry. */
+/** Read zones, rooms and held regions on one plan view by numeric Revit view id, with geometry and provenance. rooms.roster lists available views without geometry. */
 export namespace RoomsSnapshot {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
     }
   }
   export namespace Res {
@@ -11111,13 +11116,18 @@ export namespace RoomsSnapshot {
     export interface RoomsLevel {
       name: string;
       elevation: number;
-      views: string[];
+      views: RoomsPlanView[];
+    }
+    export interface RoomsPlanView {
+      id: number;
+      name: string;
+      type: string;
     }
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
       guid: string;
-      view: string;
+      view: number;
       level: string;
       role: string;
       zone?: null | string;
@@ -11158,7 +11168,7 @@ export namespace RoomsSnapshot {
 export namespace RoomsTrace {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       runId?: null | string;
     }
   }

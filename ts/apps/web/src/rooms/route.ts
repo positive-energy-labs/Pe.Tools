@@ -29,10 +29,10 @@ export const fields = {
   card: field(z.string(), "", "pose"),
 };
 export const query = {
-  view: field(address.view, "", "query", "push"),
+  view: field(address.view, null, "query", "push"),
   level: field(address.level, "", "query", "push"),
 };
-export const loaded = read(hostRead(contracts.workspace), (page: { view: string }) => ({
+export const loaded = read(hostRead(contracts.workspace), (page: { view: number | null }) => ({
   view: page.view,
 }));
 export const edits = z.array(routeStatePatchSchema);

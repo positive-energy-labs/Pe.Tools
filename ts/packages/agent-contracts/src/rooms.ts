@@ -32,10 +32,16 @@ export const roomEditAddress = (key: string) => {
   return address;
 };
 
+export const roomsViewId = z.int({ error: "Choose a plan view by its Revit view id." }).positive();
+
 const point = z.tuple([z.number(), z.number()]);
 /** Where feedback points: model feet on one plan view of one level. R-numbers are display only. */
 const anchorSchema = (minPoints: number) =>
-  z.strictObject({ view: z.string(), level: z.string(), polygon: z.array(point).min(minPoints) });
+  z.strictObject({
+    view: roomsViewId.nullable().catch(null),
+    level: z.string(),
+    polygon: z.array(point).min(minPoints),
+  });
 
 /**
  * A feedback mark. `run` is the partition run it was drawn against; its glyph (passing, failing,

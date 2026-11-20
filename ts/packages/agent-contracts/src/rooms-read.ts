@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { roomsRouteState } from "./rooms.ts";
+import { roomsRouteState, roomsViewId } from "./rooms.ts";
 import { workHandleSchema } from "./command.ts";
 import { goalSchema } from "./slots/goal.ts";
 export const roomsPlanImageSchema = z.object({
@@ -25,7 +25,7 @@ export const roomsPlanReadingSchema = z
   .union([z.object({ plan: roomsPlanImageSchema }), z.object({ refusal: roomsPlanRefusalSchema })])
   .nullable();
 export type RoomsPlanReading = z.output<typeof roomsPlanReadingSchema>;
-export const roomsArgs = z.object({ view: z.string() });
+export const roomsArgs = z.object({ view: roomsViewId.nullable() });
 export const roomsData = z.object({
   roomsWork: roomsRouteState.schema,
   handle: workHandleSchema.nullable(),

@@ -32,7 +32,7 @@ export function ScopeBody() {
     useRoomsWorkspace();
   const levels = snapshot?.levels ?? [];
   const level =
-    levels.find((item) => item.views.includes(view)) ??
+    levels.find((item) => item.views.some((plan) => plan.id === view)) ??
     levels.find((item) => item.name === page.level);
   const note = !document
     ? "choose a document first"
@@ -73,7 +73,7 @@ export function ScopeBody() {
               const single = next.views.length === 1 ? next.views[0] : undefined;
               setPage({
                 level: id,
-                view: next.views.includes(view) ? view : (single ?? ""),
+                view: next.views.some((plan) => plan.id === view) ? view : (single?.id ?? null),
                 selected: [],
                 viewport: null,
               });
@@ -81,12 +81,18 @@ export function ScopeBody() {
           },
           {
             key: "view",
-            label: view || null,
+            label: level?.views.find((plan) => plan.id === view)?.name ?? null,
             placeholder: "choose a plan view",
-            options: level ? level.views.map((id) => ({ id, label: id })) : null,
+            options: level
+              ? level.views.map((plan) => ({
+                  id: String(plan.id),
+                  label: plan.name,
+                  sub: plan.type,
+                }))
+              : null,
             note: level ? "this level has no plan views" : "choose a level first",
-            picked: (id) => id === view,
-            pick: (id) => setPage({ view: id, selected: [], viewport: null }),
+            picked: (id) => id === String(view),
+            pick: (id) => setPage({ view: Number(id), selected: [], viewport: null }),
           },
         ]}
       />
@@ -95,7 +101,7 @@ export function ScopeBody() {
           <OutcomeLine kind="refused" label="plan view" says="That view is not in this document." />
           <Button
             label="Clear plan view"
-            onClick={() => setPage({ view: "", selected: [], viewport: null })}
+            onClick={() => setPage({ view: null, selected: [], viewport: null })}
           >
             Clear plan view
           </Button>
@@ -140,9 +146,10 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: Teachin
     pinned,
     pin: setPinned,
   } = useRoomsWorkspace();
-  const level = snapshot?.levels.find((item) => item.views.includes(view))?.name ?? "";
+  const level =
+    snapshot?.levels.find((item) => item.views.some((plan) => plan.id === view))?.name ?? "";
   const onDrop = async (drop: Drop) => {
-    if (!snapshot) return "the snapshot is not read yet";
+    if (!snapshot || view === null) return "Choose a plan view first";
     const mark: Mark = {
       kind: drop.kind,
       anchor: { view, level, polygon: drop.polygon.map(([x, y]) => [x, y]) },
@@ -191,6 +198,9 @@ function PlanBody({ ctx, page, verbs, renderPane }: Body & { renderPane: Teachin
       }}
       trace={trace}
       page={ctx.page}
+      viewLabel={
+        snapshot?.levels.flatMap((item) => item.views).find((plan) => plan.id === view)?.name
+      }
       value={ctx.value}
       overlay={
         page.stage === "review"
@@ -242,7 +252,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           label="Stage marked room merge"
           onClick={() => {
             const mark = ctx.cells.doc?.marks[row.id!]?.edit?.value;
-            if (mark?.kind === "merge")
+            if (mark?.kind === "merge" && mark.anchor.view !== null)
               void ctx.cells.patch(
                 [
                   {
@@ -329,7 +339,9 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
             label="snap PNG"
             kind="framed"
             reason="Downloads the plan as drawn now, callouts and marks included"
-            onClick={() => void snapPlan(view).then((missing) => say(missing ?? "saved"))}
+            onClick={() =>
+              void snapPlan(String(view ?? "")).then((missing) => say(missing ?? "saved"))
+            }
           >
             {said && said !== "copied" && said !== "copy refused" ? said : "snap PNG"}
           </Button>

@@ -125,7 +125,7 @@ selected: {...personField(focusSelectionSchema,"replace"),agent:undefined}
 selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 }, agent: { policy: "Choose member through member, using the module's local identities." }, module: "pods" },
 "rooms": { path: "/rooms" as const, title: "Rooms", fields: {
-"view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":null,"anyOf":[{"type":"integer","exclusiveMinimum":0,"maximum":9007199254740991},{"type":"null"}]}) as z.ZodType<Immutable<number | null>>).default(null), "push"),
 "level": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "room": field(subjectSchema(512).default({"kind":"ids","ids":[]}), "push"),
 "stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"partition","type":"string","enum":["partition","review","history"]}) as z.ZodType<Immutable<"partition" | "review" | "history">>).default("partition"), "push"),

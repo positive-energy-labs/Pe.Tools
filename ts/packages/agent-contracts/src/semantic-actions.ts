@@ -1,5 +1,5 @@
 import { commandTable } from "./command-axes.ts";
-import { stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
+import { roomsViewId, stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
@@ -71,7 +71,7 @@ const definitions = {
     needs: "project-document",
     effect: "command",
     // rejected: standing "not a room" rings (model feet, outer only); a face at IoU >= 0.6 is held `rejected`.
-    input: z.object({ view: z.string().min(1), rejected: z.array(loop).optional() }),
+    input: z.object({ view: roomsViewId, rejected: z.array(loop).optional() }),
     dirties: ["snapshot"],
   },
   "rooms.draw": {
@@ -81,8 +81,13 @@ const definitions = {
     effect: "command",
     input: z.object({
       view: z
-        .string({ error: "No room draw is staged with a plan view. Nothing was written." })
-        .min(1),
+        .int({
+          error: (issue) =>
+            issue.input === undefined
+              ? "No room draw is staged with a plan view. Nothing was written."
+              : "Choose a plan view by its Revit view id.",
+        })
+        .positive(),
       loops: z.array(loop).min(1),
       name: z.string().nullable().optional(),
       role: z.enum(["room", "zone"]).optional(),
@@ -120,7 +125,7 @@ const definitions = {
     needs: "project-document",
     effect: "command",
     input: z.object({
-      view: z.string().min(1),
+      view: roomsViewId,
       guids: z.array(z.string().min(1)).min(2),
       name: z.string().nullable().optional(),
     }),

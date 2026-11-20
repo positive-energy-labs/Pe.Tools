@@ -16,7 +16,7 @@ const WANTS_A_PERSON = new Set<Card["state"]>(["fail", "stale", "gone"]);
 export function roomsGoal(
   work: Pick<RoomsRouteDocument, "marks">,
   snapshot: RoomsSnapshot.Res.Response,
-  view: string,
+  view: number | null,
 ): Omit<Goal<string>, "inputs"> & { inputs: readonly never[] } {
   const labels = new Map(
     roomRows(snapshot.regions, levelOrder(snapshot.levels)).map((row) => [
@@ -24,6 +24,9 @@ export function roomsGoal(
       row.label,
     ]),
   );
+  const viewName =
+    snapshot.levels.flatMap((level) => level.views).find((plan) => plan.id === view)?.name ??
+    "the selected plan";
   const rooms = snapshot.regions.filter((r) => r.view === view && r.role === "room").length;
   const closer = (card: Card): Closer => ({
     id: `mark:${card.id}`,
@@ -43,7 +46,7 @@ export function roomsGoal(
           : [
               {
                 id: "partition",
-                says: `No rooms on ${view} yet: partition it`,
+                says: `No rooms on ${viewName} yet: partition it`,
                 resolver: { op: "rooms.partition" },
               },
             ]),
@@ -56,7 +59,7 @@ export function roomsGoal(
     inputs: [],
     result: unresolved.length
       ? { kind: "estimate", value: null, sources: [] }
-      : { kind: "complete", value: `${rooms} room${rooms === 1 ? "" : "s"} on ${view}` },
+      : { kind: "complete", value: `${rooms} room${rooms === 1 ? "" : "s"} on ${viewName}` },
   };
 }
 

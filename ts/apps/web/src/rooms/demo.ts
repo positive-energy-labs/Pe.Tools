@@ -2,7 +2,7 @@ import type { RoomsSnapshot } from "@pe/host-contracts/generated";
 import type { PlanImage } from "./plan-reading";
 import type { TraceRead } from "./layers";
 
-export const DEMO_VIEW = "Fixture level plan";
+export const DEMO_VIEW = 6012624;
 /** The demo has no solver trace: a trace is a Revit reading, never a fixture (the saved JSON was purged). */
 export const DEMO_TRACE: TraceRead = { data: null, none: "no trace in the fixture review" };
 const rectangles = [
@@ -12,7 +12,13 @@ const rectangles = [
   ["held", 0, 12, 40, 24],
 ] as const;
 export const DEMO_ROOMS: RoomsSnapshot.Res.Response = {
-  levels: [{ name: "Fixture level", elevation: 0, views: [DEMO_VIEW] }],
+  levels: [
+    {
+      name: "Fixture level",
+      elevation: 0,
+      views: [{ id: DEMO_VIEW, name: "Fixture level plan", type: "FloorPlan" }],
+    },
+  ],
   regions: rectangles.map(([role, x, y, right, top], index) => ({
     elementId: 1001 + index,
     uniqueId: `00000000-0000-4000-9000-${String(index).padStart(12, "0")}-${(1001 + index).toString(16).padStart(8, "0")}`,

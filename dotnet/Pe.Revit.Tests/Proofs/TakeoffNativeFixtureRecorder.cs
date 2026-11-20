@@ -68,9 +68,9 @@ public sealed class TakeoffNativeFixtureRecorder {
             Assert.That(adopted, Is.Not.Null, "Adopt native path must answer; see retained error");
 
             var a = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
-                new RoomsDrawRequest(view.Name, [Square(0, 0, 10)], "Office"));
+                new RoomsDrawRequest(view.Id.Value(), [Square(0, 0, 10)], "Office"));
             var b = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
-                new RoomsDrawRequest(view.Name, [Square(10, 0, 10)], "Lobby"));
+                new RoomsDrawRequest(view.Id.Value(), [Square(10, 0, 10)], "Lobby"));
             Assert.That(a, Is.Not.Null, "Draw native path must answer; see retained error");
             Assert.That(b, Is.Not.Null, "Draw native path must answer; see retained error");
             var written = Capture<RoomsWriteResult>("rooms.write", "WriteRoomsCore", new RoomsWriteRequest([
@@ -101,11 +101,11 @@ public sealed class TakeoffNativeFixtureRecorder {
                 .Select(region => TakeoffCarriers.ReadIdentity(region).Guid!.Value).ToList();
             Assert.That(members, Has.Count.EqualTo(2));
             _ = Capture<RoomsMergeResult>("rooms.merge", "MergeRoomsCore",
-                new RoomsMergeRequest(view.Name, members, "Recorded combined room"));
+                new RoomsMergeRequest(view.Id.Value(), members, "Recorded combined room"));
             // A missing spatial recording is retained as an error, never fabricated into a DTO.
             _ = Capture<TakeoffPartitionResult>("takeoffs.partition", "PartitionTakeoffCore",
                 new TakeoffPartitionRequest(zone.Id.Value(), view.Name, "Fixture zone", adopted!.Adopted.Single().Guid, "recorded-fixture"));
-            _ = Capture<RoomsPartitionResult>("rooms.partition", "PartitionRoomsCore", new RoomsPartitionRequest(view.Name));
+            _ = Capture<RoomsPartitionResult>("rooms.partition", "PartitionRoomsCore", new RoomsPartitionRequest(view.Id.Value()));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(doc);
         }

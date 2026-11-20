@@ -27,7 +27,7 @@ import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { fixture, ref } from "../../../host/tests/host-read-graph.test-support";
 import { peClient } from "../host/pe-client";
 import { module as rooms } from "../rooms/route";
-import { DEMO_ROOMS } from "../rooms/demo";
+import { DEMO_ROOMS, DEMO_VIEW } from "../rooms/demo";
 import { roomsGoal } from "../rooms/goal";
 
 afterEach(() => {
@@ -95,7 +95,7 @@ test.each([
   else rosterData.rows = [{ ...rosterData.rows[0], mark: "MUAS-1" }];
   if (key === "rooms")
     rosterData = {
-      ...roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, ""),
+      ...roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, null),
       snapshot: DEMO_ROOMS,
       roomsWork: roomsRouteState.schema.parse({}),
       handle: null,
@@ -246,7 +246,7 @@ test.each([
       const id = module.spec.subject!.options(rosterData)[0]!.id;
       deliverRoster = false;
       const result = await call(JSON.stringify({ kind: "ids", ids: [id] }), {
-        view: JSON.stringify("Second view"),
+        view: JSON.stringify(DEMO_VIEW),
       });
       expect(result, JSON.stringify(result)).toMatchObject({
         ok: true,

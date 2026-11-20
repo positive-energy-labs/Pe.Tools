@@ -71,17 +71,26 @@ test("the browser door binds the target in the host contract's shape", () => {
     args: { target: ref },
   });
   const rooms = hostRead(roomsWorkspace);
-  expect(rooms.request?.(rooms.input.parse({ view: "" }), { kind: "document", ref })).toMatchObject(
-    { args: { target: { kind: "document", ref } } },
-  );
+  expect(
+    rooms.request?.(rooms.input.parse({ view: null }), { kind: "document", ref }),
+  ).toMatchObject({ args: { target: { kind: "document", ref } } });
 });
 
 test("Rooms recovers the chosen document's roster when a linked plan no longer exists", async () => {
-  const levels = [{ name: "Snowdon level", elevation: 0, views: ["Snowdon plan"] }];
+  const levels = [
+    {
+      name: "Snowdon level",
+      elevation: 0,
+      views: [
+        { id: 9948, name: "L2", type: "FloorPlan" },
+        { id: 1371629, name: "L2", type: "CeilingPlan" },
+      ],
+    },
+  ];
   const operations: string[] = [];
   const read = await evaluate(
     bodyOf(roomsWorkspace),
-    { target: { kind: "document", ref: { session: "s", openId: "snowdon" } }, view: "Chadds plan" },
+    { target: { kind: "document", ref: { session: "s", openId: "snowdon" } }, view: 7426391 },
     port(async (name, args) => {
       if (name === "document-mark") return { observedSince: 1, changedAt: null, generation: 0 };
       if (name === "work-scope")

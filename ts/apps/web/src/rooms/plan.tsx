@@ -128,7 +128,6 @@ const FILL_HOT_PCT = 40;
 
 type PlanPage = {
   read(): {
-    readonly view: string;
     readonly layers: readonly string[] | "all";
     readonly viewport: PlaneViewport | null;
   };
@@ -149,6 +148,7 @@ export function RoomsPlan({
   onSelect,
   trace,
   page: place,
+  viewLabel,
   overlay,
 }: {
   renderPane: TeachingPaneRender;
@@ -168,6 +168,7 @@ export function RoomsPlan({
   /** `rooms.trace` for the drawn view; `none` names why there is nothing to draw. */
   trace: TraceRead;
   page: PlanPage;
+  viewLabel?: string;
   value?: ValueHandle<unknown>;
 }) {
   const page = place.read();
@@ -294,7 +295,7 @@ export function RoomsPlan({
     title: "plan",
 
     meta:
-      [page.view, fixture ? "fixture · no Revit capture" : null].filter(Boolean).join(" · ") ||
+      [viewLabel, fixture ? "fixture · no Revit capture" : null].filter(Boolean).join(" · ") ||
       undefined,
     floaters: [map],
     layers: {

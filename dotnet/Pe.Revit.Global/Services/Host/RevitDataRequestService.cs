@@ -102,7 +102,7 @@ internal sealed class RevitDataRequestService {
         Does = "Read plan views and level elevations without region boundaries.", Cost = OpCost.Cheap)]
     private static RoomsSnapshotData GetRoomsRoster(NoRequest _, ProjectDocument document) => Rooms.Roster(document.Value);
 
-    [Op("rooms.snapshot", OpSubject.View, OpTouches.Geometry, Does = "Read zones, rooms and held regions on one named plan view, with geometry and provenance. rooms.roster lists available views without geometry.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
+    [Op("rooms.snapshot", OpSubject.View, OpTouches.Geometry, Does = "Read zones, rooms and held regions on one plan view by numeric Revit view id, with geometry and provenance. rooms.roster lists available views without geometry.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
     private static RoomsSnapshotData GetRoomsSnapshotCore(RoomsReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, doc => Rooms.Snapshot(doc, request.View));
 

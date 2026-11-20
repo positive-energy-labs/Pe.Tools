@@ -34,7 +34,7 @@ test("switching Rooms documents leaves the old plan behind in the same history e
       place={{
         address: {
           read: () =>
-            new URLSearchParams({ view: "Chadds plan", level: "Chadds level", stage: "review" }),
+            new URLSearchParams({ view: "7426391", level: "Chadds level", stage: "review" }),
           write,
           subscribe: () => () => {},
         },
@@ -50,7 +50,7 @@ test("switching Rooms documents leaves the old plan behind in the same history e
   expect(write).toHaveBeenCalledTimes(1);
   const [search, history] = write.mock.calls[0] ?? [];
   expect(history).toBe("push");
-  expect(search?.get("view")).toBe(JSON.stringify(""));
+  expect(search?.get("view")).toBe(JSON.stringify(null));
   expect(search?.get("level")).toBe(JSON.stringify(""));
   expect(search?.get("stage")).toBe("review");
   expect(search?.get("target")).toBe(

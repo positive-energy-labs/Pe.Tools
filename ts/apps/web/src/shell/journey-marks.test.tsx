@@ -27,7 +27,7 @@ const call = vi.hoisted(() =>
 );
 vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 // The core read is the route's Goal (slice 10): a rooms packet carries its fields.
-const GOAL = roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, "");
+const GOAL = roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, null);
 const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
 const roomsProbe = (spec: Partial<typeof module.spec> = {}) =>
   route({

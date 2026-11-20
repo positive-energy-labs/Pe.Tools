@@ -111,7 +111,7 @@ test("the Goal is the partition inbox: failing and gone marks first, staged mark
     kind: "complete",
     value: "2 rooms on Fixture level plan",
   });
-  expect(roomsGoal(work, DEMO_ROOMS, "").unresolved).toEqual([
+  expect(roomsGoal(work, DEMO_ROOMS, null).unresolved).toEqual([
     { id: "view", says: "Choose a level and a plan view", resolver: "person" },
   ]);
   expect(

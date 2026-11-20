@@ -5748,13 +5748,13 @@ export namespace Op81request {
 namespace Decoded {
 
 
-const codec = Schema.Struct({ "view": Schema.String, "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsDrawRequest" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsDrawRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 
-export type Root = { readonly "view": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "name"?: null | string, readonly "role"?: null | string };
+export type Root = { readonly "view": number, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "name"?: null | string, readonly "role"?: null | string };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -5784,13 +5784,13 @@ export namespace Op82request {
 namespace Decoded {
 
 
-const codec = Schema.Struct({ "view": Schema.String, "guids": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsMergeRequest" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "guids": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsMergeRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 
-export type Root = { readonly "view": string, readonly "guids": ReadonlyArray<string>, readonly "name"?: null | string };
+export type Root = { readonly "view": number, readonly "guids": ReadonlyArray<string>, readonly "name"?: null | string };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -5820,13 +5820,13 @@ export namespace Op83request {
 namespace Decoded {
 
 
-const codec = Schema.Struct({ "view": Schema.String, "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rejected": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), Schema.Null])) }).annotate({ "title": "RoomsPartitionRequest" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rejected": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), Schema.Null])) }).annotate({ "title": "RoomsPartitionRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 
-export type Root = { readonly "view": string, readonly "runId"?: null | string, readonly "rejected"?: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> | null };
+export type Root = { readonly "view": number, readonly "runId"?: null | string, readonly "rejected"?: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> | null };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -5871,13 +5871,15 @@ export type Value = typeof decoder.Type;
 export namespace Op84response {
 namespace Decoded {
 
-const RoomsLevel = Schema.Struct({ "name": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "views": Schema.Array(Schema.String) }).annotate({ "identifier": "RoomsLevel" });
-const RoomsRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "view": Schema.String, "level": Schema.String, "role": Schema.String, "zone": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "designation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "type": Schema.String, "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "runId": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "touched": Schema.Boolean, "locked": Schema.Boolean, "stale": Schema.Boolean }).annotate({ "identifier": "RoomsRegion" });
+const RoomsPlanView = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "type": Schema.String }).annotate({ "identifier": "RoomsPlanView" });
+const RoomsRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "level": Schema.String, "role": Schema.String, "zone": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "designation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "type": Schema.String, "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "runId": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "touched": Schema.Boolean, "locked": Schema.Boolean, "stale": Schema.Boolean }).annotate({ "identifier": "RoomsRegion" });
 const TakeoffUnreadableBlob = Schema.Struct({ "elementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameter": Schema.String, "reason": Schema.String }).annotate({ "description": "A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that\nholds it, or null for the System registry on Project Information. A listing reports these and goes on: the\nregion is left out of what it lists, and no write goes over the blob.\n            ", "identifier": "TakeoffUnreadableBlob" });
+const RoomsLevel = Schema.Struct({ "name": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "views": Schema.Array(RoomsPlanView) }).annotate({ "identifier": "RoomsLevel" });
 const codec = Schema.Struct({ "levels": Schema.Array(RoomsLevel), "regions": Schema.Array(RoomsRegion), "unreadable": Schema.optionalKey(Schema.Union([Schema.Array(TakeoffUnreadableBlob), Schema.Null])) }).annotate({ "title": "RoomsSnapshotData" });
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RoomsLevel"]: strictDecoder(RoomsLevel),
+  ["RoomsPlanView"]: strictDecoder(RoomsPlanView),
   ["RoomsRegion"]: strictDecoder(RoomsRegion),
   ["TakeoffUnreadableBlob"]: strictDecoder(TakeoffUnreadableBlob),
 } as const;
@@ -5885,9 +5887,10 @@ export const definitions = {
 export const decoder = Decoded.decoder;
 export const definitions = Decoded.definitions;
 namespace WireTypes {
-type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<string> };
-type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": string, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
+type RoomsPlanView = { readonly "id": number, readonly "name": string, readonly "type": string };
+type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": number, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
 type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
+type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<RoomsPlanView> };
 export type Root = { readonly "levels": ReadonlyArray<RoomsLevel>, readonly "regions": ReadonlyArray<RoomsRegion>, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
 }
 export type Wire = WireTypes.Root;
@@ -5898,13 +5901,13 @@ export namespace Op85request {
 namespace Decoded {
 
 
-const codec = Schema.Struct({ "view": Schema.String }).annotate({ "title": "RoomsReadRequest" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "RoomsReadRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 
-export type Root = { readonly "view": string };
+export type Root = { readonly "view": number };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -5913,13 +5916,15 @@ export type Value = typeof decoder.Type;
 export namespace Op85response {
 namespace Decoded {
 
-const RoomsLevel = Schema.Struct({ "name": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "views": Schema.Array(Schema.String) }).annotate({ "identifier": "RoomsLevel" });
-const RoomsRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "view": Schema.String, "level": Schema.String, "role": Schema.String, "zone": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "designation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "type": Schema.String, "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "runId": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "touched": Schema.Boolean, "locked": Schema.Boolean, "stale": Schema.Boolean }).annotate({ "identifier": "RoomsRegion" });
+const RoomsPlanView = Schema.Struct({ "id": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "type": Schema.String }).annotate({ "identifier": "RoomsPlanView" });
+const RoomsRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "level": Schema.String, "role": Schema.String, "zone": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "designation": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "name": Schema.String, "type": Schema.String, "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "label": Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))), "runId": Schema.String, "reason": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "touched": Schema.Boolean, "locked": Schema.Boolean, "stale": Schema.Boolean }).annotate({ "identifier": "RoomsRegion" });
 const TakeoffUnreadableBlob = Schema.Struct({ "elementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameter": Schema.String, "reason": Schema.String }).annotate({ "description": "A stored takeoff blob this build can't read; it is kept as it is (ADR 0039 keep). ElementId is the region that\nholds it, or null for the System registry on Project Information. A listing reports these and goes on: the\nregion is left out of what it lists, and no write goes over the blob.\n            ", "identifier": "TakeoffUnreadableBlob" });
+const RoomsLevel = Schema.Struct({ "name": Schema.String, "elevation": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "views": Schema.Array(RoomsPlanView) }).annotate({ "identifier": "RoomsLevel" });
 const codec = Schema.Struct({ "levels": Schema.Array(RoomsLevel), "regions": Schema.Array(RoomsRegion), "unreadable": Schema.optionalKey(Schema.Union([Schema.Array(TakeoffUnreadableBlob), Schema.Null])) }).annotate({ "title": "RoomsSnapshotData" });
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["RoomsLevel"]: strictDecoder(RoomsLevel),
+  ["RoomsPlanView"]: strictDecoder(RoomsPlanView),
   ["RoomsRegion"]: strictDecoder(RoomsRegion),
   ["TakeoffUnreadableBlob"]: strictDecoder(TakeoffUnreadableBlob),
 } as const;
@@ -5927,9 +5932,10 @@ export const definitions = {
 export const decoder = Decoded.decoder;
 export const definitions = Decoded.definitions;
 namespace WireTypes {
-type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<string> };
-type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": string, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
+type RoomsPlanView = { readonly "id": number, readonly "name": string, readonly "type": string };
+type RoomsRegion = { readonly "elementId": number, readonly "uniqueId": string, readonly "guid": string, readonly "view": number, readonly "level": string, readonly "role": string, readonly "zone"?: null | string, readonly "designation"?: null | string, readonly "name": string, readonly "type": string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "sqft": number, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "label": ReadonlyArray<number>, readonly "runId": string, readonly "reason"?: null | string, readonly "touched": boolean, readonly "locked": boolean, readonly "stale": boolean };
 type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
+type RoomsLevel = { readonly "name": string, readonly "elevation": number, readonly "views": ReadonlyArray<RoomsPlanView> };
 export type Root = { readonly "levels": ReadonlyArray<RoomsLevel>, readonly "regions": ReadonlyArray<RoomsRegion>, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
 }
 export type Wire = WireTypes.Root;
@@ -5940,13 +5946,13 @@ export namespace Op86request {
 namespace Decoded {
 
 
-const codec = Schema.Struct({ "view": Schema.String, "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsTraceRequest" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsTraceRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 
-export type Root = { readonly "view": string, readonly "runId"?: null | string };
+export type Root = { readonly "view": number, readonly "runId"?: null | string };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;

@@ -185,16 +185,16 @@ public static class Rooms
             .Where(v => !v.IsTemplate && v.GenLevel != null).ToList();
         var levels = views.GroupBy(v => v.GenLevel.Name)
             .Select(g => new RoomsLevel(g.Key, g.First().GenLevel.ProjectElevation,
-                g.Select(v => v.Name).OrderBy(n => n, StringComparer.Ordinal).ToList()))
+                g.Select(v => new RoomsPlanView(v.Id.Value(), v.Name, v.ViewType.ToString()))
+                    .OrderBy(v => v.Name, StringComparer.Ordinal).ThenBy(v => v.Type, StringComparer.Ordinal)
+                    .ThenBy(v => v.Id).ToList()))
             .OrderBy(l => l.Elevation).ThenBy(l => l.Name, StringComparer.Ordinal).ToList();
         return levels;
     }
 
-    public static RoomsSnapshotData Snapshot(Document doc, string viewName)
+    public static RoomsSnapshotData Snapshot(Document doc, long viewId)
     {
-        var viewScope = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-            .SingleOrDefault(v => !v.IsTemplate && v.GenLevel != null && v.Name == viewName)
-            ?? throw new RoomsViewMissingException();
+        var viewScope = LevelView(doc, viewId);
         var levels = Levels(doc);
         var byId = new Dictionary<long, ViewPlan> { [viewScope.Id.Value()] = viewScope };
 
@@ -227,7 +227,7 @@ public static class Rooms
             bool touched = Touched(provenance, loops);
             var fields = TakeoffCarriers.ReadRoomFields(fr);
             regions.Add(new RoomsRegion(
-                fr.Id.Value(), fr.UniqueId, guid, view.Name, view.GenLevel.Name,
+                fr.Id.Value(), fr.UniqueId, guid, view.Id.Value(), view.GenLevel.Name,
                 role switch
                 {
                     TakeoffCarriers.RoleZoningRegion => "zone",
@@ -273,8 +273,8 @@ public static class Rooms
     public static RoomsPartitionResult Partition(Document doc, RoomsPartitionRequest request)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var view = LevelView(doc, request.View);
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var level = view.GenLevel;
         var runId = string.IsNullOrWhiteSpace(request.RunId) ? Guid.NewGuid().ToString("N") : request.RunId!;
         if (runId == RunDrawn) throw new InvalidOperationException($"runId '{RunDrawn}' is reserved");
@@ -546,8 +546,8 @@ public static class Rooms
 
     public static RoomsDrawResult Draw(Document doc, RoomsDrawRequest request)
     {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var view = LevelView(doc, request.View);
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var role = RoleOf(request.Role ?? "room");
         if (request.Loops is not { Count: > 0 } || request.Loops.Any(loop => loop is not { Count: >= 3 }))
             throw new InvalidOperationException("draw needs one or more loops of three or more points");
@@ -605,8 +605,8 @@ public static class Rooms
     /// </summary>
     public static RoomsMergeResult Merge(Document doc, RoomsMergeRequest request)
     {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var view = LevelView(doc, request.View);
+        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var guids = request.Guids ?? [];
         var byGuid = Resolve(doc, guids);
         var zones = byGuid.Where(r => r.Value.Role == TakeoffCarriers.RoleZoningRegion)
@@ -742,11 +742,10 @@ public static class Rooms
         return role == TakeoffCarriers.RoleZoningRegion ? RegionProvenance.ReadZone(blob) : RegionProvenance.Read(blob);
     }
 
-    private static ViewPlan LevelView(Document doc, string name)
-    {
-        var view = TakeoffAtlas.FindView(doc, name);
-        return view.GenLevel != null ? view : throw new InvalidOperationException($"view '{name}' has no level");
-    }
+    private static ViewPlan LevelView(Document doc, long id) =>
+        doc.GetElement(id.ToElementId()) is ViewPlan { IsTemplate: false, GenLevel: not null } view
+            ? view
+            : throw new RoomsViewMissingException();
 
     private static Pe.Revit.Partition.RoomProposal LockedProposal(ExistingRegion region, string name) =>
         new(RoomsRerun.LockedPrefix + region.Guid.ToString("D"), name, "", region.Loops.Select(Flat).ToArray());

@@ -4,7 +4,7 @@ import { expect, test } from "vite-plus/test";
 
 import { inboxCards } from "./cards";
 
-const VIEW = "L1 - Rooms";
+const VIEW = 6012624;
 const square = (x: number, y: number, w: number): [number, number][] => [
   [x, y],
   [x + w, y],
@@ -40,7 +40,9 @@ const region = (guid: string, name: string, x: number): Region => ({
   stale: false,
 });
 const snapshot: RoomsSnapshot.Res.Response = {
-  levels: [{ name: "L1", elevation: 0, views: [VIEW] }],
+  levels: [
+    { name: "L1", elevation: 0, views: [{ id: VIEW, name: "L1 - Rooms", type: "FloorPlan" }] },
+  ],
   regions: [region("a", "Kitchen", 0), region("b", "Nook", 10), region("c", "Closet", 30)],
 };
 const mark = (kind: Mark["kind"], polygon: [number, number][], guids: string[]): Mark => ({
