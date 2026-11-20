@@ -102,6 +102,7 @@ test("an authored product folder feeds Host, web and Pea without editing their s
     const actions = await load<typeof import("@pe/mcps/product-actions")>(productAssemblyPaths.actions);
     const catalog = await load<typeof import("@pe/mcps/product-catalog")>(productAssemblyPaths.catalog);
     const contracts = await load<typeof import("@pe/mcps/product-contracts")>(productAssemblyPaths.contracts);
+    const guides = await load<{ productGuides: readonly { instructions: string }[] }>(productAssemblyPaths.guides);
     const host = await load<{ productHttpRoutes: Layer.Layer<never, never, Http.HttpRouter> }>(productAssemblyPaths.http);
     const hostExecutors = await load<typeof import("../../../apps/host/src/product-executors.generated.ts")>(productAssemblyPaths.executors);
     const { HttpRouter } = await jiti.import<typeof import("effect/http")>("effect/http");
@@ -111,6 +112,7 @@ test("an authored product folder feeds Host, web and Pea without editing their s
     } finally { await server.dispose(); }
     expect(actions.tools).toHaveProperty("proof");
     expect(actions.commands).toHaveProperty(["document.temporary.status"]);
+    expect(guides.productGuides).toEqual([{ instructions: "Fixture guide.", skills: [] }]);
     expect(hostExecutors.productExecutors({} as never).executors).toHaveProperty(["proof.execute"]);
     const discovery = catalog.linkedCatalog().entries.get("route:reads.value")?.discovery;
     expect(discovery?.description).toContain("A proof reading.");
