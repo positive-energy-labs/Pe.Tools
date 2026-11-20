@@ -43,6 +43,7 @@
   "apps/host/tests/pea/pea-families-plan-adoption.test.ts",
   "apps/host/tests/pea/pea-pod-knowledge.test.ts",
   "apps/host/tests/pea/undo-place.test.ts",
+  "apps/host/tests/pod-read-door.test.ts",
   "apps/host/tests/pod-transfer.test.ts",
   "apps/host/tests/product-executors.test.ts",
   "apps/host/tests/project-file-inputs.test.ts",
