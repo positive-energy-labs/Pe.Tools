@@ -18,6 +18,7 @@ import {
 } from "./import-census.ts";
 import baseline from "./host-door.baseline.json" with { type: "json" };
 
+const WEB_KERNEL = "packages/web-kernel/src/";
 const INFRASTRUCTURE = new Set(
   [
     // Shared subscription/read transport, including receipt observation.
@@ -38,17 +39,19 @@ const INFRASTRUCTURE = new Set(
     "host/measured-parse.ts",
     // Navigation snapshot transport used by the shared navigation owner.
     "navigation/navigation-client.ts",
-    // Native family read adapter preserves response provenance for subsequent admission.
-    "revit/observation.tsx",
     // Immutable binary scene-artifact transport, separate from JSON readings.
     "scene/artifact.ts",
     // Scene reading source owns subscriber demand, cancellation, busy retry and artifact leases.
     "scene/scene-data.ts",
     // Typed harness-thread HTTP/SSE transport used by shared chat sources and owners.
     "workbench/provider/harness-client.ts",
-  ].map((path) => WEB + path),
+  ].map((path) => WEB + path).concat(
+    // Native family read adapter preserves response provenance for subsequent admission.
+    WEB_KERNEL + "revit/observation.tsx",
+  ),
 );
 const HOST_CLIENT = modulePath(WEB + "index.ts", "#/host/client");
+const HOST_RUNTIME = modulePath(WEB_KERNEL + "index.ts", "./host/runtime");
 const ACTION_CLIENT = resolve(ROOT, "packages/mcps/src/shared/takeoff-action-client").replaceAll(
   "\\",
   "/",
@@ -68,7 +71,7 @@ function hostImport(file: string, entry: Import): boolean {
   return (
     path === HOST_CLIENT ||
     !!entry.names?.some((name) => name === "callHostRpc" || name === "hostFetch") ||
-    (entry.names === null && path === modulePath(file, "#/host/runtime"))
+    (entry.names === null && (path === HOST_RUNTIME || path === "@pe/web-kernel/host/runtime"))
   );
 }
 
@@ -78,7 +81,7 @@ const bypasses = (file: string, entries: Import[]) =>
   entries.some((entry) => hostImport(file, entry));
 
 it("host door bypasses can only shrink (ADR 0026)", () => {
-  const actual = productionFiles("apps/web/src").filter((file) =>
+  const actual = [...productionFiles("apps/web/src"), ...productionFiles("packages/web-kernel/src")].filter((file) =>
     bypasses(file, readImports(file)),
   );
   expect(
@@ -113,8 +116,14 @@ it("exempts only named infrastructure, never neighboring UI or a directory", () 
     ).toBe(true);
   }
   expect(
-    bypasses(WEB + "host/client.ts", [{ module: "#/host/runtime", names: ["hostFetch"] }]),
+    bypasses(WEB + "host/client.ts", [{ module: "@pe/web-kernel/host/runtime", names: ["hostFetch"] }]),
   ).toBe(false);
+  expect(bypasses(WEB_KERNEL + "revit/observation.tsx", [
+    { module: "../host/runtime", names: ["hostFetch"] },
+  ])).toBe(false);
+  expect(bypasses(WEB_KERNEL + "revit/another-reader.tsx", [
+    { module: "../host/runtime", names: null },
+  ])).toBe(true);
 });
 
 it("does not mistake inert evidence or a detached receipt type for an effect", () => {
