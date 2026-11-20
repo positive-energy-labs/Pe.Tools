@@ -52,6 +52,7 @@ public static class TakeoffCarriers
 
     internal static void CheckReplacement(OwnerBlobRead stored, JObject data, OwnerBlobReplacement? replacing)
     {
+        if (stored.Status == OwnerBlobStatus.NewerVersion) throw new InvalidOperationException(stored.Error);
         if (stored.Replacement != null || replacing != null)
             _ = OwnerBlob.Replace(stored, data, (_, _) => { }, replacing);
     }
@@ -135,6 +136,7 @@ public sealed class RoomsRegionRecord
 
     internal static RoomsRegionRecord Stage(OwnerBlobRead stored, OwnerBlobReplacement? replacing)
     {
+        if (stored.Status == OwnerBlobStatus.NewerVersion) throw new InvalidOperationException(stored.Error);
         var read = Decode(stored);
         var record = read.Value ?? new RoomsRegionRecord { Refusal = read.Refusal };
         if (record.Recovery != null && replacing == null)

@@ -256,7 +256,11 @@ type Bound<R extends Readings, N> = HostRead & {
   readonly args: N extends readonly [unknown, infer A] ? A : () => {};
 };
 type BoundRoute<R extends Readings, Route> = {
-  readonly [K in keyof Route]: K extends "core"
+  readonly [K in keyof Route as K extends "subject"
+    ? NonNullable<Route[K]> extends { readonly field: string }
+      ? K
+      : never
+    : K]: K extends "core"
     ? Bound<R, Route[K]>
     : K extends "reads"
       ? { readonly [N in keyof Route[K]]: Bound<R, Route[K][N]> }
@@ -435,7 +439,9 @@ export function product<
     };
   };
   readonly sheetWrites?: {
-    readonly route: keyof NoInfer<Works> extends never ? NoInfer<Id> : keyof NoInfer<Works> & string;
+    readonly route: keyof NoInfer<Works> extends never
+      ? NoInfer<Id>
+      : keyof NoInfer<Works> & string;
     readonly writes: Sheet & NoExtras<NonNullable<Sheet>, H>;
   };
   /** Zero or several, keyed by the route key. A subject's pane is one of the route's panes. */

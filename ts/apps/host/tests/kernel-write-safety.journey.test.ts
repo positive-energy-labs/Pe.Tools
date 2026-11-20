@@ -22,6 +22,7 @@ import { testRegistry } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { nativeFixture } from "./fans/fans-native.fixture.ts";
+import { withRoomsSheet } from "./rooms/rooms-sheet.ts";
 import { pagesRoute } from "../src/pages-route.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";
@@ -575,14 +576,16 @@ test("E9 a queued Page command loses authority before its first effect", async (
   let stop = () => {};
   try {
     await f.bindPage();
-    f.native.select("fresh-takeoffs.initialize-carrier", "fresh-rooms.write");
+    withRoomsSheet(f.workspace);
+    f.native.select("fresh-rooms.write");
     const rooms = { ...f.key, route: "rooms" };
     const request = nativeRecordingRequest("fresh-rooms.write");
+    f.native.reportTrackedRooms(request.regions.map((room: { uniqueId: string }) => room.uniqueId));
     expect(
       await f.workspace.publish(
         rooms,
         "rooms",
-        request.regions.map((room: any) => ({
+        request.regions.map((room: { uniqueId: string; name: string }) => ({
           path: ["name", regionCode(room.uniqueId)],
           value: { edit: { value: room.name } },
         })),
@@ -591,8 +594,9 @@ test("E9 a queued Page command loses authority before its first effect", async (
     ).toMatchObject({ ok: true });
     const firstPlan = await f.page("parameter-links.apply.plan");
     expect(await f.native.journal.wait(firstPlan.id)).toMatchObject({ state: "succeeded" });
-    const secondPlan = await f.page("rooms.write.preview", rooms);
-    expect(await f.native.journal.wait(secondPlan.id)).toMatchObject({ state: "succeeded" });
+    const secondPlan = await f.page("sheet.plan", rooms);
+    const receipt = await f.native.journal.wait(secondPlan.id);
+    expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "succeeded" });
     let held = false;
     f.native.onRequest(async (key) => {
       if (key === "revit.apply.parameter-links") {
@@ -602,7 +606,7 @@ test("E9 a queued Page command loses authority before its first effect", async (
     });
     const first = await f.page("parameter-links.apply");
     await vi.waitFor(() => expect(held).toBe(true));
-    const second = await f.page("rooms.write", rooms);
+    const second = await f.page("sheet.apply", rooms);
     // The journal reports running while waitForTurn holds it before preparation/effects.
     await vi.waitFor(async () =>
       expect((await f.native.journal.list(undefined, second.id))[0]).toMatchObject({
@@ -621,7 +625,8 @@ test("E9 a queued Page command loses authority before its first effect", async (
     });
     release();
     expect(await f.native.journal.wait(first.id)).toMatchObject({ state: "succeeded" });
-    expect(await f.native.journal.wait(second.id)).toMatchObject({
+    const queued = await f.native.journal.wait(second.id);
+    expect(queued, JSON.stringify(queued)).toMatchObject({
       state: "failed",
       notDispatched: true,
       refusal: { kind: "trust" },

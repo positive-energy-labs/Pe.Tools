@@ -113,6 +113,13 @@ public sealed class DuctLossStoreTests {
         Assert.That(DuctLossStore.Read(blob).Value, Is.Null);
     }
 
+    [Test]
+    public void A_newer_duct_store_cannot_be_replaced() {
+        var blob = OwnerBlob.Decode(DuctLossStore.Owner, Stored("{}", DuctLossStore.Owner.Version + 1));
+        Assert.That(blob.Replacement, Is.Null);
+        Assert.That(DuctLossStore.Read(blob).Refusal, Does.Contain("update Pe"));
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public void Data_refused_preview_is_pure_and_apply_requires_the_same_bytes(bool stale) {

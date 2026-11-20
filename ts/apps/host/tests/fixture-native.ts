@@ -39,24 +39,25 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
     regions: null,
     registry: null,
   };
+  const actionLeaves = (action: string) => {
+    if (action.startsWith("native:")) {
+      const key = action.slice("native:".length);
+      const op = hostOpCatalog.find((op) => op.key === key);
+      // A direct public native door is its generated leaf; a semantic action uses its real uses.
+      return op && !op.internal ? [key] : undefined;
+    }
+    const declaration = linkedCatalog().entries.get(`command:${action}`);
+    if (declaration)
+      return declaration.uses.map((use) => (typeof use === "string" ? use : use.key));
+    // A public native operation admitted as an action uses its own generated declaration.
+    return hostOpCatalog.some((op) => op.key === action && !op.internal)
+      ? gatewayNativeLeaves(action)
+      : undefined;
+  };
   const makeTransport = () =>
     createFixtureHost(hostOpCatalog, selected.responses, {
       sources: selected.sources,
-      actionLeaves(action) {
-        if (action.startsWith("native:")) {
-          const key = action.slice("native:".length);
-          const op = hostOpCatalog.find((op) => op.key === key);
-          // A direct public native door is its generated leaf; a semantic action uses its real uses.
-          return op && !op.internal ? [key] : undefined;
-        }
-        const declaration = linkedCatalog().entries.get(`command:${action}`);
-        if (declaration)
-          return declaration.uses.map((use) => (typeof use === "string" ? use : use.key));
-        // A public native operation admitted as an action uses its own generated declaration.
-        return hostOpCatalog.some((op) => op.key === action && !op.internal)
-          ? gatewayNativeLeaves(action)
-          : undefined;
-      },
+      actionLeaves,
     });
   let transport = makeTransport();
   const scope = Scope.makeUnsafe();
@@ -314,7 +315,15 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
                   : (yield* Effect.promise(() => journal.list())).filter(
                       (row) => row.state === "running",
                     );
-                const owners = [...new Set(active.map((row) => row.key))];
+                const owners = [
+                  ...new Set(
+                    active
+                      .map((row) => row.key)
+                      .filter(
+                        (key) => !modeledRoster || actionLeaves(key)?.includes(req.operationKey),
+                      ),
+                  ),
+                ];
                 if (owners.length > 1)
                   throw Error("Fixture cannot attribute this native read to one admitted action");
                 const action = req.derivedCommand ?? owners[0] ?? `native:${req.operationKey}`;
