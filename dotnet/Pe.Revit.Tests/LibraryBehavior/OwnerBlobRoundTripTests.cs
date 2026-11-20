@@ -196,8 +196,8 @@ public sealed class OwnerBlobRoundTripTests {
 
     private static Guid AdoptRegistry(Document document) {
         var view = CreateRoomsView(document);
-        var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
-        _ = TakeoffAtlas.AdoptZones(document, new(view.Name, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]));
+        var zone = Rooms.Draw(document, new(view.UniqueId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
+        _ = TakeoffAtlas.AdoptZones(document, new(view.UniqueId, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]));
         return TakeoffCarriers.ReadRegistry(document).Systems.Single().Guid;
     }
 
@@ -261,8 +261,8 @@ public sealed class OwnerBlobRoundTripTests {
     }
 
     [Test]
-    public void A_future_version_blob_opens_and_its_read_keeps_the_bytes(UIApplication uiApplication) =>
-        RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.UnknownVersion,
+    public void A_newer_version_blob_refuses_replacement_and_keeps_the_bytes(UIApplication uiApplication) =>
+        RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.NewerVersion,
             owner => $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 998}}},"data":{"fromTheFuture":true}}""");
 
     [Test]
@@ -497,6 +497,27 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(() => TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable!.Select(blob => blob.ElementId),
                     Is.EqualTo(new long?[] { null }), "the roster read reports the registry and does not throw");
             });
+
+            if (expected == OwnerBlobStatus.NewerVersion) {
+                using var isolated = new OwnerBlobRecoveryFixture();
+                var request = new DuctApplyRequest(null, [], [], [], [], [], [], new DuctLossStore());
+                foreach (var preview in new[] { true, false }) {
+                    var result = DuctApplier.Apply(document, request, preview);
+                    Assert.That(result.Replacement, Is.Null);
+                    var store = result.Writes.Single(write => write.Kind == "store");
+                    Assert.That(store.Outcome, Is.EqualTo("refused"));
+                    Assert.That(store.Reason, Does.Contain("update Pe"));
+                }
+                using var transaction = new Transaction(document, "Try replacing newer records");
+                _ = transaction.Start();
+                foreach (var owner in ProjectOwners) {
+                    Assert.That(OwnerBlobStore.Read(document, owner).Replacement, Is.Null, owner.Name);
+                    Assert.That(() => OwnerBlobStore.Write(document, owner, new JObject()),
+                        Throws.InvalidOperationException.With.Message.Contains("update Pe"), owner.Name);
+                }
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+                Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+            }
 
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)

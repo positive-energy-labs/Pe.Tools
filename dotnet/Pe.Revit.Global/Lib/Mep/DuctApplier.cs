@@ -140,7 +140,8 @@ public static class DuctApplier {
         var store = new Item(null, "store", stored is null ? read.Refusal is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
             After = $"revision {storeRevision + 1}"
         };
-        if (!preview && read.Refusal is not null && request.Replacement is null)
+        if (blob.Status == OwnerBlobStatus.NewerVersion) store.Refuse(blob.Error!);
+        else if (!preview && read.Refusal is not null && request.Replacement is null)
             store.Refuse("Preview before replacing the unreadable duct loss store.");
         else if (UnbackedProvenance(request, stored, items) is { } unbacked) store.Refuse(unbacked);
         else if (request.Store.WorkRevision < storeRevision)
