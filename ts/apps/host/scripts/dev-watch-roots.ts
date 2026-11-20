@@ -1,4 +1,8 @@
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { promisify } from "node:util";
+
+const run = promisify(execFile);
 
 type Manifest = {
   name: string;
@@ -16,13 +20,27 @@ const runtimeDependencies = (manifest: Manifest) =>
   });
 
 /** Frozen Vite+ installs keep a copy of the workspace lock in the virtual store. */
-export function requireDevDependencies(workspace: URL): void {
+export async function ensureDevDependencies(
+  workspace: URL,
+  execute: (command: string, args: string[], options: { cwd: URL }) => Promise<unknown> = run,
+): Promise<void> {
   const installed = new URL("node_modules/.pnpm/lock.yaml", workspace);
   const wanted = new URL("pnpm-lock.yaml", workspace);
-  if (existsSync(installed) && readFileSync(installed).equals(readFileSync(wanted))) return;
-  throw new Error(
-    `Dev server dependencies are out of date. Run \`vp i --frozen-lockfile --prefer-offline\` from ts, then start the dev server again.`,
-  );
+  const current = () => existsSync(installed) && readFileSync(installed).equals(readFileSync(wanted));
+  if (current()) return;
+
+  const args = ["i", "--frozen-lockfile", "--prefer-offline"];
+  const command = `vp ${args.join(" ")}`;
+  console.log(`Dev server dependencies are out of date. Running \`${command}\` from ts.`);
+  const recovery = `Dev server dependencies are out of date. Run \`${command}\` from ts, then start the dev server again.`;
+  try {
+    await execute("vp", args, { cwd: workspace });
+  } catch (error) {
+    throw new Error(`${recovery}\n${error instanceof Error ? error.message : String(error)}`, {
+      cause: error,
+    });
+  }
+  if (!current()) throw new Error(recovery);
 }
 
 /** Vite owns frontend HMR. A package edit restarts the host only if its runtime graph uses it;
