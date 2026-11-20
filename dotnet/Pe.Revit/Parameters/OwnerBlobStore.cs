@@ -72,7 +72,7 @@ public static class OwnerBlobStore {
 
     private static Parameter RequireParameter(Element element, OwnerDescriptor owner) =>
         element.get_Parameter(owner.Guid)
-        ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first.");
+        ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}.");
 
     private static bool Write(Parameter parameter, Document document, OwnerDescriptor owner, JObject data,
         OwnerBlobReplacement? replacing = null, OwnerBlobNotices? notices = null) {

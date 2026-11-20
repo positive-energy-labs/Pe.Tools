@@ -63,21 +63,21 @@ const nativeRequestInput = (input: Record<string, unknown>): Record<string, unkn
   );
 
 const recordReplacements = nativeResponseSchema("takeoffs.record-replacements");
-export const preparedCarrierSchema = z.strictObject({
+export const preparedReplacementSchema = z.strictObject({
   process: nativeProcessSchema,
   replacement: recordReplacements.optional(),
 });
-const preparedSyncSchema = preparedCarrierSchema.extend({
+const preparedSyncSchema = preparedReplacementSchema.extend({
   edits: z.record(z.string(), stagedRoomEditSchema),
   decisions: z.record(z.string(), z.enum(["accept", "dismiss"])),
   capture: takeoffCaptureSchema,
   replacement: recordReplacements,
 });
-export const sealCarrier = ({ process, replacement }: z.infer<typeof preparedCarrierSchema>) => ({
+export const sealReplacement = ({ process, replacement }: z.infer<typeof preparedReplacementSchema>) => ({
   request: { process, replacement },
   evidence: replacement,
 });
-export const replacing = (p: z.infer<typeof preparedCarrierSchema>) =>
+export const replacing = (p: z.infer<typeof preparedReplacementSchema>) =>
   p.replacement?.regions ?? undefined;
 const modelTarget = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
@@ -123,7 +123,7 @@ export const runModel = (
 };
 
 /** What the plan saw of the records an apply may replace; the apply sends exactly that. */
-export const carrier = (bridge: RevitBridge["Service"], deps: Deps) => {
+export const replacementEvidence = (bridge: RevitBridge["Service"], deps: Deps) => {
   const replacementFor = async (ctx: CommandContext, registry = false) => {
     // The platform sheet pair plans under its own key, not a `.preview` twin.
     if (!ctx.admission.key.endsWith(".preview") && ctx.admission.key !== "sheet.plan") {
@@ -172,7 +172,7 @@ export const carrier = (bridge: RevitBridge["Service"], deps: Deps) => {
 };
 
 export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
-  const { replacementFor, bind } = carrier(bridge, deps);
+  const { replacementFor, bind } = replacementEvidence(bridge, deps);
   const input = (ctx: CommandContext) => nativeRequestInput(ctx.admission.input);
   const value = (ctx: CommandContext, native: Native, key: string, input: unknown) =>
     Effect.map(native(key, input), (value) => ({
@@ -180,8 +180,8 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       target: { session: modelTarget(ctx).session, document: null },
     }));
   return {
-    "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
-      seal: sealCarrier,
+    "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedReplacementSchema, {
+      seal: sealReplacement,
       bind: (ctx) => bind(ctx, "takeoffs.adopt", ctx.admission.input.views, "registry"),
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, (native) =>
@@ -198,8 +198,8 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
           }),
         ),
     }),
-    "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
-      seal: sealCarrier,
+    "takeoffs.partition": command(commands["takeoffs.partition"], preparedReplacementSchema, {
+      seal: sealReplacement,
       bind: (ctx) => bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, (native) => {

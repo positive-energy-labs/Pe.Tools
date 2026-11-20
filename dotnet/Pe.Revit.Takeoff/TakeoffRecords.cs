@@ -5,7 +5,7 @@ using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Revit.Takeoff;
 
-public static class TakeoffCarriers
+public static class TakeoffRecords
 {
     public const string RoleZoningRegion = "zoning-region";
     public const string RoleRoomRegion = "room-region";
@@ -24,15 +24,8 @@ public static class TakeoffCarriers
     {
         var stored = OwnerBlobStore.Read(document, SystemRegistry.Owner);
         var registry = SystemRegistry.Read(stored).Value ?? new SystemRegistry();
-        CheckReplacement(stored, registry.ToData(), replacing);
+        _ = OwnerBlob.Replace(stored, registry.ToData(), (_, _) => { }, replacing);
         return registry;
-    }
-
-    internal static void CheckReplacement(OwnerBlobRead stored, JObject data, OwnerBlobReplacement? replacing)
-    {
-        if (stored.Status == OwnerBlobStatus.NewerVersion) throw new InvalidOperationException(stored.Error);
-        if (stored.Replacement != null || replacing != null)
-            _ = OwnerBlob.Replace(stored, data, (_, _) => { }, replacing);
     }
 
     internal static void Save(Document document, OwnerDescriptor owner, JObject data, OwnerBlobReplacement? replacing, OwnerBlobNotices? notices)
@@ -79,14 +72,12 @@ public sealed class RoomsRegionRecord
 
     internal RegionRow? this[string uniqueId] => this.Regions.GetValueOrDefault(uniqueId);
 
-    internal static OwnerValue<RoomsRegionRecord> Read(Document document) =>
-        Decode(OwnerBlobStore.Read(document, Owner));
-
-    internal static OwnerValue<RoomsRegionRecord> ReadWithRecovery(Document document)
+    /// <summary>A refusal names the recovery only when the stored record can be replaced.</summary>
+    internal static OwnerValue<RoomsRegionRecord> Read(Document document)
     {
         var stored = OwnerBlobStore.Read(document, Owner);
         var read = Decode(stored);
-        return stored.Status == OwnerBlobStatus.NewerVersion ? read : read with { Refusal = RecoveryFor(read.Refusal) };
+        return stored.Replacement is null ? read : read with { Refusal = RecoveryFor(read.Refusal) };
     }
 
     internal static OwnerValue<RoomsRegionRecord> Decode(OwnerBlobRead stored) => stored.Parse(data =>
@@ -104,7 +95,7 @@ public sealed class RoomsRegionRecord
         foreach (var property in regions.Properties())
         {
             var row = property.Value.ToObject<RegionRow>();
-            if (row?.Role is not (TakeoffCarriers.RoleZoningRegion or TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue)
+            if (row?.Role is not (TakeoffRecords.RoleZoningRegion or TakeoffRecords.RoleRoomRegion or TakeoffRecords.RoleHeldResidue)
                 || string.IsNullOrWhiteSpace(row.Provenance.RunId) || row.Provenance.Flags is null)
                 throw new InvalidOperationException($"Invalid Rooms row '{property.Name}'");
             result.Regions.Add(property.Name, row);
@@ -121,13 +112,11 @@ public sealed class RoomsRegionRecord
 
     internal static RoomsRegionRecord Stage(OwnerBlobRead stored, OwnerBlobReplacement? replacing)
     {
-        if (stored.Status == OwnerBlobStatus.NewerVersion) throw new InvalidOperationException(stored.Error);
         var read = Decode(stored);
         var record = read.Value ?? new RoomsRegionRecord { Refusal = read.Refusal };
-        if (record.Recovery != null && replacing == null)
+        if (stored.Replacement != null && replacing == null)
             throw new InvalidOperationException($"Preview before replacing '{Owner.Name}': {record.Recovery}");
-        if (replacing != null)
-            TakeoffCarriers.CheckReplacement(stored, record.ToData(), replacing);
+        _ = OwnerBlob.Replace(stored, record.ToData(), (_, _) => { }, replacing);
         return record;
     }
 
@@ -192,7 +181,7 @@ public sealed class RoomsRegionRecord
         this.BeforeMutation(() => true);
         foreach (var json in originals)
             RoomsRunTraces.KeepOriginal(traceRoot ?? RoomsRunTraces.Root, this.TraceId, json);
-        TakeoffCarriers.Save(document, Owner, this.ToData(), replacing, notices);
+        TakeoffRecords.Save(document, Owner, this.ToData(), replacing, notices);
     }
 
     internal RegionProvenance ProjectOriginal(RegionProvenance provenance, string? traceRoot = null) =>

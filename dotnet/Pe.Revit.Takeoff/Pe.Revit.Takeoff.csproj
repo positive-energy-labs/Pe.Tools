@@ -23,7 +23,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <!-- TakeoffCarriers rides SharedParameterBinder/TempSharedParamFile — the one sanctioned
+        <!-- TakeoffRecords rides SharedParameterBinder/TempSharedParamFile — the one sanctioned
              persistence path (ES is banned). Takeoff stays otherwise leaf. -->
         <ProjectReference Include="..\Pe.Revit\Pe.Revit.csproj"/>
         <ProjectReference Include="..\Pe.Shared.RevitData\Pe.Shared.RevitData.csproj"/>
