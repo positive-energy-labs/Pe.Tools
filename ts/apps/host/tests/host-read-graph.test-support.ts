@@ -83,6 +83,16 @@ export async function fixture(
     recorded.read && recorded.inventory
       ? { read: recorded.read, inventory: recorded.inventory }
       : undefined;
+  // A journey on another document names it first in its inventory; native answers confirm that one.
+  const session = recorded.inventory?.sessions[0];
+  const opened = session?.openDocuments?.[0];
+  const here = opened
+    ? { session: session!.sessionId, openId: opened.openId, address: opened.address as typeof path }
+    : { ...ref, address: path };
+  const target = {
+    processIncarnation: { pid: 42, startedAt: 1 },
+    openDocumentLifetime: { openId: here.openId },
+  };
   const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
   await mkdir(join(dir, "Catalogs"));
   await mkdir(join(dir, "Settings"), { recursive: true });
@@ -193,7 +203,7 @@ export async function fixture(
             }),
         }),
         inventory: Layer.succeed(HostSessionInventory, {
-          document: recorded.document ?? (() => Effect.succeed({ ...ref, address: path })),
+          document: recorded.document ?? (() => Effect.succeed(here)),
           session: () => Effect.succeed({ sessionId: ref.session }),
           attachment: () => Effect.succeed({ sessionId: ref.session }),
           list:

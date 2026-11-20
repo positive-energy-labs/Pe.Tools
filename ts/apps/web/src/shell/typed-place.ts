@@ -26,6 +26,11 @@ export interface AdmittedPlace<State extends Disposable> extends Disposable {
   state(create: () => State): State;
   memory(this: void): unknown;
   remember(page: unknown): void;
+  /**
+   * The resolved target owns the Page (route-target.ts `targetOwner`). False means the Page this
+   * Place holds was another target's and could not be dropped yet: the caller must not mount.
+   */
+  enter(owner: string | null, fields: readonly string[]): boolean;
 }
 
 export function createAdmittedPlace<State extends Disposable>(options: {
@@ -42,6 +47,7 @@ export function createAdmittedPlace<State extends Disposable>(options: {
   let state: State | undefined;
   let memory: unknown = freezePage(options.memory ?? {});
   let captured = new URLSearchParams(options.search);
+  let owner: string | null = null;
   const addressListeners = new Set<() => void>();
   const current = () => !disposed && visible && scope.current();
   const unsubscribe = options.address.subscribe(() => {
@@ -79,6 +85,23 @@ export function createAdmittedPlace<State extends Disposable>(options: {
     memory: () => memory,
     remember(page) {
       if (!disposed) memory = freezePage(page);
+    },
+    enter(next, fields) {
+      if (next === null || next === owner) return true;
+      // The first target adopts the address as given: a link or a reload names its own Page.
+      if (owner !== null) {
+        // ponytail: a hidden Place cannot write its address, so it waits unmounted for its reveal.
+        if (!current()) return false;
+        // The old target's mount goes first, so it can neither follow nor remember the reset.
+        state?.dispose();
+        state = undefined;
+        const search = place.address.read();
+        for (const field of fields) search.delete(field);
+        memory = freezePage({});
+        place.address.write(search, "replace");
+      }
+      owner = next;
+      return true;
     },
     dispose() {
       if (disposed) return;

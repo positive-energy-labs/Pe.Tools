@@ -83,6 +83,10 @@ import {
   type RouteStatePatch,
   editableCells,
   type Command,
+  type ExecutionTarget,
+  type WorkHandle,
+  workBinding,
+  workHandleSchema,
   workKey,
   cellPatches,
   type CellLike,
@@ -531,6 +535,29 @@ const RETAIN_RECEIPTS = 10_000;
  * facts plus every command once the file holds twice what is live, counted in lines or, past
  * {@link COMPACT_BYTES}, in bytes against what the last compaction wrote.
  */
+/**
+ * The kernel's Work fence, for every product: Work is staged against one document, and no command
+ * spends it on another. It runs at admission and at every Work selection, before any native step.
+ * The document's identity is the Work key's own: the exact open lifetime, or the saved Address.
+ * An unsaved target has no Address, so Address-keyed Work refuses there and says why. `address` is
+ * undefined only where the composition has no document resolver; the open lifetime still fences.
+ */
+function admitWorkTarget(
+  target: ExecutionTarget,
+  address: string | null | void,
+  { key }: WorkHandle,
+) {
+  if (target.kind !== "document" || (key.binding !== "open" && key.binding !== "address")) return;
+  if (key.binding === "address" && address === undefined) return;
+  if (!workBinding(key).admits(target.ref, address))
+    throw refused(
+      key.binding === "address" && address === null
+        ? "Work belongs to a saved document, and the target document is unsaved"
+        : "Work belongs to another document",
+      "work.target",
+    );
+}
+
 export class ActionJournal implements ReceiptReader {
   private readonly rows = new Map<string, ActionReceipt>();
   private readonly receipts = new Map<string, Receipt>();
@@ -1041,6 +1068,7 @@ export class ActionJournal implements ReceiptReader {
     admission: ActionAdmission,
     crossing: Crossing,
     consumed: Consumed[],
+    located: { address?: string | null | void },
   ): CommandContext {
     const workspace = this.workReads(admission),
       owner = this.environment?.work;
@@ -1062,12 +1090,7 @@ export class ActionJournal implements ReceiptReader {
       selectWork: async (spec, handle, select) => {
         if (handle.key.route !== spec.route)
           throw refused("Work belongs to another tool", "work.route");
-        if (
-          admission.target.kind === "document" &&
-          handle.key.binding === "open" &&
-          canonicalRouteInput(handle.key.open) !== canonicalRouteInput(admission.target.ref)
-        )
-          throw refused("Work belongs to another document", "work.target");
+        admitWorkTarget(admission.target, located.address, handle);
         const identity = workKey(handle.key);
         let original = context.consumed.find(
           (value) => value.kind === "work" && workKey(value.probe.handle.key) === identity,
@@ -1362,7 +1385,8 @@ export class ActionJournal implements ReceiptReader {
     // carries the caller alone.
     crossing = { ...crossing, caller: retainActionCaller(crossing.caller) };
     const activePrior = prior ? executableActionReceiptSchema.parse(prior) : undefined;
-    const context = this.context(admission, crossing, activePrior?.consumes ?? []);
+    const located: { address?: string | null | void } = {};
+    const context = this.context(admission, crossing, activePrior?.consumes ?? [], located);
     let executor!: CommandExecutor;
     let definition!: Command;
     let binding: CommandBinding | undefined;
@@ -1424,7 +1448,14 @@ export class ActionJournal implements ReceiptReader {
           code: "target.required",
           message: "Target does not match the command contract",
         });
-      if (!retirementOnly) await this.environment?.target?.(admission.target, definition.needs);
+      if (!retirementOnly) {
+        located.address = await this.environment?.target?.(admission.target, definition.needs);
+        const { work, readWorks } = admission.input;
+        for (const held of [work, ...Object.values(readWorks ?? {})]) {
+          const handle = workHandleSchema.safeParse(held);
+          if (handle.success) admitWorkTarget(admission.target, located.address, handle.data);
+        }
+      }
       if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);
       row = { ...row, input: structuredClone(admission.input) };
       if (!prior) {

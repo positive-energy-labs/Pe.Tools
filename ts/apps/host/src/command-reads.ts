@@ -124,6 +124,7 @@ export function commandResources(
         (needs === "family-document" && !document.isFamilyDocument)
       )
         throw Error("Target document lifetime or kind differs from the command contract");
+      return document.address ?? null;
     },
     async probe(dependency, moment, pass) {
       switch (dependency.kind) {

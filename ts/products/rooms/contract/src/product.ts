@@ -365,7 +365,7 @@ export const product = define({
       ...edit,
       says: "Partition every zone on a plan into rooms, keeping locked and matched rooms.",
       input: z.object({ view, rejected: z.array(ring).optional() }),
-      native: ["takeoffs.record-replacements", "rooms.roster", "rooms.partition"],
+      native: ["takeoffs.record-replacements", "rooms.partition"],
       writes: { regions: [], traces: [] },
     }),
     ...workWriteCommands("rooms", "rooms.draw", {
@@ -377,14 +377,14 @@ export const product = define({
         name: z.string().optional(),
         role: z.enum(["room", "zone"]).optional(),
       }),
-      native: ["takeoffs.record-replacements", "rooms.roster", "rooms.draw"],
+      native: ["takeoffs.record-replacements", "rooms.draw"],
       writes: { regions: [] },
     }),
     ...workWriteCommands("rooms", "rooms.merge", {
       ...edit,
       says: "Combine two or more touching rooms of one zone into one locked room.",
       input: z.object({ view, regions: z.array(region).min(2), name: z.string().optional() }),
-      native: ["takeoffs.record-replacements", "rooms.roster", "rooms.merge"],
+      native: ["takeoffs.record-replacements", "rooms.merge"],
       writes: { regions: [] },
     }),
     // Setup binds the registry and enclosure carriers on Project Information.

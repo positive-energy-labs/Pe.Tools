@@ -5,12 +5,8 @@ import { module as takeoffs } from "../routes/takeoffs/route.ts";
 
 const modules = { rooms, takeoffs };
 const reads = Object.values(product.readings).map(({ handle }) => handle.key);
-export const journey = (
-  route: keyof typeof modules,
-  native: Native,
-  search?: URLSearchParams,
-  document?: NonNullable<Parameters<typeof mounted>[3]>["document"],
-) => mounted(modules[route], reads, native, { search, document });
+export const journey = (route: keyof typeof modules, native: Native, search?: URLSearchParams) =>
+  mounted(modules[route], reads, native, { search });
 
 export const FLOOR = "8a0c1e3f-0000-4000-8000-000000000001-000026dc";
 export const CEILING = "8a0c1e3f-0000-4000-8000-000000000001-0014edcd";

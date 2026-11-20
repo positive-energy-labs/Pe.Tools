@@ -26,7 +26,7 @@ import { Button } from "@pe/kit/lang/button";
 import { PreviewAction } from "@pe/kit/lang/write-action";
 import { KeyScopeHost, ScopeKeys, actionScopeKeys } from "@pe/kit/keys";
 import { routeOf, routeAddress, canonicalRouteInput, type LayoutNode } from "@pe/agent-contracts";
-import { useRouteTarget } from "../route/route-target";
+import { targetOwner, useRouteTarget } from "../route/route-target";
 import { parseTarget } from "../route/target-codec";
 import { appAtomRegistry } from "./owner";
 import { admittedRouterAddress, PlaceBoundary } from "./typed-place-boundary";
@@ -194,7 +194,8 @@ function TypedPlace({
     place.setVisible(visible);
     if (
       (snapshot && !pose) ||
-      (needs !== "browser" && !input.target && !input.work.address && !input.work.open)
+      (needs !== "browser" && !input.target && !input.work.address && !input.work.open) ||
+      !place.enter(targetOwner(input), [...Object.keys(module.spec.fields), "selected"])
     ) {
       setMount(null);
       setProblem(null);
@@ -265,7 +266,6 @@ function TypedPlace({
     <DocumentPicker
       place={place}
       target={resolved}
-      page={module.spec}
       needs={module.spec.optionalTarget ?? needs}
       enabled={
         fixture === null &&

@@ -202,9 +202,6 @@ test.each([
       "fresh-takeoffs.rhvac-links",
     );
     native.reportTrackedRooms(recordedRoomWrites.map(({ uniqueId }) => uniqueId));
-    if (commandKey.startsWith("rooms.") && "view" in intent)
-      native.reportRoomsPlans([String(intent.view)]);
-    if (commandKey === "rooms.merge") native.reportTrackedRooms(uniqueIds as string[]);
     const socket = await native.connect();
     const { calls } = native;
     const ref = socket.target;

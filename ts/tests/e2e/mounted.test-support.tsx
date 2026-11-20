@@ -10,7 +10,13 @@ import { typedSubjectDoor, type TypedMount } from "../../apps/web/src/shell/type
 import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 
 export { mounted, path, ref, type Native } from "../../apps/web/src/shell/mounted-journey.test-support";
-export { planned } from "../../apps/web/src/shell/typed-mount";
+export { planned, typedSubjectDoor } from "../../apps/web/src/shell/typed-mount";
+export {
+  targetChange,
+  targetPaths,
+  type JourneyDoc,
+  type TargetProduct,
+} from "../../apps/web/src/shell/target-journey.test-support";
 
 /** One pane of the mounted route, drawn again on every change of the mount. */
 export function Pane({
