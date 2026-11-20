@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 
 const TS = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const shell = process.platform === "win32";
@@ -19,23 +20,17 @@ const listed = spawnSync("pnpm", ["-r", "list", "--depth", "-1", "--json"], {
   maxBuffer: 64 * 1024 * 1024,
 });
 if (listed.status !== 0) throw new Error(`pnpm -r list failed: ${listed.stderr}`);
-const workspaces: unknown = JSON.parse(listed.stdout);
-if (!Array.isArray(workspaces)) throw new Error("pnpm -r list did not return a workspace list");
-const tested: string[] = [];
-for (const entry of workspaces) {
-  const workspace: unknown = entry;
-  if (!workspace || typeof workspace !== "object" || !("name" in workspace)) continue;
-  const { name } = workspace;
-  if (typeof name !== "string" || !name.startsWith("@pe/")) continue;
+const manifest = z.object({ scripts: z.object({ test: z.string().optional() }).optional() });
+const tested = z
+  .array(z.object({ name: z.string(), path: z.string() }))
+  .parse(JSON.parse(listed.stdout))
   // The source gate runs the repo guards.
-  if (name === "@pe/repo-guards") continue;
-  if (!("path" in workspace) || typeof workspace.path !== "string") {
-    throw new Error(`pnpm -r list did not return a path for ${name}`);
-  }
-  if (JSON.parse(readFileSync(resolve(workspace.path, "package.json"), "utf8")).scripts?.test) {
-    tested.push(name);
-  }
-}
+  .filter(({ name }) => name.startsWith("@pe/") && name !== "@pe/repo-guards")
+  .filter(
+    ({ path }) =>
+      manifest.parse(JSON.parse(readFileSync(resolve(path, "package.json"), "utf8"))).scripts?.test,
+  )
+  .map(({ name }) => name);
 if (!tested.length) throw new Error("no @pe/* package declares a test script");
 
 type Step = [name: string, cwd: string, cmd: [string, ...string[]]];
