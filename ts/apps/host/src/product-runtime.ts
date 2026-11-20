@@ -1,21 +1,10 @@
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
-import type { HostRouteModule, Tool } from "@pe/agent-contracts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { CommandExecutor } from "@pe/host-internal/command-executor";
-import type { CommandBody } from "@pe/host-internal/product";
+import type { CommandBody, implement } from "@pe/host-internal/product";
 import type { FamilyActionDependencies } from "./family-actions.ts";
 
 type Deps = FamilyActionDependencies & Parameters<CommandBody>[1];
-type Factory = (bridge: RevitBridge["Service"], deps: Deps) => Record<string, CommandExecutor>;
-type Host = {
-  product: {
-    id: string;
-    tools: Readonly<Record<string, Tool>>;
-  };
-  reads?: HostRouteModule["reads"];
-  executors?: Factory;
-  sheet?: Factory;
-};
 type SheetOwner = {
   id: string;
   executors: Record<string, CommandExecutor>;
@@ -23,26 +12,29 @@ type SheetOwner = {
 export type SheetExecutors = ReadonlyMap<string, SheetOwner>;
 
 /** Work selects the admitted product's sheet body. */
-export function bindProducts(hosts: readonly Host[]) {
+export function bindProducts(hosts: readonly ReturnType<typeof implement>[]) {
   return {
     productReads: hosts.map(({ reads }) => ({ reads })),
     productExecutors(bridge: RevitBridge["Service"], deps: Deps = {}) {
       const executors: Record<string, CommandExecutor> = Object.create(null);
       const sheets = new Map<string, SheetOwner>();
-      for (const { product, executors: make, sheet } of hosts) {
-        for (const [key, executor] of Object.entries(make?.(bridge, deps) ?? {})) {
+      for (const { product, executors: make } of hosts) {
+        const {
+          [SHEET_COMMANDS.plan]: plan,
+          [SHEET_COMMANDS.apply]: apply,
+          ...commands
+        } = make(bridge, deps);
+        for (const [key, executor] of Object.entries(commands)) {
           if (Object.hasOwn(executors, key)) throw Error(`Duplicate product executor ${key}`);
           executors[key] = executor;
         }
-        if (!sheet) continue;
-        const bound = sheet(bridge, deps);
-        for (const key of Object.values(SHEET_COMMANDS))
-          if (!Object.hasOwn(bound, key)) throw Error(`Product ${product.id} has no ${key} body`);
-        for (const { work } of Object.values(product.tools)) {
-          if (!work || sheets.has(work.route))
-            throw Error(`Product ${product.id} needs a unique sheet Work owner`);
-          sheets.set(work.route, { id: product.id, executors: bound });
-        }
+        if (!product.sheetWrites) continue;
+        if (!plan || !apply || sheets.has(product.id))
+          throw Error(`Product ${product.id} needs both sheet bodies and a unique Work owner`);
+        sheets.set(product.id, {
+          id: product.id,
+          executors: { [SHEET_COMMANDS.plan]: plan, [SHEET_COMMANDS.apply]: apply },
+        });
       }
       return { executors, sheets };
     },

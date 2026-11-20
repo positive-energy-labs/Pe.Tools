@@ -20,7 +20,7 @@ import {
 import { contextHeaders } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
 import { bindWork } from "@pe/agent-contracts";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { RouteWorkspace } from "@pe/runtime";
 import { hostTimeline } from "../src/reads/work-timeline.ts";
 import { approvedPea, human, pea } from "./callers.ts";
@@ -39,7 +39,7 @@ function homeHistory() {
   const path = join(firm, "Settings", "ducts.json");
   writeFileSync(path, '{"designFriction":0.07}');
   const owner = journalAt(join(root, "actions.json"), Date.now);
-  const registrations = [{ spec: ductsRouteState }];
+  const registrations = [{ spec: ductSystems.work }];
   const workspace = new RouteWorkspace({
     registrations,
     store: { getState: async () => null, setState: async () => {} },
@@ -211,7 +211,7 @@ test("Pea's first home write records its caller and refuses undo with a reason, 
     const wrote = z.object({ path: z.string(), sha256: z.string() }).parse(receipt.result);
     const before = readFileSync(wrote.path);
     const workspace = new RouteWorkspace({
-      registrations: [{ spec: ductsRouteState }],
+      registrations: [{ spec: ductSystems.work }],
       store: { getState: async () => null, setState: async () => {} },
     });
     const timeline = hostTimeline(workspace, owner);

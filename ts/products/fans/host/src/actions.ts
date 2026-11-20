@@ -6,6 +6,7 @@ import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
 import { type DuctsApplyInput } from "@pe/duct-systems-contract/ducts";
 import { type FanClaim } from "@pe/fans-contract/fans-inputs";
+import { fanWriteScopeMessage } from "@pe/fans-contract/fans";
 
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -13,7 +14,6 @@ import { stagedValues } from "@pe/duct-systems-contract/ducts";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { RevitBridge } from "@pe/host-internal/bridge";
 import { refused } from "@pe/host-internal/command-executor";
 
 import {
@@ -34,11 +34,7 @@ import { workLayer } from "@pe/ducts-host/ducts-inputs";
 import { scopeApplyRequest, appliedCellPaths, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
-import {
-  ductActionExecutors,
-  type DuctActionPreparation,
-  type DuctActionDependencies,
-} from "@pe/ducts-host/action-runtime";
+import { ductActionBody, type DuctActionPreparation } from "@pe/ducts-host/action-runtime";
 /** Refused intent cannot authorize ancillary writes, even when those writes planned successfully. */
 export const lossPlanRefusal = (writes: DuctsApply.Res.Response["writes"]) =>
   writes.some((w) => w.outcome === "refused")
@@ -50,10 +46,7 @@ export async function lossSnapshot(
   intent: { walk?: { unitId: number; portIndex: number } } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
-  if (!intent?.walk)
-    throw refused(
-      "Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses",
-    );
+  if (!intent?.walk) throw refused(fanWriteScopeMessage);
   const snapshot = await read({ kind: "from", unitId: intent.walk.unitId });
   if (snapshot.walk?.truncated)
     throw refused("The fan walk is truncated; no writes can be previewed from this scope");
@@ -175,10 +168,7 @@ async function prepareLosses(p: DuctActionPreparation) {
   } = p;
 
   const walk = intent.walk;
-  if (!walk)
-    throw refused(
-      "Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses",
-    );
+  if (!walk) throw refused(fanWriteScopeMessage);
   const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
   const grids = toGrids(tables);
   const catalogs = await runPods(catalogsFor(deps.files!, pointer));
@@ -318,30 +308,23 @@ async function prepareLosses(p: DuctActionPreparation) {
   };
 }
 
-export function fansExecutors(bridge: RevitBridge["Service"], deps: DuctActionDependencies = {}) {
-  return ductActionExecutors(
-    {
-      snapshot: lossSnapshot,
-      derive: prepareLosses,
-      entry: {
-        key: "ducts.apply",
-        native: "ducts.apply.plan",
-        refusePlan: (value) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
-        retires: (input, value, subjects, cells) =>
-          appliedCellPaths(
-            input as unknown as DuctsApplyInput,
-            value as DuctsApply.Res.Response,
-            subjects,
-            cells,
-          ),
-      },
-      bindings: [
-        ["sheet.plan", "losses", "plan"],
-        ["sheet.apply", "losses", "apply"],
-      ],
+export const fanLosses = ductActionBody(
+  {
+    snapshot: lossSnapshot,
+    derive: prepareLosses,
+    entry: {
+      key: "ducts.apply",
+      native: "ducts.apply.plan",
+      refusePlan: (value) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
+      retires: (input, value, subjects, cells) =>
+        appliedCellPaths(
+          input as unknown as DuctsApplyInput,
+          value as DuctsApply.Res.Response,
+          subjects,
+          cells,
+        ),
     },
-    bridge,
-    deps,
-    product.tool,
-  );
-}
+  },
+  product.tool,
+  "losses",
+);

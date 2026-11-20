@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { Schema } from "effect";
 import { wire, type SelectedSdkTypes } from "./vendor/generated/pe-revit-wire.ts";
+import { nativeResponseSchema } from "./native-schemas.ts";
 // The catalog-generated request/response schemas are zod-only; they live on their own door so a Pod bundles them.
 export {
   generatedJsonSchema,
@@ -8,6 +9,10 @@ export {
   nativeResponseDefinitionSchema,
   nativeResponseSchema,
 } from "./native-schemas.ts";
+
+export const roomWriteReceiptSchema = nativeResponseSchema("rooms.write").and(
+  z.object({ cells: z.array(z.object({ value: z.union([z.string(), z.number(), z.null()]) })) }),
+);
 
 type SdkWireShape =
   | string

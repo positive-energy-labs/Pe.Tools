@@ -5,8 +5,7 @@ import { scrollBody } from "../body.ts";
 import { paneLayout } from "../defaults.ts";
 import { screen } from "../screen.ts";
 
-const tiny = {
-  key: "tiny",
+const tinyDeclaration = {
   name: "Tiny",
   directory: {
     aliases: [],
@@ -24,6 +23,7 @@ const tiny = {
   fields: {},
   panes: ["list", "detail"],
 } as const;
+const tiny = { ...tinyDeclaration, key: "tiny" } as const;
 const pane = {
   title: "Pane",
   purpose: "Draw",
@@ -40,8 +40,6 @@ screen(tiny, { panes: { list: pane, detail: pane, extra: pane }, layout });
 
 // A route as `product()` returns it is what `screen()` takes: its key, name, directory and built reads.
 declare const roster: ReadHandle<"tiny.roster", { level: string }, number>;
-// `product()` names the route by its map key and refuses a `key` of its own.
-const { key: _key, ...route } = tiny;
 const declared = product({
   id: "tiny",
   says: "Tiny",
@@ -50,7 +48,11 @@ const declared = product({
   readings: { roster: { handle: roster, sources: [] } },
   commands: {},
   routes: {
-    tiny: { ...route, core: ["roster", () => ({ level: "" })], reads: { list: "roster" } },
+    tiny: {
+      ...tinyDeclaration,
+      core: ["roster", () => ({ level: "" })],
+      reads: { list: "roster" },
+    },
   },
 });
 const drawn = screen(declared.routes.tiny, { panes: { list: pane, detail: pane }, layout });

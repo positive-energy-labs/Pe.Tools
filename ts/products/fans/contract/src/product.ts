@@ -11,7 +11,6 @@ import { schemaOf, type Domain, type DomainValue } from "@pe/agent-contracts/slo
 import type { Immutable, RouteStatePatch } from "@pe/agent-contracts";
 import { DUCT_UNIT_ROLES, elementSubjectRecord } from "@pe/ducts-contract/duct-inputs";
 import { lossWrites, product as ducts } from "@pe/ducts-contract/product";
-import { sheetCommands } from "@pe/ducts-contract/semantic-actions";
 import { admissionPreflight } from "./admission.ts";
 import { peaGuide } from "./pea/ducts-skill.ts";
 import { contract } from "@pe/agent-contracts/handle";
@@ -42,11 +41,10 @@ const drop = { ...esp, metadata: { source: z.string().optional() } };
 const fanCells = {
   writeIntent: cell(
     {
-      kind: "enum",
+      kind: "value",
       shape: z.strictObject({
         walk: z.strictObject({ unitId: z.number().int(), portIndex: z.number().int() }).optional(),
       }),
-      choices: [],
     },
     "route",
     { label: "Write scope" },
@@ -58,10 +56,10 @@ const fanCells = {
         role: {
           kind: "enum",
           shape: z.enum(DUCT_UNIT_ROLES),
-          choices: DUCT_UNIT_ROLES.map((value) => ({
-            value,
-            label: value === "fan" ? "Fan" : "Passive",
-          })),
+          choices: [
+            { value: "fan", label: "Fan" },
+            { value: "passive", label: "Passive" },
+          ],
         },
       },
     },
@@ -231,13 +229,8 @@ const declaration = declare({
   },
   homes: ducts.homes,
   cells: fanCells,
-  commands: {
-    "sheet.plan": { ...sheetCommands["sheet.plan"], writes: {} },
-    "sheet.apply": {
-      ...sheetCommands["sheet.apply"],
-      writes,
-    },
-  },
+  commands: {},
+  sheetWrites: writes,
   readings: {
     calc: {
       handle: calc,
@@ -301,13 +294,8 @@ const declaration = declare({
   },
   guide: peaGuide,
 });
-// The shared sheet pair is published by Ducts; Work dispatch selects Fans' bodies.
-const tool = { ...declaration.tool, commands: {} };
 export const product = {
   ...declaration,
-  tool,
-  tools: { fans: tool },
-  actions: {},
   admissionPreflight: admissionPreflight(declaration.work.schema),
 };
 export const fanWriteSegments = Object.values(writes).flat();

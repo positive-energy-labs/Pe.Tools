@@ -19,7 +19,7 @@ const priced = evidence.read.criteria.autoJoinGapIn;
 if (
   priced.value !== 9 ||
   priced.source.toLowerCase() !== "work" ||
-  evidence.work.criteria.autoJoinGapIn.edit.value !== 9 ||
+  evidence.work.autoJoinGapIn.edit.value !== 9 ||
   !evidence.read.settings.ducts.some(
     (t: { tier: string; json: { criteria: { autoJoinGapIn: number } } }) =>
       t.tier === "firm" && t.json.criteria.autoJoinGapIn === 5,

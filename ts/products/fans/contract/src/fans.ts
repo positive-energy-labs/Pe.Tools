@@ -3,6 +3,8 @@ import type { Immutable } from "@pe/agent-contracts/route-kernel-data";
 import { product, type FansWorkSchema } from "./product.ts";
 export { DUCT_UNIT_ROLES, type DuctFlow } from "@pe/ducts-contract/duct-inputs";
 
+export const fanWriteScopeMessage = "Choose a fan port in Write scope in Inputs, then plan again.";
+
 export const fansRouteState = product.work;
 export const fansDocumentSchema: FansWorkSchema = fansRouteState.schema;
 export type FansRouteDocument = z.output<FansWorkSchema>;

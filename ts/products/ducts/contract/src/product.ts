@@ -17,7 +17,6 @@ import { settingLayer, type Domain } from "@pe/agent-contracts/slots/sheet";
 import { ductCatalogReadingSchema } from "./duct-catalog.ts";
 import { peaGuide } from "./pea-guide.ts";
 import { DUCTS_REFRESH_HEADER, snapshotReading, tablesReading } from "./reading.ts";
-import { sheetCommands } from "./semantic-actions.ts";
 import {
   DUCT_PARAMETER_KEYS,
   ductParameterNameSchema,
@@ -62,7 +61,7 @@ const settings = Object.fromEntries([
     entry(
       `parameters.${key}`,
       ["parameters", key],
-      { kind: "enum", shape: ductParameterNameSchema(key), choices: [] },
+      { kind: "text", shape: ductParameterNameSchema(key) },
       key === "requiredEsp" ? "requiredEsp slot (empty writes nowhere)" : `${key} slot`,
     ),
   ),
@@ -135,22 +134,7 @@ export const product = define({
       says: "Read duct pricing tables and their source files across the user, project and firm homes.",
     },
   },
-  commands: {
-    "sheet.plan": { ...sheetCommands["sheet.plan"], writes: {} },
-    "sheet.apply": {
-      ...sheetCommands["sheet.apply"],
-      writes: {
-        losses: [],
-        fittingResults: [],
-        specificCoefficient: [],
-        specificLoss: [],
-        requiredEsp: [],
-        fanFlow: [],
-        terminalFlow: [],
-        terminalDrop: [],
-      } satisfies Record<keyof typeof lossWrites, readonly []>,
-    },
-  },
+  commands: {},
   guide: peaGuide,
 });
 

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { applyPatches } from "@pe/agent-contracts";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { SystemColours } from "./settings.tsx";
 import { FIRM_COLOURS } from "@pe/ducts-web/colours";
@@ -10,10 +10,10 @@ import type { LossesWork } from "@pe/ducts-web/work";
 
 afterEach(cleanup);
 test("the compact colour picker stages one validated Work palette and survives remount", async () => {
-  let doc = ductsRouteState.schema.parse({});
+  let doc = ductSystems.work.schema.parse({});
   const write: LossesWork["write"] = vi.fn(async (patches) => {
     const result = applyPatches(
-      ductsRouteState,
+      ductSystems.work,
       { version: 1, revision: 0, doc },
       "human",
       patches,

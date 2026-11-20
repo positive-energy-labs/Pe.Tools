@@ -12,9 +12,9 @@ internal sealed class ParameterLinksProfileStorage {
         return new ProfileReadResult(read.Value, blob.Status != OwnerBlobStatus.Absent, read.Refusal, blob.Replacement);
     }
 
-    public bool Write(RevitDocument document, ParameterLinkProfile profile, OwnerBlobReplacement? replacing = null) =>
+    public bool Write(RevitDocument document, ParameterLinkProfile profile, OwnerBlobReplacement? replacing = null, OwnerBlobNotices? notices = null) =>
         replacing is null ? OwnerBlobStore.Write(document, ParameterLinkProfile.Owner, profile.ToData())
-            : OwnerBlobStore.Write(document, ParameterLinkProfile.Owner, profile.ToData(), replacing);
+            : OwnerBlobStore.Write(document, ParameterLinkProfile.Owner, profile.ToData(), replacing, notices ?? throw new ArgumentNullException(nameof(notices)));
 }
 
 internal sealed record ProfileReadResult(

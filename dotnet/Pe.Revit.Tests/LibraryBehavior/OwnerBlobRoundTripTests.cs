@@ -127,15 +127,17 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(() => Rooms.Write(document, new([new("unavailable", Name: "Office")], evidence)),
                 Throws.InvalidOperationException.With.Message.Contains(evidence.Reason).And.Message.Contains("rooms.draw"));
 
+            var recoveryNotices = new OwnerBlobNotices();
             using (var tx = new Transaction(document, "Apply the Rooms replacement preview")) {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
                 Assert.That(() => Rooms.Draw(document, draw),
                     Throws.InvalidOperationException.With.Message.Contains("Preview before"));
                 Assert.That(Raw(document, owner), Is.EqualTo(planted));
-                _ = Rooms.Draw(document, draw with { Replacing = evidence });
+                _ = Rooms.Draw(document, draw with { Replacing = evidence }, recoveryNotices);
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 
+            recoveryNotices.Publish();
             Assert.That(TakeoffCarriers.Replacements(document).Regions, Is.Null);
             Assert.That(Rooms.Snapshot(document, viewId).Regions.Single().Name, Is.EqualTo("Recovered"));
             var backup = Path.Combine(isolated.Root, "model-recovery", "owner-rooms-regions", evidence.RawUtf8Sha256 + ".txt");
@@ -169,15 +171,17 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Invalid));
             var evidence = TakeoffCarriers.Replacements(document).Registry!;
             Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+            var recoveryNotices = new OwnerBlobNotices();
             using (var tx = new Transaction(document, "Apply adoption with registry replacement")) {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
                 Assert.That(() => TakeoffAtlas.AdoptZones(document, request),
                     Throws.InvalidOperationException.With.Message.Contains("Preview before"));
                 Assert.That(Raw(document, owner), Is.EqualTo(raw));
-                Assert.That(TakeoffAtlas.AdoptZones(document, request with { ReplacingRegistry = evidence }).Adopted, Has.Count.EqualTo(1));
+                Assert.That(TakeoffAtlas.AdoptZones(document, request with { ReplacingRegistry = evidence }, recoveryNotices).Adopted, Has.Count.EqualTo(1));
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 
+            recoveryNotices.Publish();
             Assert.That(TakeoffCarriers.ReadRegistry(document).Systems.Single().Tag, Is.EqualTo("FC-8"));
             var backup = Path.Combine(isolated.Root, "model-recovery", "owner-takeoff-systems", evidence.RawUtf8Sha256 + ".txt");
             Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
@@ -218,7 +222,7 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 3 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
                 system = AdoptRegistry(document);
-                EnclosureDeclaration.Write(document, Enclosure.Default);
+                EnclosureDeclaration.Write(document, Enclosure.Default, new OwnerBlobNotices());
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.True);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.False, "an unchanged value is a no-op");
                 _ = transaction.Commit();
@@ -305,7 +309,7 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 1 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
                 _ = AdoptRegistry(document);
-                EnclosureDeclaration.Write(document, Enclosure.Default);
+                EnclosureDeclaration.Write(document, Enclosure.Default, new OwnerBlobNotices());
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, ProjectHomePointer.Create("Projects/Chadds").Pointer!.ToData()), Is.True);
                 _ = transaction.Commit();
             }
@@ -374,7 +378,7 @@ public sealed class OwnerBlobRoundTripTests {
             Directory.CreateDirectory(notices);
             using (var transaction = new Transaction(document, "Force a recovery notice failure")) {
                 _ = transaction.Start();
-                Assert.That(() => OwnerBlobStore.Write(document, owner, request.Store.ToData(), replacement), Throws.Exception);
+                Assert.That(() => OwnerBlobStore.Write(document, owner, request.Store.ToData(), replacement, new OwnerBlobNotices()), Throws.Exception);
                 Assert.That(Raw(document, owner), Is.EqualTo(raw));
                 _ = transaction.RollBack();
             }
@@ -450,10 +454,10 @@ public sealed class OwnerBlobRoundTripTests {
             using var edit = new Transaction(document, "Check the sealed element writer");
             _ = edit.Start();
             Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(),
-                    OwnerBlob.Decode(owner with { Version = owner.Version + 1 }, readable.Raw).Replacement!),
+                    OwnerBlob.Decode(owner with { Version = owner.Version + 1 }, readable.Raw).Replacement!, new OwnerBlobNotices()),
                 Throws.InvalidOperationException.With.Message.Contains("is readable"));
             Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
-            Assert.That(OwnerBlobStore.Write(anchor, owner, settings.ToData(), evidence), Is.True);
+            Assert.That(OwnerBlobStore.Write(anchor, owner, settings.ToData(), evidence, new OwnerBlobNotices()), Is.True);
             Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
             _ = edit.RollBack();
         } finally {

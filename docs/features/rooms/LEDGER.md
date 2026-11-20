@@ -106,6 +106,8 @@
 - 2026-11-19, ruling 7. The pick on the rulings sheet: `rooms.write` answers per cell, so a confirmed edit can retire from Work. Today it answers with a count, which cannot name a cell. kaitpw agreed to it with rulings 3 to 13 in one answer: "agreed on all."
 - 2026-11-19, standing rule of the product-declaration run (the run's `RULES.md`): `/rooms` is rebuilt clean-room. The writer reads the spec, the native operations and the primitives, and never the old `/rooms` web code.
 
+- 2026-11-20, Start Work on a fresh document keeps the ready plan picture while the earlier native read settles. `cad1bd1f`, merged in `8a0c1e3f`. PROVEN: Start Work keeps a ready picture; "Native read is retiring" does not appear. The drive used controlled Revit 2025 session `acc-tieup-rooms-09943e6c` (pid 29324), add-ins off, on a fresh Chadds copy, with no page reload. Evidence: `rooms-drive/tieup-rooms-09943e6c/REPORT.md`, row 4. See [Routes](../routes/LEDGER.md) for the shared retry and Timeline drives.
+
 ## Tried & rejected
 
 - 2026-09-26, the white "Controls Plan - Level 2" view image was suspected to be a headless-export defect; falsified: the view holds nothing that draws (section boxes, circuits, a camera, a link contributing one element; template hides ducts, fixtures, grids), and exports are byte-identical headless, windowed, and as the active view zoomed to fit (`docs/research/2026-09-26-headless-documents.md`).
@@ -221,5 +223,6 @@
 - 2026-11-19, UNPROVEN[partition resend after unknown outcome, host restart mid-run and Revit queue timeout during a multi-minute run]. Also check a level with exactly one plan and whether a schema failure for a `rooms.draw` reply inside `retires` can leave a staged draw after creating its room.
 - 2026-11-19, reconcile the knob count in [ADR 0011](../../adr/0011-takeoff-on-space.md#consequences). R23 found nine in the ADR and eight in `Pe.Revit.Partition.Knobs`.
 - 2026-11-20, check if two Revit area plans can share both name and type under different schemes. If so, make them distinguishable in the roster. Revit behavior is unproven.
-- 2026-11-20, check the redraw notice for saved marks with no plan. Address the covered document picker at a 380 px body and the ceiling plan with no crop that reports “no plan image · NoCrop”. Evidence: `rooms-drive/tieup-rooms-96d69b96/REPORT.md`.
-- 2026-11-20, keep a ready picture when Start Work runs on a fresh document. The `96d69b96` drive saw “Native read is retiring; retry after terminal settlement”. In flight on `tieup/rooms-fixes-3`.
+- 2026-11-20, check the redraw notice for saved marks with no plan.
+- 2026-11-20, uncover the document picker at a 380 px body. The `96d69b96` drive captured `r07-narrow-repeat-screen.png`.
+- 2026-11-20, decide how Rooms shows a ceiling plan with no active crop. Snowdon view `1371629` reports “no plan image · NoCrop”. Evidence: `rooms-drive/tieup-rooms-96d69b96/REPORT.md`.

@@ -32,7 +32,10 @@
 - 2026-11-19, PROVEN[browser and session acc-tieup-fan-replan-38dac482-drive pid 1008, Chadds copy, 38dac482, 2026-11-19]: an unchanged re-plan on B160E75RS 8775469 port 7 says "Nothing to write: all native targets are unchanged.", the loss record stays revision 1 byte for byte, and a real edit (terminal 9020215 flow 75 to 80 cfm) still offers a write.
 - 2026-11-19, Fans offers All up to eight ports. The old full-worksheet read took 268–270 s in 75 native walks before its 512-recipe refusal. Each port added six port-specific recipes, so 112 ports required 672 before shared work. The eight-port limit was the writer's conservative choice. `6797476c`, merged in `7c21e6cf`.
 - 2026-11-20, PROVEN[browser and session, 7c21e6cf, 2026-11-20]: with 112 ports All is dimmed and says "Open up to 8 fan ports at a time from the roster." (roster ready 45.7 s after opening the route); eight ports read in 72.9 s from the first click, 13.2 s from the eighth; no 512-recipe refusal. An unchanged re-plan's toolbar says "Write to Revit · nothing to write"; a plan of two planned and two unchanged says "planned 2". Custody: the driver's controlled Revit 2025 session `acc-tieup-products-7c21e6cf` (pid 48116), add-ins off, on a disposable Chadds copy.
-- 2026-11-20, the ninth roster row explains the limit and leaves the eight ports open. An oversized address or Pea navigation keeps the first eight IDs in request order, or roster order for All, and rewrites the address to match. All works when the roster fits. `605364aa`, merged in `252d3ccf`. UNPROVEN[Revit drive of the final roster, address and small-roster All paths].
+- 2026-11-20, the ninth roster row explains the limit and leaves the eight ports open. An oversized address or Pea navigation keeps the first eight IDs in request order, or roster order for All, and rewrites the address to match. All works when the roster fits. `605364aa`, merged in `252d3ccf`..
+
+- 2026-11-20, PROVEN[browser and session, 09943e6c, 2026-11-20]: the ninth port was disabled with the limit’s wording, the eight-port batch stayed visible and no read was sent. Pasting nine IDs opened the first eight and dropped the ninth from the address. The fourth drive used controlled Revit 2025 session `acc-tieup-rooms-09943e6c` (pid 29324), add-ins off, on a fresh Chadds copy. Evidence: `rooms-drive/tieup-rooms-09943e6c/REPORT.md`, row 5. UNPROVEN[Pea navigation with oversized scope and All on a roster that fits in Revit].
+- 2026-11-20, when one port is open and Write scope is empty, browser Plan stages that port and plans on the accepted Work revision. When a choice is needed, it says “Choose a fan port in Write scope in Inputs, then plan again.” Pea’s refusal says to read `fans.roster`, stage `unitId` and `portIndex` in Fans Work, and retry `sheet.plan`. It says nothing was submitted. `8d2a6057` and `d5dc8183`, merged in `7d1e67e8`. UNPROVEN[the first fan plan on Revit after the fix].
 
 ## Tried & rejected
 
@@ -90,6 +93,9 @@
 - Break up the Fans route declaration along existing ownership boundaries when the next route change needs that space. [W-fans-04-084]
 
 ### Tie-up, 2026-11-19 to 2026-11-20
+
+- 2026-11-20, decide how Pea should handle a single open fan port. The browser can use the Page’s selection, while Pea’s preflight sees only Work handles.
+- 2026-11-20, investigate two failures the `tieup/products-fixes-5` writer also reported on main: a missing ghost volume and an unavailable `ink-mute` token in test setup.
 
 - 2026-11-19, witness manufacturer catalogue drops on a real worksheet. The Chadds copy in the F1 drive had no catalogue witness.
 - 2026-11-20, provide a whole-model fan pressure sheet. Acquire shared data in bounded batches and publish pressure and blocker rows with progress. Read the full worksheet when a port opens.

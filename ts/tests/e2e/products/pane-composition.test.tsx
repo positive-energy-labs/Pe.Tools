@@ -142,7 +142,7 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
     <RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>,
   );
   const field = await vi.waitFor(() => {
-    const cell = view.container.querySelector('[data-sheet-address="criteria.terminalDropInWg"]');
+    const cell = view.container.querySelector('[data-sheet-address="terminalDropInWg"]');
     if (!cell) throw Error("Waiting for the terminal drop cell");
     return cell;
   });
@@ -151,13 +151,11 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   fireEvent.keyDown(input, { key: "Enter", code: "Enter" });
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 1));
   expect(f.owner.work()?.value).toMatchObject({
-    criteria: { terminalDropInWg: { edit: { value: 0.07 } } },
+    terminalDropInWg: { edit: { value: 0.07 } },
   });
   view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
   // A criterion choice stages its own cell the same way.
-  const split = view.container.querySelector<HTMLElement>(
-    '[data-sheet-address="criteria.splitPolicy"]',
-  )!;
+  const split = view.container.querySelector<HTMLElement>('[data-sheet-address="splitPolicy"]')!;
   fireEvent.click(split.querySelector<HTMLElement>("button")!);
   const pick = await vi.waitFor(() => {
     const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
@@ -171,21 +169,19 @@ test("/ducts design sheet stages each criterion in /ducts Work, and Fans Work ne
   fireEvent.click(pick);
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 2));
   expect(f.owner.work()?.value).toMatchObject({
-    criteria: { splitPolicy: { edit: { value: expect.any(String) } } },
+    splitPolicy: { edit: { value: expect.any(String) } },
   });
   // Clearing the typed criterion is the cell's own clear verb; it returns to the layer underneath.
   view.rerender(<RegistryContext value={registry()}>{nodeFor(f.owner, "design")}</RegistryContext>);
   fireEvent.click(
     within(
-      view.container.querySelector<HTMLElement>(
-        '[data-sheet-address="criteria.terminalDropInWg"]',
-      )!,
+      view.container.querySelector<HTMLElement>('[data-sheet-address="terminalDropInWg"]')!,
     ).getByRole("button", { name: "clear" }),
   );
   await vi.waitFor(() => expect(f.owner.work()?.revision).toBe(ducts0 + 3));
   expect(
-    (f.owner.work()?.value as { criteria?: Record<string, { edit?: unknown }> }).criteria
-      ?.terminalDropInWg?.edit ?? undefined,
+    (f.owner.work()?.value as { terminalDropInWg?: { edit?: unknown } })?.terminalDropInWg?.edit ??
+      undefined,
   ).toBeUndefined();
   expect(f.fans.work()?.revision).toBe(fans0);
   expect(acks.filter((a) => a.route === "fans")).toEqual([]);

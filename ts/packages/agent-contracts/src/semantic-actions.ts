@@ -1,4 +1,5 @@
 import { commandTable } from "./command-axes.ts";
+import { sheetCommands } from "./slots/sheet-command.ts";
 import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleReads } from "./schedule-actions.ts";
@@ -102,6 +103,7 @@ export const builtinCommandHead = {
 };
 export const builtinCommands = {
   ...builtinCommandHead,
+  ...sheetCommands,
   ...builtinTools.pods.commands,
   ...builtinTools.families.commands,
   ...builtinTools.findings.commands,

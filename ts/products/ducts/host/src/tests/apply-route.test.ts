@@ -1,10 +1,10 @@
-import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { product as fans } from "@pe/fans-contract/product";
 const fansTool = fans.tool;
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import type { WorkPath } from "@pe/agent-contracts";
-import { ductActionExecutors } from "../action-runtime.ts";
+import { ductActionBody } from "../action-runtime.ts";
 
 /*
  * Ruling D9 (2026-11-18; field map invariant 8): an apply stays in its route. Whatever the native owner
@@ -59,8 +59,8 @@ async function apply(
 }
 
 // A fake action that asks to retire one cell of each route, so the runtime's own filter is what is tested.
-const both = (owner: typeof fansTool | typeof ductSystemsTool) =>
-  ductActionExecutors(
+const both = (owner: typeof fansTool | typeof ductSystems.tool) =>
+  ductActionBody(
     {
       snapshot: async () => {
         throw Error("unused");
@@ -77,12 +77,10 @@ const both = (owner: typeof fansTool | typeof ductSystemsTool) =>
           ["roles", role],
         ],
       },
-      bindings: [["ducts.apply-heal", "heal", "apply"]],
     },
-    {} as never,
-    {},
     owner,
-  )["ducts.apply-heal"] as never;
+    "heal",
+  )("ducts.apply-heal", "apply")({} as never, {}) as never;
 
 test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
   const { key, calls } = await apply(both(fansTool), "fans");
@@ -90,13 +88,15 @@ test("an apply executed on /fans never retires a /duct-systems cell, whatever it
 });
 
 test("a /duct-systems apply still retires its own verdict, under its own route", async () => {
-  const { key, calls } = await apply(both(ductSystemsTool), "duct-systems");
+  const { key, calls } = await apply(both(ductSystems.tool), "duct-systems");
   expect(calls).toEqual([[key, "duct-systems", [["assumptions", "open-end:101:1"]]]]);
 });
 
 test.each(["unregistered", "__proto__", "constructor"])(
   "refuses an apply from unknown route %s",
   async (route) => {
-    await expect(apply(both(ductSystemsTool), route)).rejects.toThrow("Expected duct-systems Work");
+    await expect(apply(both(ductSystems.tool), route)).rejects.toThrow(
+      "Expected duct-systems Work",
+    );
   },
 );

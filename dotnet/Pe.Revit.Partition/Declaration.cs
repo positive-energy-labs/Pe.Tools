@@ -55,8 +55,8 @@ public static class EnclosureDeclaration {
     }
 
     /// <summary>Writes a declaration. The caller owns the transaction.</summary>
-    public static void Write(Document document, Enclosure enclosure) {
-        _ = OwnerBlobStore.WriteWithoutPreview(document, Owner, JObject.FromObject(Declared.From(enclosure), Json));
+    public static void Write(Document document, Enclosure enclosure, OwnerBlobNotices notices) {
+        _ = OwnerBlobStore.WriteWithoutPreview(document, Owner, JObject.FromObject(Declared.From(enclosure), Json), notices);
     }
 
     /// <summary>The declaration, or the reason it is "can't read, kept" (the default then applies).</summary>

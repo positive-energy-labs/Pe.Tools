@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./semantic-actions": "./src/semantic-actions.ts",
     "./fixtures/synthetic-snapshot.json": "./src/fixtures/synthetic-snapshot.json",
     "./reading": "./src/reading.ts",
     "./system-work": "./src/system-work.ts",

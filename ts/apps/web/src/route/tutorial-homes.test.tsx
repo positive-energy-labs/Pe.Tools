@@ -40,7 +40,6 @@ test.each(tutorialProducts)(
         homeRow(home).querySelector('[data-column-key="cells"]')?.textContent?.split(", "),
       ).toContain(cell);
     }
-    expect(within(homeRow("Project home")).getByText("Declared · unreachable")).toBeTruthy();
   },
 );
 

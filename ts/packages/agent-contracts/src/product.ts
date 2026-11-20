@@ -9,166 +9,30 @@ import { z } from "zod";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
-import { entities, machineFiles, ownerBlobs } from "./generated/native-homes.generated.ts";
+import type { CellKey, Home } from "./product-homes.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { AnyReadHandle, ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
 import type { RouteGraphWire } from "./route-kernel-data.ts";
 import type { RouteStateSpec } from "./route-state.ts";
-import { schemaOf, type Domain, type DomainValue, type Placement } from "./slots/sheet.ts";
+import {
+  SHEET_COMMANDS,
+  schemaOf,
+  type Domain,
+  type DomainValue,
+  type Placement,
+} from "./slots/sheet.ts";
+import { sheetWritesFor } from "./slots/sheet-command.ts";
 import { defineSettingOwners } from "./setting-owners.ts";
 import { subjectRefCodeSchema, type SubjectRefCode } from "./subject-ref.ts";
-import { SETTING_TIERS, writeSettingTier, type SettingTier } from "./tiered-setting.ts";
+import { writeSettingTier } from "./tiered-setting.ts";
 import { writeIntentSchema } from "./write-intent.ts";
 import type { Publication } from "./value.ts";
 
-/** Unexported, so only this module makes a home, a native home handle or a cell. */
+/** Unexported, so only cell() makes a cell. */
 const made: unique symbol = Symbol("declared");
 
-/** How a cell is keyed: one for the whole Work, one per free name, or one per subject. */
-export type CellKey = "route" | "name" | "subject";
-/** The six questions every home kind answers (ADR 0058 decision 4). The homes table renders them. */
-export type HomeCost = {
-  readonly readsPerCommand: string;
-  readonly placesThatCanDisagree: string;
-  readonly setupBeforeFirstUse: string;
-  readonly writeBorrows: string;
-  readonly sizeLimit: string;
-  readonly seenInRevit: string;
-};
-/** Where a stored fact rests. Only the constructors below make one, so a new kind is a kernel change. */
-export type Home<Takes extends CellKey = CellKey> = {
-  readonly [made]: "home";
-  readonly kind: string;
-  readonly rung: 3 | 4 | 5 | 6 | null;
-  /** The identity the write door matches exactly (S11). */
-  readonly key: string;
-  readonly cost: HomeCost;
-  /** The cell keys this home can hold. A command may land no other cell here. */
-  readonly takes: readonly Takes[];
-  /** How a sheet places a cell that lands here (ADR 0032: placement is derived, never per field). */
-  readonly place: (cell: string) => Placement;
-  readonly settingCells?: readonly string[];
-};
-/**
- * A home C# declares and writes (ruling 4), identified by its generated handle.
- */
-export type NativeHome<Prefix extends string> = {
-  readonly [made]: "native";
-  readonly key: `${Prefix}:${string}`;
-};
-export const ownerBlob = (name: keyof typeof ownerBlobs): NativeHome<"owner-blob"> => ({
-  [made]: "native",
-  key: ownerBlobs[name],
-});
-export const entity = (name: keyof typeof entities): NativeHome<"entity"> => ({
-  [made]: "native",
-  key: entities[name],
-});
-export const machineFileHandle = (name: keyof typeof machineFiles): NativeHome<"machine-file"> => ({
-  [made]: "native",
-  key: machineFiles[name],
-});
-
-/*
- * The home ladder in code (ADR 0058). Ask in order and stop at the first yes: a fact the model can
- * give again is not stored (rung 1), and a fact not applied yet is a cell no command lands (rung 2).
- * Rungs 3 to 6 are the constructors. No bound-parameter constructor exists until a product needs one.
- */
-/** Rung 3: a standard of the firm or the project, in a home file by tier. */
-export const homeFile = (
-  owner: string,
-  tiers: readonly SettingTier[] = SETTING_TIERS,
-  paths: Readonly<Record<string, readonly string[]>> = {},
-): Home<"route"> => ({
-  [made]: "home",
-  kind: "home-file",
-  rung: 3,
-  key: `home-file:${owner}`,
-  takes: ["route"],
-  settingCells: Object.keys(paths),
-  place: (cell) => ({ at: "setting", owner, path: paths[cell] ?? cell.split("."), tiers }),
-  cost: {
-    readsPerCommand: "One file per tier",
-    placesThatCanDisagree: "One per tier: default, firm and document",
-    setupBeforeFirstUse: "A firm home, for the firm tier only",
-    writeBorrows: "Project Information, for the document tier only",
-    sizeLimit: "256 KiB for the document tier",
-    seenInRevit: "Nothing",
-  },
-});
-/** Rung 4: an entity on the element, only where Revit's own calculation must read the fact. */
-export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => ({
-  [made]: "home",
-  kind: "revit-entity",
-  rung: 4,
-  key: declared.key,
-  takes: ["subject"],
-  place: () => ({ at: "store", store: declared.key }),
-  cost: {
-    readsPerCommand: "One per element",
-    placesThatCanDisagree: "One per element",
-    setupBeforeFirstUse: "A schema, which can never gain a field",
-    writeBorrows: "The element",
-    sizeLimit: "One versioned JSON text per element",
-    seenInRevit: "Nothing; Revit's calculation reads it",
-  },
-});
-/** Rung 5: a semantic parameter slot. Its owner's settings resolve the actual Revit name. */
-export const familyParameter = (slot: string): Home<"subject"> => ({
-  [made]: "home",
-  kind: "family-parameter",
-  rung: 5,
-  key: `parameter:${slot}`,
-  takes: ["subject"],
-  place: () => ({ at: "parameter", parameter: slot }),
-  cost: {
-    readsPerCommand: "One per element",
-    placesThatCanDisagree: "One per element; a person can edit it in Revit",
-    setupBeforeFirstUse: "None; the family already has it",
-    writeBorrows: "The element",
-    sizeLimit: "One value",
-    seenInRevit: "The value, in Properties, tags and schedules",
-  },
-});
-/** Rung 6: Pe's own fact about an element, in the product's one document record keyed by `UniqueId`. */
-export const documentRecord = (declared: NativeHome<"owner-blob">): Home => ({
-  [made]: "home",
-  kind: "document-record",
-  rung: 6,
-  key: declared.key,
-  takes: ["route", "name", "subject"],
-  place: () => ({ at: "store", store: declared.key }),
-  cost: {
-    readsPerCommand: "One, the whole record",
-    placesThatCanDisagree: "One",
-    setupBeforeFirstUse: "None; the first write binds one hidden parameter",
-    writeBorrows: "Project Information, so one person writes a product's facts between syncs",
-    sizeLimit: "256 KiB per record, provisional until measure M1",
-    seenInRevit: "Nothing: no tag, filter, schedule or Properties row",
-  },
-});
-/**
- * Beside the ladder: evidence a native operation keeps on this machine, such as a solver trace. It
- * holds no cell, because a fact about the model does not rest on one machine. It is on no rung of
- * ADR 0058; owner confirmation pending in the product-declaration run.
- */
-export const machineFile = (declared: NativeHome<"machine-file">): Home<never> => ({
-  [made]: "home",
-  kind: "machine-file",
-  rung: null,
-  key: declared.key,
-  takes: [],
-  place: () => ({ at: "local" }),
-  cost: {
-    readsPerCommand: "One file per subject",
-    placesThatCanDisagree: "One per machine",
-    setupBeforeFirstUse: "None",
-    writeBorrows: "Nothing in the model",
-    sizeLimit: "None",
-    seenInRevit: "Nothing",
-  },
-});
+export * from "./product-homes.ts";
 
 /**
  * One staged value family, with its ADR 0032 value domain; the schema follows from `schemaOf`. The
@@ -180,28 +44,38 @@ export type Cell<D extends Domain = Domain, K extends CellKey = CellKey> = {
   readonly per: K;
   readonly label?: string;
   readonly default?: DomainValue<D>;
+  readonly deletable?: true;
+  readonly record?: SubjectRecord;
 };
-export const cell = <const D extends Domain, const K extends CellKey>(
-  domain: D,
-  per: K,
-  draw: { readonly label?: string; readonly default?: DomainValue<D> } = {},
-): Cell<D, K> => ({ ...draw, [made]: "cell", domain, per });
+type CellOptions<D extends Domain, K extends CellKey> = Pick<Cell<D, K>, "label" | "default"> & {
+  deletable?: K extends "route" ? never : true;
+  record?: K extends "route" ? never : SubjectRecord;
+};
+export function cell<
+  const D extends Domain,
+  const K extends CellKey,
+  const Options extends CellOptions<D, K> = {},
+>(domain: D, per: K, draw?: Options): Cell<D, K> & Options;
+export function cell(domain: Domain, per: CellKey, draw: CellOptions<Domain, CellKey> = {}): Cell {
+  return { ...draw, [made]: "cell", domain, per };
+}
 type Homes = Readonly<Record<string, Home>>;
 type Cells = Readonly<Record<string, Cell>>;
 const single = <S extends z.ZodType>(schema: S) => draftCellSchema(schema).default({});
-const byName = <S extends z.ZodType>(schema: S) =>
-  z.record(z.string(), draftCellSchema(schema)).default({});
 type SubjectRecord = <S extends z.ZodType>(value: S) => z.ZodRecord<z.ZodType<string>, S>;
 const subjectRecord = <S extends z.ZodType>(value: S) => z.record(subjectRefCodeSchema, value);
-const bySubject = <S extends z.ZodType>(schema: S, record: SubjectRecord) =>
+const byName = <S extends z.ZodType>(schema: S) => z.record(z.string(), schema);
+const keyed = <S extends z.ZodType>(schema: S, record: SubjectRecord) =>
   record(draftCellSchema(schema)).default({});
+const deletableKeyed = <S extends z.ZodType>(schema: S, record: SubjectRecord) =>
+  record(draftCellSchema(schema, { deletable: true })).default({});
 type Schema<C extends Cell> = z.ZodType<DomainValue<C["domain"]>>;
 type WorkShape<C extends Cells> = {
   -readonly [K in keyof C]: C[K]["per"] extends "route"
     ? ReturnType<typeof single<Schema<C[K]>>>
-    : C[K]["per"] extends "subject"
-      ? ReturnType<typeof bySubject<Schema<C[K]>>>
-      : ReturnType<typeof byName<Schema<C[K]>>>;
+    : C[K]["deletable"] extends true
+      ? ReturnType<typeof deletableKeyed<Schema<C[K]>>>
+      : ReturnType<typeof keyed<Schema<C[K]>>>;
 };
 /** What Pea may edit is every cell, so no second list can name a cell the schema lacks. */
 export type EditablePath<C extends Cells> = {
@@ -215,15 +89,16 @@ export function workSchema<C extends Cells>(
 export function workSchema(cells: Cells, record: SubjectRecord = subjectRecord) {
   return z.strictObject(
     Object.fromEntries(
-      Object.entries(cells).map(([name, { domain, per }]) => {
+      Object.entries(cells).map(([name, { domain, per, deletable, record: custom }]) => {
         const schema = schemaOf(domain);
+        const row = custom ?? (per === "subject" ? record : byName);
         return [
           name,
           per === "route"
             ? single(schema)
-            : per === "subject"
-              ? bySubject(schema, record)
-              : byName(schema),
+            : deletable
+              ? deletableKeyed(schema, row)
+              : keyed(schema, row),
         ];
       }),
     ),
@@ -433,17 +308,20 @@ export type ProductDeclaration = {
   readonly cells: Cells;
   readonly readings: Readonly<Record<string, Reading>>;
   readonly commands: Readonly<Record<string, ProductCommand>>;
+  readonly sheetWrites?: ProductCommand["writes"];
   readonly routes: Readonly<Record<string, { readonly key: string }>>;
   readonly guide?: Guide;
 };
-type Stored = Pick<ProductDeclaration, "homes" | "cells" | "commands">;
-/** Platform settings writes and product commands use the same home-to-cells map. */
+type Stored = Pick<ProductDeclaration, "homes" | "cells" | "commands" | "sheetWrites">;
+/** Platform commands and product commands use the same home-to-cells map. */
 export const productWrites = ({
   homes,
   cells,
   commands,
+  sheetWrites,
 }: Stored): Readonly<Record<string, ProductCommand["writes"]>> => ({
   ...Object.fromEntries(Object.entries(commands).map(([key, { writes }]) => [key, writes])),
+  ...sheetWritesFor(sheetWrites),
   [writeSettingTier.key]: Object.fromEntries(
     Object.entries(homes).flatMap(([name, home]) => {
       const settings = home.settingCells?.filter((cell) => cells[cell]?.per === "route");
@@ -491,7 +369,8 @@ function toolTable<
   C extends Cells,
   W extends RouteWorks<C>,
 >(
-  key: K,
+  id: string,
+  alias: K | undefined,
   value: T,
   publish: Publish | undefined,
   declared: Declared & { readonly cells: C; readonly works?: W },
@@ -500,10 +379,16 @@ function toolTable<
     ? Record<never, never>
     : { readonly [P in K]: T }
   : RouteTools<C, W>;
-function toolTable(key: string, value: unknown, publish: boolean | undefined, declared: Declared) {
+function toolTable(
+  id: string,
+  alias: string | undefined,
+  value: unknown,
+  publish: boolean | undefined,
+  declared: Declared,
+) {
   if (declared.works)
     return routeTools(declared.says, declared.cells, declared.works, declared.commands);
-  return publish === false ? {} : { [key]: value };
+  return publish === false ? {} : { [alias ?? id]: value };
 }
 
 /** The declaration, plus what derives from it: the Work, Pea's tool, the named reads and the guide. */
@@ -515,9 +400,11 @@ export function product<
   const M extends Readonly<Record<string, ProductCommand<H, C>>>,
   const Routes extends Readonly<Record<string, ProductRoute<keyof R & string>>>,
   const Publish extends boolean = true,
+  const ToolName extends string = Id,
+  const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
 >(declaration: {
-  /** The product folder's name, the name of Pea's tool and the route of its Work. */
+  /** The product folder, Work route and default name of its Pea tool. */
   readonly id: Id;
   readonly says: string;
   /** Only the product's own. A platform home follows from the nouns a product uses. */
@@ -525,7 +412,7 @@ export function product<
   readonly cells: C;
   readonly work?: Pick<
     RouteStateSpec<z.ZodObject>,
-    "title" | "settingsOwners" | "schemaVersion"
+    "title" | "settingsOwners" | "schemaVersion" | "retired" | "finds"
   > & {
     readonly subjectRecord?: SubjectRecord;
   };
@@ -544,6 +431,7 @@ export function product<
       };
     };
   };
+  readonly sheetWrites?: Sheet & NoExtras<NonNullable<Sheet>, H>;
   /** Zero or several, keyed by the route key. A subject's pane is one of the route's panes. */
   readonly routes: Routes & {
     readonly [K in keyof Routes]: NoExtras<Routes[K], ProductRoute> & {
@@ -557,9 +445,10 @@ export function product<
   };
   readonly guide?: Guide;
   readonly publishTool?: Publish;
+  readonly toolName?: ToolName;
 }) {
-  if (Object.hasOwn(declaration.commands, writeSettingTier.key))
-    throw Error(`${writeSettingTier.key} belongs to the platform`);
+  for (const key of [writeSettingTier.key, ...Object.values(SHEET_COMMANDS)])
+    if (Object.hasOwn(declaration.commands, key)) throw Error(`${key} belongs to the platform`);
   const work: RouteStateSpec<z.ZodObject<WorkShape<C>, z.core.$strict>> & {
     readonly editable: readonly EditablePath<C>[];
     readonly schemaVersion: number;
@@ -568,12 +457,14 @@ export function product<
     title: declaration.work?.title ?? declaration.id,
     description: declaration.says,
     settingsOwners: declaration.work?.settingsOwners,
+    retired: declaration.work?.retired,
+    finds: declaration.work?.finds,
     schemaVersion: declaration.work?.schemaVersion ?? 1,
     schema: workSchema(declaration.cells, declaration.work?.subjectRecord),
     editable: editable(declaration.cells),
   };
   const tool: Tool<M> & { readonly work: typeof work } = {
-    name: declaration.id,
+    name: declaration.toolName ?? declaration.id,
     says: declaration.says,
     work,
     commands: declaration.commands,
@@ -589,8 +480,9 @@ export function product<
     guide: declaration.guide ?? noGuide,
     actions: declaration.commands,
     // With `works`, each tool carries its route's Work, and `work` and `tool` are not the product's.
-    tools: toolTable<Id, typeof tool, Publish, C, Works>(
+    tools: toolTable<ToolName, typeof tool, Publish, C, Works>(
       declaration.id,
+      declaration.toolName,
       tool,
       declaration.publishTool,
       declaration,
@@ -636,5 +528,7 @@ export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
   /** A plan built by `workWriteCommands` is its write's body in the preview phase, so it takes none. */
   readonly commands: {
     readonly [K in keyof P["commands"] as K extends `${string}.preview` ? never : K]: Executor;
-  };
+  } & ([NonNullable<P["sheetWrites"]>] extends [never]
+    ? unknown
+    : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
 };

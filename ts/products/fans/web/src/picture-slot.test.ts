@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { expect, test } from "vite-plus/test";
@@ -24,7 +24,11 @@ const files = (dir: string): string[] =>
           : [],
   );
 const productFiles = () =>
-  readdirSync(products).flatMap((product) => files(`${products}/${product}/web`));
+  readdirSync(products, { withFileTypes: true }).flatMap((product) => {
+    if (!product.isDirectory()) return [];
+    const web = `${products}/${product.name}/web`;
+    return statSync(web, { throwIfNoEntry: false })?.isDirectory() ? files(web) : [];
+  });
 const imports = (file: string, text = readFileSync(file, "utf8")) => {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const found: { from: string; names: string[] }[] = [];

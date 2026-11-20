@@ -10,7 +10,7 @@ import {
   claimRefusal,
   fanRulings,
   fanWriteRequest,
-  fansExecutors,
+  fanLosses,
   lossSnapshot,
   unwrittenCells,
   unwrittenReason,
@@ -95,7 +95,7 @@ test("the real /fans apply asks to retire its own role only, and retires it unde
     retireWork,
   };
   await settle(
-    fansExecutors({} as never)["sheet.apply"]!.run(
+    fanLosses("sheet.apply", "apply")({} as never, {}).run(
       ctx as never,
       execution as never,
     ) as Effect.Effect<unknown>,
@@ -379,10 +379,10 @@ test("a claim that is not complete is refused with its kind and what holds it op
   );
 });
 
-test("unscoped losses do not fire a healing read", async () => {
+test("unscoped fan losses name the Inputs control before reading a walk", async () => {
   const read = vi.fn();
   await expect(lossSnapshot(undefined, read)).rejects.toThrow(
-    "stage a scope before previewing losses",
+    "Choose a fan port in Write scope in Inputs, then plan again.",
   );
   expect(read).not.toHaveBeenCalled();
 });

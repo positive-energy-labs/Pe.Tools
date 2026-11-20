@@ -1,7 +1,7 @@
 import { contract } from "@pe/agent-contracts/handle";
 import { native } from "@pe/agent-contracts/handle";
 import * as resources from "../../../host/resource-state";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ductsSettings } from "@pe/ducts-contract/product";
 
@@ -61,7 +61,7 @@ test("model value from the read: a binding reads its row's model value out of th
   const slot = {
     draft: true as const,
     bindings: {
-      terminalDrop: local({ kind: "enum", shape: z.string(), choices: [] }, "route", {
+      terminalDrop: local({ kind: "text", shape: z.string() }, "route", {
         model: (read: { slots: Record<string, string> }) => ({ value: read.slots.terminalDrop }),
       }),
     },
@@ -99,11 +99,11 @@ test("rows per binding: a binding names its own rows from the read, apart from t
     bindings: {
       roles: store(
         "_PE_DuctLosses",
-        { kind: "object", fields: { role: { kind: "enum", shape: z.string(), choices: [] } } },
+        { kind: "object", fields: { role: { kind: "text", shape: z.string() } } },
         "subject",
         { rows: (read: { units: string[] }) => read.units, rowLabel: (_r, row) => `Unit ${row}` },
       ),
-      note: local({ kind: "enum", shape: z.string(), choices: [] }, "subject"),
+      note: local({ kind: "text", shape: z.string() }, "subject"),
     },
   };
   const cells = sheetCells(slot, {
@@ -444,7 +444,7 @@ test.each(["ready", "stale"] as const)(
       sheet: { bindings: { velocity: ductsSettings["setting.ducts.velocitySupplyFpm"]! } },
       layout: { kind: "pane", id: "sheet" },
     });
-    const base = createFixtureWorkDoor(ductsRouteState, {});
+    const base = createFixtureWorkDoor(ductSystems.work, {});
     const sent: unknown[] = [];
     const work: WorkJournalDoor = {
       ...base,

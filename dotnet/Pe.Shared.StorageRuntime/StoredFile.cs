@@ -62,8 +62,11 @@ public static class StoredFile {
         }
     }
 
-    /// <summary>Preserve exact model text and publish its recovery notice before the caller can replace it.</summary>
-    public static void KeepModelRecord(string stateRoot, string owner, string document, string raw, string reason) {
+    public static void KeepModelRecord(string stateRoot, string owner, string document, string raw, string reason) =>
+        PrepareModelRecovery(stateRoot, owner, document, raw, reason)();
+
+    /// <summary>Keeps the original now and returns the notice to publish after commit.</summary>
+    public static Action PrepareModelRecovery(string stateRoot, string owner, string document, string raw, string reason) {
         var bytes = ModelRecordBytes(raw);
         var sha256 = Hash(bytes);
         var suffix = bytes.Length > 0 && bytes[0] == 0xff ? ".utf16le" : ".txt";
@@ -74,8 +77,12 @@ public static class StoredFile {
         }
         if (!File.ReadAllBytes(path).SequenceEqual(bytes))
             throw new IOException($"Model recovery file '{path}' does not match the stored record.");
-        NoteOrThrow(path, StoredPolicy.Keep, $"{document} / {owner}", $"Kept at {path} before replacing the model record. {reason}",
-            sha256, Path.Combine(stateRoot, ProductPathNames.StoredNoticesFileName), documentKey: document);
+        var notices = Path.Combine(stateRoot, ProductPathNames.StoredNoticesFileName);
+        // Refuse a known feed failure before replacement, without appending anything.
+        try { using var probe = new FileStream(notices, FileMode.Open, FileAccess.Write, FileShare.ReadWrite); }
+        catch (FileNotFoundException) { }
+        return () => NoteOrThrow(path, StoredPolicy.Keep, $"{document} / {owner}",
+            $"Kept at {path} before replacing the model record. {reason}", sha256, notices, documentKey: document);
     }
 
     public static byte[] ModelRecordBytes(string raw) {

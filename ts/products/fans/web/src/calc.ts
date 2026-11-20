@@ -149,8 +149,8 @@ const bindCells = (
         throw Error(`Unexpected Fans Work placement for ${name}`);
       const draw = { ...cell, ...draws[name] };
       const rendered =
-        name === "writeIntent" && domain.kind === "enum"
-          ? { ...domain, choices: scopeChoices }
+        name === "writeIntent" && domain.kind === "value"
+          ? { ...domain, kind: "enum" as const, choices: scopeChoices }
           : domain;
       if (home.at === "parameter") {
         if (per !== "subject") throw Error(`Parameter ${name} needs an element`);

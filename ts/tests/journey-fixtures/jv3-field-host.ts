@@ -18,7 +18,7 @@ import { sheetCells } from "../../apps/web/src/route/slots/sheet/index.ts";
 const dir = resolve("../.artifacts/runs/field-20261118/J-V3", String(Date.now()));
 await mkdir(dir, { recursive: true });
 const work = ductsDocumentSchema.parse({
-  criteria: { autoJoinGapIn: { edit: { value: 9, by: "human" } } },
+  autoJoinGapIn: { edit: { value: 9, by: "human" } },
 });
 const tiers = [
   {
@@ -48,7 +48,7 @@ await writeFile(inputs, JSON.stringify(evidence, null, 2));
 if (process.argv.includes("--witness")) {
   const priced = read.criteria.autoJoinGapIn;
   const drawn = sheetCells(designCalc, { rows: [], work, read })
-    .filter((c) => c.binding.endsWith(".autoJoinGapIn"))
+    .filter((c) => c.binding === "autoJoinGapIn")
     .map((c) => ({ binding: c.binding, value: c.value, source: c.source }));
   const ok =
     drawn.length === 1 &&

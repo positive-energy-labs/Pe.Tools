@@ -576,15 +576,15 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
   await user.click(screen.getByRole("textbox", { name: "Velocity limit supply" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
-  await waitFor(() => expect(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit).toBeDefined());
-  expect.soft(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
+  await waitFor(() => expect(ducts.owner()?.doc.velocitySupplyFpm?.edit).toBeDefined());
+  expect.soft(ducts.owner()?.doc.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
   expect
     .soft(
       (
         f.saved.get("duct-systems") as {
-          doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } };
+          doc: { velocitySupplyFpm?: { edit?: { value: number } } };
         }
-      ).doc.criteria?.velocitySupplyFpm?.edit?.value,
+      ).doc.velocitySupplyFpm?.edit?.value,
     )
     .toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
@@ -1150,6 +1150,45 @@ afterEach(() => {
 
 // CB4-F01: replay the recorded MUAS walk through Work, Plan and the shared review DOM.
 // Native responses use the new DTO; they certify presentation, not a Revit read.
+test.each([1, 2])(
+  "JZ first Fans plan with %i open ports chooses a scope only when unambiguous",
+  async (count) => {
+    const f = await createWitness(closes);
+    const roster = f.typed.spec.subject?.read;
+    await waitFor(() => expect(f.typed.value(roster).state).toBe("ready"));
+    const value = valueOf(f.typed.value(roster));
+    const rows = value.rows.slice(0, count);
+    expect(rows).toHaveLength(count);
+    f.typed.page.subject({ kind: "ids", ids: rows.map(stableFanKey) });
+    await f.typed.whenWritable();
+    native.submit.mockReset();
+    native.submit.mockRejectedValue(Error("Plan received"));
+    const revision = f.fans.work()?.revision;
+    expect(f.typed.owner()?.doc.writeIntent).toEqual({});
+    render(<TypedWrite mount={f.typed} id="losses" />);
+    fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" }));
+    if (count === 2) {
+      expect(
+        await screen.findByText("Choose a fan port in Write scope in Inputs, then plan again."),
+      ).toBeTruthy();
+      expect(native.submit).not.toHaveBeenCalled();
+      expect(f.fans.work()?.revision).toBe(revision);
+    } else {
+      await waitFor(() => expect(native.submit).toHaveBeenCalledTimes(1));
+      const { unitId, portIndex } = rows[0];
+      expect(f.typed.owner()?.doc.writeIntent.edit?.value).toEqual({ walk: { unitId, portIndex } });
+      expect(native.submit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          key: "sheet.plan",
+          input: expect.objectContaining({
+            work: expect.objectContaining({ revision: (revision ?? 0) + 1 }),
+          }),
+        }),
+      );
+    }
+  },
+);
+
 test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unreadable holds Apply", async () => {
   for (const unreadable of [false, true]) {
     const capture = structuredClone(realMuas);
@@ -2113,14 +2152,21 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
   const { typedSubjectDoor } = await import("../shell/typed-mount");
   const host = await fixture(true),
     tasks = new Set<Promise<unknown>>();
-  const roster = fans.spec.subject!.read!;
+  const subject = fans.spec.subject;
+  if (!subject?.read) throw Error("Fans must declare its roster read");
+  const roster = subject.read;
   const module = route({
     ...fans.spec,
     core: roster,
     edits: undefined,
     verbs: {},
     band: [],
-    subject: { ...fans.spec.subject!, pane: "detail" },
+    subject: {
+      ...subject,
+      pane: "detail",
+      // This journey checks chooser gestures. Use a roster that All can open under the Fans limit.
+      options: (value) => subject.options(value).slice(0, 2),
+    },
     panes: {
       detail: {
         title: "Subject choices",
@@ -2181,7 +2227,7 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     expect(document.body.textContent).not.toContain(unknown);
     expect(screen.getByText(/outside the current roster/)).toBeTruthy();
     const options = module.spec.subject!.options(valueOf(mount.value(roster)));
-    expect(options.length).toBeGreaterThan(1);
+    expect(options).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "No fan" }));
     expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [] });
     expect(moves).toBe(1);

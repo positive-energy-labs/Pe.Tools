@@ -188,13 +188,10 @@ const captures = contract("takeoffs.captures", {
 
 const room = subjectSchema(Number.MAX_SAFE_INTEGER);
 const onPlan = (page: { view: string }) => ({ view: page.view });
-/**
- * A value a person types or a mark they make: no choices to acquire.
- * ponytail: steer 2 item 4 asks for the free-text domain kind, which is not on this branch's base.
- * This one constructor is the only place to swap when it lands.
- */
-const free = <S extends z.ZodType>(shape: S) => ({ kind: "enum", shape, choices: [] }) as const;
-const text = free(z.string());
+/** Free text a person types. */
+const text = { kind: "text", shape: z.string() } as const;
+/** A structured value a person or Pea authors: it has a shape and no list to choose from. */
+const value = <S extends z.ZodType>(shape: S) => ({ kind: "value", shape }) as const;
 const count = { kind: "number", min: 0 } as const;
 const edit = { needs: "project-document", effect: "command", dirties: ["snapshot"] } as const;
 const directory = {
@@ -265,6 +262,8 @@ export const product = define({
   },
   cells: {
     name: cell(text, "subject", { label: "Name" }),
+    // Text, not an enum: the region record holds the type as a string, and neither the spec, the
+    // ledger nor a native read supplies a list of room types.
     type: cell(text, "subject", { label: "Type" }),
     ceilingFt: cell({ ...count, unit: "ft" }, "subject", { label: "Ceiling height" }),
     people: cell(count, "subject", { label: "People" }),
@@ -287,7 +286,7 @@ export const product = define({
     ),
     /** A person's or Pea's mark on the plan. No command lands it, so it stays in Work. */
     marks: cell(
-      free(
+      value(
         z.object({
           kind: z.enum(["merge", "reject", "wall", "split"]),
           view,
@@ -301,10 +300,10 @@ export const product = define({
     ),
     // Takeoffs. Keys are the kernel's (`takeoffEditKey`, `takeoffDecisionKey`, `takeoffFlagKey`).
     /** A room field's next value in RHVAC, keyed `[roomId, field]`. */
-    edits: cell(free(z.union([z.string(), z.number()])), "name", { label: "Room edits" }),
+    edits: cell(value(z.union([z.string(), z.number()])), "name", { label: "Room edits" }),
     /** A designer region's adoption choice, keyed `<view UniqueId>:<elementId>`. */
     adopt: cell(
-      free(
+      value(
         z.object({
           checked: z.boolean().optional(),
           name: z.string().optional(),

@@ -93,7 +93,7 @@ export type RowProps = RowState & {
         /** Row verbs (usually one menu): they take the meta slot in place on hover, keyboard
          *  focus or an open menu; without hover, a tap on the slot opens them. Never the pick. */
         actions?: ReactNode;
-        /** Keep urgent row verbs in the trailing slot at rest as well as on hover and focus. */
+        /** Keep urgent row verbs and their labels in the trailing slot at rest. */
         persistentActions?: boolean;
         /** A measure below the row, inside its measured virtual extent. */
         band?: ReactNode;
@@ -270,7 +270,9 @@ function ListRow({
                     onKeyDown={(event) => event.stopPropagation()}
                     onKeyUp={(event) => event.stopPropagation()}
                   >
-                    <ButtonIcon value={Ellipsis}>{props.actions}</ButtonIcon>
+                    <ButtonIcon value={props.persistentActions ? null : Ellipsis}>
+                      {props.actions}
+                    </ButtonIcon>
                   </span>
                 ) : null}
               </span>

@@ -116,7 +116,6 @@ const panes = {
 export const module = screen(
   {
     ...declared,
-    host: "@pe/duct-systems-host/host",
     subject: {
       ...declared.subject,
       resetQuery: ["fan"],

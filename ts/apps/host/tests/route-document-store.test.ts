@@ -10,7 +10,7 @@ import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { Effect, Layer } from "effect";
 import { effectTest } from "./effect-test.ts";
 import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
@@ -56,7 +56,7 @@ test("startup retires old ducts Work, preserves exact bytes and emits one notice
     const bytes = readdirSync(dir)
       .map((file) => readFileSync(join(dir, file)))
       .find((bytes) => JSON.parse(bytes.toString()).route === "ducts")!;
-    await new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store }).ready;
+    await new RouteWorkspace({ registrations: [{ spec: ductSystems.work }], store }).ready;
     expect(await store.getState({ targetKey: "old-address", route: "ducts" })).toBeNull();
     expect(await store.getState({ targetKey: "current-address", route: "duct-systems" })).toEqual({
       current: true,
@@ -77,7 +77,7 @@ test("startup retires old ducts Work, preserves exact bytes and emits one notice
         }),
     ).toBe(true);
     await new RouteWorkspace({
-      registrations: [{ spec: ductsRouteState }],
+      registrations: [{ spec: ductSystems.work }],
       store: fileRouteDocumentStore(stateFixture(dir)),
     }).ready;
     expect(readFileSync(machine.notices, "utf8")).toBe(notices);
@@ -94,7 +94,7 @@ test("startup keeps an unreadable old Work record instead of deleting it", async
     const path = join(dir, readdirSync(dir)[0]!);
     const bytes = Buffer.from('{"format":"route-state-record-v2","route":"ducts",');
     writeFileSync(path, bytes);
-    await new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store }).ready;
+    await new RouteWorkspace({ registrations: [{ spec: ductSystems.work }], store }).ready;
     expect(readFileSync(path)).toEqual(bytes);
     expect(readdirSync(dir)).toHaveLength(1);
   } finally {
@@ -111,7 +111,7 @@ test("startup keeps retired Work when preservation fails", async () => {
     const bytes = readFileSync(path);
     writeFileSync(stateMachine(dir).blobs, "blocks preservation");
     await expect(
-      new RouteWorkspace({ registrations: [{ spec: ductsRouteState }], store }).ready,
+      new RouteWorkspace({ registrations: [{ spec: ductSystems.work }], store }).ready,
     ).rejects.toMatchObject({ kind: "kept" });
     expect(readFileSync(path)).toEqual(bytes);
   } finally {

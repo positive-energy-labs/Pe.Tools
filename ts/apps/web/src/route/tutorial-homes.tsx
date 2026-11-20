@@ -1,75 +1,18 @@
 import {
   landings,
   productWrites,
+  platformHomes,
   type HomeCost,
   type ProductDeclaration,
 } from "@pe/agent-contracts/product";
 import { Table } from "@pe/kit/table/table";
 import type { Column } from "@pe/kit/table/model";
 
-const WORK = "Work";
-const platformHomes = [
-  {
-    key: WORK,
-    kind: "work",
-    rung: 2,
-    cost: {
-      readsPerCommand: "One Work document",
-      placesThatCanDisagree: "One per Work member",
-      setupBeforeFirstUse: "None",
-      writeBorrows: "Nothing in the model",
-      sizeLimit: "No model record limit",
-      seenInRevit: "Nothing until applied",
-    },
-  },
-  {
-    key: "Route address",
-    kind: "url",
-    rung: null,
-    cost: {
-      readsPerCommand: "None",
-      placesThatCanDisagree: "One per URL",
-      setupBeforeFirstUse: "None",
-      writeBorrows: "Nothing in the model",
-      sizeLimit: "URL length",
-      seenInRevit: "Nothing",
-    },
-  },
-  {
-    key: "Route layout",
-    kind: "browser storage",
-    rung: null,
-    cost: {
-      readsPerCommand: "None",
-      placesThatCanDisagree: "One per browser and route",
-      setupBeforeFirstUse: "None",
-      writeBorrows: "Nothing in the model",
-      sizeLimit: "Browser storage quota",
-      seenInRevit: "Nothing",
-    },
-  },
-  {
-    key: "Project home",
-    kind: "content home",
-    rung: 3,
-    status: "Declared · unreachable",
-    cost: {
-      readsPerCommand: "Unavailable",
-      placesThatCanDisagree: "One per project",
-      setupBeforeFirstUse: "A project folder and a model pointer",
-      writeBorrows: "Nothing in the model for file writes",
-      sizeLimit: "File system limits",
-      seenInRevit: "Nothing",
-    },
-  },
-] satisfies readonly HomeDetails[];
-
 type HomeDetails = {
   key: string;
   kind: string;
   rung: number | null;
   cost: HomeCost;
-  status?: string;
 };
 type HomeRow = HomeDetails & {
   name: string;
@@ -91,12 +34,11 @@ const columns: readonly Column<HomeRow>[] = [
   {
     key: "home",
     label: "Home",
-    cell: ({ name, key, owner, status }) => (
+    cell: ({ name, key, owner }) => (
       <>
         <div>{name}</div>
         {key !== name && <div>{key}</div>}
         <div>{owner}</div>
-        {status && <div>{status}</div>}
       </>
     ),
   },
@@ -133,7 +75,7 @@ export function TutorialHomes({ product }: { product: ProductDeclaration }) {
       ...home,
       name: home.key,
       owner: "Platform",
-      cells: home.key === WORK ? cells.filter((cell) => !Object.hasOwn(lands, cell)) : [],
+      cells: home.kind === "work" ? cells.filter((cell) => !Object.hasOwn(lands, cell)) : [],
       commands: [],
     })),
     ...Object.entries(product.homes).map(([name, home]) => ({

@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json.Linq;
@@ -87,7 +88,7 @@ public static class TakeoffAtlas
             .ToList();
     }
 
-    public static TakeoffAdoptResult AdoptZones(Document doc, TakeoffAdoptRequest request)
+    public static TakeoffAdoptResult AdoptZones(Document doc, TakeoffAdoptRequest request, OwnerBlobNotices? notices = null)
     {
         var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var unnamed = request.Items.FirstOrDefault(item => string.IsNullOrWhiteSpace(item.Name));
@@ -122,8 +123,8 @@ public static class TakeoffAtlas
                 view.CropBoxActive && loops.Count > 0 ? OwnerCrop(view.CropBox, loops) : null));
         }
 
-        TakeoffCarriers.Save(doc, SystemRegistry.Owner, registry.ToData(), request.ReplacingRegistry);
-        record.Save(doc, replacing: request.Replacing);
+        TakeoffCarriers.Save(doc, SystemRegistry.Owner, registry.ToData(), request.ReplacingRegistry, notices);
+        record.Save(doc, replacing: request.Replacing, notices: notices);
         return new TakeoffAdoptResult(adopted);
     }
 
@@ -131,7 +132,7 @@ public static class TakeoffAtlas
     // maps its answer onto the materializer exactly as the raster result was mapped — Accepted to
     // Room Regions, Held and Void to held regions, Excluded drawn as nothing — and the
     // rebind-by-geometry rule in ZoneMaterializer is untouched.
-    public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request) {
+    public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request, OwnerBlobNotices? notices = null) {
         var zone = doc.GetElement(request.ZoneRegion.ToElementId()) as FilledRegion
             ?? throw new InvalidOperationException("Partition requires a native Zoning Region");
         var record = RoomsRegionRecord.Stage(doc, request.Replacing);
@@ -142,15 +143,15 @@ public static class TakeoffAtlas
         // The partition's own scope also holds every room label the measurement probes: rooms lie inside their zone.
         var partition = new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion);
         var world = Pe.Revit.Partition.Verbs.PrepareSpace(doc, partition);
-        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(doc, partition, world), world, record);
+        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(doc, partition, world), world, record, notices);
     }
 
     public static TakeoffPartitionResult MaterializePartition(
         Document doc,
         TakeoffPartitionRequest request,
         Pe.Revit.Partition.PartitionAnswer answer,
-        Pe.Revit.Space.World? world = null) =>
-        MaterializePartition(doc, request, answer, world, RoomsRegionRecord.Stage(doc, request.Replacing));
+        Pe.Revit.Space.World? world = null, OwnerBlobNotices? notices = null) =>
+        MaterializePartition(doc, request, answer, world, RoomsRegionRecord.Stage(doc, request.Replacing), notices);
 
     private static void ValidateRunId(string runId)
     {
@@ -159,7 +160,7 @@ public static class TakeoffAtlas
     }
 
     private static TakeoffPartitionResult MaterializePartition(Document doc, TakeoffPartitionRequest request,
-        Pe.Revit.Partition.PartitionAnswer answer, Pe.Revit.Space.World? world, RoomsRegionRecord record)
+        Pe.Revit.Partition.PartitionAnswer answer, Pe.Revit.Space.World? world, RoomsRegionRecord record, OwnerBlobNotices? notices)
     {
         ValidateRunId(request.RunId);
         Action<string> log = static _ => { };
@@ -201,7 +202,7 @@ public static class TakeoffAtlas
             doc, view, record, elevation, request.ZoneUniqueId, request.RunId, rooms, residues, log));
         doc.Regenerate();
         RegionMeasurements.Measure(doc, view, record, request.ZoneUniqueId, request.RunId, world);
-        record.Save(doc, replacing: request.Replacing);
+        record.Save(doc, replacing: request.Replacing, notices: notices);
 
         var acc = answer.Accounting;
         return new TakeoffPartitionResult(
@@ -260,7 +261,7 @@ public static class TakeoffAtlas
     public static IReadOnlyList<TakeoffWriteResult> LinkRhvacBatch(
         Document doc,
         TakeoffRhvacLinksRequest request,
-        bool commit = true)
+        bool commit = true, OwnerBlobNotices? notices = null)
     {
         if (request.Writes.Count == 0) throw new InvalidOperationException("RHVAC link batch is empty");
         if (request.Writes.Select(w => w.ElementId).Distinct().Count() != request.Writes.Count)
@@ -278,7 +279,7 @@ public static class TakeoffAtlas
             string blob = next.ToJson();
             results.Add(new(write.ElementId, fr.UniqueId, next.Zone, Encoding.UTF8.GetByteCount(blob), blob));
         }
-        if (commit) record.Save(doc, replacing: request.Replacing);
+        if (commit) record.Save(doc, replacing: request.Replacing, notices: notices);
         else record.BeforeMutation(() => true);
         return results;
     }

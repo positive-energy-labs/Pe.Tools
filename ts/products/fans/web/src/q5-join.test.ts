@@ -1,6 +1,6 @@
 import { beforeAll, expect, test } from "vite-plus/test";
 import { applyPatches } from "../../../../packages/agent-contracts/src/route-doc.ts";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { fansRouteState } from "@pe/fans-contract/fans";
 import { editPatches } from "@pe/fans-domain/calc/index";
 import { DUCTS_FIXES } from "./calc/closer.ts";
@@ -29,7 +29,13 @@ test("Q5: a join patch issued from the fans route does not land in Ducts Work", 
   // The same patch lands in Ducts Work, so the path is typed end to end on /ducts.
   const envelope = <D>(doc: D) => ({ version: 1 as const, revision: 0, doc });
   expect(
-    applyPatches(ductsRouteState, envelope(ductsRouteState.schema.parse({})), "human", patches, 0),
+    applyPatches(
+      ductSystems.work,
+      envelope(ductSystems.work.schema.parse({})),
+      "human",
+      patches,
+      0,
+    ),
   ).toMatchObject({ ok: true });
   // From /fans it has three doors, and each is shut.
   expect(edits.input.safeParse({ joins }).success).toBe(false);

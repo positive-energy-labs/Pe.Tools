@@ -2,7 +2,7 @@ import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./src/bindings.ts";
 import { hostRead } from "@pe/agent-contracts/route";
-import { fansDocumentSchema, fansRouteState } from "@pe/fans-contract/fans";
+import { fansDocumentSchema, fansRouteState, fanWriteScopeMessage } from "@pe/fans-contract/fans";
 import { product, fansCalcEditsSchema, fanEditPatches } from "@pe/fans-contract/product";
 import { FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
 import { split } from "@pe/web-kernel/route";
@@ -103,6 +103,26 @@ export const module = screen(
       losses: {
         handle: handle("sheet.apply"),
         label: "Write to Revit",
+        stageForPlan: ({ page, value, doc }) => {
+          if (doc?.writeIntent.edit?.value?.walk) return;
+          const rows = value?.rows ?? [];
+          const fan = page.fan;
+          const port =
+            fan.kind === "all"
+              ? rows.length === 1
+                ? rows[0]
+                : undefined
+              : fan.ids.length === 1
+                ? rows.find((row) => stableFanKey(row) === fan.ids[0])
+                : undefined;
+          if (!port) throw Error(fanWriteScopeMessage);
+          return {
+            pane: fansPanes.inputs,
+            path: ["writeIntent"],
+            value: { walk: { unitId: port.unitId, portIndex: port.portIndex } },
+            label: "Write scope",
+          };
+        },
         present: (result, { value: data, doc: work }) =>
           presentLosses(result, {
             page: { stage: "calc" },
