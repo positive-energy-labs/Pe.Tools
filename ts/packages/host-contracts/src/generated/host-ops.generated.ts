@@ -11294,6 +11294,8 @@ export namespace RoomsTrace {
     export interface Response {
       runId: string;
       zones: RoomsZoneTrace[];
+      originalIssue?: null | string;
+      missingOriginals?: string[] | null;
     }
     export interface RoomsZoneTrace {
       zoneUniqueId: string;
@@ -11917,6 +11919,7 @@ export namespace TakeoffsAdopt {
     }
     export interface TakeoffAdoptItem {
       elementId: number;
+      uniqueId: string;
       name: string;
       systemTag: string;
     }
@@ -12136,6 +12139,48 @@ export namespace TakeoffsRhvacLinks {
     }
     export interface TakeoffRhvacLinkWrite {
       elementId: number;
+      uniqueId: string;
+      link: TakeoffRhvacLink;
+    }
+    export interface TakeoffRhvacLink {
+      identifier: number;
+      fileIdentity: string;
+      syncedAt: string;
+      lastSyncedSqft: number;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
+    }
+  }
+  export namespace Res {
+    export interface Response {
+      writes: TakeoffWriteResult[];
+    }
+    export interface TakeoffWriteResult {
+      elementId: number;
+      uniqueId: string;
+      zoneUniqueId?: null | string;
+      bytes: number;
+      blob: string;
+    }
+  }
+}
+
+/** Check that the proposed RHVAC links fit the staged Rooms record without writing. */
+export namespace TakeoffsRhvacLinksPreflight {
+  export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
+    export interface Request {
+      writes: TakeoffRhvacLinkWrite[];
+      replacing?: null | OwnerBlobReplacement;
+    }
+    export interface TakeoffRhvacLinkWrite {
+      elementId: number;
+      uniqueId: string;
       link: TakeoffRhvacLink;
     }
     export interface TakeoffRhvacLink {
@@ -12427,6 +12472,7 @@ export interface HostOps {
   "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
   "takeoffs.record-replacements": { request: TakeoffsRecordReplacements.Req.Request; response: TakeoffsRecordReplacements.Res.Response };
   "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
+  "takeoffs.rhvac-links.preflight": { request: TakeoffsRhvacLinksPreflight.Req.Request; response: TakeoffsRhvacLinksPreflight.Res.Response };
   "takeoffs.snapshot": { request: TakeoffsSnapshot.Req.Request; response: TakeoffsSnapshot.Res.Response };
 }
 
@@ -12533,6 +12579,7 @@ export const hostOpKeys = [
   "takeoffs.partition",
   "takeoffs.record-replacements",
   "takeoffs.rhvac-links",
+  "takeoffs.rhvac-links.preflight",
   "takeoffs.snapshot",
 ] as const satisfies readonly (keyof HostOps)[];
 
@@ -12639,5 +12686,6 @@ export const hostOpSafety = {
   "takeoffs.partition": {"costTier":"Mutation","subject":"Region","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "takeoffs.record-replacements": {"costTier":"Bounded","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":true},
   "takeoffs.rhvac-links": {"costTier":"Mutation","subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true},
+  "takeoffs.rhvac-links.preflight": {"costTier":"Bounded","subject":"Elements","touches":"Metadata","effect":"Read","cardinality":"One","internal":true},
   "takeoffs.snapshot": {"costTier":"Bounded","subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
 } as const satisfies Record<keyof HostOps, { costTier: string; subject: string; touches: string; effect: string; cardinality: string; internal: boolean }>;

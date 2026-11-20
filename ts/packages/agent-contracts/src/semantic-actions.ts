@@ -20,7 +20,12 @@ import { isReadEffect } from "@pe/host-contracts/contracts";
 
 import type { Command } from "./command.ts";
 export type { ActionNeed } from "./command.ts";
-const item = z.object({ elementId: z.number().int(), name: z.string(), systemTag: z.string() });
+const item = z.object({
+  elementId: z.number().int(),
+  uniqueId: z.string().min(1),
+  name: z.string(),
+  systemTag: z.string(),
+});
 const point = z.tuple([z.number(), z.number()]);
 const loop = z.array(point).min(3);
 const roomNumber = z.number().optional();
@@ -58,7 +63,11 @@ const definitions = {
     dirties: ["snapshot", "takeoff-views"],
   },
   "takeoffs.sync": {
-    native: ["takeoffs.record-replacements", "takeoffs.rhvac-links"],
+    native: [
+      "takeoffs.record-replacements",
+      "takeoffs.rhvac-links.preflight",
+      "takeoffs.rhvac-links",
+    ],
     says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
     needs: "project-document",
     effect: "command",

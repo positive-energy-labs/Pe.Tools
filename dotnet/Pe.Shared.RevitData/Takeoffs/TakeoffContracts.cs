@@ -65,7 +65,7 @@ public sealed record TakeoffSnapshotResponse(Reading Reading, TakeoffSnapshotDat
 public sealed record TakeoffCandidatesRequest(string View);
 public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Regions);
 
-public sealed record TakeoffAdoptItem(long ElementId, string Name, string SystemTag);
+public sealed record TakeoffAdoptItem(long ElementId, string UniqueId, string Name, string SystemTag);
 public sealed record TakeoffRecordReplacements(OwnerBlobReplacement? Regions, OwnerBlobReplacement? Registry);
 public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Items,
     OwnerBlobReplacement? Replacing = null, OwnerBlobReplacement? ReplacingRegistry = null);
@@ -135,7 +135,7 @@ public sealed record TakeoffRhvacLink(
     string FileIdentity,
     string SyncedAt,
     double LastSyncedSqft);
-public sealed record TakeoffRhvacLinkWrite(long ElementId, TakeoffRhvacLink Link);
+public sealed record TakeoffRhvacLinkWrite(long ElementId, string UniqueId, TakeoffRhvacLink Link);
 public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes, OwnerBlobReplacement? Replacing = null);
 public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Writes);
 
@@ -237,7 +237,8 @@ public sealed record RoomsZoneTrace(string ZoneUniqueId, string Label, RoomsTrac
 
 // RunId null reads the view's latest committed partition run.
 public sealed record RoomsTraceRequest(long View, string? RunId = null);
-public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones);
+public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones,
+    string? OriginalIssue = null, IReadOnlyList<string>? MissingOriginals = null);
 
 /// <summary>Geometry scope. Empty scope reads only the geometry-free roster.</summary>
 public sealed record TakeoffReadRequest(IReadOnlyList<string>? Views = null, IReadOnlyList<string>? ZoneUniqueIds = null);

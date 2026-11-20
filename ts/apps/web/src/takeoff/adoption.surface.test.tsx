@@ -176,7 +176,12 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     const doc = j.mount.owner()!.doc;
     expect(commands["takeoffs.adopt"].workIntent.derive(doc)).toEqual({
       views: [
-        { view: "Zoning plan", items: [{ elementId: 21, name: "West office", systemTag: "" }] },
+        {
+          view: "Zoning plan",
+          items: [
+            { elementId: 21, uniqueId: "office-zone-00000015", name: "West office", systemTag: "" },
+          ],
+        },
       ],
     });
     await j.ready();

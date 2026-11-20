@@ -13,6 +13,7 @@ import {
 } from "@pe/host-internal/command-executor";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
+import { win32 } from "node:path";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
@@ -488,7 +489,10 @@ export function takeoffExecutors(
           if (inserts.some(({ zone }) => !zone.tags[0]))
             throw refused("Every inserted room requires a system tag");
           const replacement = replacing(execution.prepared);
-          if (inserts.length && replacement) throw refused(replacement.reason);
+          if (inserts.length && replacement)
+            throw refused(
+              `${replacement.reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.`,
+            );
           const recordedFile = execution.recorded("file", "rhvac.sync");
           const request: RhvacSyncRequest = recordedFile
             ? (recordedFile.input as { request: RhvacSyncRequest }).request
@@ -558,6 +562,22 @@ export function takeoffExecutors(
                   deleteUntouchedSeedRoom: inserts.length > 0,
                 } satisfies RhvacSyncRequest;
               });
+          const syncedAt = new Date().toISOString();
+          if (inserts.length && !recordedFile) {
+            // Jet assigns a signed int and the file identity is the input basename plus a 16-digit hex stamp.
+            yield* nativeStep(bridge, target, "takeoffs.rhvac-links.preflight", {
+              writes: inserts.map(({ room }) => ({
+                elementId: room.elementId!,
+                uniqueId: room.guid,
+                link: {
+                  identifier: -2147483648,
+                  fileIdentity: `${win32.basename(input.path)}#${"0".repeat(16)}`,
+                  syncedAt,
+                  lastSyncedSqft: room.sqft,
+                },
+              })),
+            }).pipe(Effect.mapError((error) => refused(error.message)));
+          }
           const syncFile = deps.syncFile;
           const expectedVersion = input.fileVersion as string;
           const result = yield* execution.step(
@@ -579,10 +599,11 @@ export function takeoffExecutors(
               throw Error("RHVAC insertion result omitted a room identity");
             return {
               elementId: room.elementId!,
+              uniqueId: room.guid,
               link: {
                 identifier,
                 fileIdentity,
-                syncedAt: new Date().toISOString(),
+                syncedAt,
                 lastSyncedSqft: room.sqft,
               },
             };

@@ -31,6 +31,7 @@ const RegionBlob = Schema.Struct({
   sourceRoomId: RunKey,
   SourceRoomId: RunKey,
   /** `Pe.Revit.Partition.Room`: the enum is a number, a string from a string-enum writer. */
+  originalTrace: RunKey,
   partition: Schema.optionalKey(
     Schema.NullOr(
       Schema.Struct({
@@ -46,6 +47,7 @@ const Region = Schema.toType(
     runId: Schema.optionalKey(Schema.String),
     sourceRoomId: Schema.optionalKey(Schema.String),
     partition: RegionBlob.fields.partition,
+    originalTrace: RunKey,
   }),
 );
 export const RegionProvenance = Schema.fromJsonString(
@@ -57,6 +59,7 @@ export const RegionProvenance = Schema.fromJsonString(
         return {
           ...(runId ? { runId } : {}),
           ...(sourceRoomId ? { sourceRoomId } : {}),
+          ...(blob.originalTrace ? { originalTrace: blob.originalTrace } : {}),
           ...(blob.partition === undefined ? {} : { partition: blob.partition }),
         };
       }),
@@ -139,7 +142,9 @@ export function projectTakeoffSnapshot(
         const value = Schema.decodeUnknownSync(RegionProvenance)(item.blob);
         return {
           id: item.guid,
-          reason: disposition(value.partition?.disposition) === "void" ? "void" : "held",
+          reason:
+            originalIssue(value) ??
+            (disposition(value.partition?.disposition) === "void" ? "void" : "held"),
           rawSqft: item.sqft,
           label: centroid(item.outer),
           outer: item.outer,
@@ -172,7 +177,9 @@ export function projectTakeoffSnapshot(
       name,
       rooms,
       residues,
-      heldSqft: residues.reduce((sum, item) => sum + item.rawSqft, 0),
+      heldSqft: residues
+        .filter((item) => item.reason !== ORIGINAL_UNAVAILABLE)
+        .reduce((sum, item) => sum + item.rawSqft, 0),
       runs: [],
       driftSqft: null, // Coverage drift has not been measured by this projection.
       savedReview: savedReview(
@@ -207,6 +214,10 @@ export function projectTakeoffSnapshot(
   };
 }
 
+const ORIGINAL_UNAVAILABLE = "original not on this machine";
+const originalIssue = (value: { originalTrace?: string | null; partition?: unknown }) =>
+  value.originalTrace && !value.partition ? ORIGINAL_UNAVAILABLE : null;
+
 const DISPOSITIONS = ["accepted", "held", "void", "excluded"] as const;
 
 function savedReview(
@@ -237,7 +248,7 @@ function savedReview(
         runId: value.runId!,
         sourceRoomId: value.sourceRoomId ?? "",
         disposition: disposition(value.partition?.disposition),
-        reason: value.partition?.reason ?? null,
+        reason: originalIssue(value) ?? value.partition?.reason ?? null,
       },
       id: region.guid,
       kind: region.role === "held-residue" ? ("residue" as const) : ("room" as const),
@@ -245,7 +256,8 @@ function savedReview(
       reason: [
         `measurements ${region.analysis?.state ?? "unmeasured"}`,
         region.analysis?.hold,
-        `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.runId}/${value.sourceRoomId})`,
+        originalIssue(value) ??
+          `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.runId}/${value.sourceRoomId})`,
       ]
         .filter(Boolean)
         .join(" | "),
@@ -293,6 +305,7 @@ function room(region: LiveRegion): ModelRoom {
     sourceSqft?: number;
     flags?: string[];
     r10?: ModelRoom["r10"];
+    originalTrace?: string;
     partition?: { floorZ?: number | null; ceilingZ?: number | null };
   };
   const runId = value.RunId ?? value.runId;
@@ -320,7 +333,12 @@ function room(region: LiveRegion): ModelRoom {
         : 0,
     label: centroid(region.outer),
     flags: [...measurementFlags, ...(value.flags ?? []), ...(value.r10 ? ["r10-not-open"] : [])],
-    provenance: { runId: analysis?.runId ?? runId, sourceRoomId, sourceSqft },
+    provenance: {
+      runId: analysis?.runId ?? runId,
+      sourceRoomId,
+      sourceSqft,
+      originalIssue: originalIssue(value) ?? undefined,
+    },
     r10: value.r10 ?? null,
     data: null,
     outer: region.outer,

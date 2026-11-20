@@ -58,6 +58,36 @@ public class RoomsRunTracesTests
     }
 
     [Test]
+    public void Missing_and_damaged_originals_are_visible_and_a_later_save_repairs_the_digest()
+    {
+        var root = Directory.CreateTempSubdirectory("pe-rooms-damaged-original-").FullName;
+        try
+        {
+            var record = new RoomsRegionRecord();
+            var original = new Pe.Revit.Partition.Room(4, Pe.Revit.Partition.Disposition.Void, "no-floor",
+                [0, 0, 10, 0, 0, 10, 0, 0], 50, 2, 2, 1, null, null, []);
+            var json = TakeoffJson.Serialize(original);
+            var digest = RoomsRunTraces.Hash(json);
+            var provenance = RegionProvenance.Default with { OriginalTrace = digest };
+            Assert.That(record.ProjectOriginal(RegionProvenance.Default, root).OriginalUnavailable, Is.False);
+            Assert.That(record.ProjectOriginal(provenance, root).OriginalUnavailable, Is.True);
+
+            RoomsRunTraces.KeepOriginal(root, record.TraceId, json);
+            var path = Directory.GetFiles(root, "*.json", SearchOption.AllDirectories).Single();
+            const string damaged = "damaged evidence";
+            File.WriteAllText(path, damaged);
+            Assert.That(record.ProjectOriginal(provenance, root).OriginalUnavailable, Is.True);
+            RoomsRunTraces.KeepOriginal(root, record.TraceId, json);
+
+            Assert.That(record.ProjectOriginal(provenance, root).Partition?.Disposition,
+                Is.EqualTo(Pe.Revit.Partition.Disposition.Void));
+            Assert.That(File.ReadAllText(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.damaged-*").Single()),
+                Is.EqualTo(damaged));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Test]
     public void A_committed_reference_recovers_failed_promotion_and_repeated_reads()
     {
         const string view = "view-a", zone = "zone-00000042";
@@ -72,8 +102,8 @@ public class RoomsRunTracesTests
             using (var pending = new RoomsRunTraces.Pending(root, doc, view, runId))
             {
                 pending.Write(zone, new JObject { ["label"] = "Z1" });
-                record.Regions[zone] = new(TakeoffCarriers.RoleZoningRegion, new(),
-                    RegionProvenance.Default with { TraceRun = pending.Reference });
+                record.Regions[zone] = new(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default);
+                record.Runs[view] = pending.Reference;
                 destination = Path.Combine(folder, pending.Reference.Attempt);
                 File.WriteAllText(destination, "obstruct promotion");
                 pending.MarkCommitted();
@@ -89,7 +119,11 @@ public class RoomsRunTracesTests
 
             var reopened = RoomsRegionRecord.Decode(OwnerBlob.Decode(RoomsRegionRecord.Owner, File.ReadAllText(renamedPath))).OrThrow()!;
             Assert.That(reopened.TraceId, Is.EqualTo(doc));
-            var committed = reopened[zone]!.Provenance.TraceRun;
+            reopened.Prune(_ => false);
+            var pruned = RoomsRegionRecord.Decode(OwnerBlob.Decode(RoomsRegionRecord.Owner,
+                OwnerBlob.Encode(RoomsRegionRecord.Owner, reopened.ToData()))).OrThrow()!;
+            Assert.That(pruned.Regions, Is.Empty, "The first zone was deleted");
+            var committed = pruned.Runs[view];
             Assert.That(committed, Is.Not.Null);
             Assert.That(RoomsRunTraces.Find(root, doc, view, runId, null), Is.Empty);
             Assert.That(RoomsRunTraces.Find(root, "another project", view, runId, committed), Is.Empty);

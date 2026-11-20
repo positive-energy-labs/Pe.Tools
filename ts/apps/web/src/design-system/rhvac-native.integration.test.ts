@@ -113,6 +113,7 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
         ]),
         invoke: (key: string, input: unknown) =>
           Effect.sync(() => {
+            if (key === "takeoffs.rhvac-links.preflight") return { value: { writes: [] } };
             if (key !== "takeoffs.rhvac-links") throw Error(`Unexpected native operation ${key}`);
             nativeLinks.push(input);
             return {

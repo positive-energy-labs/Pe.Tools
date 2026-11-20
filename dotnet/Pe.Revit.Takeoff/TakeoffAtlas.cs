@@ -101,6 +101,7 @@ public static class TakeoffAtlas
         {
             var fr = doc.GetElement(item.ElementId.ToElementId()) as FilledRegion
                      ?? throw new InvalidOperationException($"element {item.ElementId} is not a FilledRegion");
+            RequireRegionIdentity(item.ElementId, item.UniqueId, fr.UniqueId);
             if (fr.OwnerViewId != view.Id)
                 throw new InvalidOperationException($"FilledRegion {item.ElementId} is not on '{request.View}'");
             var row = record[fr.UniqueId] ?? new RegionRow(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default);
@@ -136,7 +137,7 @@ public static class TakeoffAtlas
         var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         if (zone.UniqueId != request.ZoneUniqueId || record[zone.UniqueId]?.Role != TakeoffCarriers.RoleZoningRegion
             || zone.OwnerViewId != FindView(doc, request.View).Id)
-            throw new InvalidOperationException(record.Refusal ?? "Partition target does not match the adopted zone identity and view");
+            throw new InvalidOperationException(record.Recovery ?? "Partition target does not match the adopted zone identity and view");
         ValidateRunId(request.RunId);
         // The partition's own scope also holds every room label the measurement probes: rooms lie inside their zone.
         var partition = new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion);
@@ -258,7 +259,8 @@ public static class TakeoffAtlas
 
     public static IReadOnlyList<TakeoffWriteResult> LinkRhvacBatch(
         Document doc,
-        TakeoffRhvacLinksRequest request)
+        TakeoffRhvacLinksRequest request,
+        bool commit = true)
     {
         if (request.Writes.Count == 0) throw new InvalidOperationException("RHVAC link batch is empty");
         if (request.Writes.Select(w => w.ElementId).Distinct().Count() != request.Writes.Count)
@@ -269,14 +271,22 @@ public static class TakeoffAtlas
         {
             var fr = doc.GetElement(write.ElementId.ToElementId()) as FilledRegion
                 ?? throw new InvalidOperationException($"element {write.ElementId} is not a FilledRegion");
-            var row = record[fr.UniqueId] ?? throw new InvalidOperationException(record.Refusal ?? $"FilledRegion {write.ElementId} is not tracked");
+            RequireRegionIdentity(write.ElementId, write.UniqueId, fr.UniqueId);
+            var row = record[fr.UniqueId] ?? throw new InvalidOperationException(record.Recovery ?? $"FilledRegion {write.ElementId} is not tracked");
             var next = row.Provenance with { Rhvac = write.Link };
             record.Regions[fr.UniqueId] = row with { Provenance = next };
             string blob = next.ToJson();
             results.Add(new(write.ElementId, fr.UniqueId, next.Zone, Encoding.UTF8.GetByteCount(blob), blob));
         }
-        record.Save(doc, replacing: request.Replacing);
+        if (commit) record.Save(doc, replacing: request.Replacing);
+        else record.BeforeMutation(() => true);
         return results;
+    }
+
+    internal static void RequireRegionIdentity(long elementId, string expectedUniqueId, string actualUniqueId)
+    {
+        if (expectedUniqueId != actualUniqueId)
+            throw new InvalidOperationException($"FilledRegion {elementId} no longer matches UniqueId '{expectedUniqueId}'.");
     }
 
     internal static ViewPlan FindView(Document doc, string name) =>

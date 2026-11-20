@@ -44,8 +44,8 @@ public sealed record RegionProvenance(
 
     public static RegionProvenance Default => new(null, Rooms.RunDrawn, "", 0);
 
-    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-    internal RoomsTraceRun? TraceRun { get; init; }
+    [JsonIgnore]
+    internal bool OriginalUnavailable => this.OriginalTrace != null && this.Partition == null;
 
     // The data text, fail-closed. The envelope version is the only gate: data that holds its own version, under
     // either spelling an earlier build wrote (`version` on a region, `v` on a zone), is refused.

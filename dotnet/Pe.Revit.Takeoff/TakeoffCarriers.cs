@@ -62,9 +62,6 @@ public static class TakeoffCarriers
         else _ = OwnerBlobStore.Write(document, owner, data, replacing);
     }
 
-    public static void WriteRegistry(Document document, SystemRegistry registry) =>
-        _ = OwnerBlobStore.WriteWithoutPreview(document, SystemRegistry.Owner, registry.ToData());
-
 }
 
 public sealed record RoomFields(
@@ -90,6 +87,9 @@ public sealed class RoomsRegionRecord
         "Pe Rooms roles, fields and provenance keyed by FilledRegion UniqueId.") { ValidateData = read => Decode(read).Refusal };
 
     internal string? Refusal { get; private set; }
+    internal string? Recovery => this.Refusal is { } reason
+        ? $"{reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it." : null;
+    internal Dictionary<string, RoomsTraceRun> Runs { get; private init; } = new(StringComparer.Ordinal);
 
     internal string TraceId { get; private init; } = Guid.NewGuid().ToString("N");
 
@@ -107,7 +107,11 @@ public sealed class RoomsRegionRecord
         var traceId = data["traceId"] is JValue { Type: JTokenType.String } value ? (string?)value : null;
         if (!Guid.TryParseExact(traceId, "N", out var id) || id == Guid.Empty)
             throw new InvalidOperationException("Rooms data needs a stable trace id");
-        var result = new RoomsRegionRecord { TraceId = traceId! };
+        var result = new RoomsRegionRecord { TraceId = traceId!,
+            Runs = data["runs"]?.ToObject<Dictionary<string, RoomsTraceRun>>() ?? new(StringComparer.Ordinal) };
+        if (result.Runs.Any(pair => pair.Value is not { RunId.Length: > 0, Zones: >= 0 } run
+            || run.View != pair.Key || !Guid.TryParseExact(run.Attempt, "N", out _)))
+            throw new InvalidOperationException("Invalid Rooms view run reference");
         foreach (var property in regions.Properties())
         {
             var row = property.Value.ToObject<RegionRow>();
@@ -123,6 +127,8 @@ public sealed class RoomsRegionRecord
     {
         var record = Stage(OwnerBlobStore.Read(document, Owner), replacing);
         record.Prune(id => document.GetElement(id) is FilledRegion);
+        foreach (var view in record.Runs.Keys.Where(id => document.GetElement(id) is not ViewPlan).ToList())
+            record.Runs.Remove(view);
         return record;
     }
 
@@ -130,7 +136,9 @@ public sealed class RoomsRegionRecord
     {
         var read = Decode(stored);
         var record = read.Value ?? new RoomsRegionRecord { Refusal = read.Refusal };
-        if (read.Refusal != null || replacing != null)
+        if (record.Recovery != null && replacing == null)
+            throw new InvalidOperationException($"Preview before replacing '{Owner.Name}': {record.Recovery}");
+        if (replacing != null)
             TakeoffCarriers.CheckReplacement(stored, record.ToData(), replacing);
         return record;
     }
@@ -141,15 +149,30 @@ public sealed class RoomsRegionRecord
             this.Regions.Remove(id);
     }
 
-    internal JObject ToData() => TakeoffJson.Object(new { this.TraceId, this.Regions });
+    internal JObject ToData() => TakeoffJson.Object(new { this.TraceId, this.Regions, this.Runs });
 
-    private static void Validate(JObject data) => _ = OwnerBlob.Encode(Owner, data);
-
-    internal T BeforeMutation<T>(Func<T> begin)
+    // Project future rows with a conservative UniqueId length and the archived form they actually store.
+    internal T BeforeMutation<T>(Func<T> begin, IEnumerable<RegionRow>? additions = null)
     {
-        Validate(this.ToData());
+        var data = this.ToData();
+        var regions = (JObject)data["regions"]!;
+        int index = 0;
+        foreach (var (id, row) in this.Regions.Where(pair => pair.Value.Provenance.Partition != null))
+            regions[id] = TakeoffJson.Object(Archive(row));
+        foreach (var row in additions ?? [])
+            regions[(++index).ToString("D64")] = TakeoffJson.Object(Archive(row));
+        _ = OwnerBlob.Encode(Owner, data);
         return begin();
     }
+
+    internal static readonly string PendingHash = new('0', 64);
+
+    private static RegionRow Archive(RegionRow row, string? digest = null, string? geometryHash = null) =>
+        row.Provenance.Partition == null ? row : row with { Provenance = row.Provenance with
+        {
+            Partition = null, OriginalTrace = digest ?? PendingHash,
+            GeometryHash = row.Provenance.GeometryHash ?? geometryHash ?? PendingHash,
+        } };
 
     internal void Save(Document document, string? traceRoot = null, OwnerBlobReplacement? replacing = null)
     {
@@ -157,20 +180,15 @@ public sealed class RoomsRegionRecord
         var originals = new List<string>();
         foreach (var (id, row) in this.Regions.Where(pair => pair.Value.Provenance.Partition != null).ToList())
         {
-            var provenance = row.Provenance;
-            var json = TakeoffJson.Serialize(provenance.Partition!);
+            var json = TakeoffJson.Serialize(row.Provenance.Partition!);
             originals.Add(json);
-            var hash = provenance.GeometryHash ?? Rooms.GeometryHash(TakeoffAtlas.Boundaries((FilledRegion)document.GetElement(id)));
-            this.Regions[id] = row with { Provenance = provenance with
-            {
-                Partition = null, OriginalTrace = RoomsRunTraces.Hash(json), GeometryHash = hash,
-            } };
+            var hash = row.Provenance.GeometryHash ?? Rooms.GeometryHash(TakeoffAtlas.Boundaries((FilledRegion)document.GetElement(id)));
+            this.Regions[id] = Archive(row, RoomsRunTraces.Hash(json), hash);
         }
-        var data = this.ToData();
-        Validate(data);
+        this.BeforeMutation(() => true);
         foreach (var json in originals)
             RoomsRunTraces.KeepOriginal(traceRoot ?? RoomsRunTraces.Root, this.TraceId, json);
-        TakeoffCarriers.Save(document, Owner, data, replacing);
+        TakeoffCarriers.Save(document, Owner, this.ToData(), replacing);
     }
 
     internal RegionProvenance ProjectOriginal(RegionProvenance provenance, string? traceRoot = null) =>

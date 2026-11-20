@@ -207,9 +207,12 @@ test.each([
   ["rooms.write", {}],
   ["rooms.merge", recordedInput("fresh-rooms.merge")],
   ["takeoffs.sync", {}],
+  ["takeoffs.sync with full Rooms record", {}],
 ] as const)(
   "JZ carrier commands run real declarations and guarded native dispatch: %s",
-  async (commandKey, intent) => {
+  async (scenario, intent) => {
+    const fullRecord = scenario === "takeoffs.sync with full Rooms record";
+    const commandKey = fullRecord ? "takeoffs.sync" : scenario;
     const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
     const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
@@ -237,6 +240,7 @@ test.each([
     );
     const socket = await native.connect();
     const { calls } = native;
+    if (fullRecord) native.reportLinkCapacityRefusal("the Rooms blob exceeds the cap");
     const ref = socket.target;
     const path = address("C:/model.rvt");
     const { bridge, journal } = native;
@@ -290,7 +294,9 @@ test.each([
       const response = await post({ id, key, target: { kind: "document", ref }, input });
       expect([200, 202], await response.clone().text()).toContain(response.status);
       const receipt = await journal.wait(id);
-      expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+      expect(receipt.state, JSON.stringify(receipt)).toBe(
+        fullRecord && key === "takeoffs.sync" ? "failed" : "succeeded",
+      );
       return receipt;
     };
     try {
@@ -343,10 +349,34 @@ test.each([
         expect(plan).toMatchObject({ result: { previewOnly: true } });
         expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
       }
-      await invoke(commandKey, { work });
+      const applied = await invoke(commandKey, { work });
+      if (fullRecord) {
+        expect(applied).toMatchObject({
+          state: "failed",
+          error: expect.stringContaining("exceeds the cap"),
+        });
+        expect(applied.steps.some((step) => step.kind === "file")).toBe(false);
+        expect(synced).toBe(false);
+        expect(calls.map((call) => call.key)).toEqual(["takeoffs.rhvac-links.preflight"]);
+        return;
+      }
       if (commandKey === "takeoffs.sync") {
         expect(synced).toBe(true);
-        expect(calls).toEqual([
+        expect(calls[0]).toMatchObject({
+          key: "takeoffs.rhvac-links.preflight",
+          input: {
+            writes: [
+              expect.objectContaining({
+                uniqueId: expect.any(String),
+                link: expect.objectContaining({
+                  identifier: -2147483648,
+                  fileIdentity: "recorded.r10#0000000000000000",
+                }),
+              }),
+            ],
+          },
+        });
+        expect(calls.slice(1)).toEqual([
           {
             key: "takeoffs.rhvac-links",
             action: commandKey,
@@ -354,6 +384,7 @@ test.each([
               writes: [
                 {
                   elementId: 21,
+                  uniqueId: expect.any(String),
                   link: expect.objectContaining({
                     identifier: 101,
                     fileIdentity: "recorded.r10#recorded",
@@ -380,12 +411,15 @@ test.each([
       if (initialize || adopt)
         expect(calls[0]).toEqual({
           key: "takeoffs.initialize-carrier",
-          input: { stage: initialize ? intent.stage : "Adoption" },
+          input: { stage: initialize ? authored.stage : "Adoption" },
           action: commandKey,
         });
       expect(calls.map((row) => row.key)).toEqual(
-        initialize ? ["takeoffs.initialize-carrier"]
-          : adopt ? ["takeoffs.initialize-carrier", commandKey] : [commandKey],
+        initialize
+          ? ["takeoffs.initialize-carrier"]
+          : adopt
+            ? ["takeoffs.initialize-carrier", commandKey]
+            : [commandKey],
       );
       if (commandKey === "rooms.write") {
         expect(calls[0]).toEqual({

@@ -123,7 +123,7 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(() => Rooms.Partition(document, new(viewId)),
                 Throws.InvalidOperationException.With.Message.Contains(evidence.Reason));
             Assert.That(() => Rooms.Write(document, new([new("unavailable", Name: "Office")], evidence)),
-                Throws.InvalidOperationException.With.Message.Contains(evidence.Reason));
+                Throws.InvalidOperationException.With.Message.Contains(evidence.Reason).And.Message.Contains("rooms.draw"));
 
             using (var tx = new Transaction(document, "Apply the Rooms replacement preview")) {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
@@ -160,7 +160,7 @@ public sealed class OwnerBlobRoundTripTests {
                 var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
                 _ = TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Adoption);
                 Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
-                request = new(view.Name, [new(zone.ElementId, "North", "FC-8")]);
+                request = new(view.Name, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]);
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 
@@ -185,6 +185,13 @@ public sealed class OwnerBlobRoundTripTests {
         }
     }
 
+    private static Guid AdoptRegistry(Document document) {
+        var view = CreateRoomsView(document);
+        var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
+        _ = TakeoffAtlas.AdoptZones(document, new(view.Name, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]));
+        return TakeoffCarriers.ReadRegistry(document).Systems.Single().Guid;
+    }
+
     private static ViewPlan CreateRoomsView(Document document) {
         var level = Level.Create(document, 0);
         var planType = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType))
@@ -199,14 +206,13 @@ public sealed class OwnerBlobRoundTripTests {
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
             var storage = new ParameterLinksProfileStorage();
-            var registry = new SystemRegistry();
-            var system = registry.Register("FC-8");
+            Guid system;
             var pointer = ProjectHomePointer.Create("Projects/2026-014 Chadds Ford").Pointer!;
             using (var transaction = new Transaction(document, "Write every owner blob")) {
                 _ = transaction.Start();
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 3 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
-                TakeoffCarriers.WriteRegistry(document, registry);
+                system = AdoptRegistry(document);
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.True);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.False, "an unchanged value is a no-op");
@@ -226,7 +232,7 @@ public sealed class OwnerBlobRoundTripTests {
                     var profile = storage.Read(doc);
                     Assert.That(profile.Error, Is.Null);
                     Assert.That(profile.Profile!.FormatVersion, Is.EqualTo(ParameterLinkProfile.CurrentFormatVersion));
-                    Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Guid, Is.EqualTo(system.Guid));
+                    Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Guid, Is.EqualTo(system));
                     Assert.That(EnclosureDeclaration.Read(doc).Source, Does.StartWith("declared"));
                     Assert.That(ProjectHomePointer.FromData(OwnerBlobStore.Read(doc, ProjectHomePointer.Owner).Data!).Pointer!.Path, Is.EqualTo(pointer.Path));
                     Assert.That(AutoTagService.Instance.HasSettingsInDocument(doc), Is.True);
@@ -289,13 +295,11 @@ public sealed class OwnerBlobRoundTripTests {
             });
 
             // The first write through each owner's own door replaces the old bytes with an envelope.
-            var registry = new SystemRegistry();
-            _ = registry.Register("FC-8");
             using (var transaction = new Transaction(document, "First write over the old blobs")) {
                 _ = transaction.Start();
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 1 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
-                TakeoffCarriers.WriteRegistry(document, registry);
+                _ = AdoptRegistry(document);
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, ProjectHomePointer.Create("Projects/Chadds").Pointer!.ToData()), Is.True);
                 _ = transaction.Commit();
