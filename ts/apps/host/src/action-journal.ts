@@ -1457,7 +1457,12 @@ export class ActionJournal implements ReceiptReader {
       if (!retirementOnly) {
         located.address = await this.environment?.target?.(admission.target, definition.needs);
         const { work, readWorks } = admission.input;
-        const intent = (definition as { workIntent?: { workspace: boolean } }).workIntent;
+        // A Work command declares whether its Work may be a workspace's (`workIntent.workspace`).
+        const intent = "workIntent" in definition ? definition.workIntent : undefined;
+        const ruled =
+          typeof intent === "object" && intent !== null
+            ? "workspace" in intent && intent.workspace === true
+            : undefined;
         for (const held of [work, ...Object.values(readWorks ?? {})]) {
           const handle = workHandleSchema.safeParse(held);
           if (handle.success)
@@ -1465,7 +1470,7 @@ export class ActionJournal implements ReceiptReader {
               admission.target,
               located.address,
               handle.data,
-              held === work ? intent?.workspace : undefined,
+              held === work ? ruled : undefined,
             );
         }
       }
