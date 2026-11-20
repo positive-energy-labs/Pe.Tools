@@ -14,7 +14,7 @@ import { product, takeoffsWork } from "@pe/rooms-contract/product";
 import { RouteWorkspace } from "@pe/runtime";
 import { checkoutRoot } from "../../../web/checkout-paths.ts";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
-import { fileVersion } from "@pe/rooms-host/rhvac";
+import { fileVersion } from "@pe/host-internal/local-files";
 import { captureStore, settle, testDocumentMarks } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
 import { readRhvacFixture, sdkSessions } from "../native-receipt-fixture.ts";

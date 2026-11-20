@@ -18,7 +18,7 @@ import type { TakeoffCaptures } from "./observation-store.ts";
 import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { lifetime } from "./document-lifetime.ts";
-import { productExecutors, productGateway } from "./product-executors.generated.ts";
+import { productExecutors, type ProductDependencies } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
@@ -35,7 +35,7 @@ import { commands } from "@pe/mcps/product-actions";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies &
-  Parameters<typeof productGateway.commandFiles>[1] &
+  Partial<ProductDependencies> &
   InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
@@ -64,7 +64,7 @@ export function commandRegistry(
   const products = productExecutors(bridge, {
     ...deps,
     captures,
-    rhvac: productGateway.commandFiles(hostOwnership, deps),
+    roots: hostOwnership,
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
@@ -177,7 +177,7 @@ export function bindCommandRuntime(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
   deps: FamilyActionDependencies &
-    Parameters<typeof productGateway.commandFiles>[1] &
+    Partial<ProductDependencies> &
     InstancesActionDependencies & {
       nativeRead?: HostNativeRead["Service"];
       nativeReads?: NativeReadTerminals;

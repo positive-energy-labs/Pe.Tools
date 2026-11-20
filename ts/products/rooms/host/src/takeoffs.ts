@@ -7,7 +7,6 @@ import {
   nativeProcessSchema,
   workAdmissionSchema,
   type Consumed,
-  type DocumentRef,
   type NativeProcess,
 } from "@pe/agent-contracts";
 import {
@@ -20,15 +19,10 @@ import {
   takeoffEditAddress,
   takeoffEditKey,
   type StagedRoomEdit,
-  type TakeoffCapture,
 } from "@pe/rooms-contract/takeoffs";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
-import type {
-  RhvacExtractData,
-  RhvacSyncRequest,
-  RhvacSyncResult,
-} from "@pe/rooms-contract/local-operations";
+import type { RhvacSyncRequest } from "@pe/rooms-contract/local-operations";
 import type { ActionExecution, Step } from "@pe/host-internal/action-execution";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import {
@@ -37,24 +31,19 @@ import {
   refused,
   type CommandContext,
 } from "@pe/host-internal/command-executor";
-import type { applyStaged, buildRhvacInsert } from "./rhvac-ops.ts";
+import type { RhvacOverrides, RhvacRoots } from "./rhvac-ops.ts";
+import { commandFiles } from "./bodies.ts";
+import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import type { CommandBody } from "@pe/host-internal/product";
 import { product, takeoffsWork } from "@pe/rooms-contract/product";
 
 const { commands } = product;
-export type Deps = Parameters<CommandBody>[1] & {
-  captures?: {
-    invalidate(target: DocumentRef): void;
-    saved(id: string): Promise<TakeoffCapture>;
-    savedText(id: string): Promise<{ path: string; text: string }>;
+export type Deps = Parameters<CommandBody>[1] &
+  RhvacOverrides & {
+    captures?: TakeoffCaptures;
+    /** Where the host keeps its checkout and state: the RHVAC file lane runs its scripts from there. */
+    roots?: RhvacRoots;
   };
-  rhvac?: {
-    open(path: string): Step<RhvacExtractData>;
-    sync(request: RhvacSyncRequest, expectedVersion: string): Step<RhvacSyncResult>;
-    applyStaged: typeof applyStaged;
-    buildInsert: typeof buildRhvacInsert;
-  };
-};
 
 /** Admission context is no native field. */
 const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
@@ -224,8 +213,8 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, deps);
         const { input } = ctx.admission;
-        const { captures, rhvac } = deps;
-        if (!captures || !rhvac) throw refused("This host has no RHVAC file lane");
+        const { captures } = deps;
+        if (!captures) throw refused("This host has no RHVAC file lane");
         const capture = await captures.saved(input.captureId);
         if (
           capture.provenance.kind !== "live" ||
@@ -293,7 +282,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         const { process, edits: stagedEdits, decisions, capture } = execution.prepared;
         const submitted = { edits: stagedEdits, decisions };
         const native = nativeFor(ctx, execution, bridge, process);
-        const rhvac = deps.rhvac!;
+        const rhvac = commandFiles(deps);
         return Effect.gen(function* () {
           deps.captures?.invalidate(target);
           const selected = new Set(input.zones);

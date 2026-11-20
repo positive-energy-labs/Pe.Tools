@@ -20,7 +20,7 @@ import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
 import { bindCommandRuntime } from "../../src/command-registry.ts";
 import { bindControl } from "../../src/control.ts";
-import { fileVersion } from "@pe/rooms-host/rhvac";
+import { fileVersion } from "@pe/host-internal/local-files";
 import {
   captureStore,
   settle,

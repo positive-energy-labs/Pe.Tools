@@ -13,7 +13,7 @@ import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
 import type { CellKey, Home } from "./product-homes.ts";
 import { draftCellSchema } from "./draft.ts";
-import type { AnyReadHandle, ReadHandle } from "./handle.ts";
+import type { ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
 import type { RouteGraphWire } from "./route-kernel-data.ts";
 import type { RouteStateSpec } from "./route-state.ts";
@@ -35,6 +35,8 @@ import type { Publication } from "./value.ts";
 const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
+export * from "./product-bodies.ts";
+import type { LocalOperations } from "./product-bodies.ts";
 
 /**
  * One staged value family, with its ADR 0032 value domain; the schema follows from `schemaOf`. The
@@ -328,7 +330,12 @@ export type ProductDeclaration = {
     Record<string, { readonly key: string } & Pick<ProductRoute, "captureSubject" | "demoPlace">>
   >;
   readonly guide?: Guide;
+  readonly http: HttpRoutes;
+  readonly local: LocalOperations;
+  readonly callPolicies: Readonly<Record<string, CallPolicy>>;
 };
+/** A declared HTTP route: the kernel mounts it at its path, so the path is rooted. */
+type HttpRoutes = Readonly<Record<string, HttpRead & { readonly path: `/${string}` }>>;
 type SheetNative = {
   readonly native?: Readonly<Partial<Record<"plan" | "apply", readonly HostOperationKey[]>>>;
 };
@@ -439,7 +446,8 @@ export function product<
   const ToolName extends string = Id,
   const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
-  const Http extends Readonly<Record<string, HttpRead>> = Record<never, never>,
+  const Http extends HttpRoutes = Record<never, never>,
+  const Local extends LocalOperations = Record<never, never>,
 >(declaration: {
   /** The product folder, Work route and default name of its Pea tool. */
   readonly id: Id;
@@ -483,6 +491,8 @@ export function product<
   };
   readonly guide?: Guide;
   readonly http?: Http;
+  /** The product's local operations by catalog key; the host half owes one body each. */
+  readonly local?: Local;
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
 }) {
@@ -516,6 +526,7 @@ export function product<
   return {
     ...declaration,
     http: Object.assign({}, declaration.http),
+    local: Object.assign({}, declaration.local),
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,
     actions: declaration.commands,
@@ -548,32 +559,3 @@ export function product<
     },
   };
 }
-
-type Handle<
-  P extends ProductDeclaration,
-  K extends keyof P["readings"],
-> = P["readings"][K]["handle"];
-/** One body per declared reading and per declared command. The runtime names its own context and executor. */
-type ReadingBody<P extends ProductDeclaration, K extends keyof P["readings"], Context> = (
-  ctx: Context,
-  args: z.output<Handle<P, K>["input"]>,
-) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
-export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
-  readonly readings: {
-    readonly [K in keyof P["readings"]]:
-      | ReadingBody<P, K, Context>
-      | {
-          readonly name: string;
-          readonly input: z.ZodType;
-          readonly output: z.ZodType;
-          readonly contract?: AnyReadHandle;
-          readonly run: ReadingBody<P, K, Context>;
-        };
-  };
-  /** A plan built by `workWriteCommands` is its write's body in the preview phase, so it takes none. */
-  readonly commands: {
-    readonly [K in keyof P["commands"] as K extends `${string}.preview` ? never : K]: Executor;
-  } & (NonNullable<P["sheetWrites"]>["writes"] extends undefined
-    ? unknown
-    : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
-};
