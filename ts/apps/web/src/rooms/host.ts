@@ -38,16 +38,18 @@ export const reads: {
           },
         )
       : await roster();
-    const selected = snapshot.levels.some((level) => level.views.includes(view)) ? view : "";
+    const selected = snapshot.levels.some((level) => level.views.some((plan) => plan.id === view))
+      ? view
+      : null;
     let trace = null,
       traceError = null,
       plan = null,
       planError = null;
-    if (selected) {
+    if (selected !== null) {
       try {
         trace = (
           await ctx.read(native("rooms.trace"), {
-            request: { view },
+            request: { view: selected },
             target: target,
           })
         ).body;
@@ -59,7 +61,7 @@ export const reads: {
         plan = planOf(
           (
             await ctx.read(native("revit.context.view-image"), {
-              request: { target: { name: view }, pixelSize: 8000 },
+              request: { target: { id: selected }, pixelSize: 8000 },
               target,
             })
           ).body,

@@ -1,0 +1,8 @@
+/* The regions table scrolls across its columns, keeping a single row for each region. */
+[data-rooms-regions] [data-table-scroll] {
+  container-name: none;
+}
+
+[data-rooms-regions] [data-table] {
+  min-width: 70rem;
+}

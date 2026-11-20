@@ -61,7 +61,7 @@ const DRAWN = "drawn";
  * this reads provenance: a rerun restamps every machine region it keeps or creates, while locked
  * regions keep their old id, so the newest run is the id most rooms and held regions carry.
  */
-export function newestRun(snapshot: Snapshot, view: string): string | null {
+export function newestRun(snapshot: Snapshot, view: number | null): string | null {
   const counts = new Map<string, number>();
   for (const region of snapshot.regions)
     if (region.view === view && region.role !== "zone" && region.runId !== DRAWN)
@@ -160,7 +160,7 @@ export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
     if (region.role !== "held") return name;
     return `${name} (held${region.reason ? `: ${region.reason}` : ""})`;
   };
-  const lines: { view: string; rank: number; id: string; text: string }[] = [];
+  const lines: { view: number | null; rank: number; id: string; text: string }[] = [];
   for (const [id, cell] of Object.entries(doc.marks)) {
     const mark: Mark | undefined = cell.edit?.value;
     if (!mark) continue;
@@ -179,15 +179,18 @@ export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
     lines.push({ view: mark.anchor.view, rank, id, text: parts.join(" · ") });
   }
   if (!lines.length) return "# Rooms feedback\n\nNo marks.\n";
-  const views = [...new Set(lines.map((line) => line.view))].sort(byText);
+  const views = [...new Set(lines.map((line) => line.view))].sort((a, b) => (a ?? 0) - (b ?? 0));
   const sections = views.map((view) => {
     const body = lines
       .filter((line) => line.view === view)
       .sort((a, b) => a.rank - b.rank || byText(a.id, b.id))
       .map((line) => `- ${line.text}`);
-    return [`## ${view} · newest run ${newestRun(snapshot, view) ?? "none"}`, "", ...body].join(
-      "\n",
-    );
+    const label = snapshot.levels.flatMap((level) => level.views).find((plan) => plan.id === view);
+    return [
+      `## ${label ? `${label.name} · ${label.type}` : "Choose a plan view"} · newest run ${newestRun(snapshot, view) ?? "none"}`,
+      "",
+      ...body,
+    ].join("\n");
   });
   return ["# Rooms feedback", ...sections].join("\n\n") + "\n";
 }
@@ -212,7 +215,7 @@ export interface Card {
 }
 
 /** The inbox for one view: its marks in `CARD_STATES` order, then by id. */
-export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: string): Card[] {
+export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: number | null): Card[] {
   const regions = snapshot.regions.filter((r) => r.view === view && r.role !== "zone");
   const under = ([x = 0, y = 0]: readonly number[]) =>
     regions.filter((r) => inLoop(x, y, r.outer)).map((r) => r.guid);

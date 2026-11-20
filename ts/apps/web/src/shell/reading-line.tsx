@@ -26,7 +26,7 @@ export const failureLine = (says: string) => (
 /** The shell's overlay words for a present value that is not current; null for a ready or value-less state. */
 export const retainedLine = (state: ReadingState<unknown>) =>
   state.state === "refreshing"
-    ? "Showing previous Value; refreshing"
+    ? (state.reason ?? "Showing previous Value; refreshing")
     : state.state === "stale"
       ? "Showing previous Value; refresh needed"
       : null;

@@ -44,8 +44,8 @@ function useWorkspace(ctx: RoomsContext) {
     value.state === "ready" &&
     !!page.view &&
     !!snapshot &&
-    !snapshot.levels.some((level) => level.views.includes(page.view));
-  const view = viewMissing ? "" : page.view;
+    !snapshot.levels.some((level) => level.views.some((plan) => plan.id === page.view));
+  const view = viewMissing ? null : page.view;
   const error = value.state === "stale" ? (value.reason ?? "Read failed") : null;
   const pending = value.state === "refreshing";
   const document = ctx.target?.kind === "document" ? ctx.target.ref : null;

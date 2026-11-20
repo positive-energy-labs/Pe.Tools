@@ -289,7 +289,7 @@ export function witnessFactory(dependencies: FixtureDependencies) {
                 if (frame.kind === "complete" || frame.kind === "part") {
                   captured = frame.value;
                   send(captured);
-                }
+                } else if (frame.kind === "failure") deliver(frame);
               })
             : (send(captured), undefined);
         const stopWork = ws.subscribeUncaptured(() => {

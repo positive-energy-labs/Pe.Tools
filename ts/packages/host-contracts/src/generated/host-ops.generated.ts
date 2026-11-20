@@ -10975,11 +10975,11 @@ export namespace RevitResolveUnitValue {
   }
 }
 
-/** Draw one room or zone region from loops on a plan view; a person's designation, so a room is locked. */
+/** Draw one room or zone region from loops on a plan view by numeric Revit view id; a person's designation, so a room is locked. */
 export namespace RoomsDraw {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       loops: number[][][];
       name?: null | string;
       role?: null | string;
@@ -10993,11 +10993,11 @@ export namespace RoomsDraw {
   }
 }
 
-/** Combine two or more rooms or held regions of one zone on one plan view into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
+/** Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
 export namespace RoomsMerge {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       guids: string[];
       name?: null | string;
     }
@@ -11012,11 +11012,11 @@ export namespace RoomsMerge {
   }
 }
 
-/** Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction. */
+/** Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction. */
 export namespace RoomsPartition {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       runId?: null | string;
       rejected?: number[][][] | null;
     }
@@ -11052,13 +11052,18 @@ export namespace RoomsRoster {
     export interface RoomsLevel {
       name: string;
       elevation: number;
-      views: string[];
+      views: RoomsPlanView[];
+    }
+    export interface RoomsPlanView {
+      id: number;
+      name: string;
+      type: string;
     }
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
       guid: string;
-      view: string;
+      view: number;
       level: string;
       role: string;
       zone?: null | string;
@@ -11095,11 +11100,11 @@ export namespace RoomsRoster {
   }
 }
 
-/** Read zones, rooms and held regions on one named plan view, with geometry and provenance. rooms.roster lists available views without geometry. */
+/** Read zones, rooms and held regions on one plan view by numeric Revit view id, with geometry and provenance. rooms.roster lists available views without geometry. */
 export namespace RoomsSnapshot {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
     }
   }
   export namespace Res {
@@ -11111,13 +11116,18 @@ export namespace RoomsSnapshot {
     export interface RoomsLevel {
       name: string;
       elevation: number;
-      views: string[];
+      views: RoomsPlanView[];
+    }
+    export interface RoomsPlanView {
+      id: number;
+      name: string;
+      type: string;
     }
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
       guid: string;
-      view: string;
+      view: number;
       level: string;
       role: string;
       zone?: null | string;
@@ -11154,11 +11164,11 @@ export namespace RoomsSnapshot {
   }
 }
 
-/** Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
+/** Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
 export namespace RoomsTrace {
   export namespace Req {
     export interface Request {
-      view: string;
+      view: number;
       runId?: null | string;
     }
   }

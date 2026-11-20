@@ -172,7 +172,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
   const { workFingerprintSchema } = await import("@pe/agent-contracts");
   const frames: Parameters<import("@pe/web-kernel/shell/source-contract").UseSource["open"]>[1][] =
     [];
-  let search = new URLSearchParams();
+  let search = new URLSearchParams({ view: "L2" });
   const mount = mountTypedRoute(
     {
       ...module,
@@ -223,12 +223,21 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     state: "current",
     value: {
       data: {
-        ...roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, ""),
+        ...roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, null),
         roomsWork: roomsRouteState.schema.parse({}),
         handle: null,
         snapshot: {
           ...DEMO_ROOMS,
-          levels: [{ name: label, elevation: 0, views: ["First view", "Second view"] }],
+          levels: [
+            {
+              name: label,
+              elevation: 0,
+              views: [
+                { id: 9948, name: "L2", type: "FloorPlan" },
+                { id: 1371629, name: "L2", type: "CeilingPlan" },
+              ],
+            },
+          ],
         },
         trace: null,
         traceError: null,
@@ -257,23 +266,26 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     );
   }
   try {
+    expect(mount.page.read().view).toBeNull();
     emit(0, "Fixture level");
     await vi.waitFor(() => expect(ctx().cells.state.state).toBe("ready"));
     render(<Chooser />);
-    await act(async () => ctx().page.query({ view: "Missing view" }));
+    await act(async () => ctx().page.query({ view: 7426391 }));
     await act(async () => emit(frames.length - 1, "Fixture level"));
     expect(screen.getByText("That view is not in this document.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Clear plan view" }));
-    expect(mount.page.read().view).toBe("");
+    expect(mount.page.read().view).toBeNull();
     await act(async () => emit(frames.length - 1, "Fixture level"));
     const rosterReads = frames.length;
     fireEvent.click(screen.getByRole("button", { name: "Choose level" }));
     fireEvent.click(await screen.findByRole("option", { name: /Fixture level/ }));
-    expect(mount.page.read().view).toBe("");
+    expect(mount.page.read().view).toBeNull();
     expect(mount.page.read().level).toBe("Fixture level");
     expect(frames).toHaveLength(rosterReads);
-    fireEvent.click(await screen.findByRole("option", { name: "Second view" }));
-    expect(mount.page.read().view).toBe("Second view");
+    expect(await screen.findByRole("option", { name: /L2.*FloorPlan/ })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("option", { name: /L2.*CeilingPlan/ }));
+    expect(mount.page.read().view).toBe(1371629);
+    expect(search.get("view")).toBe("1371629");
     expect(ctx().value).toMatchObject({
       state: "refreshing",
       publication: { freshness: "refresh-needed" },

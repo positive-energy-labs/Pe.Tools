@@ -91,6 +91,8 @@ export function applyPatches<S extends z.ZodType>(
   } catch (error) {
     return refuse("error", message(error), "patch paths must address plain document keys.");
   }
+  const invalidEdit = restore ? null : spec.validateEdit?.(draft, envelope.doc, by);
+  if (invalidEdit) return refuse("refused", invalidEdit, "Correct the staged edit and try again.");
   const stamped = restore ? draft : stampChanges(draft, envelope.doc, by, expectedRevision);
   const checked = commitDoc(spec, envelope, stamped);
   if (!checked.ok || restore || !spec.reconcileEdit) return checked;

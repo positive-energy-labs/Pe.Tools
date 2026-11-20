@@ -83,6 +83,7 @@ test("complete Work spec is required and every host-run export is captured", asy
     ...neutral.workState!,
     finds: ["search"],
     editable: [["amount"]],
+    validateEdit: () => null,
     reconcileEdit: (next: unknown, patches: readonly unknown[]) => ({ next, patches }),
   };
   const module = { ...neutral, workState };
@@ -93,6 +94,7 @@ test("complete Work spec is required and every host-run export is captured", asy
     { ...module, workState: { ...workState, route: "wrong" } },
     { ...module, workState: { ...workState, schemaVersion: 3 } },
     { ...module, workState: { ...workState, schema: z.object({}) } },
+    { ...module, workState: { ...workState, validateEdit: () => "refused" } },
     { ...module, workState: { ...workState, reconcileEdit: () => null } },
     { ...module, workState: { ...workState, finds: [] } },
     { ...module, workState: { ...workState, editable: [] } },
@@ -104,7 +106,7 @@ test("complete Work spec is required and every host-run export is captured", asy
       workState: undefined,
     }).ok,
   ).toBe(false);
-  for (const key of ["reconcileEdit"] as const)
+  for (const key of ["validateEdit", "reconcileEdit"] as const)
     expect(() =>
       captureHostModule({ ...module, workState: { ...workState, [key]: "not executable" } }),
     ).toThrow();

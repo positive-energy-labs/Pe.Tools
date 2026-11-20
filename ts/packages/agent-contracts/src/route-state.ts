@@ -1,4 +1,4 @@
-import { authorSchema } from "./author.ts";
+import { authorSchema, type Author } from "./author.ts";
 import type { GraphJsonValue as JsonValue } from "./route-graph.ts";
 /** Shared Work schemas and semantic commands. The host stamps authorship and checks revisions.
  * Authored edits and optional suggestions use one model for human and Pea. External effects
@@ -32,6 +32,8 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
    */
   schemaVersion?: number;
   editable?: readonly import("./command.ts").WorkPath[];
+  /** Refuse newly authored values before the saved Work schema can normalize them. */
+  validateEdit?: (next: unknown, prior: unknown, by: Author) => string | null;
   /** Domain-derived bookkeeping after an authored edit, before validation. */
   reconcileEdit?: (next: unknown, patches: readonly RouteStatePatch[]) => unknown;
   /**

@@ -6,7 +6,7 @@ import { writeIntentSchema } from "./write-intent.ts";
  */
 import { z } from "zod";
 
-import { type RouteStateSpec } from "./route-state.ts";
+import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { roomEditSchema, type RoomEdit, type RoomEditField } from "./takeoffs.ts";
 import { draftCellSchema, type CellLike } from "./draft.ts";
 
@@ -32,10 +32,21 @@ export const roomEditAddress = (key: string) => {
   return address;
 };
 
+const choosePlan = "Choose a plan view.";
+const choosePlanId = "Choose a plan view by its Revit view id.";
+export const roomsViewId = z
+  .int({ error: choosePlan })
+  .positive({ error: choosePlan })
+  .meta({ description: choosePlanId });
+
 const point = z.tuple([z.number(), z.number()]);
 /** Where feedback points: model feet on one plan view of one level. R-numbers are display only. */
 const anchorSchema = (minPoints: number) =>
-  z.strictObject({ view: z.string(), level: z.string(), polygon: z.array(point).min(minPoints) });
+  z.strictObject({
+    view: roomsViewId.nullable().catch(null),
+    level: z.string(),
+    polygon: z.array(point).min(minPoints),
+  });
 
 /**
  * A feedback mark. `run` is the partition run it was drawn against; its glyph (passing, failing,
@@ -82,6 +93,11 @@ export const roomsDocumentSchema = z
   });
 export type RoomsRouteDocument = z.infer<typeof roomsDocumentSchema>;
 
+const editedMark = z.object({
+  edit: z.object({ value: z.object({ anchor: z.object({ view: z.unknown().optional() }) }) }),
+});
+const marksOf = (doc: unknown) => (isRecord(doc) && isRecord(doc.marks) ? doc.marks : {});
+
 /** One `rooms.write` region per guid with edited cells: current edits only, never suggestions. */
 export function stagedRoomWrites(doc: RoomsRouteDocument): ({ guid: string } & RoomEdit)[] {
   const regions = new Map<string, { guid: string } & RoomEdit>();
@@ -98,8 +114,19 @@ export const roomsRouteState = {
   route: "rooms",
   title: "Rooms",
   description:
-    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes live in findings Work through findings.say, never rooms Work. Regions and geometry are read from rooms.snapshot.",
+    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a numeric Revit view id, a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes live in findings Work through findings.say, never rooms Work. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
+  validateEdit: (next, prior, by) => {
+    const before = marksOf(prior);
+    for (const [id, cell] of Object.entries(marksOf(next))) {
+      const mark = editedMark.safeParse(cell).data;
+      if (!mark || roomsViewId.safeParse(mark.edit.value.anchor.view).success) continue;
+      const previous = editedMark.safeParse(before[id]).data;
+      if (!previous || !Object.is(previous.edit.value.anchor.view, mark.edit.value.anchor.view))
+        return by === "pea" ? choosePlanId : choosePlan;
+    }
+    return null;
+  },
 } satisfies RouteStateSpec<typeof roomsDocumentSchema>;
 
 /** Solver layer vocabulary shared by typed Rooms and its drawings. */

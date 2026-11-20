@@ -485,17 +485,19 @@ function BandContext({ mount, document }: { mount: TypedMount; document: ReactNo
 function BandAlerts({ mount }: { mount: TypedMount }) {
   const readiness = mount.readiness(),
     failure = mount.failure(),
-    problem = failure ? null : mount.problem();
+    problem = failure ? null : mount.problem(),
+    retained = retainedLine(mount.value());
   return (
     <>
       <span role="status" aria-label="Route readiness" data-readiness={readiness.kind}>
-        {readiness.kind !== "ready" && readiness.reason !== problem && readiness.reason !== failure
+        {readiness.kind !== "ready" &&
+        readiness.reason !== problem &&
+        readiness.reason !== failure &&
+        readiness.reason !== retained
           ? readiness.reason
           : null}
       </span>
-      {retainedLine(mount.value()) ? (
-        <span role="status">{retainedLine(mount.value())}</span>
-      ) : null}
+      {retained ? <span role="status">{retained}</span> : null}
       {problem ? <span role="alert">{problem}</span> : null}
       {mount.absentOwners().map((owner) => {
         const route = routeOf(owner);

@@ -365,6 +365,16 @@ test.each([
         ]);
         return;
       }
+      if (commandKey === "rooms.partition") {
+        expect(calls).toEqual([
+          {
+            key: commandKey,
+            action: commandKey,
+            input: { ...authored, runId: expect.any(String) },
+          },
+        ]);
+        return;
+      }
       expect(calls[0]).toEqual({
         key: "takeoffs.initialize-carrier",
         input: {

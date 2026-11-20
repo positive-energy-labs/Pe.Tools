@@ -139,12 +139,13 @@ public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Wri
 // as takeoffs plus the seven room fields. Loops are [x,y] host feet, outer CCW, even-odd holes.
 // Role is "zone" | "room" | "held". Zone is the parent zone's guid (null = not in a zone on this view).
 // Designation is "person" | "inferred" for hand-drawn regions, null for machine regions.
-public sealed record RoomsLevel(string Name, double Elevation, IReadOnlyList<string> Views);
+public sealed record RoomsPlanView(long Id, string Name, string Type);
+public sealed record RoomsLevel(string Name, double Elevation, IReadOnlyList<RoomsPlanView> Views);
 public sealed record RoomsRegion(
     long ElementId,
     string UniqueId,
     Guid Guid,
-    string View,
+    long View,
     string Level,
     string Role,
     Guid? Zone,
@@ -171,7 +172,7 @@ public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOn
 
 // Rejected: a person's standing "not a room" marks, each an outer ring of x y points in model feet on the view. A face
 // overlapping one at IoU 0.6 or more is held as rejected instead of becoming a room.
-public sealed record RoomsPartitionRequest(string View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null);
+public sealed record RoomsPartitionRequest(long View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null);
 public sealed record RoomsPartitionResult(
     string Level,
     string RunId,
@@ -186,7 +187,7 @@ public sealed record RoomsPartitionResult(
     double Ms);
 
 // Role is "room" (default) or "zone".
-public sealed record RoomsDrawRequest(string View, List<List<double[]>> Loops, string? Name = null, string? Role = null);
+public sealed record RoomsDrawRequest(long View, List<List<double[]>> Loops, string? Name = null, string? Role = null);
 public sealed record RoomsDrawResult(long ElementId, Guid Guid);
 
 public sealed record RoomsWriteRegion(
@@ -204,7 +205,7 @@ public sealed record RoomsWriteRequest(List<RoomsWriteRegion> Regions);
 public sealed record RoomsWriteResult(int Written);
 
 // Combine two or more rooms or held regions of one zone on one view into one locked Room Region; the sources are deleted.
-public sealed record RoomsMergeRequest(string View, List<Guid> Guids, string? Name = null);
+public sealed record RoomsMergeRequest(long View, List<Guid> Guids, string? Name = null);
 public sealed record RoomsMergeResult(long ElementId, Guid Guid, IReadOnlyList<Guid> Merged, double Sqft);
 
 // The solver's layer 1 per zone, as rooms.partition persisted it (<state>/rooms/<runId>/<zoneGuid>.json). The wire
@@ -225,9 +226,9 @@ public sealed record RoomsTraceAccounting(double ZoneSqft, double Accepted, doub
 public sealed record RoomsZoneTrace(Guid ZoneGuid, string Label, RoomsTrace Trace, RoomsTraceAccounting Accounting);
 
 // RunId null reads the newest run that traced a zone on the view.
-public sealed record RoomsTraceRequest(string View, string? RunId = null);
+public sealed record RoomsTraceRequest(long View, string? RunId = null);
 public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones);
 
 /// <summary>Geometry scope. Empty scope reads only the geometry-free roster.</summary>
 public sealed record TakeoffReadRequest(IReadOnlyList<string>? Views = null, IReadOnlyList<Guid>? ZoneGuids = null);
-public sealed record RoomsReadRequest(string View);
+public sealed record RoomsReadRequest(long View);
