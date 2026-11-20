@@ -1,12 +1,6 @@
 import { listSearchKey, listSearchCodec, emptyListSearch, pickListPill } from "../list-search.ts";
-import {
-  fitViewportCodec,
-  planeViewportSchema,
-  viewportKey,
-  type PlaneViewport,
-  type Codec,
-} from "../page-keys.ts";
-import { field, textCodec } from "../route-field.ts";
+import { type Codec } from "../page-keys.ts";
+import { textCodec } from "../route-field.ts";
 import { z } from "zod";
 
 /** Chat's sidebar can accompany any route; its list view has one shareable address. */
@@ -31,10 +25,3 @@ export const threadListFields = {
   ),
   threadSort: sharedQuery(z.enum(["", "recent", "title"]).default(""), textCodec),
 };
-
-/** A plan picture's pan and zoom; null = fit. A drag replaces; Pea may set it. */
-export const planViewport = field(
-  viewportKey(planeViewportSchema),
-  { url: "replace", agent: "set" },
-  fitViewportCodec<PlaneViewport>(),
-);
