@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { z } from "zod";
-import { routeAddress, settingsRouteState } from "@pe/agent-contracts";
-import { podsValue, podMemberCode } from "../../../../packages/agent-contracts/src/pods-read.ts";
+import { settingsRouteState } from "@pe/agent-contracts";
+import { podsValue } from "../../../../packages/agent-contracts/src/pods-read.ts";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Button } from "@pe/kit/lang/button";
-import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
-import { isSpecOf } from "../route/workflow";
 import type { PodsContext } from "./route.ts";
 
 type Value = z.output<typeof podsValue>;
@@ -85,30 +83,13 @@ const jsonOrText = (text: string) => {
 };
 export function MemberFields({ ctx }: { ctx: PodsContext }) {
   const [typedOnly, setTypedOnly] = useState(false);
-  const search = useRouteSearchSlice((s) => s);
   const read = ctx.value.value;
   const empty = fieldsEmpty(read);
   if (empty) return <p className="text-ink-2">{empty}</p>;
   const cells = memberFields(read, ctx.cells.doc),
     note = fieldsNote(read);
-  const family =
-    read.member && isSpecOf(read.schemaRef, "/schemas/settings/FamilyFoundry/models.json")
-      ? routeAddress("family").link({
-          stage: "apply",
-          member: {
-            kind: "ids",
-            ids: [podMemberCode({ pod: read.scope.pod, path: read.scope.path })],
-          },
-          ...(typeof search.thread === "string" ? { thread: search.thread } : {}),
-        })
-      : null;
   return (
     <section aria-label="Member fields" className="flex min-w-0 flex-col gap-1 t-small">
-      {family ? (
-        <a href={family} className="text-ink-2">
-          Open in Family
-        </a>
-      ) : null}
       {note ? (
         <p role="note" className="text-ink-2">
           {note}

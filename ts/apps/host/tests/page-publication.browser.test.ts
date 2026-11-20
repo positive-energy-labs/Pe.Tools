@@ -8,9 +8,9 @@ import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vite-plus/test";
 import { servePeRoute } from "@pe/mcps/product-catalog";
 import { createHash } from "node:crypto";
-import { Context, Effect } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
-import { PictureCaptures, PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
+import { Context } from "effect";
+import { HttpRouter } from "effect/http";
+import { PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
 import { bindControl } from "../src/control.ts";
 import {
   commitPagePublication,
@@ -106,10 +106,7 @@ it("captures through real Edge, publishes only on success, and preserves authore
   expect(result.capture.sha256).toBe(createHash("sha256").update(expected).digest("hex"));
   expect(result.capture.url).toBe(`http://fixture/captures/${result.capture.sha256}.png`);
   expect(await captures.blob(result.capture.sha256)).toEqual(expected);
-  const assets = HttpRouter.toWebHandler(
-    capturesRoute(() => Effect.succeed(HttpServerResponse.text("spa"))),
-    { disableLogger: true },
-  );
+  const assets = HttpRouter.toWebHandler(capturesRoute, { disableLogger: true });
   try {
     // The handler reads the store per request, so it comes in the request context, as in captures.test.ts.
     const image = await assets.handler(

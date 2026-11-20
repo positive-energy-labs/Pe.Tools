@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { module as ducts } from "@pe/duct-systems-web/route";
-import { module as family } from "../family/route";
+import { module as families } from "../families/route";
 import { publicRoutes } from "./route-discovery";
-for (const typed of [ducts, family])
+for (const typed of [ducts, families])
   if (!publicRoutes.typed(typed.data.key))
     publicRoutes.register({ typed, manifest: typed.data, hosted: () => null });
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -22,7 +22,7 @@ const DUCTS_TEACHING = referenceTeaching("/duct-systems");
 test("route teaching names the declared design pane and never the retired e-inputs pane", () => {
   expect(DUCTS_TEACHING.some((fact) => fact.kind === "region" && fact.id === "design")).toBe(true);
   expect(DUCTS_TEACHING.some((fact) => fact.id === "e-inputs")).toBe(false);
-  expect(referenceTeaching("/family")).not.toEqual(STARTUP_TEACHING);
+  expect(referenceTeaching("/families")).not.toEqual(STARTUP_TEACHING);
 });
 import { STAGE_ACTIONS } from "#/scene/stage-teaching";
 import { HelpWorld } from "./help";
@@ -230,7 +230,7 @@ test("empty measurements keep the reference; route changes exclude another retai
   );
   expect(view.container.textContent).toContain("Measured ducts");
   view.rerender(
-    <TeachPage value="/family">
+    <TeachPage value="/families">
       <TeachReference value={STARTUP_TEACHING}>
         <Tutorial />
       </TeachReference>

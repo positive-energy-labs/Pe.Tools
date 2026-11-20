@@ -1,5 +1,3 @@
-import { subjectCode } from "@pe/agent-contracts";
-const scheduleIdentity = (key: string) => subjectCode({ keyKind: "workspace", key });
 import { z } from "zod";
 import {
   routeAddress,
@@ -138,44 +136,12 @@ export async function readThreadWork(
 async function resumeDestination(
   workspace: RouteWorkspace,
   id: string,
-  sources?: NavigationSources,
 ): Promise<Omit<WorkResume, "knownOpenRefs"> | null> {
   const census = await workspace.instances();
   if (!census.available) throw new Error("Persisted Work discovery is unavailable");
   const work = census.works.find((item) => item.id === id);
   if (!work) return null;
   const path = documentRoutes[work.route];
-  if (work.scope.binding === "workspace" && work.route === "schedules") {
-    const addresses = (sources?.contexts?.() ?? []).flatMap(({ context }) =>
-      context
-        ? context.works
-            .filter(({ key }) => workKey(key) === id)
-            .flatMap(({ documentId }) =>
-              context.documents
-                .filter((doc) => doc.id === documentId && doc.address !== null)
-                .map((doc) => doc.address!),
-            )
-        : [],
-    );
-    const unique = addresses.filter(
-      (at, index) => addresses.findIndex((other) => sameAddress(other, at)) === index,
-    );
-    return {
-      id,
-      key: work.scope,
-      url:
-        unique.length === 1 && work.state === "ready"
-          ? routeAddress("schedules").link(
-              { workspaceId: { kind: "ids", ids: [scheduleIdentity(work.scope.work)] } },
-              { target: unique[0]! },
-            )
-          : null,
-      reason:
-        unique.length === 1 && work.state === "ready"
-          ? null
-          : "This schedule Work has no unique remembered document binding. It was left unchanged.",
-    };
-  }
   if (work.scope.binding === "host")
     return {
       id,
@@ -257,7 +223,7 @@ export async function resumeWork(
   id: string,
   sources?: NavigationSources,
 ): Promise<WorkResume | null> {
-  const destination = await resumeDestination(workspace, id, sources);
+  const destination = await resumeDestination(workspace, id);
   return (
     destination && {
       ...destination,

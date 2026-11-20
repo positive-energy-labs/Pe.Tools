@@ -59,17 +59,14 @@ export * from "./history.ts";
 export * from "./work-timeline.ts";
 
 export * from "./bind-read.ts";
-export * from "./captures-read.ts";
 export type { CaptureDisclosure } from "./capture.ts";
 export * from "./chat-read.ts";
 export * from "./native-output-read.ts";
 export * from "./families-read.ts";
-export * from "./family-read.ts";
 export * from "./open-read.ts";
 export * from "./ops-read.ts";
 export * from "./pods-read.ts";
 export * from "./rooms-read.ts";
-export * from "./schedules-read.ts";
 export * from "./settings-read.ts";
 export * from "./tiered-setting.ts";
 

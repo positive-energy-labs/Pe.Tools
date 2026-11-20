@@ -1,6 +1,5 @@
 {
   "hostCalls": [
-    "ts/apps/web/src/revit/observation.tsx#readFamilyPlacements/response:createPeClient",
     "ts/apps/web/src/routes/design-system_.popovers.tsx#ResourcePreviews:hostFetch"
   ],
   "customDecodes": [],
@@ -35,8 +34,6 @@
     "ts/apps/web/src/machine/update.tsx#UpdateGroup:BindingElement",
     "ts/apps/web/src/machine/bay.tsx#PatchBayBody:BindingElement",
     "ts/apps/web/src/rooms/plan.tsx#RoomsPlan:BindingElement",
-    "ts/apps/web/src/route/activity.tsx#useRouteFixture:PropertyAccessExpression",
-    "ts/apps/web/src/route/activity.tsx#useRouteFixture:PropertyAccessExpression",
     "ts/apps/web/src/shell/owner.ts#routeSearch/fixture:PropertyAccessExpression",
     "ts/apps/web/src/shell/owner.ts#routeSearch:PropertyAccessExpression",
     "ts/apps/web/src/workbench/route-retention.tsx#RouteRetention/source:PropertyAccessExpression",

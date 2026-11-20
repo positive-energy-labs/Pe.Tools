@@ -10,7 +10,6 @@ import { writeIntentSchema } from "./write-intent.ts";
  * native transaction.
  */
 import { z } from "zod";
-import type { RouteStateSpec } from "./route-state.ts";
 import { draftCellSchema } from "./draft.ts";
 
 /**
@@ -195,32 +194,3 @@ export const scheduleGridDocumentSchema = z.object({
   takenAt: z.string().nullable().default(null).meta({ title: "capture time", internal: true }),
 });
 export type ScheduleGridDocument = z.infer<typeof scheduleGridDocumentSchema>;
-export const scheduleGridRouteState = {
-  route: "schedules",
-  title: "Schedule Grid",
-  description:
-    "Review schedule cell edits. Read op:schedule.grid.snapshot for the subject Work address and binding basis; both authors apply.",
-  schema: scheduleGridDocumentSchema,
-  reconcileEdit: (next, patches) => {
-    const doc = scheduleGridDocumentSchema.parse(next);
-    if (!doc.basis?.stale) return doc;
-    const edited = new Set(
-      patches
-        .filter((patch) => patch.path[0] === "cells")
-        .flatMap((patch) =>
-          patch.path.length === 1 ? Object.keys(doc.cells) : [String(patch.path[1])],
-        ),
-    );
-    const stale = doc.basis.stale.filter((cell) => !edited.has(cell.key));
-    return { ...doc, basis: { ...doc.basis, stale: stale.length ? stale : undefined } };
-  },
-} satisfies RouteStateSpec<typeof scheduleGridDocumentSchema>;
-
-export function scheduleCellKey(rowNumber: number, columnNumber: number): string {
-  return `${rowNumber}::${columnNumber}`;
-}
-
-export function splitScheduleCellKey(key: string): { rowNumber: number; columnNumber: number } {
-  const [row, column] = key.split("::");
-  return { rowNumber: Number(row), columnNumber: Number(column) };
-}

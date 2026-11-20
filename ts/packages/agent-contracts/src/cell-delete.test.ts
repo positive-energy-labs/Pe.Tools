@@ -1,15 +1,13 @@
 /**
  * O-1, revised by rulings 2026-09-18 16:00 #3: one cell factory; an empty value is a value on
  * every route; deleting is opt-in and kept only where a shipped consumer stages it (settings
- * cells: `/family` and the pods reviewer). Elsewhere a delete rung is refused by the schema.
+ * cells: the Pods reviewer). Elsewhere a delete rung is refused by the schema.
  */
 import { describe, expect, it } from "vite-plus/test";
 import { z } from "zod";
 import { applyPatches, type RouteEnvelope } from "./route-doc.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { familiesRouteState, familyCellKey } from "./families.ts";
-import { familyDraftRouteState } from "./family.ts";
-import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { settingsRouteState } from "./settings.ts";
 import { cellPatches, type Rung } from "./draft.ts";
 
@@ -23,9 +21,7 @@ const routes: Route[] = [
     familyKey,
     { value: { value: "", storageType: "String" } },
   ],
-  ["schedules", scheduleGridRouteState as never, "cells", "1::2", { value: "" }],
   ["pods", settingsRouteState as never, "fields", "/a/b", { value: "" }],
-  ["family", familyDraftRouteState as never, "cells", "/a/b", { value: "" }],
 ];
 const stage = ([, spec, container, cell]: Route, rung: Rung) =>
   applyPatches(

@@ -4,11 +4,7 @@ import { builtinTools as tools } from "./semantic-actions.ts";
 import { consumedSchema, type Command, type Consumed, type WorkHandle } from "./command.ts";
 import { retainedConsumedSchema } from "./receipt-evidence.ts";
 import { bindWork } from "./route-state.ts";
-import {
-  familyActions,
-  familyApplyResultSchema,
-  type FamilyApplyResult,
-} from "./family-actions.ts";
+import { familyApplyResultSchema, type FamilyApplyResult } from "./family-actions.ts";
 
 describe("portable tool consumers", () => {
   it("lets the host choose sealed preview hashes and rejects competing apply intent", () => {
@@ -56,7 +52,7 @@ describe("portable tool consumers", () => {
   });
 
   it("keeps command input and result types through Work binding", () => {
-    const apply = tools.family.commands["family.apply"];
+    const apply = tools.families.commands["families.apply"];
     // The write boundary wraps the result in a preview-or-committed envelope; the committed arm keeps FamilyApplyResult.
     type Out = z.output<NonNullable<typeof apply.result>>;
     expectTypeOf<Extract<Out, { previewOnly: false }>>().toExtend<FamilyApplyResult>();
@@ -64,43 +60,8 @@ describe("portable tool consumers", () => {
     expectTypeOf<
       Exclude<z.output<typeof apply.input>["work"], undefined>
     >().toEqualTypeOf<WorkHandle>();
-    const handle: WorkHandle = { key: bindWork("family", null, "reviewed"), revision: 13 };
+    const handle: WorkHandle = { key: bindWork("families", null, "reviewed"), revision: 13 };
     expect(apply.work.bind({}, handle)).toEqual({ work: handle });
-    const observe = tools.family.commands["family.observe"];
-    expect(observe.work.optional).toBe(true);
-    expect(observe.input.parse({ readingId: "capture" })).toEqual({ readingId: "capture" });
-    expect(observe.work.bind({ readingId: "capture" }, handle)).toEqual({
-      readingId: "capture",
-      work: handle,
-    });
-  });
-});
-
-describe("family.capture destination", () => {
-  it("documents a staged pod example the public Work command actually consumes", () => {
-    const capture = tools.family.commands["family.capture"];
-    const work = { key: bindWork("family", null, "reviewed"), revision: 1 };
-    expect(capture.says).toContain('writeIntent["family.capture"].edit.value.pod');
-    const example = capture.says.match(
-      /Example: writeIntent\["family.capture"\]\.edit = (\{.*\})\./,
-    );
-    expect(example).not.toBeNull();
-    const edit = JSON.parse(example![1]!);
-    expect(capture.workIntent.derive({ writeIntent: { "family.capture": { edit } } })).toEqual({
-      pod: "lab",
-    });
-    expect(capture.input.parse({ work })).toEqual({ work });
-    expect(capture.input.safeParse({ work, pod: "lab" }).success).toBe(false);
-    expect(capture.workIntent.derive({})).toEqual({});
-  });
-
-  it("refuses a path that leaves the family folder, as the host does", () => {
-    const input = familyActions["family.capture"].input;
-    expect(input.safeParse({ pod: "lab", path: "settings/family/box.json" }).success).toBe(true);
-    expect(input.safeParse({ pod: "lab", path: "settings/family/../../x.json" }).success).toBe(
-      false,
-    );
-    expect(input.safeParse({ pod: "lab", path: "settings/family/a\b.json" }).success).toBe(false);
   });
 });
 

@@ -26,30 +26,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "captures",
-    "directory": {
-      "label": "Revit data",
-      "icon": "Image",
-      "exposure": "Preview",
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "runtimeNeed": "Host retained view images",
-      "listed": true,
-      "satellites": [],
-      "path": "/captures",
-      "title": "Captures",
-      "category": "Coordinate model data",
-      "blurb": "Inspect retained view pictures and receipts"
-    }
-  },
-  {
     "key": "chat",
     "directory": {
       "label": "Workbench",
@@ -203,34 +179,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
     }
   },
   {
-    "key": "family",
-    "directory": {
-      "label": "Family Foundry",
-      "icon": "Boxes",
-      "exposure": "Main",
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "aliases": [
-        "rfa",
-        "author",
-        "build",
-        "capture",
-        "matrix"
-      ],
-      "runtimeNeed": "Revit for capture and apply",
-      "listed": true,
-      "satellites": [],
-      "resume": "document",
-      "path": "/family",
-      "title": "Family",
-      "category": "Build / audit families",
-      "blurb": "Inspect saved family profiles, edit cells and review PDF evidence"
-    }
-  },
-  {
     "key": "fans",
     "directory": {
       "label": "Fan ESP",
@@ -376,31 +324,6 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
       "title": "Rooms",
       "category": "Calculate loads & airflow",
       "blurb": "Inspect room regions, stage loads and review anchored feedback"
-    }
-  },
-  {
-    "key": "schedules",
-    "directory": {
-      "label": "Revit data",
-      "icon": "LayoutGrid",
-      "exposure": "Preview",
-      "surfaces": {
-        "web": "full",
-        "pwa": "full",
-        "tray": false
-      },
-      "aliases": [
-        "Revit",
-        "data"
-      ],
-      "runtimeNeed": "Open project document",
-      "listed": true,
-      "satellites": [],
-      "resume": "document",
-      "path": "/schedules",
-      "title": "Schedules",
-      "category": "Coordinate model data",
-      "blurb": "Inspect document schedules"
     }
   },
   {

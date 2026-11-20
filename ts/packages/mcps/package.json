@@ -27,7 +27,6 @@
     "./actions": "./src/shared/takeoff-action-client.ts",
     "./build": "./scripts/stage-liteparse.ts",
     "./takeoff-ops": "./src/shared/takeoff-ops.ts",
-    "./family-pdf": "./src/shared/family-pdf.ts",
     "./llama-parse": "./src/shared/llama-parse.ts",
     "./llama-key": "./src/shared/llama-key.ts",
     "./derived-parse": "./src/shared/derived-parse.ts",

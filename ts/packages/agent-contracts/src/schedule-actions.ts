@@ -2,15 +2,7 @@ import type { Command } from "./command.ts";
 import { z } from "zod";
 import { addressSchema, documentRefSchema } from "./target.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
-import {
-  scheduleGridSnapshotSchema,
-  splitScheduleCellKey,
-  type ScheduleGridDocument,
-} from "./schedule-grid-data.ts";
-import { canonicalRouteInput } from "./route-doc.ts";
-import type { RouteStatePatch } from "./route-state.ts";
-import { workHandleSchema } from "./command.ts";
-import { podMemberSourceSchema } from "./settings.ts";
+import { scheduleGridSnapshotSchema } from "./schedule-grid-data.ts";
 
 export const scheduleReadingSchema = z.object({
   id: z.string().regex(/^[a-f0-9]{64}$/),
@@ -23,108 +15,6 @@ export const scheduleReadingSchema = z.object({
 });
 export type ScheduleReading = z.infer<typeof scheduleReadingSchema>;
 
-/**
- * A person's read of this Work's schedule, or a push's readback, rebinds it in ONE write: `basis`
- * moves to `reading` (its live document lifetime) and names in `basis.stale` every staged cell whose
- * binding differs between the old basis and `reading` (or whose old basis is unreadable), with the
- * display value it was reviewed against, plus any cell still stale from before (keeping its first
- * `was`). Cells are untouched; push refuses a stale key per cell, and staging or unstaging the key
- * drops it (`unstale`).
- */
-export function rebindScheduleWork(
-  doc: ScheduleGridDocument,
-  basis: ScheduleReading | null,
-  reading: ScheduleReading,
-): RouteStatePatch[] {
-  if (!doc.basis || doc.basis.captureId === reading.id) return [];
-  const binding = (at: ScheduleReading | null, key: string) => {
-    const { rowNumber, columnNumber } = splitScheduleCellKey(key);
-    return at?.snapshot.rows
-      .find((row) => row.rowNumber === rowNumber)
-      ?.bindings.find((b) => b.columnNumber === columnNumber);
-  };
-  const already = new Map((doc.basis.stale ?? []).map((cell) => [cell.key, cell.was]));
-  const stale = Object.entries(doc.cells).flatMap(([key, cell]) => {
-    if (!cell.edit) return [];
-    if (already.has(key)) return [{ key, was: already.get(key)! }];
-    const before = binding(basis, key),
-      after = binding(reading, key);
-    return !before || !after || canonicalRouteInput(before) !== canonicalRouteInput(after)
-      ? [{ key, was: before?.displayValue ?? null }]
-      : [];
-  });
-  return [
-    { path: ["basis"], value: { captureId: reading.id, ...(stale.length ? { stale } : {}) } },
-    { path: ["takenAt"], value: reading.capturedAt },
-  ];
-}
-
-/** The patch that drops `keys` from `basis.stale` when a write stages or unstages them. */
-export function unstale(
-  doc: ScheduleGridDocument | null,
-  keys: readonly string[],
-): RouteStatePatch[] {
-  const stale = doc?.basis?.stale ?? [];
-  const rest = stale.filter((cell) => !keys.includes(cell.key));
-  if (rest.length === stale.length) return [];
-  return [rest.length ? { path: ["basis", "stale"], value: rest } : { path: ["basis", "stale"] }];
-}
-export const scheduleActions = {
-  "schedule.grid.read": {
-    catalogEffect: "SessionWrite",
-    native: ["revit.detail.schedules"],
-    says: "Read the selected schedule and bind its immutable capture to that schedule's reviewed Work without dropping authored cells.",
-    needs: "project-document",
-    effect: "command",
-    dirties: ["schedules"],
-    input: z.strictObject({
-      work: workHandleSchema,
-      scheduleId: z.number().int(),
-      maxRows: z.number().int().min(1).max(2000).default(200),
-    }),
-    result: scheduleReadingSchema,
-  },
-  "schedule.grid.bind": {
-    catalogEffect: "SessionWrite",
-    says: "Bind immutable host schedule evidence to shared Work at an expected revision; retain authored cells and mark changed native bindings stale.",
-    needs: "nothing",
-    effect: "command",
-    dirties: [],
-    input: z.object({
-      readingId: z.string().min(1),
-      reading: scheduleReadingSchema.optional(),
-      expectedRevision: z.number().int().nonnegative(),
-    }),
-  },
-
-  "schedule.grid.push": {
-    native: ["schedule.cells.apply", "revit.detail.schedules"],
-    says: "Push reviewed staged schedule cells using their frozen bindings. Complete positive native acknowledgments precede conditional Work publication and actual readback. Files a run receipt (values before and after) in the bound pod, or in the action receipt when no pod is bound.",
-    needs: "project-document",
-    effect: "command",
-    dirties: ["schedules", "pods"],
-    input: z.object({ pod: z.string().min(1).optional() }),
-  },
-  "schedule.capture": {
-    catalogEffect: "SessionWrite",
-    says: "Capture one schedule as a new spec member in the route's pod and write its run; returns the member address, sha256, and run.",
-    needs: "project-document",
-    effect: "command",
-    dirties: ["pods"],
-    input: z.object({
-      pod: z.string().min(1),
-      path: z.string().min(1).optional(),
-      scheduleId: z.number().int(),
-    }),
-  },
-  "schedule.apply": {
-    says: "Apply a saved schedule spec to the target document. Creates a new schedule every time and writes a run receipt.",
-    needs: "project-document",
-    effect: "command",
-    dirties: ["pods"],
-    input: z.object({ source: podMemberSourceSchema }),
-  },
-} as const;
 export const scheduleReadingRoute = "schedules.readings";
 export const scheduleReads = {
   "schedule.grid.catalog": {
@@ -139,7 +29,7 @@ export const scheduleReads = {
   "schedule.grid.snapshot": {
     via: { route: "schedules.readings" },
     catalogEffect: "Read",
-    says: "Read one schedule and its bindings. Returns immutable reading ID and subject workspaceId. Read/propose route:schedules with this workspaceId; stage against basis.captureId. Reading never deletes cells.",
+    says: "Read one schedule and its bindings. Returns an immutable reading ID and the workspace ID used to find retained snapshots.",
     dirties: [],
     needs: "project-document",
     effect: "query",

@@ -283,12 +283,9 @@ const RULES: Rule[] = [
     roots: [K + "**/*.css"], select: "hover-css", allow: [], cannotSee: "Nested CSS, inherited dimensions and media-query interactions." },
   { id: "web-hover-handler", doctrine: "N7", pattern: /onMouseEnter|onPointerEnter|onMouseOver/g,
     roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx", WK + "**/*.tsx"], allow: [
-      { glob: "{products/ducts/web/src/schematic,apps/web/src/family/anatomy-model-views,apps/web/src/rooms/plan,apps/web/src/takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
       ...allow({
         [WK + "scene/footnotes.tsx"]: "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
         "products/duct-systems/web/src/screen/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
-        "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
-        "family/doc-pane.tsx": "Evidence engine owns document hover.",
         "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
         "machine/notice.tsx": "Reading a notice pauses expiry.",
         "machine/bay.tsx": "Pointer chooses the file preview.",

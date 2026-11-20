@@ -7,29 +7,44 @@ import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { ADMISSION_RESEND_HEADER } from "@pe/agent-contracts";
 import { sha256Hex } from "@pe/host-contracts/kinds";
-import { setup } from "./schedule-recorded-fixture.ts";
 import { fixtureNative } from "./fixture-native.ts";
 
+function memberWrite() {
+  return {
+    id: crypto.randomUUID(),
+    key: "pod.member.write",
+    target: { kind: "host" as const },
+    input: { pod: "journal-proof", path: "settings/fixture.json", content: "{}" },
+  };
+}
+
 test("E8 cold HTTP reentry converts a real running native write to unknown without redispatch", async () => {
-  const f = await setup();
-  const admission = await f.admission();
+  const dir = await mkdtemp(join(tmpdir(), "pe-running-write-"));
+  const native = await fixtureNative(dir, "retained-script-Succeeded", "retained-host-ops-catalog");
+  const { target } = await native.connect();
+  const admission = {
+    id: "interrupted-script",
+    key: "scripting.execute",
+    target: { kind: "document" as const, ref: target },
+    input: { scriptContent: "WriteLine(1);" },
+  };
   let release = () => {};
   const hold = new Promise<void>((resolve) => {
     release = resolve;
   });
-  f.native.onRequest(async (key) => {
-    if (key === "schedule.cells.apply") await hold;
+  native.onRequest(async (key) => {
+    if (key === "scripting.execute") await hold;
   });
-  const pending = f.submit(admission);
-  const dir = await mkdtemp(join(tmpdir(), "pe-cold-write-"));
+  const pending = native.actions()(admission);
+  const coldDir = await mkdtemp(join(tmpdir(), "pe-cold-write-"));
   let cold: Awaited<ReturnType<typeof fixtureNative>> | undefined;
   try {
     await vi.waitFor(async () =>
-      expect((await f.native.journal.list(undefined, admission.id))[0]).toMatchObject({
+      expect((await native.journal.list(undefined, admission.id))[0]).toMatchObject({
         state: "running",
         steps: expect.arrayContaining([
           expect.objectContaining({
-            key: "schedule.cells.apply",
+            key: "scripting.execute",
             state: "running",
             dispatchedAt: expect.any(String),
           }),
@@ -37,10 +52,10 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
       }),
     );
     await copyFile(
-      join(f.dir, "native", "partition-operations.json"),
       join(dir, "partition-operations.json"),
+      join(coldDir, "partition-operations.json"),
     );
-    const durable = (await readFile(join(dir, "partition-operations.json"), "utf8"))
+    const durable = (await readFile(join(coldDir, "partition-operations.json"), "utf8"))
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line))
@@ -54,20 +69,20 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
       state: "running",
       steps: expect.arrayContaining([
         expect.objectContaining({
-          key: "schedule.cells.apply",
+          key: "scripting.execute",
           state: "running",
           dispatchedAt: expect.any(String),
         }),
       ]),
     });
-    cold = await fixtureNative(dir);
+    cold = await fixtureNative(coldDir);
     const response = await cold.actions()(admission);
     expect(response.status, await response.clone().text()).toBeLessThan(400);
     expect(await cold.journal.wait(admission.id)).toMatchObject({
       state: "unknown",
       steps: expect.arrayContaining([
         expect.objectContaining({
-          key: "schedule.cells.apply",
+          key: "scripting.execute",
           state: "unknown",
           dispatchedAt: expect.any(String),
         }),
@@ -77,7 +92,9 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
   } finally {
     release();
     await pending;
+    await native.close();
     await cold?.close();
+    await rm(coldDir, { recursive: true, force: true });
     await rm(dir, { recursive: true, force: true });
   }
 });
@@ -88,8 +105,7 @@ test("E8 cold HTTP reentry converts a real running native write to unknown witho
 // journal. The boundary that still holds is the test above: a journal that decodes never
 // redispatches a write it knows was running. A journal that does not decode knows nothing.
 test("E8 corrupt journal is discarded with one notice, and a real action then runs", async () => {
-  const f = await setup();
-  const admission = await f.admission();
+  const admission = memberWrite();
   const dir = await mkdtemp(join(tmpdir(), "pe-corrupt-journal-"));
   const path = join(dir, "partition-operations.json");
   const corrupt = Buffer.from("corrupt journal header\n", "utf8");
@@ -121,8 +137,7 @@ test("E8 corrupt journal is discarded with one notice, and a real action then ru
 // refusal holds across a restart with the notice file gone, because the discard rides the
 // journal's own header.
 test("E8 a re-sent admission that a discarded journal does not know is refused, and nothing dispatches", async () => {
-  const f = await setup();
-  const admission = await f.admission();
+  const admission = memberWrite();
   const resend = () =>
     new Request("http://host/actions", {
       method: "POST",
@@ -183,8 +198,7 @@ test("E8 a re-sent admission that a discarded journal does not know is refused, 
 });
 
 test("E8 a new admission first sent after discard survives a lost first POST", async () => {
-  const f = await setup();
-  const admission = await f.admission();
+  const admission = memberWrite();
   const dir = await mkdtemp(join(tmpdir(), "pe-new-after-discard-"));
   await writeFile(join(dir, "partition-operations.json"), "corrupt journal header\n");
   const cold = await fixtureNative(dir);
@@ -212,8 +226,7 @@ test("E8 a new admission first sent after discard survives a lost first POST", a
 test.each([10, 1])(
   "E8 a re-send %i minutes ahead of the host clock crosses the real actions door",
   async (minutes) => {
-    const f = await setup();
-    const admission = await f.admission();
+    const admission = memberWrite();
     const dir = await mkdtemp(join(tmpdir(), "pe-future-send-"));
     await writeFile(join(dir, "partition-operations.json"), "corrupt journal header\n");
     const cold = await fixtureNative(dir);
@@ -252,8 +265,7 @@ test.each([10, 1])(
 );
 
 test("E8 a re-send refuses when the journal's own discard time does not parse", async () => {
-  const f = await setup();
-  const admission = await f.admission();
+  const admission = memberWrite();
   const dir = await mkdtemp(join(tmpdir(), "pe-unparsed-discard-"));
   await writeFile(join(dir, "partition-operations.json"), '{"version":8,"discarded":"x"}\n');
   const cold = await fixtureNative(dir);
@@ -277,8 +289,7 @@ test("E8 a re-send refuses when the journal's own discard time does not parse", 
 });
 
 test("W7c an intact journal admits a future re-send as new work", async () => {
-  const f = await setup();
-  const admission = await f.admission();
+  const admission = memberWrite();
   const dir = await mkdtemp(join(tmpdir(), "pe-intact-future-"));
   const cold = await fixtureNative(dir);
   try {

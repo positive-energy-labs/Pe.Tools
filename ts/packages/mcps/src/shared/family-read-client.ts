@@ -1,6 +1,5 @@
 import {
   familyCaptureSchema,
-  familyReads,
   type FamilyReadKey,
   type WorkKey,
   type DocumentRef,
@@ -25,7 +24,5 @@ export async function readFamilyCapture(
       Error((value as { error?: string }).error ?? `Family read failed (${response.status})`),
       { status: response.status },
     );
-  if (key === "family.read") return familyReads[key].result.parse(value);
-  if (key === "family.cancel-read") return familyReads[key].result.parse(value);
   return familyCaptureSchema.parse(value);
 }

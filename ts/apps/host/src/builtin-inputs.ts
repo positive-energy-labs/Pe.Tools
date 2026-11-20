@@ -4,7 +4,6 @@ import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { join } from "node:path";
-import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, type RecordedInput } from "@pe/host-internal/input-recording";
 import { nativeInputIdentity } from "@pe/host-internal/input-recording";
@@ -12,7 +11,6 @@ import { CaptureStore } from "./takeoff-captures.ts";
 import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
 import { readLocal } from "./local-inputs.ts";
-import { readFamilySpec } from "./family-file-input.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
 import { createHash } from "node:crypto";
 import { nativeOutputLayer } from "./native-output.ts";
@@ -576,18 +574,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                 })()
               : name.startsWith("local:")
                 ? readLocal(name.slice(6), args)
-                : name === "family-spec"
-                  ? (async () => {
-                      const { target } = z
-                        .object({ target: documentRefSchema.optional() })
-                        .parse(args);
-                      const pointer = target
-                        ? (await invoke(inventory.document(target))).projectHome
-                        : null;
-                      const { target: _target, ...member } = args as Record<string, unknown>;
-                      return readFamilySpec(member, pointer);
-                    })()
-                  : Promise.reject(Error(`Unknown file input ${name}`)),
+                : Promise.reject(Error(`Unknown file input ${name}`)),
         );
       const sources = (current: InputConsumption): ReadSources => {
         const context = Context.add(admitted, CurrentInputConsumption, current);
@@ -636,11 +623,6 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   current,
                   { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
                   () => {
-                    if ((request as { kind: string }).kind === "captures")
-                      return (async () => {
-                        const captures = await pictures!.list();
-                        return { captures };
-                      })();
                     const resource = resourceReadingSchema.parse(request);
                     if (resource.kind === "takeoff-saved")
                       return (async () => {

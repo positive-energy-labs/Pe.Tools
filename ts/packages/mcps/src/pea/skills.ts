@@ -2,9 +2,7 @@ import path from "node:path";
 import { browserSkillName, renderBrowserGuide } from "@pe/browser/guide";
 import { userRoot } from "@pe/host-contracts/product-paths";
 import { productGuides } from "./guides.generated.ts";
-import { renderSchedulesSkill } from "./schedules-skill.ts";
 import { renderFamiliesSkill } from "./families-skill.ts";
-import { renderFamilySkill } from "./family-skill.ts";
 
 export interface BundledPeaSkill {
   name: string;
@@ -159,7 +157,7 @@ The user asked to learn, not to be told. The master corrects the hand and never 
     name: "write-revit-csharp-script",
     content: String.raw`---
 name: write-revit-csharp-script
-description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets and workspace files; build-pod owns scripts that live in a Pod. Not for changing values a route shows (family or type parameters, schedule cells, takeoffs, parameter links); edit those with edit-shared-work and use their semantic apply command.
+description: Write and run a C# Revit script when code is the clearest way to inspect, mutate, or experiment against a connected model. Use for one-off probes, gaps in host operations, and durable multi-step work. Covers inline snippets and workspace files; build-pod owns scripts that live in a Pod. Not for changing values a route shows (loaded family and type parameters, takeoffs, parameter links); edit those with edit-shared-work and use their semantic apply command.
 ---
 
 # Write Revit C# Script
@@ -199,7 +197,7 @@ A family is a spatial claim. Counts and flexed formulas prove that numbers hold,
 
 ## Method
 
-1. Attach the sheet. Save the family first: stage writeIntent["family.capture"].edit = { "value": { "pod": "<pod>" } } in Family Work and run family.capture with the Work handle; its result is the saved member. Then pe_do key=family.attach-spec with that member and source { "path": "<absolute PDF path>" } or { "url": "<PDF url>" }. A value you stage from the sheet cites it: cells.<pointer>.edit = { "value": ..., "sources": [{ "blockId": "<block id from the attached spec>" }] }. Tables give sizes; drawings give sides, offsets, and which openings exist. Read the page renders in the Pod spec folder as images, not only the text.
+1. Read the cut sheet or submittal and cite the page, table, or detail behind each modeled value. Tables give sizes, and drawings give sides, offsets, and which openings exist.
 2. Inventory before building, then align on it: every size column is a type; every opening drawn is a connector (supply, return, outside air, each pipe, drain, power); every option is a Yes/No toggle; every clearance zone is a block. A ruling about one axis never removes items on another: "no three-phase" removes electrical variants, not cabinet sizes. Ask.
 3. Parameters: search the parameters service cache for PE_ shared parameters first (PE_G_Dim_*, PE_M_Fan_AirFlow, PE_M_PerfCool_CapacityRated, PE_M_Fan_Filter, PE_E_*). Create a family parameter only when no PE parameter fits, and name it in your report. Sheet dimensions are type parameters.
 4. Clearances: nest the company clearance family (!Mechanical Equipment_Clearance_Rectangular_UH in the PE library, or the one the user names) once per zone, always on. Ask before modeling clearance as plain solids.
@@ -349,7 +347,7 @@ When more than a sentence is needed, report what the Pod does in the user's word
     name: "edit-shared-work",
     content: String.raw`---
 name: edit-shared-work
-description: Edit shared tool Work and apply it through the same semantic commands the person uses. Use for parameter values, families, schedules, takeoffs, parameter links, and pod members.
+description: Edit shared tool Work and apply it through the same semantic commands the person uses. Use for parameter values, families, takeoffs, parameter links, and pod members.
 ---
 
 # Edit shared Work
@@ -363,9 +361,7 @@ description: Edit shared tool Work and apply it through the same semantic comman
 7. Report completed work and exact tool/Work links. If accepted commands still run, say so. External devices and Pages keep their own trust adapter.
 `,
   },
-  { name: "edit-schedule-grid", content: renderSchedulesSkill() },
   { name: "edit-loaded-families", content: renderFamiliesSkill() },
-  { name: "edit-family", content: renderFamilySkill() },
   ...productGuides.flatMap((guide) => guide.skills),
 ];
 
@@ -379,6 +375,8 @@ export const retiredPeaSkillNames: readonly string[] = [
   "debug-family-foundry-artifacts",
   "validate-pe-settings-workspace",
   "author-pe-settings",
+  "edit-family",
+  "edit-schedule-grid",
 ];
 
 /** Codex reads repo skills from `.agents/skills` under its cwd; Claude Code from `.claude/skills`. */

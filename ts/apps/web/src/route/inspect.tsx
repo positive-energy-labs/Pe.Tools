@@ -6,8 +6,10 @@
  */
 import { useState, type ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { podMemberCode, routeAddress } from "@pe/agent-contracts";
+import { captureUrl, podMemberCode, routeAddress } from "@pe/agent-contracts";
 
+import { runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
+import { currentFixture } from "@pe/web-kernel/shell/fixture-name";
 import { Button } from "@pe/kit/lang/button";
 import { hostShellOpenRpc } from "../../../../packages/mcps/src/shared/rpc-client";
 
@@ -47,10 +49,18 @@ const RECEIPT: Inspectable = {
   open: { kind: "route", href: (id) => routeAddress("ops").link({ actionId: id }) },
 };
 
-/** A kept view picture, opened in `/captures` focused on its row. Its id is the blob's sha. */
+/** A kept view picture, opened at its PNG URL. Its id is the blob's sha. */
 const CAPTURE: Inspectable = {
   label: (id) => `capture ${id.slice(0, 8)}`,
-  open: { kind: "route", href: (id) => routeAddress("captures").link({ focus: id, open: [id] }) },
+  open: {
+    kind: "href",
+    href: (id) => {
+      const url = captureUrl(encodeURIComponent(id));
+      return typeof window === "undefined" || currentFixture() !== null
+        ? url
+        : runtimeStreamUrl(url);
+    },
+  },
 };
 
 /** The kinds every route opens, beside the ones its manifest declares. */

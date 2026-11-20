@@ -2,7 +2,7 @@ import { commandTable } from "./command-axes.ts";
 import { roomsViewId, stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
 import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
-import { scheduleActions, scheduleReads } from "./schedule-actions.ts";
+import { scheduleReads } from "./schedule-actions.ts";
 import { familyActions, familyReads } from "./family-actions.ts";
 import { stagedRoomEditSchema } from "./takeoffs.ts";
 import { nativeProcessSchema } from "./action-receipts.ts";
@@ -152,9 +152,7 @@ export const ADMISSION_RESEND_HEADER = "x-pe-admission-resend";
 
 import { workCommand, type Tool } from "./command.ts";
 import { settingsRouteState } from "./settings.ts";
-import { familyDraftRouteState } from "./family.ts";
 import { familiesRouteState } from "./families.ts";
-import { scheduleGridRouteState } from "./schedule-grid-data.ts";
 import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { catalogWorkCommands } from "./catalog-work.ts";
@@ -167,25 +165,6 @@ export const builtinTools = {
     commands: {
       "settings.observe": workCommand("pods", familyActions["settings.observe"]),
       "settings.write": workCommand("pods", familyActions["settings.write"]),
-    },
-  },
-  family: {
-    name: "family",
-    says: familyDraftRouteState.description,
-    work: {
-      ...familyDraftRouteState,
-      editable: [
-        ["writeIntent", "*"],
-        ["cells", "*"],
-      ],
-    },
-    commands: {
-      "family.attach-spec": workCommand("family", familyActions["family.attach-spec"]),
-      "family.observe": workCommand("family", familyActions["family.observe"], { optional: true }),
-      ...workIntent("family", "family.capture", familyActions["family.capture"]),
-      "family.plan": workCommand("family", familyActions["family.plan"]),
-      ...workWriteCommands("family", "family.apply", familyActions["family.apply"]),
-      ...workWriteCommands("family", "family.build", familyActions["family.build"]),
     },
   },
   families: {
@@ -202,29 +181,6 @@ export const builtinTools = {
       "families.plan": workCommand("families", familyActions["families.plan"]),
       ...workWriteCommands("families", "families.apply", familyActions["families.apply"]),
       "families.save-draft": workCommand("families", familyActions["families.save-draft"]),
-    },
-  },
-  schedules: {
-    name: "schedules",
-    says: scheduleGridRouteState.description,
-    work: {
-      ...scheduleGridRouteState,
-      editable: [
-        ["writeIntent", "*"],
-        ["cells", "*"],
-      ],
-    },
-    commands: {
-      "schedule.grid.read": scheduleActions["schedule.grid.read"],
-      "schedule.grid.bind": scheduleActions["schedule.grid.bind"],
-      ...workWriteCommands(
-        "schedules",
-        "schedule.grid.push",
-        scheduleActions["schedule.grid.push"],
-        { workspace: true },
-      ),
-      ...workIntent("schedules", "schedule.capture", scheduleActions["schedule.capture"]),
-      ...workWriteCommands("schedules", "schedule.apply", scheduleActions["schedule.apply"]),
     },
   },
   takeoffs: {
@@ -317,9 +273,7 @@ export const builtinCommandHead = {
 export const builtinCommands = {
   ...builtinCommandHead,
   ...builtinTools.pods.commands,
-  ...builtinTools.family.commands,
   ...builtinTools.families.commands,
-  ...builtinTools.schedules.commands,
   ...builtinTools.takeoffs.commands,
   ...builtinTools.rooms.commands,
   ...builtinTools.findings.commands,
@@ -408,8 +362,6 @@ const hostActionTail = {
   ...actionControls,
   // These direct reads consume an owning Work just like journaled commands. The send door
   // projects its handle into the existing family transport's scope, outside the read payload.
-  "family.read": workCommand("family", familyReads["family.read"]),
-  "family.cancel-read": workCommand("family", familyReads["family.cancel-read"]),
   "family.saved": familyReads["family.saved"],
   "parameter-links.read": workCommand("parameter-links", familyReads["parameter-links.read"]),
   ...scheduleReads,

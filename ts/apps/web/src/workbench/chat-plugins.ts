@@ -126,11 +126,6 @@ export function capturedPlace(
       kind: "ids",
       ids: [podMemberCode({ pod: String(input.pod), path: String(input.path) })],
     };
-  if (key === "schedules" && scope.binding === "workspace") {
-    const id = encode({ keyKind: "workspace", key: scope.work });
-    if (!id.ok) return { ok: false, refusal: id.reason };
-    search.workspaceId = { kind: "ids", ids: [id.value] };
-  }
   return { ok: true, route: key, page: at.read(at.write(search)).page, carry };
 }
 
@@ -265,5 +260,5 @@ export function receiptRoute(
   return publicRoutes.get(route) ? (route as ChatPluginRoute) : null;
 }
 
-/** `takeoffs.sync` → `sync`, `schedule.grid.push` → `grid push`. */
+/** `takeoffs.sync` → `sync`, `schedule.grid.snapshot` → `grid snapshot`. */
 export const actionWord = (key: string) => key.split(".").slice(1).join(" ") || key;
