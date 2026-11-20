@@ -1,7 +1,8 @@
 import { callPolicies, type CallPolicy } from "./call-policy.ts";
 import { commandCatalogAxes, commandTable, type CommandKey } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { builtinLocalCatalog } from "@pe/host-contracts/operation-types";
+import type { LocalCatalog } from "./semantic-actions.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import type { Command } from "./command.ts";
 import { capabilityPrincipals } from "./capability.ts";
@@ -102,6 +103,8 @@ export function createPeCatalog<const Extra extends HttpReads = Record<never, ne
   reads?: { inputs: Readonly<Record<string, z.ZodType>>; help: string },
   productPolicies: Readonly<Record<string, CallPolicy>> = {},
   extra?: Extra,
+  // The built-in rows alone suit a caller that registers no product; the registration site passes its assembled table.
+  local: LocalCatalog = builtinLocalCatalog,
 ): PeCatalog<Extra> {
   assertProductCatalogKeys("HTTP readings", "route axes", extra ?? {});
   const routes = Object.assign({}, httpRoutes, extra);
@@ -127,13 +130,12 @@ export function createPeCatalog<const Extra extends HttpReads = Record<never, ne
     : schemas.valueReadRequest;
   const routeAxes = hostRouteAxes(
     [
-      ...hostOpCatalog
-        .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
-        .map(opEntry),
-      ...tsOnlyOperationCatalog.map(opEntry),
+      ...hostOpCatalog.filter((op) => !local.some((local) => local.key === op.key)).map(opEntry),
+      ...local.map(opEntry),
       ...Object.entries(actions).map(([key, action]) => commandAxes(key, action)),
     ],
     Object.keys(productPolicies),
+    local,
   );
   const peRoutes: { [K in keyof typeof routes]: (typeof routes)[K] & { catalog: CatalogRow } } = {
     ...(Object.fromEntries(
@@ -172,7 +174,7 @@ export function createPeCatalog<const Extra extends HttpReads = Record<never, ne
       ]),
     ) as unknown as { [K in keyof typeof routes]: (typeof routes)[K] & { catalog: CatalogRow } }),
     ...Object.fromEntries(
-      tsOnlyOperationCatalog.map((op) => [
+      local.map((op) => [
         `op:${op.key}`,
         {
           kind: "operation",
@@ -211,9 +213,7 @@ export function createPeCatalog<const Extra extends HttpReads = Record<never, ne
   function linkedCatalog(): LinkedCatalog<CatalogRow> {
     return (linked ??= requireLinkedCatalog(
       link<CatalogRow>([
-        ...hostOpCatalog
-          .filter((op) => !tsOnlyOperationCatalog.some((local) => local.key === op.key))
-          .map(opEntry),
+        ...hostOpCatalog.filter((op) => !local.some((local) => local.key === op.key)).map(opEntry),
         ...Object.values(peRoutes).flatMap((row) =>
           "catalog" in row ? [row.catalog as CatalogRow] : [],
         ),
@@ -315,10 +315,11 @@ function axes(
 function hostRouteAxes(
   leaves: readonly CatalogLink[],
   resourceReads: readonly string[],
+  local: LocalCatalog,
 ): Record<PeRouteId, CatalogLink> {
   const reads = [
     ...new Set(
-      [...hostOpCatalog, ...tsOnlyOperationCatalog]
+      [...hostOpCatalog, ...local]
         .filter((op) => op.effect === "Read" || op.effect === "TransactRead")
         .map((op) => op.key),
     ),

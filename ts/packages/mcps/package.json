@@ -19,6 +19,7 @@
   "exports": {
     "./product-catalog": "./src/pea/product-catalog.generated.ts",
     "./product-actions": "./src/pea/product-actions.generated.ts",
+    "./product-operations": "./src/pea/product-operations.generated.ts",
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"

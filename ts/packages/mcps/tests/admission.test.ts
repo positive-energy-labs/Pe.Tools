@@ -584,7 +584,15 @@ test("an unregistered sheet route submits through the generic path without produ
   expect(seen).toEqual(["/actions"]);
 });
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import {
+  tsOnlyOperationCatalog,
+  tsOnlyOperationSchemas,
+} from "../src/pea/product-operations.generated.ts";
+test("the assembled local catalog has one row per assembled schema key", () => {
+  expect(tsOnlyOperationCatalog.map((op) => op.key).sort()).toEqual(
+    Object.keys(tsOnlyOperationSchemas).sort(),
+  );
+});
 // Mutant: make opWrites read `intent` for a native op and the first two lines go red.
 test("native and host-local ops select the write door by effect, regardless of intent", () => {
   const native = { key: "revit.context.view-image.focus", intent: "Read" } as const;
