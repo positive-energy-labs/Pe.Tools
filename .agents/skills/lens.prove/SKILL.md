@@ -31,6 +31,8 @@ A route's acceptance is a person's task driven through its real controls. Tests,
 
 - Drive the surface first. Add a deterministic test only for an invariant a drive cannot expose reliably. Do not add tests that mirror an implementation or freeze an interaction still being discovered, and keep temporary test scaffolding disposable.
 - Push on the boundary the feature crosses, because bugs live where isolated checks never cross: a second conversation turn, a writer outside the page, a cold start through the ordinary launch path, a leave-and-return, a native edit behind the UI. The happy path in one tab finds little.
+- Off the happy path is the habit, because that is where edges are found: a second write while the first is unknown, a double click, a leave mid-action, on a disposable copy, each recorded as deliberate. A defect found is a seed: drive its neighbours next, the same class of fault on sibling surfaces and on whatever the fix touched, because a system that held one such defect is fragile around it.
+- Drive Pea with a person's words. A prompt that names tools, doors or steps ("use Pea tools only") tests the prompt, not Pea, and never stamps a Pea row.
 - Pick challenges from what the feature promises. A mutation journey covers one real write, an independent readback, a refused re-plan of consumed work, and a change made behind the UI. A read-only audit needs no write.
 - Record a disabled, stale, covered or refused control as the result, because it is what the person would have met. Never route around it.
 - Compare the intended, typed, staged, reviewed and written values, because a screenshot can hide a wrong staged value.
