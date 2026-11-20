@@ -45,7 +45,7 @@ async function ensureDevTray(sourceRoot: string) {
 }
 
 /** Own one icon for the checkout; backend and frontend incarnations are read by the native adapter. */
-export async function createDevTraySupervisor(sourceRoot: string, showWindow = false) {
+export async function createDevTraySupervisor(sourceRoot: string, showWindow = false, watchedHostRoot?: string) {
   const directory = devTrayDirectory(sourceRoot);
   const path = join(directory, "supervisor.json");
   await mkdir(directory, { recursive: true });
@@ -79,6 +79,7 @@ export async function createDevTraySupervisor(sourceRoot: string, showWindow = f
       instanceId,
       pid: process.pid,
       processStartUtc: new Date(Date.now() - process.uptime() * 1000).toISOString(),
+      watchedHostRoot,
       showWindow,
     }),
   );
