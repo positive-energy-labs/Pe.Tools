@@ -41,7 +41,7 @@ import { fillBody, scrollBody } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
 import type { FieldCodec } from "./field-codec.ts";
-import type { RoleFields, Specification } from "./specification.ts";
+import type { PlanCell, Presentation, RoleFields, Specification } from "./specification.ts";
 export type { Owners, Specification } from "./specification.ts";
 type Field = {
   schema: z.ZodType;
@@ -268,14 +268,6 @@ export type VerbContext<C extends VerbScope = { page: any; value: any; doc: any 
   readonly value: C["value"] | undefined;
   readonly doc: C["doc"] | undefined;
 };
-/** What a review says: one sentence, or a sentence over its rows and cells (`presentationSchema` decodes it). */
-type Presentation =
-  | string
-  | {
-      readonly sentence: string;
-      readonly rows: readonly string[];
-      readonly cells?: readonly unknown[];
-    };
 /** The mount binds the Work handles; a verb supplies the rest of its handle's input. */
 type Unbound<I> = I extends object ? Omit<I, "work" | "readWorks"> : I;
 /**
@@ -287,6 +279,8 @@ export type VerbDecl<C extends VerbScope, H extends CommandHandle = CommandHandl
   readonly handle: H;
   readonly label: string;
   readonly input?: (ctx: VerbContext<C>, supplied?: any) => Unbound<InputOf<H>>;
+  /** A cell the Plan gesture can choose unambiguously. Stage it through Work before issuing the Read. */
+  readonly stageForPlan?: (ctx: VerbContext<C>) => PlanCell | undefined;
 } & (CommandHandle extends H
   ? // A handle whose key is erased (a mounted spec declared again) keeps whatever it had.
     {
@@ -308,6 +302,7 @@ export type AnyVerb = {
   readonly handle: CommandHandle;
   readonly label: string;
   input?(ctx: VerbContext, supplied?: unknown): unknown;
+  stageForPlan?(ctx: VerbContext): PlanCell | undefined;
   present?(result: unknown, ctx: VerbContext): Presentation;
 };
 type HostRead = import("./host-read.ts").HostRead;

@@ -1193,6 +1193,18 @@ export function mountTypedRoute(
       try {
         if (!basis() || [...owners.values()].some((o) => !o.ready))
           throw Error(basisRefusal() ?? "Work unavailable");
+        const cell = verb.stageForPlan?.(verbContext(owners.get(own)?.handle ?? null));
+        if (cell) {
+          const result = await mounted.draw(cell.pane, ({ cells }) =>
+            cells.at(cell.path).stage(cell.value, { label: cell.label }),
+          );
+          if (result !== null) {
+            const failure = z.object({ message: z.string() }).safeParse(result);
+            throw Error(failure.data?.message ?? `Choose ${cell.label} before planning again.`);
+          }
+          await whenSettled(true);
+          requireWritable();
+        }
         const core = spec.core ? reads.get(spec.core)?.snapshot : undefined;
         if (core?.state !== "ready")
           throw Error(core ? reasonOf(core) : "Read the current Value before planning");

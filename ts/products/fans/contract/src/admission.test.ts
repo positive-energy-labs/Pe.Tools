@@ -4,6 +4,16 @@ import { expect, test } from "vite-plus/test";
 import { workHandle } from "@pe/agent-contracts";
 import { admissionPreflight } from "./admission.ts";
 
+test("saving Duct Systems rulings does not require a Fans write scope", async () => {
+  const asked = workHandle({ binding: "host", route: DUCT_SYSTEMS_ROUTE, target: null }, 1);
+  await expect(
+    admissionPreflight.run({}, asked, async (key) => ({
+      handle: workHandle(key, 1),
+      doc: {},
+    })),
+  ).resolves.toBeUndefined();
+});
+
 test("P-096: preflight refuses a stale route-keyed sibling revision", async () => {
   const asked = workHandle({ binding: "host", route: fansRouteState.route, target: null }, 1);
   const sibling = workHandle({ ...asked.key, route: DUCT_SYSTEMS_ROUTE }, 1);

@@ -365,10 +365,10 @@ test("a claim that is not complete is refused with its kind and what holds it op
   );
 });
 
-test("unscoped losses do not fire a healing read", async () => {
+test("unscoped fan losses name the Inputs control before reading a walk", async () => {
   const read = vi.fn();
   await expect(lossSnapshot(undefined, read)).rejects.toThrow(
-    "stage a scope before previewing losses",
+    "Choose a fan port in Write scope in Inputs, then plan again.",
   );
   expect(read).not.toHaveBeenCalled();
 });

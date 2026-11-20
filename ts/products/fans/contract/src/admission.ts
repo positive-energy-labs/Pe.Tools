@@ -1,4 +1,4 @@
-import { fansDocumentSchema, fansRouteState } from "./fans.ts";
+import { fansDocumentSchema, fansRouteState, fanWriteScopeMessage } from "./fans.ts";
 import { DUCT_SYSTEMS_ROUTE } from "@pe/ducts-contract/system-work";
 import { z } from "zod";
 import { workHandleSchema, workKey, type WorkHandle } from "@pe/agent-contracts";
@@ -34,10 +34,10 @@ export const admissionPreflight = {
       throw Error("Ducts Work changed; read its current revision before preview");
     if (fansHandle && !same(fans.handle, fansHandle))
       throw Error("Fans Work changed; read its current revision before preview");
-    const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
-    if (!walk)
-      throw Error(
-        'Preview needs a fan walk. Read route:reads.value (read fans.roster), then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.',
-      );
+    if (
+      asked.key.route === fansRoute &&
+      !fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk
+    )
+      throw Error(fanWriteScopeMessage);
   },
 };

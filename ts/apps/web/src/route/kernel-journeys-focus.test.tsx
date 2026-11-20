@@ -1980,6 +1980,45 @@ afterEach(() => {
 
 // CB4-F01: replay the recorded MUAS walk through Work, Plan and the shared review DOM.
 // Native responses use the new DTO; they certify presentation, not a Revit read.
+test.each([1, 2])(
+  "JZ first Fans plan with %i open ports chooses a scope only when unambiguous",
+  async (count) => {
+    const f = await createWitness(closes);
+    const roster = f.typed.spec.subject?.read;
+    await waitFor(() => expect(f.typed.value(roster).state).toBe("ready"));
+    const value = valueOf(f.typed.value(roster));
+    const rows = value.rows.slice(0, count);
+    expect(rows).toHaveLength(count);
+    f.typed.page.subject({ kind: "ids", ids: rows.map(stableFanKey) });
+    await f.typed.whenWritable();
+    native.submit.mockReset();
+    native.submit.mockRejectedValue(Error("Plan received"));
+    const revision = f.fans.work()?.revision;
+    expect(f.typed.owner()?.doc.writeIntent).toEqual({});
+    render(<TypedWrite mount={f.typed} id="losses" />);
+    fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" }));
+    if (count === 2) {
+      expect(
+        await screen.findByText("Choose a fan port in Write scope in Inputs, then plan again."),
+      ).toBeTruthy();
+      expect(native.submit).not.toHaveBeenCalled();
+      expect(f.fans.work()?.revision).toBe(revision);
+    } else {
+      await waitFor(() => expect(native.submit).toHaveBeenCalledTimes(1));
+      const { unitId, portIndex } = rows[0];
+      expect(f.typed.owner()?.doc.writeIntent.edit?.value).toEqual({ walk: { unitId, portIndex } });
+      expect(native.submit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          key: "sheet.plan",
+          input: expect.objectContaining({
+            work: expect.objectContaining({ revision: (revision ?? 0) + 1 }),
+          }),
+        }),
+      );
+    }
+  },
+);
+
 test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unreadable holds Apply", async () => {
   for (const unreadable of [false, true]) {
     const capture = structuredClone(realMuas);
