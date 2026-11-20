@@ -19,7 +19,8 @@ import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
 const familiesView = body(contracts.view, async function (ctx, args) {
   await ctx.read(documentMark, args.target);
-  const scope = (await ctx.read(workBinding, { route: "families", target: args.target }))!;
+  const scope = await ctx.read(workBinding, { route: "families", target: args.target });
+  if (!scope) throw Error("This document has no Work binding");
   const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
   const work = familiesRouteState.schema.parse(view?.doc ?? {});
   const { body: catalog } = await ctx.read(native("revit.catalog.loaded-families"), {

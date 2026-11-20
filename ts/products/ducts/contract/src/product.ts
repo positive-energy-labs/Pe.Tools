@@ -9,6 +9,7 @@ import {
   entity,
   familyParameter,
   homeFile,
+  productRead,
   ownerBlob,
   product as define,
   revitEntity,
@@ -103,7 +104,7 @@ export const product = define({
   id: "ducts",
   publishTool: false,
   says: "Shared duct model inputs, settings, catalogs and loss records.",
-  homes: { settings: settingsHome, ...lossWrites, catalogs: homeFile("Catalogs") },
+  homes: { settings: settingsHome, ...lossWrites, catalogs: productRead(homeFile("Catalogs")) },
   cells: settingsCells,
   routes: {},
   readings: {

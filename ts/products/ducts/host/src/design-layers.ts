@@ -28,7 +28,8 @@ export const designLayers = read("ducts.design-layers", {
   }),
   async run(ctx, target) {
     // The duct network's Work is another product's; this reading names the route it reads.
-    const scope = (await ctx.read(workBinding, { route: "duct-systems", target }))!;
+    const scope = await ctx.read(workBinding, { route: "duct-systems", target });
+    if (!scope) throw Error("This document has no Work binding");
     const ducts = await ctx.read(workRead("duct-systems", ductsDocumentSchema), scope);
     const fans = await ctx.read(workRead("fans", fansDocumentSchema), { ...scope, route: "fans" });
     return {

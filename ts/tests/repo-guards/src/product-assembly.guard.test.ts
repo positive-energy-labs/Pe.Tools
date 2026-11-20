@@ -74,7 +74,7 @@ const fixtureFiles = {
     '  says: "Fixture tool",',
     '  homes: { standards: homeFile("proof") },',
     "  cells: {},",
-    '  readings: { echo: { handle: contract("proof.echo", { input: z.strictObject({ kind: z.literal("proof-reading"), text: z.string() }), data: z.string(), uses: [] }), sources: [], says: "A proof reading.", load: { resource: true, calls: { "document.temporary.status": { canonicalSession: true } } } } },',
+    '  readings: { echo: { handle: contract("proof.echo", { input: z.strictObject({ kind: z.literal("proof-reading"), session: z.string(), text: z.string() }), data: z.string(), uses: [] }), sources: [], says: "A proof reading.", load: { resource: true, scope: "session", calls: { "document.temporary.status": { canonicalSession: true } } } } },',
     `  commands: { "${freshCommand}": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", catalogEffect: "Read", dirties: [], native: [], writes: {} } },`,
     "  routes: {},",
     '  guide: { instructions: "Fixture guide.", skills: [] },',
@@ -234,7 +234,7 @@ test("an authored product folder feeds Host, web and Pea without editing their s
       canonicalSession: true,
     });
     expect(
-      contracts.resourceReadingSchema.parse({ kind: "proof-reading", text: "fixture" }),
+      contracts.resourceReadingSchema.parse({ kind: "proof-reading", session: "s", text: "fixture" }),
     ).toMatchObject({ text: "fixture" });
     mkdirSync(join(root, "ts/apps/web/src"), { recursive: true });
     expect(routeFolderCandidates(root)).toContain(join(root, product, "web"));

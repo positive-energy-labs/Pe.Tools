@@ -568,11 +568,9 @@ type ReadingBody<P extends ProductDeclaration, K extends keyof P["readings"], Co
   ctx: Context,
   args: z.output<Handle<P, K>["input"]>,
 ) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
-/** A home file that names no cell path holds what only its product can read. */
+/** The homes declared with `productRead`: what only the product can read. */
 type ProductRead<P extends ProductDeclaration, Reader> = {
-  readonly [K in keyof P["homes"] as [P["homes"][K]["settingCells"]] extends [readonly never[]]
-    ? K
-    : never]: Reader;
+  readonly [K in keyof P["homes"] as P["homes"][K] extends { read: "product" } ? K : never]: Reader;
 };
 /** One reader per such home, beside `HostBodies`. A product with none names no `homes`. */
 export type HomeBodies<P extends ProductDeclaration, Reader> =

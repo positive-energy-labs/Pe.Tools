@@ -1,5 +1,4 @@
 import { resourceReadingSchema } from "@pe/mcps/product-contracts";
-import type { z } from "zod";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";

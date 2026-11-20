@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
-import type { z } from "zod";
+import { z } from "zod";
 import {
   canonicalRouteInput,
-  type DocumentRef,
+  documentRefSchema,
   type RetainedReadingEnvelope,
 } from "@pe/agent-contracts";
 import type { ProductDeclaration } from "@pe/agent-contracts/product";
@@ -18,11 +18,14 @@ export const RETAINED_FRAME = "reading.retained";
 export const RETAINED_REUSED_HEADER = "x-pe-reading-reused";
 
 /** A reading a product declares with `load.resource`: its request, as the product's schema parses it. */
-export type RetainedRequest = { readonly kind: string } & Readonly<Record<string, unknown>>;
+const requestSchema = z.looseObject({ kind: z.string() });
+export type RetainedRequest = Readonly<z.output<typeof requestSchema>>;
+const documentScope = z.looseObject({ target: documentRefSchema });
+const sessionScope = z.looseObject({ session: z.string() });
 type Declared = {
   readonly product: string;
   readonly kind: string;
-  readonly input: z.ZodType<RetainedRequest>;
+  readonly input: z.ZodType;
   readonly scope: "document" | "session";
   readonly calls: readonly string[];
   readonly fixes: Readonly<Record<string, Readonly<Record<string, unknown>> | undefined>>;
@@ -33,10 +36,9 @@ const calls = new Map<string, Declared>();
 export function declareRetained(product: ProductDeclaration) {
   for (const { handle, load } of Object.values(product.readings)) {
     if (!load?.resource) continue;
-    const input = handle.input as z.ZodType<RetainedRequest> & {
-      shape?: { kind?: { value?: unknown } };
-    };
-    const kind = input.shape?.kind?.value;
+    const input = handle.input;
+    const literal = input instanceof z.ZodObject ? input.shape.kind : undefined;
+    const kind = literal instanceof z.ZodLiteral ? literal.value : undefined;
     if (typeof kind !== "string" || !load.scope)
       throw Error(`Retained reading ${handle.key} needs a literal kind and a declared scope`);
     const declared: Declared = {
@@ -64,24 +66,24 @@ const declaredFor = (request: RetainedRequest) => {
 };
 /** The request when it is a declared retained reading; undefined for every other resource. */
 export const retainedRequest = (raw: unknown): RetainedRequest | undefined =>
-  kindOf(raw)?.input.safeParse(raw).data;
+  requestSchema.safeParse(kindOf(raw)?.input.safeParse(raw).data).data;
 /** The retained reading a native call serves, with its declared scope. */
 export const retainedReadingOf = (key: string): Pick<Declared, "scope" | "product"> | undefined =>
   calls.get(key);
 /** One identity however a caller spelled the request: the product's schema is the only normaliser. */
 export const retainedSubject = (raw: RetainedRequest): RetainedRequest =>
-  declaredFor(raw).input.parse(raw);
+  requestSchema.parse(declaredFor(raw).input.parse(raw));
 /** What a retained body belongs to: its session, and its document unless the reading is session-scoped. */
 export const retainedScope = (request: RetainedRequest) => {
   if (declaredFor(request).scope === "session")
-    return { target: null, session: request.session as string };
-  const target = request.target as DocumentRef;
+    return { target: null, session: sessionScope.parse(request).session };
+  const { target } = documentScope.parse(request);
   return { target, session: target.session };
 };
-export const canonicalRetained = (request: RetainedRequest, session: string): RetainedRequest =>
-  declaredFor(request).scope === "session"
-    ? { ...request, session }
-    : { ...request, target: { ...(request.target as DocumentRef), session } };
+export const canonicalRetained = (request: RetainedRequest, session: string): RetainedRequest => {
+  const { target } = retainedScope(request);
+  return target ? { ...request, target: { ...target, session } } : { ...request, session };
+};
 const same = (a: unknown, b: unknown) => canonicalRouteInput(a) === canonicalRouteInput(b);
 /** The native call a retained request acquires through: the call whose fixed fields it carries. */
 export function retainedNative(request: RetainedRequest): NativeReadInput {
@@ -106,7 +108,7 @@ export function retainedCallSubject(input: NativeReadInput): RetainedRequest {
   if (!session) throw refused("Retained read needs an exact canonical session", "read.target");
   const declared = calls.get(input.key);
   if (!declared) throw refused("Operation has no retained subject", "read.contract");
-  return declared.input.parse({
+  return retainedSubject({
     ...(input.input && typeof input.input === "object" ? input.input : {}),
     kind: declared.kind,
     ...declared.fixes[input.key],

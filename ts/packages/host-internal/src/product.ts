@@ -12,6 +12,11 @@ type Dependencies = {
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
 };
 
+const hasHomes = (
+  bodies: object,
+): bodies is { readonly homes: Readonly<Record<string, HomeReader | undefined>> } =>
+  "homes" in bodies;
+
 /** A command's host body. The command registry calls it once with the services it owns. */
 export type CommandBody<D = Dependencies> = (
   bridge: RevitBridge["Service"],
@@ -24,8 +29,7 @@ export type CommandBody<D = Dependencies> = (
  */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  // `any`: a reader answers its own schema, which the product's reading then decodes.
-  bodies: HostBodies<P, ReadContext, CommandBody<D>> & HomeBodies<P, HomeReader<any>>,
+  bodies: HostBodies<P, ReadContext, CommandBody<D>> & HomeBodies<P, HomeReader>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
@@ -37,10 +41,9 @@ export function implement<D>(
   // declaration, so the readers are read back by name here.
   bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>>,
 ) {
-  const { homes: readers = {} } = bodies as { homes?: Readonly<Record<string, HomeReader>> };
   for (const [key, home] of Object.entries(product.homes)) {
-    if (home.kind !== "home-file" || home.settingCells?.length) continue;
-    const reader = readers[key];
+    if (home.read !== "product") continue;
+    const reader = hasHomes(bodies) ? bodies.homes[key] : undefined;
     if (!reader) throw Error(`No host reader for home ${key}`);
     const place = home.place(key);
     declareHome(key, { ...reader, directory: place.at === "setting" ? place.owner : key });

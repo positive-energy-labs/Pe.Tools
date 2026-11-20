@@ -28,6 +28,8 @@ export type Home<Takes extends CellKey = CellKey> = {
   /** How a sheet places a cell that lands here (ADR 0032: placement is derived, never per field). */
   readonly place: (cell: string) => Placement;
   readonly settingCells?: readonly string[];
+  /** Set by `productRead`: the files here are no cells, and the product's host reads them. */
+  readonly read?: "product";
 };
 /**
  * A home C# declares and writes (ruling 4), identified by its generated handle.
@@ -97,11 +99,11 @@ export const platformHomes = [
 ] as const;
 
 /** Rung 3: a standard of the firm or the project, in a home file by tier. */
-export const homeFile = <const Paths extends Readonly<Record<string, readonly string[]>> = {}>(
+export const homeFile = (
   owner: string,
   tiers: readonly SettingTier[] = SETTING_TIERS,
-  paths: Paths = {} as Paths,
-): Home<"route"> & { readonly settingCells: readonly (keyof Paths & string)[] } => ({
+  paths: Readonly<Record<string, readonly string[]>> = {},
+): Home<"route"> => ({
   [made]: "home",
   kind: "home-file",
   rung: 3,
@@ -117,6 +119,14 @@ export const homeFile = <const Paths extends Readonly<Record<string, readonly st
     sizeLimit: "256 KiB for the document tier",
     seenInRevit: "Nothing",
   },
+});
+/**
+ * A home file whose content is not cells, such as a folder of units. It stays a home file on the
+ * same rung; the product's host hands the kernel the reader, and `implement()` refuses without one.
+ */
+export const productRead = <H extends Home>(home: H): H & { readonly read: "product" } => ({
+  ...home,
+  read: "product",
 });
 /** Rung 4: an entity on the element, only where Revit's own calculation must read the fact. */
 export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => ({
