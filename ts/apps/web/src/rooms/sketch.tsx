@@ -130,7 +130,7 @@ export function RoomsSketch({
       onDrop({
         kind: "reject",
         polygon: region.outer.map((p) => [p[0]!, p[1]!]),
-        guid: region.guid,
+        guid: region.uniqueId,
       }),
     );
   };

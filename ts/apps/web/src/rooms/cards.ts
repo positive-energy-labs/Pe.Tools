@@ -152,7 +152,7 @@ const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** The Work's marks as markdown: one section per view, deterministic order. */
 export function cardsMarkdown(doc: FeedbackWork, snapshot: Snapshot): string {
-  const regions = new Map(snapshot.regions.map((region) => [region.guid, region]));
+  const regions = new Map(snapshot.regions.map((region) => [region.uniqueId, region]));
   const label = (guid: string) => {
     const region = regions.get(guid);
     if (!region) return null;
@@ -218,7 +218,7 @@ export interface Card {
 export function inboxCards(doc: FeedbackWork, snapshot: Snapshot, view: number | null): Card[] {
   const regions = snapshot.regions.filter((r) => r.view === view && r.role !== "zone");
   const under = ([x = 0, y = 0]: readonly number[]) =>
-    regions.filter((r) => inLoop(x, y, r.outer)).map((r) => r.guid);
+    regions.filter((r) => inLoop(x, y, r.outer)).map((r) => r.uniqueId);
   const concerns = (polygon: Loop) => {
     const covered = polygon.length > 2 ? coverage(polygon, regions) : [];
     return covered.length ? covered : under(polygon[0]!);
@@ -256,11 +256,11 @@ export function coverage(polygon: Loop, regions: readonly Region[]): string[] {
       const hit = regions.find(
         (r) => r.role !== "zone" && inLoop(x, y, r.outer) && !r.holes.some((h) => inLoop(x, y, h)),
       );
-      if (hit) hits.set(hit.guid, (hits.get(hit.guid) ?? 0) + 1);
+      if (hit) hits.set(hit.uniqueId, (hits.get(hit.uniqueId) ?? 0) + 1);
     }
   return regions
-    .filter((r) => ((hits.get(r.guid) ?? 0) * step * step) / Math.max(r.sqft, 1e-9) >= 0.5)
-    .map((r) => r.guid);
+    .filter((r) => ((hits.get(r.uniqueId) ?? 0) * step * step) / Math.max(r.sqft, 1e-9) >= 0.5)
+    .map((r) => r.uniqueId);
 }
 
 /** Ramer-Douglas-Peucker: drop every point within `eps` of its chord. */

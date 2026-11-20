@@ -177,6 +177,7 @@ export async function journey(
           regions: [
             {
               elementId: 21,
+              uniqueId: "office-zone-00000015",
               typeName: "Office zone",
               view: "Zoning plan",
               color: "10,20,30",

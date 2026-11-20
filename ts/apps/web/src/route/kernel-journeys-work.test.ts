@@ -73,7 +73,7 @@ const recordedInput = (name: string) =>
     Object.entries(nativeRecordingRequest(name)).filter(([, value]) => value !== null),
   );
 const recordedRoomWrites = nativeRecordingRequest("fresh-rooms.write").regions as {
-  guid: string;
+  uniqueId: string;
   name: string;
 }[];
 test("JZ Initialize declaration must also pass the recording transport leaf admission", async () => {
@@ -87,7 +87,7 @@ test("JZ Initialize declaration must also pass the recording transport leaf admi
         body: JSON.stringify({
           action: "takeoffs.initialize",
           key: "takeoffs.initialize-carrier",
-          request: { stage: "Rooms" },
+          request: { stage: "Adoption" },
         }),
       }),
     );
@@ -326,7 +326,7 @@ test.each([
       const edits =
         commandKey === "rooms.write"
           ? recordedRoomWrites.map((room) => ({
-              path: ["edits", roomEditKey(room.guid, "name")],
+              path: ["edits", roomEditKey(room.uniqueId, "name")],
               value: { edit: { value: room.name } },
             }))
           : [];
@@ -375,38 +375,27 @@ test.each([
         ]);
         return;
       }
-      expect(calls[0]).toEqual({
-        key: "takeoffs.initialize-carrier",
-        input: {
-          stage:
-            commandKey === "takeoffs.initialize"
-              ? intent.stage
-              : commandKey === "takeoffs.partition"
-                ? "Materialization"
-                : commandKey.startsWith("rooms.")
-                  ? "Rooms"
-                  : "Adoption",
-        },
-        action: commandKey,
-      });
+      const initialize = commandKey === "takeoffs.initialize";
+      const adopt = commandKey === "takeoffs.adopt";
+      if (initialize || adopt)
+        expect(calls[0]).toEqual({
+          key: "takeoffs.initialize-carrier",
+          input: { stage: initialize ? intent.stage : "Adoption" },
+          action: commandKey,
+        });
       expect(calls.map((row) => row.key)).toEqual(
-        commandKey === "takeoffs.initialize"
-          ? ["takeoffs.initialize-carrier"]
-          : ["takeoffs.initialize-carrier", commandKey],
+        initialize ? ["takeoffs.initialize-carrier"]
+          : adopt ? ["takeoffs.initialize-carrier", commandKey] : [commandKey],
       );
       if (commandKey === "rooms.write") {
-        expect(calls[1]).toEqual({
+        expect(calls[0]).toEqual({
           key: "rooms.write",
           action: commandKey,
-          input: { regions: recordedRoomWrites.map(({ guid, name }) => ({ guid, name })) },
+          input: { regions: recordedRoomWrites.map(({ uniqueId, name }) => ({ uniqueId, name })) },
         });
-        expect((await workspace.read(key, route))!.doc).toMatchObject({
-          edits: {
-            [roomEditKey(recordedRoomWrites[1]!.guid, "name")]: {
-              edit: { value: recordedRoomWrites[1]!.name },
-            },
-          },
-        });
+        const current = tools.rooms.work.schema.parse((await workspace.read(key, route))!.doc);
+        for (const { uniqueId } of recordedRoomWrites)
+          expect(current.edits[roomEditKey(uniqueId, "name")]?.edit ?? null).toBeNull();
       }
     } finally {
       await native.close();

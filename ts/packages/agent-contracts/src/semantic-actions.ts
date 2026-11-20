@@ -1,5 +1,10 @@
 import { commandTable } from "./command-axes.ts";
-import { roomsViewId, stagedRoomWrites, roomsRouteState as roomsWorkSchema } from "./rooms.ts";
+import {
+  roomsViewId,
+  roomRegionUniqueId,
+  stagedRoomWrites,
+  roomsRouteState as roomsWorkSchema,
+} from "./rooms.ts";
 import { workIntent, workWriteCommands } from "./write-intent.ts";
 import { instancesActions, instancesReading, instancesSessionSelection } from "./instances.ts";
 import { scheduleReads } from "./schedule-actions.ts";
@@ -29,7 +34,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "takeoffs.adopt": {
-    native: ["takeoffs.initialize-carrier", "takeoffs.adopt"],
+    native: ["takeoffs.record-replacements", "takeoffs.initialize-carrier", "takeoffs.adopt"],
     says: "Adopt selected regions using the submitted names and system tags.",
     needs: "project-document",
     effect: "command",
@@ -39,21 +44,21 @@ const definitions = {
     dirties: ["snapshot", "takeoff-views", "candidates"],
   },
   "takeoffs.partition": {
-    native: ["takeoffs.initialize-carrier", "takeoffs.partition"],
-    says: "Prepare carriers and partition the selected adopted zone.",
+    native: ["takeoffs.record-replacements", "takeoffs.partition"],
+    says: "Partition the selected adopted zone.",
     needs: "project-document",
     effect: "command",
     input: z.object({
       zoneRegion: z.number().int(),
       view: z.string(),
       zoneName: z.string(),
-      zoneGuid: z.string(),
+      zoneUniqueId: z.string(),
       runId: z.string().optional(),
     }),
     dirties: ["snapshot", "takeoff-views"],
   },
   "takeoffs.sync": {
-    native: ["takeoffs.rhvac-links"],
+    native: ["takeoffs.record-replacements", "takeoffs.rhvac-links"],
     says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
     needs: "project-document",
     effect: "command",
@@ -66,7 +71,7 @@ const definitions = {
     dirties: ["snapshot", "rhvac-open"],
   },
   "rooms.partition": {
-    native: ["rooms.partition"],
+    native: ["takeoffs.record-replacements", "rooms.partition"],
     says: "Partition every zone on a plan selected by numeric Revit view id, keeping locked and matched rooms.",
     needs: "project-document",
     effect: "command",
@@ -75,7 +80,7 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.draw": {
-    native: ["takeoffs.initialize-carrier", "rooms.draw"],
+    native: ["takeoffs.record-replacements", "rooms.draw"],
     says: "Draw one room (locked) or zone region from loops on a plan selected by numeric Revit view id.",
     needs: "project-document",
     effect: "command",
@@ -96,15 +101,15 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.write": {
-    native: ["takeoffs.initialize-carrier", "rooms.write"],
-    says: "Write the given room fields, and a person's room or zone designation, onto regions by guid.",
+    native: ["takeoffs.record-replacements", "rooms.write"],
+    says: "Write room fields by FilledRegion UniqueId and confirm each cell read back after commit.",
     needs: "project-document",
     effect: "command",
     input: z.object({
       regions: z
         .array(
           z.object({
-            guid: z.string().min(1),
+            uniqueId: roomRegionUniqueId,
             name: z.string().optional(),
             type: z.string().optional(),
             ceilingFt: roomNumber,
@@ -121,13 +126,13 @@ const definitions = {
     dirties: ["snapshot"],
   },
   "rooms.merge": {
-    native: ["takeoffs.initialize-carrier", "rooms.merge"],
+    native: ["takeoffs.record-replacements", "rooms.merge"],
     says: "Combine two or more touching rooms of one zone on a plan selected by numeric Revit view id into one locked room.",
     needs: "project-document",
     effect: "command",
     input: z.object({
       view: roomsViewId,
-      guids: z.array(z.string().min(1)).min(2),
+      uniqueIds: z.array(roomRegionUniqueId).min(2),
       name: z.string().nullable().optional(),
     }),
     dirties: ["snapshot"],

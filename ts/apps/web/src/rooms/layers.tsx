@@ -102,7 +102,7 @@ export function TraceLayers({
           {trace.zones.flatMap((zone) =>
             zone.trace.segments.map((segment, i) => (
               <line
-                key={`${zone.zoneGuid}-${i}`}
+                key={`${zone.zoneUniqueId}-${i}`}
                 data-segment={segment.kind}
                 {...line(segment.a, segment.b)}
                 className={segment.kind === "Zone" ? "dash-reference" : undefined}
@@ -117,7 +117,7 @@ export function TraceLayers({
           {trace.zones.flatMap((zone) =>
             zone.trace.openings.map((opening, i) => (
               <line
-                key={`${zone.zoneGuid}-${i}`}
+                key={`${zone.zoneUniqueId}-${i}`}
                 data-opening={opening.kind}
                 {...line(opening.a, opening.b)}
                 style={{
@@ -147,7 +147,7 @@ export function TraceFaces({ trace }: { trace: TraceData }) {
       {trace.zones.flatMap((zone) =>
         zone.trace.faces.map((face) => (
           <FactChip
-            key={`${zone.zoneGuid}-${face.index}`}
+            key={`${zone.zoneUniqueId}-${face.index}`}
             title={`${face.kind} · backed ${pct(face.backed)} · floating ${ft(face.floatingFt)} · ${face.narrow ? "narrow" : "not narrow"} · band ${ft(face.bandWidthFt)}${face.ownEdgeEmpty ? " · own edge empty" : ""}`}
           >
             <span data-face={face.kind}>{`${zone.label}·F${face.index + 1} ${face.kind}`}</span>

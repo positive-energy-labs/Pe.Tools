@@ -73,6 +73,10 @@ internal sealed class RevitDataRequestService {
     private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
 
+    [Op("takeoffs.record-replacements", OpSubject.Document, OpTouches.Metadata, Internal = true, Does = "Read replacement evidence for unreadable Rooms and Takeoff registry records.", Title = "Read Takeoff Record Replacements", Finds = ["takeoffs", "rooms", "records", "replacement"], Cost = OpCost.Bounded)]
+    private static TakeoffRecordReplacements GetTakeoffRecordReplacements(NoRequest _, ProjectDocument document) =>
+        TakeoffCarriers.Replacements(document.Value);
+
     [Op("takeoffs.adopt", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Adopt Filled Regions as Zoning Regions and register their System tags in one transaction.", Title = "Adopt Takeoff Regions", Finds = ["takeoffs", "adopt", "zones", "filled-regions", "register"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.AdoptZones(document, request), "Pe Adopt Takeoff Regions");
@@ -259,11 +263,11 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("rooms.trace", OpSubject.View, OpTouches.Metadata,Does = "Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
+    [Op("rooms.trace", OpSubject.View, OpTouches.Metadata,Does = "Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the view's latest committed run when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
 
-    [Op("rooms.partition", OpSubject.View, OpTouches.Metadata | OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.partition", OpSubject.View, OpTouches.Metadata | OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument,
         ModelWrite scope, CancellationToken cancellationToken) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request, cancellationToken,
@@ -273,9 +277,9 @@ internal sealed class RevitDataRequestService {
     private static RoomsDrawResult DrawRoomCore(RoomsDrawRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Draw(document, request), "Pe Draw Room Region");
 
-    [Op("rooms.write", OpSubject.Elements, OpTouches.Metadata, Internal = true, Does = "Write the given room fields, and a person's room or zone designation, onto regions by guid.", Title = "Write Room Fields", Finds = ["rooms", "write", "room-regions", "fields", "parameters"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
-    private static RoomsWriteResult WriteRoomsCore(RoomsWriteRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(activeDocument.Value, document => Rooms.Write(document, request), "Pe Write Room Fields");
+    [Op("rooms.write", OpSubject.Elements, OpTouches.Metadata, Internal = true, Does = "Write submitted Rooms fields by FilledRegion UniqueId and return cells confirmed by committed readback.", Title = "Write Room Fields", Finds = ["rooms", "write", "room-regions", "fields", "parameters"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    private static RoomsWriteReceipt WriteRoomsCore(RoomsWriteRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
+        RunTakeoff(activeDocument.Value, document => Rooms.Write(document, request), opensOwnTransaction: true);
 
     [Op("rooms.merge", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources.", Title = "Merge Room Regions", Finds = ["rooms", "merge", "combine", "room-regions", "filled-regions"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsMergeResult MergeRoomsCore(RoomsMergeRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
@@ -376,14 +380,10 @@ internal sealed class RevitDataRequestService {
         } catch (RoomsViewMissingException ex) {
             throw BridgeOperationExceptions.BadRequest(ex.Message,
                 [BridgeOperationExceptions.Issue("$.view", "RoomsViewMissing", ex.Message, "Choose a plan view in this document.")]);
-        } catch (TakeoffCarrierPrerequisiteException ex) {
-            throw BridgeOperationExceptions.Conflict(
-                ex.Message,
-                [BridgeOperationExceptions.Issue(
-                    "$",
-                    "TakeoffCarriersNeedInitialization",
-                    $"Missing carrier GUIDs: {string.Join(", ", ex.Preflight.MissingCarrierGuids.Select(guid => guid.ToString("D")))}",
-                    $"Call takeoffs.initialize-carrier with stage '{ex.Preflight.Stage}' until status is ready.")]);
+        } catch (RoomsTraceUnavailableException ex) {
+            throw BridgeOperationExceptions.Conflict(ex.Message,
+                [BridgeOperationExceptions.Issue("$.view", ex.Unpartitioned ? "RoomsUnpartitioned" : "RoomsTraceMissing",
+                    ex.Message, ex.Unpartitioned ? "Partition the view to create a trace." : "Look up the trace on the machine that ran partition, or partition again.")]);
         } catch (System.InvalidOperationException ex) when (writes) {
             // Takeoff verbs refuse a failed precondition (cross-zone merge, no zone drawn) with this type, inside the
             // sandbox, so nothing committed: a conflict the host settles `failed`, never an uncertain fault.

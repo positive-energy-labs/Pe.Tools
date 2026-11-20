@@ -40,7 +40,7 @@ test("a region hovered or picked as its regionSubject draws hovered and selected
   const [target, other] = DEMO_ROOMS.regions;
   const ctx = {
     value: { value: { snapshot: DEMO_ROOMS } },
-    page: { read: () => ({ room: { kind: "ids", ids: [regionSubject(target!.guid)] } }) },
+    page: { read: () => ({ room: { kind: "ids", ids: [regionSubject(target!.uniqueId)] } }) },
     cells: { doc: null },
     target: null,
   } as unknown as RoomsContext;
@@ -76,10 +76,10 @@ test("a region hovered or picked as its regionSubject draws hovered and selected
   );
   const path = (guid: string) =>
     view.container.querySelector<SVGPathElement>(`path[data-subject="${regionSubject(guid)}"]`)!;
-  expect(path(target!.guid).style.strokeWidth).toContain("3px");
-  expect(path(other!.guid).style.strokeWidth).toContain("2px");
-  const rest = path(other!.guid).getAttribute("fill");
-  act(() => setHovered(registry, { doc, key: regionSubject(other!.guid) }));
-  expect(path(other!.guid).getAttribute("fill")).not.toBe(rest);
-  expect(path(other!.guid).getAttribute("fill")).toContain("40%");
+  expect(path(target!.uniqueId).style.strokeWidth).toContain("3px");
+  expect(path(other!.uniqueId).style.strokeWidth).toContain("2px");
+  const rest = path(other!.uniqueId).getAttribute("fill");
+  act(() => setHovered(registry, { doc, key: regionSubject(other!.uniqueId) }));
+  expect(path(other!.uniqueId).getAttribute("fill")).not.toBe(rest);
+  expect(path(other!.uniqueId).getAttribute("fill")).toContain("40%");
 });

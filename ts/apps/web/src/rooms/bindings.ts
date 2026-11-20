@@ -10,10 +10,10 @@ export function bindings(ctx: RoomsContext) {
   return {
     selected:
       room.kind === "all"
-        ? regions.map((r) => regionSubject(r.guid))
+        ? regions.map((r) => regionSubject(r.uniqueId))
         : room.ids.map((id) => id as ReturnType<typeof regionSubject>),
     members: new Map(
-      regions.map((region) => [regionSubject(region.guid), [elementKey(region.uniqueId)]]),
+      regions.map((region) => [regionSubject(region.uniqueId), [elementKey(region.uniqueId)]]),
     ),
     observation: {
       scope: {
