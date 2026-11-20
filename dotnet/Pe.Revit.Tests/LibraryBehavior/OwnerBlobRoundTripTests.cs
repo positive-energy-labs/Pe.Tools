@@ -45,11 +45,11 @@ public sealed class OwnerBlobRoundTripTests {
         string? path = null;
         try {
             RoomsDrawResult room;
-            long viewId;
+            string viewId;
             using (var tx = new Transaction(document, "Draw Rooms round trip")) {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
                 var view = CreateRoomsView(document);
-                viewId = view.Id.Value();
+                viewId = view.UniqueId;
                 room = Rooms.Draw(document, new(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Office"));
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
@@ -99,10 +99,10 @@ public sealed class OwnerBlobRoundTripTests {
             ? $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 1}}},"data":{}}"""
             : $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{"regions":[]}}""";
         try {
-            long viewId;
+            string viewId;
             using (var tx = new Transaction(document, "Plant unreadable Rooms record")) {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
-                viewId = CreateRoomsView(document).Id.Value();
+                viewId = CreateRoomsView(document).UniqueId;
                 _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
                 document.Regenerate();
                 Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(planted), Is.True);
@@ -157,10 +157,10 @@ public sealed class OwnerBlobRoundTripTests {
             using (var tx = new Transaction(document, "Create a zone and plant an unreadable registry")) {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
                 var view = CreateRoomsView(document);
-                var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
+                var zone = Rooms.Draw(document, new(view.UniqueId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
                 _ = TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Adoption);
                 Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
-                request = new(view.Name, [new(zone.ElementId, "North", "FC-8")]);
+                request = new(view.UniqueId, [new(zone.ElementId, "North", "FC-8")]);
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 

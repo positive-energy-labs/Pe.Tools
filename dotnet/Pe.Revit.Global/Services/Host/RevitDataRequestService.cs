@@ -64,12 +64,12 @@ internal sealed class RevitDataRequestService {
                 [BridgeOperationExceptions.Issue(refusal.Path, refusal.Code, refusal.Message, null)])
             : result.Value!;
 
-    [Op("takeoffs.snapshot", OpSubject.Region, OpTouches.Geometry, Does = "Read Takeoff zones and rooms for explicit view names or zone GUIDs. Empty scope reads only model status and source identity without region geometry.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
+    [Op("takeoffs.snapshot", OpSubject.Region, OpTouches.Geometry, Does = "Read Takeoff zones and rooms for explicit plan view UniqueIds or zone UniqueIds. Empty scope reads only model status and source identity without region geometry.", Title = "Get Takeoff Snapshot", Finds = ["takeoffs", "snapshot", "zones", "rooms", "filled-regions"], Cost = OpCost.Bounded)]
     private static TakeoffSnapshotResponse GetTakeoffSnapshotCore(TakeoffReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document =>
             new TakeoffSnapshotResponse(DocumentReading.Here(document), TakeoffAtlas.Snapshot(document, request)));
 
-    [Op("takeoffs.candidates", OpSubject.View, OpTouches.Geometry, Does = "Read Filled Regions and their boundary loops from one named plan view.", Title = "Get Takeoff Candidate Regions", Finds = ["takeoffs", "candidates", "filled-regions", "boundaries", "view"], Cost = OpCost.Bounded)]
+    [Op("takeoffs.candidates", OpSubject.View, OpTouches.Geometry, Does = "Read Filled Regions and their boundary loops from one plan view by its UniqueId.", Title = "Get Takeoff Candidate Regions", Finds = ["takeoffs", "candidates", "filled-regions", "boundaries", "view"], Cost = OpCost.Bounded)]
     private static TakeoffCandidatesData GetTakeoffCandidatesCore(TakeoffCandidatesRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => new TakeoffCandidatesData(TakeoffAtlas.CandidateRegions(document, request)));
 
@@ -106,7 +106,7 @@ internal sealed class RevitDataRequestService {
         Does = "Read plan views and level elevations without region boundaries.", Cost = OpCost.Cheap)]
     private static RoomsSnapshotData GetRoomsRoster(NoRequest _, ProjectDocument document) => Rooms.Roster(document.Value);
 
-    [Op("rooms.snapshot", OpSubject.View, OpTouches.Geometry, Does = "Read zones, rooms and held regions on one plan view by numeric Revit view id, with geometry and provenance. rooms.roster lists available views without geometry.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
+    [Op("rooms.snapshot", OpSubject.View, OpTouches.Geometry, Does = "Read zones, rooms and held regions on one plan view by view UniqueId, with geometry and provenance. rooms.roster lists available views without geometry.", Title = "Get Rooms Snapshot", Finds = ["rooms", "snapshot", "levels", "room-regions", "filled-regions"], Cost = OpCost.Bounded)]
     private static RoomsSnapshotData GetRoomsSnapshotCore(RoomsReadRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, doc => Rooms.Snapshot(doc, request.View));
 
@@ -263,17 +263,17 @@ internal sealed class RevitDataRequestService {
         }
     }
 
-    [Op("rooms.trace", OpSubject.View, OpTouches.Metadata,Does = "Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the view's latest committed run when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
+    [Op("rooms.trace", OpSubject.View, OpTouches.Metadata,Does = "Read the solver's layer 1 for each zone on one plan view by view UniqueId from a rooms.partition run, the view's latest committed run when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting.", Title = "Get Rooms Solver Trace", Finds = ["rooms", "trace", "partition", "rails", "openings", "solver"], Cost = OpCost.Bounded)]
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
 
-    [Op("rooms.partition", OpSubject.View, OpTouches.Metadata | OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.partition", OpSubject.View, OpTouches.Metadata | OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view by view UniqueId into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument,
         ModelWrite scope, CancellationToken cancellationToken) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request, cancellationToken,
             progress => _ = RevitReceiptTransport.ReportRoomsProgressAsync(progress)), opensOwnTransaction: true);
 
-    [Op("rooms.draw", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Draw one room or zone region from loops on a plan view by numeric Revit view id; a person's designation, so a room is locked.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.draw", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Draw one room or zone region from loops on a plan view by view UniqueId; a person's designation, so a room is locked.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsDrawResult DrawRoomCore(RoomsDrawRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Draw(document, request), "Pe Draw Room Region");
 
@@ -281,7 +281,7 @@ internal sealed class RevitDataRequestService {
     private static RoomsWriteReceipt WriteRoomsCore(RoomsWriteRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Write(document, request), opensOwnTransaction: true);
 
-    [Op("rooms.merge", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources.", Title = "Merge Room Regions", Finds = ["rooms", "merge", "combine", "room-regions", "filled-regions"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.merge", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Combine two or more rooms or held regions of one zone on one plan view by view UniqueId into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources.", Title = "Merge Room Regions", Finds = ["rooms", "merge", "combine", "room-regions", "filled-regions"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsMergeResult MergeRoomsCore(RoomsMergeRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Merge(document, request), "Pe Merge Room Regions");
 

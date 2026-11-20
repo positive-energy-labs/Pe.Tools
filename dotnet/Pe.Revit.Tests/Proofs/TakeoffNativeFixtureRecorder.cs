@@ -64,13 +64,13 @@ public sealed class TakeoffNativeFixtureRecorder {
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
             var adopted = Capture<TakeoffAdoptResult>("takeoffs.adopt", "AdoptTakeoffRegionsCore",
-                new TakeoffAdoptRequest(view.Name, [new TakeoffAdoptItem(zone.Id.Value(), "Fixture zone", "FIXTURE-1")]));
+                new TakeoffAdoptRequest(view.UniqueId, [new TakeoffAdoptItem(zone.Id.Value(), "Fixture zone", "FIXTURE-1")]));
             Assert.That(adopted, Is.Not.Null, "Adopt native path must answer; see retained error");
 
             var a = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
-                new RoomsDrawRequest(view.Id.Value(), [Square(0, 0, 10)], "Office"));
+                new RoomsDrawRequest(view.UniqueId, [Square(0, 0, 10)], "Office"));
             var b = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
-                new RoomsDrawRequest(view.Id.Value(), [Square(10, 0, 10)], "Lobby"));
+                new RoomsDrawRequest(view.UniqueId, [Square(10, 0, 10)], "Lobby"));
             Assert.That(a, Is.Not.Null, "Draw native path must answer; see retained error");
             Assert.That(b, Is.Not.Null, "Draw native path must answer; see retained error");
             var written = Capture<RoomsWriteReceipt>("rooms.write", "WriteRoomsCore", new RoomsWriteRequest([
@@ -102,14 +102,14 @@ public sealed class TakeoffNativeFixtureRecorder {
                 .Select(entry => entry.Key).ToList();
             Assert.That(members, Has.Count.EqualTo(2));
             _ = Capture<RoomsMergeResult>("rooms.merge", "MergeRoomsCore",
-                new RoomsMergeRequest(view.Id.Value(), members, "Recorded combined room"));
+                new RoomsMergeRequest(view.UniqueId, members, "Recorded combined room"));
             // A missing spatial recording is retained as an error, never fabricated into a DTO.
             _ = Capture<TakeoffPartitionResult>("takeoffs.partition", "PartitionTakeoffCore",
-                new TakeoffPartitionRequest(zone.Id.Value(), view.Name, "Fixture zone", adopted!.Adopted.Single().UniqueId, "recorded-fixture"));
-            var partitioned = Capture<RoomsPartitionResult>("rooms.partition", "PartitionRoomsCore", new RoomsPartitionRequest(view.Id.Value()));
+                new TakeoffPartitionRequest(zone.Id.Value(), view.UniqueId, "Fixture zone", adopted!.Adopted.Single().UniqueId, "recorded-fixture"));
+            var partitioned = Capture<RoomsPartitionResult>("rooms.partition", "PartitionRoomsCore", new RoomsPartitionRequest(view.UniqueId));
             if (partitioned != null)
             {
-                var trace = Invoke<RoomsTraceData>("GetRoomsTraceCore", doc, new RoomsTraceRequest(view.Id.Value()));
+                var trace = Invoke<RoomsTraceData>("GetRoomsTraceCore", doc, new RoomsTraceRequest(view.UniqueId));
                 Assert.That(trace.RunId, Is.EqualTo(partitioned.RunId));
                 Assert.That(trace.Zones.Select(item => item.ZoneUniqueId), Does.Contain(zoneUniqueId));
             }
@@ -126,14 +126,14 @@ public sealed class TakeoffNativeFixtureRecorder {
         try
         {
             RoomsDrawResult room;
-            long viewId;
+            string viewId;
             using (var transaction = new Transaction(doc, "Draw proof room"))
             {
                 Assert.That(transaction.Start(), Is.EqualTo(TransactionStatus.Started));
                 var level = Level.Create(doc, 0);
                 var planType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
                     .Cast<ViewFamilyType>().First(type => type.ViewFamily == ViewFamily.FloorPlan);
-                viewId = ViewPlan.Create(doc, planType.Id, level.Id).Id.Value();
+                viewId = ViewPlan.Create(doc, planType.Id, level.Id).UniqueId;
                 room = Rooms.Draw(doc, new(viewId, [Square(0, 0, 10)], "Office"));
                 Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
