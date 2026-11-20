@@ -1,7 +1,13 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "@pe/fans-contract/contract";
 import { body } from "@pe/host-internal/read-graph";
-import { fansReadArgs, fansCalcData, openFanCalcSchema } from "@pe/fans-contract/fans-read";
+import {
+  FAN_DETAIL_LIMIT,
+  fanDetailLimitMessage,
+  fansReadArgs,
+  fansCalcData,
+  openFanCalcSchema,
+} from "@pe/fans-contract/fans-read";
 import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { subjectCode, subjectOf } from "@pe/agent-contracts";
 import { calcSnapshot } from "@pe/ducts-domain/calc/scoped-snapshot";
@@ -69,10 +75,13 @@ const openFan = read("fans.open", {
 /** The Fans read owns the join; its adapter has no untracked Work/file/native access. */
 export const fansCalc = body(contracts.calc, async function (ctx, args) {
   const fans = await ctx.read(fanRoster, { target: args.target });
+  const requested = args.fan === "all" ? null : [...new Set(args.fan)];
+  if ((requested?.length ?? fans.rows.length) > FAN_DETAIL_LIMIT)
+    throw Error(fanDetailLimitMessage);
   const chosen =
-    args.fan === "all"
+    requested === null
       ? fans.rows
-      : [...new Set(args.fan)].map((key) => {
+      : requested.map((key) => {
           const ref = subjectOf(key);
           const port = ref.sub && "port" in ref.sub ? ref.sub.port : null;
           const row = fans.rows.find(

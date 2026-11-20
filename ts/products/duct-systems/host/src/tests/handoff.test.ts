@@ -7,6 +7,36 @@ import type { ReadContext } from "@pe/host-internal/read-graph";
 import { nativeRead } from "@pe/host-internal/reads/evaluator";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 
+test.each([363, 1089])("refuses All for %i systems before acquiring geometry", async (size) => {
+  const roster = {
+    ...snapshot,
+    rows: [],
+    sourceVersion: "roster",
+    systems: Array.from({ length: size }, (_, id) => ({
+      ...snapshot.systems[0]!,
+      id,
+      name: `SA ${id}`,
+    })),
+  };
+  const unexpected = () => {
+    throw Error("The read started acquiring geometry");
+  };
+  const ctx: ReadContext = {
+    work: unexpected,
+    native: unexpected,
+    collect: unexpected,
+    compute: unexpected,
+    files: { firm: unexpected, tiers: unexpected },
+    read: async (node) => {
+      if (!("name" in node) || node.name !== "ducts.roster") return unexpected();
+      return node.output.parse(roster);
+    },
+  };
+  await expect(
+    ductsNetwork.run(ctx, { target: { session: "test", openId: "document" }, system: "all" }),
+  ).rejects.toThrow("Open up to 16 systems at a time from the Systems list.");
+});
+
 test("pricing reads Chadds' saved ignore with empty pending Work", async () => {
   // The contents of Project Information's _PE_DuctLosses in row2-after-save.json.
   const store = {

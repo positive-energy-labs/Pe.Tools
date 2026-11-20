@@ -7,11 +7,41 @@ import { type ReadContext } from "@pe/host-internal/read-graph";
 import { nativeRead } from "@pe/host-internal/reads/evaluator";
 import { fansCalc } from "../host.ts";
 
+test.each([112, 336])("refuses All for %i ports before opening a single ledger", async (size) => {
+  const target = { session: "test", openId: "document" };
+  const rows = Array.from({ length: size }, (_, id) => ({
+    unitId: id + 1,
+    uniqueId: uniqueIdOf(id + 1),
+    portIndex: 1,
+    mark: "",
+    kind: "air-handler",
+    side: "supply",
+    ratedEspInWg: null,
+  }));
+  const unexpected = () => {
+    throw Error("The read started opening ledgers");
+  };
+  const ctx: ReadContext = {
+    work: unexpected,
+    native: unexpected,
+    collect: unexpected,
+    compute: unexpected,
+    files: { firm: unexpected, tiers: unexpected },
+    read: async (node) => {
+      if (!("name" in node) || node.name !== "fans.roster") return unexpected();
+      return node.output.parse({ target, slots: [], activeSlot: "", rows });
+    },
+  };
+  await expect(fansCalc.run(ctx, { target, fan: "all", calcPath: "" })).rejects.toThrow(
+    "Open up to 8 fan ports at a time from the roster.",
+  );
+});
+
 test.each(["all", "all but one"] as const)(
-  "Fans opens %s of a Chadds-sized roster",
+  "Fans opens %s of a bounded selection and batches its geometry",
   async (scope) => {
     const target = { session: "test", openId: "document" };
-    const rows = Array.from({ length: 112 }, (_, index) => ({
+    const rows = Array.from({ length: 8 }, (_, index) => ({
       unitId: index + 1,
       uniqueId: uniqueIdSchema.parse(uniqueIdOf(index + 1)),
       portIndex: 1,
@@ -118,8 +148,8 @@ test.each(["all", "all but one"] as const)(
               kind: "elements",
               beyond: [],
               walkedElementIds: Array.from(
-                { length: 40 },
-                (_, index) => row.unitId * 40 + index + rows.length,
+                { length: 600 },
+                (_, index) => row.unitId * 600 + index + rows.length,
               ),
             },
             inputs: null,
@@ -132,7 +162,7 @@ test.each(["all", "all but one"] as const)(
     };
     const result = await fansCalc.run(ctx, fansCalc.input.parse({ target, fan }));
     expect(result.opened).toHaveLength(selected.length);
-    expect(batches.map((ids) => ids.length)).toEqual([4096, selected.length * 41 - 4096]);
+    expect(batches.map((ids) => ids.length)).toEqual([4096, selected.length * 601 - 4096]);
     expect(result.calcSnapshot).toMatchObject({ sourceVersion: "geometry-1+geometry-2" });
     expect("nodes" in result.calcSnapshot && result.calcSnapshot.nodes.map(({ id }) => id)).toEqual(
       batches.flat(),

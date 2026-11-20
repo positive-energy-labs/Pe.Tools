@@ -35,6 +35,9 @@ export const fansReadArgs = z.strictObject({
   fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema)]),
   calcPath: z.string().default(""),
 });
+/** The detailed read builds a worksheet per port. Keep its serial native walks bounded. */
+export const FAN_DETAIL_LIMIT = 8;
+export const fanDetailLimitMessage = `Open up to ${FAN_DETAIL_LIMIT} fan ports at a time from the roster.`;
 export const fansReadRequest = publicationRequest(fansReadArgs);
 
 export const fansCalcData = fanCalcSchema.extend({

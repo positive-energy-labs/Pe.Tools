@@ -1415,7 +1415,10 @@ export function mountTypedRoute(
         select: (selected: any) => move({ selected }),
         subject: (subject: any) => {
           if (!spec.subject) throw Error("No subject declared");
-          return move({ [spec.subject.field]: subject }, "push");
+          const reset = Object.fromEntries(
+            (spec.subject.resetQuery ?? []).map((key) => [key, spec.fields[key]?.initial]),
+          );
+          return move({ ...reset, [spec.subject.field]: subject }, "push");
         },
       },
       subscribe(listener: () => void) {
