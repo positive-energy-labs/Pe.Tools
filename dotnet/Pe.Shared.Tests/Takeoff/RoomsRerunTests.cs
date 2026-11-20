@@ -1,5 +1,7 @@
 
 using Pe.Revit.Takeoff;
+using Pe.Shared.RevitData.Serialization;
+using Pe.Shared.RevitData.Takeoffs;
 
 namespace Pe.Takeoff.Tests;
 
@@ -7,6 +9,43 @@ namespace Pe.Takeoff.Tests;
 // redrawn, and a room that came back from a locked proposal is never created again.
 public sealed class RoomsRerunTests
 {
+    [Test]
+    public void Write_receipts_follow_committed_cell_readback_including_no_ops()
+    {
+        const string id = "1a10950e-5cb8-4ed6-a239-d7dfbcc18f16-00000042";
+        var request = new RoomsWriteRequest([new(id, Name: "Office", People: 3, CeilingFt: 9)]);
+        var record = new RoomsRegionRecord();
+        record.Regions[id] = new(TakeoffCarriers.RoleRoomRegion, new RoomFields(Name: "Office", People: 1), RegionProvenance.Default);
+        var commit = false;
+        var receipt = Rooms.CommitWrite(request, () =>
+        {
+            var next = Rooms.Patch(record[id]!, request.Regions.Single());
+            record.Regions[id] = next with { Fields = next.Fields with { CeilingFt = 8 } };
+            commit = true;
+        }, () =>
+        {
+            Assert.That(commit, Is.True);
+            var raw = OwnerBlob.Encode(RoomsRegionRecord.Owner, record.ToData());
+            return RoomsRegionRecord.Decode(OwnerBlob.Decode(RoomsRegionRecord.Owner, raw)).Value!;
+        });
+        Assert.That(receipt.Cells, Is.EqualTo(new RoomsWriteCell[]
+        {
+            new(id, RoomField.name, "Office"),
+            new(id, RoomField.people, 3d),
+        }));
+    }
+
+    [Test]
+    public void Rollback_cannot_read_back_a_preexisting_no_op_or_publish_a_receipt()
+    {
+        RoomsWriteReceipt? receipt = null;
+        Assert.Throws<InvalidOperationException>(() => receipt = Rooms.CommitWrite(
+            new RoomsWriteRequest([new("region-00000042", Name: "Office")]),
+            () => throw new InvalidOperationException("transaction rolled back"),
+            () => throw new AssertionException("rollback must never read back")));
+        Assert.That(receipt, Is.Null);
+    }
+
     private static RoomResult Room(string id, double lx, double ly, double sqft, string? source = null) =>
         new()
         {
@@ -26,7 +65,7 @@ public sealed class RoomsRerunTests
         };
 
     private static ExistingRegion Region(long id, double x0, double y0, double x1, double y1) =>
-        new(id, Guid.NewGuid(),
+        new(id, Guid.NewGuid().ToString("D") + "-00000042",
             [new List<double[]> { new[] { x0, y0 }, new[] { x1, y0 }, new[] { x1, y1 }, new[] { x0, y1 } }],
             (x1 - x0) * (y1 - y0));
 
@@ -62,8 +101,8 @@ public sealed class RoomsRerunTests
     public void Locked_is_never_deleted_or_recreated()
     {
         var locked = Region(7, 0, 0, 10, 10);
-        var echo = Room("R01", 5, 5, 100, RoomsRerun.LockedPrefix + locked.Guid.ToString("D"));
-        var heldEcho = Residue("R02", RoomsRerun.LockedPrefix + Guid.NewGuid().ToString("D"));
+        var echo = Room("R01", 5, 5, 100, RoomsRerun.LockedPrefix + locked.UniqueId);
+        var heldEcho = Residue("R02", RoomsRerun.LockedPrefix + Guid.NewGuid().ToString("D") + "-00000042");
         var native = Room("R03", 15, 5, 100, "host|host|room-unique-id");
         var plan = RoomsRerun.Plan([], [], [locked], [echo, native], [heldEcho], null);
         Assert.Multiple(() => {
@@ -82,12 +121,12 @@ public sealed class RoomsRerunTests
         // A person merged two 10x10 rooms into one 20x10 region; the rerun solves the zone again around it.
         var merged = Region(9, 0, 0, 20, 10);
         var plan0 = RoomsMerge.Plan(1, [
-            new MergeMember(Guid.NewGuid(), 1, "room-region", Guid.Empty, 100, Region(1, 0, 0, 10, 10).Loops, null),
-            new MergeMember(Guid.NewGuid(), 1, "room-region", Guid.Empty, 100, Region(2, 10, 0, 20, 10).Loops, null),
+            new MergeMember(Guid.NewGuid().ToString("D") + "-00000042", 1, "room-region", "fixture-zone-00000042", 100, Region(1, 0, 0, 10, 10).Loops, null),
+            new MergeMember(Guid.NewGuid().ToString("D") + "-00000042", 1, "room-region", "fixture-zone-00000042", 100, Region(2, 10, 0, 20, 10).Loops, null),
         ]);
-        var provenance = RoomsMerge.Provenance(plan0, [Guid.NewGuid(), Guid.NewGuid()], 200, Rooms.GeometryHash(merged.Loops));
+        var provenance = RoomsMerge.Provenance(plan0, [Guid.NewGuid().ToString("D") + "-00000042", Guid.NewGuid().ToString("D") + "-00000042"], 200, Rooms.GeometryHash(merged.Loops));
         var neighbour = Region(3, 20, 0, 30, 10);
-        var echo = Room("R01", 10, 5, 200, RoomsRerun.LockedPrefix + merged.Guid.ToString("D"));
+        var echo = Room("R01", 10, 5, 200, RoomsRerun.LockedPrefix + merged.UniqueId);
         var again = Room("R02", 25, 5, 100);
         var plan = RoomsRerun.Plan([neighbour], [], [merged], [echo, again], [], 300);
         Assert.Multiple(() => {
@@ -99,7 +138,7 @@ public sealed class RoomsRerunTests
             Assert.That(plan.Create, Is.Empty);
             Assert.That(plan.Delete, Is.Empty);
             Assert.That(plan.Redesignate, Is.Null);
-            Assert.That(new RegionProvenance(Guid.Empty, "run", "", 0).ToJson(), Does.Not.Contain("mergedFrom"));
+            Assert.That(new RegionProvenance(null, "run", "", 0).ToJson(), Does.Not.Contain("mergedFrom"));
         });
     }
 
@@ -187,8 +226,9 @@ public sealed class RoomsRerunTests
         var held = new Pe.Revit.Partition.Room(0, Pe.Revit.Partition.Disposition.Held, Pe.Revit.Partition.Reasons.ZoneEdgeOnly,
             [], 737.2, 5, 6, 0, 0, 9, []);
         var sole = new RoomResult { Id = "R01", RawSqft = 737.2, Partition = held };
-        var zone = new RegionProvenance(Guid.Empty, Rooms.RunDrawn, "", 0);
-        var flipped = RoomsRerun.Redesignated(zone, Guid.NewGuid(), sole, "hash");
+        var zone = new RegionProvenance(null, Rooms.RunDrawn, "", 0) { OriginalTrace = "prior-trace" };
+        var flipped = RoomsRerun.Redesignated(zone, Guid.NewGuid().ToString("D") + "-00000042", sole, "hash");
+        Assert.That(flipped.OriginalTrace, Is.Null);
         Assert.Multiple(() => {
             Assert.That(flipped.Partition!.Reason, Is.Null);
             Assert.That(flipped.Partition.Disposition, Is.EqualTo(Pe.Revit.Partition.Disposition.Accepted));
@@ -201,17 +241,17 @@ public sealed class RoomsRerunTests
     [Test]
     public void Flipped_zone_is_its_own_zone_not_unassigned()
     {
-        // The w9 snapshot read the garage with no zone (the level scope guid), so /rooms called it unassigned.
-        var guid = Guid.NewGuid();
+        // A standalone room has a null zone; a redesignated zone keeps its own UniqueId.
+        var guid = Guid.NewGuid().ToString("D") + "-00000042";
         var sole = new RoomResult { Id = "R01", RawSqft = 99.5 };
-        var flipped = RoomsRerun.Redesignated(new RegionProvenance(Guid.NewGuid(), Rooms.RunDrawn, "", 0), guid, sole, "h");
-        var live = Guid.NewGuid();
-        var scope = new RegionProvenance(Guid.NewGuid(), Rooms.RunDrawn, "", 0);
+        var flipped = RoomsRerun.Redesignated(new RegionProvenance(Guid.NewGuid().ToString("D") + "-00000042", Rooms.RunDrawn, "", 0), guid, sole, "h");
+        var live = Guid.NewGuid().ToString("D") + "-00000042";
+        var scope = new RegionProvenance(null, Rooms.RunDrawn, "", 0);
         Assert.Multiple(() => {
-            Assert.That(flipped.ZoneGuid, Is.EqualTo(guid));
+            Assert.That(flipped.Zone, Is.EqualTo(guid));
             Assert.That(RoomsRerun.ZoneOf(guid, flipped, _ => false), Is.EqualTo(guid));
-            Assert.That(RoomsRerun.ZoneOf(Guid.NewGuid(), scope with { ZoneGuid = live }, z => z == live), Is.EqualTo(live));
-            Assert.That(RoomsRerun.ZoneOf(Guid.NewGuid(), scope, _ => false), Is.Null, "a drawn room outside every zone stays unassigned");
+            Assert.That(RoomsRerun.ZoneOf(Guid.NewGuid().ToString("D") + "-00000042", scope with { Zone = live }, z => z == live), Is.EqualTo(live));
+            Assert.That(RoomsRerun.ZoneOf(Guid.NewGuid().ToString("D") + "-00000042", scope, _ => false), Is.Null, "a drawn room outside every zone stays unassigned");
         });
     }
 
@@ -265,7 +305,7 @@ public sealed class RoomsRerunTests
     [Test]
     public void Held_field_edit_claims_custody_but_noop_does_not()
     {
-        var provenance = new RegionProvenance(Guid.NewGuid(), "machine-run", "source-room", 12)
+        var provenance = new RegionProvenance(Guid.NewGuid().ToString("D") + "-00000042", "machine-run", "source-room", 12)
             { GeometryHash = "geometry", WallHash = "wall", Flags = ["stale"] };
         var before = new RoomFields("", "hall", null, null, null, null, null, null);
         var changed = before with { Name = "Authored Held" };

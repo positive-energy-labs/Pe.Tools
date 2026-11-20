@@ -15,15 +15,10 @@ import type {
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { Schema, SchemaGetter } from "effect";
 
-/**
- * FilledRegion blobs `Pe.Revit.Takeoff` writes with camelCase Newtonsoft (ADR 0029 rule 7):
- * `TakeoffZoneProvenance(V, View, Name, SystemTag)` on a Zoning Region, `RegionProvenance` on a
- * materialized room or residue. PascalCase run keys are the pre-camelCase blobs readers still meet.
- * Promise callers until phase 5 decode with `decodeUnknownSync`; a bad blob throws its path.
- */
+/** The native Takeoffs projection exposes each Rooms row's provenance as JSON. */
 export const ZoneProvenance = Schema.fromJsonString(
   Schema.Struct({
-    view: Schema.String,
+    view: Schema.optionalKey(Schema.String),
     name: Schema.optionalKey(Schema.NullOr(Schema.String)),
     systemTag: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
@@ -36,6 +31,7 @@ const RegionBlob = Schema.Struct({
   sourceRoomId: RunKey,
   SourceRoomId: RunKey,
   /** `Pe.Revit.Partition.Room`: the enum is a number, a string from a string-enum writer. */
+  originalTrace: RunKey,
   partition: Schema.optionalKey(
     Schema.NullOr(
       Schema.Struct({
@@ -51,6 +47,7 @@ const Region = Schema.toType(
     runId: Schema.optionalKey(Schema.String),
     sourceRoomId: Schema.optionalKey(Schema.String),
     partition: RegionBlob.fields.partition,
+    originalTrace: RunKey,
   }),
 );
 export const RegionProvenance = Schema.fromJsonString(
@@ -62,6 +59,7 @@ export const RegionProvenance = Schema.fromJsonString(
         return {
           ...(runId ? { runId } : {}),
           ...(sourceRoomId ? { sourceRoomId } : {}),
+          ...(blob.originalTrace ? { originalTrace: blob.originalTrace } : {}),
           ...(blob.partition === undefined ? {} : { partition: blob.partition }),
         };
       }),
@@ -96,17 +94,18 @@ export function projectTakeoffSnapshot(
   views: readonly Pick<ViewFacts, "name" | "level">[],
 ): TakeoffSnapshot {
   const snapshot = response.snapshot;
-  const zoneFrs = snapshot.zoneFrs.map((region) => ({
+  const zoneFrs = snapshot.zoneFrs.map(({ uniqueId, ...region }) => ({
     ...region,
     role: region.role ?? null,
-    guid: region.guid ?? null,
+    guid: uniqueId,
     loops: region.loops.map(points),
   }));
   const regionsByZone = Object.fromEntries(
     Object.entries(snapshot.regionsByZone).map(([key, regions]) => [
       key,
-      regions.map((region) => ({
+      regions.map(({ uniqueId, ...region }) => ({
         ...region,
+        guid: uniqueId,
         analysis: region.analysis ? takeoffRegionAnalysisSchema.parse(region.analysis) : null,
         outer: points(region.outer),
         holes: region.holes.map(points),
@@ -125,8 +124,7 @@ export function projectTakeoffSnapshot(
   const ordinals = new Map<string, number>();
   const zones: ModelZone[] = zoneFrs.map((region) => {
     const meta = Schema.decodeUnknownSync(ZoneProvenance)(region.blob);
-    if (!meta.view) throw Error("Zoning Region provenance is missing view");
-    const view = region.view || meta.view;
+    const view = region.view || meta.view || "";
     const name = meta.name?.trim() || `${view} · ${region.elementId}`;
     const label = levelByView.get(view) || view;
     let lane = lanes.find((item) => item.view === view);
@@ -144,7 +142,9 @@ export function projectTakeoffSnapshot(
         const value = Schema.decodeUnknownSync(RegionProvenance)(item.blob);
         return {
           id: item.guid,
-          reason: disposition(value.partition?.disposition) === "void" ? "void" : "held",
+          reason:
+            originalIssue(value) ??
+            (disposition(value.partition?.disposition) === "void" ? "void" : "held"),
           rawSqft: item.sqft,
           label: centroid(item.outer),
           outer: item.outer,
@@ -177,7 +177,9 @@ export function projectTakeoffSnapshot(
       name,
       rooms,
       residues,
-      heldSqft: residues.reduce((sum, item) => sum + item.rawSqft, 0),
+      heldSqft: residues
+        .filter((item) => item.reason !== ORIGINAL_UNAVAILABLE)
+        .reduce((sum, item) => sum + item.rawSqft, 0),
       runs: [],
       driftSqft: null, // Coverage drift has not been measured by this projection.
       savedReview: savedReview(
@@ -212,6 +214,10 @@ export function projectTakeoffSnapshot(
   };
 }
 
+const ORIGINAL_UNAVAILABLE = "original not on this machine";
+const originalIssue = (value: { originalTrace?: string | null; partition?: unknown }) =>
+  value.originalTrace && !value.partition ? ORIGINAL_UNAVAILABLE : null;
+
 const DISPOSITIONS = ["accepted", "held", "void", "excluded"] as const;
 
 function savedReview(
@@ -226,8 +232,8 @@ function savedReview(
     region,
     value: Schema.decodeUnknownSync(RegionProvenance)(region.blob),
   }));
-  if (values.some(({ value }) => !value.runId || !value.sourceRoomId))
-    throw Error("Native takeoff review provenance is missing runId or sourceRoomId");
+  if (values.some(({ value }) => !value.runId))
+    throw Error("Native takeoff review provenance is missing runId");
   const runIds = [...new Set(values.map(({ value }) => value.runId!))];
 
   return {
@@ -240,9 +246,9 @@ function savedReview(
     shapes: values.map(({ region, value }) => ({
       original: {
         runId: value.runId!,
-        sourceRoomId: value.sourceRoomId!,
+        sourceRoomId: value.sourceRoomId ?? "",
         disposition: disposition(value.partition?.disposition),
-        reason: value.partition?.reason ?? null,
+        reason: originalIssue(value) ?? value.partition?.reason ?? null,
       },
       id: region.guid,
       kind: region.role === "held-residue" ? ("residue" as const) : ("room" as const),
@@ -250,7 +256,8 @@ function savedReview(
       reason: [
         `measurements ${region.analysis?.state ?? "unmeasured"}`,
         region.analysis?.hold,
-        `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.runId}/${value.sourceRoomId})`,
+        originalIssue(value) ??
+          `original ${disposition(value.partition?.disposition) ?? "unknown"}: ${value.partition?.reason ?? "no reason"} (${value.runId}/${value.sourceRoomId})`,
       ]
         .filter(Boolean)
         .join(" | "),
@@ -298,12 +305,13 @@ function room(region: LiveRegion): ModelRoom {
     sourceSqft?: number;
     flags?: string[];
     r10?: ModelRoom["r10"];
+    originalTrace?: string;
     partition?: { floorZ?: number | null; ceilingZ?: number | null };
   };
   const runId = value.RunId ?? value.runId;
   const sourceRoomId = value.SourceRoomId ?? value.sourceRoomId;
   const sourceSqft = value.SourceSqft ?? value.sourceSqft;
-  if (!runId || !sourceRoomId || typeof sourceSqft !== "number")
+  if (!runId || sourceRoomId === undefined || typeof sourceSqft !== "number")
     throw Error("Room Region provenance is missing runId, sourceRoomId, or sourceSqft");
   const analysis = region.analysis;
   const current = analysis?.state === "current";
@@ -316,7 +324,7 @@ function room(region: LiveRegion): ModelRoom {
     analysis,
     guid: region.guid,
     elementId: region.elementId,
-    name: sourceRoomId,
+    name: sourceRoomId || String(region.elementId),
     type: (region.roomType || "hall") as ModelRoom["type"],
     sqft: Math.round(region.sqft),
     ceilingFt:
@@ -325,7 +333,12 @@ function room(region: LiveRegion): ModelRoom {
         : 0,
     label: centroid(region.outer),
     flags: [...measurementFlags, ...(value.flags ?? []), ...(value.r10 ? ["r10-not-open"] : [])],
-    provenance: { runId: analysis?.runId ?? runId, sourceRoomId, sourceSqft },
+    provenance: {
+      runId: analysis?.runId ?? runId,
+      sourceRoomId,
+      sourceSqft,
+      originalIssue: originalIssue(value) ?? undefined,
+    },
     r10: value.r10 ?? null,
     data: null,
     outer: region.outer,

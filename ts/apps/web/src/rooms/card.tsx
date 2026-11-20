@@ -54,7 +54,7 @@ function Thumb({
   regions: readonly Region[];
   width: number;
 }) {
-  const own = regions.filter((r) => card.guids.includes(r.guid));
+  const own = regions.filter((r) => card.guids.includes(r.uniqueId));
   const points = [...card.polygon, ...own.flatMap((r) => r.outer)];
   const xs = points.map((p) => p[0] ?? 0);
   const ys = points.map((p) => p[1] ?? 0);
@@ -80,7 +80,7 @@ function Thumb({
       <g transform="scale(1,-1)">
         {near.map((r) => (
           <path
-            key={r.guid}
+            key={r.uniqueId}
             d={ring(r.outer)}
             fill="none"
             stroke={tokenRef("ink-mute")}
@@ -125,7 +125,7 @@ export function FeedbackCard({
       data-card={card.id}
       {...revitTarget(
         regions
-          .filter((region) => card.guids.includes(region.guid))
+          .filter((region) => card.guids.includes(region.uniqueId))
           .map((region) => region.elementId),
       )}
     >

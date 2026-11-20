@@ -70,7 +70,7 @@ export const module = route({
         data.snapshot.regions as readonly RoomsRegion[],
         levelOrder(data.snapshot.levels),
       ).map((row) => ({
-        id: regionCode(row.region.guid),
+        id: regionCode(row.region.uniqueId),
         label: `${row.label} · ${row.region.level}`,
       })),
   },

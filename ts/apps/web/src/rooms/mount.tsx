@@ -227,7 +227,7 @@ function AttentionRoomsSketch(props: Omit<React.ComponentProps<typeof RoomsSketc
   const doc = useContext(AttentionDocument)!;
   const { hovered } = useAttention(doc);
   const region = props.regions.find((region) => hovered.has(elementKey(region.uniqueId)));
-  return <RoomsSketch {...props} hovered={region?.guid ?? null} />;
+  return <RoomsSketch {...props} hovered={region?.uniqueId ?? null} />;
 }
 
 export function RoomsBody({ ctx }: { ctx: RoomsContext }) {
@@ -258,7 +258,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
                 [
                   {
                     path: ["writeIntent", "rooms.merge"],
-                    value: { edit: { value: { view: mark.anchor.view, guids: mark.guids ?? [] } } },
+                    value: { edit: { value: { view: mark.anchor.view, uniqueIds: mark.guids ?? [] } } },
                   },
                 ],
                 { label: "Choose marked room merge" },
@@ -317,7 +317,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
                   ? "Select two or more rooms"
                   : refusalOf(ctx.cells.state)
             }
-            onClick={() => void stage("rooms.merge", { view, guids: selected })}
+            onClick={() => void stage("rooms.merge", { view, uniqueIds: selected })}
           >
             Stage room merge
           </Button>

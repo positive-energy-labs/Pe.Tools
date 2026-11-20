@@ -11,6 +11,11 @@ namespace Pe.Revit.Takeoff;
 public sealed class RoomsViewMissingException()
     : InvalidOperationException("That view is not in this document.");
 
+public sealed class RoomsTraceUnavailableException(string message, bool unpartitioned) : InvalidOperationException(message)
+{
+    public bool Unpartitioned { get; } = unpartitioned;
+}
+
 /// <summary>What a /rooms rerun does to the regions already on the level scope.</summary>
 public sealed record RoomsPlan(
     IReadOnlyList<ExistingRegion> Locked,
@@ -49,17 +54,18 @@ public static class RoomsRerun
     ///     room for Manual J), its sole face is a room, not a held residue, and the run id stays drawn so the
     ///     next run keeps the person's edge as a locked room.
     /// </summary>
-    public static RegionProvenance Redesignated(RegionProvenance zone, Guid zoneGuid, RoomResult sole, string geometryHash) =>
-        zone with
+    public static RegionProvenance Redesignated(RegionProvenance provenance, string zone, RoomResult sole, string geometryHash) =>
+        provenance with
         {
-            ZoneGuid = zoneGuid,
+            Zone = zone,
+            OriginalTrace = null,
             Partition = sole.Partition is { } p ? p with { Disposition = Pe.Revit.Partition.Disposition.Accepted, Reason = null } : null,
-            GeometryHash = zone.GeometryHash ?? geometryHash,
+            GeometryHash = provenance.GeometryHash ?? geometryHash,
         };
 
     /// <summary>The zone a room reads under: a live zone on its view, or itself when it was a zone that flipped.</summary>
-    public static Guid? ZoneOf(Guid guid, RegionProvenance provenance, Func<Guid, bool> isLiveZone) =>
-        provenance.ZoneGuid == guid || isLiveZone(provenance.ZoneGuid) ? provenance.ZoneGuid : null;
+    public static string? ZoneOf(string uniqueId, RegionProvenance provenance, Func<string, bool> isLiveZone) =>
+        provenance.Zone is { } zone && (zone == uniqueId || isLiveZone(zone)) ? zone : null;
 
     public static bool IsLocked(Pe.Revit.Partition.Room? room) =>
         room?.Proposal?.IsLocked == true;
@@ -92,10 +98,10 @@ public static class RoomsRerun
 
 /// <summary>One region a person asked to merge, as read off Revit. Zone is its zone by RoomsRerun.ZoneOf.</summary>
 public sealed record MergeMember(
-    Guid Guid, long View, string Role, Guid? Zone, double Sqft, List<List<double[]>> Loops, TakeoffRhvacLink? Rhvac);
+    string UniqueId, long View, string Role, string? Zone, double Sqft, List<List<double[]>> Loops, TakeoffRhvacLink? Rhvac);
 
 public sealed record MergePlan(
-    List<double[]> Outer, List<List<double[]>> Holes, Guid Zone, MergeMember Largest, TakeoffRhvacLink? Rhvac);
+    List<double[]> Outer, List<List<double[]>> Holes, string Zone, MergeMember Largest, TakeoffRhvacLink? Rhvac);
 
 /// <summary>
 ///     rooms.merge (docs/features/rooms/LEDGER.md, 2026-09-25), pure: rooms and held regions of one zone on one
@@ -110,14 +116,14 @@ public static class RoomsMerge
     public static MergePlan Plan(long view, IReadOnlyList<MergeMember> members)
     {
         if (members.Count < 2) throw new InvalidOperationException("rooms.merge needs two or more regions");
-        if (members.Select(m => m.Guid).Distinct().Count() != members.Count)
+        if (members.Select(m => m.UniqueId).Distinct().Count() != members.Count)
             throw new InvalidOperationException("rooms.merge names a region twice");
         if (members.FirstOrDefault(m => m.View != view) is { } off)
-            throw new InvalidOperationException($"region {off.Guid:D} is not on the merge view");
+            throw new InvalidOperationException($"region {off.UniqueId} is not on the merge view");
         if (members.FirstOrDefault(m => m.Role is not (TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue)) is { } zone)
-            throw new InvalidOperationException($"region {zone.Guid:D} is a zone; rooms.merge takes rooms and held regions");
+            throw new InvalidOperationException($"region {zone.UniqueId} is a zone; rooms.merge takes rooms and held regions");
         if (members.FirstOrDefault(m => m.Zone == null) is { } loose)
-            throw new InvalidOperationException($"region {loose.Guid:D} is in no zone");
+            throw new InvalidOperationException($"region {loose.UniqueId} is in no zone");
         if (members.Select(m => m.Zone).Distinct().Count() != 1)
             throw new InvalidOperationException("rooms.merge takes regions of one zone");
         var links = members.Where(m => m.Rhvac != null).GroupBy(m => (m.Rhvac!.Identifier, m.Rhvac.FileIdentity)).ToList();
@@ -126,11 +132,11 @@ public static class RoomsMerge
         var (outer, holes) = Union(members.Select(m => m.Loops));
         var largest = members.OrderByDescending(m => m.Sqft).First();
         // The largest member's link, else the one link a smaller member carries: a merge never drops a link.
-        return new MergePlan(outer, holes, members[0].Zone!.Value, largest, largest.Rhvac ?? links.SingleOrDefault()?.First().Rhvac);
+        return new MergePlan(outer, holes, members[0].Zone!, largest, largest.Rhvac ?? links.SingleOrDefault()?.First().Rhvac);
     }
 
     /// <summary>Drawn and a person's, so every rerun reads it locked; it keeps the one link and names what it replaced.</summary>
-    public static RegionProvenance Provenance(MergePlan plan, IReadOnlyList<Guid> merged, double sqft, string geometryHash) =>
+    public static RegionProvenance Provenance(MergePlan plan, IReadOnlyList<string> merged, double sqft, string geometryHash) =>
         new(plan.Zone, Rooms.RunDrawn, "", sqft)
         {
             GeometryHash = geometryHash, Flags = [Rooms.FlagPerson, Rooms.FlagMerged], MergedFrom = [.. merged], Rhvac = plan.Rhvac,
@@ -197,60 +203,45 @@ public static class Rooms
         return levels;
     }
 
-    public static RoomsSnapshotData Snapshot(Document doc, long viewId)
+    public static RoomsSnapshotData Snapshot(Document doc, long viewId) => Snapshot(doc, viewId, null);
+
+    internal static RoomsSnapshotData Snapshot(Document doc, long viewId, string? traceRoot)
     {
         var viewScope = LevelView(doc, viewId);
         var levels = Levels(doc);
-        var byId = new Dictionary<long, ViewPlan> { [viewScope.Id.Value()] = viewScope };
-
-        var ours = new List<(FilledRegion Fr, ViewPlan View, string Role, Guid Guid)>();
-        foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
+        var read = RoomsRegionRecord.Read(doc);
+        if (read.Value is not { } record)
+            return new(levels, [], RoomsRegionRecord.RecoveryFor(read.Refusal) is { } reason ? [new(null, RoomsRegionRecord.Owner.Name, reason)] : []);
+        var regions = new List<RoomsRegion>();
+        foreach (var fr in record.Regions.Keys.Select(id => doc.GetElement(id)).OfType<FilledRegion>()
                      .Where(fr => fr.OwnerViewId == viewScope.Id).OrderBy(fr => fr.Id.Value()))
         {
-            if (!byId.TryGetValue(fr.OwnerViewId.Value(), out var view)) continue;
-            var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
-            if (guid != null && role is TakeoffCarriers.RoleZoningRegion or TakeoffCarriers.RoleRoomRegion
-                    or TakeoffCarriers.RoleHeldResidue)
-                ours.Add((fr, view, role, guid.Value));
-        }
-        var zones = ours.Where(r => r.Role == TakeoffCarriers.RoleZoningRegion)
-            .Select(r => (r.View.Id.Value(), r.Guid)).ToHashSet();
-        var regions = new List<RoomsRegion>();
-        // ADR 0039 keep: a blob this build can't read is reported with its reason and the listing goes on.
-        var unreadable = new List<TakeoffUnreadableBlob>();
-        foreach (var (fr, view, role, guid) in ours)
-        {
-            var read = TryReadProvenance(fr, role);
-            if (read.Value is not { } provenance)
-            {
-                unreadable.Add(new TakeoffUnreadableBlob(fr.Id.Value(), TakeoffCarriers.Provenance.Name, read.Refusal!));
-                continue;
-            }
+            var (role, fields, stored) = record[fr.UniqueId]!;
+            var provenance = record.ProjectOriginal(stored, traceRoot);
             var loops = TakeoffAtlas.Boundaries(fr);
             if (loops.Count == 0) continue;
             var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
             bool touched = Touched(provenance, loops);
-            var fields = TakeoffCarriers.ReadRoomFields(fr);
             regions.Add(new RoomsRegion(
-                fr.Id.Value(), fr.UniqueId, guid, view.Id.Value(), view.GenLevel.Name,
+                fr.Id.Value(), fr.UniqueId, viewScope.Id.Value(), viewScope.GenLevel.Name,
                 role switch
                 {
                     TakeoffCarriers.RoleZoningRegion => "zone",
                     TakeoffCarriers.RoleRoomRegion => "room",
                     _ => "held",
                 },
-                RoomsRerun.ZoneOf(guid, provenance, zone => zones.Contains((view.Id.Value(), zone))),
+                RoomsRerun.ZoneOf(fr.UniqueId, provenance, zone => IsZone(doc, record, viewScope.Id, zone)),
                 provenance.Flags.Contains(FlagPerson) ? "person" : provenance.RunId == RunDrawn ? "inferred" : null,
                 fields.Name ?? "", fields.Type ?? "",
                 fields.CeilingFt, fields.People, fields.LightingW,
                 fields.EquipSensible, fields.EquipLatent, fields.VentilationCfm,
                 Sqft(fr, loops), outer, loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
                 !touched && provenance.Partition is { } p ? [p.LabelX, p.LabelY] : Interior(loops),
-                provenance.RunId, provenance.Partition?.Reason,
+                provenance.RunId, provenance.OriginalUnavailable ? RoomsRunTraces.OriginalUnavailable : provenance.Partition?.Reason,
                 touched, role != TakeoffCarriers.RoleZoningRegion && Locked(provenance, loops),   // an authored held row reads locked too (Astra ad180f8f)
-                provenance.Flags.Contains(FlagStale)));
+                provenance.Flags.Contains(FlagStale), provenance.MergedFrom));
         }
-        return new RoomsSnapshotData(levels, regions, unreadable);
+        return new RoomsSnapshotData(levels, regions);
     }
 
     /// <summary>
@@ -308,12 +299,12 @@ public static class Rooms
         var level = view.GenLevel;
         var runId = string.IsNullOrWhiteSpace(request.RunId) ? Guid.NewGuid().ToString("N") : request.RunId!;
         if (runId == RunDrawn) throw new InvalidOperationException($"runId '{RunDrawn}' is reserved");
-        var scope = ScopeGuid(level);
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var onView = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .OrderBy(fr => fr.Id.Value())
-            .Select(fr => (Fr: fr, Loops: TakeoffAtlas.Boundaries(fr), Identity: TakeoffCarriers.ReadIdentity(fr)))
+            .Select(fr => (Fr: fr, Loops: TakeoffAtlas.Boundaries(fr), Row: record[fr.UniqueId]))
             .Where(r => r.Loops.Count > 0).ToList();
-        var mayZone = onView.Where(r => r.Identity.Role is null or TakeoffCarriers.RoleZoningRegion).ToList();
+        var mayZone = onView.Where(r => r.Row?.Role is null or TakeoffCarriers.RoleZoningRegion).ToList();
         if (mayZone.Count == 0) throw new InvalidOperationException($"draw a zone on '{view.Name}' first");
 
         // ponytail: one capture over the rectangle enclosing every zone and every role-less fill, because a
@@ -333,49 +324,47 @@ public static class Rooms
         // Designate and classify in memory; nothing is written until every zone is solved.
         cancellationToken.ThrowIfCancellationRequested();
         BeginPhase("Designation");
-        var zones = new List<(FilledRegion Fr, Guid Guid, List<List<double[]>> Loops, string Label, bool Declared)>();
+        var zones = new List<(FilledRegion Fr, string UniqueId, List<List<double[]>> Loops, string Label, bool Declared)>();
         var rooms = new List<(FilledRegion Fr, bool Held, ExistingRegion Region, RegionProvenance Provenance)>();
         var adopt = new List<(FilledRegion Fr, string Role, ExistingRegion Region)>();
-        foreach (var (fr, loops, (role, guid)) in onView)
+        foreach (var (fr, loops, row) in onView)
         {
-            if (role == null)
+            if (row == null)
             {
-                var drawn = new ExistingRegion(fr.Id.Value(), guid ?? Guid.NewGuid(), loops, Sqft(fr, loops));
+                var drawn = new ExistingRegion(fr.Id.Value(), fr.UniqueId, loops, Sqft(fr, loops));
                 string designated;
                 try { designated = Designate(knee, loops, drawn.Sqft); }
                 catch (Exception ex) { throw new InvalidOperationException($"designate {fr.Id}: {ex.GetType().Name} {ex.Message}", ex); }
                 adopt.Add((fr, designated, drawn));
                 if (designated == TakeoffCarriers.RoleZoningRegion)
-                    zones.Add((fr, drawn.Guid, loops, drawn.Guid.ToString("N").Substring(0, 8), false));
+                    zones.Add((fr, drawn.UniqueId, loops, fr.Id.Value().ToString(CultureInfo.InvariantCulture), false));
                 else
-                    rooms.Add((fr, false, drawn, new RegionProvenance(scope, RunDrawn, "", drawn.Sqft)));
+                    rooms.Add((fr, false, drawn, new RegionProvenance(null, RunDrawn, "", drawn.Sqft)));
                 continue;
             }
-            if (guid == null) continue;
-            if (role == TakeoffCarriers.RoleZoningRegion)
-                zones.Add((fr, guid.Value, loops, TakeoffCarriers.ReadRoomFields(fr).Name is { Length: > 0 } name
-                    ? name
-                    : guid.Value.ToString("N").Substring(0, 8),
-                    ReadProvenance(fr, role).Flags.Contains(FlagPerson)));
-            else if (role is TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue)
-                rooms.Add((fr, role == TakeoffCarriers.RoleHeldResidue,
-                    new ExistingRegion(fr.Id.Value(), guid.Value, loops, Sqft(fr, loops)), ReadProvenance(fr, role)));
+            if (row.Role == TakeoffCarriers.RoleZoningRegion)
+                zones.Add((fr, fr.UniqueId, loops, row.Fields.Name is { Length: > 0 } name
+                    ? name : fr.Id.Value().ToString(CultureInfo.InvariantCulture),
+                    row.Provenance.Flags.Contains(FlagPerson)));
+            else
+                rooms.Add((fr, row.Role == TakeoffCarriers.RoleHeldResidue,
+                    new ExistingRegion(fr.Id.Value(), fr.UniqueId, loops, Sqft(fr, loops)), row.Provenance));
         }
         if (zones.Count == 0) throw new InvalidOperationException($"draw a zone on '{view.Name}' first");
 
-        var zoneGuids = zones.Select(z => z.Guid).ToHashSet();
+        var zoneIds = zones.Select(z => z.UniqueId).ToHashSet();
         var locked = rooms.Where(r => Locked(r.Provenance, r.Region.Loops)).ToList();
         var machine = rooms.Where(r => !Locked(r.Provenance, r.Region.Loops)).ToList();
         // A machine region whose zone is no longer a zone (flipped to a room, or deleted) rebinds against nothing:
-        // delete it. A machine region still on the level scope predates zones: unassigned, never touched.
-        var orphans = machine.Where(r => r.Provenance.ZoneGuid != scope && !zoneGuids.Contains(r.Provenance.ZoneGuid))
+        // delete it. Unassigned regions are never touched.
+        var orphans = machine.Where(r => r.Provenance.Zone is { } zone && !zoneIds.Contains(zone))
             .Select(r => r.Region).ToList();
 
-        var solved = new List<(FilledRegion Zone, Guid Guid, string Label, RoomsPlan Plan)>();
+        var solved = new List<(FilledRegion Zone, string UniqueId, string Label, RoomsPlan Plan)>();
         var holds = new List<string>();
         var failures = new List<string>();
         var bufferedBands = new Pe.Revit.Partition.Solve.BufferedBands(captured);
-        using var traces = new RoomsRunTraces.Pending(TraceRoot, runId);
+        using var traces = new RoomsRunTraces.Pending(RoomsRunTraces.Root, record.TraceId, view.UniqueId, runId);
         zonesTotal = zones.Count;
         BeginPhase("Solve");
         SolveZones(zones.OrderBy(z => z.Fr.Id.Value()), zone =>
@@ -397,7 +386,7 @@ public static class Rooms
                 Proposals =
                 [
                     .. captured.Proposals,
-                    .. lockedIn.Select(r => LockedProposal(r.Region, TakeoffCarriers.ReadRoomFields(r.Fr).Name ?? "")),
+                    .. lockedIn.Select(r => LockedProposal(r.Region, record[r.Fr.UniqueId]?.Fields.Name ?? "")),
                 ],
             };
             Pe.Revit.Partition.PartitionAnswer answer;
@@ -422,12 +411,12 @@ public static class Rooms
                     request.View, zoneId, sw.Elapsed.TotalMilliseconds - zoneStart, probeMs, zonesDone, zonesTotal);
                 Report();
             }
-            traces.Write(zone.Guid.ToString("N") + ".json", Newtonsoft.Json.Linq.JObject.FromObject(
-                new { ZoneGuid = zone.Guid, zone.Label, answer.Trace, answer.Accounting }, Newtonsoft.Json.JsonSerializer.Create(TraceJson)));
+            traces.Write(zone.UniqueId, Newtonsoft.Json.Linq.JObject.FromObject(
+                new { ZoneUniqueId = zone.UniqueId, zone.Label, answer.Trace, answer.Accounting }, Newtonsoft.Json.JsonSerializer.Create(TraceJson)));
             if (answer.Hold != null) holds.Add($"{zone.Label}: {answer.Hold}");
             var (accepted, residues) = Results(answer);
-            var mine = machine.Where(r => r.Provenance.ZoneGuid == zone.Guid).ToList();
-            solved.Add((zone.Fr, zone.Guid, zone.Label, RoomsRerun.Plan(
+            var mine = machine.Where(r => r.Provenance.Zone == zone.UniqueId).ToList();
+            solved.Add((zone.Fr, zone.UniqueId, zone.Label, RoomsRerun.Plan(
                 mine.Where(r => !r.Held).Select(r => r.Region).ToList(),
                 mine.Where(r => r.Held).Select(r => r.Region).ToList(),
                 lockedIn.Select(r => r.Region).ToList(), accepted, residues,
@@ -435,36 +424,23 @@ public static class Rooms
         }, cancellationToken);
 
         zoneId = null;
+        if (!record.RecordSolvedRun(traces.Reference))
+        {
+            EndPhase();
+            return new(level.Name, runId, zones.Count, 0, 0, 0, 0, 0, failures,
+                "No zone solved.", Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+        }
         // The last checkpoint is before this phase. From here the one transaction owns the outcome,
         // including first-run parameter bindings. A late Stop lets it commit or fail normally.
         BeginPhase("Materialization");
-        using var transaction = DocumentSandbox.BeginCommit(doc, "Pe Partition Rooms");
-        var pending = TakeoffCarriers.Preflight(doc, TakeoffCarrierStage.Rooms).MissingCarrierGuids.Count;
-        while (pending > 0)
-        {
-            var initialized = TakeoffCarriers.InitializeNext(doc, TakeoffCarrierStage.Rooms);
-            if (initialized.Remaining.Count >= pending)
-                throw new InvalidOperationException("Room parameter binding made no progress.");
-            pending = initialized.Remaining.Count;
-        }
-        double elevation = level.ProjectElevation;
-        var frType = RegionType(doc);
-
         foreach (var (fr, role, drawn) in adopt)
-        {
-            TakeoffCarriers.WriteIdentity(fr, role, drawn.Guid);
-            TakeoffCarriers.WriteProvenance(fr, new RegionProvenance(scope, RunDrawn, "", drawn.Sqft)
-                { GeometryHash = GeometryHash(drawn.Loops) }.ToJson());
-        }
+            record.Regions.Add(fr.UniqueId, new(role, new RoomFields(), new RegionProvenance(null, RunDrawn, "", drawn.Sqft)
+                { GeometryHash = GeometryHash(drawn.Loops) }));
+        foreach (var region in orphans.Concat(solved.SelectMany(zone => zone.Plan.Delete)))
+            record.Regions.Remove(region.UniqueId);
 
-        // ponytail: orphans count in Deleted, not itemized. Ceiling: the log row cannot tell a flipped zone's
-        // children from rebind deletions.
-        if (orphans.Count > 0)
-            doc.Delete(orphans.Select(r => r.ElementId.ToElementId()).ToList());
-
-        var created = new List<(FilledRegion Fr, RegionProvenance Provenance, bool Room)>();
-        int createdRooms = 0, createdHeld = 0;
-        foreach (var (zoneFr, zoneGuid, label, plan) in solved)
+        var retype = new List<FilledRegion>();
+        foreach (var (zoneFr, zone, _, plan) in solved)
         {
             // Kept regions: geometry stays; the run id moves for machine regions, a locked room inside the zone
             // joins it, and the wall evidence under every region decides the stale flag.
@@ -474,52 +450,73 @@ public static class Rooms
             {
                 var fr = (FilledRegion)doc.GetElement(region.ElementId.ToElementId());
                 var isMachine = room != null;
-                if (isMachine && fr.GetTypeId() != frType.Id) fr.ChangeTypeId(frType.Id);
-                if (room != null && ProposedName(room, TakeoffCarriers.ReadRoomFields(fr).Name!) is { } name)
-                    TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: name));
-                var provenance = ReadProvenance(fr, TakeoffCarriers.ReadIdentity(fr).Role);
+                if (isMachine) retype.Add(fr);
+                var row = record[fr.UniqueId]!;
+                var fields = row.Fields;
+                if (room != null && ProposedName(room, fields.Name ?? "") is { } name)
+                    fields = fields with { Name = name };
+                var provenance = row.Provenance;
                 var wall = WallHash(knee, region.Loops);
                 var flags = provenance.Flags.Where(f => f != FlagStale).ToList();
                 if (provenance.WallHash != null && provenance.WallHash != wall) flags.Add(FlagStale);
-                TakeoffCarriers.WriteProvenance(fr, (provenance with
+                record.Regions[fr.UniqueId] = row with { Fields = fields, Provenance = provenance with
                 {
-                    ZoneGuid = zoneGuid,
+                    Zone = zone,
                     RunId = isMachine ? runId : provenance.RunId,
                     GeometryHash = provenance.GeometryHash ?? GeometryHash(region.Loops),
                     WallHash = provenance.WallHash ?? wall,
                     Flags = flags,
-                }).ToJson());
+                } };
             }
-
-            if (plan.Delete.Count > 0)
-                doc.Delete(plan.Delete.Select(r => r.ElementId.ToElementId()).ToList());
 
             // ponytail: a redesignated zone is not itemized in the result (Created stays 0). Ceiling: the log
             // row reads it as deletions only.
             if (plan.Redesignate is { } sole)
             {
-                var zoneProvenance = ReadProvenance(zoneFr, TakeoffCarriers.RoleZoningRegion);
-                TakeoffCarriers.WriteIdentity(zoneFr, TakeoffCarriers.RoleRoomRegion, zoneGuid);
-                if (zoneFr.GetTypeId() != frType.Id) zoneFr.ChangeTypeId(frType.Id);
-                if (ProposedName(sole, TakeoffCarriers.ReadRoomFields(zoneFr).Name!) is { } name)
-                    TakeoffCarriers.WriteRoomFields(zoneFr, new RoomFields(Name: name));
-                // The person flag is already absent, since a declared zone never gets here.
-                TakeoffCarriers.WriteProvenance(zoneFr, RoomsRerun.Redesignated(
-                    zoneProvenance, zoneGuid, sole, GeometryHash(TakeoffAtlas.Boundaries(zoneFr))).ToJson());
+                var row = record[zone]!;
+                retype.Add(zoneFr);
+                var fields = row.Fields;
+                if (ProposedName(sole, fields.Name ?? "") is { } name)
+                    fields = fields with { Name = name };
+                record.Regions[zone] = new(TakeoffCarriers.RoleRoomRegion, fields,
+                    RoomsRerun.Redesignated(row.Provenance, zone, sole, GeometryHash(TakeoffAtlas.Boundaries(zoneFr))));
             }
 
+        }
+
+        const string failureFlag = "materialization-failure";
+        RegionRow NewRoom(string zone, RoomResult room) => new(TakeoffCarriers.RoleRoomRegion,
+            new RoomFields(Name: ProposedName(room, ""), Type: "hall"), new RegionProvenance(zone, runId, room.Id, room.RawSqft)
+                { Flags = room.Flags.ToList(), Partition = room.Partition });
+        RegionRow NewHeld(string zone, ResidueResult residue) => new(TakeoffCarriers.RoleHeldResidue,
+            new RoomFields(), new RegionProvenance(zone, runId, residue.Id, residue.RawSqft) { Partition = residue.Partition });
+
+        // A refused room can become one held row. The room reservation includes the larger fields and failure flag.
+        var pending = solved.SelectMany(s => s.Plan.Create.Select(room => NewRoom(s.UniqueId, room))
+            .Concat(s.Plan.CreateHeld.Select(residue => NewHeld(s.UniqueId, residue))))
+            .Select(row => row with { Provenance = row.Provenance with {
+                GeometryHash = RoomsRegionRecord.PendingHash, WallHash = RoomsRegionRecord.PendingHash,
+                Flags = row.Role == TakeoffCarriers.RoleRoomRegion ? [.. row.Provenance.Flags, failureFlag] : row.Provenance.Flags,
+            } });
+        using var transaction = record.BeforeMutation(() => DocumentSandbox.BeginCommit(doc, "Pe Partition Rooms"), pending);
+        double elevation = level.ProjectElevation;
+        var frType = RegionType(doc);
+        foreach (var fr in retype.Distinct().Where(fr => fr.GetTypeId() != frType.Id))
+            fr.ChangeTypeId(frType.Id);
+        var obsolete = orphans.Concat(solved.SelectMany(zone => zone.Plan.Delete)).Select(r => r.ElementId.ToElementId()).Distinct().ToList();
+        if (obsolete.Count > 0) doc.Delete(obsolete);
+
+        var created = new List<(FilledRegion Fr, RegionRow Row)>();
+        int createdRooms = 0, createdHeld = 0;
+        foreach (var (_, zone, label, plan) in solved)
+        {
             var unbuildable = new List<ResidueResult>();
             foreach (var room in plan.Create)
             {
                 try
                 {
                     if (Create(doc, frType, view, elevation, room.Polygon, room.Holes) is not { } fr) continue;
-                    TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
-                    TakeoffCarriers.WriteRoomType(fr, "hall");
-                    if (ProposedName(room, "") is { } name)
-                        TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: name));
-                    created.Add((fr, new RegionProvenance(zoneGuid, runId, room.Id, room.RawSqft)
-                        { Flags = room.Flags.ToList(), Partition = room.Partition }, true));
+                    created.Add((fr, NewRoom(zone, room)));
                     createdRooms++;
                 }
                 catch (Exception) when (room.Partition is { } face)
@@ -537,9 +534,7 @@ public static class Rooms
                 try
                 {
                     if (Create(doc, frType, view, elevation, residue.Polygon, residue.Holes) is not { } fr) continue;
-                    TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
-                    created.Add((fr, new RegionProvenance(zoneGuid, runId, residue.Id, residue.RawSqft)
-                        { Partition = residue.Partition }, false));
+                    created.Add((fr, NewHeld(zone, residue)));
                     createdHeld++;
                 }
                 catch (Exception ex)
@@ -551,15 +546,18 @@ public static class Rooms
 
         // Hash what Revit stored, not what was asked for: a later snapshot compares against the readback.
         doc.Regenerate();
-        foreach (var (fr, provenance, isRoom) in created)
+        foreach (var (fr, row) in created)
         {
             var loops = TakeoffAtlas.Boundaries(fr);
-            List<string> flags = failures.Count > 0 && isRoom
-                ? [.. provenance.Flags, "materialization-failure"]
+            var provenance = row.Provenance;
+            List<string> flags = failures.Count > 0 && row.Role == TakeoffCarriers.RoleRoomRegion
+                ? [.. provenance.Flags, failureFlag]
                 : provenance.Flags;
-            TakeoffCarriers.WriteProvenance(fr, (provenance with
-                { GeometryHash = GeometryHash(loops), WallHash = WallHash(knee, loops), Flags = flags }).ToJson());
+            record.Regions.Add(fr.UniqueId, row with { Provenance = provenance with
+                { GeometryHash = GeometryHash(loops), WallHash = WallHash(knee, loops), Flags = flags } });
         }
+
+        record.Save(doc, replacing: request.Replacing);
 
         var result = new RoomsPartitionResult(level.Name, runId, zones.Count, createdRooms,
             solved.Sum(s => s.Plan.Keep.Count), solved.Sum(s => s.Plan.Locked.Count),
@@ -567,6 +565,7 @@ public static class Rooms
             holds.Count > 0 ? string.Join("; ", holds) : null, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
         BeginPhase("Commit");
         transaction.Complete();
+        traces.MarkCommitted();
         EndPhase();
         // The committed model determines which solve the plan can show. A trace I/O failure here
         // cannot undo a Revit transaction or turn its committed result into a failed partition.
@@ -596,136 +595,163 @@ public static class Rooms
         Converters = [new Newtonsoft.Json.Converters.StringEnumConverter()],
     };
 
-    private static string TraceRoot => new Pe.Shared.StorageRuntime.ModuleStorage("rooms").State().DirectoryPath;
-
-    /// <summary>
-    ///     rooms.trace: layer 1 per zone for one run on a view. The view's regions name the zones; a run without
-    ///     runId is the one whose published trace of those zones was written last.
-    /// </summary>
     public static RoomsTraceData Trace(Document doc, RoomsTraceRequest request)
     {
         var view = LevelView(doc, request.View);
-        var files = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-            .Select(fr => TakeoffCarriers.ReadIdentity(fr).Guid).OfType<Guid>()
-            .Select(g => g.ToString("N") + ".json").ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var traces = RoomsRunTraces.Find(TraceRoot, request.RunId, files);
-        if (traces.Count == 0)
-            throw new InvalidOperationException(request.RunId != null
-                ? $"run '{request.RunId}' traced no zone on '{view.Name}'"
-                : $"no rooms.partition run has traced a zone on '{view.Name}'");
-        return new RoomsTraceData(RoomsRunTraces.RunId(File.ReadAllText(traces[0].FullName)), traces.OrderBy(f => f.Name, StringComparer.Ordinal)
+        var read = RoomsRegionRecord.Read(doc);
+        if (RoomsRegionRecord.RecoveryFor(read.Refusal) is { } recovery)
+            throw new InvalidOperationException(recovery);
+        var record = read.Value;
+        var reference = record?.Runs.GetValueOrDefault(view.UniqueId);
+        if (reference == null)
+            throw new RoomsTraceUnavailableException($"View '{view.Name}' has no committed rooms.partition run.", unpartitioned: true);
+        var runId = request.RunId ?? reference.RunId;
+        if (runId != reference.RunId)
+            throw new RoomsTraceUnavailableException($"Run '{runId}' is not the committed run for '{view.Name}'.", unpartitioned: false);
+        if (reference.Zones == 0)
+            throw new RoomsTraceUnavailableException($"No zone solved in run '{runId}' for '{view.Name}'.", unpartitioned: false);
+        var files = RoomsRunTraces.Find(RoomsRunTraces.Root, record!.TraceId, view.UniqueId, runId, reference);
+        if (files.Count == 0)
+            throw new RoomsTraceUnavailableException($"Trace for run '{runId}' for '{view.Name}' is not on this machine.", unpartitioned: false);
+        var originals = record.Regions.Where(pair => pair.Value.Provenance.RunId == runId
+            && doc.GetElement(pair.Key) is FilledRegion fr && fr.OwnerViewId == view.Id
+            && record.ProjectOriginal(pair.Value.Provenance).OriginalUnavailable)
+            .Select(pair => pair.Key).ToList();
+        return new RoomsTraceData(runId, files
             .Select(f => Newtonsoft.Json.JsonConvert.DeserializeObject<RoomsZoneTrace>(File.ReadAllText(f.FullName), TraceJson)!)
-            .ToList());
+            .ToList(), originals.Count == 0 ? null : RoomsRunTraces.OriginalUnavailable, originals);
     }
 
     public static RoomsDrawResult Draw(Document doc, RoomsDrawRequest request)
     {
         var view = LevelView(doc, request.View);
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var role = RoleOf(request.Role ?? "room");
         if (request.Loops is not { Count: > 0 } || request.Loops.Any(loop => loop is not { Count: >= 3 }))
             throw new InvalidOperationException("draw needs one or more loops of three or more points");
         var outer = request.Loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
-        var fr = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, outer,
-            request.Loops.Where(loop => !ReferenceEquals(loop, outer)).ToList())
+        var row = new RegionRow(role, new RoomFields(Name: request.Name), new RegionProvenance(null, RunDrawn, "", double.MinValue)
+            { GeometryHash = RoomsRegionRecord.PendingHash, Flags = [FlagPerson] });
+        var fr = record.BeforeMutation(() => Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, outer,
+            request.Loops.Where(loop => !ReferenceEquals(loop, outer)).ToList()), [row])
             ?? throw new InvalidOperationException("draw loops are under 1 sf");
-        var guid = Guid.NewGuid();
-        TakeoffCarriers.WriteIdentity(fr, role, guid);
-        if (request.Name != null) TakeoffCarriers.WriteRoomFields(fr, new RoomFields(Name: request.Name));
         doc.Regenerate();
         var loops = TakeoffAtlas.Boundaries(fr);
-        // WallHash stays null: no Space build here; the next partition records it.
-        TakeoffCarriers.WriteProvenance(fr, new RegionProvenance(ScopeGuid(view.GenLevel), RunDrawn, "", Sqft(fr, loops))
-            { GeometryHash = GeometryHash(loops), Flags = [FlagPerson] }.ToJson());
-        return new RoomsDrawResult(fr.Id.Value(), guid);
+        record.Regions.Add(fr.UniqueId, row with { Provenance = row.Provenance with
+            { SourceSqft = Sqft(fr, loops), GeometryHash = GeometryHash(loops) } });
+        record.Save(doc, replacing: request.Replacing);
+        return new RoomsDrawResult(fr.Id.Value(), fr.UniqueId);
     }
 
-    public static RoomsWriteResult Write(Document doc, RoomsWriteRequest request)
+    public static RoomsWriteReceipt Write(Document doc, RoomsWriteRequest request)
     {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         if (request.Regions is not { Count: > 0 }) throw new InvalidOperationException("rooms.write needs regions");
-        if (request.Regions.Select(r => r.Guid).Distinct().Count() != request.Regions.Count)
+        if (request.Regions.Select(r => r.UniqueId).Distinct(StringComparer.Ordinal).Count() != request.Regions.Count)
             throw new InvalidOperationException("rooms.write names a region twice");
-        var byGuid = Resolve(doc, request.Regions.Select(r => r.Guid));
-        foreach (var r in request.Regions)
+
+        return CommitWrite(request, () =>
         {
-            var (fr, current) = byGuid[r.Guid];
-            var held = current == TakeoffCarriers.RoleHeldResidue;
-            if (r.Role != null && held)
-                throw new InvalidOperationException($"held residue {r.Guid:D} takes no room or zone designation");
-            var before = held ? TakeoffCarriers.ReadRoomFields(fr) : null;
-            TakeoffCarriers.WriteRoomFields(fr, new RoomFields(
-                r.Name, r.Type, r.CeilingFt, r.People, r.LightingW, r.EquipSensible, r.EquipLatent, r.VentilationCfm));
-            if (r.Role != null)
+            using var transaction = DocumentSandbox.BeginCommit(doc, "Pe Write Room Fields");
+            var record = RoomsRegionRecord.Stage(doc, request.Replacing);
+            foreach (var patch in request.Regions)
             {
-                // The same role still marks it a person's: they confirmed it.
-                var role = RoleOf(r.Role);
-                var provenance = ReadProvenance(fr, current);
-                if (role != current) TakeoffCarriers.WriteIdentity(fr, role, r.Guid);
-                if (!provenance.Flags.Contains(FlagPerson))
-                    TakeoffCarriers.WriteProvenance(fr, (provenance with { Flags = [.. provenance.Flags, FlagPerson] }).ToJson());
+                var (fr, row) = Resolve(doc, record, patch.UniqueId);
+                record.Regions[fr.UniqueId] = Patch(row, patch);
             }
-            if (!held) continue;
-            var heldProvenance = ReadProvenance(fr, current);
-            var authored = AuthorHeldIfEdited(heldProvenance, before!, TakeoffCarriers.ReadRoomFields(fr));
-            if (!ReferenceEquals(authored, heldProvenance)) TakeoffCarriers.WriteProvenance(fr, authored.ToJson());
-        }
-        return new RoomsWriteResult(request.Regions.Count);
+            record.Save(doc, replacing: request.Replacing);
+            transaction.Complete();
+        }, () => RoomsRegionRecord.Read(doc).OrThrow() ?? throw new InvalidOperationException("Committed Rooms record is missing"));
     }
 
-    /// <summary>
-    ///     A person combines rooms (rooms LEDGER 2026-09-25): one drawn, person-flagged Room Region replaces them,
-    ///     so every rerun keeps it locked and clips the faces under it. Fields come from the largest member.
-    /// </summary>
+    // Readback runs only after a successful commit. An empty patch is refused, and null means omitted.
+    internal static RoomsWriteReceipt CommitWrite(RoomsWriteRequest request, Action commit, Func<RoomsRegionRecord> readback)
+    {
+        var cells = request.Regions.SelectMany(patch =>
+        {
+            var values = WriteCells(patch).ToList();
+            if (values.Count == 0) throw new InvalidOperationException($"rooms.write has no fields for '{patch.UniqueId}'");
+            return values;
+        }).ToList();
+        commit();
+        var committed = readback();
+        return new(cells.Where(cell => committed[cell.UniqueId] is { } row && Equals(cell.Value, CellValue(row, cell.Field))).ToList());
+    }
+
+    private static IEnumerable<RoomsWriteCell> WriteCells(RoomsWriteRegion patch)
+    {
+        var values = TakeoffJson.Object(patch);
+        foreach (var field in Enum.GetValues<RoomField>())
+        {
+            if (values[field.ToString()] is not Newtonsoft.Json.Linq.JValue { Value: { } value }) continue;
+            if (value is double number && !double.IsFinite(number))
+                throw new InvalidOperationException($"rooms.write needs a finite '{field}'");
+            yield return new(patch.UniqueId, field, value);
+        }
+    }
+
+    private static object? CellValue(RegionRow row, RoomField field) => field == RoomField.role
+        ? row.Role == TakeoffCarriers.RoleZoningRegion ? "zone" : "room"
+        : (TakeoffJson.Object(row.Fields)[field.ToString()] as Newtonsoft.Json.Linq.JValue)?.Value;
+
+    internal static RegionRow Patch(RegionRow row, RoomsWriteRegion patch)
+    {
+        var (role, before, provenance) = row;
+        var fields = new RoomFields(patch.Name ?? before.Name, patch.Type ?? before.Type,
+            patch.CeilingFt ?? before.CeilingFt, patch.People ?? before.People, patch.LightingW ?? before.LightingW,
+            patch.EquipSensible ?? before.EquipSensible, patch.EquipLatent ?? before.EquipLatent,
+            patch.VentilationCfm ?? before.VentilationCfm);
+        if (patch.Role != null)
+        {
+            if (role == TakeoffCarriers.RoleHeldResidue)
+                throw new InvalidOperationException($"held residue '{patch.UniqueId}' takes no room or zone designation");
+            role = RoleOf(patch.Role);
+            if (!provenance.Flags.Contains(FlagPerson)) provenance = provenance with { Flags = [.. provenance.Flags, FlagPerson] };
+        }
+        if (role == TakeoffCarriers.RoleHeldResidue) provenance = AuthorHeldIfEdited(provenance, before, fields);
+        return new(role, fields, provenance);
+    }
+
     public static RoomsMergeResult Merge(Document doc, RoomsMergeRequest request)
     {
         var view = LevelView(doc, request.View);
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
-        var guids = request.Guids ?? [];
-        var byGuid = Resolve(doc, guids);
-        var zones = byGuid.Where(r => r.Value.Role == TakeoffCarriers.RoleZoningRegion)
-            .Select(r => (r.Value.Fr.OwnerViewId.Value(), r.Key)).ToHashSet();
-        var members = guids.Select(guid =>
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
+        var ids = request.UniqueIds ?? [];
+        var sources = ids.Select(id => Resolve(doc, record, id)).ToList();
+        var members = sources.Select(source =>
         {
-            var (fr, role) = byGuid[guid];
-            var provenance = ReadProvenance(fr, role);
+            var (fr, row) = source;
             var loops = TakeoffAtlas.Boundaries(fr);
-            var owner = fr.OwnerViewId.Value();
-            return new MergeMember(guid, owner, role, RoomsRerun.ZoneOf(guid, provenance, zone => zones.Contains((owner, zone))),
-                Sqft(fr, loops), loops, provenance.Rhvac);
+            return new MergeMember(fr.UniqueId, fr.OwnerViewId.Value(), row.Role,
+                RoomsRerun.ZoneOf(fr.UniqueId, row.Provenance, zone => IsZone(doc, record, fr.OwnerViewId, zone)),
+                Sqft(fr, loops), loops, row.Provenance.Rhvac);
         }).ToList();
         var plan = RoomsMerge.Plan(view.Id.Value(), members);
-        var fields = TakeoffCarriers.ReadRoomFields(byGuid[plan.Largest.Guid].Fr);
+        var fields = record[plan.Largest.UniqueId]!.Fields;
 
-        var merged = Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, plan.Outer, plan.Holes)
+        var row = new RegionRow(TakeoffCarriers.RoleRoomRegion, fields with { Name = request.Name ?? fields.Name },
+            RoomsMerge.Provenance(plan, ids, double.MinValue, RoomsRegionRecord.PendingHash));
+        foreach (var id in ids) record.Regions.Remove(id);
+        var merged = record.BeforeMutation(() =>
+            Create(doc, RegionType(doc), view, view.GenLevel.ProjectElevation, plan.Outer, plan.Holes), [row])
             ?? throw new InvalidOperationException("merged loops are under 1 sf");
-        var mergedGuid = Guid.NewGuid();
-        TakeoffCarriers.WriteIdentity(merged, TakeoffCarriers.RoleRoomRegion, mergedGuid);
-        TakeoffCarriers.WriteRoomFields(merged, fields with { Name = request.Name ?? fields.Name });
-        doc.Delete(guids.Select(guid => byGuid[guid].Fr.Id).ToList());
+        doc.Delete(sources.Select(source => source.Region.Id).ToList());
         doc.Regenerate();
         var stored = TakeoffAtlas.Boundaries(merged);
         var sqft = Sqft(merged, stored);
-        // WallHash stays null: no Space build here; the next partition records it.
-        TakeoffCarriers.WriteProvenance(merged, RoomsMerge.Provenance(plan, guids, sqft, GeometryHash(stored)).ToJson());
-        return new RoomsMergeResult(merged.Id.Value(), mergedGuid, guids, sqft);
+        record.Regions.Add(merged.UniqueId, row with { Provenance = row.Provenance with
+            { SourceSqft = sqft, GeometryHash = GeometryHash(stored) } });
+        record.Save(doc, replacing: request.Replacing);
+        return new RoomsMergeResult(merged.Id.Value(), merged.UniqueId, ids, sqft);
     }
 
-    /// <summary>Our zone, room, and held regions by guid, the whole document; throws naming a guid that is none of them.</summary>
-    private static Dictionary<Guid, (FilledRegion Fr, string Role)> Resolve(Document doc, IEnumerable<Guid> guids)
-    {
-        var byGuid = new Dictionary<Guid, (FilledRegion Fr, string Role)>();
-        foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
-        {
-            var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
-            if (guid != null && role is TakeoffCarriers.RoleZoningRegion or TakeoffCarriers.RoleRoomRegion
-                    or TakeoffCarriers.RoleHeldResidue)
-                byGuid[guid.Value] = (fr, role!);
-        }
-        foreach (var guid in guids)
-            if (!byGuid.ContainsKey(guid)) throw new InvalidOperationException($"no Room Region with guid {guid:D}");
-        return byGuid;
-    }
+    internal static (FilledRegion Region, RegionRow Row) Resolve(Document doc, RoomsRegionRecord record, string uniqueId) =>
+        !string.IsNullOrEmpty(uniqueId) && record[uniqueId] is { } row && doc.GetElement(uniqueId) is FilledRegion fr
+            ? (fr, row)
+            : throw new InvalidOperationException(record.Recovery ?? $"no tracked FilledRegion with UniqueId '{uniqueId}'");
+
+    private static bool IsZone(Document doc, RoomsRegionRecord record, ElementId view, string uniqueId) =>
+        record[uniqueId]?.Role == TakeoffCarriers.RoleZoningRegion
+        && doc.GetElement(uniqueId) is FilledRegion fr && fr.OwnerViewId == view;
 
     // ---------------------------------------------------------------- hashes (pure)
 
@@ -741,12 +767,6 @@ public static class Rooms
             .Where(piece => Intersects(FlatBox(piece), box))
             .Select(piece => Ring(Pairs(piece)))
             .OrderBy(s => s, StringComparer.Ordinal)));
-    }
-
-    public static Guid ScopeGuid(Level level)
-    {
-        using var md5 = MD5.Create();
-        return new Guid(md5.ComputeHash(Encoding.UTF8.GetBytes(level.UniqueId)));
     }
 
     private static string Ring(IEnumerable<double[]> loop) =>
@@ -806,23 +826,13 @@ public static class Rooms
             ? provenance
             : provenance with { Flags = [.. provenance.Flags, FlagAuthored] };
 
-    // For a write run: a blob that cannot be read stops the run with its reason and is never written over.
-    private static RegionProvenance ReadProvenance(FilledRegion fr, string? role) =>
-        TryReadProvenance(fr, role).OrThrow()!;
-
-    private static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> TryReadProvenance(FilledRegion fr, string? role)
-    {
-        var blob = TakeoffCarriers.ReadProvenanceBlob(fr);
-        return role == TakeoffCarriers.RoleZoningRegion ? RegionProvenance.ReadZone(blob) : RegionProvenance.Read(blob);
-    }
-
     private static ViewPlan LevelView(Document doc, long id) =>
         doc.GetElement(id.ToElementId()) is ViewPlan { IsTemplate: false, GenLevel: not null } view
             ? view
             : throw new RoomsViewMissingException();
 
     private static Pe.Revit.Partition.RoomProposal LockedProposal(ExistingRegion region, string name) =>
-        new(RoomsRerun.LockedPrefix + region.Guid.ToString("D"), name, "", region.Loops.Select(Flat).ToArray());
+        new(RoomsRerun.LockedPrefix + region.UniqueId, name, "", region.Loops.Select(Flat).ToArray());
 
     private static double[] Flat(List<double[]> loop) => loop.SelectMany(p => new[] { p[0], p[1] }).ToArray();
 

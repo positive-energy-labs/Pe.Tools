@@ -75,7 +75,12 @@ const modelRoomSchema = z.object({
   ceilingFt: z.number(),
   label: pointSchema,
   flags: z.array(z.string()),
-  provenance: z.object({ runId: z.string(), sourceRoomId: z.string(), sourceSqft: z.number() }),
+  provenance: z.object({
+    runId: z.string(),
+    sourceRoomId: z.string(),
+    sourceSqft: z.number(),
+    originalIssue: z.string().optional(),
+  }),
   r10: z
     .object({
       identifier: z.number(),

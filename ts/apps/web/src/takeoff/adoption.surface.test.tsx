@@ -127,7 +127,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     await screen.findByRole("checkbox", { name: "Select Office zone in Zoning plan" });
     expect(j.nativeCalls).toContainEqual({
       key: "takeoffs.snapshot",
-      input: { views: ["Zoning plan"], zoneGuids: [] },
+      input: { views: ["Zoning plan"], zoneUniqueIds: [] },
     });
     expect(j.nativeCalls).toContainEqual({
       key: "takeoffs.candidates",
@@ -176,7 +176,12 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     const doc = j.mount.owner()!.doc;
     expect(commands["takeoffs.adopt"].workIntent.derive(doc)).toEqual({
       views: [
-        { view: "Zoning plan", items: [{ elementId: 21, name: "West office", systemTag: "" }] },
+        {
+          view: "Zoning plan",
+          items: [
+            { elementId: 21, uniqueId: "office-zone-00000015", name: "West office", systemTag: "" },
+          ],
+        },
       ],
     });
     await j.ready();

@@ -23,7 +23,7 @@ test("rooms attention decodes as a region with its stable carrier GUID", () => {
   );
   try {
     const key = view.container.querySelector("tr[data-subject]")!.getAttribute("data-subject")!;
-    expect(decode(key)).toEqual({ ok: true, value: { keyKind: "region", key: region.guid } });
+    expect(decode(key)).toEqual({ ok: true, value: { keyKind: "region", key: region.uniqueId } });
   } finally {
     cleanup();
   }
@@ -43,14 +43,14 @@ test("the Rooms table distinguishes an unset native room type from a real hall",
   try {
     const row = (guid: string) =>
       view.container.querySelector(`tr[data-subject="${regionSubject(guid)}"]`);
-    expect(row(room.guid)?.textContent).toContain("No type");
-    expect(row(hall.guid)?.textContent).toContain("hall");
+    expect(row(room.uniqueId)?.textContent).toContain("No type");
+    expect(row(hall.uniqueId)?.textContent).toContain("hall");
   } finally {
     cleanup();
   }
 });
 
-test("stagedRoomWrites sends both authors staged values per guid", () => {
+test("stagedRoomWrites sends both authors staged values per UniqueId", () => {
   const doc = roomsRouteState.schema.parse({
     edits: {
       [roomEditKey("a", "name")]: { edit: { by: "human", value: "Pantry" } },
@@ -62,9 +62,9 @@ test("stagedRoomWrites sends both authors staged values per guid", () => {
     },
   });
   expect(stagedRoomWrites(doc)).toEqual([
-    { guid: "a", name: "Pantry", people: 2 },
-    { guid: "b", type: "kitchen", role: "zone", ceilingFt: 9 },
-    { guid: "c", name: "Pea's idea" },
+    { uniqueId: "a", name: "Pantry", people: 2 },
+    { uniqueId: "b", type: "kitchen", role: "zone", ceilingFt: 9 },
+    { uniqueId: "c", name: "Pea's idea" },
   ]);
   expect(
     roomsRouteState.schema.safeParse({
@@ -99,9 +99,10 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
       disconnect() {}
     },
   );
-  // 00000000-0000-4000-8000-000000000001 is locked; make it stale as well. 00000000-0000-4000-8000-000000000002 is stale alone.
+  const lockedId = DEMO_ROOMS.regions[1]!.uniqueId;
+  const staleId = DEMO_ROOMS.regions[2]!.uniqueId;
   const regions = DEMO_ROOMS.regions.map((region) =>
-    region.guid === "00000000-0000-4000-8000-000000000001" ? { ...region, stale: true } : region,
+    region.uniqueId === lockedId ? { ...region, stale: true } : region,
   );
   const rows = roomRows(regions, ["Fixture level"]);
   const page = roomsPageSchema.parse({ view: DEMO_VIEW });
@@ -128,7 +129,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     </>,
   );
   const path = view.container.querySelector<SVGPathElement>(
-    `path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`,
+    `path[data-subject="${regionSubject(lockedId)}"]`,
   )!;
   expect(path.getAttribute("data-state")).toBe("locked");
   const image = view.container.querySelector('image[data-layer="plan-image"]');
@@ -142,7 +143,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   expect(path.getAttribute("fill")).toContain(
     view.container
       .querySelector(
-        `path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000002")}"]`,
+        `path[data-subject="${regionSubject(staleId)}"]`,
       )!
       .getAttribute("stroke"),
   );
@@ -151,11 +152,11 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   expect(legend).toMatch(/stale\D*2/);
   expect(
     view.container.querySelector(
-      `tr[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`,
+      `tr[data-subject="${regionSubject(lockedId)}"]`,
     )!.textContent,
   ).toContain("locked · stale");
   fireEvent.click(path);
-  expect(onSelect).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", false);
+  expect(onSelect).toHaveBeenCalledWith(lockedId, false);
   cleanup();
   vi.unstubAllGlobals();
 });
@@ -293,7 +294,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     expect(ctx().cells.state.state).not.toBe("ready");
     expect(
       await ctx()
-        .cells.at(["edits", roomEditKey(DEMO_ROOMS.regions[0]!.guid, "name")])
+        .cells.at(["edits", roomEditKey(DEMO_ROOMS.regions[0]!.uniqueId, "name")])
         .stage("Unsafe"),
     ).not.toBeNull();
     await act(async () => emit(frames.length - 1, "Replacement floor"));

@@ -24,16 +24,14 @@ internal static class RegionMeasurements
             elevation.ToString("R", CultureInfo.InvariantCulture) + "|" + string.Join("|", shapes))));
     }
 
-    // A room's zone need not be a live Zoning Region: a zone that flipped to a room is its own zone, and a drawn room
-    // outside every zone carries the level scope guid. Then the regions sharing that guid are the whole scope.
-    internal static string ScopeKey(Document doc, View view, Guid zoneGuid)
+    internal static string ScopeKey(Document doc, View view, RoomsRegionRecord record, string? zoneId)
     {
-        var zone = new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-            .SingleOrDefault(fr => TakeoffCarriers.ReadIdentity(fr) == (TakeoffCarriers.RoleZoningRegion, zoneGuid));
+        var zone = zoneId != null && record[zoneId]?.Role == TakeoffCarriers.RoleZoningRegion
+            ? doc.GetElement(zoneId) as FilledRegion : null;
         if (zone != null && zone.OwnerViewId != view.Id)
             throw new InvalidOperationException("Zoning Region and Room Region views disagree");
-        var regions = ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion)
-            .Concat(ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue));
+        var regions = ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleRoomRegion)
+            .Concat(ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleHeldResidue));
         return ScopeKey(view.GenLevel?.ProjectElevation
             ?? throw new InvalidOperationException("Takeoff view has no level"),
             zone == null ? null : TakeoffAtlas.Boundaries(zone), regions.Select(r => r.Loops));
@@ -51,11 +49,11 @@ internal static class RegionMeasurements
             : new("stale", measurement.RunId, null, null, "geometry-changed");
     }
 
-    internal static void Measure(Document doc, View view, Guid zoneGuid, string runId, World? world = null)
+    internal static void Measure(Document doc, View view, RoomsRegionRecord record, string zoneId, string runId, World? world = null)
     {
-        var regions = ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion)
-            .Concat(ZoneMaterializer.ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue)).ToList();
-        var key = ScopeKey(doc, view, zoneGuid);
+        var regions = ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleRoomRegion)
+            .Concat(ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleHeldResidue)).ToList();
+        var key = ScopeKey(doc, view, record, zoneId);
         var levelZ = view.GenLevel.ProjectElevation;
         if (regions.Count == 0) return;
         var points = regions.SelectMany(r => r.Loops).SelectMany(loop => loop).ToList();
@@ -74,11 +72,11 @@ internal static class RegionMeasurements
             string? hold = floor is not { } fz || Math.Abs(fz - levelZ) > knobs.FloorTolFt ? "no-floor"
                 : ceiling is null ? "no-ceiling"
                 : ceiling - floor < knobs.MinHeadroomFt ? "low-headroom" : null;
-            var fr = (FilledRegion)doc.GetElement(region.ElementId.ToElementId());
-            var provenance = TakeoffCarriers.ReadRegion(fr).OrThrow()!;
-            TakeoffCarriers.WriteProvenance(fr, (provenance with {
+            var row = record[region.UniqueId]!;
+            record.Regions[region.UniqueId] = row with { Provenance = row.Provenance with
+            {
                 Measurement = new(key + GeometryKey(levelZ, [region.Loops]), runId, floor, ceiling, hold)
-            }).ToJson());
+            } };
         }
     }
 }

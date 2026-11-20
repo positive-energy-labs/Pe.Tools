@@ -48,7 +48,7 @@ export function roomRows(regions: readonly RoomsRegion[], levels: readonly strin
   const zones = regions
     .filter((region) => region.role === "zone")
     .sort((a, b) => b.sqft - a.sqft)
-    .map((zone) => zone.guid);
+    .map((zone) => zone.uniqueId);
   const zoneAt = (guid: string | null | undefined) => {
     const at = guid == null ? -1 : zones.indexOf(guid);
     return at < 0 ? zones.length : at;

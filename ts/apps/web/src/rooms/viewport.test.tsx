@@ -75,7 +75,7 @@ test("a null viewport fits without a write, wheel preserves its cursor point, an
   expect((200 - initial.tx) / initial.scale).toBeCloseTo((200 - next.tx) / next.scale);
   expect((150 - initial.ty) / initial.scale).toBeCloseTo((150 - next.ty) / next.scale);
   expect(writes.mock.calls[0]![1]).toEqual("gesture");
-  act(() => navigate({ selected: [rows[1]!.region.guid] }));
+  act(() => navigate({ selected: [rows[1]!.region.uniqueId] }));
   expect(writes).toHaveBeenCalledTimes(1);
   expect(pose()).toEqual(next);
 });

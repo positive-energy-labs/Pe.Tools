@@ -1,5 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
+using Newtonsoft.Json.Linq;
 using Pe.Shared.RevitData;
 
 namespace Pe.Revit.Takeoff;
@@ -8,7 +9,7 @@ internal static class TakeoffJson
 {
     private static readonly JsonSerializerSettings Settings = new()
     {
-        ContractResolver = new CamelCasePropertyNamesContractResolver(),
+        ContractResolver = new DefaultContractResolver { NamingStrategy = new CamelCaseNamingStrategy() },
         FloatFormatHandling = FloatFormatHandling.DefaultValue,
         NullValueHandling = NullValueHandling.Include,
     };
@@ -16,10 +17,10 @@ internal static class TakeoffJson
     public static string Serialize(object value) =>
         JsonConvert.SerializeObject(value, Formatting.None, Settings);
 
+    public static JObject Object(object value) => JObject.FromObject(value, JsonSerializer.Create(Settings));
+
 }
 
-// The keys adoption sets on a zone's blob. The envelope version is the only version.
-public sealed record TakeoffZoneProvenance(string View, string Name, string SystemTag);
 public sealed record TakeoffPlanReferenceArgs(
     string View,
     string Token,
@@ -36,43 +37,35 @@ public static class TakeoffAtlas
     public static TakeoffSnapshotData Snapshot(Document doc, TakeoffReadRequest request)
     {
         var views = (request.Views ?? []).Select(name => FindView(doc, name).Id).ToHashSet();
-        var zoneIds = (request.ZoneGuids ?? []).ToHashSet();
-        // No selected view/zone is the metadata roster, never an implicit project geometry read.
-        var scoped = new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-            .Where(fr => views.Contains(fr.OwnerViewId) || zoneIds.Contains(TakeoffCarriers.ReadIdentity(fr).Guid ?? Guid.Empty))
-            .ToList();
-        var zones = scoped.Where(fr => TakeoffCarriers.ReadIdentity(fr).Role == TakeoffCarriers.RoleZoningRegion)
-            .Select(fr => ToRegionFacts(doc, fr)).ToList();
-        var grouped = new Dictionary<string, List<TakeoffLiveRegion>>(StringComparer.OrdinalIgnoreCase);
-        var geometryKeys = new Dictionary<Guid, string>();
-        // ADR 0039 keep: a blob this build can't read is reported with its reason and the listing goes on.
-        var unreadable = zones.Where(zone => zone.Unreadable != null)
-            .Select(zone => new TakeoffUnreadableBlob(zone.ElementId, TakeoffCarriers.Provenance.Name, zone.Unreadable!)).ToList();
-
-        foreach (var fr in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-                     .Where(fr => views.Contains(fr.OwnerViewId) || zoneIds.Count > 0))
-        {
-            var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
-            if (guid == null || role is not (TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue))
-                continue;
-            var stored = TakeoffCarriers.ReadProvenanceBlob(fr);
-            var read = RegionProvenance.Read(stored);
-            if (read.Value is not { } provenance)
+        var zoneIds = (request.ZoneUniqueIds ?? []).ToHashSet(StringComparer.Ordinal);
+        var read = RoomsRegionRecord.Read(doc);
+        var zones = new List<TakeoffRegionFacts>();
+        var grouped = new Dictionary<string, List<TakeoffLiveRegion>>(StringComparer.Ordinal);
+        var geometryKeys = new Dictionary<(ElementId View, string? Zone), string>();
+        var unreadable = new List<TakeoffUnreadableBlob>();
+        if (read.Refusal != null)
+            unreadable.Add(new(null, RoomsRegionRecord.Owner.Name, read.Refusal));
+        if (read.Value is { } record && (views.Count > 0 || zoneIds.Count > 0))
+            foreach (var (id, row) in record.Regions)
             {
-                // Its zone is unknown without a readable blob, so it is reported only when its own view was asked for.
-                if (views.Contains(fr.OwnerViewId))
-                    unreadable.Add(new TakeoffUnreadableBlob(fr.Id.Value(), TakeoffCarriers.Provenance.Name, read.Refusal!));
-                continue;
+                if (doc.GetElement(id) is not FilledRegion fr) continue;
+                bool selectedView = views.Contains(fr.OwnerViewId);
+                if (row.Role == TakeoffCarriers.RoleZoningRegion)
+                {
+                    if (selectedView || zoneIds.Contains(id)) zones.Add(ToRegionFacts(doc, fr, row));
+                    continue;
+                }
+                var zone = row.Provenance.Zone;
+                if (!selectedView && (zone == null || !zoneIds.Contains(zone))) continue;
+                var scope = (fr.OwnerViewId, zone);
+                if (!geometryKeys.TryGetValue(scope, out var geometryKey))
+                    geometryKeys[scope] = geometryKey = RegionMeasurements.ScopeKey(
+                        doc, (View)doc.GetElement(fr.OwnerViewId), record, zone);
+                var key = zone ?? "";
+                if (!grouped.TryGetValue(key, out var regions))
+                    grouped[key] = regions = [];
+                regions.Add(ToLiveRegion(doc, fr, record, row, geometryKey));
             }
-            if (!views.Contains(fr.OwnerViewId) && !zoneIds.Contains(provenance.ZoneGuid)) continue;
-            string key = provenance.ZoneGuid.ToString("D");
-            if (!grouped.TryGetValue(key, out var regions))
-                grouped[key] = regions = [];
-            if (!geometryKeys.TryGetValue(provenance.ZoneGuid, out var geometryKey))
-                geometryKeys[provenance.ZoneGuid] = geometryKey = RegionMeasurements.ScopeKey(
-                    doc, (View)doc.GetElement(fr.OwnerViewId), provenance.ZoneGuid);
-            regions.Add(ToLiveRegion(doc, fr, role, guid.Value, stored.Data?.ToString(Formatting.None) ?? provenance.ToJson(), provenance, geometryKey));
-        }
 
         var registry = TakeoffCarriers.TryReadRegistry(doc);
         if (registry.Refusal != null)
@@ -86,57 +79,51 @@ public static class TakeoffAtlas
     public static List<TakeoffRegionFacts> CandidateRegions(Document doc, TakeoffCandidatesRequest request)
     {
         var view = FindView(doc, request.View);
+        var read = RoomsRegionRecord.Read(doc);
         return new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .OrderBy(fr => fr.Id.Value())
-            .Select(fr => ToRegionFacts(doc, fr))
+            .Select(fr => ToRegionFacts(doc, fr, read.Value?[fr.UniqueId], read.Refusal))
             .ToList();
     }
 
-    private static List<TakeoffRegionFacts> ZoneRegions(Document doc) =>
-        new FilteredElementCollector(doc)
-            .OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
-            .Where(fr => TakeoffCarriers.ReadIdentity(fr).Role == TakeoffCarriers.RoleZoningRegion)
-            .Select(fr => ToRegionFacts(doc, fr))
-            .ToList();
-
     public static TakeoffAdoptResult AdoptZones(Document doc, TakeoffAdoptRequest request)
     {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Adoption);
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var unnamed = request.Items.FirstOrDefault(item => string.IsNullOrWhiteSpace(item.Name));
         if (unnamed != null)
             throw new InvalidOperationException($"FilledRegion {unnamed.ElementId} requires a zone name");
         var view = FindView(doc, request.View);
-        var registry = TakeoffCarriers.ReadRegistry(doc);
+        var registry = TakeoffCarriers.StageRegistry(doc, request.ReplacingRegistry);
         var adopted = new List<TakeoffAdopted>();
 
         foreach (var item in request.Items)
         {
             var fr = doc.GetElement(item.ElementId.ToElementId()) as FilledRegion
                      ?? throw new InvalidOperationException($"element {item.ElementId} is not a FilledRegion");
+            RequireRegionIdentity(item.ElementId, item.UniqueId, fr.UniqueId);
             if (fr.OwnerViewId != view.Id)
                 throw new InvalidOperationException($"FilledRegion {item.ElementId} is not on '{request.View}'");
-            var identity = TakeoffCarriers.ReadIdentity(fr);
-            if (identity.Role != null && identity.Role != TakeoffCarriers.RoleZoningRegion)
-                throw new InvalidOperationException(
-                    $"element {item.ElementId} already carries role '{identity.Role}'");
-            var guid = identity.Guid ?? Guid.NewGuid();
-            TakeoffCarriers.WriteIdentity(fr, TakeoffCarriers.RoleZoningRegion, guid);
-            // Read first, as every door does: a zone blob this build cannot read stops the adopt with its reason,
-            // and the keys other doors wrote (flags, run id, a merge) are kept under the three this door sets.
-            _ = TakeoffCarriers.ReadRegion(fr).OrThrow();
-            var data = TakeoffCarriers.ReadProvenanceBlob(fr).Data ?? new Newtonsoft.Json.Linq.JObject();
-            data.Merge(Newtonsoft.Json.Linq.JObject.Parse(
-                TakeoffJson.Serialize(new TakeoffZoneProvenance(request.View, item.Name.Trim(), item.SystemTag.Trim()))));
-            TakeoffCarriers.WriteProvenance(fr, data);
+            var row = record[fr.UniqueId] ?? new RegionRow(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default);
+            if (row.Role != TakeoffCarriers.RoleZoningRegion)
+                throw new InvalidOperationException($"element {item.ElementId} already carries role '{row.Role}'");
+            var name = item.Name.Trim();
+            var provenance = row.Provenance;
+            var metadata = new Dictionary<string, JToken>(provenance.Unknown)
+            {
+                ["view"] = request.View, ["systemTag"] = item.SystemTag.Trim(),
+            };
+            record.Regions[fr.UniqueId] = row with { Fields = row.Fields with { Name = name },
+                Provenance = provenance with { Flags = [.. provenance.Flags.Where(flag => flag != Rooms.FlagPerson), Rooms.FlagPerson], Unknown = metadata } };
             if (!string.IsNullOrWhiteSpace(item.SystemTag) && registry.FindByTag(item.SystemTag) == null)
                 registry.Register(item.SystemTag);
             var loops = Boundaries(fr);
-            adopted.Add(new TakeoffAdopted(item.ElementId, guid,
+            adopted.Add(new TakeoffAdopted(item.ElementId, fr.UniqueId,
                 view.CropBoxActive && loops.Count > 0 ? OwnerCrop(view.CropBox, loops) : null));
         }
 
-        TakeoffCarriers.WriteRegistry(doc, registry);
+        TakeoffCarriers.Save(doc, SystemRegistry.Owner, registry.ToData(), request.ReplacingRegistry);
+        record.Save(doc, replacing: request.Replacing);
         return new TakeoffAdoptResult(adopted);
     }
 
@@ -145,25 +132,36 @@ public static class TakeoffAtlas
     // Room Regions, Held and Void to held regions, Excluded drawn as nothing — and the
     // rebind-by-geometry rule in ZoneMaterializer is untouched.
     public static TakeoffPartitionResult Partition(Document doc, TakeoffPartitionRequest request) {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         var zone = doc.GetElement(request.ZoneRegion.ToElementId()) as FilledRegion
             ?? throw new InvalidOperationException("Partition requires a native Zoning Region");
-        if (TakeoffCarriers.ReadIdentity(zone) != (TakeoffCarriers.RoleZoningRegion, request.ZoneGuid)
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
+        if (zone.UniqueId != request.ZoneUniqueId || record[zone.UniqueId]?.Role != TakeoffCarriers.RoleZoningRegion
             || zone.OwnerViewId != FindView(doc, request.View).Id)
-            throw new InvalidOperationException("Partition target does not match the adopted zone identity and view");
+            throw new InvalidOperationException(record.Recovery ?? "Partition target does not match the adopted zone identity and view");
+        ValidateRunId(request.RunId);
         // The partition's own scope also holds every room label the measurement probes: rooms lie inside their zone.
         var partition = new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion);
         var world = Pe.Revit.Partition.Verbs.PrepareSpace(doc, partition);
-        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(doc, partition, world), world);
+        return MaterializePartition(doc, request, Pe.Revit.Partition.Verbs.Partition(doc, partition, world), world, record);
     }
 
     public static TakeoffPartitionResult MaterializePartition(
         Document doc,
         TakeoffPartitionRequest request,
         Pe.Revit.Partition.PartitionAnswer answer,
-        Pe.Revit.Space.World? world = null)
+        Pe.Revit.Space.World? world = null) =>
+        MaterializePartition(doc, request, answer, world, RoomsRegionRecord.Stage(doc, request.Replacing));
+
+    private static void ValidateRunId(string runId)
     {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
+        if (string.IsNullOrWhiteSpace(runId))
+            throw new InvalidOperationException("Takeoffs partition requires a run id.");
+    }
+
+    private static TakeoffPartitionResult MaterializePartition(Document doc, TakeoffPartitionRequest request,
+        Pe.Revit.Partition.PartitionAnswer answer, Pe.Revit.Space.World? world, RoomsRegionRecord record)
+    {
+        ValidateRunId(request.RunId);
         Action<string> log = static _ => { };
         var view = FindView(doc, request.View);
         var level = view.GenLevel;
@@ -199,10 +197,11 @@ public static class TakeoffAtlas
             });
         }
 
-        var materialized = ZoneMaterializer.Materialize(
-            doc, view, elevation, request.ZoneGuid, request.RunId, rooms, residues, log);
+        var materialized = record.BeforeMutation(() => ZoneMaterializer.Materialize(
+            doc, view, record, elevation, request.ZoneUniqueId, request.RunId, rooms, residues, log));
         doc.Regenerate();
-        RegionMeasurements.Measure(doc, view, request.ZoneGuid, request.RunId, world);
+        RegionMeasurements.Measure(doc, view, record, request.ZoneUniqueId, request.RunId, world);
+        record.Save(doc, replacing: request.Replacing);
 
         var acc = answer.Accounting;
         return new TakeoffPartitionResult(
@@ -226,10 +225,10 @@ public static class TakeoffAtlas
             residues.Select(r => new TakeoffDetectedResidue(
                 r.Id, r.Reason.ToString(), r.RawSqft,
                 [r.LabelX, r.LabelY], r.Polygon)).ToList(),
-            ReadLiveRegions(doc, view, request.ZoneGuid),
+            ReadLiveRegions(doc, view, record, request.ZoneUniqueId),
             new TakeoffPartitionReview(
-                new TakeoffReviewSource(request.RunId, answer.Evidence.DocumentKey, request.ZoneGuid.ToString("D")),
-                new TakeoffReviewZone(request.ZoneGuid.ToString("D"), request.ZoneName,
+                new TakeoffReviewSource(request.RunId, answer.Evidence.DocumentKey, request.ZoneUniqueId),
+                new TakeoffReviewZone(request.ZoneUniqueId, request.ZoneName,
                     Boundaries((FilledRegion)doc.GetElement(request.ZoneRegion.ToElementId()))),
                 answer.Rooms.Select(r => new TakeoffReviewShape(
                     $"R{r.Index + 1:D2}",
@@ -260,27 +259,34 @@ public static class TakeoffAtlas
 
     public static IReadOnlyList<TakeoffWriteResult> LinkRhvacBatch(
         Document doc,
-        TakeoffRhvacLinksRequest request)
+        TakeoffRhvacLinksRequest request,
+        bool commit = true)
     {
         if (request.Writes.Count == 0) throw new InvalidOperationException("RHVAC link batch is empty");
         if (request.Writes.Select(w => w.ElementId).Distinct().Count() != request.Writes.Count)
             throw new InvalidOperationException("RHVAC link batch contains duplicate FilledRegion ids");
-        return request.Writes.Select(write =>
-            MutateProvenance(doc, write.ElementId, p => p with { Rhvac = write.Link })).ToList();
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
+        var results = new List<TakeoffWriteResult>();
+        foreach (var write in request.Writes)
+        {
+            var fr = doc.GetElement(write.ElementId.ToElementId()) as FilledRegion
+                ?? throw new InvalidOperationException($"element {write.ElementId} is not a FilledRegion");
+            RequireRegionIdentity(write.ElementId, write.UniqueId, fr.UniqueId);
+            var row = record[fr.UniqueId] ?? throw new InvalidOperationException(record.Recovery ?? $"FilledRegion {write.ElementId} is not tracked");
+            var next = row.Provenance with { Rhvac = write.Link };
+            record.Regions[fr.UniqueId] = row with { Provenance = next };
+            string blob = next.ToJson();
+            results.Add(new(write.ElementId, fr.UniqueId, next.Zone, Encoding.UTF8.GetByteCount(blob), blob));
+        }
+        if (commit) record.Save(doc, replacing: request.Replacing);
+        else record.BeforeMutation(() => true);
+        return results;
     }
 
-    private static TakeoffWriteResult MutateProvenance(
-        Document doc,
-        long elementId,
-        Func<RegionProvenance, RegionProvenance> mutate)
+    internal static void RequireRegionIdentity(long elementId, string expectedUniqueId, string actualUniqueId)
     {
-        var fr = doc.GetElement(elementId.ToElementId()) as FilledRegion
-                 ?? throw new InvalidOperationException($"element {elementId} is not a FilledRegion");
-        var next = mutate(TakeoffCarriers.ReadRegion(fr).OrThrow()!);
-        string blob = next.ToJson();
-        TakeoffCarriers.WriteProvenance(fr, blob);
-        var check = TakeoffCarriers.ReadRegion(fr).OrThrow()!;
-        return new TakeoffWriteResult(elementId, check.ZoneGuid, blob.Length, blob);
+        if (expectedUniqueId != actualUniqueId)
+            throw new InvalidOperationException($"FilledRegion {elementId} no longer matches UniqueId '{expectedUniqueId}'.");
     }
 
     internal static ViewPlan FindView(Document doc, string name) =>
@@ -288,9 +294,8 @@ public static class TakeoffAtlas
             .FirstOrDefault(v => !v.IsTemplate && v.Name == name)
         ?? throw new InvalidOperationException($"no ViewPlan named '{name}'");
 
-    private static TakeoffRegionFacts ToRegionFacts(Document doc, FilledRegion fr)
+    private static TakeoffRegionFacts ToRegionFacts(Document doc, FilledRegion fr, RegionRow? row, string? refusal = null)
     {
-        var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
         var type = doc.GetElement(fr.GetTypeId()) as FilledRegionType;
         var owner = doc.GetElement(fr.OwnerViewId) as View;
         string color = "128,128,128";
@@ -301,19 +306,20 @@ public static class TakeoffAtlas
         }
         catch { }
         var loops = Boundaries(fr);
-        var blob = TakeoffCarriers.TryReadProvenance(fr);
+        var provenance = row == null ? null : TakeoffJson.Object(row.Provenance);
+        if (provenance != null && row!.Fields.Name is { } name) provenance["name"] = name;
         return new TakeoffRegionFacts(
             fr.Id.Value(),
             type?.Name ?? "",
             owner?.Name ?? "",
             color,
             Area(fr, loops),
-            role,
-            guid,
-            blob.Value ?? "",
+            row?.Role,
+            fr.UniqueId,
+            provenance?.ToString(Formatting.None) ?? "",
             loops,
             owner is { CropBoxActive: true } && loops.Count > 0 ? OwnerCrop(owner.CropBox, loops) : null,
-            blob.Refusal);
+            refusal);
     }
 
     private static RevitCropCoverage OwnerCrop(BoundingBoxXYZ crop, List<List<double[]>> loops)
@@ -324,32 +330,28 @@ public static class TakeoffAtlas
     }
 
     private static TakeoffLiveRegion ToLiveRegion(
-        Document doc, FilledRegion fr, string role, Guid guid, string blob, RegionProvenance provenance, string geometryKey)
+        Document doc, FilledRegion fr, RoomsRegionRecord record, RegionRow row, string geometryKey)
     {
         var loops = Boundaries(fr);
         var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).FirstOrDefault()
                     ?? throw new InvalidOperationException($"FilledRegion {fr.Id} has no boundary");
-        return new TakeoffLiveRegion(fr.Id.Value(), role, guid, Area(fr, loops),
-            role == TakeoffCarriers.RoleRoomRegion ? TakeoffCarriers.ReadRoomType(fr) ?? "" : "", blob, outer,
+        return new TakeoffLiveRegion(fr.Id.Value(), row.Role, fr.UniqueId, Area(fr, loops),
+            row.Role == TakeoffCarriers.RoleRoomRegion ? row.Fields.Type ?? "" : "", record.ProjectOriginal(row.Provenance).ToJson(), outer,
             loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
-            RegionMeasurements.Read(provenance, geometryKey + RegionMeasurements.GeometryKey(
+            RegionMeasurements.Read(row.Provenance, geometryKey + RegionMeasurements.GeometryKey(
                 ((View)doc.GetElement(fr.OwnerViewId)).GenLevel.ProjectElevation, [loops])));
     }
 
-    private static List<TakeoffLiveRegion> ReadLiveRegions(Document doc, ViewPlan view, Guid zoneGuid)
+    private static List<TakeoffLiveRegion> ReadLiveRegions(Document doc, ViewPlan view, RoomsRegionRecord record, string zone)
     {
         var result = new List<TakeoffLiveRegion>();
-        var geometryKey = RegionMeasurements.ScopeKey(doc, view, zoneGuid);
+        var geometryKey = RegionMeasurements.ScopeKey(doc, view, record, zone);
         foreach (var fr in new FilteredElementCollector(doc, view.Id)
                      .OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
         {
-            var (role, guid) = TakeoffCarriers.ReadIdentity(fr);
-            if (guid == null || role is not (TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue))
-                continue;
-            var provenance = TakeoffCarriers.ReadRegion(fr).OrThrow()!;
-            if (provenance.ZoneGuid != zoneGuid) continue;
-            result.Add(ToLiveRegion(doc, fr, role, guid.Value,
-                TakeoffCarriers.TryReadProvenance(fr).Value ?? provenance.ToJson(), provenance, geometryKey));
+                if (record[fr.UniqueId] is not { } row || row.Role == TakeoffCarriers.RoleZoningRegion
+                || row.Provenance.Zone != zone) continue;
+            result.Add(ToLiveRegion(doc, fr, record, row, geometryKey));
         }
         return result;
     }

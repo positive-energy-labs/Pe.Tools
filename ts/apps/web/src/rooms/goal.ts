@@ -20,7 +20,7 @@ export function roomsGoal(
 ): Omit<Goal<string>, "inputs"> & { inputs: readonly never[] } {
   const labels = new Map(
     roomRows(snapshot.regions, levelOrder(snapshot.levels)).map((row) => [
-      row.region.guid,
+      row.region.uniqueId,
       row.label,
     ]),
   );

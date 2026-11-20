@@ -91,12 +91,12 @@ test("a room is a region SubjectRef over its carrier GUID, in roster order with 
     "R3 · Fixture level",
     "R4 · Fixture level",
   ]);
-  expect(options[0]!.id).toBe(regionSubject(zone!.guid));
+  expect(options[0]!.id).toBe(regionSubject(zone!.uniqueId));
   expect(decode(options[1]!.id)).toEqual({
     ok: true,
-    value: { keyKind: "region", key: room!.guid },
+    value: { keyKind: "region", key: room!.uniqueId },
   });
-  expect(regionOf(options[1]!.id)).toBe(room!.guid);
+  expect(regionOf(options[1]!.id)).toBe(room!.uniqueId);
   // Only a region names a room: an element's UniqueId is not the carrier, and never decodes as one.
   expect(regionOf(`UniqueId:${room!.uniqueId}`)).toBeNull();
 });
@@ -129,7 +129,7 @@ test("the Goal is the partition inbox: failing and gone marks first, staged mark
   });
   const goal = roomsGoal(work, DEMO_ROOMS, DEMO_VIEW);
   expect(goal.unresolved.map((c) => [c.id, c.resolver, c.subject ?? null])).toEqual([
-    ["mark:failing", "person", regionSubject(room!.guid)],
+    ["mark:failing", "person", regionSubject(room!.uniqueId)],
     ["mark:gone", "person", null],
   ]);
   expect(goal.unresolved[0]!.says).toMatch(/^wall R2 · failing/);
@@ -193,7 +193,7 @@ test.fails("kernel gap: store-binding-write (10)", async () => {
   };
   expect(writesRevit(sheet)).toBe(true);
   expect(
-    sheetWrites(sheet, { name: { [regionSubject(room!.guid)]: { edit: { value: "Pantry" } } } }),
+    sheetWrites(sheet, { name: { [regionSubject(room!.uniqueId)]: { edit: { value: "Pantry" } } } }),
   ).toHaveLength(1);
 });
 

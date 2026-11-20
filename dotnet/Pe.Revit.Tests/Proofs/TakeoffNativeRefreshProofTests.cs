@@ -1,3 +1,4 @@
+using System.IO;
 using Pe.Revit.Takeoff;
 using Pe.Shared.RevitData.Takeoffs;
 
@@ -12,11 +13,13 @@ public sealed class TakeoffNativeRefreshProofTests
     public void NativeEditRefreshAndRerunPreserveIdentityAndGeometry(UIApplication uiApplication)
     {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        var scratch = Directory.CreateTempSubdirectory("pe-takeoff-refresh-");
         try
         {
+            _ = RevitFamilyFixtureHarness.SaveDocumentCopy(doc, scratch.FullName, "refresh-proof");
             ViewPlan view;
             FilledRegion zone;
-            Guid zoneGuid;
+            string zoneUniqueId;
             using (var tx = new Transaction(doc, "Seed owned takeoff zone"))
             {
                 tx.Start();
@@ -25,26 +28,26 @@ public sealed class TakeoffNativeRefreshProofTests
                     .Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
                 view = ViewPlan.Create(doc, planType.Id, level.Id);
                 view.Name = "Native refresh proof";
-                while (TakeoffCarriers.Preflight(doc, TakeoffCarrierStage.Materialization).MissingCarrierGuids.Count > 0)
-                    TakeoffCarriers.InitializeNext(doc, TakeoffCarrierStage.Materialization);
                 var type = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).FirstElementId();
                 zone = FilledRegion.Create(doc, type, view.Id, Kernel.ToLoops(Square(0, 0, 30), [], 0));
-                zoneGuid = Guid.NewGuid();
-                TakeoffCarriers.WriteIdentity(zone, TakeoffCarriers.RoleZoningRegion, zoneGuid);
-                TakeoffCarriers.WriteProvenance(zone,
-                    TakeoffJson.Serialize(new TakeoffZoneProvenance(view.Name, "Zone", "")));
-                ZoneMaterializer.Materialize(doc, view, 0, zoneGuid, "original",
+                zoneUniqueId = zone.UniqueId;
+                var record = RoomsRegionRecord.Stage(doc);
+                record.Regions.Add(zoneUniqueId, new(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default));
+                ZoneMaterializer.Materialize(doc, view, record, 0, zoneUniqueId, "original",
                     [new RoomResult { Id = "R01", RawSqft = 100, LabelX = 10, LabelY = 10,
                         Polygon = Square(5, 5, 10) }], [], _ => { });
+                record.Save(doc);
                 tx.Commit();
             }
-            using (var tx = new Transaction(doc, "Measure native baseline"))
-            {
-                tx.Start();
-                RegionMeasurements.Measure(doc, view, zoneGuid, "measurement-1");
-                tx.Commit();
-            }
-            var before = TakeoffAtlas.Snapshot(doc, new TakeoffReadRequest(ZoneGuids: [zoneGuid])).RegionsByZone[zoneGuid.ToString("D")].Single();
+            // Keep both measurements on the same native operation path as the installed add-in.
+            TakeoffLiveRegion Read() => TakeoffNativeFixtureRecorder.Invoke<TakeoffSnapshotResponse>(
+                "GetTakeoffSnapshotCore", doc, new TakeoffReadRequest(ZoneUniqueIds: [zoneUniqueId]))
+                .Snapshot.RegionsByZone[zoneUniqueId].Single();
+            void Rerun(string runId) => _ = TakeoffNativeFixtureRecorder.Invoke<TakeoffPartitionResult>(
+                "PartitionTakeoffCore", doc, new TakeoffPartitionRequest(zone.Id.Value(), view.Name, "Zone", zoneUniqueId, runId));
+
+            Rerun("measurement-1");
+            var before = Read();
             Assert.That(before.Analysis!.State, Is.EqualTo("current"));
             using (var tx = new Transaction(doc, "Native edit with unchanged area"))
             {
@@ -53,25 +56,23 @@ public sealed class TakeoffNativeRefreshProofTests
                 view.Name = "Renamed proof view";
                 tx.Commit();
             }
-            var edited = TakeoffAtlas.Snapshot(doc, new TakeoffReadRequest(ZoneGuids: [zoneGuid])).RegionsByZone[zoneGuid.ToString("D")].Single();
-            Assert.That(edited.Guid, Is.EqualTo(before.Guid));
+            var edited = Read();
+            Assert.That(edited.UniqueId, Is.EqualTo(before.UniqueId));
             Assert.That(edited.Sqft, Is.EqualTo(before.Sqft));
             Assert.That(edited.Analysis!.State, Is.EqualTo("stale"));
             var geometry = TakeoffJson.Serialize(edited.Outer);
-            using (var tx = new Transaction(doc, "Rerun without overwriting native geometry"))
-            {
-                tx.Start();
-                TakeoffAtlas.Partition(doc, new(zone.Id.Value(), view.Name, "Zone", zoneGuid, "measurement-2"));
-                tx.Commit();
-            }
-            var after = TakeoffAtlas.Snapshot(doc, new TakeoffReadRequest(ZoneGuids: [zoneGuid])).RegionsByZone[zoneGuid.ToString("D")].Single();
+            Rerun("measurement-2");
+            var after = Read();
             Assert.That(after.ElementId, Is.EqualTo(before.ElementId));
-            Assert.That(after.Guid, Is.EqualTo(before.Guid));
+            Assert.That(after.UniqueId, Is.EqualTo(before.UniqueId));
             Assert.That(TakeoffJson.Serialize(after.Outer), Is.EqualTo(geometry));
             Assert.That(after.Analysis!.State, Is.EqualTo("current"));
             Assert.That(after.Analysis.RunId, Is.EqualTo("measurement-2"));
             Assert.That(RegionProvenance.FromJson(after.Blob).RunId, Is.EqualTo("original"));
         }
-        finally { doc.Close(false); }
+        finally {
+            RevitFamilyFixtureHarness.CloseDocument(doc);
+            scratch.Delete(true);
+        }
     }
 }

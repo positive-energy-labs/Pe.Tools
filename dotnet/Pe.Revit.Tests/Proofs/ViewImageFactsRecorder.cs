@@ -191,13 +191,14 @@ public sealed class ViewImageFactsRecorder {
 
     private static JArray Regions(Document doc, HashSet<long> ids) {
         var rows = new JArray();
+        var record = RoomsRegionRecord.Read(doc).OrThrow();
         foreach (var region in new FilteredElementCollector(doc).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()) {
-            var (role, guid) = TakeoffCarriers.ReadIdentity(region);
-            if (guid is null && !ids.Contains(region.Id.Value())) continue;
+            var row = record?[region.UniqueId];
+            if (row is null && !ids.Contains(region.Id.Value())) continue;
             rows.Add(new JObject {
                 ["id"] = region.Id.Value(),
-                ["role"] = role,
-                ["guid"] = guid?.ToString(),
+                ["role"] = row?.Role,
+                ["uniqueId"] = region.UniqueId,
                 ["ownerViewId"] = region.OwnerViewId.Value(),
                 ["ownerViewName"] = (doc.GetElement(region.OwnerViewId) as View)?.Name,
                 ["loops"] = new JArray(region.GetBoundaries().Select(loop =>
