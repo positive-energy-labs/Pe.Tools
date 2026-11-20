@@ -47,8 +47,12 @@ internal static class TsHostLauncher {
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
-            if (DevWatcherOwnsHost(Runtime))
+            if (DevWatcherOwnsHost(Runtime)) {
+                // A host-launched Revit inherits the parent's URL, which only names that incarnation.
+                // The watcher owns replacement; the endpoint still verifies the receipt and listener.
+                Environment.SetEnvironmentVariable(HostEndpoint.HostBaseUrlVariable, null);
                 return new TsHostLaunchResult(false, false, false, "The checkout's dev watcher is responsible for starting its host.", WatcherOwnsStartup: true);
+            }
             var result = Runtime.Lane == ProductLane.Installed ? EnsureInstalled() : EnsureDev();
             return result.State switch {
                 ServiceRunState.Running => new TsHostLaunchResult(true, true, false, $"Sharing the running host: {Describe(result.File!)}"),

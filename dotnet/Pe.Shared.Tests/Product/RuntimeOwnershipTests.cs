@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
@@ -281,6 +283,63 @@ namespace Pe.Revit.Tests {
                 Assert.That(TsHostLauncher.EnsureRunning().Message, Does.Contain("has no node_modules"), "A reused PID is not the watcher.");
             } finally {
                 File.Delete(receipt);
+            }
+        }
+
+        [Test]
+        [NonParallelizable]
+        public async Task A_watched_dev_host_can_reconnect_on_a_new_port_despite_the_inherited_url() {
+            var runtime = ProductRuntimeLayout.Current;
+            Assert.That(runtime.RootPath, Is.EqualTo(ProductRuntimeLayout.For(ProductLane.Dev, TestRuntime.Checkout, null).RootPath));
+            var name = HostEndpoint.ResolveServiceName(runtime);
+            var directory = Path.Combine(runtime.OwnerRoot, ".artifacts", "dev-tray");
+            var watcher = Path.Combine(directory, "supervisor.json");
+            var service = PeServiceDiscovery.ServiceFilePath(runtime.RootPath, name);
+            Directory.CreateDirectory(directory);
+            Directory.CreateDirectory(Path.GetDirectoryName(service)!);
+            using var process = Process.GetCurrentProcess();
+            using var listener = new TcpListener(IPAddress.Loopback, 0);
+            using var stop = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var previous = Environment.GetEnvironmentVariable(HostEndpoint.HostBaseUrlVariable);
+            try {
+                File.WriteAllText(watcher, JsonSerializer.Serialize(new {
+                    schemaVersion = 1, sourceRoot = runtime.OwnerRoot, watchedHostRoot = runtime.RootPath,
+                    pid = process.Id, processStartUtc = process.StartTime.ToUniversalTime()
+                }));
+                File.WriteAllText(service, JsonSerializer.Serialize(new {
+                    schemaVersion = 3, sourceRoot = runtime.OwnerRoot, lane = "dev", port, pid = process.Id
+                }));
+                Environment.SetEnvironmentVariable(HostEndpoint.HostBaseUrlVariable, "http://127.0.0.1:1");
+
+                Assert.That(TsHostLauncher.EnsureRunning().WatcherOwnsStartup, Is.True);
+                var serve = ReplyToProbe();
+                try {
+                    Assert.That(HostEndpoint.ResolveHostBaseUrl(), Is.EqualTo($"http://127.0.0.1:{port}"));
+                    Assert.That(() => HostEndpoint.ResolveHostBaseUrl("http://127.0.0.1:1"),
+                        Throws.InvalidOperationException.With.Message.Contains("Host override"));
+                } finally {
+                    stop.Cancel();
+                    try { await serve; } catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
+                }
+            } finally {
+                Environment.SetEnvironmentVariable(HostEndpoint.HostBaseUrlVariable, previous);
+                File.Delete(service);
+                File.Delete(watcher);
+            }
+
+            async Task ReplyToProbe() {
+                using var client = await listener.AcceptTcpClientAsync(stop.Token);
+                using var stream = client.GetStream();
+                using var reader = new StreamReader(stream);
+                while (await reader.ReadLineAsync(stop.Token) is { Length: > 0 }) { }
+                var body = JsonSerializer.SerializeToUtf8Bytes(new {
+                    lane = "dev", serviceName = name, processId = process.Id, sourceRoot = runtime.OwnerRoot
+                });
+                await stream.WriteAsync(System.Text.Encoding.ASCII.GetBytes(
+                    $"HTTP/1.1 200 OK\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n"), stop.Token);
+                await stream.WriteAsync(body, stop.Token);
             }
         }
 
