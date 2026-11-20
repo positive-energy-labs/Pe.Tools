@@ -4,7 +4,8 @@ import {
   CALC_DETAIL_READ,
   CALC_BREAKDOWN_READ,
 } from "@pe/fans-contract/fan-calc";
-import { body } from "@pe/host-internal/read-graph";
+import { body, type ReadContext } from "@pe/host-internal/read-graph";
+import * as contracts from "@pe/fans-contract/contract";
 import { networkCalcs } from "@pe/fans-domain/calc/network-calcs";
 import { native } from "@pe/agent-contracts/handle";
 import { canonicalRouteInput } from "@pe/agent-contracts";
@@ -129,105 +130,122 @@ const coveredSeed = (part: z.infer<typeof walk.output>) =>
   [...part.snapshot.nodes, ...part.snapshot.segments].some((element) => element.id === part.seed)
     ? [part.seed]
     : [];
+async function price(ctx: ReadContext, request: DuctsCalcRequest) {
+  const saved = await ctx.read(designLayers, request.target);
+  const design = ductsDesign(saved.ducts, saved.fans),
+    work = workLayer(design);
+  const criteria = resolveCriteria(work, firmLayer(saved.firm, saved.settings));
+  const tolerances = {
+    autoJoinGapIn: criteria.autoJoinGapIn.value,
+    candidateBoxIn: criteria.healBoxIn.value,
+  };
+  const { flow } = await ctx.read(ductsInputs, request.target),
+    { slots } = flow;
+  const acquisition = {
+    ...(Object.keys(slots).length ? { slots } : {}),
+    selector:
+      request.mode === "fan"
+        ? { kind: "from" as const, unitId: request.unitId, ...tolerances }
+        : {
+            kind: "from" as const,
+            unitId: request.start.elementId,
+            portIndex: request.start.connector,
+            ...tolerances,
+          },
+  };
+  const response = await ctx.read(native("ducts.snapshot.walk"), {
+    role: "acquire",
+    request: acquisition,
+    target: { kind: "document", ref: request.target },
+  });
+  const tables = await ctx.read(native("ducts.tables"), {
+    role: "acquire",
+    request: tableRequest,
+    target: { kind: "document", ref: request.target },
+  });
+  if (!response.version || !tables.version)
+    throw Error("Ducts read did not return an observation version");
+  const catalog = await ctx.read(catalogs, request.target);
+  const layersOf = (snapshot: z.infer<typeof snapshotSchema>) => ({
+    terminalFlow: flow.terminalFlow,
+    snapshot,
+    work,
+    versions: { Work: saved.revision },
+    firm: firmLayer(saved.firm, saved.settings),
+    catalogs: catalog.tables,
+  });
+  const first = response.body;
+  const snapshot = await followAcceptedJoins(
+    first,
+    resolveInputs(layersOf(first)).rulings.joins,
+    async (unitId) => {
+      const parts = await ctx.collect([unitId], {
+        read: walk,
+        batch: 1,
+        args: ([id]) => ({
+          target: { kind: "document" as const, ref: request.target },
+          role: "join" as const,
+          request: {
+            ...(Object.keys(slots).length ? { slots } : {}),
+            selector: { kind: "from" as const, unitId: id!, ...tolerances },
+          },
+        }),
+        key: (id) => `join:${id}`,
+        covered: coveredSeed,
+      });
+      // A refused necessary join cannot be silently replaced with the near-side snapshot.
+      if (!parts[0]) throw Error(`Accepted join at ${unitId} was refused`);
+      return parts[0].snapshot;
+    },
+  );
+  const inputs = resolveInputs(layersOf(snapshot)),
+    grids = toGrids(tables.body);
+  const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
+    ports = [...roster.fans, ...roster.suggestions];
+  const endFlow =
+    request.mode === "chain" ? inputs.terminals[String(request.end.elementId)]?.cfm.value : null;
+  const value =
+    request.mode === "fan"
+      ? buildCalc({
+          terminalFlowNote: flow.terminalFlowNote,
+          snapshot,
+          grids,
+          inputs,
+          roster: ports,
+          fan: { unitId: request.unitId, portIndex: request.portIndex },
+          encounterRulings: encounterRulings({ work }),
+          // `hosts` stays unpassed: one read prices one fan, and the engine builds a host's calc where it meets one.
+        })
+      : buildChain({
+          snapshot,
+          grids,
+          inputs,
+          roster: ports,
+          start: request.start,
+          end: request.end,
+          direction: request.direction,
+          ...(endFlow != null ? { flowCfm: endFlow } : {}),
+        });
+  return {
+    value,
+    inputs,
+    grids,
+    saved,
+    snapshot,
+    ports,
+    slots,
+    tolerances,
+    catalog,
+    versions: [response.version, tables.version],
+  };
+}
+
 const calcModel = read("fans.calculation", {
   input: ductsCalcRequestSchema,
   output: modelSchema,
   async run(ctx, request) {
-    const saved = await ctx.read(designLayers, request.target);
-    const design = ductsDesign(saved.ducts, saved.fans),
-      work = workLayer(design);
-    const criteria = resolveCriteria(work, firmLayer(saved.firm, saved.settings));
-    const tolerances = {
-      autoJoinGapIn: criteria.autoJoinGapIn.value,
-      candidateBoxIn: criteria.healBoxIn.value,
-    };
-    const { flow } = await ctx.read(ductsInputs, request.target),
-      { slots } = flow;
-    const acquisition = {
-      ...(Object.keys(slots).length ? { slots } : {}),
-      selector:
-        request.mode === "fan"
-          ? { kind: "from" as const, unitId: request.unitId, ...tolerances }
-          : {
-              kind: "from" as const,
-              unitId: request.start.elementId,
-              portIndex: request.start.connector,
-              ...tolerances,
-            },
-    };
-    const response = await ctx.read(native("ducts.snapshot.walk"), {
-      role: "acquire",
-      request: acquisition,
-      target: { kind: "document", ref: request.target },
-    });
-    const tables = await ctx.read(native("ducts.tables"), {
-      role: "acquire",
-      request: tableRequest,
-      target: { kind: "document", ref: request.target },
-    });
-    if (!response.version || !tables.version)
-      throw Error("Ducts read did not return an observation version");
-    const catalog = await ctx.read(catalogs, request.target);
-    const layersOf = (snapshot: z.infer<typeof snapshotSchema>) => ({
-      terminalFlow: flow.terminalFlow,
-      snapshot,
-      work,
-      versions: { Work: saved.revision },
-      firm: firmLayer(saved.firm, saved.settings),
-      catalogs: catalog.tables,
-    });
-    const first = response.body;
-    const snapshot = await followAcceptedJoins(
-      first,
-      resolveInputs(layersOf(first)).rulings.joins,
-      async (unitId) => {
-        const parts = await ctx.collect([unitId], {
-          read: walk,
-          batch: 1,
-          args: ([id]) => ({
-            target: { kind: "document" as const, ref: request.target },
-            role: "join" as const,
-            request: {
-              ...(Object.keys(slots).length ? { slots } : {}),
-              selector: { kind: "from" as const, unitId: id!, ...tolerances },
-            },
-          }),
-          key: (id) => `join:${id}`,
-          covered: coveredSeed,
-        });
-        // A refused necessary join cannot be silently replaced with the near-side snapshot.
-        if (!parts[0]) throw Error(`Accepted join at ${unitId} was refused`);
-        return parts[0].snapshot;
-      },
-    );
-    const inputs = resolveInputs(layersOf(snapshot)),
-      grids = toGrids(tables.body);
-    const roster = suggestRoster(snapshot, [], rosterInputs(inputs)),
-      ports = [...roster.fans, ...roster.suggestions];
-    const endFlow =
-      request.mode === "chain" ? inputs.terminals[String(request.end.elementId)]?.cfm.value : null;
-    const value =
-      request.mode === "fan"
-        ? buildCalc({
-            terminalFlowNote: flow.terminalFlowNote,
-            snapshot,
-            grids,
-            inputs,
-            roster: ports,
-            fan: { unitId: request.unitId, portIndex: request.portIndex },
-            encounterRulings: encounterRulings({ work }),
-            // `hosts` stays unpassed: one read prices one fan, and the engine builds a host's calc where it meets one.
-          })
-        : buildChain({
-            snapshot,
-            grids,
-            inputs,
-            roster: ports,
-            start: request.start,
-            end: request.end,
-            direction: request.direction,
-            ...(endFlow != null ? { flowCfm: endFlow } : {}),
-          });
+    const { value, inputs, grids, saved, snapshot, ports, slots, tolerances, catalog, versions } =
+      await price(ctx, request);
     let beyond: CalcModel["beyond"] = [];
     if (request.mode === "fan") {
       const units = stoppingUnits(value as Calc).map((unit) => unit.unitId);
@@ -256,8 +274,7 @@ const calcModel = read("fans.calculation", {
     }
     value.basis = fingerprint([
       request.target,
-      response.version,
-      tables.version,
+      ...versions,
       subject(request),
       saved,
       catalog,
@@ -546,6 +563,27 @@ export const fanRoster = body(acquisition.fanRoster, async function (ctx, { targ
       .filter((row) => wanted === undefined || row.mark.trim().toLowerCase() === wanted),
   });
 });
+export const fanPressureRows = body(contracts.overview, async (ctx, { target }) => {
+  const roster = await ctx.read(fanRoster, { target });
+  const rows = [];
+  for (const row of roster.rows) {
+    const { value } = await price(ctx, {
+      target,
+      mode: "fan",
+      unitId: row.unitId,
+      portIndex: row.portIndex,
+    });
+    if (!("claim" in value)) throw Error("Fan pricing returned a chain");
+    rows.push({
+      ...row,
+      requiredEspInWg: value.totals.requiredEspInWg,
+      complete: value.claim.kind === "complete",
+      blockerCount: value.blockers.length,
+    });
+  }
+  return { ...roster, rows };
+});
+
 export const networkCalcsBody = body(acquisition.networkCalcs, (_ctx, args) =>
   acquisition.networkCalcs.data.parse(
     networkCalcs(

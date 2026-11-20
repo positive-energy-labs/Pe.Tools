@@ -40,7 +40,9 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
     equipmentFlows: {},
     verdicts: {},
     roles: {},
-    terminalFlows: { "3": { cfm: 200, source: "human", appliedAt: CLOSED_AT } },
+    terminalFlows: {
+      "3": { cfm: 200, source: "human", appliedAt: CLOSED_AT, parameter: model.slots.terminalFlow },
+    },
   };
   const terminalWrites: unknown[] = [];
   const f = await nativeFixture("real", (key, raw) => {

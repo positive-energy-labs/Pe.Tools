@@ -1,4 +1,4 @@
-import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
+import type { FansCalcEdits } from "@pe/fans-contract/product";
 import type { ValueHandle, ListPersist } from "@pe/kit/lang/collection";
 import { openFanCalcSchema } from "@pe/fans-contract/fans-read";
 import type { Immutable } from "@pe/agent-contracts";
@@ -28,7 +28,7 @@ export interface LedgerProps {
   busy: boolean;
   loading: boolean;
   error: string | null;
-  changeInputs: (edits: CalcEdits) => void;
+  changeInputs: (edits: FansCalcEdits) => void;
   closerOf: (blocker: CalcBlocker, typed: number | null) => Closer;
   close: (closer: Closer) => void;
   closeMany: (closers: readonly Closer[]) => void;

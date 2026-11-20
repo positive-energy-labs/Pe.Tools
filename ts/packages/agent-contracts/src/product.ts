@@ -11,7 +11,7 @@ import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
 import { entities, ownerBlobs } from "./generated/native-homes.generated.ts";
 import { draftCellSchema } from "./draft.ts";
-import type { ReadHandle } from "./handle.ts";
+import type { AnyReadHandle, ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
 import type { RouteGraphWire } from "./route-kernel-data.ts";
 import type { RouteStateSpec } from "./route-state.ts";
@@ -104,7 +104,7 @@ export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => 
     seenInRevit: "Nothing; Revit's calculation reads it",
   },
 });
-/** Rung 5: a named parameter the family already has. A setting holds its name. */
+/** Rung 5: a semantic parameter slot. Its owner's settings resolve the actual Revit name. */
 export const familyParameter = (slot: string): Home<"subject"> => ({
   [made]: "home",
   kind: "family-parameter",
@@ -178,8 +178,10 @@ type Cells = Readonly<Record<string, Cell>>;
 const single = <S extends z.ZodType>(schema: S) => draftCellSchema(schema).default({});
 const byName = <S extends z.ZodType>(schema: S) =>
   z.record(z.string(), draftCellSchema(schema)).default({});
-const bySubject = <S extends z.ZodType>(schema: S) =>
-  z.record(subjectRefCodeSchema, draftCellSchema(schema)).default({});
+type SubjectRecord = <S extends z.ZodType>(value: S) => z.ZodRecord<z.ZodType<string>, S>;
+const subjectRecord = <S extends z.ZodType>(value: S) => z.record(subjectRefCodeSchema, value);
+const bySubject = <S extends z.ZodType>(schema: S, record: SubjectRecord) =>
+  record(draftCellSchema(schema)).default({});
 type Schema<C extends Cell> = z.ZodType<DomainValue<C["domain"]>>;
 type WorkShape<C extends Cells> = {
   -readonly [K in keyof C]: C[K]["per"] extends "route"
@@ -193,15 +195,22 @@ export type EditablePath<C extends Cells> = {
   [K in keyof C & string]: C[K]["per"] extends "route" ? readonly [K] : readonly [K, "*"];
 }[keyof C & string];
 // `Object.entries` keeps no key types, so these two overloads state what the cell list builds.
-function workSchema<C extends Cells>(cells: C): z.ZodObject<WorkShape<C>, z.core.$strict>;
-function workSchema(cells: Cells) {
+export function workSchema<C extends Cells>(
+  cells: C,
+  subjectRecord?: SubjectRecord,
+): z.ZodObject<WorkShape<C>, z.core.$strict>;
+export function workSchema(cells: Cells, record: SubjectRecord = subjectRecord) {
   return z.strictObject(
     Object.fromEntries(
       Object.entries(cells).map(([name, { domain, per }]) => {
         const schema = schemaOf(domain);
         return [
           name,
-          per === "route" ? single(schema) : per === "subject" ? bySubject(schema) : byName(schema),
+          per === "route"
+            ? single(schema)
+            : per === "subject"
+              ? bySubject(schema, record)
+              : byName(schema),
         ];
       }),
     ),
@@ -404,6 +413,12 @@ export function product<
   /** Only the product's own. A platform home follows from the nouns a product uses. */
   readonly homes: H;
   readonly cells: C;
+  readonly work?: Pick<
+    RouteStateSpec<z.ZodObject>,
+    "title" | "settingsOwners" | "schemaVersion"
+  > & {
+    readonly subjectRecord?: SubjectRecord;
+  };
   readonly readings: R & {
     readonly [K in keyof R]: R[K] extends { load: { resource: true } }
       ? { readonly handle: { readonly input: z.ZodType<{ kind: string }> } }
@@ -427,11 +442,14 @@ export function product<
 }) {
   const work: RouteStateSpec<z.ZodObject<WorkShape<C>, z.core.$strict>> & {
     readonly editable: readonly EditablePath<C>[];
+    readonly schemaVersion: number;
   } = {
     route: declaration.id,
-    title: declaration.id,
+    title: declaration.work?.title ?? declaration.id,
     description: declaration.says,
-    schema: workSchema(declaration.cells),
+    settingsOwners: declaration.work?.settingsOwners,
+    schemaVersion: declaration.work?.schemaVersion ?? 1,
+    schema: workSchema(declaration.cells, declaration.work?.subjectRecord),
     editable: editable(declaration.cells),
   };
   const tool: Tool<M> & { readonly work: typeof work } = {
@@ -469,12 +487,21 @@ type Handle<
   K extends keyof P["readings"],
 > = P["readings"][K]["handle"];
 /** One body per declared reading and per declared command. The runtime names its own context and executor. */
+type ReadingBody<P extends ProductDeclaration, K extends keyof P["readings"], Context> = (
+  ctx: Context,
+  args: z.output<Handle<P, K>["input"]>,
+) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
 export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
   readonly readings: {
-    readonly [K in keyof P["readings"]]: (
-      ctx: Context,
-      args: z.output<Handle<P, K>["input"]>,
-    ) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
+    readonly [K in keyof P["readings"]]:
+      | ReadingBody<P, K, Context>
+      | {
+          readonly name: string;
+          readonly input: z.ZodType;
+          readonly output: z.ZodType;
+          readonly contract?: AnyReadHandle;
+          readonly run: ReadingBody<P, K, Context>;
+        };
   };
   readonly commands: { readonly [K in keyof P["commands"]]: Executor };
 };

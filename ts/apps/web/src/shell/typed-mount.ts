@@ -176,7 +176,9 @@ export function mountTypedRoute(
     };
     let subjectNotice: string | null = null;
     const fitSubject = (value: unknown, roster?: () => readonly unknown[] | undefined) =>
-      subjectSpec?.limit && isOpenSet(value)
+      subjectSpec?.limit &&
+      isOpenSet(value) &&
+      !(subjectSpec.limit.overview && value.kind === "all")
         ? boundedOpenSet(
             value,
             subjectSpec.limit.max,
@@ -1925,7 +1927,12 @@ export function typedSubjectDoor(mount: TypedMount) {
     mount.page.subject(op(set, mount.page.read()[subjectSpec.field]));
   };
   return {
-    toggle: (id: unknown) => update((set, value) => set.toggle(value, id)),
+    toggle: (id: unknown) =>
+      update((set, value) =>
+        subjectSpec.limit?.overview && isOpenSet(value) && value.kind === "all"
+          ? set.select(value, [id])
+          : set.toggle(value, id),
+      ),
     toggleRefusal: (id: unknown) => {
       const value: unknown = mount.page.read()[subjectSpec.field];
       return isOpenSet(value) && value.kind === "ids" && !value.ids.includes(id)

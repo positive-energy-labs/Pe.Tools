@@ -1,6 +1,7 @@
 import { expect, it } from "vite-plus/test";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
-import { elementSubjectSchema, fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
+import { elementSubjectSchema } from "@pe/ducts-contract/duct-inputs";
+import { fansCalcEditsSchema } from "../product.ts";
 import { fansDocumentSchema } from "../fans.ts";
 
 it.each(["flows", "ratedEsp", "equipmentFlows", "roles", "terminalDrops", "componentDrops"])(
@@ -39,7 +40,6 @@ import {
   ductsBaseSchema,
   ductsFirmSchema,
   ductsCalcEditsSchema,
-  calcEditsSchema,
   fittingPricingSchema,
 } from "../calc-read.ts";
 
@@ -66,9 +66,13 @@ it("refuses withdrawn source text on drop, flow and ESP edit values", () => {
     fittingDrops: { "proposed:pair>straight": { inWg: 0.3, source: "fitting submittal" } },
   };
   for (const [segment, values] of Object.entries(edits))
-    expect(calcEditsSchema.safeParse({ [segment]: values }).success).toBe(false);
+    expect(
+      (segment === "fittingDrops" ? ductsCalcEditsSchema : fansCalcEditsSchema).safeParse({
+        [segment]: values,
+      }).success,
+    ).toBe(false);
   expect(
-    calcEditsSchema.safeParse({ esp: { [key]: { inWg: 1, source: "unsupported" } } }).success,
+    fansCalcEditsSchema.safeParse({ esp: { [key]: { inWg: 1, source: "unsupported" } } }).success,
   ).toBe(false);
 });
 const key = "proposed:14106988:1|14122436:1>straight";
