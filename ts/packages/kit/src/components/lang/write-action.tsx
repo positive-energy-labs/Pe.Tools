@@ -34,7 +34,7 @@ export interface WriteCell {
 }
 
 export interface WriteHeld {
-  /** The armed button's word: "heal · planned 3" or "heal · checked in Revit 3". */
+  /** The review button's word, with the plan's status and count when it has changes. */
   word: string;
   /** The counts line over the list: "3 pass · 1 refused". */
   summary: string;
@@ -102,7 +102,7 @@ export function PreviewAction({
   const nativeWrites = z
     .object({
       value: z.object({
-        writes: z.array(z.object({ outcome: z.string(), reason: z.string().optional() })),
+        writes: z.array(z.object({ outcome: z.string(), reason: z.string().nullish() })),
       }),
     })
     .safeParse(review?.preview);
@@ -119,10 +119,10 @@ export function PreviewAction({
       ? [...new Set(refused.map((write) => write.reason).filter(Boolean))].join("; ") ||
         `${refused.length} planned writes were refused.`
       : null);
-  const empty =
-    nativeWrites.success &&
-    (!nativeWrites.data.value.writes.some((write) => write.outcome === "planned") ||
-      nativeWrites.data.value.writes.some((write) => write.outcome === "refused"));
+  const plannedCount = nativeWrites.success
+    ? nativeWrites.data.value.writes.filter((write) => write.outcome === "planned").length
+    : undefined;
+  const empty = plannedCount === 0 || refused.length > 0;
   const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
   const run = async (action: () => unknown): WriteRun => {
     try {
@@ -149,7 +149,14 @@ export function PreviewAction({
       held={
         review && !review.stale
           ? {
-              word: writeWord(label, review.cells?.length || review.rows.length, false),
+              word:
+                plannedCount === 0
+                  ? `${label} · ${refusal ? "held" : "nothing to write"}`
+                  : writeWord(
+                      label,
+                      plannedCount ?? (review.cells?.length || review.rows.length),
+                      false,
+                    ),
               summary: review.sentence ?? "",
               ...(review.cells?.length ? { cells: review.cells } : { rows: review.rows }),
             }
@@ -266,7 +273,7 @@ export function WriteAction({
           <Button
             icon={icon}
             label={word}
-            reason={armed ? `${says}. Planned; press to see it again` : reason}
+            reason={armed ? "Press to reopen the review" : reason}
             // A refused plan (no document, nothing edit) still leaves a held one to look at.
             refusal={armed ? null : refusal}
             busy={busy || phase === "planning" || applying}

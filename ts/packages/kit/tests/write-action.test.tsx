@@ -7,6 +7,7 @@ import {
   WriteAction,
   PreviewAction,
   writeWord,
+  type PlanReview,
   type WriteHeld,
 } from "../src/components/lang/write-action";
 import { TooltipProvider } from "../src/components/lang/tooltip";
@@ -48,6 +49,59 @@ test("a plan handle is resampled after settling; an unsealed review never arms a
   );
   expect(view.container.querySelector('[data-write-action="stale"]')).toBeTruthy();
   expect(handle.plan).toHaveBeenCalledOnce();
+});
+
+test.each([
+  {
+    outcome: "unchanged",
+    summary: "Nothing to write: all native targets are unchanged.",
+    toolbar: "Write to Revit · nothing to write",
+    apply: false,
+  },
+  {
+    outcome: "planned",
+    summary: "2 Revit targets: 1 planned · 1 unchanged",
+    toolbar: "Write to Revit · planned 1",
+    apply: true,
+  },
+])("the write toolbar counts native edits when a target is $outcome", async (result) => {
+  let review: PlanReview | null = null;
+  const handle = {
+    read: () => review,
+    plan: () => {
+      review = {
+        preview: {
+          previewOnly: true,
+          derivedRequest: {},
+          seal: {
+            caller: { kind: "human", via: "local" },
+            requestHash: "h",
+            work: {},
+            documentMark: { session: "s", openId: "o", observedSince: null, changedAt: null },
+            incarnation: {},
+            dependencies: "d",
+          },
+          value: { writes: [{ outcome: result.outcome, reason: null }, { outcome: "unchanged" }] },
+        },
+        sentence: result.summary,
+        rows: [`Fan pressure · ${result.outcome}`, "Loss record revision 1 · unchanged"],
+        stale: false,
+      };
+    },
+    apply: vi.fn(),
+    cancel: vi.fn(),
+  };
+  render(
+    <TooltipProvider delay={0}>
+      <PreviewAction handle={handle} label="Write to Revit" />
+    </TooltipProvider>,
+  );
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" })));
+  expect(await screen.findByText(result.summary)).toBeTruthy();
+  expect(screen.getByRole("button", { name: result.toolbar })).toBeTruthy();
+  const apply = screen.queryByRole("button", { name: "Write to Revit" });
+  if (result.apply) expect(apply?.getAttribute("aria-disabled")).not.toBe("true");
+  expect(!!apply).toBe(result.apply);
 });
 
 /** A route in miniature: it keeps the plan and the input it rested on, as the page does. */
