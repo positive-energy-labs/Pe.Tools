@@ -25,11 +25,7 @@ test.each([null, unreadableRooms])(
   "a confirmed room draw seals replacement %j and consumes only its staged intent",
   async (replacing) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-draw-"));
-    const native = await fixtureNative(
-      join(directory, "native"),
-      "fresh-takeoffs.initialize-carrier",
-      "fresh-rooms.draw",
-    );
+    const native = await fixtureNative(join(directory, "native"), "fresh-rooms.draw");
     const socket = await native.connect();
     native.reportTakeoffReplacements({ regions: replacing, registry: null });
     let state: unknown;
@@ -105,22 +101,16 @@ test.each([null, unreadableRooms])(
   },
 );
 
-test.each(["initialize", "adopt", "partition"])(
+test.each(["adopt", "partition"] as const)(
   "Takeoffs %s preview accepts readWorks and apply dispatches strict native input",
   async (verb) => {
-    const directory = await mkdtemp(join(tmpdir(), "pe-initialize-plan-"));
-    const leaf =
-      verb === "initialize"
-        ? "takeoffs.initialize-carrier"
-        : verb === "adopt"
-          ? "takeoffs.adopt"
-          : "takeoffs.partition";
-    const action = `takeoffs.${verb}`;
-    const native = await fixtureNative(
-      join(directory, "native"),
-      "fresh-takeoffs.initialize-carrier",
-      `fresh-${leaf}`,
-    );
+    const directory = await mkdtemp(join(tmpdir(), "pe-takeoffs-plan-"));
+    const leaf = `takeoffs.${verb}` as const;
+    const action = leaf;
+    const native = await fixtureNative(join(directory, "native"), `fresh-${leaf}`);
+    const registry = verb === "adopt" ? { ...unreadableRooms, owner: "takeoff-systems" } : null;
+    const evidence = { regions: unreadableRooms, registry };
+    native.reportTakeoffReplacements(evidence);
     const socket = await native.connect();
     let state: unknown;
     const workspace = new RouteWorkspace({
@@ -176,18 +166,15 @@ test.each(["initialize", "adopt", "partition"])(
       expect(native.calls).toEqual([]);
       expect(await invoke("plan", `${action}.preview`)).toMatchObject({
         state: "succeeded",
-        result: { previewOnly: true },
+        result: { previewOnly: true, evidence },
       });
       expect(native.calls).toEqual([]);
       expect(await invoke("apply", action)).toMatchObject({ state: "succeeded" });
-      expect(native.calls.map((call) => call.key)).toEqual(
-        verb === "adopt" ? ["takeoffs.initialize-carrier", leaf] : [leaf],
-      );
-      if (verb === "adopt")
-        expect(
-          nativeRequestSchema("takeoffs.initialize-carrier").safeParse(native.calls[0]!.input)
-            .success,
-        ).toBe(true);
+      expect(native.calls.map((call) => call.key)).toEqual([leaf]);
+      expect(native.calls[0]!.input).toMatchObject({
+        replacing: unreadableRooms,
+        ...(registry ? { replacingRegistry: registry } : {}),
+      });
       expect(nativeRequestSchema(leaf).safeParse(native.calls.at(-1)!.input).success).toBe(true);
     } finally {
       await native.close();
@@ -202,7 +189,6 @@ test.each(["selected", "unrelated", "none", "foreign", "unreadable"] as const)(
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
     const native = await fixtureNative(
       join(directory, "native"),
-      "fresh-takeoffs.initialize-carrier",
       "fresh-rooms.write",
       "fresh-rooms.partition",
       "fresh-rooms.draw",
@@ -264,12 +250,13 @@ test.each(["selected", "unrelated", "none", "foreign", "unreadable"] as const)(
       await work.publish(
         key,
         "rooms",
-        [...regions, ...(changed === "foreign" ? [{ uniqueId: foreign, name: "Foreign" }] : [])].map(
-          (region) => ({
-            path: ["name", regionCode(region.uniqueId)],
-            value: { edit: { value: region.name } },
-          }),
-        ),
+        [
+          ...regions,
+          ...(changed === "foreign" ? [{ uniqueId: foreign, name: "Foreign" }] : []),
+        ].map((region) => ({
+          path: ["name", regionCode(region.uniqueId)],
+          value: { edit: { value: region.name } },
+        })),
         0,
       );
       const revision = (await work.read(key, "rooms"))!.revision;
@@ -419,11 +406,7 @@ test.each(["selected", "unrelated", "none", "foreign", "unreadable"] as const)(
 
 test("a room field under a key that is no region is refused by Work before any native write", async () => {
   const directory = await mkdtemp(join(tmpdir(), "pe-rooms-invalid-"));
-  const native = await fixtureNative(
-    join(directory, "native"),
-    "fresh-takeoffs.initialize-carrier",
-    "fresh-rooms.write",
-  );
+  const native = await fixtureNative(join(directory, "native"), "fresh-rooms.write");
   const socket = await native.connect();
   let state: unknown;
   const work = withRoomsSheet(

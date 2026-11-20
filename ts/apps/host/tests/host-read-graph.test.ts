@@ -813,7 +813,6 @@ test("HTTP retaining one capture twice with an open reader never rewrites it and
       snapshot: {
         status: {
           systems: [],
-          carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
         },
         zoneFrs: [],
         regionsByZone: {},

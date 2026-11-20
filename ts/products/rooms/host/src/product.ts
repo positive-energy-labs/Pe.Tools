@@ -18,7 +18,6 @@ export const host = implement<typeof product, Deps>(product, {
     "rooms.partition": body("rooms.partition"),
     "rooms.draw": body("rooms.draw"),
     "rooms.merge": body("rooms.merge"),
-    "takeoffs.initialize": body("takeoffs.initialize"),
     "takeoffs.adopt": body("takeoffs.adopt"),
     "takeoffs.partition": body("takeoffs.partition"),
     "takeoffs.sync": body("takeoffs.sync"),

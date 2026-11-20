@@ -6525,42 +6525,6 @@ export type Value = typeof decoder.Type;
 export namespace Op97request {
 namespace Decoded {
 
-const TakeoffCarrierStage = Schema.Literals(["Adoption", "Materialization"]).annotate({ "description": "", "identifier": "TakeoffCarrierStage" });
-const codec = Schema.Struct({ "stage": Schema.optionalKey(TakeoffCarrierStage) }).annotate({ "title": "TakeoffCarrierInitializationRequest" });
-export const decoder = strictDecoder(codec);
-}
-export const decoder = Decoded.decoder;
-namespace WireTypes {
-type TakeoffCarrierStage = "Adoption" | "Materialization";
-export type Root = { readonly "stage"?: TakeoffCarrierStage };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof decoder.Type;
-}
-
-export namespace Op97response {
-namespace Decoded {
-
-
-const codec = Schema.Struct({ "status": Schema.String, "bound": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String]).annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))), "remaining": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))) }).annotate({ "title": "TakeoffCarrierInitializationData" });
-export const decoder = strictDecoder(codec);
-export const definitions = {
-
-} as const;
-}
-export const decoder = Decoded.decoder;
-export const definitions = Decoded.definitions;
-namespace WireTypes {
-
-export type Root = { readonly "status": string, readonly "bound"?: null | string, readonly "remaining": ReadonlyArray<string> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof decoder.Type;
-}
-
-export namespace Op98request {
-namespace Decoded {
-
 const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion", "NewerVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
 const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
 const codec = Schema.Struct({ "zoneRegion": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "view": Schema.String, "zoneName": Schema.String, "zoneUniqueId": Schema.String, "runId": Schema.String, "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffPartitionRequest" });
@@ -6576,7 +6540,7 @@ export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
-export namespace Op98response {
+export namespace Op97response {
 namespace Decoded {
 
 const TakeoffPromotionFacts = Schema.Struct({ "accepted": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "held": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "strict": Schema.Boolean }).annotate({ "identifier": "TakeoffPromotionFacts" });
@@ -6620,7 +6584,7 @@ export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
-export namespace Op99request {
+export namespace Op98request {
 namespace Decoded {
 
 
@@ -6636,7 +6600,7 @@ export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
-export namespace Op99response {
+export namespace Op98response {
 namespace Decoded {
 
 const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion", "NewerVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
@@ -6654,6 +6618,48 @@ namespace WireTypes {
 type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
 type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
 export type Root = { readonly "regions"?: null | OwnerBlobReplacement, readonly "registry"?: null | OwnerBlobReplacement };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
+
+export namespace Op99request {
+namespace Decoded {
+
+const TakeoffRhvacLink = Schema.Struct({ "identifier": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "fileIdentity": Schema.String, "syncedAt": Schema.String, "lastSyncedSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "TakeoffRhvacLink" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion", "NewerVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const TakeoffRhvacLinkWrite = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "link": TakeoffRhvacLink }).annotate({ "identifier": "TakeoffRhvacLinkWrite" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "writes": Schema.Array(TakeoffRhvacLinkWrite), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffRhvacLinksRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
+namespace WireTypes {
+type TakeoffRhvacLink = { readonly "identifier": number, readonly "fileIdentity": string, readonly "syncedAt": string, readonly "lastSyncedSqft": number };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
+type TakeoffRhvacLinkWrite = { readonly "elementId": number, readonly "uniqueId": string, readonly "link": TakeoffRhvacLink };
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "writes": ReadonlyArray<TakeoffRhvacLinkWrite>, readonly "replacing"?: null | OwnerBlobReplacement };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
+
+export namespace Op99response {
+namespace Decoded {
+
+const TakeoffWriteResult = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "zoneUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "bytes": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "blob": Schema.String }).annotate({ "identifier": "TakeoffWriteResult" });
+const codec = Schema.Struct({ "writes": Schema.Array(TakeoffWriteResult) }).annotate({ "title": "TakeoffRhvacLinksData" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+  ["TakeoffWriteResult"]: strictDecoder(TakeoffWriteResult),
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type TakeoffWriteResult = { readonly "elementId": number, readonly "uniqueId": string, readonly "zoneUniqueId"?: null | string, readonly "bytes": number, readonly "blob": string };
+export type Root = { readonly "writes": ReadonlyArray<TakeoffWriteResult> };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -6704,48 +6710,6 @@ export type Value = typeof decoder.Type;
 export namespace Op101request {
 namespace Decoded {
 
-const TakeoffRhvacLink = Schema.Struct({ "identifier": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "fileIdentity": Schema.String, "syncedAt": Schema.String, "lastSyncedSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "TakeoffRhvacLink" });
-const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion", "NewerVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
-const TakeoffRhvacLinkWrite = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "link": TakeoffRhvacLink }).annotate({ "identifier": "TakeoffRhvacLinkWrite" });
-const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
-const codec = Schema.Struct({ "writes": Schema.Array(TakeoffRhvacLinkWrite), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffRhvacLinksRequest" });
-export const decoder = strictDecoder(codec);
-}
-export const decoder = Decoded.decoder;
-namespace WireTypes {
-type TakeoffRhvacLink = { readonly "identifier": number, readonly "fileIdentity": string, readonly "syncedAt": string, readonly "lastSyncedSqft": number };
-type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion" | "NewerVersion";
-type TakeoffRhvacLinkWrite = { readonly "elementId": number, readonly "uniqueId": string, readonly "link": TakeoffRhvacLink };
-type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
-export type Root = { readonly "writes": ReadonlyArray<TakeoffRhvacLinkWrite>, readonly "replacing"?: null | OwnerBlobReplacement };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof decoder.Type;
-}
-
-export namespace Op101response {
-namespace Decoded {
-
-const TakeoffWriteResult = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "zoneUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "bytes": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "blob": Schema.String }).annotate({ "identifier": "TakeoffWriteResult" });
-const codec = Schema.Struct({ "writes": Schema.Array(TakeoffWriteResult) }).annotate({ "title": "TakeoffRhvacLinksData" });
-export const decoder = strictDecoder(codec);
-export const definitions = {
-  ["TakeoffWriteResult"]: strictDecoder(TakeoffWriteResult),
-} as const;
-}
-export const decoder = Decoded.decoder;
-export const definitions = Decoded.definitions;
-namespace WireTypes {
-type TakeoffWriteResult = { readonly "elementId": number, readonly "uniqueId": string, readonly "zoneUniqueId"?: null | string, readonly "bytes": number, readonly "blob": string };
-export type Root = { readonly "writes": ReadonlyArray<TakeoffWriteResult> };
-}
-export type Wire = WireTypes.Root;
-export type Value = typeof decoder.Type;
-}
-
-export namespace Op102request {
-namespace Decoded {
-
 
 const codec = Schema.Struct({ "views": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])), "zoneUniqueIds": Schema.optionalKey(Schema.Union([Schema.Array(Schema.String), Schema.Null])) }).annotate({ "title": "TakeoffReadRequest", "description": "Geometry scope. Empty scope reads only the geometry-free roster." });
 export const decoder = strictDecoder(codec);
@@ -6759,27 +6723,23 @@ export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
-export namespace Op102response {
+export namespace Op101response {
 namespace Decoded {
 
 const Reading = Schema.Struct({ "at": Schema.String, "version": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "observedAt": Schema.String }).annotate({ "identifier": "Reading" });
 const TakeoffRegistrySystem = Schema.Struct({ "guid": Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))), "tag": Schema.String }).annotate({ "identifier": "TakeoffRegistrySystem" });
-const TakeoffCarrierStage = Schema.Literals(["Adoption", "Materialization"]).annotate({ "description": "", "identifier": "TakeoffCarrierStage" });
 const RevitCropCoverage = Schema.Literals(["Inside", "Crossing", "Outside"]).annotate({ "description": "Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.", "identifier": "RevitCropCoverage" });
 const TakeoffRegionAnalysis = Schema.Struct({ "state": Schema.String, "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "floorZ": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ceilingZ": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "hold": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "description": "Freshness against native region and zone geometry, not a claim about all model evidence.", "identifier": "TakeoffRegionAnalysis" });
 const TakeoffUnreadableBlob = Schema.Struct({ "elementId": Schema.optionalKey(Schema.Union([Schema.Number.check(Schema.isInt().annotate({ "expected": "an integer" })), Schema.Null]).annotate({ "format": "int64" })), "parameter": Schema.String, "reason": Schema.String }).annotate({ "description": "A model record the listing cannot read. Document records report a null ElementId.\n            ", "identifier": "TakeoffUnreadableBlob" });
-const TakeoffCarrierPreflight = Schema.Struct({ "stage": TakeoffCarrierStage, "status": Schema.String, "missingCarrierGuids": Schema.Array(Schema.String.annotate({ "format": "guid" }).check(Schema.makeFilter((value) => typeof value !== "string" || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)))) }).annotate({ "identifier": "TakeoffCarrierPreflight" });
+const TakeoffModelStatus = Schema.Struct({ "systems": Schema.Array(TakeoffRegistrySystem) }).annotate({ "identifier": "TakeoffModelStatus" });
 const TakeoffRegionFacts = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "typeName": Schema.String, "view": Schema.String, "viewUniqueId": Schema.String, "color": Schema.String, "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "uniqueId": Schema.String, "blob": Schema.String, "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "ownerCrop": Schema.optionalKey(Schema.Union([Schema.Null, RevitCropCoverage], { mode: "oneOf" })), "unreadable": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "TakeoffRegionFacts" });
 const TakeoffLiveRegion = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "role": Schema.String, "uniqueId": Schema.String, "sqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "roomType": Schema.String, "blob": Schema.String, "outer": Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })))), "holes": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "analysis": Schema.optionalKey(Schema.Union([Schema.Null, TakeoffRegionAnalysis], { mode: "oneOf" })) }).annotate({ "identifier": "TakeoffLiveRegion" });
-const TakeoffModelStatus = Schema.Struct({ "systems": Schema.Array(TakeoffRegistrySystem), "carriers": TakeoffCarrierPreflight }).annotate({ "identifier": "TakeoffModelStatus" });
 const TakeoffSnapshotData = Schema.Struct({ "status": TakeoffModelStatus, "zoneFrs": Schema.Array(TakeoffRegionFacts), "regionsByZone": Schema.Record(Schema.String, Schema.Array(TakeoffLiveRegion)), "unreadable": Schema.optionalKey(Schema.Union([Schema.Array(TakeoffUnreadableBlob), Schema.Null])) }).annotate({ "identifier": "TakeoffSnapshotData" });
 const codec = Schema.Struct({ "reading": Reading, "snapshot": TakeoffSnapshotData }).annotate({ "title": "TakeoffSnapshotResponse" });
 export const decoder = strictDecoder(codec);
 export const definitions = {
   ["Reading"]: strictDecoder(Reading),
   ["RevitCropCoverage"]: strictDecoder(RevitCropCoverage),
-  ["TakeoffCarrierPreflight"]: strictDecoder(TakeoffCarrierPreflight),
-  ["TakeoffCarrierStage"]: strictDecoder(TakeoffCarrierStage),
   ["TakeoffLiveRegion"]: strictDecoder(TakeoffLiveRegion),
   ["TakeoffModelStatus"]: strictDecoder(TakeoffModelStatus),
   ["TakeoffRegionAnalysis"]: strictDecoder(TakeoffRegionAnalysis),
@@ -6794,14 +6754,12 @@ export const definitions = Decoded.definitions;
 namespace WireTypes {
 type Reading = { readonly "at": string, readonly "version"?: null | string, readonly "observedAt": string };
 type TakeoffRegistrySystem = { readonly "guid": string, readonly "tag": string };
-type TakeoffCarrierStage = "Adoption" | "Materialization";
 type RevitCropCoverage = "Inside" | "Crossing" | "Outside";
 type TakeoffRegionAnalysis = { readonly "state": string, readonly "runId"?: null | string, readonly "floorZ"?: null | number, readonly "ceilingZ"?: null | number, readonly "hold"?: null | string };
 type TakeoffUnreadableBlob = { readonly "elementId"?: number | null, readonly "parameter": string, readonly "reason": string };
-type TakeoffCarrierPreflight = { readonly "stage": TakeoffCarrierStage, readonly "status": string, readonly "missingCarrierGuids": ReadonlyArray<string> };
+type TakeoffModelStatus = { readonly "systems": ReadonlyArray<TakeoffRegistrySystem> };
 type TakeoffRegionFacts = { readonly "elementId": number, readonly "typeName": string, readonly "view": string, readonly "viewUniqueId": string, readonly "color": string, readonly "sqft": number, readonly "role"?: null | string, readonly "uniqueId": string, readonly "blob": string, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "ownerCrop"?: null | RevitCropCoverage, readonly "unreadable"?: null | string };
 type TakeoffLiveRegion = { readonly "elementId": number, readonly "role": string, readonly "uniqueId": string, readonly "sqft": number, readonly "roomType": string, readonly "blob": string, readonly "outer": ReadonlyArray<ReadonlyArray<number>>, readonly "holes": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "analysis"?: null | TakeoffRegionAnalysis };
-type TakeoffModelStatus = { readonly "systems": ReadonlyArray<TakeoffRegistrySystem>, readonly "carriers": TakeoffCarrierPreflight };
 type TakeoffSnapshotData = { readonly "status": TakeoffModelStatus, readonly "zoneFrs": ReadonlyArray<TakeoffRegionFacts>, readonly "regionsByZone": { readonly [x: string]: ReadonlyArray<TakeoffLiveRegion> }, readonly "unreadable"?: ReadonlyArray<TakeoffUnreadableBlob> | null };
 export type Root = { readonly "reading": Reading, readonly "snapshot": TakeoffSnapshotData };
 }
@@ -6907,12 +6865,11 @@ export const nativeEffectSchemas = {
 "settings.validate": { request: Op94request.decoder, response: Op94response.decoder },
 "takeoffs.adopt": { request: Op95request.decoder, response: Op95response.decoder },
 "takeoffs.candidates": { request: Op96request.decoder, response: Op96response.decoder },
-"takeoffs.initialize-carrier": { request: Op97request.decoder, response: Op97response.decoder },
-"takeoffs.partition": { request: Op98request.decoder, response: Op98response.decoder },
-"takeoffs.record-replacements": { request: Op99request.decoder, response: Op99response.decoder },
-"takeoffs.rhvac-links": { request: Op100request.decoder, response: Op100response.decoder },
-"takeoffs.rhvac-links.preflight": { request: Op101request.decoder, response: Op101response.decoder },
-"takeoffs.snapshot": { request: Op102request.decoder, response: Op102response.decoder }
+"takeoffs.partition": { request: Op97request.decoder, response: Op97response.decoder },
+"takeoffs.record-replacements": { request: Op98request.decoder, response: Op98response.decoder },
+"takeoffs.rhvac-links": { request: Op99request.decoder, response: Op99response.decoder },
+"takeoffs.rhvac-links.preflight": { request: Op100request.decoder, response: Op100response.decoder },
+"takeoffs.snapshot": { request: Op101request.decoder, response: Op101response.decoder }
 } as const;
 
 export const nativeEffectResponseDefinitions = {
@@ -7013,12 +6970,11 @@ export const nativeEffectResponseDefinitions = {
   ["settings.validate"]: Op94response.definitions,
   ["takeoffs.adopt"]: Op95response.definitions,
   ["takeoffs.candidates"]: Op96response.definitions,
-  ["takeoffs.initialize-carrier"]: Op97response.definitions,
-  ["takeoffs.partition"]: Op98response.definitions,
-  ["takeoffs.record-replacements"]: Op99response.definitions,
-  ["takeoffs.rhvac-links"]: Op100response.definitions,
-  ["takeoffs.rhvac-links.preflight"]: Op101response.definitions,
-  ["takeoffs.snapshot"]: Op102response.definitions,
+  ["takeoffs.partition"]: Op97response.definitions,
+  ["takeoffs.record-replacements"]: Op98response.definitions,
+  ["takeoffs.rhvac-links"]: Op99response.definitions,
+  ["takeoffs.rhvac-links.preflight"]: Op100response.definitions,
+  ["takeoffs.snapshot"]: Op101response.definitions,
 } as const;
 
 export interface NativeEffectValues {
@@ -7119,12 +7075,11 @@ export interface NativeEffectValues {
 "settings.validate": { request: { wire: Op94request.Wire; value: Op94request.Value }; response: { wire: Op94response.Wire; value: Op94response.Value } };
 "takeoffs.adopt": { request: { wire: Op95request.Wire; value: Op95request.Value }; response: { wire: Op95response.Wire; value: Op95response.Value } };
 "takeoffs.candidates": { request: { wire: Op96request.Wire; value: Op96request.Value }; response: { wire: Op96response.Wire; value: Op96response.Value } };
-"takeoffs.initialize-carrier": { request: { wire: Op97request.Wire; value: Op97request.Value }; response: { wire: Op97response.Wire; value: Op97response.Value } };
-"takeoffs.partition": { request: { wire: Op98request.Wire; value: Op98request.Value }; response: { wire: Op98response.Wire; value: Op98response.Value } };
-"takeoffs.record-replacements": { request: { wire: Op99request.Wire; value: Op99request.Value }; response: { wire: Op99response.Wire; value: Op99response.Value } };
-"takeoffs.rhvac-links": { request: { wire: Op100request.Wire; value: Op100request.Value }; response: { wire: Op100response.Wire; value: Op100response.Value } };
-"takeoffs.rhvac-links.preflight": { request: { wire: Op101request.Wire; value: Op101request.Value }; response: { wire: Op101response.Wire; value: Op101response.Value } };
-"takeoffs.snapshot": { request: { wire: Op102request.Wire; value: Op102request.Value }; response: { wire: Op102response.Wire; value: Op102response.Value } };
+"takeoffs.partition": { request: { wire: Op97request.Wire; value: Op97request.Value }; response: { wire: Op97response.Wire; value: Op97response.Value } };
+"takeoffs.record-replacements": { request: { wire: Op98request.Wire; value: Op98request.Value }; response: { wire: Op98response.Wire; value: Op98response.Value } };
+"takeoffs.rhvac-links": { request: { wire: Op99request.Wire; value: Op99request.Value }; response: { wire: Op99response.Wire; value: Op99response.Value } };
+"takeoffs.rhvac-links.preflight": { request: { wire: Op100request.Wire; value: Op100request.Value }; response: { wire: Op100response.Wire; value: Op100response.Value } };
+"takeoffs.snapshot": { request: { wire: Op101request.Wire; value: Op101request.Value }; response: { wire: Op101response.Wire; value: Op101response.Value } };
 }
 export type NativeKey = keyof NativeEffectValues;
 export type NativeRequestWire<K extends NativeKey> = NativeEffectValues[K]["request"]["wire"];

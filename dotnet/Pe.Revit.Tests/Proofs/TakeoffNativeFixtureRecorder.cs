@@ -6,6 +6,7 @@ using Newtonsoft.Json.Linq;
 using Pe.Revit.Global.Services.Host;
 using Pe.Revit.Operations;
 using Pe.Revit.Takeoff;
+using Pe.Shared.HostContracts.Operations;
 using Pe.Shared.RevitData.Serialization;
 using Pe.Shared.RevitData.Takeoffs;
 
@@ -44,15 +45,6 @@ public sealed class TakeoffNativeFixtureRecorder {
         var previousTraceRoot = RoomsRunTraces.RootOverride.Value;
         RoomsRunTraces.RootOverride.Value = traces.FullName;
         try {
-            TakeoffCarrierInitializationData? carrier;
-            var count = 0;
-            do {
-                carrier = Capture<TakeoffCarrierInitializationData>("takeoffs.initialize-carrier", "InitializeTakeoffCarrierCore",
-                    new TakeoffCarrierInitializationRequest());
-                Assert.That(carrier, Is.Not.Null, "Carrier native path must answer; see retained error");
-                Assert.That(++count, Is.LessThan(64));
-            } while (carrier!.Remaining.Count > 0);
-
             ViewPlan view;
             FilledRegion zone;
             using (var tx = new Transaction(doc, "Seed native recording view and candidate")) {
@@ -66,9 +58,18 @@ public sealed class TakeoffNativeFixtureRecorder {
                 zone = FilledRegion.Create(doc, regionType, view.Id, Kernel.ToLoops(Square(-5, -5, 30), [], 0));
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
+            foreach (var owner in new[] { SystemRegistry.Owner, Pe.Revit.Partition.EnclosureDeclaration.Owner, RoomsRegionRecord.Owner })
+                Assert.That(SharedParameterElement.Lookup(doc, owner.Guid), Is.Null, owner.Name);
+            var replacements = Invoke<TakeoffRecordReplacements>("GetTakeoffRecordReplacements", doc, new NoRequest());
+            Assert.That(replacements, Is.EqualTo(new TakeoffRecordReplacements(null, null)));
+
             var adopted = Capture<TakeoffAdoptResult>("takeoffs.adopt", "AdoptTakeoffRegionsCore",
                 new TakeoffAdoptRequest(view.UniqueId, [new TakeoffAdoptItem(zone.Id.Value(), zone.UniqueId, "Fixture zone", "FIXTURE-1")]));
             Assert.That(adopted, Is.Not.Null, "Adopt native path must answer; see retained error");
+
+            Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Tag, Is.EqualTo("FIXTURE-1"));
+            Assert.That(Pe.Revit.Partition.EnclosureDeclaration.Read(doc).Source, Does.StartWith("declared:"));
+            Assert.That(RoomsRegionRecord.Read(doc).OrThrow()!.Regions[zone.UniqueId].Fields.Name, Is.EqualTo("Fixture zone"));
 
             var a = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
                 new RoomsDrawRequest(view.UniqueId, [Square(0, 0, 10)], "Office"));

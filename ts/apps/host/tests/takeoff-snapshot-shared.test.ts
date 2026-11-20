@@ -26,7 +26,6 @@ const snapshotValue = {
   snapshot: {
     status: {
       systems: [],
-      carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
     },
     zoneFrs: [],
     regionsByZone: {},

@@ -107,28 +107,17 @@ const nativeFor =
     );
 type Native = ReturnType<typeof nativeFor>;
 
-/** Only Takeoffs registry initialization needs a separate binding step. */
 export const runModel = (
   ctx: CommandContext,
   execution: ActionExecution & { readonly prepared: { process: NativeProcess } },
   deps: Deps,
   bridge: RevitBridge["Service"],
-  stage: string | null,
   perform: (native: Native) => Step<unknown>,
 ) => {
   const target = modelTarget(ctx);
   const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
   return Effect.gen(function* () {
     deps.captures?.invalidate(target);
-    let remaining = stage === null ? 0 : Infinity;
-    while (remaining > 0) {
-      const result = yield* native<{ remaining: string[] }>("takeoffs.initialize-carrier", {
-        stage,
-      });
-      if (!Array.isArray(result.remaining) || result.remaining.length >= remaining)
-        throw Error("Carrier preparation made no progress");
-      remaining = result.remaining.length;
-    }
     return yield* perform(native);
   }).pipe(Effect.ensuring(Effect.sync(() => deps.captures?.invalidate(target))));
 };
@@ -155,7 +144,7 @@ export const carrier = (bridge: RevitBridge["Service"], deps: Deps) => {
     ctx: CommandContext,
     leaf: HostOperationKey,
     requests: readonly unknown[],
-    replaces: false | "regions" | "registry" = "regions",
+    replaces: "regions" | "registry" = "regions",
   ) => {
     for (const request of requests) {
       const checked = nativeRequestSchema(leaf).safeParse(request);
@@ -166,7 +155,7 @@ export const carrier = (bridge: RevitBridge["Service"], deps: Deps) => {
         );
     }
     const { target, process } = await bindModel(ctx, deps);
-    const replacement = replaces ? await replacementFor(ctx, replaces === "registry") : undefined;
+    const replacement = await replacementFor(ctx, replaces === "registry");
     return {
       consumes: [
         {
@@ -191,19 +180,11 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       target: { session: modelTarget(ctx).session, document: null },
     }));
   return {
-    "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
-      seal: sealCarrier,
-      bind: (ctx) => bind(ctx, "takeoffs.initialize-carrier", [input(ctx)], false),
-      run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, ctx.admission.input.stage, () =>
-          Effect.succeed({ text: `wrote the shared parameters for ${ctx.admission.input.stage}` }),
-        ),
-    }),
     "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
       seal: sealCarrier,
       bind: (ctx) => bind(ctx, "takeoffs.adopt", ctx.admission.input.views, "registry"),
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, "Adoption", (native) =>
+        runModel(ctx, execution, deps, bridge, (native) =>
           Effect.gen(function* () {
             let adopted = 0;
             for (const [index, view] of ctx.admission.input.views.entries())
@@ -221,7 +202,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       seal: sealCarrier,
       bind: (ctx) => bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, null, (native) => {
+        runModel(ctx, execution, deps, bridge, (native) => {
           return value(ctx, native, "takeoffs.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,

@@ -11,28 +11,6 @@ public static class TakeoffCarriers
     public const string RoleRoomRegion = "room-region";
     public const string RoleHeldResidue = "held-residue";
 
-    public static TakeoffCarrierPreflight Preflight(
-        Document document,
-        TakeoffCarrierStage stage = TakeoffCarrierStage.Adoption)
-    {
-        var missing = document.ProjectInformation?.get_Parameter(SystemRegistry.Owner.Guid) == null
-            ? new[] { SystemRegistry.Owner.Guid } : [];
-        return new(stage, missing.Length == 0 ? "ready" : "needs-initialization", missing);
-    }
-
-    public static TakeoffCarrierInitializationData InitializeNext(Document document, TakeoffCarrierStage stage)
-    {
-        if (Preflight(document, stage).MissingCarrierGuids.Count == 0)
-            return new("ready", null, []);
-
-        SharedParameterBinder.EnsureProjectBinding(
-            document, OwnerBlobStore.Spec(SystemRegistry.Owner), [BuiltInCategory.OST_ProjectInformation]);
-        Pe.Revit.Partition.EnclosureDeclaration.EnsureBound(document);
-        document.Regenerate();
-        var remaining = Preflight(document, stage);
-        return new(remaining.Status, SystemRegistry.Owner.Guid, remaining.MissingCarrierGuids);
-    }
-
     public static OwnerValue<SystemRegistry> TryReadRegistry(Document document) =>
         SystemRegistry.Read(OwnerBlobStore.Read(document, SystemRegistry.Owner));
 

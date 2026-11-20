@@ -631,11 +631,7 @@ test("E9 a queued Page command loses authority before its first effect", async (
       notDispatched: true,
       refusal: { kind: "trust" },
     });
-    expect(
-      f.native.calls.filter(
-        (call) => call.key === "takeoffs.initialize-carrier" || call.key === "rooms.write",
-      ),
-    ).toEqual([]);
+    expect(f.native.calls.filter((call) => call.key === "rooms.write")).toEqual([]);
   } finally {
     stop();
     release();
