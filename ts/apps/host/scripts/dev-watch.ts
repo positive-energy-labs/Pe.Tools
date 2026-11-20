@@ -3,10 +3,13 @@ import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
 import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
-import { devWatchRoots } from "./dev-watch-roots.ts";
+import { devWatchRoots, requireDevDependencies } from "./dev-watch-roots.ts";
 
 const sourceRoot = checkoutRootFrom(import.meta.dirname);
 if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkout");
+const hostDirectory = new URL("../", import.meta.url);
+const workspace = new URL("../../", hostDirectory);
+requireDevDependencies(workspace);
 const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"));
 
 let child: ChildProcess | undefined;
@@ -44,8 +47,12 @@ const changed = (root: URL) => (event: string, file: string | null) => {
     disconnect();
   }, 150);
 };
-const watchRoots = devWatchRoots(new URL("../", import.meta.url));
+const watchRoots = devWatchRoots(hostDirectory);
 const watchers = watchRoots.map((root) => watch(root, { recursive: true }, changed(root)));
+const workspaceChanged = changed(workspace);
+watchers.push(watch(workspace, (event, file) => {
+  if (file === "pnpm-lock.yaml") workspaceChanged(event, file);
+}));
 const stop = () => {
   stopped = true;
   for (const watcher of watchers) watcher.close();
@@ -59,6 +66,7 @@ process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
   do {
+    if (restart) requireDevDependencies(workspace);
     restart = false;
     // src/dev.ts prepares builtin closures itself, so attach and the supervisor share one path.
     child = spawn(

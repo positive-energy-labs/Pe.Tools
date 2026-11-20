@@ -3,7 +3,25 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "vite-plus/test";
-import { devWatchRoots } from "../scripts/dev-watch-roots.ts";
+import { devWatchRoots, requireDevDependencies } from "../scripts/dev-watch-roots.ts";
+
+test("a changed or missing installed lock names the frozen install before restarting", () => {
+  const temp = mkdtempSync(join(tmpdir(), "pe-watch-install-"));
+  const workspace = pathToFileURL(join(temp, "/"));
+  const message = "vp i --frozen-lockfile --prefer-offline";
+  try {
+    const lock = new URL("pnpm-lock.yaml", workspace);
+    writeFileSync(lock, "old");
+    expect(() => requireDevDependencies(workspace)).toThrow(message);
+    mkdirSync(new URL("node_modules/.pnpm", workspace), { recursive: true });
+    writeFileSync(new URL("node_modules/.pnpm/lock.yaml", workspace), "old");
+    expect(() => requireDevDependencies(workspace)).not.toThrow();
+    writeFileSync(lock, "new");
+    expect(() => requireDevDependencies(workspace)).toThrow(message);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
 
 test("host watch roots follow runtime dependencies, including transitive optional and peers", () => {
   const temp = mkdtempSync(join(tmpdir(), "pe-watch-roots-"));

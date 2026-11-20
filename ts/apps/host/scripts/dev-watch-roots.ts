@@ -15,6 +15,16 @@ const runtimeDependencies = (manifest: Manifest) =>
     ...manifest.peerDependencies,
   });
 
+/** Frozen Vite+ installs keep a copy of the workspace lock in the virtual store. */
+export function requireDevDependencies(workspace: URL): void {
+  const installed = new URL("node_modules/.pnpm/lock.yaml", workspace);
+  const wanted = new URL("pnpm-lock.yaml", workspace);
+  if (existsSync(installed) && readFileSync(installed).equals(readFileSync(wanted))) return;
+  throw new Error(
+    `Dev server dependencies are out of date. Run \`vp i --frozen-lockfile --prefer-offline\` from ts, then start the dev server again.`,
+  );
+}
+
 /** Vite owns frontend HMR. A package edit restarts the host only if its runtime graph uses it;
  * kit page assets are read on request, so serving them is not a host-code dependency. */
 export function devWatchRoots(hostRoot: URL): URL[] {
