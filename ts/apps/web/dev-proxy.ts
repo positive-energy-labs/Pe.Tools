@@ -1,6 +1,6 @@
 import { resourceReadingSchema } from "@pe/mcps/product-readings";
 import { READING_MAX_KEYS } from "@pe/agent-contracts";
-﻿import { request, type IncomingMessage } from "node:http";
+import { request, type IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
 import { matchPeRoute } from "@pe/mcps/product-catalog";
