@@ -1,4 +1,4 @@
-import { openSet } from "@pe/web-kernel/shell/subject-set";
+import { boundedOpenSet, isOpenSet, openSet } from "@pe/web-kernel/shell/subject-set";
 import { homeHandle } from "../route/slots/sheet/index.ts";
 import { peReadings, type Readings } from "#/host/resource-stream";
 import { kernelVerbs, type KernelVerbKey } from "@pe/web-kernel/route/slots/findings";
@@ -113,6 +113,8 @@ export function mountTypedRoute(
   const cleanups: (() => void)[] = [];
   try {
     const spec = module.spec;
+    const subjectSpec = spec.subject;
+    const subjectRead = subjectSpec?.read ?? spec.core;
     const edits = spec.edits;
     const own = edits?.work.route ?? spec.key;
     const ownerConfigs = edits?.owners ?? {};
@@ -172,6 +174,42 @@ export function mountTypedRoute(
         ),
       });
     };
+    let subjectNotice: string | null = null;
+    const fitSubject = (value: unknown, roster?: () => readonly unknown[] | undefined) =>
+      subjectSpec?.limit && isOpenSet(value)
+        ? boundedOpenSet(
+            value,
+            subjectSpec.limit.max,
+            value.kind === "all" ? roster?.() : undefined,
+          )
+        : value;
+    const fitPage = (
+      candidate: Record<string, unknown>,
+      roster?: () => readonly unknown[] | undefined,
+    ) => {
+      if (!subjectSpec?.limit || !Object.hasOwn(candidate, subjectSpec.field)) return candidate;
+      const value = candidate[subjectSpec.field];
+      const fitted = fitSubject(value, roster);
+      return fitted === value ? candidate : { ...candidate, [subjectSpec.field]: fitted };
+    };
+    const fitAddress = (
+      candidate: Record<string, unknown>,
+      roster?: () => readonly unknown[] | undefined,
+    ) => {
+      const next = fitPage(candidate, roster);
+      if (next !== candidate && subjectSpec?.limit) {
+        subjectNotice = subjectSpec.limit.message;
+        const search = new URLSearchParams(input.address.read());
+        const previous = search.toString();
+        const field = subjectSpec.field;
+        search.set(field, encodeField(spec.fields[field], next[field]));
+        queueMicrotask(() => {
+          if (!disposed && input.custody.current() && input.address.read().toString() === previous)
+            input.address.write(search, "replace");
+        });
+      }
+      return next;
+    };
     const owners = new Map<
       string,
       {
@@ -187,7 +225,7 @@ export function mountTypedRoute(
         lease: ReturnType<typeof registry.acquire>;
       }
     >();
-    let page: Record<string, any> = decodePage();
+    let page: Record<string, any> = freezePage(fitAddress(decodePage()));
     const selectedKey = () => {
       if (!edits) return null;
       if (edits.key) {
@@ -224,6 +262,12 @@ export function mountTypedRoute(
       import("@pe/web-kernel/host-read").HostRead,
       { snapshot: Snapshot; args: string; stop(): void }
     >();
+    const limitRoster = () => {
+      const snapshot = subjectRead && reads.get(subjectRead)?.snapshot;
+      if (subjectSpec?.limit && snapshot?.state === "ready")
+        return subjectSpec.options(snapshot.value).map((option) => option.id);
+    };
+    const boundedAll = () => subjectSpec?.limit && page[subjectSpec.field].kind === "all";
     const readInput = (read: import("@pe/web-kernel/host-read").HostRead) => {
       const project =
         "args" in read && typeof read.args === "function"
@@ -385,7 +429,11 @@ export function mountTypedRoute(
       : (ports.work ?? createWorkFeedClient());
     let fixtureReady = true;
     if (edits && key && spec.core && !input.history && input.fixture !== null) {
-      const packet = spec.core.source.provide?.(input.fixture, spec.core.args(page as never));
+      const seedPage =
+        boundedAll() && subjectSpec
+          ? { ...page, [subjectSpec.field]: { kind: "ids", ids: [] } }
+          : page;
+      const packet = spec.core.source.provide?.(input.fixture, spec.core.args(seedPage as never));
       const initialize = (packet: import("@pe/agent-contracts/value").Publication | undefined) => {
         if (!packet?.value) throw Error(`Missing fixture ${input.fixture}`);
         const data = packet.value.data as Record<string, unknown>;
@@ -556,7 +604,19 @@ export function mountTypedRoute(
     };
     const syncReads = (force = false) => {
       if (disposed || released || !input.custody.current()) return;
+      const all = boundedAll();
+      const roster = all ? limitRoster() : undefined;
+      if (roster) {
+        const next = fitAddress(page, () => roster);
+        if (next !== page) {
+          page = freezePage(next);
+          gate.movePage(page, { kind: "human", source: "query", history: "replace" });
+          syncWork();
+        }
+      }
       for (const read of allReads) {
+        // All cannot start detail until the roster establishes what it would open.
+        if (all && !roster && read !== subjectRead) continue;
         const args = readInput(read),
           signature = canonicalRouteInput(args);
         if ((!force || applyingDocumentWrite()) && signature === reads.get(read)?.args) continue;
@@ -630,6 +690,8 @@ export function mountTypedRoute(
                     record.snapshot.publication,
                   )
                 : reading(valueOf(record.snapshot), record.snapshot.publication);
+          if (read === subjectRead && record.snapshot.state === "ready" && boundedAll())
+            queueMicrotask(() => syncReads());
           connectTimeline();
           notify();
         };
@@ -679,13 +741,19 @@ export function mountTypedRoute(
     };
     const move = (patch: Record<string, unknown>, history?: "push" | "replace") => {
       requireCurrent();
-      const next = { ...page, ...patch };
       for (const [key, value] of Object.entries(patch)) {
         if (key === "selected") focusSelectionSchema.parse(value);
         else spec.fields[key]!.schema.parse(value);
       }
-      if (canonicalRouteInput(next) === canonicalRouteInput(page))
+      const fitted = fitPage(patch, limitRoster);
+      const next = { ...page, ...fitted };
+      if (fitted !== patch && subjectSpec?.limit) subjectNotice = subjectSpec.limit.message;
+      if (canonicalRouteInput(next) === canonicalRouteInput(page)) {
+        if (fitted !== patch) notify();
         return { kind: "accepted", changed: false } as const;
+      }
+      if (fitted === patch && subjectSpec && Object.hasOwn(patch, subjectSpec.field))
+        subjectNotice = null;
       history ??= Object.keys(patch).some((key) => spec.fields[key]?.url === "push")
         ? "push"
         : "replace";
@@ -695,7 +763,7 @@ export function mountTypedRoute(
       syncReads();
       notify();
       const search = input.address.read();
-      for (const [key, value] of Object.entries(patch))
+      for (const [key, value] of Object.entries(fitted))
         search.set(key, encodeField(spec.fields[key], value));
       input.address.write(search, history);
       return { kind: "accepted", changed: true } as const;
@@ -719,12 +787,20 @@ export function mountTypedRoute(
       return input.address.read().has("selected") ? next : { ...next, selected: page.selected };
     };
     const stopAddress = input.address.subscribe(() => {
-      const next = addressPage();
+      const addressed = addressPage();
+      const next = fitAddress(addressed, limitRoster);
       // An unchanged address can be the custody-return notification for released read resources.
       if (canonicalRouteInput(next) === canonicalRouteInput(page)) {
         syncReads();
         return;
       }
+      if (
+        next === addressed &&
+        subjectSpec &&
+        canonicalRouteInput(next[subjectSpec.field]) !==
+          canonicalRouteInput(page[subjectSpec.field])
+      )
+        subjectNotice = null;
       page = freezePage(next);
       gate.movePage(page, { kind: "human", source: "query", history: "replace" });
       syncWork();
@@ -1224,6 +1300,11 @@ export function mountTypedRoute(
       spec,
       data: module.data,
       subjectState,
+      subjectNotice: () => subjectNotice,
+      subjectRefusal: (value: unknown) =>
+        subjectSpec?.limit && fitSubject(value, limitRoster) !== value
+          ? subjectSpec.limit.message
+          : null,
       move,
       readiness,
       whenReady: () => whenSettled(false),
@@ -1353,13 +1434,13 @@ export function mountTypedRoute(
             inspect();
           });
         },
-        write: (page: object) =>
-          Object.fromEntries(
-            Object.keys(spec.fields).map((key) => [
-              key,
-              JSON.stringify((page as Record<string, unknown>)[key]),
-            ]),
-          ),
+        write: (page: object) => {
+          // Pea's rendered receipt compares the same bounded patch that the Page admits.
+          const fitted = fitPage({ ...page }, limitRoster);
+          return Object.fromEntries(
+            Object.keys(spec.fields).map((key) => [key, JSON.stringify(fitted[key])]),
+          );
+        },
         read: (patch: Record<string, string>) =>
           Object.fromEntries(
             Object.entries(patch).map(([key, text]) => {
@@ -1432,12 +1513,21 @@ export function mountTypedRoute(
           ),
         query: (patch: any) => moveRole("query", patch),
         select: (selected: any) => move({ selected }),
-        subject: (subject: any) => {
-          if (!spec.subject) throw Error("No subject declared");
+        subject: (subject: unknown) => {
+          if (!subjectSpec) throw Error("No subject declared");
+          const field = spec.fields[subjectSpec.field];
+          if (!field) throw Error("Missing subject field");
+          const choice = field.schema.parse(subject);
+          const refusal = mounted.subjectRefusal(choice);
+          if (refusal) {
+            subjectNotice = refusal;
+            notify();
+            return { kind: "accepted", changed: false } as const;
+          }
           const reset = Object.fromEntries(
-            (spec.subject.resetQuery ?? []).map((key) => [key, spec.fields[key]?.initial]),
+            (subjectSpec.resetQuery ?? []).map((key) => [key, spec.fields[key]?.initial]),
           );
-          return move({ ...reset, [spec.subject.field]: subject }, "push");
+          return move({ ...reset, [subjectSpec.field]: choice }, "push");
         },
       },
       subscribe(listener: () => void) {
@@ -1828,6 +1918,12 @@ export function typedSubjectDoor(mount: TypedMount) {
   };
   return {
     toggle: (id: unknown) => update((set, value) => set.toggle(value, id)),
+    toggleRefusal: (id: unknown) => {
+      const value: unknown = mount.page.read()[subjectSpec.field];
+      return isOpenSet(value) && value.kind === "ids" && !value.ids.includes(id)
+        ? mount.subjectRefusal({ kind: "ids", ids: [...value.ids, id] })
+        : null;
+    },
     add: (ids: readonly unknown[]) => update((set, value) => set.add(value, ids)),
     remove: (id: unknown) => update((set, value) => set.remove(value, id)),
     select: (ids: readonly unknown[]) => update((set, value) => set.select(value, ids)),
