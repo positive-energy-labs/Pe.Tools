@@ -364,6 +364,16 @@ public sealed class OwnerBlobTests {
         Assert.That(OwnerBlob.Replace(OwnerBlob.Decode(Owner, OwnerBlob.Encode(Owner, NewData)), NewData,
             (_, _) => Assert.Fail("no recovery needed")), Is.Null);
 
+    [Test]
+    public void A_matching_seal_cannot_recover_a_readable_record() {
+        var raw = OwnerBlob.Encode(Owner, NewData);
+        var stored = OwnerBlob.Decode(Owner, raw);
+        var evidence = stored.DataRefused("caller claims the data is unreadable");
+        Assert.That(() => OwnerBlob.Replace(stored, new JObject { ["a"] = 2 },
+                (_, _) => Assert.Fail("a readable record must not be backed up or noticed"), evidence),
+            Throws.InvalidOperationException.With.Message.Contains("is readable"));
+    }
+
     // ---- owner shapes
 
     [Test]

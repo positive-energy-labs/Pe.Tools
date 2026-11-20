@@ -120,6 +120,8 @@ public static class OwnerBlob {
         if (replacing is not null && (stored.Raw is null || replacing.Owner != stored.Owner.Owner ||
             !string.Equals(HashRaw(stored.Raw), replacing.RawUtf8Sha256, StringComparison.Ordinal)))
             throw new InvalidOperationException($"The stored '{stored.Owner.Name}' changed since replacement was planned.");
+        if (replacing is not null && stored.Status is OwnerBlobStatus.Ok or OwnerBlobStatus.Absent)
+            throw new InvalidOperationException($"The stored '{stored.Owner.Name}' is readable; replacement evidence cannot authorize recovery.");
         if (replacing is null && stored.Replacement is { } unreadable)
             throw new InvalidOperationException($"Preview before replacing '{stored.Owner.Name}': {unreadable.Reason}.");
         var text = Encode(stored.Owner, data);

@@ -498,11 +498,14 @@ public sealed class ParameterLinksBehaviorTests {
 
             var owner = ParameterLinkProfile.Owner;
             var raw = $$$"""{"owner":"parameter-links","version":{{{owner.Version}}},"data":{"definitions":[],"test":"{{{Guid.NewGuid():N}}}"}}""";
-            using (var transaction = new Transaction(document, "Plant unreadable parameter-links profile")) {
+            var parameter = document.ProjectInformation.get_Parameter(owner.Guid);
+            void Plant(string text) {
+                using var transaction = new Transaction(document, "Plant unreadable parameter-links profile");
                 _ = transaction.Start();
-                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
+                Assert.That(parameter.Set(text), Is.True);
                 _ = transaction.Commit();
             }
+            Plant(raw);
 
             var service = ParameterLinksService.Instance;
             var request = new ParameterLinksApplyRequest(profile, Reconcile: false);
@@ -524,7 +527,15 @@ public sealed class ParameterLinksBehaviorTests {
             Assert.That(NoticeCount(), Is.Zero);
             Assert.That(() => service.Apply(document, request, preview: false),
                 Throws.InvalidOperationException.With.Message.Contains("Preview before"));
-            Assert.That(service.Apply(document, request with { Replacement = plan.Replacement }, preview: false).ProfileChanged, Is.True);
+            var sealedRequest = request with { Replacement = plan.Replacement };
+            var changed = raw.Replace("\"definitions\":[]", "\"definitions\":{}");
+            Plant(changed);
+            Assert.That(() => service.Apply(document, sealedRequest, preview: false),
+                Throws.InvalidOperationException.With.Message.Contains("changed since replacement"));
+            Assert.That(parameter.AsString(), Is.EqualTo(changed));
+            Assert.That(Directory.GetFileSystemEntries(state), Is.Empty);
+            Plant(raw);
+            Assert.That(service.Apply(document, sealedRequest, preview: false).ProfileChanged, Is.True);
             Assert.That(File.ReadAllBytes(backup), Is.EqualTo(System.Text.Encoding.UTF8.GetBytes(raw)));
             Assert.That(NoticeCount(), Is.EqualTo(1));
             Assert.That(storage.Read(document).Profile?.Definitions.Single().Id, Is.EqualTo("project-info-number"));

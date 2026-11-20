@@ -37,7 +37,7 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
             _ = transaction.Start();
-            _ = OwnerBlobStore.Write(doc, AutoTagSettings.Owner, settings.ToData());
+            _ = OwnerBlobStore.WriteWithoutPreview(doc, AutoTagSettings.Owner, settings.ToData());
             _ = transaction.Commit();
         }
         var tracked = this._documents?.Find(doc);

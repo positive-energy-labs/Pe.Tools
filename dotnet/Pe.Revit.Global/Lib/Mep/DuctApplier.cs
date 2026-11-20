@@ -36,17 +36,15 @@ public static class DuctApplier {
     private static readonly ForgeTypeId InWg = UnitTypeId.InchesOfWater60DegreesFahrenheit;
     private static readonly ForgeTypeId Cfm = UnitTypeId.CubicFeetPerMinute;
 
-    private static readonly OwnerDescriptor StoreEnvelope = DuctLossStore.Owner with { ValidateData = null };
-
     public static (DuctLossStore? Store, string? Error) ReadStore(Document doc) {
         var (_, read, _) = ReadStoreState(doc);
         return (read.Value, read.Refusal);
     }
 
     internal static (OwnerBlobRead Blob, OwnerValue<DuctLossStore> Read, OwnerBlobReplacement? Replacement) ReadStoreState(Document doc, bool reportReplacement = true) {
-        var blob = OwnerBlobStore.Read(doc, StoreEnvelope);
+        var blob = OwnerBlobStore.Read(doc, DuctLossStore.Owner);
         var read = DuctLossStore.Read(blob);
-        var replacement = reportReplacement && read.Refusal is { } reason ? blob.Replacement ?? blob.DataRefused(reason) : null;
+        var replacement = reportReplacement ? blob.Replacement : null;
         return (blob, read, replacement);
     }
 
@@ -170,7 +168,7 @@ public static class DuctApplier {
             if (request.Replacement is { } replacing) {
                 _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData(), replacing);
             } else {
-                if (!string.Equals(OwnerBlobStore.Read(doc, StoreEnvelope).Raw, blob.Raw, StringComparison.Ordinal))
+                if (!string.Equals(OwnerBlobStore.Read(doc, DuctLossStore.Owner).Raw, blob.Raw, StringComparison.Ordinal))
                     throw new InvalidOperationException("The duct loss store changed after planning; re-read ducts.snapshot.");
                 _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData());
             }

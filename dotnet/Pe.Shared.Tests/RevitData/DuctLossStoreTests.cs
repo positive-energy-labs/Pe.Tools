@@ -137,7 +137,7 @@ public sealed class DuctLossStoreTests {
             var modelText = stale ? raw + " " : raw;
             var before = Encoding.UTF8.GetBytes(modelText);
             var next = new DuctLossStore { Roles = new() { [Unit] = new DuctRoleRecord("fan", At) } };
-            void Apply() => modelText = OwnerBlob.Replace(OwnerBlob.Decode(envelope, modelText), next.ToData(),
+            void Apply() => modelText = OwnerBlob.Replace(OwnerBlob.Decode(owner, modelText), next.ToData(),
                 (evidence, kept) => StoredFile.KeepModelRecord(root, evidence.Owner, "Fixture model", kept, evidence.Reason),
                 replacement) ?? modelText;
 

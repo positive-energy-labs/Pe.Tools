@@ -46,6 +46,14 @@ public static class OwnerBlobStore {
         return Write(parameter, document, owner, data, replacing);
     }
 
+    /// <summary>Saves an owner that has no preview. The caller's transaction owns the read and the write.</summary>
+    public static bool WriteWithoutPreview(Document document, OwnerDescriptor owner, JObject data) {
+        RequireTransaction(document, owner);
+        return Read(document, owner).Replacement is { } replacing
+            ? Write(document, owner, data, replacing)
+            : Write(document, owner, data);
+    }
+
     private static void RequireTransaction(Document document, OwnerDescriptor owner) {
         if (!document.IsModifiable)
             throw new InvalidOperationException($"'{owner.Name}' writes require an open Revit transaction.");
@@ -53,9 +61,18 @@ public static class OwnerBlobStore {
 
     /// <summary>False when the value is already there. Throws when the owner's parameter is not bound on the element.</summary>
     public static bool Write(Element element, OwnerDescriptor owner, JObject data) =>
-        Write(element.get_Parameter(owner.Guid)
-              ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first."),
-            element.Document, owner, data);
+        Write(RequireParameter(element, owner), element.Document, owner, data);
+
+    /// <summary>Replaces a sealed unreadable record on an already bound element.</summary>
+    public static bool Write(Element element, OwnerDescriptor owner, JObject data, OwnerBlobReplacement replacing) {
+        if (replacing is null) throw new ArgumentNullException(nameof(replacing));
+        RequireTransaction(element.Document, owner);
+        return Write(RequireParameter(element, owner), element.Document, owner, data, replacing);
+    }
+
+    private static Parameter RequireParameter(Element element, OwnerDescriptor owner) =>
+        element.get_Parameter(owner.Guid)
+        ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first.");
 
     private static bool Write(Parameter parameter, Document document, OwnerDescriptor owner, JObject data,
         OwnerBlobReplacement? replacing = null) {

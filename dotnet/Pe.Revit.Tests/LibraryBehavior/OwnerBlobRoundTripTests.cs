@@ -282,6 +282,53 @@ public sealed class OwnerBlobRoundTripTests {
         }
     }
 
+    [Test]
+    public void AutoTag_save_recovers_once_and_element_writes_enforce_the_seal(UIApplication uiApplication) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        using var isolated = new OwnerBlobRecoveryFixture();
+        try {
+            var owner = AutoTagSettings.Owner;
+            var anchor = document.ProjectInformation;
+            const string raw = """{"owner":"autotag","version":1,"data":{"unknownAutoTagField":true}}""";
+            var settings = new AutoTagSettings { Enabled = false };
+            OwnerBlobReplacement evidence;
+            using (var transaction = new Transaction(document, "Plant unreadable AutoTag settings")) {
+                _ = transaction.Start();
+                _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
+                document.Regenerate();
+                Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
+                evidence = OwnerBlobStore.Read(anchor, owner).Replacement!;
+                Assert.That(evidence, Is.Not.Null);
+                Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData()),
+                    Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+                Assert.That(Raw(document, owner), Is.EqualTo(raw));
+                Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+                _ = transaction.Commit();
+            }
+
+            AutoTagService.Instance.SaveSettingsForDocument(document, settings);
+            AutoTagService.Instance.SaveSettingsForDocument(document, settings);
+            var recovery = Path.Combine(isolated.Root, "model-recovery", "owner-autotag");
+            Assert.That(File.ReadAllBytes(Directory.GetFiles(recovery).Single()), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+            var readable = OwnerBlobStore.Read(anchor, owner);
+            Assert.That(readable.Status, Is.EqualTo(OwnerBlobStatus.Ok));
+            Assert.That(AutoTagSettings.Read(readable).Value?.Enabled, Is.False);
+
+            using var edit = new Transaction(document, "Check the sealed element writer");
+            _ = edit.Start();
+            Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(), readable.DataRefused("claimed unreadable")),
+                Throws.InvalidOperationException.With.Message.Contains("is readable"));
+            Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
+            Assert.That(OwnerBlobStore.Write(anchor, owner, settings.ToData(), evidence), Is.True);
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+            _ = edit.RollBack();
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
     private static void RefusesAndKeeps(Application application, OwnerBlobStatus expected, Func<OwnerDescriptor, string> plant) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         string? path = null;
