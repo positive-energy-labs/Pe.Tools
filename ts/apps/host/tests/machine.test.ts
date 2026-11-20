@@ -9,6 +9,7 @@ import type {
 } from "@pe/host-contracts/pe-revit-contract";
 import {
   machineSources,
+  readMachineSession,
   unavailableShare,
   type AttachmentRead,
   type HeldTarget,
@@ -228,6 +229,39 @@ test("only an answering Revit in the SDK execution boundary is asked for holding
   expect(fault).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ leg: "holdings", kind: "error" }));
 });
 
+test("lifecycle gets the exact document census while years and holdings are still waiting", async () => {
+  vi.useFakeTimers(FAKE_CLOCK);
+  const f = fixture();
+  vi.mocked(f.sources.years).mockReturnValue(new Promise(() => {}));
+  vi.mocked(f.sources.holdings).mockReturnValue(new Promise(() => {}));
+  const result = readMachineSession(row.process).then(
+    (value) => ({ value }), (error: unknown) => ({ error }),
+  );
+  try {
+    await vi.advanceTimersByTimeAsync(15_001);
+    await vi.advanceTimersByTimeAsync(15_001);
+    expect(await result).toMatchObject({ value: { documents: docs.documents } });
+    expect(f.sources.years).not.toHaveBeenCalled();
+    expect(f.sources.holdings).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a stuck document census refuses with a next step before the machine deadline", async () => {
+  vi.useFakeTimers(FAKE_CLOCK);
+  const f = fixture();
+  vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
+  let error: unknown;
+  void readMachineSession(row.process).catch((caught: unknown) => { error = caught; });
+  try {
+    await vi.advanceTimersByTimeAsync(3_001);
+    expect(error).toMatchObject({ message: expect.stringContaining("Switch to Revit") });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 /** A Pea acquisition receipt as instances-actions records it: intent first, then its steps. */
 function acquiring(process: { pid: number; processStartUtc: string }): ActionReceipt {
   const start = { year: "2025", owner: "pea", addins: "on" } as const;
@@ -356,12 +390,12 @@ test("unread observed documents remain unknown and a reused pid cannot classify 
 
 test("SDK adapter uses the all-row census and pid document read, refusing a different incarnation", async () => {
   const f = fixture();
-  const envelope = (result: unknown, resolved: unknown = null) =>
+  const envelope = (result: unknown, resolved: unknown = null, diagnostics: unknown[] = []) =>
     JSON.stringify({
       result,
       resolved,
       exitCode: 0,
-      diagnostics: [],
+      diagnostics,
       binary: sdkBinary,
       command: sdkCommand,
       nextSteps: [],
@@ -373,6 +407,9 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
     sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
     expect(await settle(sources.sessions())).toEqual([row]);
     expect(sdkRun).toHaveBeenLastCalledWith(["session", "list", "--all", "--json"]);
+    sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
+    expect(await settle(sources.sessions(row.process.pid))).toEqual([row]);
+    expect(sdkRun).toHaveBeenLastCalledWith(["session", "list", "--pid", "42", "--json"]);
     sdkRun.mockResolvedValueOnce(envelope(docs, row.process));
     expect(await settle(sources.documents(row.process))).toEqual(docs);
     expect(sdkRun).toHaveBeenLastCalledWith(["doc", "list", "--pid", "42", "--json"]);
@@ -380,6 +417,11 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
       envelope(docs, { ...row.process, processStartUtc: "a-new-process" }),
     );
     await expect(settle(sources.documents(row.process))).rejects.toThrow("different process incarnation");
+    sdkRun.mockResolvedValueOnce(envelope(
+      { state: "ok", documents: [] }, row.process,
+      [{ code: "doc.bridge-unreachable", detail: "bridge did not answer" }],
+    ));
+    await expect(settle(sources.documents(row.process))).rejects.toThrow("incomplete document census");
     const holdings = [
       {
         openId: "sdk-open",

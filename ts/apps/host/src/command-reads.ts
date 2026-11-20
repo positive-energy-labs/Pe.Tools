@@ -1,5 +1,5 @@
 import { get } from "./action-blobs.ts";
-import { SdkSession } from "./sdk-session.ts";
+import { readSdk, SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import type { CommandResources } from "./command-executor.ts";
 import type { RevitBridge } from "./bridge.ts";
@@ -8,7 +8,7 @@ import { assertFresh, assertSealed } from "./document-marks.ts";
 import { readOriginalProcess } from "./native-receipts.ts";
 import { readMember, readMemberPod } from "./settings.ts";
 import { captureDirectory, listPackages } from "./packages.ts";
-import { readMachineSession } from "./machine.ts";
+import { readMachineSession, withinLifecycleCensus } from "./machine.ts";
 import { onePackage, type AdmittedPackage } from "./packages.ts";
 import { join } from "node:path";
 import { readFile } from "node:fs/promises";
@@ -172,14 +172,15 @@ export function commandResources(
           // one before dispatch; between them the bridge attachment below, which carries the same pid and
           // start and must still be connected, is the proof. A missing moment is the strongest reading.
           const sdkProof = moment === undefined || moment === "admit" || moment === "dispatch";
-          const actual = sdkProof
-            ? await readOriginalProcess(
-                dependency.probe.process.pid,
-                Date.parse(dependency.probe.process.processStartUtc),
-                deps.sdk,
-              )
-            : dependency.probe.process;
           const target = dependency.probe.target;
+          const readProcess = (signal?: AbortSignal) => readOriginalProcess(
+            dependency.probe.process.pid,
+            Date.parse(dependency.probe.process.processStartUtc),
+            signal ? (args) => (deps.sdk ?? readSdk)(args, signal) : deps.sdk,
+          );
+          const actual = sdkProof
+            ? await (target.kind === "sdk-session" ? withinLifecycleCensus(readProcess) : readProcess())
+            : dependency.probe.process;
           if (target.kind === "document" || target.kind === "session") {
             const id = target.kind === "document" ? target.ref.session : target.session;
             const session = await runPods(deps, SdkSession.resolve(bridge, { session: id }));
