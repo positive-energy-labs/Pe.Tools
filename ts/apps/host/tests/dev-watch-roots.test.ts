@@ -79,7 +79,11 @@ test("host watch roots follow runtime dependencies, including transitive optiona
   try {
     put("apps/host", {
       name: "host",
-      dependencies: { a: "workspace:*" },
+      dependencies: {
+        a: "workspace:*",
+        "product-host": "workspace:*",
+        "product-web": "workspace:*",
+      },
       devDependencies: { kit: "workspace:*" },
     });
     put("packages/a", { name: "a", optionalDependencies: { b: "workspace:*" } });
@@ -90,10 +94,26 @@ test("host watch roots follow runtime dependencies, including transitive optiona
     put("packages/c", { name: "c" });
     put("packages/kit", { name: "kit" });
     put("packages/browser", { name: "browser" });
+    put("products/example/host", {
+      name: "product-host",
+      dependencies: { "product-domain": "workspace:*" },
+    });
+    put("products/example/domain", { name: "product-domain" });
+    put("products/example/web", { name: "product-web" });
+    put("products/unused/host", { name: "unused-host" });
     const roots = devWatchRoots(pathToFileURL(join(temp, "apps/host/"))).map((root) =>
       relative(temp, fileURLToPath(root)).replaceAll("\\", "/"),
     );
-    expect(roots).toEqual(["apps/host/src", "packages/a/src", "packages/b/src", "packages/c/src"]);
+    expect(roots).toContain("products/example/host/src");
+    expect(roots).not.toContain("products/example/web/src");
+    expect(roots.sort()).toEqual([
+      "apps/host/src",
+      "packages/a/src",
+      "packages/b/src",
+      "packages/c/src",
+      "products/example/domain/src",
+      "products/example/host/src",
+    ]);
   } finally {
     rmSync(temp, { recursive: true, force: true });
   }
@@ -104,6 +124,9 @@ test("current checkout watches runtime packages and leaves kit updates to the fr
   expect(roots.some((root) => root.endsWith("/packages/host-contracts/src/"))).toBe(true);
   expect(roots.some((root) => root.endsWith("/packages/runtime/src/"))).toBe(true);
   expect(roots.some((root) => root.endsWith("/packages/kit/src/"))).toBe(false);
+  expect(roots.some((root) => root.endsWith("/products/fans/host/src/"))).toBe(true);
+  expect(roots.some((root) => root.endsWith("/products/duct-systems/host/src/"))).toBe(true);
+  expect(roots.some((root) => /\/products\/[^/]+\/web\//.test(root))).toBe(false);
   // MCP skill discovery now consumes the browser guide at runtime.
   expect(roots.some((root) => root.endsWith("/packages/browser/src/"))).toBe(true);
 });
