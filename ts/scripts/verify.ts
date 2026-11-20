@@ -19,15 +19,23 @@ const listed = spawnSync("pnpm", ["-r", "list", "--depth", "-1", "--json"], {
   maxBuffer: 64 * 1024 * 1024,
 });
 if (listed.status !== 0) throw new Error(`pnpm -r list failed: ${listed.stderr}`);
-const tested = (JSON.parse(listed.stdout) as { name?: string; path: string }[])
-  .filter(
-    ({ name, path }) =>
-      name?.startsWith("@pe/") &&
-      // The source gate runs the repo guards.
-      name !== "@pe/repo-guards" &&
-      JSON.parse(readFileSync(resolve(path, "package.json"), "utf8")).scripts?.test,
-  )
-  .map(({ name }) => name!);
+const workspaces: unknown = JSON.parse(listed.stdout);
+if (!Array.isArray(workspaces)) throw new Error("pnpm -r list did not return a workspace list");
+const tested: string[] = [];
+for (const entry of workspaces) {
+  const workspace: unknown = entry;
+  if (!workspace || typeof workspace !== "object" || !("name" in workspace)) continue;
+  const { name } = workspace;
+  if (typeof name !== "string" || !name.startsWith("@pe/")) continue;
+  // The source gate runs the repo guards.
+  if (name === "@pe/repo-guards") continue;
+  if (!("path" in workspace) || typeof workspace.path !== "string") {
+    throw new Error(`pnpm -r list did not return a path for ${name}`);
+  }
+  if (JSON.parse(readFileSync(resolve(workspace.path, "package.json"), "utf8")).scripts?.test) {
+    tested.push(name);
+  }
+}
 if (!tested.length) throw new Error("no @pe/* package declares a test script");
 
 const steps: [name: string, cwd: string, cmd: string[]][] = [
