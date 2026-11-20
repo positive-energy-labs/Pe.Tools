@@ -57,6 +57,7 @@ export interface PlanReview {
 /** Structural plan handle supplied by the shell; kit owns no Work, consent or transport. */
 export interface PlanHandle {
   readonly pending?: boolean;
+  readonly applying?: boolean;
   readonly refusal?: string | null;
   readonly failure?: string | null;
   plan(): unknown;
@@ -158,6 +159,7 @@ export function PreviewAction({
       plan={() => run(() => handle.plan())}
       apply={{
         hidden: empty,
+        pending: handle.applying,
         label,
         says: `${label} what the plan sealed`,
         refusal: refusal ?? (sealed ? null : "Plan the current Work first"),
@@ -188,6 +190,7 @@ export interface WriteActionProps {
   plan: () => WriteRun;
   apply: {
     hidden?: boolean;
+    pending?: boolean;
     label: string;
     says: string;
     /** Why apply is not armed even with a plan held. */
@@ -217,13 +220,16 @@ export function WriteAction({
   const [phase, setPhase] = useState<"planning" | "applying" | null>(null);
   const [open, setOpen] = useState(false);
   const [ran, setOutcome] = useState<Outcome | null>(null);
-  const outcome: Outcome | null = ran ?? (failed ? { kind: "refused", text: failed } : null);
+  const applying = phase === "applying" || apply.pending === true;
+  const outcome: Outcome | null = applying
+    ? null
+    : (ran ?? (failed ? { kind: "refused", text: failed } : null));
   const armed = held !== null;
-  const shown = open && (armed || outcome !== null);
+  const shown = open && (armed || applying || outcome !== null);
   // A disarmed button holds no popover: when the inputs move, the next arming opens fresh.
   useEffect(() => {
-    if (!armed && ran === null) setOpen(false);
-  }, [armed, ran]);
+    if (!armed && !applying && ran === null) setOpen(false);
+  }, [armed, applying, ran]);
 
   const settle = (kind: Outcome["kind"], text: string) => {
     setOutcome({ kind, text });
@@ -251,7 +257,7 @@ export function WriteAction({
         if (!next) {
           setOpen(false);
           setOutcome(null);
-        } else if (armed) setOpen(true);
+        } else if (armed || applying) setOpen(true);
         else if (!refusal && !busy && phase === null) void runPlan();
       }}
     >
@@ -263,7 +269,7 @@ export function WriteAction({
             reason={armed ? `${says}. Planned; press to see it again` : reason}
             // A refused plan (no document, nothing edit) still leaves a held one to look at.
             refusal={armed ? null : refusal}
-            busy={busy || phase === "planning"}
+            busy={busy || phase === "planning" || applying}
             pressed={armed}
             data-tone={stale && !armed ? "caution" : undefined}
             data-write-action={armed ? "armed" : stale ? "stale" : "idle"}
@@ -321,20 +327,24 @@ export function WriteAction({
           </p>
         ) : null}
         {/* E8-03: the action refusal is an exception to sentence-free working surfaces; a hidden Apply must explain its hold. */}
-        {armed && apply.refusal ? (
+        {applying ? (
+          <p role="status" className="t-small">
+            Applying…
+          </p>
+        ) : armed && apply.refusal ? (
           <p role="status" data-tone="caution" className="t-small">
             Apply is held: {apply.refusal}
           </p>
         ) : null}
-        {armed && outcome?.kind !== "done" ? (
+        {(armed || applying) && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">
-            {!apply.hidden ? (
+            {!apply.hidden || applying ? (
               <Button
                 kind="commit"
                 label={apply.label}
                 reason={apply.says}
-                refusal={apply.refusal}
-                busy={phase === "applying"}
+                refusal={applying ? null : apply.refusal}
+                busy={applying}
                 onClick={() => void runApply()}
               >
                 {apply.label}
