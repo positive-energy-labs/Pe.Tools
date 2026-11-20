@@ -4,6 +4,8 @@ import { generateCommandTable, commandTableSource } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { hostActions, commandTarget } from "../src/pea/product-actions.ts";
+import { isWritePreviewKey } from "@pe/agent-contracts/semantic-actions";
+import { commandTable } from "../../agent-contracts/src/command-axes.ts";
 
 test("native effect changes flow through generation into browser metadata", () => {
   const source = [...hostOpCatalog, ...tsOnlyOperationCatalog];
@@ -53,6 +55,13 @@ test("tracked browser table is fresh and contains data alone", () => {
   const generated = readFileSync(new URL("../../agent-contracts/src/generated/command-axes.generated.ts", import.meta.url), "utf8");
   expect(generated.replace(/\r\n/g, "\n")).toBe(commandTableSource());
   expect(generated).not.toMatch(/^import\s|Zod|zod|safeParse/m);
+});
+
+test("every live write plan is recognised by the browser and no retired plan is retained", () => {
+  const live = generateCommandTable();
+  const keys = new Set([...Object.keys(live), ...Object.keys(commandTable)]);
+  const plans = new Set(Object.values(live).flatMap(({ plan }) => plan ? [plan] : []));
+  for (const key of keys) expect(isWritePreviewKey(key), key).toBe(plans.has(key));
 });
 
 test("Takeoffs native model writes have a generated plan and the existing write boundary", () => {
