@@ -10,7 +10,7 @@
   "tests/e2e/cdp.ts": 2,
   "tests/e2e/conversation-work.fixture.ts": 8,
   "tests/e2e/route-chaos-launch.ts": 13,
-  "apps/host/src/takeoff-actions.ts": 47,
+  "apps/host/src/takeoff-actions.ts": 46,
   "packages/agent-contracts/src/semantic-actions.ts": 39,
   "packages/agent-contracts/src/rooms.ts": 23,
   "packages/agent-contracts/src/rooms-read.ts": 20,

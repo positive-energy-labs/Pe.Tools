@@ -15,7 +15,7 @@ import type {
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { Schema, SchemaGetter } from "effect";
 
-/** The native Takeoffs projection exposes each Rooms row's provenance as JSON. */
+/** The native Takeoffs projection exposes each zone's provenance as JSON. */
 export const ZoneProvenance = Schema.fromJsonString(
   Schema.Struct({
     view: Schema.optionalKey(Schema.String),

@@ -193,7 +193,9 @@ test.fails("kernel gap: store-binding-write (10)", async () => {
   };
   expect(writesRevit(sheet)).toBe(true);
   expect(
-    sheetWrites(sheet, { name: { [regionSubject(room!.uniqueId)]: { edit: { value: "Pantry" } } } }),
+    sheetWrites(sheet, {
+      name: { [regionSubject(room!.uniqueId)]: { edit: { value: "Pantry" } } },
+    }),
   ).toHaveLength(1);
 });
 

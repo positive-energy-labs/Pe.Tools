@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
+import {
+  nativeRequestSchema,
+  nativeResponseSchema,
+  roomWriteReceiptSchema,
+} from "@pe/host-contracts/decoders";
 import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { invokeBridge } from "./bridge.ts";
@@ -20,7 +24,6 @@ import { Effect } from "effect";
 import {
   roomEditAddress,
   roomEditKey,
-  roomsWriteReceiptSchema,
   takeoffEditAddress,
   takeoffDecisionAddress,
   type RoomsRouteDocument,
@@ -165,7 +168,7 @@ export function takeoffExecutors(
     if (!ctx.admission.key.endsWith(".preview")) {
       const plan = ctx.read.receipts(ctx.admission.id)[0];
       return plan?.state === "succeeded"
-        ? recordReplacements.parse((plan.result as { evidence: unknown }).evidence)
+        ? z.object({ evidence: recordReplacements }).parse(plan.result).evidence
         : { regions: null, registry: null };
     }
     const { regions, registry: systems } = recordReplacements.parse(
@@ -315,7 +318,7 @@ export function takeoffExecutors(
         run: (ctx, execution) =>
           runModel(ctx, execution, captures, bridge, null, (native) =>
             Effect.gen(function* () {
-              const receipt = roomsWriteReceiptSchema.parse(
+              const receipt = roomWriteReceiptSchema.parse(
                 yield* native("rooms.write", {
                   regions: ctx.admission.input.regions,
                   replacing: replacing(execution.prepared),
@@ -566,16 +569,19 @@ export function takeoffExecutors(
           if (inserts.length && !recordedFile) {
             // Jet assigns a signed int and the file identity is the input basename plus a 16-digit hex stamp.
             yield* nativeStep(bridge, target, "takeoffs.rhvac-links.preflight", {
-              writes: inserts.map(({ room }) => ({
-                elementId: room.elementId!,
-                uniqueId: room.guid,
-                link: {
-                  identifier: -2147483648,
-                  fileIdentity: `${win32.basename(input.path)}#${"0".repeat(16)}`,
-                  syncedAt,
-                  lastSyncedSqft: room.sqft,
-                },
-              })),
+              writes: inserts.map(({ room }) => {
+                if (room.elementId === null) throw refused("Inserted room requires an element id");
+                return {
+                  elementId: room.elementId,
+                  uniqueId: room.guid,
+                  link: {
+                    identifier: -2147483648,
+                    fileIdentity: `${win32.basename(input.path)}#${"0".repeat(16)}`,
+                    syncedAt,
+                    lastSyncedSqft: room.sqft,
+                  },
+                };
+              }),
             }).pipe(Effect.mapError((error) => refused(error.message)));
           }
           const syncFile = deps.syncFile;

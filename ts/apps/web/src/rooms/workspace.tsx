@@ -73,7 +73,10 @@ function useWorkspace(ctx: RoomsContext) {
     else if (!id) door?.clear();
     ctx.page.pose({ card: id ?? "" });
   };
-  const labels = useMemo(() => new Map(rows.map((row) => [row.region.uniqueId, row.label])), [rows]);
+  const labels = useMemo(
+    () => new Map(rows.map((row) => [row.region.uniqueId, row.label])),
+    [rows],
+  );
   const trace: TraceRead = { data: data?.trace ?? null, none: data?.traceError ?? error };
   const plan = data?.plan ?? null;
   const empty = !document
