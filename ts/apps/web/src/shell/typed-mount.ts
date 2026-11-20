@@ -909,14 +909,7 @@ export function mountTypedRoute(
         const pending = inFlight(value);
         if (pending && showHolder) holder ??= allReads.holder(read)?.label;
         // The core and subject remain required even when their policy allows separate publication.
-        if (
-          !all &&
-          read !== spec.core &&
-          read !== subjectRead &&
-          "load" in read &&
-          (read.load as import("@pe/agent-contracts/value").ReadingLoad | undefined)?.alone
-        )
-          continue;
+        if (!all && read !== spec.core && read !== subjectRead && read.load?.alone) continue;
         if (value.state !== "ready" && (!waiting || (all && pending)))
           waiting = { kind: pending ? "pending" : "blocked", reason: reasonOf(value) };
       }

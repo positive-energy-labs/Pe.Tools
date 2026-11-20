@@ -17,7 +17,7 @@ import {
 } from "@pe/host-internal/reads/evaluator";
 import { startFlight, type Flight, type ReadLease } from "./read-ownership.ts";
 import { ReadBusy } from "@pe/host-internal/read-errors";
-import type { QueueHolder, ReadingLoad } from "@pe/agent-contracts/value";
+import type { QueueHolder } from "@pe/agent-contracts/value";
 import { nativeArgs } from "@pe/agent-contracts/native-output-read";
 import type { ReadingDemand } from "@pe/host-internal/native-read";
 
@@ -360,7 +360,7 @@ export class Publications {
   async publish<I>(
     id: string,
     generation: number,
-    definition: Read<I, unknown> & { readonly load?: ReadingLoad },
+    definition: Read<I, unknown>,
     args: I,
     port: InputPort,
     keep?: (publication: Publication<unknown>) => Promise<() => void>,

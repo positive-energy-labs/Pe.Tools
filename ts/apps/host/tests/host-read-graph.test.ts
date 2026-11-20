@@ -50,6 +50,8 @@ import {
   snapshot,
 } from "./host-read-graph.test-support.ts";
 import { subjectCode, type UniqueId } from "@pe/agent-contracts";
+import { contract } from "@pe/agent-contracts/handle";
+import { body } from "@pe/host-internal/read-graph";
 const fanCode = (row: { uniqueId: string; portIndex: number }) =>
   subjectCode({ keyKind: "UniqueId", key: row.uniqueId as UniqueId, sub: { port: row.portIndex } });
 
@@ -65,18 +67,17 @@ test("S6 a completed read reuses only the same definition, arguments and marked 
     revision = 0,
     open = true;
   const kept: string[] = [];
-  const definition = {
-    ...read("probe.plans", {
-      input,
-      output: z.number(),
-      async run(ctx, args) {
-        reads++;
-        const mark = await ctx.read(documentMark, args.target);
-        return mark.generation + (args.extra ? await ctx.read(extra, null) : args.option);
-      },
-    }),
-    load: { freshBy: ["document-mark"] } as const,
-  };
+  const plans = contract("probe.plans", {
+    input,
+    data: z.number(),
+    uses: [],
+    load: { freshBy: ["document-mark"] },
+  });
+  const definition = body(plans, async (ctx, args) => {
+    reads++;
+    const mark = await ctx.read(documentMark, args.target);
+    return mark.generation + (args.extra ? await ctx.read(extra, null) : args.option);
+  });
   const run = (option = 2, target = ref, extra = false) => {
     const port: InputPort = {
       evaluation: String(reads),
