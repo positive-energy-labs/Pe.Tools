@@ -7,7 +7,6 @@
  */
 import { z } from "zod";
 import { documentRefSchema } from "@pe/agent-contracts/target";
-import { workKeySchema } from "@pe/agent-contracts/route-state";
 import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
 import {
   nativeArgs,
@@ -85,7 +84,6 @@ export const leaf = <I, O>(
   validate = true,
 ): Leaf<I, O> => Object.freeze({ name, input, output, leaf: true, validate });
 /** Standard tracked Work inputs, shared by every host route. */
-export const workScope = leaf("work-scope", documentRefSchema, workKeySchema, false);
 export const workValue = z
   .object({ doc: z.unknown(), revision: z.number() })
   .passthrough()

@@ -119,7 +119,7 @@ test.each(["project", "firm"] as const)(
           calcPort(
             {
               firm: (owner) => settle(testDuctFiles().firm(owner)),
-              catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+              catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
               workKey: async () => f.key,
               call: f.readDucts,
             },
@@ -155,7 +155,7 @@ test("read and sealed apply request carry the same coverage-chosen slot", async 
         calcPort(
           {
             firm: (owner) => settle(testDuctFiles().firm(owner)),
-            catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+            catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
             workKey: async () => f.key,
             call: f.readDucts,
           },

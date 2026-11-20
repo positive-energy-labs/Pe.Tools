@@ -18,10 +18,10 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { readInputRoutes } from "../src/app.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { RetainedReadings } from "@pe/host-internal/retained-readings";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { mintBrowserContext } from "../src/control.ts";
@@ -109,11 +109,11 @@ async function setup(mode = "normal") {
       ),
   });
   const live = {
-    owner: new DuctsReadings(),
+    owner: new RetainedReadings(),
     native,
-    files: DuctFiles.layer(hostState().home, {
+    files: HomeFiles.layer(hostState().home, {
       firm: join(dir, "Settings"),
-      catalogs: [{ tier: "firm", root: dir }],
+      homes: [{ tier: "firm", root: dir }],
     }),
     marks: Layer.succeed(
       HostDocumentMarks,

@@ -1,5 +1,5 @@
 import { product } from "@pe/fans-contract/product";
-import { catalogsFor } from "@pe/ducts-host/ducts-files";
+import { catalogsFor } from "@pe/ducts-host/duct-catalogs";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";

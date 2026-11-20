@@ -97,11 +97,11 @@ export const platformHomes = [
 ] as const;
 
 /** Rung 3: a standard of the firm or the project, in a home file by tier. */
-export const homeFile = (
+export const homeFile = <const Paths extends Readonly<Record<string, readonly string[]>> = {}>(
   owner: string,
   tiers: readonly SettingTier[] = SETTING_TIERS,
-  paths: Readonly<Record<string, readonly string[]>> = {},
-): Home<"route"> => ({
+  paths: Paths = {} as Paths,
+): Home<"route"> & { readonly settingCells: readonly (keyof Paths & string)[] } => ({
   [made]: "home",
   kind: "home-file",
   rung: 3,

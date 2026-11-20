@@ -26,7 +26,11 @@ import type { ReadingDemand } from "@pe/host-internal/native-read";
 
 export interface ReadSources {
   inputs?: { consumption: InputConsumption; run: WorkInputRunner; work: WorkReadContext };
-  workKey: (target: z.output<typeof documentRefSchema>) => Promise<z.output<typeof workKeySchema>>;
+  /** The Work of `route` for an open document: the asker names its own route. */
+  workKey: (
+    target: z.output<typeof documentRefSchema>,
+    route: string,
+  ) => Promise<z.output<typeof workKeySchema>>;
   resource: (request: unknown) => Promise<unknown>;
   file: (name: string, args: unknown) => Promise<unknown>;
   call: (
@@ -78,8 +82,6 @@ export function inputPort(options: {
         return options.run(options.marks.snapshot(documentRefSchema.parse(raw)));
       }
       if (name === "work-scope") {
-        const document = documentRefSchema.safeParse(raw);
-        if (document.success) return source.workKey(document.data);
         const request = workBinding.input.parse(raw);
         if (request.work === null) return null;
         if (request.work !== undefined) return bindWork(request.route, null, request.work);
@@ -87,9 +89,7 @@ export function inputPort(options: {
           ref =
             target &&
             ("kind" in target ? (target.kind === "document" ? target.ref : null) : target);
-        return ref
-          ? { ...(await source.workKey(ref)), route: request.route }
-          : bindWork(request.route, null);
+        return ref ? source.workKey(ref, request.route) : bindWork(request.route, null);
       }
       if (name === "work-timeline") {
         if (!options.timeline) throw Error("The Timeline needs the host's action journal");

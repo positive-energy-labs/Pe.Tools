@@ -10,8 +10,10 @@ import {
   networkCalcsBody,
 } from "./fan-calc.ts";
 import { fansCalc } from "./host.ts";
+import { catalogsHome } from "@pe/ducts-host/duct-catalogs";
 
 export const host = implement<typeof product, DuctActionDependencies>(product, {
+  homes: { catalogs: catalogsHome },
   readings: {
     calc: fansCalc,
     roster: fanRoster,

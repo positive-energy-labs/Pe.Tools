@@ -823,20 +823,20 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
       expect(joined.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(
         first.headers.get(NATIVE_BODY_VERSION_HEADER),
       );
-      expect([first, joined].map((response) => response.headers.get("x-pe-ducts-reused"))).toEqual([
+      expect([first, joined].map((response) => response.headers.get("x-pe-reading-reused"))).toEqual([
         "false",
         "false",
       ]);
       wait = Promise.resolve();
       expect(first.status, await first.clone().text()).toBe(200);
-      expect(first.headers.get("x-pe-ducts-reused")).toBe("false");
+      expect(first.headers.get("x-pe-reading-reused")).toBe("false");
       expect(first.headers.get("x-pe-native-request-id")).toBe(nativeIds[before]);
       const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
       const next = await post(key, human, { [NATIVE_BODY_VERSION_HEADER]: version }, "dev");
       expect(next.status, await next.clone().text()).toBe(200);
       expect(next.headers.get("x-pe-native-request-id")).toBe(nativeIds[before]);
       expect(next.headers.get("x-pe-resolved-session")).toBe(target.session);
-      expect(next.headers.get("x-pe-ducts-reused")).toBe("true");
+      expect(next.headers.get("x-pe-reading-reused")).toBe("true");
       expect(await next.json()).toEqual(await first.json());
       expect(nativeIds).toHaveLength(before + 1);
       expect(
@@ -891,7 +891,7 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
 });
 
 import { addressSchema } from "@pe/agent-contracts";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { RetainedReadings } from "@pe/host-internal/retained-readings";
 import { HostNativeReadLive } from "../src/native-read.ts";
 import { mintContext, retireContext } from "../src/control.ts";
 import { serveRoutes } from "./real-server.ts";
@@ -967,7 +967,7 @@ test.each([false, true])(
         };
       }),
     ).pipe(Layer.provide(HostNativeReadLive));
-    const owner = new DuctsReadings();
+    const owner = new RetainedReadings();
     const server = await serveRoutes(
       HttpRouter.add("POST", "/call", () =>
         retainedNativeRead(

@@ -31,11 +31,11 @@ import { historyRoutes } from "../src/reads/history-routes.ts";
 import { fansReadResponse } from "@pe/fans-contract/fans-read";
 import { HostInputContext } from "../src/input-context.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { RetainedReadings } from "@pe/host-internal/retained-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
@@ -94,7 +94,7 @@ export async function fixture(
   const markListeners = new Set<() => void>();
   const holds = new Map<string, ReturnType<typeof gate>>();
   let nativeHold: ReturnType<typeof gate> | undefined;
-  const owner = new DuctsReadings();
+  const owner = new RetainedReadings();
   const marks = hostMarks({
     observedSince: 1,
     changedAt: () => mark,
@@ -173,9 +173,9 @@ export async function fixture(
       },
       live: {
         owner,
-        files: DuctFiles.layer(hostState().home, {
+        files: HomeFiles.layer(hostState().home, {
           firm: join(dir, "Settings"),
-          catalogs: [{ tier: "firm", root: dir }],
+          homes: [{ tier: "firm", root: dir }],
         }),
         marks: Layer.succeed(HostDocumentMarks, {
           ...marks,

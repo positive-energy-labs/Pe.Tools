@@ -118,7 +118,7 @@ export type FamilyActionDependencies = PodDependencies & {
   workReads?: import("./command-executor.ts").CommandResources["workReads"];
   sdk?: import("./native-receipts.ts").SdkReceiptReader;
   marks?: DocumentMarks;
-  files?: (typeof import("./product-executors.generated.ts"))["productGateway"]["files"]["Service"];
+  files?: import("@pe/host-internal/home-files").HomeFiles["Service"];
   pictures?: import("./captures-route.ts").PictureCaptureStore["Service"];
   families?: Pick<FamiliesReader["Service"], "read" | "cancel">;
   /** The demo owner keeps native reads inside its own root; a build has no output path to place. */

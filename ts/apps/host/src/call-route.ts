@@ -1,4 +1,13 @@
 import { productGateway } from "./product-executors.generated.ts";
+import { HomeFiles } from "@pe/host-internal/home-files";
+import type { createRetainedBasis } from "@pe/host-internal/retained-basis";
+import {
+  RETAINED_REUSED_HEADER,
+  isRetainedReadFailure,
+  retainedCallSubject,
+  retainedReadings,
+  type RetainedReadings,
+} from "@pe/host-internal/retained-readings";
 import { hostOwnership } from "./host-ownership.ts";
 import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
@@ -150,7 +159,7 @@ function callRoutes(
     readonly families?: FamiliesReader["Service"];
     /** Thread meta's pointer surface; pointer ops refuse without it. */
     readonly pointers?: ThreadPointers;
-    readonly retainedBasis?: ReturnType<typeof productGateway.retainedBasis>;
+    readonly retainedBasis?: ReturnType<typeof createRetainedBasis>;
     readonly retainedRead?: (
       input: NativeReadInput,
       options: { version?: string; refresh?: string },
@@ -382,7 +391,7 @@ function callRoutes(
       }
       if (entry.reading) {
         const response = yield* retainedNativeRead(
-          productGateway.retainedReadings(bridge),
+          retainedReadings(bridge),
           {
             key,
             input: request ?? {},
@@ -869,7 +878,7 @@ function callRoutes(
             ...actionDeps,
             marks: yield* HostDocumentMarks,
             pictures: yield* PictureCaptureStore,
-            files: yield* productGateway.files,
+            files: yield* HomeFiles,
           };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
@@ -1405,12 +1414,12 @@ const readNativeCall = (key: string, input: unknown, scope: HostSessionScope) =>
 
 /** The retained acquisition path shared by live /call and explicit historical read sets. */
 export const retainedNativeRead = Effect.fn("Call.retainedNative")(function* (
-  owner: InstanceType<typeof productGateway.retainedOwner>,
+  owner: RetainedReadings,
   rawInput: NativeReadInput,
   options: { version?: string; refresh?: string },
   source: {
     document: HostSessionInventory["Service"]["document"];
-    basis?: ReturnType<typeof productGateway.retainedBasis>;
+    basis?: ReturnType<typeof createRetainedBasis>;
   },
 ) {
   const native = yield* HostNativeRead;
@@ -1420,7 +1429,7 @@ export const retainedNativeRead = Effect.fn("Call.retainedNative")(function* (
   if (replaying) yield* admitNativeCaller(input.key);
   const resolved = !replaying ? yield* native.resolve(input) : undefined;
   const subject = yield* Effect.try({
-    try: () => productGateway.retainedSubject(input),
+    try: () => retainedCallSubject(input),
     catch: (error) =>
       isDoorFailure(error)
         ? error
@@ -1482,7 +1491,7 @@ export const retainedNativeRead = Effect.fn("Call.retainedNative")(function* (
     )
     .pipe(
       Effect.catch((error) =>
-        basis && options.version && productGateway.retainedFailure(error)
+        basis && options.version && isRetainedReadFailure(error)
           ? basis.refuse(error)
           : Effect.fail(error),
       ),
@@ -1498,7 +1507,7 @@ export const retainedNativeRead = Effect.fn("Call.retainedNative")(function* (
       ...resolvedTargetHeaders(shared.target),
       "x-pe-native-request-id": shared.nativeRequestId,
       [NATIVE_BODY_VERSION_HEADER]: shared.version,
-      [productGateway.retainedHeader]: String(shared.reused),
+      [RETAINED_REUSED_HEADER]: String(shared.reused),
     },
   });
 });

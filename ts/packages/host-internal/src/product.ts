@@ -1,7 +1,9 @@
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
-import type { HostBodies, ProductDeclaration } from "@pe/agent-contracts/product";
+import type { HomeBodies, HostBodies, ProductDeclaration } from "@pe/agent-contracts/product";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
+import { declareHome, type HomeReader } from "./home-files.ts";
+import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
 import { body, type Read, type ReadContext } from "./reads/door.ts";
 
@@ -16,10 +18,14 @@ export type CommandBody<D = Dependencies> = (
   deps: D,
 ) => CommandExecutor;
 
-/** The host half of a product: one body per declared reading and command, or `tsc` fails. */
+/**
+ * The host half of a product: one body per declared reading and command, and one reader per home
+ * only the product can read, or `tsc` fails. Its retained readings are the kernel's from here.
+ */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  bodies: HostBodies<P, ReadContext, CommandBody<D>>,
+  // `any`: a reader answers its own schema, which the product's reading then decodes.
+  bodies: HostBodies<P, ReadContext, CommandBody<D>> & HomeBodies<P, HomeReader<any>>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
@@ -27,8 +33,19 @@ export function implement<P extends ProductDeclaration, D = Dependencies>(
 };
 export function implement<D>(
   product: ProductDeclaration,
+  // The overload decides whether `homes` is owed; `tsc` cannot relate that condition to an erased
+  // declaration, so the readers are read back by name here.
   bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>>,
 ) {
+  const { homes: readers = {} } = bodies as { homes?: Readonly<Record<string, HomeReader>> };
+  for (const [key, home] of Object.entries(product.homes)) {
+    if (home.kind !== "home-file" || home.settingCells?.length) continue;
+    const reader = readers[key];
+    if (!reader) throw Error(`No host reader for home ${key}`);
+    const place = home.place(key);
+    declareHome(key, { ...reader, directory: place.at === "setting" ? place.owner : key });
+  }
+  declareRetained(product);
   const reads = Object.fromEntries(
     Object.entries(product.readings).map(([key, { handle }]) => {
       const run = bodies.readings[key];

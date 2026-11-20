@@ -2,9 +2,10 @@ import { ductLossData } from "@pe/ducts-contract/duct-loss-read";
 import { ductInputError, solve } from "@pe/ducts-domain/duct-loss-math";
 import { product } from "@pe/ducts-contract/product";
 import { implement } from "@pe/host-internal/product";
-import { catalogs } from "./ducts-files.ts";
+import { catalogs, catalogsHome } from "./duct-catalogs.ts";
 
 export const host = implement(product, {
+  homes: { catalogs: catalogsHome },
   readings: {
     ductLoss: (ctx, { target: _target, ...args }) =>
       ctx.compute(ductLossData, args, (input) => {

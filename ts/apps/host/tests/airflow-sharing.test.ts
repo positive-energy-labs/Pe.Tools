@@ -59,7 +59,7 @@ test.each(["coverage", "apply"] as const)(
         calcPort(
           {
             firm: (owner) => settle(testDuctFiles().firm(owner)),
-            catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+            catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
             workKey: async () => f.key,
             call: f.readDucts,
           },

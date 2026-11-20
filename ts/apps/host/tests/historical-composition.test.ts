@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { readInputRoutes, hostInputGraph } from "../src/app.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { hostInputs, recordingInputSelection } from "../src/host-program.ts";
 import { nativeInputIdentity } from "@pe/host-internal/input-recording";
@@ -443,7 +443,7 @@ test("historical entry serves real static files through identity and retains API
   const selection = await settle(recordingInputSelection(["--recording", dir]));
   const inputs = await settle(hostInputs(stamp, selection!));
   let live = 0;
-  const files = vi.spyOn(DuctFiles, "layer").mockImplementation(() => {
+  const files = vi.spyOn(HomeFiles, "layer").mockImplementation(() => {
     live++;
     throw Error("live files");
   });

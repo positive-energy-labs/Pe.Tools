@@ -35,7 +35,7 @@ import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixtur
 import { hostOwnership, hostState } from "../../apps/host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../apps/host/src/document-marks.ts";
 import { HostSessionInventory } from "../../apps/host/src/session-inventory.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { RevitBridge } from "@pe/host-internal/bridge";
 import { RevitBridgeLive } from "../../apps/host/src/bridge.ts";
 import { SdkSession } from "../../apps/host/src/sdk-session.ts";
@@ -331,7 +331,7 @@ export async function fansPlanJourney(journey: "watched publications" | "externa
         inventory: HostSessionInventory.layer.pipe(
           Layer.provide(Layer.mergeAll(ambient(RevitBridge), ambient(SdkSession))),
         ),
-        files: DuctFiles.layer(hostState().home),
+        files: HomeFiles.layer(hostState().home),
         native,
       },
     },

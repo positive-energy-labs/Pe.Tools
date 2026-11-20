@@ -20,8 +20,8 @@ import { HostInputContext } from "../src/input-context.ts";
 import { PictureCaptures, PictureCaptureStore } from "../src/captures-route.ts";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { HomeFiles } from "@pe/host-internal/home-files";
+import { RetainedReadings } from "@pe/host-internal/retained-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import {
@@ -75,7 +75,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
           ? {
               store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
               live: {
-                owner: new DuctsReadings(),
+                owner: new RetainedReadings(),
                 native: Layer.succeed(HostNativeRead, {
                   read: (input) =>
                     input.key !== "revit.context.view-image"
@@ -116,9 +116,9 @@ test("recorded host-local inputs and immutable capture files replay without a li
                         }),
                   resolve: () => Effect.die("No native resolution"),
                 }),
-                files: DuctFiles.layer(hostState().home, {
+                files: HomeFiles.layer(hostState().home, {
                   firm: join(dir, "Settings"),
-                  catalogs: [{ tier: "firm", root: dir }],
+                  homes: [{ tier: "firm", root: dir }],
                 }),
                 marks: Layer.succeed(
                   HostDocumentMarks,

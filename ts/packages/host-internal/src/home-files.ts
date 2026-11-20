@@ -1,25 +1,19 @@
-import { leaf } from "@pe/host-internal/read-graph";
-import { documentRefSchema } from "@pe/agent-contracts";
 /**
- * The host's file inputs (ADR 0031 rule 1): the firm files and the duct catalogs. A body reads them
- * through this service so a test or a recording can answer instead of the disk. A firm file is
- * kept as read (absent, unreadable, or its JSON); `ctx.firm` decodes it against the owner's schema
- * and seed, so the recording holds the input, never a derived fallback.
+ * The host's file inputs (ADR 0031 rule 1): the firm files, and each home a product reads itself. A
+ * body reads them through this service so a test or a recording can answer instead of the disk. A
+ * firm file is kept as read (absent, unreadable, or its JSON); `ctx.firm` decodes it against the
+ * owner's schema and seed, so the recording holds the input, never a derived fallback.
  */
 import { Context, Effect, Layer, Schema } from "effect";
-import { z } from "zod";
+import type { z } from "zod";
 import { existsSync, watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
-import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
-import type { DoorFailure } from "@pe/host-internal/request-contracts";
+import type { DoorFailure } from "./request-contracts.d.ts";
 import { firmSettingsDir, homes, type Home } from "@pe/host-contracts/product-paths";
 import type { HomeRoot } from "@pe/host-contracts/kinds";
-import { productPathNames } from "@pe/host-contracts/contracts";
-import { readDuctCatalogs, type CatalogReading } from "./duct-catalogs.ts";
-import { firmFileSchema, firmOwner, type FirmFile } from "@pe/host-internal/reads/evaluator";
-import { readSettingsFile } from "@pe/host-internal/settings-files";
+import { firmFileSchema, firmOwner, type FirmFile } from "./reads/evaluator.ts";
+import { readSettingsFile } from "./settings-files.ts";
 import {
   captureInput,
   inputBindingKey,
@@ -27,11 +21,41 @@ import {
   type RecordingReader,
   type RecordingWriter,
   type TakingObserver,
-} from "@pe/host-internal/input-recording";
+} from "./input-recording.ts";
 
 /**
- * Firm files are the firm tier of a tiered value (ADR 0037 rule 8), at `<firm home>/Settings/<owner>.json`
- * (ducts' is `Settings/ducts.json`); null on a machine with no firm home.
+ * A home whose files the kernel cannot read as cells: its product's reader, given every tier's
+ * home. `implement()` takes one for each declared home file that names no cell path.
+ */
+export type HomeReader<T = unknown> = {
+  /** The recorded input name. Recordings pin it, so it does not follow a rename of the home. */
+  readonly name: string;
+  readonly schema: z.ZodType<T>;
+  readonly read: (homes: readonly Home[], bindHome: (home: Home) => HomeRoot) => Promise<T>;
+};
+type Declared = HomeReader & { readonly directory: string };
+const readers = new Map<string, Declared>();
+/** Called by `implement()`. Products that declare one shared home hand over its one reader. */
+export function declareHome(home: string, reader: Declared) {
+  const held = readers.get(home);
+  if (held && held.read !== reader.read) throw Error(`Home '${home}' already has a reader`);
+  readers.set(home, reader);
+}
+export const isProductHome = (home: string) => readers.has(home);
+const declared = (home: string) => {
+  const reader = readers.get(home);
+  if (!reader) throw Error(`Home '${home}' has no reader on this host`);
+  return {
+    ...reader,
+    input: { kind: "files", file: reader.name } as const,
+    // A recorded input decodes only if it is still that input.
+    codec: Schema.declare((u): u is unknown => reader.schema.safeParse(u).success),
+  };
+};
+
+/**
+ * Firm files are the firm tier of a tiered value (ADR 0037 rule 8), at
+ * `<firm home>/Settings/<owner>.json`; null on a machine with no firm home.
  */
 export const firmRootPath = (): string | null => firmSettingsDir();
 /** One owner's firm file, through the one settings-file reader (`tiered-settings.ts`); a malformed file is a visible error. */
@@ -53,61 +77,47 @@ const readFirmRoot = async (root: string | null) => {
   );
 };
 
-// The decoded ducts layer, and the catalogs' own contract: a recorded input decodes only if it is still that input.
-export const firmReading = z.union([
-  z.strictObject({
-    firm: ductsFirmSchema,
-    path: z.string(),
-    present: z.boolean(),
-    error: z.string().optional(),
-  }),
-  z.strictObject({ refused: z.literal("no-shared-root") }),
-]);
-export const catalogReading = ductCatalogReadingSchema.strict();
 const firmCodec = Schema.declare((u): u is FirmFile => firmFileSchema.safeParse(u).success);
-const catalogsCodec = Schema.declare(
-  (u): u is CatalogReading => catalogReading.safeParse(u).success,
-);
 const FIRM = { kind: "files", file: "firm" } as const;
-const CATALOGS = { kind: "files", file: "duct-catalogs" } as const;
-// A catalog taking names its project pointer; a document-free taking keeps the host-root scope.
+// A home taking names its project pointer; a document-free taking keeps the host-root scope.
 const SCOPE = "{}";
-const catalogScope = (pointer?: string | null) => (pointer ? JSON.stringify({ pointer }) : SCOPE);
+const homeScope = (pointer?: string | null) => (pointer ? JSON.stringify({ pointer }) : SCOPE);
 const firmScope = (owner: string) => JSON.stringify({ owner });
 
-export class DuctFiles extends Context.Service<
-  DuctFiles,
+export class HomeFiles extends Context.Service<
+  HomeFiles,
   {
     readonly firm: (owner: string) => Effect.Effect<FirmFile, DoorFailure>;
-    readonly catalogsFor: (
+    /** A product-read home across every tier, with the project home `pointer` names. */
+    readonly home: (
+      name: string,
       pointer: string | null | undefined,
-    ) => Effect.Effect<CatalogReading, DoorFailure>;
+    ) => Effect.Effect<unknown, DoorFailure>;
     readonly subscribe?: (changed: (name: string) => void) => () => void;
   }
->()("pe/DuctFiles") {
+>()("pe/HomeFiles") {
   static readonly layer = (
     bindHome: (home: Home) => HomeRoot,
     roots: {
       readonly firm: string | null | (() => string | null);
-      readonly catalogs: readonly Home[];
+      readonly homes: readonly Home[];
     } = {
       firm: firmRootPath,
-      catalogs: homes(),
+      homes: homes(),
     },
   ) => {
     const firmRoot = () => (typeof roots.firm === "function" ? roots.firm() : roots.firm);
-    return Layer.succeed(DuctFiles, {
+    return Layer.succeed(HomeFiles, {
       firm: (owner) => Effect.sync(() => readFirmFile(firmRoot(), owner)),
-      catalogsFor: (pointer) =>
-        Effect.promise(() =>
-          readDuctCatalogs(pointer ? homes({ pointer }) : roots.catalogs, bindHome),
+      home: (name, pointer) =>
+        Effect.promise(async () =>
+          declared(name).read(pointer ? homes({ pointer }) : roots.homes, bindHome),
         ),
       subscribe: (changed) => {
         const stops = [
           ["firm", firmRoot()] as const,
-          ...roots.catalogs.map(
-            (home) =>
-              ["catalogs", join(home.root, productPathNames.catalogsDirectoryName)] as const,
+          ...[...readers].flatMap(([name, { directory }]) =>
+            roots.homes.map((home) => [name, join(home.root, directory)] as const),
           ),
         ].map(([name, path]) => {
           // A filesystem hint (including an ancestor change) is not a changed input.
@@ -118,7 +128,7 @@ export class DuctFiles extends Context.Service<
                   const root = firmRoot();
                   return { root, files: await readFirmRoot(root) };
                 }
-              : () => readDuctCatalogs(roots.catalogs, bindHome);
+              : () => declared(name).read(roots.homes, bindHome);
           let closed = false;
           let value: string | undefined;
           const failed = (error: unknown) => {
@@ -192,18 +202,21 @@ export class DuctFiles extends Context.Service<
   /** The live files, each read kept as a taking: absence, fallback and findings included. */
   static readonly capturing = (writer: RecordingWriter, observed?: TakingObserver) =>
     Layer.effect(
-      DuctFiles,
-      Effect.map(Effect.service(DuctFiles), (live) => ({
+      HomeFiles,
+      Effect.map(Effect.service(HomeFiles), (live) => ({
         subscribe: live.subscribe,
-        catalogsFor: (pointer) =>
-          captureInput(
-            writer,
-            CATALOGS,
-            catalogScope(pointer),
-            catalogsCodec,
-            catalogsFor(live, pointer),
-            observed,
-          ),
+        home: (name, pointer) =>
+          Effect.suspend(() => {
+            const { input, codec } = declared(name);
+            return captureInput(
+              writer,
+              input,
+              homeScope(pointer),
+              codec,
+              live.home(name, pointer),
+              observed,
+            );
+          }),
         firm: (owner) =>
           captureInput(writer, FIRM, firmScope(owner), firmCodec, live.firm(owner), observed),
       })),
@@ -213,15 +226,18 @@ export class DuctFiles extends Context.Service<
     reader: RecordingReader,
     bindings: ReadonlyMap<string, string> = new Map(),
   ) =>
-    Layer.succeed(DuctFiles, {
-      catalogsFor: (pointer) =>
-        replayInput(
-          reader,
-          CATALOGS,
-          catalogScope(pointer),
-          catalogsCodec,
-          bindings.get(inputBindingKey(CATALOGS, catalogScope(pointer))),
-        ),
+    Layer.succeed(HomeFiles, {
+      home: (name, pointer) =>
+        Effect.suspend(() => {
+          const { input, codec } = declared(name);
+          return replayInput(
+            reader,
+            input,
+            homeScope(pointer),
+            codec,
+            bindings.get(inputBindingKey(input, homeScope(pointer))),
+          );
+        }),
       firm: (owner) =>
         replayInput(
           reader,
@@ -232,8 +248,3 @@ export class DuctFiles extends Context.Service<
         ),
     });
 }
-
-export const catalogsFor = (files: DuctFiles["Service"], pointer?: string | null) =>
-  files.catalogsFor(pointer);
-
-export const catalogs = leaf("file:catalogs", documentRefSchema.nullable(), catalogReading);

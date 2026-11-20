@@ -13,10 +13,10 @@ import { registeredReads } from "../src/reads/routes.ts";
 import { readInputRoutes } from "../src/builtin-inputs.ts";
 import { HostInputContext } from "../src/input-context.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { RetainedReadings } from "@pe/host-internal/retained-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 import { settle } from "./effect-test.ts";
@@ -44,8 +44,8 @@ test("file inputs retain the target pointer for project Catalogs", async () => {
     readInputRoutes(inputs, {
       store: fileRouteDocumentStore(stateFixture(join(f.dir, "file-work"))),
       live: {
-        owner: new DuctsReadings(),
-        files: DuctFiles.layer(hostState().home),
+        owner: new RetainedReadings(),
+        files: HomeFiles.layer(hostState().home),
         native: Layer.succeed(HostNativeRead, {
           resolve: () => Effect.die("Unexpected native read"),
           read: () => Effect.die("Unexpected native read"),

@@ -31,7 +31,7 @@ test("roster composition retains UniqueId for two equipment instances with the s
       calcPort(
         {
           firm: (owner) => settle(testDuctFiles().firm(owner)),
-          catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+          catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
           workKey: async () => bindWork("duct-systems", null, undefined, target),
           call: async () => Response.json({ ...snapshot, nodes }),
         },
@@ -73,7 +73,7 @@ test("a numeric UniqueId row is refused without hiding the other fan rows", asyn
       calcPort(
         {
           firm: (owner) => settle(testDuctFiles().firm(owner)),
-          catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+          catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
           workKey: async () => bindWork("duct-systems", null, undefined, target),
           call: async () => Response.json({ ...snapshot, nodes }),
         },
@@ -113,7 +113,7 @@ test("a lookup by mark returns only the rows carrying that mark, and no mark ret
         calcPort(
           {
             firm: (owner) => settle(testDuctFiles().firm(owner)),
-            catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+            catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
             workKey: async () => bindWork("duct-systems", null, undefined, target),
             call: async () => Response.json({ ...snapshot, nodes }),
           },

@@ -44,7 +44,7 @@ import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { followAcceptedJoins, mergeFar } from "@pe/ducts-domain/calc/joins";
 import { designLayers } from "@pe/ducts-host/design-layers";
-import { catalogs } from "@pe/ducts-host/ducts-files";
+import { catalogs } from "@pe/ducts-host/duct-catalogs";
 import { fingerprint, nativeRead, read } from "@pe/host-internal/reads/evaluator";
 // Wire reads carry FanClaim, never the domain write capability (contract 3a).
 type Calc = Omit<DomainCalc, "claim"> & { claim: import("@pe/fans-contract/fans-inputs").FanClaim };

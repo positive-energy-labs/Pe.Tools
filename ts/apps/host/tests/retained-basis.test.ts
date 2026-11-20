@@ -29,8 +29,8 @@ import {
   type HostInputLane,
   type Taking,
 } from "@pe/host-internal/input-recording";
-import { createDuctsBodyBasis, ductBodySubject } from "@pe/ducts-host/ducts-body-basis";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { createRetainedBasis } from "@pe/host-internal/retained-basis";
+import { RetainedReadings, retainedCallSubject } from "@pe/host-internal/retained-readings";
 import { retainedNativeRead } from "../src/call-route.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
@@ -93,12 +93,12 @@ const inventory = Layer.succeed(HostSessionInventory, {
 });
 function router(
   lane: HostInputLane,
-  owner: DuctsReadings,
+  owner: RetainedReadings,
   counts: { reads: number },
   observed: (taking: Taking) => Effect.Effect<void> = () => Effect.void,
   consumer?: { current: InputConsumption | undefined },
 ) {
-  const basis = createDuctsBodyBasis(lane, observed)!;
+  const basis = createRetainedBasis(lane, observed)!;
   const live =
     lane.kind === "recording"
       ? Layer.effect(HostNativeRead, Effect.die("Live native factory constructed"))
@@ -157,7 +157,7 @@ async function captured(maxTakings = 100, observer?: (taking: Taking) => Effect.
   );
   const takes: Taking[] = [];
   const counts = { reads: 0 };
-  const owner = new DuctsReadings();
+  const owner = new RetainedReadings();
   const web = router({ kind: "live", captureStore: writer }, owner, counts, (taking) =>
     Effect.sync(() => {
       takes.push(taking);
@@ -182,8 +182,8 @@ effectTest(
   "an overlapping acquisition keeps its own body after its peer publishes; later readers retain the winner",
   () =>
     Effect.gen(function* () {
-      const owner = new DuctsReadings();
-      const subject = ductBodySubject(input);
+      const owner = new RetainedReadings();
+      const subject = retainedCallSubject(input);
       const secondReady = yield* Deferred.make<void>();
       const secondEntered = yield* Deferred.make<void>();
       const acquired = (id: string) => ({
@@ -244,7 +244,7 @@ effectTest(
       const dir = yield* Effect.promise(temp);
       const writer = yield* openRecordingWriter(stateFixture(dir), identity, bounds);
       const lane = { kind: "live", captureStore: writer } as const;
-      const basis = createDuctsBodyBasis(lane)!;
+      const basis = createRetainedBasis(lane)!;
       const nativeReady = yield* Deferred.make<void>();
       const indexed = yield* Deferred.make<void>();
       const ownTakings = new Map<string, string>();
@@ -325,14 +325,14 @@ effectTest(
       yield* Effect.addFinalizer(() => root.close);
       const children = [0, 1].map(() => {
         const child = root.child({
-          key: "ducts.retained",
+          key: "reading.retained",
           input: { key: input.key },
           scope: canonicalJson(scope),
         });
         if (Result.isFailure(child)) throw child.failure;
         return child.success;
       });
-      const owner = new DuctsReadings();
+      const owner = new RetainedReadings();
       const web = HttpRouter.toWebHandler(
         HttpRouter.add("POST", "/call", (req) => {
           const consumer = children.find((child) => child.id === req.headers["x-test-reader"])!;
@@ -365,7 +365,7 @@ effectTest(
           Effect.flatMap((response) =>
             Effect.promise(async () => {
               expect(response.status, await response.clone().text()).toBe(200);
-              expect(response.headers.get("x-pe-ducts-reused")).toBe("false");
+              expect(response.headers.get("x-pe-reading-reused")).toBe("false");
               expect(await response.json()).toEqual(value);
               return {
                 reader: consumer.id,
@@ -417,7 +417,7 @@ test("same retained handler captures miss/hit and replays original version, nati
   ).toBe(version);
   const hit = await c.web.post({ [NATIVE_BODY_VERSION_HEADER]: version });
   expect(hit.status).toBe(200);
-  expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
+  expect(hit.headers.get("x-pe-reading-reused")).toBe("true");
   expect(c.counts.reads).toBe(1);
   const hitSet = c.takes.slice(firstSet.length);
   expect(hitSet).toHaveLength(1); // basis only: the original native/document acquisition is retained
@@ -440,7 +440,7 @@ test("same retained handler captures miss/hit and replays original version, nati
   });
   await c.web.close();
   const reader = await run(openRecordingReader(c.dir, identity, bounds));
-  const owner = new DuctsReadings();
+  const owner = new RetainedReadings();
   const counts = { reads: 0 };
   for (const [index, selected] of [firstBindings, secondBindings].entries()) {
     const web = router(
@@ -454,7 +454,7 @@ test("same retained handler captures miss/hit and replays original version, nati
       expect(answer.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(version);
       expect(answer.headers.get("x-pe-native-request-id")).toBe("native-1");
       expect(answer.headers.get("x-pe-resolved-session")).toBe(ref.session);
-      expect(answer.headers.get("x-pe-ducts-reused")).toBe(String(index > 0));
+      expect(answer.headers.get("x-pe-reading-reused")).toBe(String(index > 0));
       expect(await answer.json()).toEqual(await first.clone().json());
       expect((await web.post({ [DUCTS_REFRESH_HEADER]: version })).status).toBe(409);
       expect((await web.post({}, true)).status).toBe(403);
@@ -467,7 +467,7 @@ test("same retained handler captures miss/hit and replays original version, nati
   unbound.delete(inputBindingKey(basisTakes[0]!.input, basisTakes[0]!.scope));
   const web = router(
     { kind: "recording", recordingStore: reader, at: null, bindings: unbound },
-    new DuctsReadings(),
+    new RetainedReadings(),
     counts,
   );
   try {
@@ -487,7 +487,7 @@ test("full native or basis capture stops recording but preserves the live miss a
       const count = c.takes.length;
       const hit = await c.web.post();
       expect(hit.status).toBe(200);
-      expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
+      expect(hit.headers.get("x-pe-reading-reused")).toBe("true");
       expect(c.counts.reads).toBe(1);
       expect(c.takes).toHaveLength(count);
     } finally {
@@ -539,7 +539,7 @@ test("admitted stale validation keeps its typed refusal through capture, cold re
       const counts = { reads: 0 };
       const cold = router(
         { kind: "recording", recordingStore: reader, at: null, bindings: await bindings(failed) },
-        new DuctsReadings(),
+        new RetainedReadings(),
         counts,
       );
       try {
@@ -569,7 +569,7 @@ test("document invalidation during durable basis observation never publishes rea
       : Effect.void,
   );
   const frames: string[] = [];
-  const stop = c.owner.observe(ductBodySubject(input), (frame) => frames.push(frame.state));
+  const stop = c.owner.observe(retainedCallSubject(input), (frame) => frames.push(frame.state));
   try {
     const answer = c.web.post();
     await expect.poll(() => pending).toBe(true);
@@ -633,7 +633,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
       const reader = await run(openRecordingReader(c.dir, identity, bounds));
       const web = router(
         { kind: "recording", recordingStore: reader, at: null, bindings: bound },
-        new DuctsReadings(),
+        new RetainedReadings(),
         { reads: 0 },
       );
       try {
@@ -649,7 +649,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
     foreign.set(nativeKey, basisTaking.id);
     const web = router(
       { kind: "recording", recordingStore: reader, at: null, bindings: foreign },
-      new DuctsReadings(),
+      new RetainedReadings(),
       { reads: 0 },
     );
     try {
@@ -675,7 +675,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
         at: null,
         bindings: new Map([[nativeKey, copied.id]]),
       },
-      new DuctsReadings(),
+      new RetainedReadings(),
       { reads: 0 },
     );
     try {
@@ -683,7 +683,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
     } finally {
       await missing.close();
     }
-    const conflictOwner = new DuctsReadings();
+    const conflictOwner = new RetainedReadings();
     const seeded = router(
       { kind: "recording", recordingStore: reader, at: null, bindings: selected },
       conflictOwner,
@@ -697,7 +697,7 @@ test("foreign native binding, corrupt basis target/version and missing basis ref
       );
       await expect(
         run(
-          conflictOwner.read(ductBodySubject(input), Effect.die("must not acquire"), {
+          conflictOwner.read(retainedCallSubject(input), Effect.die("must not acquire"), {
             source: { revision: "conflicting-original" },
           }),
         ),
@@ -733,10 +733,10 @@ test("I/O loss after native capture marks incomplete and still serves the live b
 });
 
 test("invalidation during deferred basis capture fences ready publication", async () => {
-  const owner = new DuctsReadings({ entries: 2, bytes: 1_000_000, idleMs: 1000 });
+  const owner = new RetainedReadings({ entries: 2, bytes: 1_000_000, idleMs: 1000 });
   const gate = Promise.withResolvers<void>();
   const frames: string[] = [];
-  const subject = ductBodySubject(input);
+  const subject = retainedCallSubject(input);
   const stop = owner.observe(subject, (frame) => frames.push(frame.state));
   const result = run(
     owner.read(
@@ -774,7 +774,7 @@ test("retained calls in their own child contexts link the original native taking
   const consumer = { current: undefined as InputConsumption | undefined };
   const web = router(
     { kind: "live", captureStore: writer },
-    new DuctsReadings(),
+    new RetainedReadings(),
     counts,
     (taking) =>
       Effect.sync(() => {
@@ -790,7 +790,7 @@ test("retained calls in their own child contexts link the original native taking
   );
   const recipe = { key: "fans.calc-detail", input: { fan: "F-1" }, scope: canonicalJson(ref) };
   const retained = (role: string) => ({
-    key: "ducts.retained",
+    key: "reading.retained",
     input: { key: input.key, role },
     scope: canonicalJson(scope),
   });
@@ -806,7 +806,7 @@ test("retained calls in their own child contexts link the original native taking
   const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
   consumer.current = child("validate");
   const hit = await web.post({ [NATIVE_BODY_VERSION_HEADER]: version });
-  expect(hit.headers.get("x-pe-ducts-reused")).toBe("true");
+  expect(hit.headers.get("x-pe-reading-reused")).toBe("true");
   await run(root.seal);
   await web.close();
   const native = takes.filter((taking) => taking.input.kind === "native");
@@ -830,7 +830,7 @@ test("retained calls in their own child contexts link the original native taking
   const replayedRoot = await run(historical.open(recipe, root.id));
   const replayCounts = { reads: 0 };
   const replayed = { current: undefined as InputConsumption | undefined };
-  const again = router(lane, new DuctsReadings(), replayCounts, undefined, replayed);
+  const again = router(lane, new RetainedReadings(), replayCounts, undefined, replayed);
   try {
     for (const role of ["acquire", "validate"]) {
       const made = replayedRoot.child(retained(role));
@@ -855,7 +855,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   const consumer = { current: undefined as InputConsumption | undefined };
   const web = router(
     { kind: "live", captureStore: writer },
-    new DuctsReadings(),
+    new RetainedReadings(),
     { reads: 0 },
     (taking) =>
       Effect.sync(() => {
@@ -871,7 +871,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   );
   const recipe = { key: "fans.calc-detail", input: { fan: "F-1" }, scope: canonicalJson(ref) };
   const retained = (role: string) => ({
-    key: "ducts.retained",
+    key: "reading.retained",
     input: { key: input.key, role },
     scope: canonicalJson(scope),
   });
@@ -886,7 +886,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   const version = first.headers.get(NATIVE_BODY_VERSION_HEADER)!;
   consumer.current = child(root, "validate");
   expect(
-    (await web.post({ [NATIVE_BODY_VERSION_HEADER]: version })).headers.get("x-pe-ducts-reused"),
+    (await web.post({ [NATIVE_BODY_VERSION_HEADER]: version })).headers.get("x-pe-reading-reused"),
   ).toBe("true");
   await run(root.seal);
   await web.close();
@@ -901,7 +901,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
   child(replayedRoot, "acquire");
   const counts = { reads: 0 };
   const replayed = { current: child(replayedRoot, "validate") };
-  const cold = router(lane, new DuctsReadings(), counts, undefined, replayed);
+  const cold = router(lane, new RetainedReadings(), counts, undefined, replayed);
   try {
     const answer = await cold.post();
     expect(answer.status, await answer.clone().text()).toBe(200);
@@ -925,7 +925,7 @@ test("a cold hit-only child selects its stored native link for resolve and read;
     await run(Effect.scoped(Layer.build(HostInputReadSets.layer(forgedLane)))),
     HostInputReadSets,
   );
-  const bad = router(forgedLane, new DuctsReadings(), counts, undefined, {
+  const bad = router(forgedLane, new RetainedReadings(), counts, undefined, {
     current: await run(forgedSets.open(forged.recipe, forged.id as never)),
   });
   try {

@@ -113,6 +113,8 @@ export const product = define({
       sources: ["losses", "settings"],
       load: {
         resource: true,
+        scope: "document",
+        fixes: { "ducts.snapshot.roster": { selector: { kind: "roster" } } },
         basisHeaders: { refresh: DUCTS_REFRESH_HEADER },
         calls: {
           "ducts.snapshot.roster": { canonicalSession: true, reading: "roster" },
@@ -125,6 +127,7 @@ export const product = define({
       sources: [],
       load: {
         resource: true,
+        scope: "session",
         calls: {
           "ducts.tables": { canonicalSession: true, reading: "tables" },
         },

@@ -31,6 +31,12 @@ import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef, MarkFrame } from "./document-marks.ts";
 import type { MachineOwnerPromise } from "./machine.ts";
 import { productGateway } from "./product-executors.generated.ts";
+import {
+  canonicalRetained,
+  retainedReadings,
+  retainedRequest,
+  retainedScope,
+} from "@pe/host-internal/retained-readings";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one
@@ -297,9 +303,9 @@ export function hostResourceObserver(
     return observe();
 
     function observe(): () => void {
-      const retained = productGateway.retainedResource.safeParse(request);
-      if (retained.success) {
-        const target = productGateway.retainedTarget(retained.data);
+      const retained = retainedRequest(request);
+      if (retained) {
+        const target = retainedScope(retained);
         if (!bridge) {
           accept({ error: "No Revit bridge" });
           return () => {};
@@ -314,17 +320,15 @@ export function hostResourceObserver(
             Effect.flatMap((session) =>
               resolveSession(bridge, {
                 bridgeSessionId: session.sessionId,
-                openDocumentId: target.openId,
+                openDocumentId: target.target?.openId,
               }),
             ),
           ),
         ).then(
           (resolved) => {
             if (!live) return;
-            const canonical = productGateway.canonicalRetained(retained.data, resolved.sessionId);
-            release = productGateway
-              .retainedReadings(bridge)
-              .observe(canonical, (value) => accept({ value }));
+            const canonical = canonicalRetained(retained, resolved.sessionId);
+            release = retainedReadings(bridge).observe(canonical, (value) => accept({ value }));
           },
           (error: unknown) => {
             if (live) accept({ error: String(error) });

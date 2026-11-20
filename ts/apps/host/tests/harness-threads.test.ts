@@ -37,7 +37,7 @@ import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkDriver } from "../src/sdk-session.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { servePeRoute } from "@pe/mcps/product-catalog";
@@ -394,7 +394,7 @@ test.each([
       sdk: sdkSessions,
       workspace,
       nativeRead: Context.get(readContext, HostNativeRead),
-      files: Context.get(readContext, DuctFiles),
+      files: Context.get(readContext, HomeFiles),
       marks: Context.get(readContext, HostDocumentMarks),
     };
     const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () =>

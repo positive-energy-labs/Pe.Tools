@@ -25,7 +25,7 @@ import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { resolveCriteria, resolveInputs } from "@pe/fans-domain/calc/index";
 import { nodeOf, snapshotOf } from "@pe/ducts-domain/test-snapshot";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { firmLayer } from "@pe/ducts-host/ducts-inputs";
 import { hostState } from "../../../host/src/host-ownership.ts";
 import { SETTING_WRITE_PLACE } from "../../../host/src/notice-feed.ts";
@@ -85,7 +85,7 @@ const servedBy = (cell: DuctsCriteriaCell, mounted: boolean) => {
 const sheet = async () => {
   const tiers = readSettingTiers("ducts", pointer);
   const files = await settle(
-    Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))),
+    Effect.service(HomeFiles).pipe(Effect.provide(HomeFiles.layer(hostState().home))),
   );
   const base = firmLayer(
     resolveFirm(await settle(files.firm("ducts")), ductsFirmSchema, {}),

@@ -12,7 +12,7 @@ import { receiptGoldenEnvelope } from "../../../packages/agent-contracts/tests/r
 import { Effect } from "effect";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
-import { DuctFiles, firmRootPath } from "@pe/ducts-host/ducts-files";
+import { HomeFiles, firmRootPath } from "@pe/host-internal/home-files";
 import { resolveFirm } from "@pe/host-internal/read-graph";
 import { createReceiptExport } from "../src/receipt-export.ts";
 import { settle, journalAt } from "./effect-test.ts";
@@ -27,7 +27,7 @@ const firmHome = () => {
 // The ducts firm layer as the host reads it: the owner-keyed file (the Pod firm door's), decoded.
 const readFirm = async () => {
   const files = await settle(
-    Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))),
+    Effect.service(HomeFiles).pipe(Effect.provide(HomeFiles.layer(hostState().home))),
   );
   return resolveFirm(await settle(files.firm("ducts")), ductsFirmSchema, FIRM_SEED);
 };
@@ -65,7 +65,7 @@ test("firm files are per owner: two owners, two files, each reader gets its own 
   for (const owner of ["ducts", "hydronic"])
     writeFileSync(join(shared, "Settings", `${owner}.json`), JSON.stringify({ owner }));
   const files = await settle(
-    Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))),
+    Effect.service(HomeFiles).pipe(Effect.provide(HomeFiles.layer(hostState().home))),
   );
   for (const owner of ["ducts", "hydronic"])
     expect(await settle(files.firm(owner))).toEqual({
@@ -174,8 +174,8 @@ test("a failed firm refresh keeps its value and the next refresh still notifies"
     return join(shared, "Settings");
   };
   const files = await settle(
-    Effect.service(DuctFiles).pipe(
-      Effect.provide(DuctFiles.layer(hostState().home, { firm: root, catalogs: [] })),
+    Effect.service(HomeFiles).pipe(
+      Effect.provide(HomeFiles.layer(hostState().home, { firm: root, homes: [] })),
     ),
   );
   const changes: string[] = [];

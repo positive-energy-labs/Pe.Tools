@@ -19,7 +19,6 @@ import {
   leaf,
   nativeRead,
   resolveFirm,
-  workScope,
   type CatalogReadKey,
   type FirmValue,
   type Leaf,
@@ -27,7 +26,7 @@ import {
   type NativeValue,
   type Read,
 } from "./door.ts";
-// The Pod-facing half (read, leaf, workScope, nativeRead, the firm layer) is the effect-free door.
+// The Pod-facing half (read, leaf, nativeRead, the firm layer) is the effect-free door.
 export * from "./door.ts";
 
 export const fingerprint = (data: unknown) =>
@@ -98,6 +97,7 @@ export interface Trace {
   readonly hash?: string;
   readonly error?: string;
 }
+import { workBinding } from "./work.ts";
 export interface Coverage {
   readonly requested: readonly string[];
   readonly covered: readonly string[];
@@ -267,7 +267,7 @@ export async function evaluate<I, O>(
     work: async (owner, scope) => {
       const document = documentRefSchema.safeParse(scope);
       const key = document.success
-        ? { ...(await ctx.read(workScope, document.data)), route: owner }
+        ? await ctx.read(workBinding, { route: owner, target: document.data })
         : scope;
       const member = workKeySchema.parse({ ...workKeySchema.parse(key), route: owner });
       return ctx.read(workInput, { owner, scope: member });

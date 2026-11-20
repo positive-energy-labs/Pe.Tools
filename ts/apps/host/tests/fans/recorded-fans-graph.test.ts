@@ -29,7 +29,7 @@ import type { RouteWorkspace } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { readInputRoutes } from "../../src/app.ts";
 import { HostInputContext } from "../../src/input-context.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks, hostMarks } from "../../src/document-marks.ts";
 import { HostSessionInventory } from "../../src/session-inventory.ts";
 import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
@@ -49,7 +49,7 @@ import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/
 import { settle, detachedBridge, sessionView } from "../effect-test.ts";
 import { SdkSession } from "../../src/sdk-session.ts";
 import { HostInputReadSets, defaultReadSetLimits } from "../../src/input-occurrence.ts";
-import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
+import { RetainedReadings } from "@pe/host-internal/retained-readings";
 import { bridgeSessionsListSchema } from "@pe/host-contracts/operation-types";
 import { listBridgeSessions } from "../../src/local-ops.ts";
 import { InvalidRead } from "@pe/host-internal/read-errors";
@@ -370,9 +370,9 @@ test.each([
     const markListeners = new Set<() => void>();
     const livePorts = {
       native,
-      files: DuctFiles.layer(hostState().home, {
+      files: HomeFiles.layer(hostState().home, {
         firm: join(dir, "Settings"),
-        catalogs: [{ tier: "firm", root: dir }],
+        homes: [{ tier: "firm", root: dir }],
       }),
       marks: Layer.succeed(
         HostDocumentMarks,
@@ -541,7 +541,7 @@ test.each([
       const value = url === "/pe/reads/value" ? wire.value.data : wire;
       if (stream) expect(value.kind, JSON.stringify(value)).toBe("snapshot");
       if (url === "/call") {
-        expect(response.headers.get("x-pe-ducts-reused")).toBe("true");
+        expect(response.headers.get("x-pe-reading-reused")).toBe("true");
         expect(value.nativeRequestId).not.toBe(identity.requestId);
       }
       const key = stream
@@ -1165,7 +1165,7 @@ test.each([
       );
       const acquiredWalk = storedOverview.children.filter(
         (entry) =>
-          entry.recipe.key === "ducts.retained" &&
+          entry.recipe.key === "reading.retained" &&
           Schema.is(
             Schema.Struct({
               key: Schema.Literal("ducts.snapshot.walk"),
@@ -1210,7 +1210,7 @@ test.each([
       const cold = await send(historical, hitOnly[0]!.url, hitOnly[0]!.body);
       expect(cold.status, await cold.clone().text()).toBe(200);
       expect(await nativeValue(cold)).toEqual(hitOnly[0]!.value);
-      expect(cold.headers.get("x-pe-ducts-reused")).toBe("false");
+      expect(cold.headers.get("x-pe-reading-reused")).toBe("false");
       expect(nativeCalls).toBe(beforeHit);
       await historical.dispose();
       historical = undefined;
@@ -1366,7 +1366,7 @@ test.each([
       await reread();
       await live.dispose();
       liveFactories.recorded = true;
-      const liveFiles = vi.spyOn(DuctFiles, "layer").mockImplementation(() => {
+      const liveFiles = vi.spyOn(HomeFiles, "layer").mockImplementation(() => {
         poisoned++;
         throw Error("Live file readers constructed");
       });
@@ -1405,7 +1405,7 @@ test.each([
       const acquisitionFrame = publications[0]!;
       const acquisitionSet = await run(reader.readSets.get(acquisitionFrame.readSet));
       const acquired = acquisitionSet.children.find(
-        (entry) => entry.recipe.key === "ducts.retained",
+        (entry) => entry.recipe.key === "reading.retained",
       )!;
       expect((await run(reader.readSets.get(acquired.readSetId))).takingLinks.native).toBeTruthy();
       for (const publication of publications.slice(1).filter((entry) => entry.value !== envelope)) {
@@ -1428,7 +1428,7 @@ test.each([
         const record = await run(reader.readSets.get(detail.readSet));
         expect(record.dependencies.overview).toBeUndefined();
         expect(record.inputs.some((input) => input.input.kind === "marks")).toBe(true);
-        expect(record.children.some((child) => child.recipe.key === "ducts.retained")).toBe(true);
+        expect(record.children.some((child) => child.recipe.key === "reading.retained")).toBe(true);
       }
       for (const feed of cases.filter((entry) => entry.stream && entry.value.value?.handle)) {
         const record = await run(reader.readSets.get(feed.readSet));
@@ -1704,14 +1704,14 @@ test.each(["on", "off", "full", "io"] as const)(
       readInputRoutes(inputs, {
         live: {
           inventory,
-          owner: new DuctsReadings(),
+          owner: new RetainedReadings(),
           native: Layer.succeed(HostNativeRead, {
             resolve: () => Effect.die("unexpected native"),
             read: () => Effect.die("unexpected native"),
           }),
-          files: Layer.succeed(DuctFiles, {
+          files: Layer.succeed(HomeFiles, {
             firm: () => Effect.die("unexpected files"),
-            catalogsFor: () => Effect.die("unexpected files"),
+            home: () => Effect.die("unexpected files"),
           }),
           marks: Layer.succeed(
             HostDocumentMarks,
