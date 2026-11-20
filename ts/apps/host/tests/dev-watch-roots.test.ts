@@ -3,7 +3,29 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test, vi } from "vite-plus/test";
-import { devWatchRoots, ensureDevDependencies } from "../scripts/dev-watch-roots.ts";
+import { createDevDependencyRepair, devWatchRoots } from "../scripts/dev-watch-roots.ts";
+
+test("a successful install is remembered even if the installed lock was not rewritten", async () => {
+  const temp = mkdtempSync(join(tmpdir(), "pe-watch-install-"));
+  const workspace = pathToFileURL(join(temp, "/"));
+  const wanted = new URL("pnpm-lock.yaml", workspace);
+  const installed = new URL("node_modules/.pnpm/lock.yaml", workspace);
+  const install = vi.fn(async () => {});
+  const repair = createDevDependencyRepair(workspace, install);
+  try {
+    mkdirSync(new URL("node_modules/.pnpm", workspace), { recursive: true });
+    writeFileSync(wanted, "wanted\n");
+    writeFileSync(installed, "wanted\n\n");
+    await repair();
+    await repair();
+    expect(install).toHaveBeenCalledTimes(1);
+    writeFileSync(wanted, "new lock\n");
+    await repair();
+    expect(install).toHaveBeenCalledTimes(2);
+  } finally {
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
 
 test.each([
   {
@@ -29,7 +51,7 @@ test.each([
     writeFileSync(new URL("pnpm-lock.yaml", workspace), "new");
     mkdirSync(new URL("node_modules/.pnpm", workspace), { recursive: true });
     if (installedLock !== undefined) writeFileSync(installed, installedLock);
-    const ready = ensureDevDependencies(workspace, execute);
+    const ready = createDevDependencyRepair(workspace, execute)();
     if (succeeds) await expect(ready).resolves.toBeUndefined();
     else
       await expect(ready).rejects.toThrow(

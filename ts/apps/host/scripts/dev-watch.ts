@@ -3,13 +3,14 @@ import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
 import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
-import { devWatchRoots, ensureDevDependencies } from "./dev-watch-roots.ts";
+import { createDevDependencyRepair, devWatchRoots } from "./dev-watch-roots.ts";
 
 const sourceRoot = checkoutRootFrom(import.meta.dirname);
 if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkout");
 const hostDirectory = new URL("../", import.meta.url);
 const workspace = new URL("../../", hostDirectory);
-await ensureDevDependencies(workspace);
+const repairDevDependencies = createDevDependencyRepair(workspace);
+await repairDevDependencies();
 const hostRoot = process.argv.includes("--no-revit")
   ? undefined
   : productRoot({ lane: "dev", sourceRoot, installedRoot: null });
@@ -71,7 +72,7 @@ try {
   do {
     if (restart) {
       // The previous host has exited. Its shutdown also waits for the frontend child.
-      await ensureDevDependencies(workspace);
+      await repairDevDependencies();
       if (stopped) break;
     }
     restart = false;
