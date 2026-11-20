@@ -7,6 +7,9 @@ export default defineConfig({
       "**/dist-installed/**",
       "**/node_modules/**",
       "**/.artifacts/**",
+      // Preserve the captured JSON and fixture bytes that the tests replay.
+      "**/fixtures/**/*.json",
+      "**/native-recordings/**/*.json",
       // tsr owns this file's shape and its dev watcher instantly reverts any reformat
       "**/routeTree.gen.ts",
       // host-typegen owns these checked-in artifacts; codegen:check compares exact bytes
