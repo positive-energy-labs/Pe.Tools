@@ -8,7 +8,7 @@
  * Measured 2026-11-11 on Chrome 157 against a node:http server: beside a tab holding 5 streams, a
  * second tab's fetch never left the browser; a page navigated away kept its 5 streams for 60.06 s,
  * and the next page's fetch waited those 60.06 s; a reload freed them in 20 ms. The drive's host
- * log at ef940d36 shows /ducts holding 1 `/pe/resources` and 4 `/pe/read-events` (a stream per
+ * log at ef940d36 shows one product route holding 1 `/pe/resources` and 4 `/pe/read-events` (a stream per
  * host read, since folded into the readings stream as the `publication` kind).
  */
 import { afterEach, expect, test, vi } from "vite-plus/test";
@@ -41,7 +41,7 @@ test("a tab's host reads ride its one stream, so they hold no more of the origin
   // The census: the inventory reading behind "Finding the open document", on the tab's owner.
   const census = peReadings.subscribe({ kind: "inventory" }, () => {});
   await vi.waitFor(() => expect(live.size).toBe(1));
-  // /ducts mounts 4 host reads.
+  // That route mounts 4 host reads.
   const stops = Array.from({ length: 4 }, () =>
     publicationSource({
       read: async (_ctx, publication) => ({

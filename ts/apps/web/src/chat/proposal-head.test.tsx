@@ -10,8 +10,8 @@ const stagedRule = { edit: { value: { table: "CD3-2" } } } as never;
 
 function work(over: Partial<HeadWork> = {}): HeadWork {
   return {
-    id: "ducts:rules",
-    route: "Ducts",
+    id: "pipes:rules",
+    route: "Pipes",
     subject: "loss rules",
     cells: { "elbow-1d-le10": stagedRule, "tap-std": stagedRule },
     wire: { segment: "rules", revision: 26, write: vi.fn(async () => null) } as never,
@@ -39,7 +39,7 @@ test("review on a edit cell opens the route on that cell and the group reads in 
   expect(screen.getByText("Round Elbow 1 D · D ≤ 10 in")).toBeTruthy();
   expect(screen.queryByText("elbow-1d-le10")).toBeNull();
   fireEvent.click(
-    screen.getByRole("button", { name: "review Round Elbow 1 D · D ≤ 10 in in Ducts" }),
+    screen.getByRole("button", { name: "review Round Elbow 1 D · D ≤ 10 in in Pipes" }),
   );
   expect(open).toHaveBeenCalledWith("elbow-1d-le10");
 });

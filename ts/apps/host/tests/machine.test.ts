@@ -668,7 +668,7 @@ test("the machine resource publishes holdings counts while scoped reads retain t
       holdings: {
         elements: Array.from({ length: 100000 }, (_, id) => ({
           id,
-          category: "Ducts",
+          category: "Pipes",
           name: "HELD_SENTINEL",
           changedSinceSync: null,
           requesters: [],

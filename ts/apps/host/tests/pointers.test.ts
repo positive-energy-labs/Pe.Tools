@@ -185,7 +185,7 @@ test("standalone heads stream empty pointers without admitting pointer mutations
     expect(() => threads.pointers.read("standalone")).toThrow("Unknown thread");
     expect(() =>
       threads.pointers.point("standalone", {
-        route: "fans",
+        route: "pumps",
         target: {},
         label: "missing",
       }),
@@ -219,7 +219,7 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
   port.bind(first.pointers);
   const pea = { kind: "pea", thread: id } as never;
   port.point(pointerThread(pea, "another-thread"), {
-    route: "fans",
+    route: "pumps",
     target: { selected: '["UniqueId:u-7"]' },
     label: "FC-1 fan flow",
   });
@@ -231,7 +231,7 @@ test("a pointer lives in thread meta: it survives a host reload and leaves only 
   port.bind(second.pointers);
   const [pointer] = port.read(pointerThread({ kind: "human" } as never, id)).pointers;
   expect(pointer).toMatchObject({
-    route: "fans",
+    route: "pumps",
     label: "FC-1 fan flow",
     target: { selected: '["UniqueId:u-7"]' },
   });

@@ -32,7 +32,7 @@ const instance: SceneInstance = {
   documentKey: "fixture",
   linkInstanceId: null,
   uniqueId: "triangle",
-  category: "Ducts",
+  category: "Pipes",
   categoryId: null,
   focus: true,
   firstVertex: 0,

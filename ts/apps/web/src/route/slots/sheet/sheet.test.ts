@@ -26,13 +26,13 @@ test("setting projection ignores non-setting bindings", () => {
 
 test("setting bindings serve their fallback through the model and prefer a stated home", () => {
   const slot = {
-    bindings: { gap: setting("ducts", ["gap"], { kind: "number" }, ["firm"], { default: 3 }) },
+    bindings: { gap: setting("pipes", ["gap"], { kind: "number" }, ["firm"], { default: 3 }) },
   };
   const cells = (read?: unknown) => sheetCells(slot, { rows: [], work: {}, read });
   expect(cells({})[0]).toMatchObject({ value: 3, model: 3, source: "default" });
   expect(
     cells({
-      settings: { ducts: [{ tier: "firm", home: "Firm", name: "Firm", json: { gap: 5 } }] },
+      settings: { pipes: [{ tier: "firm", home: "Firm", name: "Firm", json: { gap: 5 } }] },
     })[0],
   ).toMatchObject({ value: 5, model: 5, source: "firm" });
   expect(cells()[0]).toMatchObject({ value: null, model: null });
@@ -92,7 +92,7 @@ test("slice 7: the sheet slot draws a binding's StateCells, and a ModelWrite bin
 });
 
 test("slice 7: a draft slot draws each Work cell's staged value with its author, and an empty draft draws the model", () => {
-  // ADR 0030 rule 8: Fans Work holds `{ edit: { value, by, at } }` at every address; `{}` is a draft nobody staged.
+  // ADR 0030 rule 8: a staged Work holds `{ edit: { value, by, at } }` at every address; `{}` is a draft nobody staged.
   const [a, b] = [uid("a-0001"), uid("b-0002")];
   const slot = {
     draft: true as const,

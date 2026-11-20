@@ -94,7 +94,7 @@ describe("subject camera bounds", () => {
       uniqueId: "fixture",
       documentKey: "fixture",
       linkInstanceId: null,
-      category: "Ducts",
+      category: "Pipes",
       categoryId: null,
       vertexCount: 3,
     };

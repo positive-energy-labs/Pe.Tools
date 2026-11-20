@@ -112,7 +112,7 @@ const row = (key: string): NoticeRow => ({
   group: "unread",
   revision: 1,
   verb: "done",
-  what: "ducts",
+  what: "pipes",
   where: "Claude",
   says: "Resized 41 of 43.",
   at: null,
@@ -196,7 +196,7 @@ test("a moved feed row becomes an OS notification only while no tray follows, on
   item("n2");
   expect(raised).toHaveLength(1);
   expect(raised[0]).toMatchObject({
-    title: "ducts",
+    title: "pipes",
     options: { body: "Resized 41 of 43.", tag: "n2" },
   });
   // The same feed again (a reconnect, a rebuild) raises nothing: no row moved.

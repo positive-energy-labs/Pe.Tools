@@ -256,9 +256,10 @@ const lines: Record<(typeof LINE_COUNTS)[number], RegExp> = {
   todos: /\b(TODO|HACK|FIXME|XXX)\b/,
 };
 
+// A product's `journeys/` is driver-run test tooling, as package-direction already reads it.
 export const isProduction = (path: string) =>
   /\.(tsx?|cs)$/.test(path) &&
-  !/\.d\.ts$|\.(test|test-support|spec|guard|journey|gen|generated|fixture)\.|(^|\/)(tests?|__tests__|fixtures?|generated)\/|Tests?\//.test(
+  !/\.d\.ts$|\.(test|test-support|spec|guard|journey|gen|generated|fixture)\.|(^|\/)(tests?|__tests__|fixtures?|generated|journeys)\/|Tests?\//.test(
     path,
   );
 

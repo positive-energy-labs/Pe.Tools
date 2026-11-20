@@ -45,7 +45,7 @@ test("URL field subscribers ignore selection writes and still follow their own f
   await waitFor(() => expect(view.getByTestId("target").textContent).toBe("A"));
 });
 
-test("a Ducts focus selection reaches shell carry readers without a Pea field decode", async () => {
+test("a Pipes focus selection reaches shell carry readers without a Pea field decode", async () => {
   function Target() {
     const target = useRouteSearchSlice((search) => search.target);
     return <output data-testid="focus-target">{String(target)}</output>;
@@ -57,7 +57,7 @@ test("a Ducts focus selection reaches shell carry readers without a Pea field de
       selected: [
         Object.assign(Object.create(null), {
           kind: "focus",
-          id: '["ducts-focus","cell:equipmentFlows:8108427:inputs"]',
+          id: '["pipes-focus","cell:equipmentFlows:8108427:inputs"]',
         }),
       ],
     }),
@@ -65,12 +65,12 @@ test("a Ducts focus selection reaches shell carry readers without a Pea field de
   const search = new URLSearchParams({
     target: "Chadds",
     selected: JSON.stringify([
-      { kind: "focus", id: '["ducts-focus","cell:equipmentFlows:8108427:inputs"]' },
+      { kind: "focus", id: '["pipes-focus","cell:equipmentFlows:8108427:inputs"]' },
     ]),
   });
   const router = createRouter({
     routeTree: route,
-    history: createMemoryHistory({ initialEntries: [`/duct-systems?${search}`] }),
+    history: createMemoryHistory({ initialEntries: [`/pipe-systems?${search}`] }),
   });
   const view = render(<RouterProvider router={router} />);
   await waitFor(() => expect(view.getByTestId("focus-target").textContent).toBe("Chadds"));

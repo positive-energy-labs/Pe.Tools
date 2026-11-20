@@ -19,7 +19,7 @@ it("empty chrome has no header or empty title, while metadata and actions can ea
     </Pane>,
   );
   expect(container.querySelector("[data-slot='pane-header']")).toBeNull();
-  rerender(<Pane meta="three rooms">body</Pane>);
+  rerender(<Pane meta="three zones">body</Pane>);
   expect(container.querySelector("[data-slot='pane-header']")).not.toBeNull();
   expect(container.querySelector("h2")).toBeNull();
   rerender(<Pane actions={<Button label="fit">fit</Button>}>body</Pane>);

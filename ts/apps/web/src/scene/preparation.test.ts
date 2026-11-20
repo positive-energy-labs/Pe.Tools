@@ -20,7 +20,7 @@ const mesh = new SceneMeshes(
       uniqueId: "cube",
       documentKey: "doc",
       linkInstanceId: null,
-      category: "Ducts",
+      category: "Pipes",
       categoryId: null,
       focus: true,
       firstVertex: 0,

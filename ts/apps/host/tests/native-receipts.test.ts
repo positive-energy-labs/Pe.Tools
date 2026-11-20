@@ -14,7 +14,7 @@ import { originalProcess, sdkEnvelope, sdkSessions } from "./native-receipt-fixt
 
 const step: ActionStep = {
   id: "11111111-1111-4111-8111-111111111111",
-  key: "takeoffs.partition",
+  key: "surveys.partition",
   kind: "native",
   input: { zoneRegion: 1 },
   transport: "sdk",
@@ -109,7 +109,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       { ...result, requestId: "another-request" },
       ...[
         { requestId: "another-request" },
-        { key: "takeoffs.adopt" },
+        { key: "surveys.adopt" },
         { pid: 43 },
         { processStartUtc: "1970-01-01T00:00:01.0000001Z" },
       ].map((patch) => ({ ...result, receipt: { ...receipt, ...patch } })),
@@ -203,7 +203,7 @@ test("production SDK reader uses exact generated selector; mismatched or unresol
       {
         ...result,
         state: "cancelled",
-        receipt: { ...receipt, verdict: "cancelled", key: "takeoffs.adopt" },
+        receipt: { ...receipt, verdict: "cancelled", key: "surveys.adopt" },
         response: { error: "stopped", statusCode: 499 },
       },
     ]) {

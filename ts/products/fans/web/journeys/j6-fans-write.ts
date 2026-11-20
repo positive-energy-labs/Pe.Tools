@@ -18,10 +18,10 @@ import {
   revit,
   sendChat,
   setPea,
-} from "../e2e/cdp.ts";
-import { fansPanes } from "../../products/fans/web/src/panes.ts";
-import type { Page } from "../e2e/cdp.ts";
-import { marks, settled } from "../e2e/marks.ts";
+} from "../../../../tests/e2e/cdp.ts";
+import { fansPanes } from "../src/panes.ts";
+import type { Page } from "../../../../tests/e2e/cdp.ts";
+import { marks, settled } from "../../../../tests/e2e/marks.ts";
 import { pickFansWriteScope } from "./fans-write-scope.ts";
 import { fanRosterRow } from "./fan-roster.ts";
 

@@ -130,7 +130,7 @@ async function bootstrap(machine: Machine, home: string) {
   await writePeaCodexProjectConfig(agent, ["mine"]);
   await fileRouteDocumentStore(stateFixture(join(machine.state, "Work"))).setState({
     targetKey: "document:one",
-    route: "duct-systems",
+    route: "pipe-systems",
     value: { rows: [machine.name] },
   });
   const pages = asCaller(

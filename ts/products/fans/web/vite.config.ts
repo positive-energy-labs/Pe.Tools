@@ -7,7 +7,7 @@ export default defineConfig({
   },
   resolve: { dedupe: ["react", "react-dom"] },
   test: {
-    include: ["src/**/*.test.{ts,tsx}"],
+    include: ["src/**/*.test.{ts,tsx}", "journeys/*.test.ts"],
     setupFiles: [
       "../../../tests/isolated-home/setup.ts",
       fileURLToPath(import.meta.resolve("@pe/web-kernel/test-setup")),

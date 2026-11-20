@@ -22,7 +22,7 @@ import { testRegistry } from "./effect-test.ts";
 import { bindControl } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { nativeFixture } from "./fans/fans-native.fixture.ts";
-import { withRoomsSheet } from "./rooms/rooms-sheet.ts";
+import { withRoomsSheet } from "@pe/rooms-host/tests/rooms-sheet";
 import { pagesRoute } from "../src/pages-route.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Layer } from "effect";

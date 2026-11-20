@@ -7,7 +7,6 @@ export default defineConfig({
     setupFiles: ["tests/isolated-home/setup.ts"],
     include: [
       "tests/e2e/marks.test.ts",
-      "tests/journey-fixtures/fan-ports.test.ts",
       "tests/e2e/pea-picker.test.ts",
     ],
     testTimeout: 120_000,

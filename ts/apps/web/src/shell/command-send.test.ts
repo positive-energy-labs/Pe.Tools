@@ -137,7 +137,7 @@ test("a different handle or a native mutation never reaches the read route", asy
         id: "request-a",
         key: "ops.read",
         target,
-        input: { op: { key: "ducts.assign-fan", effect: "ModelWrite" }, request: {} },
+        input: { op: { key: "pipes.assign-fan", effect: "ModelWrite" }, request: {} },
       },
       transport,
     ),
