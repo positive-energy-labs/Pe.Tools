@@ -1291,9 +1291,6 @@ importers:
         specifier: 4.3.6
         version: 4.3.6
     devDependencies:
-      '@pe/browser':
-        specifier: workspace:*
-        version: link:../../../packages/browser
       '@pe/duct-systems-contract':
         specifier: workspace:*
         version: link:../../duct-systems/contract
@@ -1441,9 +1438,6 @@ importers:
       '@pe/agent-contracts':
         specifier: workspace:*
         version: link:../../packages/agent-contracts
-      '@pe/duct-systems-domain':
-        specifier: workspace:*
-        version: link:../../products/duct-systems/domain
       '@pe/duct-systems-web':
         specifier: workspace:*
         version: link:../../products/duct-systems/web
@@ -1453,9 +1447,6 @@ importers:
       '@pe/ducts-domain':
         specifier: workspace:*
         version: link:../../products/ducts/domain
-      '@pe/ducts-host':
-        specifier: workspace:*
-        version: link:../../products/ducts/host
       '@pe/ducts-web':
         specifier: workspace:*
         version: link:../../products/ducts/web
@@ -1465,18 +1456,12 @@ importers:
       '@pe/fans-domain':
         specifier: workspace:*
         version: link:../../products/fans/domain
-      '@pe/fans-host':
-        specifier: workspace:*
-        version: link:../../products/fans/host
       '@pe/fans-web':
         specifier: workspace:*
         version: link:../../products/fans/web
       '@pe/host-contracts':
         specifier: workspace:*
         version: link:../../packages/host-contracts
-      '@pe/host-internal':
-        specifier: workspace:*
-        version: link:../../packages/host-internal
       '@pe/kit':
         specifier: workspace:*
         version: link:../../packages/kit
@@ -1486,9 +1471,6 @@ importers:
       '@pe/web-kernel':
         specifier: workspace:*
         version: link:../../packages/web-kernel
-      '@tanstack/react-router':
-        specifier: 1.170.31
-        version: 1.170.31(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@testing-library/react':
         specifier: ^16.3.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

@@ -4,16 +4,16 @@
 // once its host holds the service claim, start a controlled Revit from the same checkout with the
 // same PE_TOOLS_PRODUCT_HOME and open a Chadds copy. Pe.App then joins that host.
 import { execFileSync } from "node:child_process";
-import { fansPanes } from "../src/panes.ts";
+import { fansPanes } from "../../products/fans/web/src/panes.ts";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { decode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
-import { FANS_ESP_ROW } from "./fan-selectors.ts";
-import { pickFansWriteScope } from "./fans-write-scope.ts";
-import { workEvidence } from "../../../../tests/journey-fixtures/conversation-work.fixture.ts";
-import { marks, settled } from "../../../../tests/e2e/marks.ts";
-import { connectTypedPage, type TypedPage } from "../../../../tests/e2e/typed-page.ts";
+import { decode } from "../../packages/agent-contracts/src/subject-ref.ts";
+import { FANS_ESP_ROW } from "../../products/fans/web/journeys/fan-selectors.ts";
+import { pickFansWriteScope } from "../../products/fans/web/journeys/fans-write-scope.ts";
+import { workEvidence } from "./conversation-work.fixture.ts";
+import { marks, settled } from "../e2e/marks.ts";
+import { connectTypedPage, type TypedPage } from "../e2e/typed-page.ts";
 
 const FANS_PANES = [fansPanes.roster, fansPanes.inputs, fansPanes.picture, fansPanes.ledger];
 // Rulings (e-inbox) folds to a rail at the 1600 px owned viewport; case 2 unfolds it.

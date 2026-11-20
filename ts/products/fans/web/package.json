@@ -41,7 +41,6 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
-    "@pe/browser": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@testing-library/react": "^16.3.0",

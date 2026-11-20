@@ -193,8 +193,11 @@
   "tests/e2e/route-chaos.test.ts",
   "tests/journey-fixtures/conversation-work.fixture.ts",
   "tests/journey-fixtures/fans-plan-composition.test-support.tsx",
+  "tests/journey-fixtures/fans-reds.config.ts",
+  "tests/journey-fixtures/fans-reds.test.ts",
   "tests/journey-fixtures/fans-witness.test-support.ts",
   "tests/journey-fixtures/jv3-field-fixture.tsx",
   "tests/journey-fixtures/jv3-field-host.ts",
+  "tests/journey-fixtures/jv7-launch.ts",
   "tests/journey-fixtures/route-scenarios.ts"
 ]

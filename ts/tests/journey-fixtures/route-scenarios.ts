@@ -22,7 +22,7 @@ export const scenarios: Partial<Record<string, Scenario>> = {
   },
   fans: {
     path: ({ revit }) => `/fans${revit ? "" : "?demo=navigation"}`,
-    config: "products/fans/web/journeys/fans-reds.config.ts",
+    config: "tests/journey-fixtures/fans-reds.config.ts",
     attach: true,
     headless: true,
     revit: true,

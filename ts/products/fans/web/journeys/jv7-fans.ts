@@ -1,4 +1,4 @@
-// Fixture: node --import jiti/register products/fans/web/journeys/jv7-launch.ts
+// Fixture: node --import jiti/register tests/journey-fixtures/jv7-launch.ts
 // Real: E2E_WEB=<bound fans URL with thread and target>, JV7_HOST=<host origin>,
 // JV7_TOKEN=<service token>, E2E_CONTEXT_PATH=<own CLI context file>, CDP_PORT/CDP_TARGET=<owned tab>;
 // node --import jiti/register products/fans/web/journeys/jv7-fans.ts

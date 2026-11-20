@@ -1,12 +1,12 @@
-import { wait as waitFor, exited, stopOwned } from "../../../../tests/e2e/owned-runtime.ts";
+import { wait as waitFor, exited, stopOwned } from "../e2e/owned-runtime.ts";
 // One no-Revit fixture-host command; reuse the canonical seed, navigation demo and journey helper.
 import { spawn, execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { openBrowser } from "@pe/browser";
-import type { ServiceFile } from "../../../../packages/host-contracts/src/vendor/pe-service.ts";
-import { seedConversationWork, CONVERSATION_THREADS } from "../../../../tests/journey-fixtures/conversation-work.fixture.ts";
+import type { ServiceFile } from "../../packages/host-contracts/src/vendor/pe-service.ts";
+import { seedConversationWork, CONVERSATION_THREADS } from "./conversation-work.fixture.ts";
 
 const root = resolve(
   execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(),
