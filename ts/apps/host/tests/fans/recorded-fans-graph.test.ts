@@ -1,5 +1,5 @@
-import { ductsReadingSchema } from "@pe/ducts-contract/reading";
-import { readingRequestSchema, READING_MAX_KEYS } from "@pe/agent-contracts";
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
+import { READING_MAX_KEYS } from "@pe/agent-contracts";
 import { stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -248,8 +248,7 @@ test.each([
         .filter((entry: any) => entry.url.includes("/pe/resource-subscriptions"))
         .map((entry: any) => JSON.parse(entry.init.body)) ?? [];
     const coldKeys = isCold
-      ? readingRequestSchema
-          .or(ductsReadingSchema)
+      ? resourceReadingSchema
           .array()
           .min(1)
           .max(READING_MAX_KEYS)

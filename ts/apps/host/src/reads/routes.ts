@@ -1,3 +1,4 @@
+import { productReads } from "../product-executors.generated.ts";
 import { routeRegistry } from "../routes.generated.ts";
 import { placesRead, readPlaces } from "../places.ts";
 import { valueReadRequest, type HostRouteModule } from "@pe/agent-contracts";
@@ -164,6 +165,7 @@ export function readRegistry(
 }
 // The Timeline is the kernel's read, not a route's: it is registered beside the route modules.
 export const registeredReads: HostReadRegistry = readRegistry([
+  ...productReads,
   ...Object.values(routeRegistry).map((route) => route.host),
   { reads: { [WORK_TIMELINE_READ]: workTimelineRead } },
 ]);

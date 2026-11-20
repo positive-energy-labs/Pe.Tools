@@ -143,7 +143,10 @@ test("ADR 0053: a receipt that disagrees with the live parameter is the cell's d
     (
       fansCalc.bindings[binding] as unknown as { model: (read: object, row: string) => object }
     ).model(read(store), elementSubject(terminal));
-  const store = { terminalFlows: { "9": { cfm: 150 } }, terminals: { "9": { inWg: 0.5 } } };
+  const store = {
+    terminalFlows: { "9": { cfm: 150, parameter: "PE_Flow" } },
+    terminals: { "9": { inWg: 0.5 } },
+  };
   expect(model("flows", store)).toMatchObject({
     value: 200,
     source: "model",

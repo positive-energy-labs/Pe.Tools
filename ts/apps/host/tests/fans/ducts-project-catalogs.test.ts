@@ -4,16 +4,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
-import { DuctFiles, ductCatalogsRoute } from "@pe/ducts-host/ducts-files";
+import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { readProjectCatalogs } from "../project-home-fixture.ts";
 import { readDuctCatalogs } from "@pe/ducts-host/duct-catalogs";
 import { nativeFixture } from "./fans-work-fixture.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-} from "@pe/host-contracts/contracts";
 import { settle } from "../effect-test.ts";
 
 const closes: (() => Promise<unknown>)[] = [];
@@ -115,7 +112,6 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
   });
   const f = await nativeFixture("real", () => captured, null, {
     deps: { files },
-    routes: ductCatalogsRoute.pipe(Layer.provide(DuctFiles.layer(hostState().home))),
     state: {
       openDocuments: [
         {
@@ -171,13 +167,7 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
     /Nothing is written from a incomplete fan calc \(known [\d.]+ in-wg\): .*pricing \(no return path\).*open-end:100/,
   );
   expect(receipt, JSON.stringify(receipt)).not.toMatchObject({ state: "succeeded" });
-  const headers = {
-    [HOST_RPC_BRIDGE_SESSION_HEADER]: f.target.ref.session,
-    [HOST_RPC_DOCUMENT_HEADER]: f.target.ref.openId,
-  };
-  const catalogs = await (
-    await f.request(new Request("http://fixture/pe/ducts/catalogs", { headers }))
-  ).json();
+  const catalogs = await readProjectCatalogs(f, f.target.ref);
   expect(catalogs.tables["project-table"].cells.values[0][0]).toBe(0.73);
   // D8: each table carries the tier of the home it was read from, as the home list gave it.
   expect(catalogs.tables["project-table"].home).toEqual({

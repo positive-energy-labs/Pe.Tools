@@ -8,6 +8,8 @@
 import { z } from "zod";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
+import type { CallPolicy } from "./call-policy.ts";
+import { entities, ownerBlobs } from "./generated/native-homes.generated.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
@@ -52,6 +54,14 @@ export type NativeHome<Prefix extends string> = {
   readonly [made]: "native";
   readonly key: `${Prefix}:${string}`;
 };
+export const ownerBlob = (name: keyof typeof ownerBlobs): NativeHome<"owner-blob"> => ({
+  [made]: "native",
+  key: ownerBlobs[name],
+});
+export const entity = (name: keyof typeof entities): NativeHome<"entity"> => ({
+  [made]: "native",
+  key: entities[name],
+});
 
 /*
  * The home ladder in code (ADR 0058). Ask in order and stop at the first yes: a fact the model can
@@ -62,12 +72,13 @@ export type NativeHome<Prefix extends string> = {
 export const homeFile = (
   owner: string,
   tiers: readonly SettingTier[] = SETTING_TIERS,
+  path: (cell: string) => readonly string[] = (cell) => cell.split("."),
 ): Home<"route"> => ({
   [made]: "home",
   kind: "home-file",
   key: `home-file:${owner}`,
   takes: ["route"],
-  place: (cell) => ({ at: "setting", owner, path: cell.split("."), tiers }),
+  place: (cell) => ({ at: "setting", owner, path: [...path(cell)], tiers }),
   cost: {
     readsPerCommand: "One file per tier",
     placesThatCanDisagree: "One per tier: default, firm and document",
@@ -206,6 +217,8 @@ export type ReadingLoad = Readonly<{
   alone?: true;
   freshBy?: readonly ["document-mark"];
   slow?: string;
+  calls?: Readonly<Partial<Record<HostOperationKey, CallPolicy>>>;
+  resource?: true;
 }>;
 export type Reading<Source extends PropertyKey = string> = {
   readonly handle: ReadHandle;
@@ -246,6 +259,16 @@ type IsUnion<T, U = T> = [T] extends [never]
       : true
     : never;
 type Sole<M, C> = { [K in keyof C]: IsUnion<LandsIn<M, K>> extends true ? never : K }[keyof C];
+
+type ResourceInput<R> = {
+  [K in keyof R]: R[K] extends { load: { resource: true }; handle: { input: infer I } } ? I : never;
+}[keyof R];
+function resourceInputs<R extends Readings>(readings: R): readonly ResourceInput<R>[];
+function resourceInputs(readings: Readings) {
+  return Object.values(readings).flatMap(({ handle, load }) =>
+    load?.resource ? [handle.input] : [],
+  );
+}
 
 /** A declared reading by name, alone or with the function that makes its arguments from the Page. */
 type Named<R extends string = string> = R | readonly [R, (page: never) => unknown];
@@ -361,6 +384,11 @@ export const sheetCells = (declared: Stored) => {
 /** Refuses a key the declaration does not have, even through a variable or a spread. */
 export type NoExtras<Actual, Expected> = Record<Exclude<keyof Actual, keyof Expected>, never>;
 const noGuide: Guide = { instructions: "", skills: [] };
+function toolTable<K extends string, T>(key: K, value: T): { readonly [P in K]: T };
+function toolTable(key: string, value: unknown) {
+  return { [key]: value };
+}
+
 /** The declaration, plus what derives from it: the Work, Pea's tool, the named reads and the guide. */
 export function product<
   const Id extends string,
@@ -376,7 +404,11 @@ export function product<
   /** Only the product's own. A platform home follows from the nouns a product uses. */
   readonly homes: H;
   readonly cells: C;
-  readonly readings: R;
+  readonly readings: R & {
+    readonly [K in keyof R]: R[K] extends { load: { resource: true } }
+      ? { readonly handle: { readonly input: z.ZodType<{ kind: string }> } }
+      : unknown;
+  };
   /** Keyed by the catalog command key. */
   readonly commands: M & {
     readonly [K in keyof M]: {
@@ -409,10 +441,18 @@ export function product<
     commands: declaration.commands,
   };
   const readings = Object.values<Reading<keyof H>>(declaration.readings);
+  const callPolicies: Readonly<Record<string, CallPolicy>> = Object.assign(
+    {},
+    ...readings.flatMap(({ load }) => load?.calls ?? []),
+  );
   return {
     ...declaration,
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,
+    actions: declaration.commands,
+    tools: toolTable(declaration.id, tool),
+    callPolicies,
+    resourceInputs: resourceInputs<R>(declaration.readings),
     work,
     tool,
     reads: {

@@ -20,7 +20,8 @@
     "./tests/native-recordings/fresh-ducts.heal.json": "./src/tests/native-recordings/fresh-ducts.heal.json",
     "./tests/native-recordings/fresh-ducts.heal.preview-request.json": "./src/tests/native-recordings/fresh-ducts.heal.preview-request.json",
     "./tests/native-recordings/fresh-ducts.heal.preview.json": "./src/tests/native-recordings/fresh-ducts.heal.preview.json",
-    "./tests/native-recordings/sdk-ducts.apply.json": "./src/tests/native-recordings/sdk-ducts.apply.json"
+    "./tests/native-recordings/sdk-ducts.apply.json": "./src/tests/native-recordings/sdk-ducts.apply.json",
+    "./product": "./src/product.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
@@ -41,18 +42,5 @@
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
-  },
-  "pe": {
-    "executors": {
-      "module": "./action-runtime",
-      "factory": "ductsRefreshExecutors",
-      "arguments": [
-        "bridge"
-      ]
-    },
-    "httpLayer": {
-      "module": "./ducts-files",
-      "export": "ductCatalogsRoute"
-    }
   }
 }

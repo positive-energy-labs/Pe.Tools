@@ -1,3 +1,6 @@
+import type { DocumentRef } from "@pe/agent-contracts";
+import type { Catalogs } from "@pe/ducts-contract/duct-catalog";
+import { actAs } from "./callers.ts";
 import { afterEach, vi } from "vite-plus/test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -62,4 +65,26 @@ export async function projectFixture(
   });
   closes.push(() => f.close());
   return { ...f, project, pod };
+}
+
+export async function readProjectCatalogs(
+  fixture: Pick<Awaited<ReturnType<typeof nativeFixture>>, "api">,
+  target: DocumentRef | null,
+): Promise<{ tables: Catalogs; findings: string[] }> {
+  const response = await actAs({ kind: "human", via: "local" }, () =>
+    fixture.api.fetch(
+      new Request("http://fixture/pe/reads/value", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          read: "ducts.catalogs",
+          args: { target },
+          subscription: `catalogs:${target?.openId ?? "unbound"}`,
+          generation: 0,
+        }),
+      }),
+    ),
+  );
+  if (!response.ok) throw Error(await response.text());
+  return (await response.json()).value.data;
 }
