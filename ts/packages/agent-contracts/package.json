@@ -66,7 +66,8 @@
     "./route-kernel-page": "./src/route-kernel-page.ts",
     "./command-handle": "./src/command-handle.ts",
     "./list-search": "./src/list-search.ts",
-    "./page-keys": "./src/page-keys.ts"
+    "./page-keys": "./src/page-keys.ts",
+    "./product": "./src/product.ts"
   },
   "publishConfig": {
     "access": "public"
