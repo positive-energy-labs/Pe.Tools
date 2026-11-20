@@ -40,13 +40,16 @@ function Sessions({
         : owner.view.setPage({ draft: { ...page.draft, target: keyOf(row) } }),
   });
   const selected = rows.find((row) => keyOf(row) === session);
+  const starting = selected?.row.case === "controlled-pending";
   return (
     <>
-      <a
-        href={`/open?draft=${encodeURIComponent(JSON.stringify({ ...page.draft, target: session }))}`}
-      >
-        Open a document in this session
-      </a>
+      {!starting && (
+        <a
+          href={`/open?draft=${encodeURIComponent(JSON.stringify({ ...page.draft, target: session }))}`}
+        >
+          Open a document in this session
+        </a>
+      )}
       <ListView
         list={list}
         aria-label="Sessions"
@@ -84,7 +87,7 @@ function Sessions({
         })}
         empty={{ message: sessions.failure ?? "No running sessions", exit: "Start Revit" }}
       />
-      {selected && (
+      {selected && !starting && (
         <section aria-label="Session detail">
           <p>
             {keyOf(selected)} · Revit {selected.row.year}

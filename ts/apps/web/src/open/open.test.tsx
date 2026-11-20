@@ -11,6 +11,7 @@ import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/tes
 
 import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
 import { PatchBay } from "../machine/bay";
+import { SessionsBody } from "../sessions/mount";
 import { installOpenControls } from "../machine/context";
 import { OpenControls } from "../machine/kernel";
 import { lifecycleRequest } from "../machine/lifecycle";
@@ -348,8 +349,64 @@ test("Open distinguishes a starting Revit from a real document-details failure",
       ])}
     />,
   );
-  expect(screen.getByText("starting")).toBeTruthy();
+  const starting = within(screen.getByRole("group", { name: "Revit 2026 pe-app-26-installed" }));
+  expect(starting.getByText("Starting")).toBeTruthy();
+  expect(starting.queryByRole("button", { name: "stop" })).toBeNull();
+  expect(starting.queryByText(/patch a document here/)).toBeNull();
   expect(screen.getByText("document details unavailable")).toBeTruthy();
+});
+
+test("Sessions keeps the selected session from Starting to ready and clears a removed start", () => {
+  const session = "pe-app-26-installed";
+  const unused = (): never => {
+    throw Error("This Sessions render does not invoke a verb or edit Work");
+  };
+  const renderSessions = (entries: MachineSession[]) => (
+    <SessionsBody
+      ctx={{
+        target: { kind: "host" },
+        page: {
+          read: () => ({
+            draft: EMPTY_DRAFT,
+            session,
+            table: { query: "", sorts: [] },
+            selected: [],
+          }),
+          pose: vi.fn(),
+          query: vi.fn(),
+          select: vi.fn(),
+        },
+        value: {
+          state: "ready",
+          value: { machine: withSessions(entries), recents: BAY_RECENTS, threads: BAY_THREADS },
+          publication: null,
+        },
+        selection: { read: () => [], set: vi.fn() },
+        read: () => ({ state: "reading" }),
+        absent: () => null,
+        refresh: vi.fn(),
+        verb: unused,
+        get cells() {
+          return unused();
+        },
+      }}
+    />
+  );
+  const screenState = render(renderSessions([BACKGROUND_BOOTING]));
+  expect(screen.getByText("Starting")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "stop" })).toBeNull();
+  expect(screen.queryByRole("link", { name: "Open a document in this session" })).toBeNull();
+
+  screenState.rerender(
+    renderSessions([{ ...CHECKOUT_HOT, row: { ...CHECKOUT_HOT.row, id: session } }]),
+  );
+  expect(screen.queryByText("Starting")).toBeNull();
+  expect(screen.getByRole("button", { name: "stop" })).toBeTruthy();
+
+  screenState.rerender(renderSessions([BACKGROUND_BOOTING]));
+  screenState.rerender(renderSessions([]));
+  expect(screen.queryByText("Starting")).toBeNull();
+  expect(screen.queryByText(session)).toBeNull();
 });
 
 test("patching Clinic into your Revit 2025 by click names the upgrade and sends the consent", async () => {

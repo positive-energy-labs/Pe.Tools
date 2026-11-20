@@ -260,6 +260,11 @@ test("only an answering Revit in the SDK execution boundary is asked for holding
   const result = await f.machine.refresh();
   expect(f.sources.holdings).toHaveBeenCalledExactlyOnceWith(row.process);
   expect(f.sources.documents).toHaveBeenCalledExactlyOnceWith(row.process);
+  expect(result.revit.sessions?.[1]).toMatchObject({
+    row: starting,
+    documents: null,
+    holdings: null,
+  });
   expect(result.revit.sessions?.map((entry) => entry.holdingsLeg.error)).toEqual([
     null,
     null,
