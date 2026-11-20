@@ -31,6 +31,7 @@ type Slot = {
   generation: number;
   key: string;
   published?: Publication<unknown>;
+  inputRaced?: boolean;
   attempt: number;
   pending?: Pending;
   lease?: ReadLease;
@@ -146,6 +147,15 @@ export class Publications {
         this.notify(id);
       }
     }
+  }
+  /** Claim one retry for a retained read after a newer input observation. */
+  takeRacedRead(id: string, generation: number) {
+    const slot = this.slots.get(id);
+    const published = this.publication(id);
+    if (!slot?.inputRaced || slot.pending || slot.generation !== generation || !published?.value)
+      return;
+    slot.inputRaced = false;
+    return published;
   }
   /** Pin only this ID's release fence before opening inputs; close on every request exit. */
   admission(id: string, generation: number) {
@@ -371,11 +381,12 @@ export class Publications {
           throw Error("Published Values exceed the shared byte bound; old Value retained");
         this.bytes = retainedBytes;
         this.retainedBytes.set(id, bytes);
+        slot.inputRaced = false;
         slot.published = published;
         this.pruneKeys();
         commit?.();
         this.notify(id);
-        return published;
+        return this.publication(id) ?? obsolete();
       } catch (error) {
         if (!mine()) return obsolete();
         const previous = slot.published;
@@ -392,6 +403,7 @@ export class Publications {
         });
         // Old data retains its original key/version, but its non-current label is host-owned too.
         if (previous?.value) {
+          slot.inputRaced = error instanceof RefreshNeeded;
           slot.published = result;
           if (previous.state === "current") this.notify(id);
         }

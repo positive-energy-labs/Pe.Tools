@@ -39,6 +39,8 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
   };
   const listeners = new Set<() => void>();
   let machineObservations = 0;
+  let sample = 0;
+  let beforeRecents: (() => void) | undefined;
   const resourceObserver: ResourceObserver = (reading, publish) => {
     if (reading.kind === "machine") {
       machineObservations++;
@@ -48,8 +50,12 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
       return () => listeners.delete(send);
     }
     if (reading.kind === "threads") publish({ kind: "snapshot", key: "threads", value: [] });
-    if (reading.kind === "sdk" && reading.read === "recents")
+    if (reading.kind === "sdk" && reading.read === "recents") {
+      const change = beforeRecents;
+      beforeRecents = undefined;
+      change?.();
       publish({ kind: "snapshot", key: "recents", value: { result: { recents: [] } } });
+    }
     return () => {};
   };
   const host = await fixture(false, { resourceObserver });
@@ -82,26 +88,48 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
     observations: () => machineObservations,
     publication: () =>
       host.reads.publications.publication(canonicalRouteInput([who, subscription])),
-    async nextEvent(state: string) {
+    onNextRecents(change: () => void) {
+      beforeRecents = change;
+    },
+    async nextEvent(state: string, { version, retry }: { version?: number; retry?: number } = {}) {
       const decoder = new TextDecoder();
+      const metadata = z.object({
+        value: z.object({ state: z.string(), version: z.number(), retry: z.number().optional() }),
+      });
       let text = "";
-      while (!text.includes(`"state":"${state}"`)) {
+      for (;;) {
         const chunk = await stream.read();
         if (chunk.done) throw Error(`Publication stream closed before ${state}`);
         text += decoder.decode(chunk.value, { stream: true });
+        const lines = text.split("\n");
+        text = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const frame = metadata.parse(JSON.parse(line.slice(6))).value;
+          if (
+            frame.state === state &&
+            frame.retry === retry &&
+            (version === undefined || frame.version === version)
+          )
+            return frame;
+        }
       }
     },
     pass(
       years: Machine["revit"]["years"],
       error: string | null,
       sessions = machine.revit.sessions,
+      sessionsError: string | null = null,
     ) {
-      const now = "2026-11-19T00:00:05Z";
+      const now = new Date(Date.UTC(2026, 10, 19, 0, 0, ++sample)).toISOString();
       machine = {
         ...machine,
         observedAtUtc: now,
         revit: { ...machine.revit, years, sessions },
-        legs: { years: { ...leg, attemptedAtUtc: now, error } },
+        legs: {
+          years: { ...leg, attemptedAtUtc: now, error },
+          sessions: { ...leg, attemptedAtUtc: now, error: sessionsError },
+        },
       };
       for (const notify of listeners) notify();
     },
@@ -128,6 +156,147 @@ test("an open tab reacquires its publication when the installed-year check recov
     const next = await open.read();
     expect(next.version).toBeGreaterThan(first.version);
     expect(plan(next.value.data.machine)).toMatchObject({ year: 2025, refusal: null });
+  } finally {
+    await open.close();
+  }
+});
+
+test("Stop invalidates a ready row through a failed reading, removal, and a second launch", async () => {
+  const open = await openYears([2026], null);
+  const pending = BACKGROUND_BOOTING;
+  const attached = CHECKOUT_HOT;
+  if (pending.row.case !== "controlled-pending" || attached.row.case !== "controlled-active")
+    throw Error("Expected pending and attached session fixtures");
+  const first = {
+    ...attached,
+    row: { ...attached.row, id: pending.row.id, year: pending.row.year },
+  };
+  try {
+    await open.read();
+    open.pass([2026], null, [pending]);
+    expect((await open.read()).value.data.machine.revit.sessions).toMatchObject([
+      { row: { id: pending.row.id, case: "controlled-pending" } },
+    ]);
+    open.pass([2026], null, [first]);
+    expect((await open.read()).value.data.machine.revit.sessions).toMatchObject([
+      { row: { case: "controlled-active", process: first.row.process } },
+    ]);
+
+    // Stop can close the native bridge while the holdings query is in flight. A sampled
+    // Ready row can still have the same PID and attachment when the failure lands.
+    open.pass([2026], null, [
+      {
+        ...first,
+        holdingsLeg: { ...first.holdingsLeg, error: "SDK bridge stopped answering" },
+      },
+    ]);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    expect((await open.read()).value.data.machine.revit.sessions).toMatchObject([
+      { holdingsLeg: { error: "SDK bridge stopped answering" } },
+    ]);
+
+    open.pass([2026], null, []);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    expect((await open.read()).value.data.machine.revit.sessions).toEqual([]);
+
+    if (pending.row.attempt.attempt !== "launched") throw Error("Expected a launched attempt");
+    const pid = first.row.process.pid + 1;
+    open.pass([2026], null, [
+      {
+        ...pending,
+        row: {
+          ...pending.row,
+          attempt: { ...pending.row.attempt, process: { ...pending.row.attempt.process, pid } },
+        },
+      },
+    ]);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    expect((await open.read()).value.data.machine.revit.sessions).toMatchObject([
+      { row: { id: pending.row.id, case: "controlled-pending", attempt: { process: { pid } } } },
+    ]);
+  } finally {
+    await open.close();
+  }
+});
+
+test("a Stop read that races the disappearing Revit retries on the next Machine sample", async () => {
+  const open = await openYears([2026], null);
+  const pending = BACKGROUND_BOOTING;
+  const attached = CHECKOUT_HOT;
+  if (
+    pending.row.case !== "controlled-pending" ||
+    pending.row.attempt.attempt !== "launched" ||
+    attached.row.case !== "controlled-active"
+  )
+    throw Error("Expected a launched attempt and an attached session");
+  const id = pending.row.id;
+  const first = { ...attached, row: { ...attached.row, id } };
+  const nextPid = first.row.process.pid + 1;
+  const second = {
+    ...pending,
+    row: {
+      ...pending.row,
+      attempt: {
+        ...pending.row.attempt,
+        process: { ...pending.row.attempt.process, pid: nextPid },
+      },
+    },
+  };
+  try {
+    await open.read();
+    open.pass([2026], null, [pending]);
+    expect((await open.read()).value.data.machine.revit.sessions).toMatchObject([
+      { row: { id, case: "controlled-pending" } },
+    ]);
+    open.pass([2026], null, [first]);
+    const ready = await open.read();
+    expect(ready.value.data.machine.revit.sessions).toMatchObject([
+      { row: { id, case: "controlled-active", process: first.row.process } },
+    ]);
+
+    open.pass([2026], null, [first], "Session census temporarily unavailable");
+    await open.nextEvent("refresh-needed", { version: ready.version });
+    // The recipe takes Machine first, then recents. Stop lands before Machine is validated.
+    open.onNextRecents(() => open.pass([2026], null, []));
+    const raced = await open.read();
+    expect(raced).toMatchObject({
+      state: "refresh-needed",
+      reason: "The machine input changed while this was being read.",
+      value: { freshness: "refresh-needed" },
+    });
+    expect(raced.value.data.machine.revit.sessions).toMatchObject([
+      { row: { id, case: "controlled-active" } },
+    ]);
+
+    open.pass([2026], null, []);
+    const woke = await Promise.race([
+      open.nextEvent("refresh-needed", { version: ready.version, retry: 1 }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
+    ]);
+    expect(woke).toMatchObject({ state: "refresh-needed", retry: 1 });
+    expect(open.publication()?.version).toBe(ready.version);
+    const removed = await open.read();
+    expect(removed).toMatchObject({
+      state: "current",
+      value: { data: { machine: { revit: { sessions: [] } } } },
+    });
+
+    open.pass([2026], null, [second]);
+    await open.nextEvent("refresh-needed", { version: removed.version });
+    expect(await open.read()).toMatchObject({
+      state: "current",
+      value: {
+        data: {
+          machine: {
+            revit: {
+              sessions: [
+                { row: { id, case: "controlled-pending", attempt: { process: { pid: nextPid } } } },
+              ],
+            },
+          },
+        },
+      },
+    });
   } finally {
     await open.close();
   }
