@@ -1,7 +1,5 @@
 {
-  "hostCalls": [
-    "ts/apps/web/src/routes/design-system_.popovers.tsx#ResourcePreviews:hostFetch"
-  ],
+  "hostCalls": ["ts/apps/web/src/routes/design-system_.popovers.tsx#ResourcePreviews:hostFetch"],
   "customDecodes": [],
   "readWrites": [],
   "peaRows": [],
