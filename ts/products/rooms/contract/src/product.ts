@@ -9,17 +9,13 @@ import {
   cell,
   documentRecord,
   machineFile,
+  machineFileHandle,
+  ownerBlob,
   product as define,
-  type NativeHome,
 } from "@pe/agent-contracts/product";
 import { field, subjectSchema } from "@pe/agent-contracts/route";
 import { subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { documentRefSchema } from "@pe/agent-contracts/target";
-
-// Owed to S8a: C# declares both homes and generates these handles (ruling 4), and these two lines
-// become one import. Until then this module type-checks and cannot run, so its package exports nothing.
-declare const regionRecord: NativeHome<"owner-blob">;
-declare const runTraces: NativeHome<"machine-file">;
 
 const target = documentRefSchema;
 /** A plan view's `UniqueId`. The host resolves Revit's numeric view id at the native boundary. */
@@ -142,9 +138,9 @@ export const product = define({
   says: "Partition a plan into zones and rooms, state each room's fields, and write them to the model.",
   homes: {
     /** Role, provenance and the eight fields of every region, in one document record (ruling 14). */
-    regions: documentRecord(regionRecord),
+    regions: documentRecord(ownerBlob("regionRecord")),
     /** One solve's evidence per zone, kept by the native partition. */
-    traces: machineFile(runTraces),
+    traces: machineFile(machineFileHandle("runTraces")),
   },
   cells: {
     name: cell(text, "subject", { label: "Name" }),

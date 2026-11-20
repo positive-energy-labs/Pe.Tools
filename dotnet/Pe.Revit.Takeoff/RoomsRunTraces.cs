@@ -11,10 +11,12 @@ internal sealed record RoomsTraceRun(string View, string RunId, string Attempt, 
 internal static class RoomsRunTraces
 {
     private const string PendingPrefix = ".pending-";
+    [Pe.Shared.Product.NativeHome("runTraces", "machine-file")]
+    private const string TraceDirectory = "rooms";
 
     internal const string OriginalUnavailable = "original not on this machine";
     internal static readonly AsyncLocal<string?> RootOverride = new();
-    internal static string Root => RootOverride.Value ?? new ModuleStorage("rooms").State().DirectoryPath;
+    internal static string Root => RootOverride.Value ?? new ModuleStorage(TraceDirectory).State().DirectoryPath;
 
     // Create-only evidence. Its digest in a committed region row is the authority to read it.
     internal static string KeepOriginal(string root, string document, string json)
