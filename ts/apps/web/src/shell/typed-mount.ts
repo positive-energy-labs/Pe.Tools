@@ -180,7 +180,7 @@ export function mountTypedRoute(
         ? boundedOpenSet(
             value,
             subjectSpec.limit.max,
-            value.kind === "all" ? roster?.() : undefined,
+            value.kind === "all" && subjectSpec.limit.all !== "overview" ? roster?.() : undefined,
           )
         : value;
     const fitPage = (
@@ -267,7 +267,10 @@ export function mountTypedRoute(
       if (subjectSpec?.limit && snapshot?.state === "ready")
         return subjectSpec.options(snapshot.value).map((option) => option.id);
     };
-    const boundedAll = () => subjectSpec?.limit && page[subjectSpec.field].kind === "all";
+    const boundedAll = () =>
+      subjectSpec?.limit &&
+      subjectSpec.limit.all !== "overview" &&
+      page[subjectSpec.field].kind === "all";
     const readInput = (read: import("@pe/agent-contracts/route").HostRead) => {
       const project =
         "args" in read && typeof read.args === "function"

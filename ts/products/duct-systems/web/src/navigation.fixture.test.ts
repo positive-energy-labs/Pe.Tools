@@ -22,7 +22,7 @@ test("selecting a system replaces the MA-1 repair link's read scope", () => {
     expect(read.args(arrival)).toEqual({ system: [], fan });
     expect(read.args(selected)).toEqual({ system: ["RA 28"], fan: null });
     expect(read.args({ ...arrival, system: { kind: "all" } })).toEqual({
-      system: "all",
+      system: [],
       fan: null,
     });
   }

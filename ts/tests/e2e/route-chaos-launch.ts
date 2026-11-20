@@ -273,7 +273,7 @@ try {
         ? "/pea"
         : values.suite === "fans"
           ? `/fans${values.revit ? "" : "?demo=navigation"}`
-          : `/ducts?demo=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
+          : `/duct-systems?fixture=navigation${values.suite === "chaos" ? `&thread=${leaseThread}` : ""}`,
       web,
     ).href;
     receipt.web = web;

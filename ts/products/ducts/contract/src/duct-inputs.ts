@@ -143,7 +143,8 @@ export const DUCTS_CRITERIA_CELLS = {
 };
 
 export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
-const isCriteriaCell = (cell: string): cell is DuctsCriteriaCell => cell in DUCTS_CRITERIA_CELLS;
+export const isCriteriaCell = (cell: string): cell is DuctsCriteriaCell =>
+  cell in DUCTS_CRITERIA_CELLS;
 /** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
 export function criteriaLayer(
   cells: Readonly<

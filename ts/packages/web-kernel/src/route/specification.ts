@@ -69,7 +69,7 @@ export type Specification<
     field: RoleFields<F & NoInfer<Q>, "subject"> & string;
     /** Query fields that give way to an explicit subject move, in the same address write. */
     resetQuery?: readonly (RoleFields<F & NoInfer<Q>, "query"> & string)[];
-    limit?: { max: number; message: string };
+    limit?: { max: number; message: string; all?: "overview" };
     noun: string;
     multiple?: boolean;
     pane: string;

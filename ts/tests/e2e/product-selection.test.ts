@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { expect, test } from "vite-plus/test";
 import { connectTypedPage, type TypedPage } from "./typed-page.ts";
 
@@ -72,47 +73,47 @@ async function openSystem(page: TypedPage, name: string) {
 }
 
 function state(page: TypedPage) {
-  return page.evaluate(() => {
+  return page.evaluate((selector) => {
     const url = new URL(location.href);
     const encoded = url.searchParams.get("system");
-    const system = encoded ? encoded.split(",").filter(Boolean) : [];
-    const chips = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[data-open-systems] button[aria-label^="Remove the "]',
-      ),
-    ]
-      .filter((element) => element.getClientRects().length > 0)
-      .map((element) => element.getAttribute("aria-label"));
-    const crumb = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[data-pane-id="e-picture"] [data-slot="pane-title"] [data-crumb-segment]',
-      ),
-    ]
-      .filter((element) => element.getClientRects().length > 0)
-      .map((element) => element.innerText.trim());
-    const picture = document.querySelector('[data-pane-id="e-picture"] [data-model-picture]');
+    const subject: unknown = encoded ? JSON.parse(encoded) : null;
+    const system =
+      subject && typeof subject === "object" && "ids" in subject && Array.isArray(subject.ids)
+        ? subject.ids.filter((id): id is string => typeof id === "string")
+        : [];
+    const rows = [...document.querySelectorAll<HTMLElement>(selector)].filter(
+      (row) => row.getClientRects().length > 0,
+    );
+    const selected = rows
+      .filter((row) => row.getAttribute("aria-selected") === "true")
+      .flatMap((row) => (row.dataset.key ? [row.dataset.key] : []))
+      .sort();
+    const pane = document.querySelector('[data-pane-id="e-picture"]');
+    const picture = pane?.querySelector("[data-model-picture]");
     return {
       url: url.href,
       system,
-      chips,
-      crumb,
+      selected,
+      rosterVisible: rows.length > 0,
       ready:
         document.readyState === "complete" &&
-        !!picture?.getClientRects().length &&
-        !document.querySelector('[data-model-picture][data-reading="pending"]'),
+        (system.length
+          ? !!picture?.getClientRects().length && !picture.matches('[data-reading="pending"]')
+          : rows.length > 0 &&
+            !!pane?.textContent?.includes("Choose a system to see its picture.")),
       alerts: [...document.querySelectorAll<HTMLElement>('[role="alert"]')]
         .filter((element) => element.getClientRects().length > 0)
         .map((element) => element.innerText),
     };
-  });
+  }, SYSTEMS);
 }
 
 test("opening a second duct system retains the first through reload and browser history", async () => {
   const resultPath = process.env.E2E_RESULT_PATH;
   if (!resultPath) throw new Error("E2E_RESULT_PATH is required");
   const url = new URL(process.env.E2E_WEB!);
-  expect(url.pathname).toBe("/ducts");
-  expect(url.search).toBe("?demo=navigation");
+  expect(url.pathname).toBe("/duct-systems");
+  expect(url.search).toBe("?fixture=navigation");
   expect(["127.0.0.1", "localhost"]).toContain(url.hostname);
   const page = await connectTypedPage();
   const checkpoints: { label: string; state: Awaited<ReturnType<typeof state>> }[] = [];
@@ -128,30 +129,22 @@ test("opening a second duct system retains the first through reload and browser 
           return {
             ready: current.ready,
             system: current.system,
-            crumb: current.crumb,
           };
         },
         { timeout: 20_000, message: label },
       )
       .toEqual({
         ready: true,
-        system: systems,
-        crumb: systems.length ? ["Systems", systems.join(" + ")] : ["Systems"],
+        system: systems.map((name) => subjectCode({ keyKind: "system-name", key: name })),
       });
-    // History can fold the scope pane; reveal it before inspecting its drawn chips.
-    if (systems.length && !(await state(page)).chips.length)
-      await click(page, `button[aria-label=${JSON.stringify(`Expand ${systems.join(" + ")}`)}]`);
+    if (systems.length && !(await state(page)).rosterVisible)
+      await click(page, 'button[aria-label^="Expand systems" i]');
     await expect
-      .poll(async () => (await state(page)).chips, {
+      .poll(async () => (await state(page)).selected, {
         timeout: 20_000,
-        message: `${label}: open-system chips`,
+        message: `${label}: selected rows`,
       })
-      .toEqual(
-        systems.map(
-          (name, index) =>
-            `Remove the "${name}${index === systems.length - 1 ? " active" : ""}" narrowing`,
-        ),
-      );
+      .toEqual([...systems].sort());
     checkpoints.push({ label, state: await state(page) });
   };
   try {

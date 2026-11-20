@@ -131,6 +131,7 @@ test("each route's contract.ts declares the reads its host serves, with the host
     "chat.context",
     "duct-loss.result",
     "ducts.network",
+    "ducts.overview",
     "ducts.pricing",
     "ducts.roster",
     "families.view",

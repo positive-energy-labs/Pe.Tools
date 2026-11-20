@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { expect, test, vi } from "vite-plus/test";
-import { ductsPricingReadResponse } from "@pe/duct-systems-contract/ducts-read";
+import { ductsOverviewData, ductsPricingReadResponse } from "@pe/duct-systems-contract/ducts-read";
+import { valueReadResponse } from "@pe/agent-contracts/value";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import walk from "@pe/ducts-host/tests/native-recordings/driver-ducts.snapshot.walk.json" with { type: "json" };
@@ -99,6 +101,43 @@ test("ducts.pricing resolves a staged Work criterion over the firm file, as the 
     });
   } finally {
     vi.unstubAllEnvs();
+    await host.close();
+  }
+}, 60000);
+
+test("the 363-system overview publishes rows without network or snapshot trace inputs", async () => {
+  const reference = recordedRoster.systems[0];
+  if (!reference) throw Error("The recording has no system");
+  const systems = Array.from({ length: 363 }, (_, id) => ({
+    ...reference,
+    id: id + 1,
+    name: `Supply ${id + 1}`,
+    criticalPath: Array.from({ length: 1024 }, (_, element) => 100000 + element),
+  }));
+  const largeRoster = { ...recordedRoster, systems };
+  expect(Buffer.byteLength(JSON.stringify(largeRoster))).toBeGreaterThan(1024 ** 2);
+  const host = await fixture(false, { snapshot, roster: largeRoster });
+  try {
+    const response = await host.probe({
+      read: "ducts.overview",
+      subscription: "overview-363",
+      generation: 0,
+      args: { target: ref },
+    });
+    expect(response.ok).toBe(true);
+    const text = await response.text();
+    const publication = valueReadResponse.parse(JSON.parse(text));
+    expect(publication.state, publication.reason ?? "overview publication").toBe("current");
+    expect(ductsOverviewData.parse(publication.value?.data).rows).toHaveLength(363);
+    expect(
+      Object.keys(z.record(z.string(), z.unknown()).parse(publication.value?.data)).sort(),
+    ).toEqual(["rows", "sourceVersion"]);
+    const bytes = Buffer.byteLength(text);
+    expect(bytes).toBeLessThan(1024 ** 2);
+    expect(text).not.toContain("ducts.snapshot.walk");
+    console.log(`363-system overview publication: ${bytes} bytes`);
+    expect(text).not.toMatch(/"(?:network|snapshot|nodes|segments|criticalPath|tables)":/);
+  } finally {
     await host.close();
   }
 }, 60000);

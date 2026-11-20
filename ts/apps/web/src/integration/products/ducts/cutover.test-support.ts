@@ -152,7 +152,7 @@ export function witnessFactory(dependencies: FixtureDependencies) {
       },
     });
     for (const [entry, read] of Object.entries({
-      [ductsReads.roster.key]: "roster",
+      [ductsReads.overview.key]: "roster",
       [ductsReads.network.key]: "network",
       [ductsReads.pricing.key]: "pricing",
     })) {

@@ -131,12 +131,12 @@ import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
   ductsPricingData,
   ductsNetworkData,
-  ductsRosterData,
+  ductsOverviewData,
 } from "@pe/duct-systems-contract/ducts-read";
 import { valueReadResponse } from "@pe/agent-contracts";
 import { InvalidRead } from "@pe/host-internal/read-errors";
 import { registeredReads } from "../../../host/src/reads/routes";
-import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/host";
+import { ductsPricing, ductsNetwork, ductsOverview } from "@pe/duct-systems-host/host";
 import { fansCalc } from "@pe/fans-host/host";
 import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as families } from "../families/route";
@@ -344,7 +344,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     ).toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     mounted.release();
-    const definitions = { ductsPricing, ductsNetwork, ductsRoster };
+    const definitions = { ductsPricing, ductsNetwork, ductsOverview };
     const unregister = registeredReads.register(
       Object.fromEntries(
         Object.entries(definitions).filter(([, read]) => !registeredReads.reads.has(read.name)),
@@ -380,7 +380,7 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     );
     try {
       await ductMount.whenReady();
-      const system = valueOf(ductMount.value(ducts.spec.reads!.roster)).systems[0]!.name;
+      const system = valueOf(ductMount.value(ducts.spec.reads!.roster)).rows[0]!.name;
       ductMount.page.subject({ kind: "ids", ids: [systemCode(system)] });
       await ductMount.whenReady();
       expect(valueOf(ductMount.value()).network.systemReads.completed).toEqual([
@@ -744,7 +744,7 @@ async function compareSystemAnswers() {
   };
   const host = await fixture(false, { snapshot, roster });
   await host.send(0, []);
-  const definitions = { ductsPricing, ductsNetwork, ductsRoster };
+  const definitions = { ductsPricing, ductsNetwork, ductsOverview };
   const unregister = registeredReads.register(
     Object.fromEntries(
       Object.entries(definitions).filter(
@@ -796,7 +796,7 @@ async function compareSystemAnswers() {
       address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     },
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
-    { work, sources },
+    { work, sources, timeline: fixtureTimeline(host.workspace) },
   );
   try {
     const staged = await host.workspace.apply(
@@ -825,7 +825,7 @@ async function compareSystemAnswers() {
       0,
     );
     expect(staged.ok).toBe(true);
-    mount.page.subject({ kind: "all" });
+    mount.page.subject({ kind: "ids", ids: snapshot.systems.map(({ name }) => systemCode(name)) });
     await vi.waitFor(
       () =>
         expect(
@@ -891,7 +891,7 @@ async function compareSystemAnswers() {
         reason: expect.stringContaining("Work subject is absent from the acquisition"),
       }),
     );
-    const unpriced = ductsRosterData.parse(valueOf(mount.value(ducts.spec.reads!.roster)));
+    const unpriced = ductsOverviewData.parse(valueOf(mount.value(ducts.spec.reads!.roster)));
     expect(
       unpriced.rows.every((row) => row.total === null),
       "H23: unread systems retain unknown pressure, never complete zeros",

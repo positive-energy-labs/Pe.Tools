@@ -13,7 +13,7 @@ import c4 from "../../web/src/duct-loss/source-closure.generated.json" with { ty
 import * as h4 from "../../web/src/duct-loss/host.ts";
 import c5 from "../../../products/duct-systems/web/source-closure.generated.json" with { type: "json" };
 import * as h5 from "@pe/duct-systems-host/host";
-import { ductsRouteState as ductSystemsWork } from "@pe/duct-systems-contract/ducts";
+import { ductSystemsWork as ductSystemsWork } from "@pe/duct-systems-contract/product";
 import c6 from "../../web/src/families/source-closure.generated.json" with { type: "json" };
 import * as h6 from "../../web/src/families/host.ts";
 import { familiesRouteState as familiesWork } from "@pe/agent-contracts";

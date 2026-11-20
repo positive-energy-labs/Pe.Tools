@@ -76,7 +76,11 @@ test.each(["coverage", "apply"] as const)(
         ).map((t) => t.cfm.value),
       ).toEqual([100, 50, 50]);
       if (witness === "coverage") expect(cfm(before)).toEqual([100, 50, 50]);
-      await evaluate(ductsPricing, { target: f.target.ref, system: "all" }, port());
+      await evaluate(
+        ductsPricing,
+        { target: f.target.ref, system: before.systems.map(({ name }) => name) },
+        port(),
+      );
       expect(f.dispatched).toContainEqual(
         expect.objectContaining({
           key: "ducts.snapshot.walk",
