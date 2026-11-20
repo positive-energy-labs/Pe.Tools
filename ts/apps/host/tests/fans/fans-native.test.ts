@@ -22,6 +22,27 @@ const scenario = (key: string, input: unknown) =>
     : undefined;
 
 const closes: (() => Promise<void>)[] = [];
+// The kernel's Work fence (owner ruling 2026-11-20): Work staged on one document is spent on no other.
+// `selected-open` is C:/model.rvt; this Work is keyed to the other open document's Address.
+test.each(["fans", "duct-systems"] as const)(
+  "%s Work staged on another document refuses its plan and its write, with nothing written",
+  async (route) => {
+    const f = await nativeFixture("test", scenario, address("C:/other.rvt"));
+    closes.push(() => f.close());
+    const fans = await stage(f);
+    const work =
+      route === "fans" ? fans : (await f.saved.view(f.key, "duct-systems"))!.handle;
+    for (const key of ["sheet.plan", "sheet.apply"]) {
+      await f.post("/actions", { id: key, key, target: f.target, input: { work } });
+      expect(await f.journal.wait(key)).toMatchObject({
+        state: "failed",
+        notDispatched: true,
+        refusal: { kind: "domain", code: "work.target" },
+      });
+    }
+    expect(f.dispatched.filter((row) => row.key.startsWith("ducts.apply"))).toEqual([]);
+  },
+);
 afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
@@ -349,5 +370,10 @@ test("H1: a canonical Fans handle beside an Address key carrying case and Save A
     ...fans,
     key: { binding: "address", route: "fans", target: address("C:/other.rvt") },
   });
-  expect(JSON.stringify(foreign)).toContain("Fans Work belongs to another document");
+  // The kernel's admission fences a sibling handle to the target before Ducts compares the two.
+  expect(foreign).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { code: "work.target", message: "Work belongs to another document" },
+  });
 });

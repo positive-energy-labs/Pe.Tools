@@ -195,7 +195,7 @@ test.each(["initialize", "adopt", "partition"])(
   },
 );
 
-test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
+test.each(["selected", "unrelated", "none", "gone", "unreadable", "elsewhere"] as const)(
   "recorded Rooms sheet admission fences %s changes and a current preview retires only confirmed field values",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
@@ -206,7 +206,12 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
       "fresh-rooms.partition",
     );
     const socket = await native.connect();
-    const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
+    // "elsewhere": the Work was staged on another document than the one the commands target.
+    const key = {
+      binding: "address" as const,
+      target: address(changed === "elsewhere" ? "C:/other.rvt" : "C:/model.rvt"),
+      route: "rooms",
+    };
     const regions = nativeRecordingRequest("fresh-rooms.write").regions as {
       uniqueId: string;
       name: string;
@@ -276,6 +281,28 @@ test.each(["selected", "unrelated", "none", "gone", "unreadable"] as const)(
         run,
         root: run,
       });
+      if (changed === "elsewhere") {
+        // The kernel's admission, not Rooms: neither the plan nor the write reaches Revit.
+        const fenced = {
+          state: "failed",
+          notDispatched: true,
+          refusal: { kind: "domain", code: "work.target" },
+        };
+        expect(preview).toMatchObject(fenced);
+        expect(await submit("elsewhere-apply", "sheet.apply", revision)).toMatchObject(fenced);
+        const { view } = nativeRecordingRequest("fresh-rooms.partition");
+        await work.publish(
+          key,
+          "rooms",
+          [{ path: ["writeIntent", "rooms.partition"], value: { edit: { value: { view } } } }],
+          revision,
+        );
+        const staged = (await work.read(key, "rooms"))!.revision;
+        for (const command of ["rooms.partition.preview", "rooms.partition"])
+          expect(await submit(command, command, staged)).toMatchObject(fenced);
+        expect(native.calls).toEqual([]);
+        return;
+      }
       if (changed === "unreadable") {
         expect(preview).toMatchObject({
           state: "failed",
