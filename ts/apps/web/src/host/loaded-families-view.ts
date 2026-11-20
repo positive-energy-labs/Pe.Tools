@@ -10,22 +10,3 @@ import type { RevitMatrixLoadedFamilies } from "@pe/host-contracts/generated";
 
 export type FamilySnapshotRecord = RevitMatrixLoadedFamilies.Res.FamilySnapshotRecord;
 export type FamilyParameterSnapshot = RevitMatrixLoadedFamilies.Res.FamilyParameterSnapshot;
-
-/** Wire enum for filter.placementScope, usable as `.Member` in route code. */
-export const LoadedFamilyPlacement = {
-  AllLoaded: "AllLoaded",
-  PlacedOnly: "PlacedOnly",
-  UnplacedOnly: "UnplacedOnly",
-} as const;
-export type LoadedFamilyPlacement =
-  (typeof LoadedFamilyPlacement)[keyof typeof LoadedFamilyPlacement];
-
-/** Parameters the matrix UI renders: excludedReason == null. */
-export function visibleParameters(family: FamilySnapshotRecord): FamilyParameterSnapshot[] {
-  return (family.parameters ?? []).filter((param) => param.excludedReason == null);
-}
-
-/** Render coercion for wire cells: null (no value) and "" (empty) both display empty. */
-export function cellText(value: string | null | undefined): string {
-  return value ?? "";
-}

@@ -1,6 +1,7 @@
 import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
 import { sheetCommands } from "@pe/ducts-contract/semantic-actions";
-import { fansTool } from "@pe/fans-contract/semantic-actions";
+import { product as fans } from "@pe/fans-contract/product";
+const fansTool = fans.tool;
 
 import { canonicalRouteInput, isRecord, workKey } from "@pe/agent-contracts";
 

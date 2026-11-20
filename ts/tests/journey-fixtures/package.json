@@ -9,11 +9,12 @@
     "@pe/fans-contract": "workspace:*"
   },
   "devDependencies": {
-    "@pe/agent-contracts": "workspace:*",
+    "@effect/atom-react": "4.0.2",
     "@pe/browser": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
+    "react-dom": "^19.2.0",
     "vite-plus": "catalog:"
   }
 }

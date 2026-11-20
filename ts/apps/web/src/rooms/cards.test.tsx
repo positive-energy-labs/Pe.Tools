@@ -14,8 +14,7 @@ const square = (x: number, y: number, w: number): [number, number][] => [
 type Region = RoomsSnapshot.Res.RoomsRegion;
 const region = (guid: string, name: string, x: number): Region => ({
   elementId: 1,
-  uniqueId: "u-region-1",
-  guid,
+  uniqueId: guid,
   view: VIEW,
   level: "L1",
   role: "room",

@@ -1,7 +1,7 @@
 import { FAN_CALC_GUIDE, ductsRosterRequestSchema, ductsCalcRequestSchema } from "../calc-read.ts";
 import { createPeCatalog } from "@pe/agent-contracts/pe-api";
 import { builtinHostActions as hostActions } from "@pe/agent-contracts/semantic-actions";
-import { fansReadDiscovery } from "../read-discovery.ts";
+import { product } from "../product.ts";
 import { renderDuctsSkill } from "../pea/ducts-skill.ts";
 import { expect, test } from "vite-plus/test";
 
@@ -73,7 +73,7 @@ test("Pea is shown the roster's by-mark lookup in the reads.value input schema",
   const target = { session: "dev", openId: "project" };
   expect(ductsRosterRequestSchema.safeParse({ target }).success).toBe(true);
   expect(ductsRosterRequestSchema.safeParse({ target, mark: "MA-1" }).success).toBe(true);
-  const { peRoutes } = createPeCatalog(hostActions, fansReadDiscovery);
+  const { peRoutes } = createPeCatalog(hostActions, product.reads);
   const input = JSON.stringify(peRoutes["reads.value"].catalog.discovery?.input);
   for (const shown of ['"const":"fans.roster"', '"mark"', '"const":"fans.calc-detail"', '"unitId"'])
     expect(input).toContain(shown);

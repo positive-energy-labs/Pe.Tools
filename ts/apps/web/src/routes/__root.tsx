@@ -6,7 +6,7 @@ import { useRestoreTabPage } from "../route/url";
 import { useEffect, useState } from "react";
 import { WorkOwner } from "@pe/kit/lang/work";
 import { TeachPage, TeachReference, TeachTarget } from "@pe/kit/lang/use-teach";
-import { HelpWorld } from "#/route/help";
+import { TutorialWorld } from "#/route/help";
 import { referenceTeaching, STARTUP_TEACHING, SHELL_REGIONS } from "#/route/teaching";
 import { PaneFaultProvider } from "@pe/kit/lang/pane";
 import { reportFault } from "#/host/diagnostics";
@@ -191,7 +191,12 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                         <TeachReference value={reference}>
                           <RemoteDeviceGate
                             name="Positive Energy Tools"
-                            guidance={<HelpWorld facts={reference} />}
+                            guidance={
+                              <TutorialWorld
+                                facts={reference}
+                                pathname={hydrated ? pathname : undefined}
+                              />
+                            }
                           >
                             {children}
                             <AppUtilities />

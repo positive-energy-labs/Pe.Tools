@@ -26,12 +26,15 @@
     "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
     "@pe/duct-systems-domain": "workspace:*",
     "@pe/duct-systems-host": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
     "@pe/ducts-web": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
     "@pe/fans-host": "workspace:*",
     "@pe/fans-web": "workspace:*",
@@ -50,7 +53,6 @@
     "effect": "4.0.2",
     "jiti": "^2.7.0",
     "lucide-react": "1.21.0",
-    "mermaid": "catalog:",
     "modern-screenshot": "catalog:",
     "qrcode": "catalog:",
     "react": "^19.2.0",
@@ -64,9 +66,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
-    "@pe/duct-systems-contract": "workspace:*",
-    "@pe/ducts-contract": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
+    "@effect/platform-node": "4.0.2",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/devtools-vite": "0.8.4",
@@ -92,7 +92,10 @@
   },
   "pe": {
     "generatedProductDependencies": [
+      "@pe/duct-systems-contract",
       "@pe/duct-systems-web",
+      "@pe/ducts-contract",
+      "@pe/fans-contract",
       "@pe/fans-web"
     ]
   }

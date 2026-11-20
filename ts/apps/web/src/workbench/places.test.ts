@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
 import { waitFor } from "@testing-library/react";
-import { spawnSync } from "node:child_process";
+import { globSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Places, focus, readFocus } from "./places";
 import { hostList } from "./places.test-support";
 import type { Readings } from "#/host/resource-stream";
@@ -47,12 +48,11 @@ test("a second client on the host stream sees a Place added by the first", async
   }
 });
 test("web source contains no retired browser list key", () => {
-  const result = spawnSync("rg", ["--files-with-matches", "pe" + "\\.places", "src"], {
-    cwd: import.meta.dirname + "/../..",
-    encoding: "utf8",
-  });
-  expect(result.stdout).toBe("");
-  expect(result.status).toBe(1);
+  const source = join(import.meta.dirname, "..");
+  const matches = globSync("**/*", { cwd: source, withFileTypes: true })
+    .flatMap((entry) => (entry.isFile() ? [join(entry.parentPath, entry.name)] : []))
+    .filter((path) => readFileSync(path, "utf8").includes("pe" + ".places"));
+  expect(matches).toEqual([]);
 });
 test("two windows can focus different Places without writing the host list", () => {
   const storage = () => {

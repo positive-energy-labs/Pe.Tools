@@ -8,13 +8,16 @@ namespace Pe.Revit.Takeoff;
 // regions by label-point containment + area +/-20% (the proven anchor law) and NEVER touch a
 // designer's existing region — propose, never overwrite.
 public sealed record RegionProvenance(
-    Guid ZoneGuid,
+    string? Zone,
     string RunId,
     string SourceRoomId,
     double SourceSqft)
 {
-    // The solver's original answer, not a designer acceptance or current edited boundary.
+    // The solver's original answer is projected from its trace. The model carries its locator and the native geometry hash.
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
     public Pe.Revit.Partition.Room? Partition { get; init; }
+    [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+    internal string? OriginalTrace { get; init; }
     public RegionMeasurement? Measurement { get; init; }
 
     [JsonProperty("r10")]
@@ -30,7 +33,7 @@ public sealed record RegionProvenance(
 
     // rooms.merge: the regions a person combined into this one. Absent on every other region.
     [JsonProperty("mergedFrom", NullValueHandling = NullValueHandling.Ignore)]
-    public List<Guid>? MergedFrom { get; init; }
+    public List<string>? MergedFrom { get; init; }
 
     // Unknown carrier keys, including legacy `resolutions` (old human dismissals), survive read-modify-write untouched.
     // Nothing reads them; no migrator, no silent discard.
@@ -39,36 +42,10 @@ public sealed record RegionProvenance(
 
     public string ToJson() => TakeoffJson.Serialize(this);
 
-    /// <summary>
-    ///     The per-region blob, on the element anchor. Its data is this record on rooms and residue and
-    ///     TakeoffZoneProvenance on an adopted zone; the envelope version gates both. Changing the GUID orphans
-    ///     deployed models — never reuse.
-    /// </summary>
-    public static readonly Pe.Shared.RevitData.Serialization.OwnerDescriptor Owner = new("takeoff-region", 1,
-        new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9003"), "_PE_TakeoffProvenance",
-        "Pe takeoff machine bookkeeping blob (run id, source hash, .r10 link, holds).");
+    public static RegionProvenance Default => new(null, Rooms.RunDrawn, "", 0);
 
-    /// <summary>What a region with no stored blob is: drawn by a person, in no zone. The next write stores it.</summary>
-    public static RegionProvenance Default => new(Guid.Empty, Rooms.RunDrawn, "", 0);
-
-    /// <summary>
-    ///     A region's provenance. No envelope (nothing stored, or an old un-enveloped shape) reads as
-    ///     <see cref="Default" />, in listings and in write runs alike. An enveloped blob this build cannot read is
-    ///     the reason it is "can't read, kept".
-    /// </summary>
-    public static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> Read(Pe.Shared.RevitData.Serialization.OwnerBlobRead read) =>
-        read.Status == Pe.Shared.RevitData.Serialization.OwnerBlobStatus.Absent
-            ? new(Default, null)
-            : Pe.Shared.RevitData.Serialization.OwnerBlob.Parse(read, data => FromJson(data.ToString(Formatting.None)));
-
-    /// <summary>
-    ///     A zone's provenance: the same read and the same refusals, then a zone that adoption wrote (View, Name,
-    ///     SystemTag, no RunId) is called drawn, with its keys riding in Unknown.
-    /// </summary>
-    public static Pe.Shared.RevitData.Serialization.OwnerValue<RegionProvenance> ReadZone(Pe.Shared.RevitData.Serialization.OwnerBlobRead read) =>
-        Read(read) is { Value: { } zone } && string.IsNullOrEmpty(zone.RunId)
-            ? new(zone with { RunId = Rooms.RunDrawn }, null)
-            : Read(read);
+    [JsonIgnore]
+    internal bool OriginalUnavailable => this.OriginalTrace != null && this.Partition == null;
 
     // The data text, fail-closed. The envelope version is the only gate: data that holds its own version, under
     // either spelling an earlier build wrote (`version` on a region, `v` on a zone), is refused.
@@ -91,7 +68,7 @@ public sealed record RegionProvenance(
     }
 }
 
-public sealed record ExistingRegion(long ElementId, Guid Guid, List<List<double[]>> Loops, double Sqft);
+public sealed record ExistingRegion(long ElementId, string UniqueId, List<List<double[]>> Loops, double Sqft);
 
 public sealed record ZoneRebind(
     IReadOnlyList<(RoomResult Room, ExistingRegion Existing)> Matched,
@@ -135,20 +112,19 @@ public static class ZoneMaterializer
     }
 
     // Reads every FR on the view stamped with this zone's provenance and the given role.
-    public static List<ExistingRegion> ReadExisting(Document doc, View view, Guid zoneGuid, string role)
+    internal static List<ExistingRegion> ReadExisting(Document doc, View view, RoomsRegionRecord record, string? zone, string role)
     {
         var found = new List<ExistingRegion>();
         foreach (var region in new FilteredElementCollector(doc, view.Id)
                      .OfClass(typeof(FilledRegion)).Cast<FilledRegion>())
         {
-            var (frRole, frGuid) = TakeoffCarriers.ReadIdentity(region);
-            if (frRole != role || frGuid == null) continue;
-            if (TakeoffCarriers.ReadRegion(region).OrThrow()!.ZoneGuid != zoneGuid) continue;
+            var row = record[region.UniqueId];
+            if (row == null || row.Role != role || row.Provenance.Zone != zone) continue;
             var loops = TakeoffAtlas.Boundaries(region);
             if (loops.Count == 0) continue;
             double sqft = region.get_Parameter(BuiltInParameter.HOST_AREA_COMPUTED)?.AsDouble()
                           ?? new ZoneScope { Loops = loops }.ExactGeometry().Area;
-            found.Add(new ExistingRegion(region.Id.Value(), frGuid.Value, loops, sqft));
+            found.Add(new ExistingRegion(region.Id.Value(), region.UniqueId, loops, sqft));
         }
         return found;
     }
@@ -158,16 +134,15 @@ public static class ZoneMaterializer
 
     // First run creates proposals. A rerun is read/propose-only: it rebinds the new result to the
     // accepted baseline and reports unmatched/orphaned facts without creating or overwriting FRs.
-    public static MaterializeResult Materialize(
-        Document doc, View view, double elevation, Guid zoneGuid, string runId,
+    internal static MaterializeResult Materialize(
+        Document doc, View view, RoomsRegionRecord record, double elevation, string zone, string runId,
         IReadOnlyList<RoomResult> accepted, IReadOnlyList<ResidueResult> held,
         Action<string> log)
     {
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Materialization);
         var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
             .Cast<FilledRegionType>().First();
-        var existing = ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleRoomRegion);
-        var existingHeld = ReadExisting(doc, view, zoneGuid, TakeoffCarriers.RoleHeldResidue);
+        var existing = ReadExisting(doc, view, record, zone, TakeoffCarriers.RoleRoomRegion);
+        var existingHeld = ReadExisting(doc, view, record, zone, TakeoffCarriers.RoleHeldResidue);
         bool firstRun = existing.Count == 0 && existingHeld.Count == 0;
         var rebind = Rebind(accepted, existing);
         var failures = new List<string>();
@@ -181,11 +156,9 @@ public static class ZoneMaterializer
                 var loops = Kernel.ToLoops(room.Polygon, room.Holes, elevation);
                 if (loops.Count == 0) continue;   // under 1 sf: nothing to draw
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
-                TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleRoomRegion, Guid.NewGuid());
-                TakeoffCarriers.WriteProvenance(region,
-                    (new RegionProvenance(zoneGuid, runId, room.Id, room.RawSqft)
-                        { Flags = room.Flags.ToList(), Partition = room.Partition }).ToJson());
-                TakeoffCarriers.WriteRoomType(region, "hall");
+                record.Regions.Add(region.UniqueId, new(TakeoffCarriers.RoleRoomRegion, new RoomFields(Type: "hall"),
+                    new RegionProvenance(zone, runId, room.Id, room.RawSqft)
+                        { Flags = room.Flags.ToList(), Partition = room.Partition }));
                 createdRegions.Add(region);
                 created++;
             }
@@ -204,10 +177,8 @@ public static class ZoneMaterializer
                     var loops = Kernel.ToLoops(residue.Polygon, residue.Holes, elevation);
                     if (loops.Count == 0) continue;   // under 1 sf: nothing to draw
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
-                    TakeoffCarriers.WriteIdentity(region, TakeoffCarriers.RoleHeldResidue, Guid.NewGuid());
-                    TakeoffCarriers.WriteProvenance(region,
-                        (new RegionProvenance(zoneGuid, runId, residue.Id, residue.RawSqft)
-                            { Partition = residue.Partition }).ToJson());
+                    record.Regions.Add(region.UniqueId, new(TakeoffCarriers.RoleHeldResidue, new RoomFields(),
+                        new RegionProvenance(zone, runId, residue.Id, residue.RawSqft) { Partition = residue.Partition }));
                     heldDrawn++;
                 }
                 catch (Exception ex)
@@ -219,13 +190,12 @@ public static class ZoneMaterializer
         if (failures.Count > 0)
             foreach (var region in createdRegions)
             {
-                var provenance = TakeoffCarriers.ReadRegion(region).OrThrow()!;
+                var provenance = record[region.UniqueId]!.Provenance;
                 if (!provenance.Flags.Contains("materialization-failure"))
                     provenance.Flags.Add("materialization-failure");
-                TakeoffCarriers.WriteProvenance(region, provenance.ToJson());
             }
 
-        log($"[materialize] zone={zoneGuid:D} created={created} held={heldDrawn} " +
+        log($"[materialize] zone={zone} created={created} held={heldDrawn} " +
             $"rebound={rebind.Matched.Count} orphaned={rebind.Orphaned.Count} failures={failures.Count}");
         return new MaterializeResult(created, heldDrawn, rebind.Matched.Count,
             rebind.Orphaned.Count, failures);

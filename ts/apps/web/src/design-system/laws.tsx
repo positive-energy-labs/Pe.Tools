@@ -1,6 +1,6 @@
 import { LawSpecimens } from "#/design-system/specimens/laws";
 
-export const LAW_POINTERS = [
+const LAW_POINTERS = [
   ["one alarm", "lens.house law 5"],
   ["pea is never blue", "lens.house law 5"],
   ["one filled blue", "lens.house law 5"],

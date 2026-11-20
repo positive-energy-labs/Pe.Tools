@@ -1,23 +1,12 @@
 import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./src/bindings.ts";
-import {
-  read,
-  stageField,
-  listFields,
-  field,
-  picturePose,
-  subjectSchema,
-  hostRead,
-} from "@pe/agent-contracts/route";
+import { hostRead } from "@pe/agent-contracts/route";
 import { fansDocumentSchema, fansRouteState, fanWriteScopeMessage } from "@pe/fans-contract/fans";
-import { z } from "zod";
-import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
-import { type Immutable } from "@pe/agent-contracts";
-import * as reads from "@pe/fans-contract/contract";
+import { product, fansCalcEditsSchema, fanEditPatches } from "@pe/fans-contract/product";
 import { FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
-import { editPatches } from "@pe/ducts-domain/calc/edits";
-import { route, split } from "@pe/web-kernel/route";
+import { split } from "@pe/web-kernel/route";
+import { screen } from "@pe/web-kernel/route/screen";
 import { draw } from "@pe/web-kernel/route/draw";
 import { fillBody, scrollBody } from "@pe/web-kernel/route/body";
 import { overlay } from "@pe/web-kernel/route/slots/picture/overlay";
@@ -31,178 +20,145 @@ import { presentLosses } from "@pe/ducts-web/reviews";
 import { fansCalc } from "./src/calc.ts";
 import { fansPanes } from "./src/panes.ts";
 
-// All opens the roster. Removing one port leaves an explicit list of every other port.
-const fan = subjectSchema(Number.MAX_SAFE_INTEGER);
-
-export const fields = {
-  ...picturePose,
-  fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
-  stage: stageField(["calc"]),
-  ...listFields("input"),
-  ...listFields("roster"),
-  calcPath: field(z.string(), "", "query"),
-};
-export const calc = read(
-  hostRead(reads.calc, calcValueFixtures),
-  (page: { fan: Immutable<z.output<typeof fan>>; calcPath: string }) => ({
-    fan: page.fan.kind === "all" ? "all" : page.fan.ids,
-    calcPath: page.calcPath,
-  }),
-);
-// The roster pane draws this read: the sheet refuses a fan it cannot find ("choose it from the roster"),
-// and the roster is the control that clears that refusal.
-const roster = read(hostRead(reads.calc, calcValueFixtures), () => ({
-  fan: [],
-  calcPath: "",
-}));
+const declared = product.routes.fans;
+export const { fields } = declared;
+const fixtureRead = hostRead(product.readings.calc.handle, calcValueFixtures);
+export const calc = { ...declared.core, ...fixtureRead };
+const roster = { ...declared.reads.roster, ...fixtureRead };
 export type FansDrawContext = ContextOf<
   typeof fields,
   typeof calc,
-  typeof import("@pe/fans-contract/fans").fansDocumentSchema,
-  typeof import("@pe/ducts-contract/duct-inputs").fansCalcEditsSchema
+  typeof fansDocumentSchema,
+  typeof fansCalcEditsSchema
 >;
-export const module = route({
-  key: "fans",
-  retiredPage: { fields: ["sheetPath"], values: { stage: ["sheet"] } },
-  host: "@pe/fans-host/host",
-  name: "Fans",
-  directory: {
-    aliases: ["fan", "ESP", "pressure"],
-    exposure: "Main",
-    group: "Calculate loads & airflow",
-    icon: "Wind",
-    label: "Fan ESP",
-    listed: true,
-    resume: "document",
-    runtimeNeed: "Revit for model reads and writes",
-    satellites: [],
-    summary: "Inspect fan paths, inputs and pressure requirements",
-    surfaces: { pwa: "full", tray: false, web: "full" },
-  },
-  subject: {
-    field: "fan",
-    limit: { max: FAN_DETAIL_LIMIT, message: fanDetailLimitMessage },
+const panes = {
+  [fansPanes.roster]: {
+    subjectList: true,
+    title: "Fans",
+    purpose: "Open fan ports",
     read: roster,
-    noun: "fan",
-    pane: fansPanes.roster,
-    options: (data: FansDrawContext["value"]["value"]) =>
-      (data?.rows ?? []).map((row) => ({
-        id: stableFanKey(row),
-        label: fanLabel(row, data?.rows ?? []),
-      })),
+    bindings,
+    body: "scroll" as const,
+    draw: draw("scroll", () => import("./src/mount.tsx"), "RosterBody"),
   },
-  core: calc,
-  reads: { roster },
-  sheet: fansCalc,
-  // The open fans' walk. Strands, blocker skins and the ESP readout are beyond the closed marks: the overlay hands them over.
-  picture: {
-    scope: { derive: fanScope },
-    overlay: overlay(() => import("./src/picture.tsx"), "FanPicture"),
+  [fansPanes.inputs]: {
+    title: "Inputs",
+    purpose: "Edit fan inputs",
+    bindings,
+    kernel: "sheet" as const,
+    // The shell draws this pane from the filled slot; the body kind is the frame it lays out in.
+    body: "scroll" as const,
+    draw: () => scrollBody(null),
   },
-  fields,
-  panes: {
-    [fansPanes.roster]: {
-      subjectList: true,
-      title: "Fans",
-      purpose: "Open fan ports",
+  [fansPanes.picture]: {
+    title: "Picture",
+    purpose: "Inspect fan paths",
+    bindings,
+    kernel: "picture" as const,
+    // The shell draws this pane from the picture slot; a picture fills its pane.
+    body: "fill" as const,
+    draw: () => fillBody(null),
+  },
+  [fansPanes.ledger]: {
+    title: "Ledger",
+    purpose: "Inspect ESP and provenance",
+    bindings,
+    body: "scroll" as const,
+    draw: draw("scroll", () => import("./src/mount.tsx"), "LedgerBody"),
+  },
+} as const;
+export const module = screen(
+  {
+    ...declared,
+    retiredPage: { fields: ["sheetPath"], values: { stage: ["sheet"] } },
+    subject: {
+      ...declared.subject,
+      limit: { max: FAN_DETAIL_LIMIT, message: fanDetailLimitMessage, overview: true },
       read: roster,
-      bindings,
-      body: "scroll",
-      draw: draw("scroll", () => import("./src/mount.tsx"), "RosterBody"),
+      options: (data: FansDrawContext["value"]["value"]) =>
+        (data?.rows ?? []).map((row) => ({
+          id: stableFanKey(row),
+          label: fanLabel(row, data?.rows ?? []),
+        })),
     },
-    [fansPanes.inputs]: {
-      title: "Inputs",
-      purpose: "Edit fan inputs",
-      bindings,
-      kernel: "sheet",
-      // The shell draws this pane from the filled slot; the body kind is the frame it lays out in.
-      body: "scroll",
-      draw: () => scrollBody(null),
+    core: calc,
+    reads: { roster },
+    sheet: fansCalc,
+    // The open fans' walk. Strands, blocker skins and the ESP readout are beyond the closed marks: the overlay hands them over.
+    picture: {
+      scope: { derive: fanScope },
     },
-    [fansPanes.picture]: {
-      title: "Picture",
-      purpose: "Inspect fan paths",
-      bindings,
-      kernel: "picture",
-      // The shell draws this pane from the picture slot; a picture fills its pane.
-      body: "fill",
-      draw: () => fillBody(null),
+    edits: {
+      seed: () => fansDocumentSchema.parse({}),
+      work: fansRouteState,
+      value: "fansWork",
+      // No cross-route write (ruling 2026-11-10): /fans owns only its Work; it reads /ducts' design in its core read.
+      owners: {},
+      input: fansCalcEditsSchema,
+      patches: fanEditPatches,
+      history: editMetaSchema,
+      describe: describeInputHistory,
     },
-    [fansPanes.ledger]: {
-      title: "Ledger",
-      purpose: "Inspect ESP and provenance",
-      bindings,
-      body: "scroll",
-      draw: draw("scroll", () => import("./src/mount.tsx"), "LedgerBody"),
-    },
-  },
-  edits: {
-    seed: () => fansDocumentSchema.parse({}),
-    work: fansRouteState,
-    value: "fansWork",
-    // No cross-route write (ruling 2026-11-10): /fans owns only its Work; it reads /ducts' design in its core read.
-    owners: {},
-    input: fansCalcEditsSchema,
-    patches: (input) => editPatches(input),
-    history: editMetaSchema,
-    describe: describeInputHistory,
-  },
-  verbs: {
-    losses: {
-      handle: handle("sheet.apply"),
-      label: "Write to Revit",
-      stageForPlan: ({ page, value, doc }) => {
-        if (doc?.writeIntent.edit?.value?.walk) return;
-        const rows = value?.rows ?? [];
-        const fan = page.fan;
-        const port =
-          fan.kind === "all"
-            ? rows.length === 1
-              ? rows[0]
-              : undefined
-            : fan.ids.length === 1
-              ? rows.find((row) => stableFanKey(row) === fan.ids[0])
-              : undefined;
-        if (!port) throw Error(fanWriteScopeMessage);
-        return {
-          pane: fansPanes.inputs,
-          path: ["writeIntent"],
-          value: { walk: { unitId: port.unitId, portIndex: port.portIndex } },
-          label: "Write scope",
-        };
+    verbs: {
+      losses: {
+        handle: handle("sheet.apply"),
+        label: "Write to Revit",
+        stageForPlan: ({ page, value, doc }) => {
+          if (doc?.writeIntent.edit?.value?.walk) return;
+          const rows = value?.rows ?? [];
+          const fan = page.fan;
+          const port =
+            fan.kind === "all"
+              ? rows.length === 1
+                ? rows[0]
+                : undefined
+              : fan.ids.length === 1
+                ? rows.find((row) => stableFanKey(row) === fan.ids[0])
+                : undefined;
+          if (!port) throw Error(fanWriteScopeMessage);
+          return {
+            pane: fansPanes.inputs,
+            path: ["writeIntent"],
+            value: { walk: { unitId: port.unitId, portIndex: port.portIndex } },
+            label: "Write scope",
+          };
+        },
+        present: (result, { value: data, doc: work }) =>
+          presentLosses(result, {
+            page: { stage: "calc" },
+            readings: { calcSnapshot: { value: data.calcSnapshot }, fansWork: { value: work } },
+          }),
       },
-      present: (result, { value: data, doc: work }) =>
-        presentLosses(result, {
-          page: { stage: "calc" },
-          readings: { calcSnapshot: { value: data.calcSnapshot }, fansWork: { value: work } },
-        }),
     },
+    band: ["losses"],
   },
-  band: ["losses"],
-  layout: split(
-    "h",
-    [
-      split("v", [fansPanes.roster, fansPanes.inputs], {
-        id: "calc-side",
-        size: 360,
-        sized: "end",
-      }),
-      split("v", [fansPanes.picture, fansPanes.ledger], {
-        id: "calc-main",
-        size: 360,
+  {
+    panes,
+    overlay: overlay(() => import("./src/picture.tsx"), "FanPicture"),
+    layout: split(
+      "h",
+      [
+        split("v", [fansPanes.roster, fansPanes.inputs], {
+          id: "calc-side",
+          size: 360,
+          sized: "end",
+        }),
+        split("v", [fansPanes.picture, fansPanes.ledger], {
+          id: "calc-main",
+          size: 360,
+          sized: "start",
+        }),
+      ],
+      {
+        id: "calc-layout",
+        size: 420,
         sized: "start",
-      }),
-    ],
-    {
-      id: "calc-layout",
-      size: 420,
-      sized: "start",
-      minOtherSize: 360,
-      minSize: 280,
-      rails: { start: { title: "Fans" } },
-    },
-  ),
-});
+        minOtherSize: 360,
+        minSize: 280,
+        rails: { start: { title: "Fans" } },
+      },
+    ),
+  },
+);
 export const fansData = module.data;
-export const fansHostModule = module.host;
 export { fansLink } from "@pe/fans-contract/link";

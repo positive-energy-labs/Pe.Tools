@@ -1,16 +1,17 @@
 import { criteriaCellOf } from "@pe/ducts-contract/duct-inputs";
-import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
+import type { DuctsCalcEdits } from "@pe/ducts-contract/duct-inputs";
 import type { RouteStatePatch } from "@pe/agent-contracts";
-import { EDIT_SEGMENTS, END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts";
+import { END_KEY, FITTING_DROP_CELL, JOIN_KEY } from "./inputs.ts";
 
 /**
- * A sheet's edits as Work patches: one per record key (`null` deletes the pending edit; a cited
- * `refs` entry rides on the cell's `ref`), one per
+ * A sheet's edits as Work patches: one per record key (`null` deletes the pending edit), one per
  * criterion and side, join and end rulings as `assumptions` verdicts
  * (`clear` writes a delete rung, which also takes back a verdict the model's store holds), and a
  * proposed fitting's per-path drop as a `component-drop:proposed:…` override.
  */
-export function editPatches(edits: CalcEdits): RouteStatePatch[] {
+const EDIT_SEGMENTS = { kinds: "kinds", tables: "rules", assignments: "ruleAssignments" } as const;
+
+export function editPatches(edits: DuctsCalcEdits): RouteStatePatch[] {
   const patches: RouteStatePatch[] = [];
   for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
     keyof typeof EDIT_SEGMENTS,
@@ -22,10 +23,7 @@ export function editPatches(edits: CalcEdits): RouteStatePatch[] {
           ? { path: [segment, key] }
           : {
               path: [segment, key, "edit"],
-              value: {
-                value,
-                ...(edits.refs?.[field]?.[key] ? { ref: edits.refs[field][key] } : {}),
-              },
+              value: { value },
             },
       );
   }

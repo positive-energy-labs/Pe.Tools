@@ -32,25 +32,176 @@ public sealed class OwnerBlobRoundTripTests {
     private static string? Raw(Document document, OwnerDescriptor owner) =>
         document.ProjectInformation.get_Parameter(owner.Guid)?.AsString();
 
-    private static string? Raw(Element element) => element.get_Parameter(TakeoffCarriers.Provenance.Guid)?.AsString();
-
-    private static FilledRegion SeedRegion(Document document) {
-        var level = Level.Create(document, 0);
-        var planType = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType))
-            .Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
-        var view = ViewPlan.Create(document, planType.Id, level.Id);
-        while (TakeoffCarriers.Preflight(document, TakeoffCarrierStage.Materialization).MissingCarrierGuids.Count > 0)
-            TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Materialization);
-        var type = new FilteredElementCollector(document).OfClass(typeof(FilledRegionType)).FirstElementId();
-        List<double[]> square = [[0, 0], [30, 0], [30, 30], [0, 30]];
-        return FilledRegion.Create(document, type, view.Id, Kernel.ToLoops(square, [], 0));
-    }
-
     private static (Document Document, string Path) SaveCloseReopen(Application application, Document document) {
         var path = Path.Combine(Path.GetTempPath(), $"pe-owner-blob-{Guid.NewGuid():N}.rvt");
         document.SaveAs(path, new SaveAsOptions { OverwriteExistingFile = true });
         RevitFamilyFixtureHarness.CloseDocument(document);
         return (application.OpenDocumentFile(path), path);
+    }
+
+    [Test]
+    public void Rooms_record_round_trips_on_Project_Information_after_save_and_reopen(UIApplication ui) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        string? path = null;
+        try {
+            RoomsDrawResult room;
+            long viewId;
+            using (var tx = new Transaction(document, "Draw Rooms round trip")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                var view = CreateRoomsView(document);
+                viewId = view.Id.Value();
+                room = Rooms.Draw(document, new(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Office"));
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var raw = Raw(document, RoomsRegionRecord.Owner);
+            var traceId = RoomsRegionRecord.Read(document).OrThrow()!.TraceId;
+
+            (document, path) = SaveCloseReopen(ui.Application, document);
+
+            Assert.That(Raw(document, RoomsRegionRecord.Owner), Is.EqualTo(raw).And.Not.Empty);
+            Assert.That(RoomsRegionRecord.Read(document).OrThrow()!.TraceId, Is.EqualTo(traceId));
+            var actual = Rooms.Snapshot(document, viewId).Regions.Single();
+            Assert.That(actual.UniqueId, Is.EqualTo(room.UniqueId));
+            Assert.That(actual.Name, Is.EqualTo("Office"));
+            var region = (FilledRegion)document.GetElement(actual.UniqueId);
+            Assert.That(region.get_Parameter(RoomsRegionRecord.Owner.Guid), Is.Null);
+            using (var tx = new Transaction(document, "Delete the first room by hand")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                document.Delete(region.Id);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            using (var tx = new Transaction(document, "Draw after native deletion")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                _ = Rooms.Draw(document, new(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Replacement"));
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            Assert.That(RoomsRegionRecord.Read(document).OrThrow()!.Regions.ContainsKey(room.UniqueId), Is.False);
+            Assert.That(Rooms.Snapshot(document, viewId).Regions.Single().Name, Is.EqualTo("Replacement"));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (path != null) File.Delete(path);
+        }
+    }
+
+    [Test]
+    public void Rooms_applies_replacement_of_a_future_envelope_and_keeps_its_bytes(UIApplication ui) =>
+        RoomsAppliesReplacement(ui, newerEnvelope: true);
+
+    [Test]
+    public void Rooms_applies_replacement_of_malformed_owner_data_and_keeps_its_bytes(UIApplication ui) =>
+        RoomsAppliesReplacement(ui, newerEnvelope: false);
+
+    private static void RoomsAppliesReplacement(UIApplication ui, bool newerEnvelope) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        string? path = null;
+        var owner = RoomsRegionRecord.Owner;
+        var planted = newerEnvelope
+            ? $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 1}}},"data":{}}"""
+            : $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{"regions":[]}}""";
+        try {
+            long viewId;
+            using (var tx = new Transaction(document, "Plant unreadable Rooms record")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                viewId = CreateRoomsView(document).Id.Value();
+                _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
+                document.Regenerate();
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(planted), Is.True);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            (document, path) = SaveCloseReopen(ui.Application, document);
+
+            var snapshot = Rooms.Snapshot(document, viewId);
+            Assert.That(snapshot.Regions, Is.Empty);
+            Assert.That(snapshot.Unreadable!.Single().Reason, Does.Contain(newerEnvelope ? "version" : "regions map"));
+            Assert.That(Raw(document, owner), Is.EqualTo(planted));
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var evidence = TakeoffCarriers.Replacements(document).Regions!;
+            var reported = snapshot.Unreadable.Single().Reason;
+            Assert.That(reported, Does.StartWith(evidence.Reason).And.Contain("rooms.draw"));
+            Assert.That(() => Rooms.Trace(document, new(viewId)), Throws.InvalidOperationException.With.Message.EqualTo(reported));
+            Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+            var draw = new RoomsDrawRequest(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Recovered");
+            Assert.That(() => Rooms.Partition(document, new(viewId)),
+                Throws.InvalidOperationException.With.Message.Contains(evidence.Reason));
+            Assert.That(() => Rooms.Write(document, new([new("unavailable", Name: "Office")], evidence)),
+                Throws.InvalidOperationException.With.Message.Contains(evidence.Reason).And.Message.Contains("rooms.draw"));
+
+            using (var tx = new Transaction(document, "Apply the Rooms replacement preview")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                Assert.That(() => Rooms.Draw(document, draw),
+                    Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+                Assert.That(Raw(document, owner), Is.EqualTo(planted));
+                _ = Rooms.Draw(document, draw with { Replacing = evidence });
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            Assert.That(TakeoffCarriers.Replacements(document).Regions, Is.Null);
+            Assert.That(Rooms.Snapshot(document, viewId).Regions.Single().Name, Is.EqualTo("Recovered"));
+            var backup = Path.Combine(isolated.Root, "model-recovery", "owner-rooms-regions", evidence.RawUtf8Sha256 + ".txt");
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(planted)));
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.ReadLines(notices).Single(), Does.Contain(evidence.RawUtf8Sha256));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (path != null) File.Delete(path);
+        }
+    }
+
+    [Test]
+    public void Takeoff_adopt_replaces_an_unreadable_registry_with_its_preview(UIApplication ui) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        try {
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var owner = SystemRegistry.Owner;
+            const string raw = """{"owner":"takeoff-systems","version":1,"data":{"systems":{}}}""";
+            TakeoffAdoptRequest request;
+            using (var tx = new Transaction(document, "Create a zone and plant an unreadable registry")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                var view = CreateRoomsView(document);
+                var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
+                _ = TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Adoption);
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
+                request = new(view.Name, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Invalid));
+            var evidence = TakeoffCarriers.Replacements(document).Registry!;
+            Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+            using (var tx = new Transaction(document, "Apply adoption with registry replacement")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                Assert.That(() => TakeoffAtlas.AdoptZones(document, request),
+                    Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+                Assert.That(Raw(document, owner), Is.EqualTo(raw));
+                Assert.That(TakeoffAtlas.AdoptZones(document, request with { ReplacingRegistry = evidence }).Adopted, Has.Count.EqualTo(1));
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            Assert.That(TakeoffCarriers.ReadRegistry(document).Systems.Single().Tag, Is.EqualTo("FC-8"));
+            var backup = Path.Combine(isolated.Root, "model-recovery", "owner-takeoff-systems", evidence.RawUtf8Sha256 + ".txt");
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            var notice = JObject.Parse(File.ReadLines(notices).Single());
+            Assert.That(notice.Value<string>("sha256"), Is.EqualTo(evidence.RawUtf8Sha256));
+            Assert.That(notice.Value<string>("documentKey"), Is.EqualTo(document.GetDocumentKey()));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
+    private static Guid AdoptRegistry(Document document) {
+        var view = CreateRoomsView(document);
+        var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
+        _ = TakeoffAtlas.AdoptZones(document, new(view.Name, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]));
+        return TakeoffCarriers.ReadRegistry(document).Systems.Single().Guid;
+    }
+
+    private static ViewPlan CreateRoomsView(Document document) {
+        var level = Level.Create(document, 0);
+        var planType = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType))
+            .Cast<ViewFamilyType>().First(type => type.ViewFamily == ViewFamily.FloorPlan);
+        return ViewPlan.Create(document, planType.Id, level.Id);
     }
 
     [Test]
@@ -60,19 +211,13 @@ public sealed class OwnerBlobRoundTripTests {
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
             var storage = new ParameterLinksProfileStorage();
-            var registry = new SystemRegistry();
-            var system = registry.Register("FC-8");
-            var zoneGuid = Guid.NewGuid();
+            Guid system;
             var pointer = ProjectHomePointer.Create("Projects/2026-014 Chadds Ford").Pointer!;
-            long regionId;
             using (var transaction = new Transaction(document, "Write every owner blob")) {
                 _ = transaction.Start();
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 3 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
-                var region = SeedRegion(document);
-                regionId = region.Id.Value();
-                TakeoffCarriers.WriteRegistry(document, registry);
-                TakeoffCarriers.WriteProvenance(region, new RegionProvenance(zoneGuid, "run-1", "R01", 100).ToJson());
+                system = AdoptRegistry(document);
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.True);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, pointer.ToData()), Is.False, "an unchanged value is a no-op");
@@ -92,13 +237,10 @@ public sealed class OwnerBlobRoundTripTests {
                     var profile = storage.Read(doc);
                     Assert.That(profile.Error, Is.Null);
                     Assert.That(profile.Profile!.FormatVersion, Is.EqualTo(ParameterLinkProfile.CurrentFormatVersion));
-                    Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Guid, Is.EqualTo(system.Guid));
+                    Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Guid, Is.EqualTo(system));
                     Assert.That(EnclosureDeclaration.Read(doc).Source, Does.StartWith("declared"));
                     Assert.That(ProjectHomePointer.FromData(OwnerBlobStore.Read(doc, ProjectHomePointer.Owner).Data!).Pointer!.Path, Is.EqualTo(pointer.Path));
                     Assert.That(AutoTagService.Instance.HasSettingsInDocument(doc), Is.True);
-                    var region = (FilledRegion)doc.GetElement(regionId.ToElementId());
-                    Assert.That(Raw(region), Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"""));
-                    Assert.That(TakeoffCarriers.ReadRegion(region).Value!.ZoneGuid, Is.EqualTo(zoneGuid));
                 });
             }
 
@@ -131,22 +273,17 @@ public sealed class OwnerBlobRoundTripTests {
         string? path = null;
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
-            long regionId;
             using (var transaction = new Transaction(document, "Plant old un-enveloped blobs")) {
                 _ = transaction.Start();
                 foreach (var owner in ProjectOwners)
                     _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
-                var region = SeedRegion(document);
-                regionId = region.Id.Value();
                 document.Regenerate();
                 foreach (var owner in ProjectOwners)
                     Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(old), Is.True, owner.Name);
-                Assert.That(region.get_Parameter(RegionProvenance.Owner.Guid).Set(old), Is.True);
                 _ = transaction.Commit();
             }
 
             (document, path) = SaveCloseReopen(uiApplication.Application, document);
-            var planted = (FilledRegion)document.GetElement(regionId.ToElementId());
             var storage = new ParameterLinksProfileStorage();
 
             // Absent: every owner starts from its defaults, with no error.
@@ -156,8 +293,6 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(DuctApplier.ReadStore(document), Is.EqualTo(((DuctLossStore?)null, (string?)null)));
                 Assert.That(storage.Read(document), Is.EqualTo(new ProfileReadResult(null, false, null)));
                 Assert.That(TakeoffCarriers.ReadRegistry(document).Systems, Is.Empty);
-                Assert.That(TakeoffCarriers.TryReadProvenance(planted), Is.EqualTo(new OwnerValue<string>(null, null)));
-                Assert.That(TakeoffCarriers.ReadRegion(planted).Value!.RunId, Is.EqualTo(Rooms.RunDrawn), "no envelope reads as the drawn default");
                 Assert.That(TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable, Is.Empty, "an old shape is not listed as unreadable");
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:"));
                 Assert.That(AutoTagService.Instance.HasSettingsInDocument(document), Is.False);
@@ -165,14 +300,11 @@ public sealed class OwnerBlobRoundTripTests {
             });
 
             // The first write through each owner's own door replaces the old bytes with an envelope.
-            var registry = new SystemRegistry();
-            _ = registry.Register("FC-8");
             using (var transaction = new Transaction(document, "First write over the old blobs")) {
                 _ = transaction.Start();
                 Assert.That(OwnerBlobStore.Write(document, DuctLossStore.Owner, new DuctLossStore { WorkRevision = 1 }.ToData()), Is.True);
                 Assert.That(storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Is.True);
-                TakeoffCarriers.WriteRegistry(document, registry);
-                TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(Guid.NewGuid(), "run-1", "R01", 100).ToJson());
+                _ = AdoptRegistry(document);
                 EnclosureDeclaration.Write(document, Enclosure.Default);
                 Assert.That(OwnerBlobStore.Write(document, ProjectHomePointer.Owner, ProjectHomePointer.Create("Projects/Chadds").Pointer!.ToData()), Is.True);
                 _ = transaction.Commit();
@@ -184,7 +316,6 @@ public sealed class OwnerBlobRoundTripTests {
                     Assert.That(Raw(document, owner), Does.StartWith($$"""{"owner":"{{owner.Owner}}","version":{{owner.Version}},"data":{"""), owner.Name);
                     Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Ok), owner.Name);
                 }
-                Assert.That(Raw(planted), Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"""));
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);
@@ -318,7 +449,8 @@ public sealed class OwnerBlobRoundTripTests {
 
             using var edit = new Transaction(document, "Check the sealed element writer");
             _ = edit.Start();
-            Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(), readable.DataRefused("claimed unreadable")),
+            Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(),
+                    OwnerBlob.Decode(owner with { Version = owner.Version + 1 }, readable.Raw).Replacement!),
                 Throws.InvalidOperationException.With.Message.Contains("is readable"));
             Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
             Assert.That(OwnerBlobStore.Write(anchor, owner, settings.ToData(), evidence), Is.True);
@@ -334,37 +466,29 @@ public sealed class OwnerBlobRoundTripTests {
         string? path = null;
         try {
             Assert.That(document.IsWorkshared, Is.False, "Writes require a disposable non-workshared document");
-            long regionId;
             using (var transaction = new Transaction(document, "Plant blobs this build cannot read")) {
                 _ = transaction.Start();
                 foreach (var owner in ProjectOwners)
                     _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
-                var region = SeedRegion(document);
-                regionId = region.Id.Value();
                 document.Regenerate();
                 foreach (var owner in ProjectOwners)
                     Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(plant(owner)), Is.True, owner.Name);
-                Assert.That(region.get_Parameter(TakeoffCarriers.Provenance.Guid).Set(plant(TakeoffCarriers.Provenance)), Is.True);
                 _ = transaction.Commit();
             }
 
             // "Opens": the planted model is saved, closed and opened again before anything reads it.
             (document, path) = SaveCloseReopen(application, document);
-            var planted = (FilledRegion)document.GetElement(regionId.ToElementId());
             var storage = new ParameterLinksProfileStorage();
 
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)
                     Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(expected), owner.Name);
-                Assert.That(OwnerBlobStore.Read(planted, TakeoffCarriers.Provenance).Status, Is.EqualTo(expected));
                 Assert.That(DuctApplier.ReadStore(document).Error, Is.Not.Null);
                 Assert.That(storage.Read(document).Error, Is.Not.Null);
                 Assert.That(() => TakeoffCarriers.ReadRegistry(document), Throws.InvalidOperationException);
-                Assert.That(() => TakeoffCarriers.ReadRegion(planted).OrThrow(), Throws.InvalidOperationException);
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("unreadable"));
                 // The keep policy for reads (ADR 0039): the refusal is a value, so a listing goes on.
                 Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("unreadable"));
-                Assert.That(TakeoffCarriers.TryReadProvenance(planted).Refusal, Does.Contain("unreadable"));
                 Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Does.Contain("unreadable"));
                 Assert.That(() => TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable!.Select(blob => blob.ElementId),
                     Is.EqualTo(new long?[] { null }), "the roster read reports the registry and does not throw");
@@ -373,7 +497,6 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)
                     Assert.That(Raw(document, owner), Is.EqualTo(plant(owner)), $"{owner.Name} bytes are unchanged");
-                Assert.That(Raw(planted), Is.EqualTo(plant(TakeoffCarriers.Provenance)), "the region blob's bytes are unchanged");
             });
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);

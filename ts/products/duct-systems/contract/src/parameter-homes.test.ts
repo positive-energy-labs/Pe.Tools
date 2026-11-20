@@ -3,7 +3,7 @@ import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { ductParameterSlots } from "@pe/ducts-contract/system-work";
 import { ductsApplyInputSchema } from "@pe/duct-systems-contract/ducts";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
-import { ductsSettings } from "@pe/ducts-contract/settings";
+import { ductsSettings } from "@pe/ducts-contract/product";
 import { schemaOf } from "@pe/agent-contracts/slots/sheet";
 
 const slots = (parameters: object) =>

@@ -1,25 +1,26 @@
 import { writeIntentSchema } from "./write-intent.ts";
 /**
- * /rooms Work: the seven room fields plus type on each Room Region, one cell per [guid, field];
+ * /rooms Work: the seven room fields plus type on each Room Region, one cell per [uniqueId, field];
  * and feedback marks as cells with one staged edit each. Notes are findings (ADR 0035 rule 9).
  * Region and op shapes are the generated host catalog's (`@pe/host-contracts/generated`).
  */
 import { z } from "zod";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 
 import { isRecord, type RouteStateSpec } from "./route-state.ts";
 import { roomEditSchema, type RoomEdit, type RoomEditField } from "./takeoffs.ts";
 import { draftCellSchema, type CellLike } from "./draft.ts";
 
-/** One canonical JSON tuple per cell address: `[guid, field]`. */
-export const roomEditKey = (guid: string, field: RoomEditField) => JSON.stringify([guid, field]);
-const addressOf = (key: string): { guid: string; field: RoomEditField } | null => {
+/** One canonical JSON tuple per cell address: `[uniqueId, field]`. */
+export const roomEditKey = (uniqueId: string, field: RoomEditField) => JSON.stringify([uniqueId, field]);
+const addressOf = (key: string): { uniqueId: string; field: RoomEditField } | null => {
   try {
     const parts = JSON.parse(key) as unknown;
     return Array.isArray(parts) &&
       parts.length === 2 &&
       parts.every((part) => typeof part === "string") &&
       JSON.stringify(parts) === key
-      ? { guid: parts[0], field: parts[1] as RoomEditField }
+      ? { uniqueId: parts[0], field: parts[1] as RoomEditField }
       : null;
   } catch (error) {
     console.warn("ts/packages/agent-contracts/src/rooms.ts: fallback after failure", error);
@@ -31,6 +32,14 @@ export const roomEditAddress = (key: string) => {
   if (!address) throw Error(`not a rooms edit key: ${key}`);
   return address;
 };
+
+// FilledRegion UniqueId includes the native element suffix after the episode GUID.
+export const roomRegionUniqueId = z.string().regex(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}-[0-9a-f]{8}$/i);
+
+export const roomsWriteReceiptSchema = nativeResponseSchema("rooms.write").and(
+  z.object({ cells: z.array(z.object({ value: z.union([z.string(), z.number(), z.null()]) })) }),
+);
+export type RoomsWriteReceipt = z.infer<typeof roomsWriteReceiptSchema>;
 
 const choosePlan = "Choose a plan view.";
 const choosePlanId = "Choose a plan view by its Revit view id.";
@@ -67,7 +76,7 @@ export const roomsDocumentSchema = z
     edits: z
       .record(
         z.string().refine((key) => addressOf(key) !== null, {
-          error: "a rooms edit cell key must be a canonical JSON [guid, field] tuple",
+          error: "a rooms edit cell key must be a canonical JSON [uniqueId, field] tuple",
         }),
         draftCellSchema(z.union([z.string(), z.number()])),
       )
@@ -98,13 +107,13 @@ const editedMark = z.object({
 });
 const marksOf = (doc: unknown) => (isRecord(doc) && isRecord(doc.marks) ? doc.marks : {});
 
-/** One `rooms.write` region per guid with edited cells: current edits only, never suggestions. */
-export function stagedRoomWrites(doc: RoomsRouteDocument): ({ guid: string } & RoomEdit)[] {
-  const regions = new Map<string, { guid: string } & RoomEdit>();
+/** One `rooms.write` region per UniqueId with edited cells: current edits only, never suggestions. */
+export function stagedRoomWrites(doc: RoomsRouteDocument): ({ uniqueId: string } & RoomEdit)[] {
+  const regions = new Map<string, { uniqueId: string } & RoomEdit>();
   for (const [key, cell] of Object.entries(doc.edits)) {
     if (cell.edit?.value === undefined) continue;
-    const { guid, field } = roomEditAddress(key);
-    const region = regions.get(guid) ?? regions.set(guid, { guid }).get(guid)!;
+    const { uniqueId, field } = roomEditAddress(key);
+    const region = regions.get(uniqueId) ?? regions.set(uniqueId, { uniqueId }).get(uniqueId)!;
     (region as Record<string, unknown>)[field] = cell.edit.value;
   }
   return [...regions.values()];
@@ -114,7 +123,7 @@ export const roomsRouteState = {
   route: "rooms",
   title: "Rooms",
   description:
-    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [region guid, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a numeric Revit view id, a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes live in findings Work through findings.say, never rooms Work. Regions and geometry are read from rooms.snapshot.",
+    "Shared edited room fields (name, type, ceiling, people, lighting, equipment, ventilation), one cell per [FilledRegion UniqueId, field]. Either author may edit or suggest, and rooms.write reads current edits only. Feedback marks (merge, reject, wall, split) are cells keyed by id with a numeric Revit view id, a model-feet anchor and the run they were drawn against: Either author edits these cells. Notes live in findings Work through findings.say, never rooms Work. Regions and geometry are read from rooms.snapshot.",
   schema: roomsDocumentSchema,
   validateEdit: (next, prior, by) => {
     const before = marksOf(prior);

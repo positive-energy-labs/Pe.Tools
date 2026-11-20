@@ -14,7 +14,7 @@ export type RecordingDiffKey =
   | { readonly kind: "section"; readonly bounds: readonly [DiffPort, DiffPort] }
   | { readonly kind: "path"; readonly fan: DiffPort; readonly terminal: SubjectRefCode }
   | { readonly kind: "loop" };
-export type RecordingDiffCoverage =
+type RecordingDiffCoverage =
   | { readonly kind: "partial"; readonly reason: string }
   | {
       readonly kind: "complete";

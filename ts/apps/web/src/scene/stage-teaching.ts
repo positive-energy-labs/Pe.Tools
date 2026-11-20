@@ -1,6 +1,4 @@
-import { actionTeaching, type ActionDefinition } from "@pe/kit/keys";
-import type { TeachDescriptor } from "@pe/kit/lang/teach";
-import { ORBIT_GESTURES } from "@pe/web-kernel/scene/gestures";
+import type { ActionDefinition } from "@pe/kit/keys";
 export const STAGE_ACTIONS = {
   frame: {
     id: "stage.frame",
@@ -34,13 +32,6 @@ export const STAGE_ACTIONS = {
     bindings: ["W"],
   },
 } as const satisfies Record<string, Omit<ActionDefinition, "invoke">>;
-export const stageTeaching = (): readonly TeachDescriptor[] => [
-  {
-    kind: "keys",
-    scope: "Picture",
-    items: [...actionTeaching(Object.values(STAGE_ACTIONS)), ...ORBIT_GESTURES],
-  },
-];
 
 /** The picture's two modes, the model and a surface's flat picture, as the pane strip and Help
  * teach them; `S` swaps them. */

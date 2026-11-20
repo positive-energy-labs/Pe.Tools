@@ -13,7 +13,7 @@ import {
 import type { Origin, RegisteredRun, RunRef } from "@pe/agent-contracts";
 
 /** A run refuses this command: no run, an ended run, or a run a person stopped. */
-export class RunRefused extends Schema.TaggedError<RunRefused>()("RunRefused", {
+class RunRefused extends Schema.TaggedError<RunRefused>()("RunRefused", {
   code: Schema.Literals(["run.none", "run.closed", "run.stopped"]),
   message: Schema.String,
 }) {}

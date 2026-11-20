@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { ListChips, ListPopup } from "@pe/kit/lang/list-popup";
 import { previousOf, type FieldOptionsData } from "#/host/resource-state";
-import type { ParameterReference, Reading } from "@pe/agent-contracts";
+import type { Reading } from "@pe/agent-contracts";
 
 export type FieldOption = {
   value: string;
@@ -10,29 +10,6 @@ export type FieldOption = {
   description?: string | null;
   metadata?: Record<string, string> | null;
 };
-
-export function parameterReferenceFromOption(option: FieldOption): ParameterReference {
-  const metadata = option.metadata;
-  if (!metadata?.key || !metadata.kind || !metadata.name) {
-    throw new Error(`Parameter option '${option.value}' is missing canonical identity metadata`);
-  }
-  return {
-    identity: {
-      key: metadata.key,
-      kind: metadata.kind as NonNullable<ParameterReference["identity"]>["kind"],
-      name: metadata.name,
-      builtInParameterId: numberOrNull(metadata.builtInParameterId),
-      sharedGuid: metadata.sharedGuid ?? null,
-      parameterElementId: numberOrNull(metadata.parameterElementId),
-    },
-  };
-}
-
-function numberOrNull(value: string | undefined) {
-  if (!value) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 export type FieldOptionStatus = "ready" | "pending" | "failed";
 

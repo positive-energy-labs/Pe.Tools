@@ -7,14 +7,14 @@ namespace Pe.Takeoff.Tests;
 // rooms.merge, pure: rooms and held regions of one zone on one view, at most one RHVAC link, one polygon.
 public sealed class RoomsMergeTests
 {
-    private static readonly Guid Zone = Guid.NewGuid();
+    private static readonly string Zone = Guid.NewGuid().ToString("D") + "-00000042";
 
     private static List<List<double[]>> Box(double x0, double y0, double x1, double y1) =>
         [[[x0, y0], [x1, y0], [x1, y1], [x0, y1]]];
 
     private static MergeMember Member(List<List<double[]>> loops, double sqft = 100, string role = "room-region",
-        Guid? zone = null, long view = 1, TakeoffRhvacLink? link = null) =>
-        new(Guid.NewGuid(), view, role, zone ?? Zone, sqft, loops, link);
+        string? zone = null, long view = 1, TakeoffRhvacLink? link = null) =>
+        new(Guid.NewGuid().ToString("D") + "-00000042", view, role, zone ?? Zone, sqft, loops, link);
 
     private static double Area(List<double[]> ring) => Kernel.Shoelace(ring);
 
@@ -24,6 +24,9 @@ public sealed class RoomsMergeTests
         var small = Member(Box(0, 0, 10, 10), 100);
         var big = Member(Box(10, 0, 30, 10), 200, "held-residue");
         var plan = RoomsMerge.Plan(1, [small, big]);
+        var mergedFrom = new[] { small.UniqueId, big.UniqueId };
+        var provenance = RoomsMerge.Provenance(plan, mergedFrom, 300, "merged");
+        Assert.That(RegionProvenance.FromJson(provenance.ToJson()).MergedFrom, Is.EqualTo(mergedFrom));
         Assert.Multiple(() => {
             Assert.That(Area(plan.Outer), Is.EqualTo(300).Within(1e-6), "outer is CCW");
             Assert.That(plan.Holes, Is.Empty);
@@ -58,8 +61,8 @@ public sealed class RoomsMergeTests
             Refused("a wall's width apart", Member(a), Member(Box(10.5, 0, 20, 10)));
             Refused("corner touch is two pieces", Member(a), Member(Box(10, 10, 20, 20)));
             Refused("a zone", Member(a), Member(b, role: "zoning-region"));
-            Refused("two zones", Member(a), Member(b, zone: Guid.NewGuid()));
-            Refused("no zone", Member(a), new MergeMember(Guid.NewGuid(), 1, "room-region", null, 100, b, null));
+            Refused("two zones", Member(a), Member(b, zone: Guid.NewGuid().ToString("D") + "-00000042"));
+            Refused("no zone", Member(a), new MergeMember(Guid.NewGuid().ToString("D") + "-00000042", 1, "room-region", null, 100, b, null));
             Refused("another view", Member(a), Member(b, view: 2));
             Refused("two links", Member(a, link: link), Member(b, link: link with { Identifier = 5 }));
             var twice = Member(a);

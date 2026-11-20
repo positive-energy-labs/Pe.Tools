@@ -51,7 +51,7 @@ export function inputPort(options: {
   revision: InputPort["revision"];
   leaves?: import("@pe/agent-contracts").HostRouteModule["leaves"];
   /** Absent on a lane with no action journal: the Timeline is then refused, never built without receipts. */
-  timeline?: import("./work-timeline.ts").HostTimeline;
+  timeline?: ReturnType<typeof import("./work-timeline.ts").hostTimeline>;
 }): InputPort {
   const port: InputPort = {
     evaluation: options.evaluation,

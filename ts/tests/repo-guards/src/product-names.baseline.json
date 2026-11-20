@@ -16,7 +16,6 @@
   "packages/agent-contracts/src/rooms-read.ts": 20,
   "apps/host/src/action-dispatch.ts": 9,
   "apps/host/src/rhvac-ops.ts": 8,
-  "apps/host/src/demo-rhvac.ts": 6,
   "packages/agent-contracts/src/takeoffs.ts": 6,
   "packages/agent-contracts/src/action-receipts.ts": 4,
   "apps/host/src/bridge.ts": 3,

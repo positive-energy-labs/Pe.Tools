@@ -95,8 +95,7 @@ export const joinRows = (
 ): TypeRow[] => rows.map((row) => ({ ...facts[row.familyId]!, ...row }));
 type TypeValues = Omit<TypeRow, "scopes" | "formulas" | "storageTypes" | "displayUnits" | "yesNos">;
 
-export const filledValue = (value: string | undefined) =>
-  value !== undefined && value.trim() !== "";
+const filledValue = (value: string | undefined) => value !== undefined && value.trim() !== "";
 
 export function buildPivot(
   rows: readonly TypeRow[],

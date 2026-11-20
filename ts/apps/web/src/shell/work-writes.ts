@@ -283,5 +283,3 @@ function createWorkWriter(key: WorkKey, remove: () => void) {
     },
   };
 }
-
-export type WorkWriter = ReturnType<typeof acquireWorkWriter>["writer"];

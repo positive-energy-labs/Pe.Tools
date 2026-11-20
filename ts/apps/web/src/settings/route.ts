@@ -6,7 +6,11 @@ import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/sett
 import { route } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { split } from "@pe/web-kernel/route/typed-route";
-import { setting, type SheetSlot } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import {
+  settingLayer,
+  type SheetSlot,
+} from "../../../../packages/agent-contracts/src/slots/sheet.ts";
+import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { settingOwners } from "@pe/mcps/product-contracts";
 
 export const loaded = read(hostRead(contracts.machine));
@@ -19,12 +23,17 @@ export const fields = { session: field(z.string(), "", "pose") };
  * with a target (/fans, /ducts) saves at it. The machine pane stays the route's own drawing: it
  * holds acts on this machine (Revit sessions, update, sharing, providers), not values in a home.
  */
+type SettingsRead = { settings?: Record<string, readonly SettingTierRead[]> } | null;
 export const settingsSheet = {
   bindings: Object.fromEntries(
     Object.values(settingOwners).flatMap((owner) =>
       owner.bindings.map((b) => [
         b.name,
-        setting(b.home.owner, b.home.path, b.domain, b.home.tiers, b),
+        {
+          ...b,
+          per: "route",
+          model: (read: SettingsRead) => settingLayer(b, read?.settings?.[b.home.owner]),
+        },
       ]),
     ),
   ),

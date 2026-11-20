@@ -44,7 +44,6 @@ export function useOpenOwner() {
   useSyncExternalStore(owner.subscribe, owner.version, owner.version);
   return owner;
 }
-export const useOpenKernel = useOpenOwner;
 export function outcomeOf(result: OpenOutcome) {
   if (result.state === "done" && result.receipt)
     return {

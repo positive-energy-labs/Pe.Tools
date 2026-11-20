@@ -2,6 +2,7 @@ import { z } from "zod";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { nativeRequestInput } from "./native-input.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
+import { invokeBridge } from "./bridge.ts";
 import { lifetime } from "./document-lifetime.ts";
 import {
   command,
@@ -12,15 +13,19 @@ import {
 } from "@pe/host-internal/command-executor";
 import { preparedTakeoffSchema } from "@pe/agent-contracts";
 import type { NativeProcess, SdkReceiptReader } from "./native-receipts.ts";
+import { win32 } from "node:path";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { Effect } from "effect";
 import {
   roomEditAddress,
+  roomEditKey,
+  roomsWriteReceiptSchema,
   takeoffEditAddress,
   takeoffDecisionAddress,
   type RoomsRouteDocument,
   type WorkPath,
+  roomEditSchema,
   takeoffCaptureSchema,
   type Consumed,
   type WorkHandle,
@@ -56,8 +61,19 @@ export type TakeoffActionDependencies = {
   syncFile?: (input: RhvacSyncRequest, expectedVersion: string) => Promise<RhvacSyncResult>;
 };
 
-const preparedSyncSchema = preparedTakeoffSchema.extend({ capture: takeoffCaptureSchema });
-const preparedCarrierSchema = preparedTakeoffSchema.pick({ process: true });
+const recordReplacements = nativeResponseSchema("takeoffs.record-replacements");
+const preparedCarrierSchema = preparedTakeoffSchema.pick({ process: true }).extend({
+  replacement: recordReplacements.optional(),
+});
+const preparedSyncSchema = preparedTakeoffSchema.extend({
+  capture: takeoffCaptureSchema,
+  replacement: recordReplacements,
+});
+const sealCarrier = ({ process, replacement }: z.infer<typeof preparedCarrierSchema>) => ({
+  request: { process, replacement },
+  evidence: replacement,
+});
+const replacing = (p: z.infer<typeof preparedCarrierSchema>) => p.replacement?.regions ?? undefined;
 const modelTarget = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
   return ctx.admission.target.ref;
@@ -114,20 +130,20 @@ const nativeFor =
     );
 type Native = ReturnType<typeof nativeFor>;
 
-/** The carrier stage is bounded by native remaining work, shared by the seven concrete commands. */
-const runCarrier = (
+/** Only Takeoffs registry initialization needs a separate binding step. */
+const runModel = (
   ctx: CommandContext,
   execution: ActionExecution & { readonly prepared: { process: NativeProcess } },
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
-  stage: string,
+  stage: string | null,
   perform: (native: Native) => Step<unknown>,
 ) => {
   const target = modelTarget(ctx);
   const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
   return Effect.gen(function* () {
     captures.invalidate(target);
-    let remaining = Infinity;
+    let remaining = stage === null ? 0 : Infinity;
     while (remaining > 0) {
       const result = yield* native<{ remaining: string[] }>("takeoffs.initialize-carrier", {
         stage,
@@ -145,6 +161,18 @@ export function takeoffExecutors(
   bridge: RevitBridge["Service"],
   deps: TakeoffActionDependencies = {},
 ) {
+  const replacementFor = async (ctx: CommandContext, registry = false) => {
+    if (!ctx.admission.key.endsWith(".preview")) {
+      const plan = ctx.read.receipts(ctx.admission.id)[0];
+      return plan?.state === "succeeded"
+        ? recordReplacements.parse((plan.result as { evidence: unknown }).evidence)
+        : { regions: null, registry: null };
+    }
+    const { regions, registry: systems } = recordReplacements.parse(
+      await invokeBridge(bridge, modelTarget(ctx), "takeoffs.record-replacements", {}),
+    );
+    return { regions: regions ?? null, registry: registry ? (systems ?? null) : null };
+  };
   const bindCarrier = async (ctx: CommandContext, select?: () => Promise<void>) => {
     // Validate the final leaf before carrier preparation can make its first model write.
     const action = ctx.admission.key.replace(/\.preview$/, "");
@@ -164,6 +192,10 @@ export function takeoffExecutors(
     }
     const { target, process } = await bindModel(ctx, bridge, deps);
     await select?.();
+    const replacement =
+      action === "takeoffs.initialize"
+        ? undefined
+        : await replacementFor(ctx, action === "takeoffs.adopt");
     return {
       consumes: [
         {
@@ -173,7 +205,7 @@ export function takeoffExecutors(
         },
       ],
       effects: [{ kind: "document" as const, ref: target }],
-      prepare: async () => ({ process }),
+      prepare: async () => ({ process, replacement }),
     };
   };
   const value = (ctx: CommandContext, native: Native, key: string, input: unknown) =>
@@ -183,40 +215,45 @@ export function takeoffExecutors(
     }));
   return {
     "takeoffs.initialize": command(commands["takeoffs.initialize"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
+      seal: sealCarrier,
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
+        runModel(ctx, execution, captures, bridge, ctx.admission.input.stage, () =>
           Effect.succeed({ text: `wrote the shared parameters for ${ctx.admission.input.stage}` }),
         ),
     }),
     "takeoffs.adopt": command(commands["takeoffs.adopt"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
+      seal: sealCarrier,
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Adoption", (native) =>
+        runModel(ctx, execution, captures, bridge, "Adoption", (native) =>
           Effect.gen(function* () {
             let adopted = 0;
-            for (const view of ctx.admission.input.views)
-              adopted += (yield* native<{ adopted: unknown[] }>("takeoffs.adopt", view)).adopted
-                .length;
+            for (const [index, view] of ctx.admission.input.views.entries())
+              adopted += (yield* native<{ adopted: unknown[] }>("takeoffs.adopt", {
+                ...view,
+                replacing: index === 0 ? replacing(execution.prepared) : undefined,
+                replacingRegistry:
+                  index === 0 ? (execution.prepared.replacement?.registry ?? undefined) : undefined,
+              })).adopted.length;
             return { adopted, text: `adopted ${adopted} zoning regions` };
           }),
         ),
     }),
     "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
+      seal: sealCarrier,
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Materialization", (native) => {
+        runModel(ctx, execution, captures, bridge, null, (native) => {
           return value(ctx, native, "takeoffs.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
+            replacing: replacing(execution.prepared),
           });
         }),
     }),
     "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
+      seal: sealCarrier,
       bind: (ctx) =>
         bindCarrier(ctx, () =>
           selectRooms(ctx, (doc, paths) =>
@@ -227,62 +264,83 @@ export function takeoffExecutors(
             }),
           ),
         ),
-      run: (ctx, execution) => {
-        const target = modelTarget(ctx);
-        const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
-        const invalidate = Effect.sync(() => captures.invalidate(target));
-        return Effect.andThen(
-          invalidate,
+      run: (ctx, execution) =>
+        runModel(ctx, execution, captures, bridge, null, (native) =>
           value(ctx, native, "rooms.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
+            replacing: replacing(execution.prepared),
           }),
-        ).pipe(Effect.ensuring(invalidate));
-      },
+        ),
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
+      seal: sealCarrier,
       bind: (ctx) => bindCarrier(ctx),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
-          value(ctx, native, "rooms.draw", nativeRequestInput(ctx.admission.input)),
+        runModel(ctx, execution, captures, bridge, null, (native) =>
+          value(ctx, native, "rooms.draw", {
+            ...nativeRequestInput(ctx.admission.input),
+            replacing: replacing(execution.prepared),
+          }),
         ),
       retires: (result) => {
         z.object({ value: nativeResponseSchema("rooms.draw") }).parse(result);
         return [["writeIntent", "rooms.draw"]];
       },
     }),
-    // TODO: docs/features/routes/LEDGER.md#s7-1cd8580b01 rooms.write native receipts report only a count; retain edits until receipts identify confirmed guid/field cells.
     "rooms.write": command(
       {
         ...commands["rooms.write"],
         authoredInput: commands["rooms.write"].authoredInput.extend({
-          regions: z.array(z.object({ guid: z.string() }).passthrough()),
+          regions: z.array(z.object({ uniqueId: z.string(), ...roomEditSchema.shape })),
         }),
       },
       preparedCarrierSchema,
       {
-        seal: (p) => ({ request: { process: p.process } }),
+        seal: sealCarrier,
         bind: (ctx) =>
           bindCarrier(ctx, () =>
-            selectRooms(ctx, (_doc, paths) =>
+            selectRooms(ctx, (doc, paths) =>
               paths.filter((path) => {
                 if (path[0] !== "edits") return false;
-                const { guid, field } = roomEditAddress(String(path[1]));
-                return ctx.admission.input.regions.some(
-                  (region) => region.guid === guid && region[field] !== undefined,
-                );
+                const key = String(path[1]);
+                const { uniqueId, field } = roomEditAddress(key);
+                const submitted = ctx.admission.input.regions.find(
+                  (region) => region.uniqueId === uniqueId,
+                )?.[field];
+                return submitted !== undefined && submitted === doc.edits[key]?.edit?.value;
               }),
             ),
           ),
         run: (ctx, execution) =>
-          runCarrier(ctx, execution, captures, bridge, "Rooms", (native) =>
-            value(ctx, native, "rooms.write", { regions: ctx.admission.input.regions }),
+          runModel(ctx, execution, captures, bridge, null, (native) =>
+            Effect.gen(function* () {
+              const receipt = roomsWriteReceiptSchema.parse(
+                yield* native("rooms.write", {
+                  regions: ctx.admission.input.regions,
+                  replacing: replacing(execution.prepared),
+                }),
+              );
+              const handle = workHandle(ctx);
+              const paths = receipt.cells.flatMap(({ uniqueId, field, value }) => {
+                const submitted = ctx.admission.input.regions.find(
+                  (region) => region.uniqueId === uniqueId,
+                )?.[field];
+                return submitted !== undefined && submitted === value
+                  ? [["edits", roomEditKey(uniqueId, field)]]
+                  : [];
+              });
+              if (handle && paths.length) yield* execution.retireWork(handle.key, "rooms", paths);
+              return {
+                value: receipt,
+                target: { session: modelTarget(ctx).session, document: null },
+              };
+            }),
           ),
       },
     ),
     "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
-      seal: (p) => ({ request: { process: p.process } }),
+      seal: sealCarrier,
       bind: (ctx) =>
         bindCarrier(ctx, () =>
           selectRooms(ctx, (doc, paths) =>
@@ -292,14 +350,17 @@ export function takeoffExecutors(
               return (
                 mark?.kind === "merge" &&
                 mark.anchor.view === ctx.admission.input.view &&
-                !!mark.guids?.some((guid) => ctx.admission.input.guids.includes(guid))
+                !!mark.guids?.some((guid) => ctx.admission.input.uniqueIds.includes(guid))
               );
             }),
           ),
         ),
       run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          return value(ctx, native, "rooms.merge", nativeRequestInput(ctx.admission.input));
+        runModel(ctx, execution, captures, bridge, null, (native) => {
+          return value(ctx, native, "rooms.merge", {
+            ...nativeRequestInput(ctx.admission.input),
+            replacing: replacing(execution.prepared),
+          });
         }),
     }),
     "takeoffs.sync": command(commands["takeoffs.sync"], preparedSyncSchema, {
@@ -309,7 +370,9 @@ export function takeoffExecutors(
           edits: p.edits,
           decisions: p.decisions,
           capture: p.capture.id,
+          replacement: p.replacement,
         },
+        evidence: p.replacement,
       }),
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, bridge, deps);
@@ -366,13 +429,20 @@ export function takeoffExecutors(
             ),
           );
         }
+        const replacement = await replacementFor(ctx);
         return {
           consumes,
           effects: [
             { kind: "document", ref: target },
             { kind: "file", path: input.path },
           ],
-          prepare: async () => ({ process, edits, decisions, capture }),
+          prepare: async () => ({
+            process,
+            edits,
+            decisions,
+            capture,
+            replacement,
+          }),
         };
       },
       run: (ctx, execution) => {
@@ -418,6 +488,11 @@ export function takeoffExecutors(
             throw refused("No eligible inserts or linked staged updates");
           if (inserts.some(({ zone }) => !zone.tags[0]))
             throw refused("Every inserted room requires a system tag");
+          const replacement = replacing(execution.prepared);
+          if (inserts.length && replacement)
+            throw refused(
+              `${replacement.reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.`,
+            );
           const recordedFile = execution.recorded("file", "rhvac.sync");
           const request: RhvacSyncRequest = recordedFile
             ? (recordedFile.input as { request: RhvacSyncRequest }).request
@@ -487,6 +562,22 @@ export function takeoffExecutors(
                   deleteUntouchedSeedRoom: inserts.length > 0,
                 } satisfies RhvacSyncRequest;
               });
+          const syncedAt = new Date().toISOString();
+          if (inserts.length && !recordedFile) {
+            // Jet assigns a signed int and the file identity is the input basename plus a 16-digit hex stamp.
+            yield* nativeStep(bridge, target, "takeoffs.rhvac-links.preflight", {
+              writes: inserts.map(({ room }) => ({
+                elementId: room.elementId!,
+                uniqueId: room.guid,
+                link: {
+                  identifier: -2147483648,
+                  fileIdentity: `${win32.basename(input.path)}#${"0".repeat(16)}`,
+                  syncedAt,
+                  lastSyncedSqft: room.sqft,
+                },
+              })),
+            }).pipe(Effect.mapError((error) => refused(error.message)));
+          }
           const syncFile = deps.syncFile;
           const expectedVersion = input.fileVersion as string;
           const result = yield* execution.step(
@@ -508,17 +599,21 @@ export function takeoffExecutors(
               throw Error("RHVAC insertion result omitted a room identity");
             return {
               elementId: room.elementId!,
+              uniqueId: room.guid,
               link: {
                 identifier,
                 fileIdentity,
-                syncedAt: new Date().toISOString(),
+                syncedAt,
                 lastSyncedSqft: room.sqft,
               },
             };
           });
           if (writes.length) {
             const recordedLinks = execution.recorded("native", "takeoffs.rhvac-links");
-            yield* native("takeoffs.rhvac-links", recordedLinks?.input ?? { writes });
+            yield* native(
+              "takeoffs.rhvac-links",
+              recordedLinks?.input ?? { writes, replacing: replacement },
+            );
           }
           let retirement: unknown;
           if (base) {

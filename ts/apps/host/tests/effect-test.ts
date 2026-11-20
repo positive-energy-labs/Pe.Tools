@@ -243,7 +243,7 @@ export type PromiseMachineSources = {
 };
 
 /** Lift a Promise fake into the Effect leg Machine reads; its rejection stays the failure value. */
-export const liftLegs = (sources: PromiseMachineSources): MachineSources => {
+const liftLegs = (sources: PromiseMachineSources): MachineSources => {
   const lift =
     <Args extends unknown[], A>(leg: (...args: Args) => Promise<A>) =>
     (...args: Args) =>
@@ -345,38 +345,6 @@ export const testHostInputs = Layer.mergeAll(
   PictureCaptureStore.layer(),
   HostDocumentMarks.layer,
 );
-
-/** Immediate native acknowledgements for read payload fixtures. Barrier tests supply their own handles. */
-export const acknowledgedReadBridge = (bridge: RevitBridge["Service"]): RevitBridge["Service"] => ({
-  ...bridge,
-  invokeHandle: (key, input, session, openId, requestId) =>
-    Effect.gen(function* () {
-      const attached = (yield* bridge.list).find((row) => row.sessionId === session)!;
-      const answer = yield* Effect.cached(
-        bridge.invoke(key, input, session, openId, requestId).pipe(
-          Effect.orDie,
-          Effect.map(({ value }) => ({
-            value,
-            nativeRequestId: requestId!,
-            actualTarget: {
-              processIncarnation: {
-                pid: attached.processId!,
-                startedAt: attached.processStartUtcUnixMs!,
-              },
-              openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const },
-            },
-            freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
-            cost: {},
-            outcome: "native-acknowledged" as const,
-          })),
-        ),
-      );
-      return {
-        answer,
-        terminal: Effect.as(answer, "native-acknowledged" as const).pipe(Effect.orDie),
-      };
-    }),
-});
 
 export const testInputContext = () =>
   Context.get(testScoped(HostInputContext.layer({ kind: "live" })), HostInputContext);

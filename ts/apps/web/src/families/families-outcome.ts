@@ -15,9 +15,7 @@ type ApplyReceipt = {
 type Refusal = { code: "not-ready" | "failed" | "partial"; message: string };
 const refuse = (code: Refusal["code"], message: string): Refusal => ({ code, message });
 
-export const applyResults = (
-  result: unknown,
-): Extract<FamilyApplyResult, { native: unknown }>[] => {
+const applyResults = (result: unknown): Extract<FamilyApplyResult, { native: unknown }>[] => {
   if (writePreviewSchema.safeParse(result).success) return [];
   const parsed = familyApplyResultSchema.parse(result);
   return "results" in parsed ? parsed.results : [parsed];

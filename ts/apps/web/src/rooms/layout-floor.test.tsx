@@ -26,7 +26,7 @@ test("at a 1160px Rooms body seven regions keep their rows and the plan in view"
     regions: Array.from({ length: 7 }, (_, index) => ({
       ...room,
       elementId: 1001 + index,
-      guid: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      uniqueId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}-00000042`,
     })),
   };
   const address = new URLSearchParams({ view: JSON.stringify(view) });

@@ -1,10 +1,3 @@
-/**
- * The one browser half of Pea's route-view channel (`routeAddress(route).agent` in agent-contracts).
- * A route mounts `useRouteLease` with its Page, what it shows and what it derives; the keys Pea may
- * set are the address's. The bridge leases the visible view to the host, takes Pea's patch from the
- * event stream, and acknowledges only after the patched Page has rendered. No Page field enters
- * authored Work.
- */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "@tanstack/react-router";
 import {
@@ -12,7 +5,6 @@ import {
   viewRoute,
   type RouteGraphJson,
   routeAddress,
-  type RoutePage,
   type RouteView,
   type RouteViewRoute,
   type ViewCodec,
@@ -21,12 +13,14 @@ import { peClient } from "#/host/pe-client";
 import { reportFault } from "#/host/diagnostics";
 import { followBeat, useHostEvents } from "#/host/resource-stream";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
-import { applyPageIntent, type PageIntent } from "./view-owner";
 import { useRouteCurrent, useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 
 type ReadyViewCodec = ViewCodec & {
   subjectReady?: (patch: Record<string, string>) => Promise<void>;
 };
+type PageIntent =
+  | { ok: true; moved: boolean; receipt: { current(): boolean; rendered(page: object): boolean } }
+  | { ok: false; refusal: Refusal };
 
 /**
  * Whether the host leases this typed route's view (`RouteViewStore.leasesView`), decided the host's
@@ -51,46 +45,6 @@ type Intent = {
   revision: number;
   patch: Record<string, string>;
 };
-
-/**
- * The one lease every route takes: its mounted Page (`useAddressPage`, or a `useRoute` handle's
- * `page`), what it shows (`context`) and what it derives (`facts`). Pea's patch, typed by the
- * address, lands as one pushed move (`routeAddress(route).history`: Pea's patch is a step), and the
- * bridge acknowledges only a patch the Page's owner accepted. With no thread nobody could name the
- * view, so nothing is published.
- */
-export function useRouteLease<R extends RouteViewRoute, P extends object>(
-  route: R,
-  [page, setPage]: readonly [P, (next: Partial<P>, move: { history: "push" }) => void],
-  shown: {
-    /** The thread that addresses this view; omitted, the URL's `?thread` (none in a chat pane). */
-    thread?: string;
-    /** False where the route does not own the address (a chat pane), as `useRoute` takes it. */
-    url?: boolean;
-    /** False while the route shows nothing Pea could address. */
-    visible?: boolean;
-    /** Identity of what is shown; an ack fails if it moves while a command is pending. */
-    context?: Record<string, unknown>;
-    /** What the shown Page derives; Pea reads it, never sets it. */
-    facts?: Record<string, unknown>;
-    /** Writes the leased page and reads Pea's patch; omitted, the legacy address's `agent` lease. */
-    codec?: ReadyViewCodec;
-  } = {},
-) {
-  const url = shown.url ?? true;
-  useRouteViewBridge({
-    route,
-    thread: shown.thread,
-    surface: url ? "route" : "chat",
-    visible: shown.visible ?? true,
-    page: page as Partial<RoutePage<R>>,
-    apply: (patch) =>
-      applyPageIntent(page, () => setPage(patch as Partial<P>, { history: "push" })),
-    context: shown.context ?? {},
-    facts: shown.facts ?? {},
-    codec: shown.codec,
-  });
-}
 
 export function useRouteViewBridge({
   route,

@@ -6,7 +6,7 @@
 // Fixture mode proves linkage only, never J-V3 acceptance.
 import { assertPageBinding } from "../../../../tests/e2e/page-binding.ts";
 import { readFileSync } from "node:fs";
-import { criterionCellLabel } from "@pe/ducts-contract/settings";
+import { criterionCellLabel } from "@pe/ducts-contract/product";
 import { run, type Action, type Rule } from "../../../../tests/e2e/walk.ts";
 import { WEB, type Page } from "../../../../tests/e2e/cdp.ts";
 
@@ -36,12 +36,18 @@ const rows = (page: Page) =>
             e.dataset.sheetCell === label &&
             [...e.querySelectorAll("*")].some((child) => child.getClientRects().length > 0),
         )
-        .map((e) => ({
-          address: e.dataset.sheetAddress ?? null,
-          source: e.dataset.source ?? null,
-          text: e.textContent?.trim() ?? null,
-          value: e.querySelector<HTMLInputElement>("input")?.value ?? null,
-        })),
+        .map((e) => {
+          const control = e.querySelector("[data-cell-owner]");
+          const displayed = Array.from(control?.childNodes ?? []).find(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+          );
+          return {
+            address: e.dataset.sheetAddress ?? null,
+            source: e.dataset.source ?? null,
+            text: e.textContent?.trim() ?? null,
+            value: control?.querySelector("input")?.value ?? displayed?.textContent?.trim() ?? null,
+          };
+        }),
     label,
   );
 const actions: Action[] = [

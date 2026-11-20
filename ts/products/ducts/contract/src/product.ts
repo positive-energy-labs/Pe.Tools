@@ -1,3 +1,4 @@
+import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { z } from "zod";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import { contract } from "@pe/agent-contracts/handle";
@@ -12,8 +13,7 @@ import {
   revitEntity,
   sheetCells,
 } from "@pe/agent-contracts/product";
-import { setting, type Domain } from "@pe/agent-contracts/slots/sheet";
-import { defineSettingOwner } from "@pe/agent-contracts/setting-owners";
+import { settingLayer, type Domain } from "@pe/agent-contracts/slots/sheet";
 import { ductCatalogReadingSchema } from "./duct-catalog.ts";
 import { peaGuide } from "./pea-guide.ts";
 import { DUCTS_REFRESH_HEADER, snapshotReading, tablesReading } from "./reading.ts";
@@ -29,8 +29,6 @@ import { criterionLabel } from "./criterion-words.neutral.ts";
 
 export const ENGINE_DEFAULT_NO_SHARED_ROOT =
   "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
-export const criterionDomain = (cell: DuctsCriteriaCell): Domain =>
-  DUCTS_CRITERIA_CELLS[cell].domain;
 const layerLabel = ([key, side]: (typeof DUCTS_CRITERIA_CELLS)[DuctsCriteriaCell]["layer"]) => {
   return side ? `${criterionLabel(key)} ${side}` : criterionLabel(key);
 };
@@ -76,11 +74,11 @@ const settings = Object.fromEntries([
     0.08,
   ),
 ]);
-const settingsHome = homeFile("ducts", ["project", "firm"], (name) => {
-  const setting = settings[name];
-  if (!setting) throw Error(`Unknown ducts setting cell ${name}`);
-  return setting.path;
-});
+const settingsHome = homeFile(
+  "ducts",
+  ["project", "firm"],
+  Object.fromEntries(Object.entries(settings).map(([name, { path }]) => [name, path])),
+);
 const settingsCells = Object.fromEntries(
   Object.entries(settings).map(([name, { cell }]) => [name, cell]),
 );
@@ -96,8 +94,9 @@ export const lossWrites = {
   terminalFlow: familyParameter("terminalFlow"),
   terminalDrop: familyParameter("terminalDrop"),
 };
-const declaration = define({
+export const product = define({
   id: "ducts",
+  publishTool: false,
   says: "Shared duct model inputs, settings, catalogs and loss records.",
   homes: { settings: settingsHome, ...lossWrites, catalogs: homeFile("Catalogs") },
   cells: settingsCells,
@@ -108,6 +107,7 @@ const declaration = define({
       sources: ["losses", "settings"],
       load: {
         resource: true,
+        basisHeaders: { refresh: DUCTS_REFRESH_HEADER },
         calls: {
           "ducts.snapshot.roster": { canonicalSession: true, reading: "roster" },
           "ducts.snapshot.walk": { canonicalSession: true, reading: "walk" },
@@ -137,33 +137,39 @@ const declaration = define({
   },
   commands: {
     "sheet.plan": { ...sheetCommands["sheet.plan"], writes: {} },
-    "sheet.apply": { ...sheetCommands["sheet.apply"], writes: {} },
-    // The existing platform settings door consumes the owner projection below.
-    "settings.tiers.write": {
-      says: "Save a duct setting at its project or firm tier.",
-      needs: "nothing",
-      effect: "command",
-      input: z.unknown(),
-      dirties: [],
-      native: [],
-      writes: { settings: Object.keys(settingsCells) },
+    "sheet.apply": {
+      ...sheetCommands["sheet.apply"],
+      writes: {
+        losses: [],
+        fittingResults: [],
+        specificCoefficient: [],
+        specificLoss: [],
+        requiredEsp: [],
+        fanFlow: [],
+        terminalFlow: [],
+        terminalDrop: [],
+      } satisfies Record<keyof typeof lossWrites, readonly []>,
     },
   },
   guide: peaGuide,
 });
-const { "settings.tiers.write": _settingsWrite, ...actions } = declaration.commands;
 
+type SettingsRead = { settings?: Record<string, readonly SettingTierRead[]> } | null;
 export const ductsSettings = Object.fromEntries(
-  Object.entries(sheetCells(declaration)).flatMap(([name, { home, ...draw }]) =>
-    home.at === "setting"
-      ? [[name, setting(home.owner, home.path, draw.domain, home.tiers, draw)]]
-      : [],
-  ),
+  Object.entries(sheetCells(product)).flatMap(([name, binding]) => {
+    const { home } = binding;
+    return home.at === "setting"
+      ? [
+          [
+            name,
+            {
+              ...binding,
+              home,
+              per: "route" as const,
+              model: (read: SettingsRead) => settingLayer(binding, read?.settings?.[home.owner]),
+            },
+          ],
+        ]
+      : [];
+  }),
 );
-export const product = {
-  ...declaration,
-  actions,
-  tools: {},
-  settingOwners: { ducts: defineSettingOwner(ductsSettings) },
-  basisHeaders: { refresh: DUCTS_REFRESH_HEADER },
-};

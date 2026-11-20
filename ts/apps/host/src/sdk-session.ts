@@ -35,12 +35,6 @@ const refuse = (message: string, result?: unknown) => Effect.fail(refusal(messag
 type ResolutionCache = Map<string, { resolved: Resolved; sessionId: string }>;
 type SdkDriver = (args: readonly string[]) => Effect.Effect<string, unknown>;
 export const SdkDriver = Context.Service<SdkDriver>("SdkDriver");
-export const SdkCacheLimits = Context.Reference<{ entries: number; bytes: number }>(
-  "SdkCacheLimits",
-  {
-    defaultValue: () => ({ entries: 64, bytes: 1024 * 1024 }),
-  },
-);
 
 export function readSessionScope(headers: Record<string, string | undefined>): HostSessionScope {
   const raw = headers[HOST_RPC_SDK_SESSION_HEADER];
@@ -306,7 +300,7 @@ const SdkSessionLayer = Layer.effect(
   Effect.gen(function* () {
     const bridge = yield* RevitBridge;
     const driver = yield* SdkDriver;
-    const limits = yield* SdkCacheLimits;
+    const limits = { entries: 64, bytes: 1024 * 1024 };
     if (Object.values(limits).some((value) => !Number.isSafeInteger(value) || value < 1))
       return yield* Effect.die(new Error("SDK cache bounds must be positive safe integers"));
     const cache: ResolutionCache = new Map();

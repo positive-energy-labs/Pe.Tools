@@ -18,7 +18,8 @@ namespace Pe.Shared.Tests.RevitData;
 /// </summary>
 [TestFixture]
 public sealed class OwnerBlobTests {
-    private static readonly OwnerDescriptor Owner = new("test-owner", 3, new Guid("00000000-0000-0000-0000-0000000000a1"), "_PE_Test", "test");
+    // The envelope tests deliberately use arbitrary owner data.
+    private static readonly OwnerDescriptor Owner = new("test-owner", 3, new Guid("00000000-0000-0000-0000-0000000000a1"), "_PE_Test", "test", static _ => null);
 
     private static string Stored(string data, int version = 3, string owner = "test-owner") =>
         $$"""{"owner":"{{owner}}","version":{{version}},"data":{{data}}}""";
@@ -181,7 +182,7 @@ public sealed class OwnerBlobTests {
         yield return Case(ParameterLinkProfile.Owner, ParameterLinkProfile.Read, """{"definitions":[]}""");
         yield return Case(ProjectHomePointer.Owner, ProjectHomePointer.Read, """{"path":"C:/Projects"}""");
         yield return Case(SystemRegistry.Owner, SystemRegistry.Read, """{"systems":[{"guid":"not-a-guid","tag":"FC-1"}]}""");
-        yield return Case(RegionProvenance.Owner, RegionProvenance.Read, """{"zoneGuid":"not-a-guid"}""");
+        yield return Case(RoomsRegionRecord.Owner, RoomsRegionRecord.Decode, """{"regions":[]}""");
         yield return Case(Pe.Revit.Partition.EnclosureDeclaration.Owner, Pe.Revit.Partition.EnclosureDeclaration.Parse, """{"solidSources":["Host"]}""");
         // AutoTag's data names Revit categories, so parsing it needs RevitAPI; the envelope refusals do not.
         yield return Case(Pe.Revit.SettingsRuntime.Modules.AutoTag.AutoTagSettings.Owner,
@@ -205,9 +206,8 @@ public sealed class OwnerBlobTests {
             }
             if (unparseableData is null) return;
             var enveloped = OwnerBlob.Decode(owner, $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{{{unparseableData}}}}""");
-            var validatesData = owner.ValidateData is not null;
-            Assert.That(enveloped.Status, Is.EqualTo(validatesData ? OwnerBlobStatus.Invalid : OwnerBlobStatus.Ok));
-            Assert.That(enveloped.Replacement is not null, Is.EqualTo(validatesData));
+            Assert.That(enveloped.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
+            Assert.That(enveloped.Replacement, Is.Not.Null);
             (bool HasValue, string? Refusal) parsed = default;
             Assert.That(() => parsed = read(enveloped), Throws.Nothing);
             Assert.That(parsed.HasValue, Is.False);
@@ -226,55 +226,6 @@ public sealed class OwnerBlobTests {
             Assert.That(ProjectHomePointer.Read(OwnerBlob.Decode(ProjectHomePointer.Owner, old)), Is.EqualTo(new OwnerValue<ProjectHomePointer>(null, null)));
             Assert.That(DuctLossResult.Decode("""[{"VelocityPressureInWg":0.5,"Coefficient":1.25}]"""), Is.Null, "an old bare list prices nothing until losses are reapplied");
         });
-    }
-
-    [TestCase(null)]
-    [TestCase("""{"version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26","runId":"run-1"}""", Description = "an old un-enveloped region blob")]
-    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""", Description = "an old un-enveloped zone blob: no envelope, so its v is never read")]
-    public void A_region_with_no_envelope_reads_as_the_drawn_default_not_a_refusal(string? stored) {
-        var read = RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, stored));
-
-        Assert.Multiple(() => {
-            Assert.That(read.Refusal, Is.Null);
-            Assert.That(read.Value!.RunId, Is.EqualTo(Rooms.RunDrawn));
-            Assert.That(read.Value.ZoneGuid, Is.EqualTo(Guid.Empty));
-            Assert.That(() => read.OrThrow(), Throws.Nothing, "a write run goes on too");
-        });
-    }
-
-    [Test]
-    public void A_region_blob_holds_no_version_of_its_own() {
-        var provenance = new RegionProvenance(Guid.NewGuid(), "run-1", "R01", 100);
-        var stored = OwnerBlob.Encode(RegionProvenance.Owner, JObject.Parse(provenance.ToJson()));
-
-        Assert.That(stored, Does.StartWith("""{"owner":"takeoff-region","version":1,"data":{"zoneGuid":"""));
-        Assert.That(JObject.Parse(provenance.ToJson()).Properties().Select(property => property.Name), Has.None.EqualTo("version").IgnoreCase);
-        Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, stored)).Value!.ZoneGuid, Is.EqualTo(provenance.ZoneGuid));
-        var withVersion = """{"owner":"takeoff-region","version":1,"data":{"version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26"}}""";
-        Assert.That(RegionProvenance.Read(OwnerBlob.Decode(RegionProvenance.Owner, withVersion)).Refusal, Does.Contain("belongs to the envelope"));
-    }
-
-    [TestCase("""{"version":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""")]
-    [TestCase("""{"v":1,"view":"L1","name":"Zone","systemTag":"FC-8"}""")]
-    [TestCase("""{"Version":1,"zoneGuid":"6d52156a-3876-4d76-b641-341454252f26","runId":"run-1"}""")]
-    public void A_blob_with_a_version_inside_its_data_is_refused_as_a_region_and_as_a_zone(string data) {
-        var blob = OwnerBlob.Decode(RegionProvenance.Owner, $$$"""{"owner":"takeoff-region","version":1,"data":{{{data}}}}""");
-
-        Assert.That(blob.Status, Is.EqualTo(OwnerBlobStatus.Ok));
-        Assert.That(RegionProvenance.Read(blob).Refusal, Does.Contain("belongs to the envelope"));
-        Assert.That(RegionProvenance.ReadZone(blob).Refusal, Does.Contain("belongs to the envelope"));
-        Assert.That(RegionProvenance.ReadZone(blob).Value, Is.Null);
-    }
-
-    [Test]
-    public void An_adopted_zone_reads_as_drawn_and_keeps_its_keys() {
-        var blob = OwnerBlob.Decode(RegionProvenance.Owner,
-            """{"owner":"takeoff-region","version":1,"data":{"view":"L1","name":"Zone","systemTag":"FC-8"}}""");
-        var zone = RegionProvenance.ReadZone(blob).Value!;
-
-        Assert.That(zone.RunId, Is.EqualTo(Rooms.RunDrawn));
-        Assert.That(zone.Unknown.Keys, Is.EquivalentTo(new[] { "view", "name", "systemTag" }));
-        Assert.That(RegionProvenance.ReadZone(OwnerBlob.Decode(RegionProvenance.Owner, null)).Value!.RunId, Is.EqualTo(Rooms.RunDrawn));
     }
 
     private static readonly JObject NewData = new() { ["a"] = 1 };
@@ -368,7 +319,7 @@ public sealed class OwnerBlobTests {
     public void A_matching_seal_cannot_recover_a_readable_record() {
         var raw = OwnerBlob.Encode(Owner, NewData);
         var stored = OwnerBlob.Decode(Owner, raw);
-        var evidence = stored.DataRefused("caller claims the data is unreadable");
+        var evidence = OwnerBlob.Decode(Owner with { Version = Owner.Version + 1 }, raw).Replacement!;
         Assert.That(() => OwnerBlob.Replace(stored, new JObject { ["a"] = 2 },
                 (_, _) => Assert.Fail("a readable record must not be backed up or noticed"), evidence),
             Throws.InvalidOperationException.With.Message.Contains("is readable"));
@@ -393,6 +344,17 @@ public sealed class OwnerBlobTests {
     public void The_duct_results_entity_prices_nothing_from_text_it_cannot_read(string? text) =>
         Assert.That(DuctLossResult.Decode(text), Is.Null);
 
+    [TestCase("""{"results":[null]}""")]
+    [TestCase("""{"results":[{"velocityPressureInWg":0.5}]}""")]
+    [TestCase("""{"results":[{"velocityPressureInWg":"x","coefficient":1.25}]}""")]
+    public void The_duct_results_descriptor_seals_unparseable_owner_data(string data) {
+        var raw = $$"""{"owner":"duct-loss-results","version":1,"data":{{data}}}""";
+        var read = OwnerBlob.Decode(DuctLossResult.Owner, raw);
+        Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
+        Assert.That(read.Replacement, Is.Not.Null);
+        Assert.That(read.Raw, Is.EqualTo(raw));
+    }
+
     [Test]
     public void The_system_registry_stores_the_envelope_with_no_inner_version() {
         var registry = new SystemRegistry();
@@ -403,10 +365,17 @@ public sealed class OwnerBlobTests {
     }
 
     [Test]
+    public void The_owner_constructor_requires_a_validator() {
+        Assert.That(typeof(OwnerDescriptor).GetConstructors().All(ctor => ctor.GetParameters().Any(parameter =>
+            parameter.ParameterType == typeof(Func<OwnerBlobRead, string>) && !parameter.IsOptional)), Is.True);
+        Assert.Throws<ArgumentNullException>(() => new OwnerDescriptor("test", 1, Guid.Empty, "_PE_Test", "test", null!));
+    }
+
+    [Test]
     public void Every_owner_has_its_own_name_parameter_and_guid() {
         OwnerDescriptor[] owners = [
             ProjectHomePointer.Owner, DuctLossStore.Owner, DuctLossResult.Owner, ParameterLinkProfile.Owner, SystemRegistry.Owner,
-            RegionProvenance.Owner, Pe.Revit.Partition.EnclosureDeclaration.Owner, Pe.Revit.SettingsRuntime.Modules.AutoTag.AutoTagSettings.Owner
+            RoomsRegionRecord.Owner, Pe.Revit.Partition.EnclosureDeclaration.Owner, Pe.Revit.SettingsRuntime.Modules.AutoTag.AutoTagSettings.Owner
         ];
 
         Assert.Multiple(() => {
@@ -414,6 +383,7 @@ public sealed class OwnerBlobTests {
             Assert.That(owners.Select(o => o.Guid), Is.Unique);
             Assert.That(owners.Select(o => o.Name), Is.Unique);
             Assert.That(owners.Select(o => o.Version), Is.All.GreaterThan(0));
+            Assert.That(owners.Select(o => o.ValidateData), Is.All.Not.Null);
         });
     }
 }

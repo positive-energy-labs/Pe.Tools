@@ -9,7 +9,7 @@ import { makeAtomRegistry } from "../../../shell/owner.ts";
 import { SheetPane } from "../../../route/slots/sheet/pane.tsx";
 import { sheetCells } from "../../../route/slots/sheet/index.ts";
 import { NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
-import { ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/settings";
+import { ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/product";
 import { fansCalc } from "../../../../../../products/fans/web/src/calc.ts";
 
 /*
@@ -144,8 +144,8 @@ test("ADR 0053: a receipt that disagrees with the live parameter is the cell's d
       fansCalc.bindings[binding] as unknown as { model: (read: object, row: string) => object }
     ).model(read(store), elementSubject(terminal));
   const store = {
-    terminalFlows: { "9": { cfm: 150, parameter: "PE_Flow" } },
-    terminals: { "9": { inWg: 0.5 } },
+    terminalFlows: { [terminal.uniqueId]: { cfm: 150, parameter: "PE_Flow" } },
+    terminals: { [terminal.uniqueId]: { inWg: 0.5 } },
   };
   expect(model("flows", store)).toMatchObject({
     value: 200,

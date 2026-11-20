@@ -40,10 +40,10 @@ export async function writeRouteWork(
   );
 }
 
-export type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
+type RouteWriteResponse = { status: number; result: RouteStateWriteResult | null };
 type WorkInput = { params: { route: string }; query: Record<string, string> };
 
-export async function postRouteWrite(input: WorkInput, body: unknown): Promise<RouteWriteResponse> {
+async function postRouteWrite(input: WorkInput, body: unknown): Promise<RouteWriteResponse> {
   const response = await peClient.response("work.apply", {
     ...input,
     body: peRoutes["work.apply"].body.parse(body),

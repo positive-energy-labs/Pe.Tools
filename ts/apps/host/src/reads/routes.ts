@@ -66,7 +66,7 @@ export function projectRouteRead(module: Pick<HostRouteModule, "data" | "schemas
     ),
   };
 }
-export const routeDeclarationRead = (module: Pick<HostRouteModule, "data" | "schemas">) =>
+const routeDeclarationRead = (module: Pick<HostRouteModule, "data" | "schemas">) =>
   read(`route:${module.data.key}`, {
     input: z.strictObject({}),
     output: z.unknown(),

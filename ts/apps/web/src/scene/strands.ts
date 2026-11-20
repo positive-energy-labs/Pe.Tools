@@ -23,7 +23,7 @@ export type Strand = { key: SubjectKey; path: readonly SubjectKey[]; heavy?: boo
 /** One element of a strand, its points oriented in flow order. */
 export type Link = { element: SubjectKey; points: readonly Point[]; reversed: boolean };
 /** A drawn piece of a strand: one element's, with its lane offset (px) at each end. */
-export type Segment = {
+type Segment = {
   from: Point;
   to: Point;
   element: SubjectKey;
@@ -159,11 +159,7 @@ const end = new THREE.Vector3();
 /** Picks against the drawn lanes, not the shared centreline: strands bundled on one element all
  * meet the ray at one depth, so the nearer lane on screen breaks the tie (1e-4 of depth per px).
  * ponytail: no near-plane trim; a segment crossing the camera plane is not pickable. */
-export function laneRaycast(
-  this: LineSegments2,
-  raycaster: THREE.Raycaster,
-  hits: THREE.Intersection[],
-) {
+function laneRaycast(this: LineSegments2, raycaster: THREE.Raycaster, hits: THREE.Intersection[]) {
   const camera = raycaster.camera;
   if (!camera) return;
   const { resolution, linewidth } = this.material;

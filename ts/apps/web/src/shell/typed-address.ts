@@ -1,4 +1,4 @@
-export type AddressHistory = "push" | "replace";
+type AddressHistory = "push" | "replace";
 
 /** Application/router adapter. Search values are codec text, never router-decoded JSON. */
 export interface AdmittedAddressPort {

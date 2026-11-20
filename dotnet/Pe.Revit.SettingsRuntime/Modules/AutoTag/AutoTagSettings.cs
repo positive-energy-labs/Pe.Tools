@@ -6,7 +6,8 @@ namespace Pe.Revit.SettingsRuntime.Modules.AutoTag;
 public class AutoTagSettings {
     /// <summary>The model's stored settings: one owner blob on Project Information.</summary>
     public static readonly Pe.Shared.RevitData.Serialization.OwnerDescriptor Owner = new("autotag", 1,
-        new Guid("a89b3d96-72ad-4972-a532-81676635755b"), "_PE_AutoTag", "Pe.Tools AutoTag settings (JSON).") { ValidateData = read => Read(read).Refusal };
+        new Guid("a89b3d96-72ad-4972-a532-81676635755b"), "_PE_AutoTag", "Pe.Tools AutoTag settings (JSON).",
+        static read => Read(read).Refusal);
 
     public Newtonsoft.Json.Linq.JObject ToData() => Newtonsoft.Json.Linq.JObject.FromObject(this, StoredSerializer());
 

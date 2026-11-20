@@ -43,7 +43,6 @@
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
-    "effect": "catalog:",
     "zod": "4.3.6"
   },
   "devDependencies": {

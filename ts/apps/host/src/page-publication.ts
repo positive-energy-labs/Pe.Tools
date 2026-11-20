@@ -336,7 +336,7 @@ export type PagesSource = PagesRoots | (() => PagesRoots);
  * (user) home. A slug two homes hold is refused with both paths: publishing would make a third
  * claim, and no listing admits a twin (ADR 0037 rule 4).
  */
-export async function pageHomeRoot(source: PagesSource, slug: string): Promise<string> {
+async function pageHomeRoot(source: PagesSource, slug: string): Promise<string> {
   const roots = typeof source === "function" ? source() : source;
   const found = await scratchPageDirectory(slug, roots);
   if (!found)

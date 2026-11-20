@@ -483,7 +483,7 @@ export async function installArchive(
 }
 
 /** Where a pod's import record rests: `state\pod-imports\<pod-id>.json`. */
-export const importRecordKind = stateKind({
+const importRecordKind = stateKind({
   schema: z.object({ archiveSha256: z.string().regex(/^[a-f0-9]{64}$/) }),
   place: (id: string) => `Import record for ${id}`,
   segments: (id: string) => ["pod-imports", `${id}.json`],

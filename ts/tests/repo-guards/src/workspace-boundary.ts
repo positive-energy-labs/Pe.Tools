@@ -19,7 +19,7 @@ export function workspaceFiles(root: string, dir: string) {
   return visit(dir);
 }
 
-export function workspaceNames(root: string, dir: string) {
+function workspaceNames(root: string, dir: string) {
   return new Set(
     readdirSync(join(root, dir), { withFileTypes: true })
       .filter((entry) => entry.isDirectory())

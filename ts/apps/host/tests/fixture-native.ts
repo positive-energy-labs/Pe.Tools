@@ -2,6 +2,8 @@ import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Exit, Fiber, Layer, Queue, Scope } from "effect";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
+import type { HostOpResponse } from "@pe/host-contracts/operation-types";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { createFixtureHost } from "../../../packages/host-contracts/src/fixture-host.ts";
@@ -31,6 +33,11 @@ const fetchRecorded = globalThis.fetch;
 /** Socket adaptation only: all native replies and checks belong to the one fixture transport. */
 export async function fixtureNative(directory: string, ...recordings: string[]) {
   let selected = nativeRecordings(...recordings);
+  let linkCapacityRefusal: string | undefined;
+  let replacementEvidence: HostOpResponse<"takeoffs.record-replacements"> = {
+    regions: null,
+    registry: null,
+  };
   const makeTransport = () =>
     createFixtureHost(hostOpCatalog, selected.responses, {
       sources: selected.sources,
@@ -96,6 +103,12 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
     bridge,
     journal,
     calls,
+    reportLinkCapacityRefusal(reason: string) {
+      linkCapacityRefusal = reason;
+    },
+    reportTakeoffReplacements(evidence: HostOpResponse<"takeoffs.record-replacements">) {
+      replacementEvidence = evidence;
+    },
     /** SDK `op result` reads, the only native evidence recovery asks for. */
     get opResultReads() {
       return opResultReads;
@@ -282,7 +295,9 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
               if (frame.kind !== "Request") continue;
               const req = frame.request!;
               const input: unknown = JSON.parse(req.payloadJson);
-              calls.push({ key: req.operationKey, input, action: req.derivedCommand });
+              const takeoffReplacementRead = req.operationKey === "takeoffs.record-replacements";
+              if (!takeoffReplacementRead)
+                calls.push({ key: req.operationKey, input, action: req.derivedCommand });
               yield* Effect.promise(() => beforeReply(req.operationKey));
               let response: object;
               try {
@@ -297,7 +312,17 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
                 if (owners.length > 1)
                   throw Error("Fixture cannot attribute this native read to one admitted action");
                 const action = req.derivedCommand ?? owners[0] ?? `native:${req.operationKey}`;
-                const value = transport.reply(action, req.operationKey, input);
+                // This read models fixture state rather than a replay of a native mutation.
+                const linkCapacity = req.operationKey === "takeoffs.rhvac-links.preflight";
+                if (linkCapacity) {
+                  transport.admit(action, req.operationKey, input);
+                  if (linkCapacityRefusal) throw Error(linkCapacityRefusal);
+                }
+                const value = takeoffReplacementRead
+                  ? nativeResponseSchema("takeoffs.record-replacements").parse(replacementEvidence)
+                  : linkCapacity
+                    ? { writes: [] }
+                    : transport.reply(action, req.operationKey, input);
                 if (loseReply === req.operationKey || refuseDeliveredReply === req.operationKey) {
                   // Drop a validated recorded answer only after production persisted delivery evidence.
                   yield* Effect.promise(async () => {

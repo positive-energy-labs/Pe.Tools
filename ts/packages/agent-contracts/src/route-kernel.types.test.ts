@@ -470,7 +470,7 @@ export function geometryRebind(
     reach,
   };
   // @ts-expect-error a generic read plus a request lacks resolver-issued geometry authority
-  return geometry.acquire(Object.assign({}, read, { request }), token);
+  geometry.acquire(Object.assign({}, read, { request }), token);
 }
 
 /** Geometry descriptors have one acquisition door, with geometry authority checks. */

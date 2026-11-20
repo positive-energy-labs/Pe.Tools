@@ -40,7 +40,7 @@ const viewportSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),
 });
-export const keeperConfigSchema = z.object({
+const keeperConfigSchema = z.object({
   id: z.uuid(),
   token: z.string().min(1),
   home: directorySchema,
@@ -69,7 +69,7 @@ export const keeperConfigSchema = z.object({
     .optional(),
 });
 export const decodeKeeperConfig = (value: unknown): KeeperConfig => keeperConfigSchema.parse(value);
-export const guardianConfigSchema = z
+const guardianConfigSchema = z
   .object({
     storage: directorySchema,
     endpoint: z.string().min(1),

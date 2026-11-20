@@ -16,29 +16,6 @@ export interface PageSnapshot<P> {
   readonly history?: PageMove<P>["history"];
 }
 
-type IntentReceipt = {
-  readonly current: () => boolean;
-  readonly rendered: (page: object) => boolean;
-};
-/**
- * One Pea intent's outcome. `moved`: the owner committed one coupled move. Not moved: the patch made
- * no move, and the receipt holds only while the Page is still the unchanged snapshot it was applied
- * to (the bridge acknowledges it only if that page already holds the patch). Refused: the owner's
- * own refusal, whole; nothing was committed.
- */
-export type PageIntent =
-  | { readonly ok: true; readonly moved: boolean; readonly receipt: IntentReceipt }
-  | { readonly ok: false; readonly refusal: Refusal };
-type IntentOwner = { apply: (page: object, apply: () => void) => PageIntent };
-const pageOwners = new WeakMap<object, IntentOwner>();
-
-/** A bridge must obtain an accepted owner receipt before it can acknowledge a rendered patch. */
-export const applyPageIntent = (page: object, apply: () => void): PageIntent =>
-  pageOwners.get(page)?.apply(page, apply) ?? {
-    ok: false,
-    refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),
-  };
-
 /** One writable Page, mounted in the route's existing registry. React only subscribes. */
 export function createViewOwner<P>(
   owner: Pick<ReturnType<typeof createRouteOwner>, "registry" | "owned" | "failure" | "write">,
@@ -53,22 +30,9 @@ export function createViewOwner<P>(
   );
   const read = () => owner.registry.get(state);
   let disposed = false;
-  let intent: {
-    refusal: Refusal | null;
-    attempted: boolean;
-    edit: PageSnapshot<P> | null;
-  } | null = null;
   const reject = (refusal: Refusal) => {
-    if (intent) intent.refusal = refusal;
     if (!disposed) owner.registry.set(owner.failure, refusal);
     return refusal;
-  };
-  const remember = (page: P) => {
-    if (page !== null && typeof page === "object") pageOwners.set(page, bridge);
-  };
-  const commit = (after: PageSnapshot<P>) => {
-    remember(after.page);
-    owner.write(after.origin, "page", () => owner.registry.set(state, after));
   };
   const move = (
     next: Partial<P>,
@@ -77,11 +41,6 @@ export function createViewOwner<P>(
     snapshot?: PageSnapshot<P>,
   ): Refusal | null => {
     if (disposed) return reject(refuse("not-ready", "This Page is no longer mounted"));
-    if (intent) {
-      if (intent.attempted)
-        return reject(refuse("not-ready", "A Pea intent must use one coupled Page transition"));
-      intent.attempted = true;
-    }
     const before = read();
     // History tagging and URL normalization can restore the current Page verbatim.
     if (
@@ -100,7 +59,7 @@ export function createViewOwner<P>(
       )
         return null;
     }
-    const source = intent ? "pea" : origin;
+    const source = origin;
     let patch = next;
     try {
       const normalized = rules.transition?.(before.page, next, source) ?? { patch: next };
@@ -141,66 +100,9 @@ export function createViewOwner<P>(
       origin: source,
       history: options.history,
     };
-    if (intent) intent.edit = after;
-    else commit(after);
+    owner.write(after.origin, "page", () => owner.registry.set(state, after));
     return null;
   };
-  const bridge: IntentOwner = {
-    apply(page, apply) {
-      if (intent)
-        return {
-          ok: false,
-          refusal: reject(refuse("not-ready", "A Pea intent cannot contain another intent")),
-        };
-      if (disposed)
-        return {
-          ok: false,
-          refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),
-        };
-      const before = read();
-      if (before.page !== page)
-        return {
-          ok: false,
-          refusal: refuse("not-ready", "This Page is no longer the one Pea leased"),
-        };
-      const attempt = {
-        refusal: null as Refusal | null,
-        attempted: false,
-        edit: null as PageSnapshot<P> | null,
-      };
-      intent = attempt;
-      try {
-        apply();
-      } catch (cause) {
-        reject(causeRefusal(cause));
-      } finally {
-        intent = null;
-      }
-      if (attempt.refusal) return { ok: false, refusal: attempt.refusal };
-      if (disposed)
-        return { ok: false, refusal: refuse("not-ready", "This Page is no longer mounted") };
-      if (!attempt.edit)
-        return {
-          ok: true,
-          moved: false,
-          receipt: {
-            current: () => !disposed && read() === before,
-            rendered: (value) => value === before.page,
-          },
-        };
-      const accepted = attempt.edit;
-      commit(accepted);
-      return {
-        ok: true,
-        moved: true,
-        receipt: {
-          current: () => !disposed && read() === accepted,
-          rendered: (value) => value === accepted.page,
-        },
-      };
-    },
-  };
-  remember(initialPage);
   return {
     state,
     read,

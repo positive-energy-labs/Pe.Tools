@@ -81,7 +81,7 @@ export const reads = {
           snapshot: (
             await ctx.read(native("takeoffs.snapshot"), {
               target,
-              request: { views: zones.length ? [] : views, zoneGuids: zones },
+              request: { views: zones.length ? [] : views, zoneUniqueIds: zones },
             })
           ).body,
         });
@@ -100,21 +100,31 @@ export const reads = {
           )
         )
           .flatMap((value) => value.body.regions)
-          .map((region) => ({ ...region, role: region.role ?? null, guid: region.guid ?? null }));
+          .map(({ uniqueId, ...region }) => ({
+            ...region,
+            role: region.role ?? null,
+            guid: uniqueId,
+          }));
     const rows = adoptDrafts(
       candidateRegionSchema.array().parse(candidates),
       stagedAdoptChoices(doc),
     );
-    const grouped = new Map<string, { elementId: number; name: string; systemTag: string }[]>();
-    for (const row of rows.filter((row) => row.checked))
+    const grouped = new Map<
+      string,
+      { elementId: number; uniqueId: string; name: string; systemTag: string }[]
+    >();
+    for (const row of rows) {
+      if (!row.checked || !row.region.guid) continue;
       grouped.set(row.view, [
         ...(grouped.get(row.view) ?? []),
         {
           elementId: row.region.elementId,
+          uniqueId: row.region.guid,
           name: row.name || `${row.view} · ${row.region.elementId}`,
           systemTag: row.systemTag,
         },
       ]);
+    }
     const refusal = !work
       ? "Start the takeoff Work first"
       : saved

@@ -30,7 +30,7 @@ export const unassigned = (region: Pick<RoomsRegion, "role" | "zone">) =>
   region.role === "room" && region.zone == null;
 
 /** A region's label: its name, else `R{n}` by its place in the roster's order. */
-export const regionLabel = (region: RoomsRegion, index: number) => region.name || `R${index + 1}`;
+const regionLabel = (region: RoomsRegion, index: number) => region.name || `R${index + 1}`;
 
 /** Levels low to high, as the roster ranks them. */
 export const levelOrder = (levels: readonly { name: string; elevation: number }[]) =>
@@ -48,7 +48,7 @@ export function roomRows(regions: readonly RoomsRegion[], levels: readonly strin
   const zones = regions
     .filter((region) => region.role === "zone")
     .sort((a, b) => b.sqft - a.sqft)
-    .map((zone) => zone.guid);
+    .map((zone) => zone.uniqueId);
   const zoneAt = (guid: string | null | undefined) => {
     const at = guid == null ? -1 : zones.indexOf(guid);
     return at < 0 ? zones.length : at;

@@ -42,7 +42,7 @@ const observedProcess: ObservedActive = {
   },
   year: 2025,
 };
-export const sdkResolved: Resolved = {
+const sdkResolved: Resolved = {
   payload: hostOwnership.lane === "dev" ? "checkout" : "installed",
   sourceRoot: hostOwnership.sourceRoot,
   installedRoot: null,
