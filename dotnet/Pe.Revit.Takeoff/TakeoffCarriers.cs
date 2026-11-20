@@ -1,7 +1,6 @@
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Pe.Revit.Parameters;
-using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Revit.Takeoff;
@@ -72,6 +71,8 @@ public sealed class RoomsRegionRecord
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020"), "_PE_RoomsRegions",
         "Pe Rooms roles, fields and provenance keyed by FilledRegion UniqueId.");
 
+    internal string TraceId { get; private init; } = Guid.NewGuid().ToString("N");
+
     internal Dictionary<string, RegionRow> Regions { get; } = new(StringComparer.Ordinal);
 
     internal RegionRow? this[string uniqueId] => this.Regions.GetValueOrDefault(uniqueId);
@@ -83,12 +84,15 @@ public sealed class RoomsRegionRecord
     {
         if (data["regions"] is not JObject regions)
             throw new InvalidOperationException("Rooms data needs a regions map");
-        var result = new RoomsRegionRecord();
+        var traceId = data["traceId"] is JValue { Type: JTokenType.String } value ? (string?)value : null;
+        if (!Guid.TryParseExact(traceId, "N", out var id) || id == Guid.Empty)
+            throw new InvalidOperationException("Rooms data needs a stable trace id");
+        var result = new RoomsRegionRecord { TraceId = traceId! };
         foreach (var property in regions.Properties())
         {
             var row = property.Value.ToObject<RegionRow>();
             if (row?.Role is not (TakeoffCarriers.RoleZoningRegion or TakeoffCarriers.RoleRoomRegion or TakeoffCarriers.RoleHeldResidue)
-                || string.IsNullOrEmpty(row.Provenance.RunId) || row.Provenance.Flags is null)
+                || string.IsNullOrWhiteSpace(row.Provenance.RunId) || row.Provenance.Flags is null)
                 throw new InvalidOperationException($"Invalid Rooms row '{property.Name}'");
             result.Regions.Add(property.Name, row);
         }
@@ -98,29 +102,55 @@ public sealed class RoomsRegionRecord
     internal static RoomsRegionRecord Stage(Document document)
     {
         var stored = OwnerBlobStore.Read(document, Owner);
-        // The document store owns recovery of envelope refusals on apply.
-        return (stored.MayOverwrite ? Decode(stored).OrThrow() : null) ?? new RoomsRegionRecord();
+        var record = (stored.MayOverwrite ? Decode(stored).OrThrow() : null) ?? new RoomsRegionRecord();
+        record.Prune(id => document.GetElement(id) is FilledRegion);
+        return record;
     }
 
-    internal JObject ToData() => TakeoffJson.Object(new { this.Regions });
-
-    internal void Save(Document document)
+    internal void Prune(Func<string, bool> isFilledRegion)
     {
+        foreach (var id in this.Regions.Keys.Where(id => !isFilledRegion(id)).ToList())
+            this.Regions.Remove(id);
+    }
+
+    internal JObject ToData() => TakeoffJson.Object(new { this.TraceId, this.Regions });
+
+    private static void Validate(JObject data)
+    {
+        var encoded = OwnerBlob.Encode(Owner, data);
+        _ = Decode(OwnerBlob.Decode(Owner, encoded)).OrThrow();
+    }
+
+    internal T BeforeMutation<T>(Func<T> begin)
+    {
+        Validate(this.ToData());
+        return begin();
+    }
+
+    internal void Save(Document document, string? traceRoot = null)
+    {
+        this.Prune(id => document.GetElement(id) is FilledRegion);
+        var originals = new List<string>();
         foreach (var (id, row) in this.Regions.Where(pair => pair.Value.Provenance.Partition != null).ToList())
         {
             var provenance = row.Provenance;
-            var digest = RoomsRunTraces.KeepOriginal(RoomsRunTraces.Root, document.GetDocumentKey(), provenance.Partition!);
+            var json = TakeoffJson.Serialize(provenance.Partition!);
+            originals.Add(json);
             var hash = provenance.GeometryHash ?? Rooms.GeometryHash(TakeoffAtlas.Boundaries((FilledRegion)document.GetElement(id)));
             this.Regions[id] = row with { Provenance = provenance with
             {
-                Partition = null, OriginalTrace = digest, GeometryHash = hash,
+                Partition = null, OriginalTrace = RoomsRunTraces.Hash(json), GeometryHash = hash,
             } };
         }
-        _ = OwnerBlobStore.Write(document, Owner, this.ToData());
+        var data = this.ToData();
+        Validate(data);
+        foreach (var json in originals)
+            RoomsRunTraces.KeepOriginal(traceRoot ?? RoomsRunTraces.Root, this.TraceId, json);
+        _ = OwnerBlobStore.Write(document, Owner, data);
     }
 
-    internal static RegionProvenance ProjectOriginal(Document document, RegionProvenance provenance) =>
+    internal RegionProvenance ProjectOriginal(RegionProvenance provenance, string? traceRoot = null) =>
         provenance.OriginalTrace is { } digest
-            ? provenance with { Partition = RoomsRunTraces.ReadOriginal(RoomsRunTraces.Root, document.GetDocumentKey(), digest) }
+            ? provenance with { Partition = RoomsRunTraces.ReadOriginal(traceRoot ?? RoomsRunTraces.Root, this.TraceId, digest) }
             : provenance;
 }

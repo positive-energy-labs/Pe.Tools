@@ -47,8 +47,8 @@ public class RoomsRunTracesTests
         {
             var original = new Pe.Revit.Partition.Room(4, Pe.Revit.Partition.Disposition.Held, "no-floor",
                 [0, 0, 10.123456789, 0, 0, 10, 0, 0], 50, 2, 2, 1, null, null, []);
-            var digest = RoomsRunTraces.KeepOriginal(root, "document-a", original);
-            Assert.That(RoomsRunTraces.KeepOriginal(root, "document-a", original), Is.EqualTo(digest));
+            var digest = RoomsRunTraces.KeepOriginal(root, "document-a", TakeoffJson.Serialize(original));
+            Assert.That(RoomsRunTraces.KeepOriginal(root, "document-a", TakeoffJson.Serialize(original)), Is.EqualTo(digest));
             Assert.That(Directory.GetFiles(root, "*.json", SearchOption.AllDirectories), Has.Length.EqualTo(1));
             Assert.That(RoomsRunTraces.ReadOriginal(root, "document-b", digest), Is.Null);
             var readback = RoomsRunTraces.ReadOriginal(root, "document-a", digest);
@@ -60,12 +60,13 @@ public class RoomsRunTracesTests
     [Test]
     public void A_committed_reference_recovers_failed_promotion_and_repeated_reads()
     {
-        const string doc = "project:a", view = "view-a", zone = "zone-00000042";
+        const string view = "view-a", zone = "zone-00000042";
         const string runId = "thread:delegated-task:command%3Amcp%3Afoo";
         var root = Directory.CreateTempSubdirectory("pe-rooms-runs-").FullName;
         try
         {
             var record = new RoomsRegionRecord();
+            var doc = record.TraceId;
             var folder = RoomsRunTraces.Folder(root, doc, view, runId);
             string destination;
             using (var pending = new RoomsRunTraces.Pending(root, doc, view, runId))
@@ -81,14 +82,26 @@ public class RoomsRunTracesTests
             File.Delete(destination);
             Assert.That(Path.GetFileName(folder), Does.Match("^[0-9a-f]{64}$"));
             var stored = OwnerBlob.Encode(RoomsRegionRecord.Owner, record.ToData());
-            var committed = RoomsRegionRecord.Decode(OwnerBlob.Decode(RoomsRegionRecord.Owner, stored)).Value![zone]!.Provenance.TraceRun;
+            var modelPath = Path.Combine(root, "unsaved-model");
+            var renamedPath = Path.Combine(root, "renamed.rvt");
+            File.WriteAllText(modelPath, stored);
+            File.Move(modelPath, renamedPath);
+
+            var reopened = RoomsRegionRecord.Decode(OwnerBlob.Decode(RoomsRegionRecord.Owner, File.ReadAllText(renamedPath))).OrThrow()!;
+            Assert.That(reopened.TraceId, Is.EqualTo(doc));
+            var committed = reopened[zone]!.Provenance.TraceRun;
             Assert.That(committed, Is.Not.Null);
             Assert.That(RoomsRunTraces.Find(root, doc, view, runId, null), Is.Empty);
             Assert.That(RoomsRunTraces.Find(root, "another project", view, runId, committed), Is.Empty);
-            var recovered = RoomsRunTraces.Find(root, doc, view, runId, committed).Single();
+            var recovered = RoomsRunTraces.Find(root, reopened.TraceId, view, runId, committed).Single();
             Assert.That((string?)JObject.Parse(File.ReadAllText(recovered.FullName))["runId"], Is.EqualTo(runId));
             Assert.That(RoomsRunTraces.Find(root, doc, view, runId, committed).Single().FullName, Is.EqualTo(recovered.FullName));
-            Assert.That(RoomsRunTraces.Find(root, doc, view, runId, null).Single().FullName, Is.EqualTo(recovered.FullName));
+            using var stale = new RoomsRunTraces.Pending(root, doc, view, "older-run");
+            stale.Write(zone, new JObject());
+            stale.MarkCommitted();
+            stale.Publish();
+            Assert.That(RoomsRunTraces.Find(root, doc, view, runId, null), Is.Empty);
+            Assert.That(RoomsRunTraces.Find(root, doc, view, "older-run", committed), Is.Empty);
             File.Delete(recovered.FullName);
             Assert.That(RoomsRunTraces.Find(root, doc, view, runId, committed), Is.Empty);
         }

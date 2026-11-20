@@ -15,9 +15,8 @@ internal static class RoomsRunTraces
     internal static string Root => new ModuleStorage("rooms").State().DirectoryPath;
 
     // Create-only evidence. Its digest in a committed region row is the authority to read it.
-    internal static string KeepOriginal(string root, string document, Pe.Revit.Partition.Room original)
+    internal static string KeepOriginal(string root, string document, string json)
     {
-        var json = TakeoffJson.Serialize(original);
         var digest = Hash(json);
         var path = OriginalPath(root, document, digest);
         if (!File.Exists(path))
@@ -50,7 +49,7 @@ internal static class RoomsRunTraces
     private static string OriginalPath(string root, string document, string digest) =>
         Path.Combine(root, Hash(document), "originals", digest + ".json");
 
-    private static string Hash(string value)
+    internal static string Hash(string value)
     {
         using var sha = SHA256.Create();
         return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value))).Replace("-", "").ToLowerInvariant();
@@ -62,24 +61,15 @@ internal static class RoomsRunTraces
     internal static IReadOnlyList<FileInfo> Find(
         string root, string document, string view, string runId, RoomsTraceRun? committed)
     {
+        if (committed == null || committed.View != view || committed.RunId != runId || committed.Zones == 0
+            || !Guid.TryParseExact(committed.Attempt, "N", out _))
+            return [];
         var folder = Folder(root, document, view, runId);
-        if (!Directory.Exists(folder)) return [];
-        if (committed != null)
-        {
-            if (committed.View != view || committed.RunId != runId || committed.Zones == 0
-                || !Guid.TryParseExact(committed.Attempt, "N", out _))
-                return [];
-            var destination = Path.Combine(folder, committed.Attempt);
-            Promote(folder, committed.Attempt);
-            if (!Directory.Exists(destination)) return [];
-            var files = Files(destination);
-            return files.Count == committed.Zones ? files : [];
-        }
-
-        // A historical attempt is eligible only after model commit promoted its directory.
-        var published = Directory.EnumerateDirectories(folder)
-            .Where(path => Guid.TryParseExact(Path.GetFileName(path), "N", out _)).ToList();
-        return published.Count == 1 ? Files(published[0]) : [];
+        var destination = Path.Combine(folder, committed.Attempt);
+        Promote(folder, committed.Attempt);
+        if (!Directory.Exists(destination)) return [];
+        var files = Files(destination);
+        return files.Count == committed.Zones ? files : [];
     }
 
     private static List<FileInfo> Files(string folder) => new DirectoryInfo(folder)

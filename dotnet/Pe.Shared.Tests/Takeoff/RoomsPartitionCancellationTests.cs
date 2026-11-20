@@ -1,26 +1,41 @@
 using Pe.Revit.Takeoff;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Takeoff.Tests;
 
 public sealed class RoomsPartitionCancellationTests
 {
-    [Test]
-    public void PartitionWritesTheRegionRecordInsideItsOwnTransaction()
+    [TestCase(true)]
+    [TestCase(false)]
+    public void A_refused_record_stops_before_the_mutation_boundary(bool overCap)
     {
-        var root = new DirectoryInfo(TestContext.CurrentContext.TestDirectory);
-        while (root is not null && !File.Exists(Path.Combine(root.FullName, "Pe.Tools.slnx"))) root = root.Parent;
-        Assert.That(root, Is.Not.Null, "Pe.Tools.slnx not found above the test directory");
-        // This boundary is tested from source because the deterministic rung cannot create a Revit Document.
-        var source = File.ReadAllText(Path.Combine(root!.FullName, "dotnet", "Pe.Revit.Takeoff", "Rooms.cs"));
-        var partition = source[source.IndexOf("public static RoomsPartitionResult Partition(", StringComparison.Ordinal)
-            ..source.IndexOf("internal static void SolveZones", StringComparison.Ordinal)];
-        Assert.That(partition, Does.Not.Contain("TakeoffCarriers.Require("));
-        var transaction = partition.IndexOf("DocumentSandbox.BeginCommit(", StringComparison.Ordinal);
-        var write = partition.IndexOf("record.Save(doc)", StringComparison.Ordinal);
-        var commit = partition.IndexOf("transaction.Complete()", StringComparison.Ordinal);
-        Assert.That(transaction, Is.GreaterThanOrEqualTo(0));
-        Assert.That(write, Is.GreaterThan(transaction));
-        Assert.That(commit, Is.GreaterThan(write));
+        var record = new RoomsRegionRecord();
+        record.Regions["room"] = new(TakeoffCarriers.RoleRoomRegion,
+            new RoomFields(Name: overCap ? new string('x', OwnerBlob.MaxBytes) : "Office"),
+            RegionProvenance.Default with { RunId = overCap ? "drawn" : "" });
+        bool mutated = false;
+
+        var error = Assert.Throws<InvalidOperationException>(() => record.BeforeMutation(() => mutated = true));
+
+        Assert.That(error!.Message, Does.Contain(overCap ? "the cap is" : "Invalid Rooms row"));
+        Assert.That(mutated, Is.False);
+    }
+
+    [Test]
+    public void Pruning_releases_deleted_region_rows_and_retains_their_merge_ancestry()
+    {
+        var record = new RoomsRegionRecord();
+        record.Regions["deleted"] = new(TakeoffCarriers.RoleRoomRegion,
+            new RoomFields(Name: new string('x', OwnerBlob.MaxBytes)), RegionProvenance.Default);
+        record.Regions["merged"] = new(TakeoffCarriers.RoleRoomRegion, new(),
+            RegionProvenance.Default with { MergedFrom = ["deleted"] });
+
+        record.Prune(id => id == "merged");
+
+        var stored = record.BeforeMutation(() => OwnerBlob.Encode(RoomsRegionRecord.Owner, record.ToData()));
+        var read = RoomsRegionRecord.Decode(OwnerBlob.Decode(RoomsRegionRecord.Owner, stored)).OrThrow()!;
+        Assert.That(read.Regions.Keys, Is.EqualTo(new[] { "merged" }));
+        Assert.That(read["merged"]!.Provenance.MergedFrom, Is.EqualTo(new[] { "deleted" }));
     }
 
     [TestCase(1)]

@@ -1,4 +1,3 @@
-using Pe.Revit.Extensions.ProjDocument;
 using Pe.Shared.Product;
 using System.Security.Cryptography;
 using Pe.Revit.Space;
@@ -204,7 +203,9 @@ public static class Rooms
         return levels;
     }
 
-    public static RoomsSnapshotData Snapshot(Document doc, long viewId)
+    public static RoomsSnapshotData Snapshot(Document doc, long viewId) => Snapshot(doc, viewId, null);
+
+    internal static RoomsSnapshotData Snapshot(Document doc, long viewId, string? traceRoot)
     {
         var viewScope = LevelView(doc, viewId);
         var levels = Levels(doc);
@@ -216,7 +217,7 @@ public static class Rooms
                      .Where(fr => fr.OwnerViewId == viewScope.Id).OrderBy(fr => fr.Id.Value()))
         {
             var (role, fields, stored) = record[fr.UniqueId]!;
-            var provenance = RoomsRegionRecord.ProjectOriginal(doc, stored);
+            var provenance = record.ProjectOriginal(stored, traceRoot);
             var loops = TakeoffAtlas.Boundaries(fr);
             if (loops.Count == 0) continue;
             var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
@@ -363,7 +364,7 @@ public static class Rooms
         var holds = new List<string>();
         var failures = new List<string>();
         var bufferedBands = new Pe.Revit.Partition.Solve.BufferedBands(captured);
-        using var traces = new RoomsRunTraces.Pending(RoomsRunTraces.Root, doc.GetDocumentKey(), view.UniqueId, runId);
+        using var traces = new RoomsRunTraces.Pending(RoomsRunTraces.Root, record.TraceId, view.UniqueId, runId);
         zonesTotal = zones.Count;
         BeginPhase("Solve");
         SolveZones(zones.OrderBy(z => z.Fr.Id.Value()), zone =>
@@ -426,19 +427,21 @@ public static class Rooms
         // The last checkpoint is before this phase. From here the one transaction owns the outcome,
         // including first-run parameter bindings. A late Stop lets it commit or fail normally.
         BeginPhase("Materialization");
-        using var transaction = DocumentSandbox.BeginCommit(doc, "Pe Partition Rooms");
-        double elevation = level.ProjectElevation;
-        var frType = RegionType(doc);
-
         foreach (var (fr, role, drawn) in adopt)
             record.Regions.Add(fr.UniqueId, new(role, new RoomFields(), new RegionProvenance(null, RunDrawn, "", drawn.Sqft)
                 { GeometryHash = GeometryHash(drawn.Loops) }));
+        foreach (var region in orphans.Concat(solved.SelectMany(zone => zone.Plan.Delete)))
+            record.Regions.Remove(region.UniqueId);
+
+        // Check the staged rows before touching Revit. Native outputs are checked again once their rows are known.
+        using var transaction = record.BeforeMutation(() => DocumentSandbox.BeginCommit(doc, "Pe Partition Rooms"));
+        double elevation = level.ProjectElevation;
+        var frType = RegionType(doc);
 
         void Delete(IReadOnlyList<ExistingRegion> regions)
         {
             if (regions.Count == 0) return;
             doc.Delete(regions.Select(r => r.ElementId.ToElementId()).ToList());
-            foreach (var region in regions) record.Regions.Remove(region.UniqueId);
         }
 
         Delete(orphans);
@@ -591,8 +594,7 @@ public static class Rooms
         if (reference == null)
             throw new RoomsTraceUnavailableException($"View '{view.Name}' has no committed rooms.partition run.", unpartitioned: true);
         var runId = request.RunId ?? reference.RunId;
-        var files = RoomsRunTraces.Find(RoomsRunTraces.Root, doc.GetDocumentKey(), view.UniqueId, runId,
-            runId == reference.RunId ? reference : null);
+        var files = RoomsRunTraces.Find(RoomsRunTraces.Root, record!.TraceId, view.UniqueId, runId, reference);
         if (files.Count == 0)
             throw new RoomsTraceUnavailableException($"Trace for run '{runId}' is missing on '{view.Name}'.", unpartitioned: false);
         return new RoomsTraceData(runId, files

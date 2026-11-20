@@ -122,6 +122,7 @@ public sealed class TakeoffNativeFixtureRecorder {
     public void Rooms_record_commits_cells_and_rolls_back_a_refused_batch(UIApplication ui)
     {
         var doc = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        var traces = Directory.CreateTempSubdirectory("pe-rooms-record-proof-");
         try
         {
             RoomsDrawResult room;
@@ -141,12 +142,15 @@ public sealed class TakeoffNativeFixtureRecorder {
                 Assert.That(transaction.Start(), Is.EqualTo(TransactionStatus.Started));
                 var record = RoomsRegionRecord.Stage(doc);
                 var roomRow = record[room.UniqueId]!;
-                record.Regions[room.UniqueId] = roomRow with { Provenance = roomRow.Provenance with
-                {
-                    Partition = new Pe.Revit.Partition.Room(0, Pe.Revit.Partition.Disposition.Held, "proof-original",
-                        [0, 0, 10, 0, 10, 10, 0, 10, 0, 0], 100, 5, 5, 1, null, null, []),
-                } };
-                record.Save(doc);
+                var provenance = JObject.Parse(roomRow.Provenance.ToJson());
+                provenance["partition"] = JObject.Parse("""
+                    {"index":0,"disposition":1,"reason":"proof-original","loop":[0,0,10,0,10,10,0,10,0,0],
+                     "areaSqft":100,"labelX":5,"labelY":5,"inkBacked":1,"shared":[]}
+                    """);
+                record.Regions[room.UniqueId] = roomRow with {
+                    Provenance = RegionProvenance.FromJson(provenance.ToString(Formatting.None)),
+                };
+                record.Save(doc, traces.FullName);
                 Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 
@@ -163,16 +167,30 @@ public sealed class TakeoffNativeFixtureRecorder {
             Assert.That(row["provenance"]!["partition"], Is.Null);
             Assert.That(row["provenance"]!["geometryHash"]!.Value<string>(), Is.Not.Empty);
             Assert.That(row["provenance"]!["originalTrace"]!.Value<string>(), Is.Not.Empty);
-            var readback = Rooms.Snapshot(doc, viewId).Regions.Single();
+            var readback = Rooms.Snapshot(doc, viewId, traces.FullName).Regions.Single();
             Assert.That(readback.People, Is.EqualTo(3));
             Assert.That(readback.Reason, Is.EqualTo("proof-original"));
+
+            var role = Rooms.Write(doc, new([new(room.UniqueId, Role: "zone")]));
+            Assert.That(role.Cells, Is.EqualTo(new[] { new RoomsWriteCell(room.UniqueId, RoomField.role, "zone") }));
+            Assert.That(Rooms.Snapshot(doc, viewId, traces.FullName).Regions.Single().Role, Is.EqualTo("zone"));
+            var beforeRollback = OwnerBlobStore.Read(doc, RoomsRegionRecord.Owner).Raw;
 
             Assert.Throws<InvalidOperationException>(() => Rooms.Write(doc, new([
                 new(room.UniqueId, People: 8), new(Guid.NewGuid().ToString("D") + "-00000042", Name: "Missing"),
             ])));
-            Assert.That(OwnerBlobStore.Read(doc, RoomsRegionRecord.Owner).Raw, Is.EqualTo(raw.Raw));
+            Assert.That(OwnerBlobStore.Read(doc, RoomsRegionRecord.Owner).Raw, Is.EqualTo(beforeRollback));
+
+            var saved = RevitFamilyFixtureHarness.SaveDocumentCopy(doc, traces.FullName, "room-proof");
+            RevitFamilyFixtureHarness.CloseDocument(doc);
+            doc = ui.Application.OpenDocumentFile(saved);
+            Assert.That(Rooms.Snapshot(doc, viewId, traces.FullName).Regions.Single().Reason, Is.EqualTo("proof-original"));
         }
-        finally { RevitFamilyFixtureHarness.CloseDocument(doc); }
+        finally
+        {
+            RevitFamilyFixtureHarness.CloseDocument(doc);
+            traces.Delete(true);
+        }
     }
 
     internal static T Invoke<T>(string entryPoint, Document document, object request)

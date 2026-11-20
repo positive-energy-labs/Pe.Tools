@@ -24,10 +24,6 @@ public sealed class CarrierGuidTests
             foreach (Match m in Literal.Matches(File.ReadAllText(file)))
                 (owners.TryGetValue(m.Groups[1].Value, out var list) ? list : owners[m.Groups[1].Value] = []).Add(Path.GetRelativePath(dir.FullName, file));
         }
-        Assert.That(owners.ContainsKey("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020"), Is.True, "Rooms document owner");
-        var storage = File.ReadAllText(Path.Combine(dir.FullName, "dotnet", "Pe.Revit.Takeoff", "TakeoffCarriers.cs"));
-        Assert.That(storage, Does.Contain("OwnerBlobStore.Write(document, Owner"));
-        Assert.That(storage, Does.Not.Contain("OST_DetailComponents"));
         Assert.That(owners, Is.Not.Empty);
         var duplicates = owners.Where(o => o.Value.Distinct().Count() > 1)
             .Select(o => $"{o.Key}: {string.Join(", ", o.Value.Distinct())}").ToList();

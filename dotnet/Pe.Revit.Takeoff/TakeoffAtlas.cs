@@ -64,7 +64,7 @@ public static class TakeoffAtlas
                 var key = zone ?? "";
                 if (!grouped.TryGetValue(key, out var regions))
                     grouped[key] = regions = [];
-                regions.Add(ToLiveRegion(doc, fr, row, geometryKey));
+                regions.Add(ToLiveRegion(doc, fr, record, row, geometryKey));
             }
 
         var registry = TakeoffCarriers.TryReadRegistry(doc);
@@ -137,6 +137,7 @@ public static class TakeoffAtlas
         if (zone.UniqueId != request.ZoneUniqueId || record[zone.UniqueId]?.Role != TakeoffCarriers.RoleZoningRegion
             || zone.OwnerViewId != FindView(doc, request.View).Id)
             throw new InvalidOperationException("Partition target does not match the adopted zone identity and view");
+        ValidateRunId(request.RunId);
         // The partition's own scope also holds every room label the measurement probes: rooms lie inside their zone.
         var partition = new Pe.Revit.Partition.PartitionRequest(request.ZoneRegion);
         var world = Pe.Revit.Partition.Verbs.PrepareSpace(doc, partition);
@@ -150,9 +151,16 @@ public static class TakeoffAtlas
         Pe.Revit.Space.World? world = null) =>
         MaterializePartition(doc, request, answer, world, RoomsRegionRecord.Stage(doc));
 
+    private static void ValidateRunId(string runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId))
+            throw new InvalidOperationException("Takeoffs partition requires a run id.");
+    }
+
     private static TakeoffPartitionResult MaterializePartition(Document doc, TakeoffPartitionRequest request,
         Pe.Revit.Partition.PartitionAnswer answer, Pe.Revit.Space.World? world, RoomsRegionRecord record)
     {
+        ValidateRunId(request.RunId);
         Action<string> log = static _ => { };
         var view = FindView(doc, request.View);
         var level = view.GenLevel;
@@ -188,8 +196,8 @@ public static class TakeoffAtlas
             });
         }
 
-        var materialized = ZoneMaterializer.Materialize(
-            doc, view, record, elevation, request.ZoneUniqueId, request.RunId, rooms, residues, log);
+        var materialized = record.BeforeMutation(() => ZoneMaterializer.Materialize(
+            doc, view, record, elevation, request.ZoneUniqueId, request.RunId, rooms, residues, log));
         doc.Regenerate();
         RegionMeasurements.Measure(doc, view, record, request.ZoneUniqueId, request.RunId, world);
         record.Save(doc);
@@ -312,13 +320,13 @@ public static class TakeoffAtlas
     }
 
     private static TakeoffLiveRegion ToLiveRegion(
-        Document doc, FilledRegion fr, RegionRow row, string geometryKey)
+        Document doc, FilledRegion fr, RoomsRegionRecord record, RegionRow row, string geometryKey)
     {
         var loops = Boundaries(fr);
         var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).FirstOrDefault()
                     ?? throw new InvalidOperationException($"FilledRegion {fr.Id} has no boundary");
         return new TakeoffLiveRegion(fr.Id.Value(), row.Role, fr.UniqueId, Area(fr, loops),
-            row.Role == TakeoffCarriers.RoleRoomRegion ? row.Fields.Type ?? "" : "", RoomsRegionRecord.ProjectOriginal(doc, row.Provenance).ToJson(), outer,
+            row.Role == TakeoffCarriers.RoleRoomRegion ? row.Fields.Type ?? "" : "", record.ProjectOriginal(row.Provenance).ToJson(), outer,
             loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
             RegionMeasurements.Read(row.Provenance, geometryKey + RegionMeasurements.GeometryKey(
                 ((View)doc.GetElement(fr.OwnerViewId)).GenLevel.ProjectElevation, [loops])));
@@ -333,7 +341,7 @@ public static class TakeoffAtlas
         {
                 if (record[fr.UniqueId] is not { } row || row.Role == TakeoffCarriers.RoleZoningRegion
                 || row.Provenance.Zone != zone) continue;
-            result.Add(ToLiveRegion(doc, fr, row, geometryKey));
+            result.Add(ToLiveRegion(doc, fr, record, row, geometryKey));
         }
         return result;
     }

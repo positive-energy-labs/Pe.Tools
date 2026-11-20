@@ -40,6 +40,95 @@ public sealed class OwnerBlobRoundTripTests {
     }
 
     [Test]
+    public void Rooms_record_round_trips_on_Project_Information_after_save_and_reopen(UIApplication ui) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        string? path = null;
+        try {
+            RoomsDrawResult room;
+            long viewId;
+            using (var tx = new Transaction(document, "Draw Rooms round trip")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                var view = CreateRoomsView(document);
+                viewId = view.Id.Value();
+                room = Rooms.Draw(document, new(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Office"));
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            var raw = Raw(document, RoomsRegionRecord.Owner);
+            var traceId = RoomsRegionRecord.Read(document).OrThrow()!.TraceId;
+
+            (document, path) = SaveCloseReopen(ui.Application, document);
+
+            Assert.That(Raw(document, RoomsRegionRecord.Owner), Is.EqualTo(raw).And.Not.Empty);
+            Assert.That(RoomsRegionRecord.Read(document).OrThrow()!.TraceId, Is.EqualTo(traceId));
+            var actual = Rooms.Snapshot(document, viewId).Regions.Single();
+            Assert.That(actual.UniqueId, Is.EqualTo(room.UniqueId));
+            Assert.That(actual.Name, Is.EqualTo("Office"));
+            var region = (FilledRegion)document.GetElement(actual.UniqueId);
+            Assert.That(region.get_Parameter(RoomsRegionRecord.Owner.Guid), Is.Null);
+            using (var tx = new Transaction(document, "Delete the first room by hand")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                document.Delete(region.Id);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            using (var tx = new Transaction(document, "Draw after native deletion")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                _ = Rooms.Draw(document, new(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Replacement"));
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            Assert.That(RoomsRegionRecord.Read(document).OrThrow()!.Regions.ContainsKey(room.UniqueId), Is.False);
+            Assert.That(Rooms.Snapshot(document, viewId).Regions.Single().Name, Is.EqualTo("Replacement"));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (path != null) File.Delete(path);
+        }
+    }
+
+    [Test]
+    public void Rooms_reports_a_future_envelope_and_preserves_its_bytes(UIApplication ui) =>
+        RoomsReportsUnreadable(ui, newerEnvelope: true);
+
+    [Test]
+    public void Rooms_reports_malformed_owner_data_and_preserves_its_bytes(UIApplication ui) =>
+        RoomsReportsUnreadable(ui, newerEnvelope: false);
+
+    private static void RoomsReportsUnreadable(UIApplication ui, bool newerEnvelope) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        string? path = null;
+        var owner = RoomsRegionRecord.Owner;
+        var planted = newerEnvelope
+            ? $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 1}}},"data":{}}"""
+            : OwnerBlob.Encode(owner, new JObject { ["traceId"] = Guid.NewGuid().ToString("N"), ["regions"] = new JArray() });
+        try {
+            long viewId;
+            using (var tx = new Transaction(document, "Plant unreadable Rooms record")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                viewId = CreateRoomsView(document).Id.Value();
+                _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
+                document.Regenerate();
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(planted), Is.True);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            (document, path) = SaveCloseReopen(ui.Application, document);
+
+            var snapshot = Rooms.Snapshot(document, viewId);
+            Assert.That(snapshot.Regions, Is.Empty);
+            Assert.That(snapshot.Unreadable!.Single().Reason, Does.Contain(newerEnvelope ? "version" : "regions map"));
+            Assert.That(Raw(document, owner), Is.EqualTo(planted));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+            if (path != null) File.Delete(path);
+        }
+    }
+
+    private static ViewPlan CreateRoomsView(Document document) {
+        var level = Level.Create(document, 0);
+        var planType = new FilteredElementCollector(document).OfClass(typeof(ViewFamilyType))
+            .Cast<ViewFamilyType>().First(type => type.ViewFamily == ViewFamily.FloorPlan);
+        return ViewPlan.Create(document, planType.Id, level.Id);
+    }
+
+    [Test]
     public void Every_owner_blob_round_trips_through_the_envelope_and_survives_save_and_reopen(UIApplication uiApplication) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
         string? path = null;
