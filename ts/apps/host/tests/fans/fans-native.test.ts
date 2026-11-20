@@ -43,6 +43,33 @@ test.each(["fans", "duct-systems"] as const)(
     expect(f.dispatched.filter((row) => row.key.startsWith("ducts.apply"))).toEqual([]);
   },
 );
+// The hole at 5911b834: the boundary fenced only the asking route's own handle, so a sibling handle
+// of another document was read as this document's Duct Systems Work and written here.
+test("Duct Systems Work of another document beside this document's Fans Work is refused, with nothing written", async () => {
+  const f = await nativeFixture("test", scenario, address("C:/model.rvt"));
+  closes.push(() => f.close());
+  const work = await stage(f);
+  const elsewhere = { binding: "address" as const, route: "duct-systems", target: address("C:/other.rvt") };
+  const staged = await f.saved.apply(
+    elsewhere,
+    "duct-systems",
+    "human",
+    [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g8718801"] } } }],
+    0,
+  );
+  if (!staged.ok) throw Error(JSON.stringify(staged));
+  const foreign = (await f.saved.view(elsewhere, "duct-systems"))!.handle;
+  for (const key of ["sheet.plan", "sheet.apply"]) {
+    const input = { work, readWorks: { "duct-systems": foreign } };
+    await f.post("/actions", { id: key, key, target: f.target, input });
+    expect(await f.journal.wait(key)).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: { kind: "domain", code: "work.target" },
+    });
+  }
+  expect(f.dispatched.filter((row) => row.key.startsWith("ducts.apply"))).toEqual([]);
+});
 afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });

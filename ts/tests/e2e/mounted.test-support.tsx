@@ -11,6 +11,8 @@ import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 
 export { mounted, path, ref, type Native } from "../../apps/web/src/shell/mounted-journey.test-support";
 export { planned, typedSubjectDoor } from "../../apps/web/src/shell/typed-mount";
+// The recorded Chadds duct walk the fixture host answers Fans and Duct Systems reads with.
+export { roster, snapshot } from "../../apps/host/tests/host-read-graph.test-support";
 export {
   targetChange,
   targetPaths,

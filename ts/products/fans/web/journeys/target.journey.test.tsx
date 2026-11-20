@@ -3,8 +3,9 @@ import { act, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 import { product } from "@pe/fans-contract/product";
 import { module } from "../route.ts";
-import { roster, snapshot } from "../../../../apps/host/tests/host-read-graph.test-support.ts";
 import {
+  roster,
+  snapshot,
   targetChange,
   targetPaths,
   type JourneyDoc,
