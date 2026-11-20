@@ -182,23 +182,6 @@ describe("the thin routes adopt the contract", () => {
     expect(ducts.history(ducts.defaults, patch)).toBe("replace");
     expect(ducts.keys).not.toContain("diagnostic");
   });
-  test("every navigable key round-trips through its link", () => {
-    const captures = routeAddress("captures");
-    expect(captures.link({ focus: "ab", open: ["ab", "cd"] })).toBe(
-      `/captures?${new URLSearchParams({ focus: JSON.stringify("ab"), open: JSON.stringify(["ab", "cd"]) })}`,
-    );
-    expect(captures.read({ open: JSON.stringify(["ab", "cd"]) }).page).toEqual({
-      ...captures.defaults,
-      open: ["ab", "cd"],
-      threadSearch: threadSearchDefault(),
-      threadSort: "",
-    });
-    const home = routeAddress("home");
-    expect(home.link({ query: "duct", folded: ["/duct-systems"], sort: "name" })).toBe(
-      "/?query=%22duct%22&folded=%5B%22%2Fduct-systems%22%5D&sort=%22name%22",
-    );
-    expect(routeAddress("settings").link({ section: "none" })).toBe("/settings?section=%22none%22");
-  });
 
   test("history: picks push and typing replaces", () => {
     const ops = routeAddress("ops");

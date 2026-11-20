@@ -43,7 +43,7 @@ async function fixture() {
   const ref = { session: "A", openId: "open-A" };
   const listeners: ((event: never) => void)[] = [];
   const work = {
-    key: { binding: "open" as const, route: "schedules", target: null, open: { ...ref } },
+    key: { binding: "open" as const, route: "families", target: null, open: { ...ref } },
     revision: 1,
   };
   const makeBridge = () =>
@@ -95,14 +95,14 @@ async function fixture() {
       { sdk: sdkSessions, marks },
     );
   const executors = {
-    preview: make(commands["schedule.apply.preview"]),
-    apply: make(commands["schedule.apply"]),
+    preview: make(commands["families.apply.preview"]),
+    apply: make(commands["families.apply"]),
   };
   let current = executors.preview;
   let executor = current();
-  const doc = tools.schedules.work.schema.parse({
+  const doc = tools.families.work.schema.parse({
     writeIntent: {
-      "schedule.apply": {
+      "families.apply": {
         edit: {
           by: "human",
           value: { source: { pod: "p", path: "s.json", sha256: "a".repeat(64) } },
@@ -113,7 +113,7 @@ async function fixture() {
   const ctx: CommandContext = {
     admission: {
       id: "preview",
-      key: "schedule.apply",
+      key: "families.apply",
       target: { kind: "document", ref },
       input: { work },
     },
@@ -157,7 +157,7 @@ async function fixture() {
     },
     run,
     receipts,
-    recordPreview: (id: string, result: unknown, key = "schedule.apply.preview") =>
+    recordPreview: (id: string, result: unknown, key = "families.apply.preview") =>
       receipts.push({
         id,
         key,
@@ -274,7 +274,7 @@ test("write admission refuses a producer without a semantic projection", () => {
   expect(() =>
     workWriteBoundary(
       {
-        definition: commands["schedule.apply"],
+        definition: commands["families.apply"],
         prepared: z.unknown(),
         bind: async () => ({ effects: [] }),
         run: () => Effect.succeed(null),

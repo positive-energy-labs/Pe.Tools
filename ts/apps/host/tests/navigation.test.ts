@@ -31,10 +31,10 @@ const temporary = async () => {
   directories.push(directory);
   return directory;
 };
-const registration = (route = "family"): RouteWorkspaceRegistration => ({
+const registration = (route = "families"): RouteWorkspaceRegistration => ({
   spec: {
     route,
-    title: route === "family" ? "Family Foundry" : route,
+    title: route === "families" ? "Family Foundry" : route,
     description: "Navigation proof",
     schema: z.object({ secret: z.string().default("") }).prefault({}),
   },
@@ -51,8 +51,8 @@ const bytes = async (directory: string) =>
 
 test("HTTP navigation resumes only the exact unique current document and reflects later writes", async () => {
   const store = fileRouteDocumentStore(stateFixture(await temporary()));
-  const scope = bindWork("family", address("C:\\Models\\A.rvt"));
-  await store.setState({ targetKey: workKey(scope), route: "family", value: envelope });
+  const scope = bindWork("families", address("C:\\Models\\A.rvt"));
+  await store.setState({ targetKey: workKey(scope), route: "families", value: envelope });
   let documents = [
     { session: "process-incarnation", openId: "open-lifetime", address: scope.target },
   ];
@@ -68,14 +68,14 @@ test("HTTP navigation resumes only the exact unique current document and reflect
     );
   const linked = (await read()).works[0]!;
   const url = new URL(linked.url!, "http://host");
-  expect(url.pathname).toBe("/family");
+  expect(url.pathname).toBe("/families");
   expect(JSON.parse(url.searchParams.get("target")!)).toEqual({
     kind: "open",
     ref: { session: "process-incarnation", openId: "open-lifetime" },
   });
   await store.setState({
     targetKey: workKey(scope),
-    route: "family",
+    route: "families",
     value: { ...envelope, revision: 4 },
   });
   expect((await read()).works[0]!.revision).toBe(4);
@@ -92,10 +92,10 @@ test("HTTP navigation resumes only the exact unique current document and reflect
 test("discovery reports transplanted Work identity without mutating its file", async () => {
   const directory = await temporary();
   const store = fileRouteDocumentStore(stateFixture(directory));
-  const scope = bindWork("family", address("C:\\Models\\A.rvt"));
-  const other = bindWork("family", address("C:\\Models\\B.rvt"));
-  await store.setState({ targetKey: workKey(scope), route: "family", value: envelope });
-  const path = join(directory, filename(workKey(scope), "family"));
+  const scope = bindWork("families", address("C:\\Models\\A.rvt"));
+  const other = bindWork("families", address("C:\\Models\\B.rvt"));
+  await store.setState({ targetKey: workKey(scope), route: "families", value: envelope });
+  const path = join(directory, filename(workKey(scope), "families"));
   const content = JSON.parse(await readFile(path, "utf8"));
   await writeFile(path, JSON.stringify({ ...content, targetKey: workKey(other) }));
   const before = await bytes(directory);

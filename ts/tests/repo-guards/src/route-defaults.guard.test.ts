@@ -41,8 +41,8 @@ export function paneReadCopies(
 // route/defaults.ts `route()` gives every pane `read: spec.core`; a pane that writes it again is a
 // copied default. Retargeted from the deleted `*/graph.ts` declarations (none since 6ecbc716).
 test("route modules do not copy the kernel's pane read default", () => {
-  const modules = files("ts/apps/web/src").filter((p) =>
-    /^ts\/apps\/web\/src\/[^/]+\/route\.ts$/.test(p),
+  const modules = [...files("ts/apps/web/src"), ...files("ts/products")].filter((p) =>
+    /^ts\/(?:apps\/web\/src\/[^/]+|products\/[^/]+\/web)\/route\.ts$/.test(p),
   );
   const results = modules.map((file) =>
     paneReadCopies(file, readFileSync(resolve(root, file), "utf8")),

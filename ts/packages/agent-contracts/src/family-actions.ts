@@ -1,5 +1,3 @@
-import { packageMemberPathSchema } from "./contribution.ts";
-import { blobRefSchema } from "./blob-ref.ts";
 import type { Command } from "./command.ts";
 import { z } from "zod";
 import { specDocSchema } from "./family.ts";
@@ -82,42 +80,11 @@ export const familyCaptureSchema = z.object({
   ]),
 });
 export type FamilyCapture = z.infer<typeof familyCaptureSchema>;
-export const familyLiveReadSchema = z.object({
-  reading: z.string(),
-  takenAt: z.iso.datetime(),
-  executionContext: documentRefSchema,
-  process: nativeProcessSchema,
-});
 /**
- * Where a saved family lives in its Pod. One rule: the capture's default path, the path a caller
- * may name, the member attach accepts and the spec asset door all read it here.
+ * The capture writer and saved spec asset reader share the Pod folder.
  */
 export const FAMILY_MEMBER_DIR = "settings/family/";
-export const isFamilyMember = (path: string) =>
-  path.startsWith(FAMILY_MEMBER_DIR) && path.endsWith(".json");
 export const familyMemberPath = (name: string) => `${FAMILY_MEMBER_DIR}${name}.json`;
-/** Where a capture lands: the route's current pod, and a new member path the host may choose. */
-const captureInto = {
-  pod: z.string().min(1),
-  path: packageMemberPathSchema
-    .refine(isFamilyMember, `A family saves under ${FAMILY_MEMBER_DIR} as a .json member`)
-    .optional(),
-};
-/**
- * The PDF to attach: an upload already retained by `POST /actions/blobs`, a file the host can read,
- * or a URL the host fetches. A path or URL is read once at admission and its bytes are retained by
- * digest, so the command stays the immutable intent (cdb265c9) whichever door the bytes came through.
- */
-const specSourceSchema = z.union([
-  blobRefSchema,
-  z.strictObject({ path: z.string().min(1) }),
-  z.strictObject({ url: z.url() }),
-]);
-/**
- * What a plan consumes: a saved member, or a draft's bytes; the run apply files captures either
- * exactly. Strict arms: a shape with both `sha256` and `content` refuses instead of losing one to
- * stripping.
- */
 const planSourceSchema = z.union([podMemberSourceSchema.strict(), podDraftSourceSchema.strict()]);
 const applySourceSchema = z.strictObject({
   source: planSourceSchema,
@@ -162,39 +129,6 @@ export const familyActions = {
     input: z.strictObject({ readId: z.uuid() }),
     result: z.strictObject({ cancelled: z.literal(true) }),
   },
-  "family.attach-spec": {
-    catalogEffect: "SessionWrite",
-    says: `Attach a PDF cut sheet and its parsed assets to a saved family member (under ${FAMILY_MEMBER_DIR}; family.capture with a pod staged in Work saves one and returns it). source is { path } for a file on this machine, { url }, or an uploaded blob. Cells then cite its blocks by id.`,
-    needs: "nothing",
-    effect: "command",
-    dirties: ["pods"],
-    input: z.object({
-      member: podMemberSchema,
-      source: specSourceSchema,
-    }),
-    result: z.object({
-      member: podMemberSchema,
-      specPath: z.string(),
-      pages: z.number(),
-      blocks: z.number(),
-      images: z.number(),
-    }),
-  },
-  "family.observe": {
-    catalogEffect: "Read",
-    says: "Adopt a verified capture receipt or exact saved source as the Family Work baseline; edits stay editable.",
-    needs: "family-document",
-    effect: "query",
-    dirties: [],
-    input: z
-      .object({
-        readingId: z.string().min(1).optional(),
-        source: podMemberSourceSchema.optional(),
-      })
-      .refine((input) => (input.readingId !== undefined) !== (input.source !== undefined), {
-        message: "Provide exactly one capture receipt or saved source",
-      }),
-  },
   "settings.observe": {
     catalogEffect: "SessionWrite",
     autoAdopt: true,
@@ -215,32 +149,6 @@ export const familyActions = {
     effect: "command",
     dirties: ["pods"],
     input: z.strictObject({ destination: podMemberSchema.optional() }),
-  },
-  "family.capture": {
-    catalogEffect: "SessionWrite",
-    says: `Read the open family's spec. To save a new member under ${FAMILY_MEMBER_DIR}, stage writeIntent["family.capture"].edit.value.pod in route:family Work. Example: writeIntent["family.capture"].edit = { "value": { "pod": "lab" } }. Then invoke with only { work: { key, revision } } at the accepted Work revision. Optional path and spec go beside pod in edit.value; spec overrides what Revit said. With a staged pod, write the run and return the member; without one, return the spec and write nothing.`,
-    needs: "family-document",
-    effect: "command",
-    dirties: ["pods"],
-    input: z
-      .object({ ...captureInto, pod: captureInto.pod.optional(), spec: z.string().optional() })
-      .refine((input) => input.pod || (!input.spec && !input.path), "A draft saves into a pod"),
-  },
-  "family.plan": {
-    says: "Preview the reviewed Family Work or an exact saved or supplied source against the open family. Seal the source and return the plan; change nothing.",
-    needs: "family-document",
-    effect: "query",
-    dirties: [],
-    input: z.object({ source: planSourceSchema.optional() }),
-    result: familyPlanResultSchema,
-  },
-  "family.apply": {
-    says: "Plan and apply the reviewed Family Work, or apply an optional preview's sealed intent, and write a run receipt. Retire successful consumed edits only while unchanged.",
-    needs: "family-document",
-    effect: "command",
-    dirties: ["family", "pods"],
-    input: applyInputSchema,
-    result: familyApplyResultSchema,
   },
   "families.capture": {
     catalogEffect: "SessionWrite",
@@ -289,40 +197,10 @@ export const familyActions = {
       members: z.array(podMemberSourceSchema),
     }),
   },
-  "family.build": {
-    says: "Build a saved composed family spec into its source Pod's run folder. The target is execution context for the new family.",
-    needs: "document",
-    effect: "command",
-    dirties: ["family"],
-    input: z.object({
-      source: podMemberSourceSchema,
-      modelDirectory: z.string().optional(),
-    }),
-  },
 } as const;
 export const familyReadingRoute = "family.readings";
 export const savedFamilyRead = "family.saved";
 export const familyReads = {
-  "family.read": {
-    via: { route: familyReadingRoute },
-    catalogEffect: "Read",
-    says: "Read the open family's spec into the draft baseline; preserve staged cells and file no Pod member.",
-    dirties: [],
-    needs: "family-document",
-    effect: "query",
-    input: z.strictObject({ readId: z.uuid(), expectedRevision: z.number().int().nonnegative() }),
-    result: familyLiveReadSchema,
-  },
-  "family.cancel-read": {
-    via: { route: "family.readings" },
-    catalogEffect: "Read",
-    says: "Cancel this exact running Family read.",
-    dirties: [],
-    needs: "family-document",
-    effect: "query",
-    input: z.strictObject({ readId: z.uuid() }),
-    result: z.object({ cancelled: z.literal(true) }),
-  },
   [savedFamilyRead]: {
     via: { route: "family.readings" },
     catalogEffect: "Read",

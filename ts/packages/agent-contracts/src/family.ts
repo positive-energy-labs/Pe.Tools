@@ -1,4 +1,3 @@
-import { writeIntentSchema } from "./write-intent.ts";
 /** Family UI projections of immutable readings. */
 import { z } from "zod";
 import { parsedDocViewSchema } from "./grounded-doc.ts";
@@ -10,37 +9,6 @@ import {
   revitDataIssueSchema,
 } from "./families.ts";
 import { routeBindingsSchema } from "./route-state.ts";
-import type { RouteStateSpec } from "./route-state.ts";
-import { settingsFieldStateSchema } from "./settings.ts";
-
-/** `/family` Work: an immutable capture baseline plus keyed JSON-pointer cells. */
-export const familyDraftSchema = z
-  .object({
-    writeIntent: writeIntentSchema.optional().meta({ title: "Write scope", internal: true }),
-    /** Immutable draft baseline; it is not a claim about current Revit state. */
-    reading: z.string().nullable().default(null).meta({ title: "Family reading" }),
-    spec: z
-      .object({ member: z.object({ pod: z.string(), path: z.string() }), doc: parsedDocViewSchema })
-      .nullable()
-      .default(null)
-      .meta({ title: "Attached PDF" }),
-    cells: z
-      .record(z.string(), settingsFieldStateSchema)
-      .default({})
-      .meta({ title: "Family fields" }),
-    /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
-    takenAt: z.string().nullable().default(null).meta({ title: "Captured at" }),
-  })
-  .strict();
-export type FamilyDraft = z.infer<typeof familyDraftSchema>;
-
-export const familyDraftRouteState = {
-  route: "family",
-  title: "Family",
-  description:
-    "A captured family draft baseline with cells keyed by JSON pointer. Either author writes cells.*.edit at the expected Work revision; the last writer wins.",
-  schema: familyDraftSchema,
-} satisfies RouteStateSpec<typeof familyDraftSchema>;
 
 export const specDocSchema = parsedDocViewSchema;
 export type SpecDoc = z.infer<typeof specDocSchema>;

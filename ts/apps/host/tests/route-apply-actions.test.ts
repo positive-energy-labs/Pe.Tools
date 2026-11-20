@@ -17,7 +17,7 @@ const writes = Object.entries(commands).filter(([, entry]) => "writeBoundary" in
 test.each(writes)(
   "%s links derivation and refuses foreign Work without reading evidence",
   async (key, definition) => {
-    const entry = definition as (typeof commands)["schedule.apply"];
+    const entry = definition as (typeof commands)["families.apply"];
     expect(typeof entry.writeBoundary.derive).toBe("function");
     expect(typeof entry.writeBoundary.preview).toBe("function");
     const executor: CommandExecutor = {

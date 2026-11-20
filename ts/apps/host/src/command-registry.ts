@@ -15,7 +15,6 @@ import type { GatewayLocal } from "./gateway-actions.ts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
-import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
 import { lifetime } from "./document-lifetime.ts";
@@ -74,7 +73,6 @@ export function commandRegistry(
   );
   for (const group of [
     familyExecutors(captures, bridge, deps),
-    scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
     productsWithoutSheet,

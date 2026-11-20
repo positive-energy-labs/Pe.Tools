@@ -150,7 +150,7 @@ export function isAppNavigation(req: Pick<IncomingMessage, "method" | "headers" 
   return (
     req.method === "GET" &&
     (req.headers["sec-fetch-mode"] === "navigate" || req.headers.accept?.includes("text/html")) &&
-    !/^\/(?:call|events|schemas|host|pe|mcp|demo|pages|api|admin|actions)(?:\/|\?|$)/.test(
+    !/^\/(?:call|events|schemas|host|pe|mcp|demo|captures|pages|api|admin|actions)(?:\/|\?|$)/.test(
       req.url ?? "",
     )
   );
@@ -342,7 +342,7 @@ export function devHostProxy(target: string): Record<string, ProxyOptions> {
             socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
           });
         },
-        // /ops and /captures are both a document and a JSON API. Sending document navigation
+        // /ops is both a document and a JSON API. Sending document navigation
         // to the backend would redirect back here forever.
         bypass(req, res) {
           if (isAppNavigation(req)) return req.url;

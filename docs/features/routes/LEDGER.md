@@ -4,6 +4,8 @@ The route kernel and every web route's shared shape ([ADR 0026](../../adr/0026-o
 
 ## Decided
 
+- 2026-11-20, owner rulings 9 to 11: archive the Schedules, Family and Captures screens and their route-owned Work commands. Recover the pre-cut tree at `archive/routes-20261120` (`8d3a507c`). Families, native operations, schedule readings, saved family evidence and picture storage and readers remain available.
+
 - 2026-11-14, owner: Pages are the only Pod UI; a Pod is pod.json plus Pages plus C# scripts. Compiled Pod-route promotion is retired by [ADR 0045](../../adr/0045-pages-only-pod-ui.md). Builtin routes retain kernel Work, History and slots.
 - D25 (2026-11-13): a route's Timeline members are the Works its host reads read, projected from the evaluator's Work leaves; writable owners stay separate and supply membership independently of the core; a missing core holds only unavailable read-derived membership (or no known members); duplicate members keep the owner feed's resolved binding; the document head uses document membership. Rejected: a document-wide route Timeline (undo could reach a Work the route does not draw).
 

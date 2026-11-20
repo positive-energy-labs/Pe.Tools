@@ -50,7 +50,6 @@
     "apps/host/tests/bridge-inventory.test.ts": 0,
     "apps/host/tests/build-kit.global-setup.ts": 0,
     "apps/host/tests/content-roots.test.ts": 0,
-    "apps/host/tests/pod-discovery-incremental.test.ts": 0,
-    "apps/web/src/ops/views/context/view-image.test.tsx": 0
+    "apps/host/tests/pod-discovery-incremental.test.ts": 0
   }
 }

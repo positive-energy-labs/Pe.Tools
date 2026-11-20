@@ -102,11 +102,11 @@ test("direct handles select targets and bind Work from the same command declarat
   for (const key of ["page.bind", "ops.read", "action.cancel"])
     expect(commandTarget(key, {})).toEqual({ kind: "host" });
   const ref = { session: "s", openId: "o" };
-  const work = { key: { binding: "host", route: "family", target: null }, revision: 9 } as const;
-  const bound = hostActions["family.read"].work.bind(
-    { readId: crypto.randomUUID(), expectedRevision: 9 },
-    work,
-  );
-  expect(hostActions["family.read"].input.parse(bound)).toEqual(bound);
-  expect(commandTarget("family.read", bound, ref)).toEqual({ kind: "document", ref });
+  const work = {
+    key: { binding: "host", route: "parameter-links", target: null },
+    revision: 9,
+  } as const;
+  const bound = hostActions["parameter-links.read"].work.bind({ evaluate: false }, work);
+  expect(hostActions["parameter-links.read"].input.parse(bound)).toEqual(bound);
+  expect(commandTarget("parameter-links.read", bound, ref)).toEqual({ kind: "document", ref });
 });

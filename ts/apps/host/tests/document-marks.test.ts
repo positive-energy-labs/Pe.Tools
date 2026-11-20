@@ -19,7 +19,6 @@ import {
 } from "@pe/agent-contracts";
 import { RevitBridge, type HostBridgeEvent } from "@pe/host-internal/bridge";
 import { assertFresh, HostDocumentMarks, STALE_READ } from "../src/document-marks.ts";
-import { setup } from "./schedule-recorded-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
 
 const A = { session: "S1", openId: "open-A" };
@@ -187,22 +186,6 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   await settle();
   expect(frames).toHaveLength(2);
 });
-
-test.each(["changed", "disconnected"])(
-  "a push after %s is refused undispatched over HTTP",
-  async (event) => {
-    const f = await setup();
-    if (event === "changed") await f.revitChanged();
-    else await f.bridgeDetached();
-    await settle();
-    expect(await f.submit()).toMatchObject({
-      error:
-        event === "changed" ? STALE_READ : expect.stringContaining("No attached Revit session"),
-    });
-    expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
-    expect((await f.view()).doc.cells["2::1"].edit.value).toBe("TC-SHARED");
-  },
-);
 
 test("the families matrix Reading streams an envelope, never the body, and wears the mark", async () => {
   const world = fakeBridge();

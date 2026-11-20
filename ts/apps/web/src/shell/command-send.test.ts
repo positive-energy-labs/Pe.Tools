@@ -173,23 +173,23 @@ test("Ops fallback catalog classifies every native effect and admits only reads 
   );
 });
 
-test("family reads project the owning Work into scope outside the strict read input", async () => {
+test("parameter link reads project the owning Work into scope outside the strict read input", async () => {
   const transport = ports({ reading: true });
-  const work = { key: { binding: "host", route: "family", target: null }, revision: 7 };
+  const work = { key: { binding: "host", route: "parameter-links", target: null }, revision: 7 };
   await sendCommand(
-    handle("family.read"),
+    handle("parameter-links.read"),
     {
       id: "request-a",
-      key: "family.read",
+      key: "parameter-links.read",
       target,
-      input: { readId: "read-a", expectedRevision: 7, work },
+      input: { evaluate: false, work },
     },
     transport,
   );
   expect(transport.fetch.mock.calls[0]![0]).toBe("/family/readings");
   expect(JSON.parse(String(transport.fetch.mock.calls[0]![1]!.body))).toEqual({
-    key: "family.read",
-    input: { readId: "read-a", expectedRevision: 7 },
+    key: "parameter-links.read",
+    input: { evaluate: false },
     target: target.ref,
     scope: work.key,
   });

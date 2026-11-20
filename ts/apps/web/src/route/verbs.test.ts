@@ -2,7 +2,6 @@ import { handle } from "@pe/agent-contracts/handle";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { module as ops } from "../ops/route";
-import { module as schedules } from "../schedules/route";
 import { field, paneLayout, route, scrollBody } from "@pe/web-kernel/route";
 
 /*
@@ -10,7 +9,7 @@ import { field, paneLayout, route, scrollBody } from "@pe/web-kernel/route";
  * lines are proved by `tsc`: each goes red (TS2578, unused directive) the moment the error it
  * expects stops being one.
  */
-const directory = schedules.data.directory;
+const directory = ops.data.directory;
 const declare = (placed: { band?: readonly "read"[]; pane?: readonly "read"[] }) =>
   route({
     key: "verbs-probe",
@@ -63,8 +62,8 @@ test("a verb's handle is a catalog key, and a planned handle says how its review
       directory,
       fields: {},
       verbs: {
-        // @ts-expect-error `schedule.grid.pus` is no command or route in the generated table.
-        push: { handle: handle("schedule.grid.pus"), label: "Push" },
+        // @ts-expect-error `families.reed` is no command or route in the generated table.
+        push: { handle: handle("families.reed"), label: "Push" },
         // @ts-expect-error `sheet.apply` has a plan, so its verb must declare `present`.
         apply: { handle: handle("sheet.apply"), label: "Apply" },
       },
@@ -74,19 +73,10 @@ test("a verb's handle is a catalog key, and a planned handle says how its review
       },
       layout: paneLayout("main"),
     });
-  expect(typo).toThrow("No command or route: schedule.grid.pus");
+  expect(typo).toThrow("No command or route: families.reed");
 });
 
 test("the wire says who draws each verb, its effect, and whether it is reviewed", () => {
-  // `/schedules`: the grid draws `push`, so the band does not.
-  expect(schedules.data.band).toEqual([]);
-  expect(schedules.data.panes.grid!.verbs).toEqual(["read", "bind", "push"]);
-  expect(schedules.data.verbs.push).toMatchObject({
-    entry: "schedule.grid.push",
-    effect: "ModelWrite",
-    review: "shown",
-  });
-  expect(schedules.data.verbs.read).toMatchObject({ entry: "schedule.grid.read", review: "none" });
   // `/ops`: a receipt control carries its own effect, never a Read's.
   expect(ops.data.verbs["action.cancel"]).toMatchObject({
     entry: "action.cancel",
@@ -97,8 +87,4 @@ test("the wire says who draws each verb, its effect, and whether it is reviewed"
     entry: "ops.read",
     effect: handle("ops.read").effect,
   });
-  // No command schema rides a route module: a verb's entry is its axes and nothing it could parse with.
-  expect(schedules.entries["schedule.grid.push"]!.input.safeParse({ anything: 1 }).success).toBe(
-    true,
-  );
 });

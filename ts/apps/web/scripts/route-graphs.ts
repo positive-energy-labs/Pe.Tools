@@ -24,7 +24,6 @@ import { createJiti } from "jiti";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { familyFixturesDir } from "../checkout-paths.ts";
 import {
   routeFolderCandidates,
   routeStartupSourceHash,
@@ -133,9 +132,6 @@ const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
   alias: {
-    "#/family/authored-families": fileURLToPath(
-      new URL("./route-projection-fixtures.ts", import.meta.url),
-    ),
     "./generated/route-directory.ts": fileURLToPath(
       new URL("./route-projection-runtime.ts", import.meta.url),
     ),
@@ -282,7 +278,6 @@ for (const key of keys) {
       resolve: {
         tsconfigPaths: true,
         dedupe: ["react", "react-dom"],
-        alias: { "@family-fixtures": familyFixturesDir },
       },
     },
   });

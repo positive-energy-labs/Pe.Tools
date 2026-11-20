@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Context, Effect } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
+import { Context } from "effect";
+import { HttpRouter } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { PictureCaptures, PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
 
@@ -26,9 +26,7 @@ test("/captures lists every pre-marks receipt without rewriting the log", async 
   }));
   const log = receipts.map((receipt) => JSON.stringify(receipt)).join("\n") + "\n";
   const path = join(dir, "receipts.jsonl");
-  const web = HttpRouter.toWebHandler(
-    capturesRoute(() => Effect.succeed(HttpServerResponse.text("spa"))),
-  );
+  const web = HttpRouter.toWebHandler(capturesRoute);
   try {
     await writeFile(path, log);
     const response = await web.handler(

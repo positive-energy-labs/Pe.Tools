@@ -133,7 +133,6 @@ it("route consumers cannot recreate Pe paths beside the contract", () => {
     "src/resource-adapters.ts",
     "src/demo-owner.ts",
     "src/pages-route.ts",
-    "tests/schedule-test-fixture.ts",
   ]) {
     expect(readFileSync(join(root, file), "utf8"), file).not.toMatch(/\/pe\//);
   }

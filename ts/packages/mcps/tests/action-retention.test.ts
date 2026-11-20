@@ -452,7 +452,7 @@ test("a later root cannot rebuild a lost pre-ACK id or borrow authority; the ori
   const { withInvocationContext, readOutbox } = await import("@pe/runtime/context");
   const { runCapability } = await import("../src/shared/admission.ts");
   const work = {
-    key: { binding: "workspace" as const, route: "schedules", target: null, work: "reviewed" },
+    key: { binding: "open" as const, route: "families", target: null, open: target },
     revision: 13,
   };
   const input = { work };
@@ -470,7 +470,7 @@ test("a later root cannot rebuild a lost pre-ACK id or borrow authority; the ori
   });
   expect(
     await withInvocationContext(contextA, () =>
-      runCapability("schedule.grid.push", input, {
+      runCapability("families.apply", input, {
         hostBaseUrl: endpoint,
         actionId: id,
         timeoutMs: 0,
@@ -487,7 +487,7 @@ test("a later root cannot rebuild a lost pre-ACK id or borrow authority; the ori
   await expect(
     withInvocationContext(contextB, () =>
       runCapability(
-        "schedule.grid.push",
+        "families.apply",
         { work: { ...work, revision: 14 } },
         {
           hostBaseUrl: endpoint,
@@ -512,7 +512,7 @@ test("a later root cannot rebuild a lost pre-ACK id or borrow authority; the ori
   });
   expect(
     await withInvocationContext(contextA, () =>
-      runCapability("schedule.grid.push", input, {
+      runCapability("families.apply", input, {
         hostBaseUrl: endpoint,
         actionId: id,
         timeoutMs: 100,

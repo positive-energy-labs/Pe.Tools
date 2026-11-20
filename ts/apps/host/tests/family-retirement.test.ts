@@ -23,7 +23,7 @@ effectTest(
       let calls = 0;
       const bridge = detachedBridge({
         invoke: (key) => {
-          expect(key).toBe("family.apply");
+          expect(key).toBe("families.apply");
           calls++;
           return Effect.succeed({ value: answer, target: { session: "s", document: "o" } });
         },
@@ -31,7 +31,7 @@ effectTest(
       const directory = yield* Effect.tryPromise(() =>
         mkdtemp(join(tmpdir(), "family-retirement-")),
       );
-      const executor = familyExecutors(captureStore(directory), bridge)["family.apply"];
+      const executor = familyExecutors(captureStore(directory), bridge)["families.apply"];
       const retired: unknown[] = [];
       const execution: ActionExecution = {
         prepared: {
@@ -56,7 +56,7 @@ effectTest(
       const ctx: CommandContext = {
         admission: {
           id: "cancelled-apply",
-          key: "family.apply",
+          key: "families.apply",
           input: {},
           target: { kind: "document", ref: target },
         },
@@ -92,9 +92,9 @@ const receipt = (familyName: string, success: boolean, converged = success) => (
   converged,
 });
 const family = {
-  key: bindWork("family", null, undefined, target),
-  route: "family" as const,
-  cells: ["a", "b"],
+  key: bindWork("families", null, undefined, target),
+  route: "families" as const,
+  cells: [cell("Fan")],
 };
 const families = {
   key: bindWork("families", null, undefined, target),
@@ -106,13 +106,6 @@ const families = {
 test("a cancelled family apply with no successful receipt retires nothing", () => {
   expect(confirmedRetirement(family, undefined, [])).toEqual([]);
   expect(confirmedRetirement(family, undefined, [receipt("Fan", false)])).toEqual([]);
-});
-
-test("a successful family apply retires its consumed cells", () => {
-  expect(confirmedRetirement(family, undefined, [receipt("Fan", true)])).toEqual([
-    ["cells", "a"],
-    ["cells", "b"],
-  ]);
 });
 
 test("a project apply retires only cells of families whose receipt succeeded", () => {

@@ -34,7 +34,6 @@ const receiptsKind = stateLog({
   segments: () => ["receipts.jsonl"],
 });
 import { hostState } from "./host-ownership.ts";
-import { isNavigation, type SpaFallback } from "./ops-catalog.ts";
 import { sha256Hex, writeArtifact } from "./page-artifacts.ts";
 
 const isMissing = (error: unknown) => (error as { code?: string } | null)?.code === "ENOENT";
@@ -186,31 +185,28 @@ const failed = (error: unknown) =>
 
 /** `/captures` and `/captures/<sha>.png` share one registration: find-my-way's `/captures/*`
  * already claims the bare `/captures`, so a second `add` for it is refused at boot. */
-export const capturesRoute = (spa: SpaFallback) =>
-  HttpRouter.add("GET", "/captures/*", (req) =>
-    Effect.flatMap(Effect.service(PictureCaptureStore), (captures) => {
-      const path = new URL(req.url, "http://host").pathname;
-      if (path === "/captures" || path === "/captures/")
-        return isNavigation(req)
-          ? spa(req)
-          : Effect.tryPromise(() => captures.list()).pipe(
-              Effect.map((list) => Response.jsonUnsafe({ captures: list })),
-              Effect.catch((error) => Effect.succeed(failed(error))),
-            );
-      // The caller names only a sha, never a path.
-      const sha = blobPattern.exec(path)?.[1];
-      if (!sha) return Effect.succeed(Response.empty({ status: 400 }));
-      return Effect.tryPromise(() => captures.blob(sha)).pipe(
-        Effect.map((bytes) =>
-          bytes
-            ? Response.uint8Array(bytes, {
-                contentType: "image/png",
-                // Content-addressed: the bytes under a sha never change.
-                headers: { "cache-control": "public, max-age=31536000, immutable" },
-              })
-            : Response.empty({ status: 404 }),
-        ),
+export const capturesRoute = HttpRouter.add("GET", "/captures/*", (req) =>
+  Effect.flatMap(Effect.service(PictureCaptureStore), (captures) => {
+    const path = new URL(req.url, "http://host").pathname;
+    if (path === "/captures" || path === "/captures/")
+      return Effect.tryPromise(() => captures.list()).pipe(
+        Effect.map((list) => Response.jsonUnsafe({ captures: list })),
         Effect.catch((error) => Effect.succeed(failed(error))),
       );
-    }),
-  );
+    // The caller names only a sha, never a path.
+    const sha = blobPattern.exec(path)?.[1];
+    if (!sha) return Effect.succeed(Response.empty({ status: 400 }));
+    return Effect.tryPromise(() => captures.blob(sha)).pipe(
+      Effect.map((bytes) =>
+        bytes
+          ? Response.uint8Array(bytes, {
+              contentType: "image/png",
+              // Content-addressed: the bytes under a sha never change.
+              headers: { "cache-control": "public, max-age=31536000, immutable" },
+            })
+          : Response.empty({ status: 404 }),
+      ),
+      Effect.catch((error) => Effect.succeed(failed(error))),
+    );
+  }),
+);
