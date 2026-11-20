@@ -1,4 +1,4 @@
-import { resourceReadingSchema } from "./product-contracts.ts";
+import { resourceReadingSchema } from "@pe/mcps/product-readings";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable, homesStatus, writeHomesConfig } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";

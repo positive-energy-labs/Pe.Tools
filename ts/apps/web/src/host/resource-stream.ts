@@ -1,3 +1,4 @@
+import { resourceReadingSchema } from "@pe/mcps/product-readings";
 import { currentFixture } from "@pe/web-kernel/shell/fixture-name";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
@@ -16,7 +17,6 @@ import {
   READING_MAX_KEYS,
   readingFrameSchema,
   readingKey,
-  readingRequestSchema,
   type ReadingFrame,
   type ReadingRequest,
   actionReceiptSchema,
@@ -243,7 +243,7 @@ export class PeReadings {
 
   subscribe(raw: ReadingRequest, listener: (frame: Frame) => void): () => void {
     if (this.closed) throw Error("This Pe reading owner is retired");
-    const request = readingRequestSchema.parse(raw);
+    const request = resourceReadingSchema.parse(raw);
     if (currentFixture() !== null) {
       listener({
         kind: "failure",

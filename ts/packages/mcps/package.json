@@ -30,7 +30,8 @@
     "./family-pdf": "./src/shared/family-pdf.ts",
     "./llama-parse": "./src/shared/llama-parse.ts",
     "./llama-key": "./src/shared/llama-key.ts",
-    "./derived-parse": "./src/shared/derived-parse.ts"
+    "./derived-parse": "./src/shared/derived-parse.ts",
+    "./product-readings": "./src/pea/product-readings.ts"
   },
   "publishConfig": {
     "access": "public"

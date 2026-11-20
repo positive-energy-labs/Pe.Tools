@@ -1,3 +1,4 @@
+import { resourceReadingSchema } from "@pe/mcps/product-readings";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
@@ -21,7 +22,6 @@ import {
   executionTargetSchema,
   documentRefSchema,
   NATIVE_BODY_VERSION_HEADER,
-  readingRequestSchema,
 } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import { CurrentInputConsumption, type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
@@ -587,7 +587,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   const captures = await pictures!.list();
                   return { captures };
                 })();
-              const resource = readingRequestSchema.parse(request);
+              const resource = resourceReadingSchema.parse(request);
               if (resource.kind === "takeoff-saved") return (async () => {
                 if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
                 if (resource.id) return resource.text ? takeoffs.value.savedText(resource.id) : takeoffs.value.saved(resource.id);

@@ -1,5 +1,5 @@
-import { ductsReadingSchema } from "@pe/ducts-contract/reading";
-import { readingRequestSchema, READING_MAX_KEYS } from "@pe/agent-contracts";
+import { resourceReadingSchema } from "@pe/mcps/product-readings";
+import { READING_MAX_KEYS } from "@pe/agent-contracts";
 ﻿import { request, type IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
@@ -17,8 +17,6 @@ import {
   checkoutRootFrom,
 } from "@pe/host-contracts/service-identity";
 import { checkoutRoot } from "./checkout-paths.ts";
-
-const resourceReadingSchema = readingRequestSchema.or(ductsReadingSchema);
 
 /** Web-only exception: borrow another checkout's reads, never its host lifecycle or writes. */
 export function readHostCheckout(): string | undefined {
