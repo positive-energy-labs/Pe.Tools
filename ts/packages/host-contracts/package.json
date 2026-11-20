@@ -87,6 +87,7 @@
     "./host-descriptor": "./src/host-descriptor.ts",
     "./decoders": "./src/decoders.ts",
     "./native-schemas": "./src/native-schemas.ts",
+    "./native-homes": "./src/generated/native-homes.generated.ts",
     "./native-effect": "./src/generated/native-effect.generated.ts"
   },
   "publishConfig": {

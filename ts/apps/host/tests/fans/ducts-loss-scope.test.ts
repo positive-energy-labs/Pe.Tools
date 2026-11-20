@@ -10,7 +10,7 @@ import {
   claimRefusal,
   fanRulings,
   fanWriteRequest,
-  fansExecutors,
+  fanLosses,
   lossSnapshot,
   unwrittenCells,
   unwrittenReason,
@@ -95,7 +95,7 @@ test("the real /fans apply asks to retire its own role only, and retires it unde
     retireWork,
   };
   await settle(
-    fansExecutors({} as never)["sheet.apply"]!.run(
+    fanLosses("sheet.apply", "apply")({} as never, {}).run(
       ctx as never,
       execution as never,
     ) as Effect.Effect<unknown>,

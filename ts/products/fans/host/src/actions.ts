@@ -13,7 +13,6 @@ import { stagedValues } from "@pe/duct-systems-contract/ducts";
 
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { RevitBridge } from "@pe/host-internal/bridge";
 import { refused } from "@pe/host-internal/command-executor";
 
 import {
@@ -34,11 +33,7 @@ import { workLayer } from "@pe/ducts-host/ducts-inputs";
 import { scopeApplyRequest, appliedCellPaths, fanWriteCells } from "@pe/ducts-domain/staged";
 import type { DuctsApply } from "@pe/host-contracts/generated";
 
-import {
-  ductActionExecutors,
-  type DuctActionPreparation,
-  type DuctActionDependencies,
-} from "@pe/ducts-host/action-runtime";
+import { ductActionBody, type DuctActionPreparation } from "@pe/ducts-host/action-runtime";
 /** Refused intent cannot authorize ancillary writes, even when those writes planned successfully. */
 export const lossPlanRefusal = (writes: DuctsApply.Res.Response["writes"]) =>
   writes.some((w) => w.outcome === "refused")
@@ -318,30 +313,23 @@ async function prepareLosses(p: DuctActionPreparation) {
   };
 }
 
-export function fansExecutors(bridge: RevitBridge["Service"], deps: DuctActionDependencies = {}) {
-  return ductActionExecutors(
-    {
-      snapshot: lossSnapshot,
-      derive: prepareLosses,
-      entry: {
-        key: "ducts.apply",
-        native: "ducts.apply.plan",
-        refusePlan: (value) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
-        retires: (input, value, subjects, cells) =>
-          appliedCellPaths(
-            input as unknown as DuctsApplyInput,
-            value as DuctsApply.Res.Response,
-            subjects,
-            cells,
-          ),
-      },
-      bindings: [
-        ["sheet.plan", "losses", "plan"],
-        ["sheet.apply", "losses", "apply"],
-      ],
+export const fanLosses = ductActionBody(
+  {
+    snapshot: lossSnapshot,
+    derive: prepareLosses,
+    entry: {
+      key: "ducts.apply",
+      native: "ducts.apply.plan",
+      refusePlan: (value) => lossPlanRefusal((value as DuctsApply.Res.Response).writes),
+      retires: (input, value, subjects, cells) =>
+        appliedCellPaths(
+          input as unknown as DuctsApplyInput,
+          value as DuctsApply.Res.Response,
+          subjects,
+          cells,
+        ),
     },
-    bridge,
-    deps,
-    product.tool,
-  );
-}
+  },
+  product.tool,
+  "losses",
+);

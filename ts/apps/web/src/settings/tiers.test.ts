@@ -15,7 +15,11 @@ import { basename, join } from "node:path";
 import { Effect } from "effect";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { fansCalcData } from "@pe/fans-contract/fans-read";
-import { ductsFirmSchema, type DuctsCriteriaCell } from "@pe/ducts-contract/duct-inputs";
+import {
+  ductsFirmSchema,
+  isCriteriaCell,
+  type DuctsCriteriaCell,
+} from "@pe/ducts-contract/duct-inputs";
 import { ductsDocumentSchema, ductParameterSlots } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
@@ -500,7 +504,7 @@ test("all eight criteria display the engine defaults when the firm folder is gon
     allowanceSupplyInWg: 0,
     allowanceReturnInWg: 0,
   };
-  for (const cell of ductsDocumentSchema.shape.criteria.unwrap().keyof().options)
+  for (const cell of Object.keys(expected).filter(isCriteriaCell))
     expect(at.cell(cell)).toMatchObject({ value: expected[cell], source: "default" });
 });
 

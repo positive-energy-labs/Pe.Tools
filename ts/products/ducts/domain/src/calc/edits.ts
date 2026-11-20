@@ -36,11 +36,7 @@ export function editPatches(edits: DuctsCalcEdits): RouteStatePatch[] {
     for (const [side, n] of sides) {
       const cell = criteriaCellOf(key, side);
       if (!cell || n === undefined) continue;
-      patches.push(
-        n === null
-          ? { path: ["criteria", cell] }
-          : { path: ["criteria", cell, "edit"], value: { value: n } },
-      );
+      patches.push(n === null ? { path: [cell] } : { path: [cell, "edit"], value: { value: n } });
     }
   }
   for (const { pair, verdict } of edits.joins ?? [])

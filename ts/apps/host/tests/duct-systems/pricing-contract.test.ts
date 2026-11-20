@@ -67,7 +67,7 @@ test("ducts.pricing resolves a staged Work criterion over the firm file, as the 
       JSON.stringify(recorded.settings.ducts[0]!.json),
     );
     const patches = Object.entries(recorded.ductSystemsWork.criteria).map(([cell, { edit }]) => ({
-      path: ["criteria", cell, "edit"],
+      path: [cell, "edit"],
       value: { value: edit.value },
     }));
     const saved = await host.workspace.apply(
@@ -88,12 +88,12 @@ test("ducts.pricing resolves a staged Work criterion over the firm file, as the 
     expect(data.settings.ducts!.find((tier) => tier.tier === "firm")?.json).toMatchObject({
       criteria: { autoJoinGapIn: 5 },
     });
-    expect(data.ductSystemsWork.criteria.autoJoinGapIn?.edit).toMatchObject({
+    expect(data.ductSystemsWork.autoJoinGapIn?.edit).toMatchObject({
       value: 9,
       by: "human",
     });
     expect(data.criteria.autoJoinGapIn).toMatchObject({
-      value: data.ductSystemsWork.criteria.autoJoinGapIn!.edit!.value,
+      value: data.ductSystemsWork.autoJoinGapIn!.edit!.value,
       source: "Work",
       author: "human",
       // The Work revision the read priced on, as `networkCalcs` versions its inputs.

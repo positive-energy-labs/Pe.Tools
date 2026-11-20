@@ -4,7 +4,8 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addressSchema, bindWork } from "@pe/agent-contracts";
-import { ductsRouteState, ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
+import { ductsDesign } from "@pe/duct-systems-contract/ducts";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { neutralFansWork, fansDocumentSchema } from "@pe/fans-contract/fans";
 import { type DuctsCalcEdits } from "@pe/ducts-contract/duct-inputs";
@@ -54,7 +55,7 @@ const design = (raw: unknown) => ductsDesign(ductsDocumentSchema.parse(raw), neu
 test("fitting edits land on Work's own keys and read back through the Work layer", async () => {
   const dir = await mkdtemp(join(tmpdir(), "ducts-fitting-edits-"));
   try {
-    const registrations = [{ spec: ductsRouteState }];
+    const registrations = [{ spec: ductSystems.work }];
     const workspace = new RouteWorkspace({
       store: fileRouteDocumentStore(stateFixture(dir)),
       registrations,
@@ -131,7 +132,7 @@ test("fitting edits land on Work's own keys and read back through the Work layer
 test("a criteria edit writes and clears one side's own cell, leaving the other side's cell alone", () => {
   // supply 850: its own cell; return stays unstaged, so it keeps the firm's value and source.
   expect(editPatches({ criteria: { velocityLimitFpm: { supply: 850 } } })).toEqual([
-    { path: ["criteria", "velocitySupplyFpm", "edit"], value: { value: 850 } },
+    { path: ["velocitySupplyFpm", "edit"], value: { value: 850 } },
   ]);
   // Clearing a side removes only its pending edit; an unsided criterion is one cell.
   expect(
@@ -139,9 +140,9 @@ test("a criteria edit writes and clears one side's own cell, leaving the other s
       criteria: { velocityLimitFpm: { return: null }, healBoxIn: null, splitPolicy: "even" },
     }),
   ).toEqual([
-    { path: ["criteria", "velocityReturnFpm"] },
-    { path: ["criteria", "healBoxIn"] },
-    { path: ["criteria", "splitPolicy", "edit"], value: { value: "even" } },
+    { path: ["velocityReturnFpm"] },
+    { path: ["healBoxIn"] },
+    { path: ["splitPolicy", "edit"], value: { value: "even" } },
   ]);
   // The engine reads the layer the cells make.
   expect(

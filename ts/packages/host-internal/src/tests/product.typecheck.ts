@@ -1,7 +1,7 @@
 // Compiled by this package's `check`, never run: every `@ts-expect-error` is a declaration `tsc` must refuse.
 import { z } from "zod";
 import type { ReadHandle } from "@pe/agent-contracts/handle";
-import { product } from "@pe/agent-contracts/product";
+import { cell, product } from "@pe/agent-contracts/product";
 import { implement, type CommandBody } from "../product.ts";
 
 declare const roster: ReadHandle<"tiny.roster", { name: string }, number>;
@@ -42,3 +42,15 @@ implement(tiny, { readings, commands: { "tiny.write": executor } });
 implement(tiny, { readings, commands: { ...commands, "tiny.merge": executor } });
 // @ts-expect-error a body that answers with the wrong data
 implement(tiny, { readings: { ...readings, calc: readings.roster }, commands });
+
+cell({ kind: "text", shape: z.string() }, "route");
+// @ts-expect-error text is not an enum with an empty static choice list
+cell({ kind: "enum", shape: z.string(), choices: [] }, "route");
+
+const withSheet = product({ ...tiny, sheetWrites: {} });
+implement(withSheet, {
+  readings,
+  commands: { ...commands, "sheet.plan": executor, "sheet.apply": executor },
+});
+// @ts-expect-error selecting a product sheet requires both platform command bodies
+implement(withSheet, { readings, commands: { ...commands, "sheet.plan": executor } });

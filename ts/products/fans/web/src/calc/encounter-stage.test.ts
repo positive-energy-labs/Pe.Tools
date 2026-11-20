@@ -1,7 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
-import { ductsRouteState, stagedDucts, encounterPatches } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
+import { stagedDucts, encounterPatches } from "@pe/duct-systems-contract/ducts";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { RouteWorkspace } from "@pe/runtime";
 import { encounterRulings } from "@pe/ducts-domain/calc/inputs";
@@ -58,7 +59,7 @@ it.each(["connect", "ignore"] as const)(
   async (choice) => {
     const saved = new Map<string, unknown>();
     const workspace = new RouteWorkspace({
-      registrations: [{ spec: ductsRouteState }],
+      registrations: [{ spec: ductSystems.work }],
       store: {
         getState: async ({ route }) => saved.get(route),
         setState: async ({ route, value }) => {

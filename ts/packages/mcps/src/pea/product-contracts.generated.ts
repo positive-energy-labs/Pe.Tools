@@ -7,11 +7,11 @@ import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
 const products = [product0, product1, product2] as const;
-export const resourceReadingSchema = z.union([readingRequestSchema, ...products.flatMap(product => "resourceInputs" in product ? [...product.resourceInputs] : [])]);
-const owners = products.flatMap(product => "settingOwners" in product ? [product.settingOwners] : []);
+export const resourceReadingSchema = z.union([readingRequestSchema, ...products.flatMap(product => [...product.resourceInputs])]);
+const owners = products.map(product => product.settingOwners);
 assertUniqueProductKeys("settings owner", owners);
 export const settingOwners: Readonly<Record<string, SettingOwner>> = Object.freeze(Object.assign({}, ...owners));
-const headersByProduct = products.flatMap(product => "basisHeaders" in product ? [product.basisHeaders] : []);
+const headersByProduct = products.map(product => product.basisHeaders);
 assertUniqueProductKeys("basis header", headersByProduct);
 export const readingBasisHeaders = (headers: Readonly<Record<string, string | undefined>>) => ({
   ...Object.fromEntries(headersByProduct.flatMap(names => Object.entries(names).map(([name, header]) => [name, headers[header]]))),

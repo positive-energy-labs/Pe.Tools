@@ -23,7 +23,7 @@ const pipe = subjectCode({
 const sheet = {
   bindings: {
     sized: local({ kind: "number" }, "subject", { label: "Pipe size", rows: () => [pipe] }),
-    slot: local({ kind: "enum", shape: z.string(), choices: [] }, "subject", {
+    slot: local({ kind: "text", shape: z.string() }, "subject", {
       rows: () => ["fanFlow"],
     }),
   },

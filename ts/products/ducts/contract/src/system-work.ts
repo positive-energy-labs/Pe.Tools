@@ -20,7 +20,8 @@
  * staged rule tables and verdicts and writes no element.
  */
 import { decode, subjectOf, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
-import { draftCellSchema } from "@pe/agent-contracts/draft";
+import { isRecord } from "@pe/agent-contracts";
+import { cell, workSchema } from "@pe/agent-contracts/product";
 import { serveSetting, type SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { z } from "zod";
 import {
@@ -28,7 +29,9 @@ import {
   ductParameterNameSchema,
   DUCT_UNIT_KINDS,
   DUCTS_CRITERIA_CELLS,
+  type DuctsCriteriaCell,
 } from "./duct-inputs.ts";
+import { criterionLabel } from "./criterion-words.neutral.ts";
 
 export const DUCT_SYSTEMS_ROUTE = "duct-systems";
 
@@ -65,93 +68,86 @@ export const ductSystemColoursSchema = z.strictObject({
 });
 export type DuctSystemColours = z.infer<typeof ductSystemColoursSchema>;
 
-/** One group's subject: element ids in walking order. The web cuts legs from it (`ducts/legs.ts`). */
-const subjectSchema = z.array(z.number().int()).min(1).readonly();
-
-export const ductsDocumentSchema = z
-  .strictObject({
-    /** The project's design criteria over the firm file (ducts LEDGER 2026-10-29): one cell per criterion and side, pending until apply. */
-    criteria: z
-      .strictObject({
-        velocitySupplyFpm: draftCellSchema(DUCTS_CRITERIA_CELLS.velocitySupplyFpm.value).optional(),
-        velocityReturnFpm: draftCellSchema(DUCTS_CRITERIA_CELLS.velocityReturnFpm.value).optional(),
-        terminalDropInWg: draftCellSchema(DUCTS_CRITERIA_CELLS.terminalDropInWg.value).optional(),
-        autoJoinGapIn: draftCellSchema(DUCTS_CRITERIA_CELLS.autoJoinGapIn.value).optional(),
-        healBoxIn: draftCellSchema(DUCTS_CRITERIA_CELLS.healBoxIn.value).optional(),
-        splitPolicy: draftCellSchema(DUCTS_CRITERIA_CELLS.splitPolicy.value).optional(),
-        allowanceSupplyInWg: draftCellSchema(
-          DUCTS_CRITERIA_CELLS.allowanceSupplyInWg.value,
-        ).optional(),
-        allowanceReturnInWg: draftCellSchema(
-          DUCTS_CRITERIA_CELLS.allowanceReturnInWg.value,
-        ).optional(),
-      })
-      .default({}),
-    /** A unit kind ruled per family type, keyed JSON.stringify([family, type]); suggested from ports otherwise. */
-    kinds: z
-      .record(z.string().min(1), draftCellSchema(z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) })))
-      .default({}),
-    /** Authored scope for host-derived repair and fan commands; never a native request. */
-    writeIntent: draftCellSchema(
-      z.strictObject({
-        /** Network groups as SubjectRef `group:<id>` codes (ADR 0035 rule 2), decoded at this door. */
-        groups: z
-          .array(
-            subjectRefCodeSchema.refine(
-              (code) => decode(code).ok && subjectOf(code).keyKind === "group",
-              {
-                message: "a write-scope group is a group:<id> SubjectRef",
-              },
-            ),
-          )
-          .readonly()
-          .optional(),
-        cells: z
-          .array(z.tuple([z.literal("rules"), z.string().min(1)]).readonly())
-          .min(1)
-          .readonly()
-          .optional()
-          .describe(
-            'The rule cells whose fitting coefficients a /fans sheet.apply writes to elements, for example [["rules","elbow-round"]]; omitted, no fitting is written. The rule itself stays staged. Preview and apply use the same scope.',
-          ),
-        fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
-      }),
-    ).default({}),
-    /** Deletable: a delete edit takes back the verdict the model's store holds at that key. */
-    assumptions: z
-      .record(z.string(), draftCellSchema(ductAssumptionSchema, { deletable: true }))
-      .default({}),
-    rules: z
-      .record(z.string(), draftCellSchema(z.strictObject({ table: z.string().min(1) })))
-      .default({}),
-    /** Key = JSON.stringify([family, type]), type "" for the whole family; edited link beats the Pe_Catalog TYPE fact. */
-    catalogs: z
-      .record(z.string(), draftCellSchema(z.strictObject({ table: z.string().min(1) })))
-      .default({}),
-    /** Key = a fitting family name no rule matches; the cell holds the rule key it is priced as. Read before any rule's own `when`; stays in Pe like `catalogs`. */
-    ruleAssignments: z
-      .record(z.string().min(1), draftCellSchema(z.strictObject({ rule: z.string().min(1) })))
-      .default({}),
-    /** Keyed by group id (`g<min element id>`): the ordered element ids of that group's system as intended. */
-    subject: z.record(z.string().min(1), draftCellSchema(subjectSchema)).default({}),
-    /** The instance parameter whose value names equipment for people; absent reads the firm tag PE_G___TagInstance. */
-    labelParameter: draftCellSchema(z.string().min(1).nullable()).default({}),
-    /** The phase the network is read in; null (or no cell) reads every element. */
-    workingPhase: draftCellSchema(z.string().min(1).nullable()).default({}),
-    /** Shared picture palette. Persisted with ducts Work; never included in Revit apply. */
-    systemColours: draftCellSchema(ductSystemColoursSchema).default({}),
-  })
-  .superRefine((doc, ctx) => {
-    for (const [key, cell] of Object.entries(doc.assumptions)) {
-      const value = cell.edit?.value;
-      if (value && value.kind !== kindOfKey(key))
-        ctx.addIssue({
-          code: "custom",
-          path: ["assumptions", key, "edit", "value"],
-          message: `the key ${key} holds a ${kindOfKey(key)}, not a ${value.kind}`,
-        });
-    }
+const nonempty = z.string().min(1);
+const named = <S extends z.ZodType>(value: S) => z.record(nonempty, value);
+const value = <S extends z.ZodType, const K extends "route" | "name">(shape: S, per: K) =>
+  cell({ kind: "value", shape }, per);
+const criterion = <K extends DuctsCriteriaCell>(key: K) => {
+  const {
+    domain,
+    layer: [name, side],
+  } = DUCTS_CRITERIA_CELLS[key];
+  return cell(domain, "route", {
+    label: side ? criterionLabel(name) + " " + side : criterionLabel(name),
   });
+};
+export const ductSystemCells = {
+  velocitySupplyFpm: criterion("velocitySupplyFpm"),
+  velocityReturnFpm: criterion("velocityReturnFpm"),
+  terminalDropInWg: criterion("terminalDropInWg"),
+  autoJoinGapIn: criterion("autoJoinGapIn"),
+  healBoxIn: criterion("healBoxIn"),
+  splitPolicy: criterion("splitPolicy"),
+  allowanceSupplyInWg: criterion("allowanceSupplyInWg"),
+  allowanceReturnInWg: criterion("allowanceReturnInWg"),
+  writeIntent: value(
+    z.strictObject({
+      /** Network groups as SubjectRef `group:<id>` codes (ADR 0035 rule 2), decoded at this door. */
+      groups: z
+        .array(
+          subjectRefCodeSchema.refine(
+            (code) => decode(code).ok && subjectOf(code).keyKind === "group",
+            {
+              message: "a write-scope group is a group:<id> SubjectRef",
+            },
+          ),
+        )
+        .readonly()
+        .optional(),
+      cells: z
+        .array(z.tuple([z.literal("rules"), z.string().min(1)]).readonly())
+        .min(1)
+        .readonly()
+        .optional()
+        .describe(
+          'The rule cells whose fitting coefficients a /fans sheet.apply writes to elements, for example [["rules","elbow-round"]]; omitted, no fitting is written. The rule itself stays staged. Preview and apply use the same scope.',
+        ),
+      fan: z.strictObject({ unitId: z.number().int(), systemId: z.number().int() }).optional(),
+    }),
+    "route",
+  ),
+  assumptions: cell({ kind: "value", shape: ductAssumptionSchema }, "name", {
+    deletable: true,
+    record: <S extends z.ZodType>(shape: S) =>
+      z.record(z.string(), shape).superRefine((rows, ctx) => {
+        for (const [key, row] of Object.entries(rows)) {
+          const value = isRecord(row) && isRecord(row.edit) ? row.edit.value : undefined;
+          const kind = kindOfKey(key);
+          if (isRecord(value) && value.kind !== kind)
+            ctx.addIssue({
+              code: "custom",
+              path: [key, "edit", "value"],
+              message: `the key ${key} holds a ${kind}, not a ${value.kind}`,
+            });
+        }
+      }),
+  }),
+  rules: value(z.strictObject({ table: nonempty }), "name"),
+  catalogs: value(z.strictObject({ table: nonempty }), "name"),
+  ruleAssignments: cell({ kind: "value", shape: z.strictObject({ rule: nonempty }) }, "name", {
+    record: named,
+  }),
+  subject: cell({ kind: "value", shape: z.array(z.number().int()).min(1).readonly() }, "name", {
+    record: named,
+  }),
+  labelParameter: cell({ kind: "text", shape: nonempty.nullable() }, "route"),
+  workingPhase: cell({ kind: "text", shape: nonempty.nullable() }, "route"),
+  systemColours: value(ductSystemColoursSchema, "route"),
+  kinds: cell({ kind: "value", shape: z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) }) }, "name", {
+    record: named,
+  }),
+};
+export const ductsDocumentSchema = workSchema(ductSystemCells);
 export type DuctsRouteDocument = z.infer<typeof ductsDocumentSchema>;
 
 /** Host requests project only served names; native fallbacks belong to the default tier. */

@@ -1,5 +1,5 @@
-import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
-import { sheetCommands } from "@pe/ducts-contract/semantic-actions";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
+import { builtinCommands } from "@pe/agent-contracts/semantic-actions";
 import { product as fans } from "@pe/fans-contract/product";
 const fansTool = fans.tool;
 
@@ -10,6 +10,7 @@ import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
+import type { CommandBody } from "@pe/host-internal/product";
 import { Effect } from "effect";
 import { admittedCommandReadIdentity } from "@pe/host-internal/command-read-identity";
 import { RequestIdentity } from "@pe/host-internal/request-identity";
@@ -69,7 +70,11 @@ export interface DuctActionPreparation {
   bridge: RevitBridge["Service"];
   appliedAt: string | undefined;
 }
-const ductCommands = { ...ductSystemsTool.commands, ...sheetCommands };
+const ductCommands = {
+  ...ductSystems.tool.commands,
+  "sheet.plan": builtinCommands["sheet.plan"],
+  "sheet.apply": builtinCommands["sheet.apply"],
+};
 
 export interface DuctAction {
   snapshot: (intent: Intent, read: ReadSnapshot) => Promise<DuctSnapshot>;
@@ -93,7 +98,6 @@ export interface DuctAction {
       cells: [string, string][],
     ) => readonly import("@pe/agent-contracts").WorkPath[];
   };
-  bindings: readonly (readonly [keyof typeof ductCommands, Kind, Phase])[];
 }
 
 const prepared = z.object({
@@ -114,7 +118,7 @@ const targetOf = (ctx: CommandContext) => {
 type Kind = "losses" | "heal" | "assign-fan";
 /** plan seals (Read), rehearse rolls back (TransactRead, never seal authority), apply commits. */
 type Phase = "plan" | "rehearse" | "apply";
-const ductsRoute = ductSystemsTool.work.route,
+const ductsRoute = ductSystems.tool.work.route,
   fansRoute = fansTool.work.route;
 
 const rulingsDoor: Pick<DuctAction, "snapshot" | "derive" | "entry"> = {
@@ -150,13 +154,28 @@ const PLAN_OF = {
   heal: "ducts.plan-heal",
   "assign-fan": "ducts.plan-assign-fan",
 } as const;
+export function ductActionBody(
+  action: DuctAction,
+  owner: typeof fansTool | typeof ductSystems.tool,
+  kind: Kind,
+) {
+  return (key: keyof typeof ductCommands, mode: Phase | "seal"): CommandBody =>
+    (bridge, deps) =>
+      ductActionExecutor(action, bridge, deps, owner, kind, key, mode);
+}
+
 /** Work is the only authored input. Plan, rehearsal and apply share the same derivation and journal. */
-export function ductActionExecutors(
+function ductActionExecutor(
   action: DuctAction,
   bridge: RevitBridge["Service"],
   deps: DuctActionDependencies,
-  owner: typeof fansTool | typeof ductSystemsTool,
+  owner: typeof fansTool | typeof ductSystems.tool,
+  kind: Kind,
+  key: keyof typeof ductCommands,
+  mode: Phase | "seal",
 ) {
+  // Heal and fan plans use the apply's derivation. The seal boundary skips native dispatch.
+  const phase = mode === "seal" ? "apply" : mode;
   const needOwner = (route: string) => {
     if (route !== owner.work.route)
       throw refused(`Expected ${owner.work.route} Work`, "work.target");
@@ -186,8 +205,8 @@ export function ductActionExecutors(
     if (!runPods)
       throw refused("Ducts preparation requires the host Pods runtime", "read.unavailable");
     const process = await deps.projectLifetime(target);
-    const doc = await ctx.selectWork(ductSystemsTool.work, raw, (_doc, cells) => ({
-      edits: ductSystemsTool.work.editable,
+    const doc = await ctx.selectWork(ductSystems.tool.work, raw, (_doc, cells) => ({
+      edits: ductSystems.tool.work.editable,
       facts: [["workingPhase"]],
       cells: cells.filter(({ cell }) => cell.edit).map(({ path }) => path),
     }));
@@ -385,56 +404,26 @@ export function ductActionExecutors(
         ...(retired ? { retired } : {}),
       };
     });
-  return {
-    // The registry wraps these at boot: `commands[key].writeBoundary` (or `workIntent` for a rehearsal) carries
-    // the binding. ducts.plan-heal and ducts.plan-assign-fan have no executor: the registry binds the apply's in
-    // its plan phase, which seals the derived request without a native call.
-    ...Object.fromEntries(
-      action.bindings.map(([key, kind, phase]) => {
-        return [
-          key,
-          command(ductCommands[key], prepared, {
-            seal: (p) => ({ request: p.input, evidence: p.dependencies }),
-            bind: (ctx) => bind(ctx, kind, phase),
-            run: (ctx, execution) => run(ctx, execution, phase),
-          }),
-        ];
-      }),
-    ),
-  };
+  return command(ductCommands[key], prepared, {
+    sealOnly: mode === "seal" ? true : undefined,
+    seal: (p) => ({ request: p.input, evidence: p.dependencies }),
+    bind: (ctx) => bind(ctx, kind, phase),
+    run: (ctx, execution) => run(ctx, execution, phase),
+  });
 }
 
-export function ductsRefreshExecutors(bridge: RevitBridge["Service"]) {
-  return {
-    "ducts.refresh": command(ductSystemsTool.commands["ducts.refresh"], z.null(), {
-      bind: async (ctx) => {
-        targetOf(ctx);
-        return { effects: [] };
-      },
-      run: (ctx) =>
-        Effect.sync(() => {
-          const target = targetOf(ctx);
-          ductsReadings(bridge).refresh(target);
-          return { target, refreshed: true };
-        }),
-    }),
-  };
-}
-
-export function ductsRulingsExecutors(
-  bridge: RevitBridge["Service"],
-  deps: DuctActionDependencies,
-) {
-  return ductActionExecutors(
-    {
-      ...rulingsDoor,
-      bindings: [
-        ["sheet.plan", "losses", "plan"],
-        ["sheet.apply", "losses", "apply"],
-      ],
+export const ductsRefresh: CommandBody = (bridge) =>
+  command(ductSystems.tool.commands["ducts.refresh"], z.null(), {
+    bind: async (ctx) => {
+      targetOf(ctx);
+      return { effects: [] };
     },
-    bridge,
-    deps,
-    ductSystemsTool,
-  );
-}
+    run: (ctx) =>
+      Effect.sync(() => {
+        const target = targetOf(ctx);
+        ductsReadings(bridge).refresh(target);
+        return { target, refreshed: true };
+      }),
+  });
+
+export const ductsRulings = ductActionBody(rulingsDoor, ductSystems.tool, "losses");

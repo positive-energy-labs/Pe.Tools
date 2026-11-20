@@ -10,6 +10,18 @@ import { Schema } from "effect";
 export type HostOperationKey = keyof HostOps;
 const hostOperationKeySet: ReadonlySet<string> = new Set(hostOpKeys);
 
+/** Native closure of the shared Revit sheet door, including parameter and loss implementations. */
+export const sheetNativeOperations = {
+  read: [
+    "revit.detail.parameter-values",
+    "ducts.snapshot.walk",
+    "ducts.snapshot.roster",
+    "ducts.tables",
+  ],
+  plan: ["ducts.apply.plan"],
+  apply: ["revit.apply.parameter-values", "ducts.apply"],
+} as const satisfies Record<string, readonly HostOperationKey[]>;
+
 type NoRequest = Record<string, never> | undefined;
 type SchemaType<T extends Schema.Schema<any>> = Schema.Schema.Type<T>;
 
