@@ -24,6 +24,7 @@
       "types": "./src/pe-api.ts",
       "import": "./src/pe-api.ts"
     },
+    "./route": "./src/route.ts",
     "./route-kernel-codecs": {
       "types": "./src/route-kernel-codecs.ts",
       "import": "./src/route-kernel-codecs.ts"

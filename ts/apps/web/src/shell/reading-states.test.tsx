@@ -14,12 +14,12 @@ import { KeyScopeHost } from "@pe/kit/keys";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { module as families } from "../families/route";
 import { route, type ContextOf } from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { hostRead } from "@pe/agent-contracts/route";
 import { scrollBody } from "@pe/web-kernel/route/body";
 import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { TypedChrome } from "./typed-shell";
 import { mountTypedRoute } from "./typed-mount";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 
 afterEach(cleanup);
 

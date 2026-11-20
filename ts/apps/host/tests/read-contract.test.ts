@@ -14,7 +14,7 @@ import {
 } from "@pe/host-internal/reads/evaluator";
 import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads, graphRoute } from "../src/reads/routes.ts";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { hostRead } from "@pe/agent-contracts/route";
 import * as fanContracts from "@pe/fans-contract/contract";
 import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";

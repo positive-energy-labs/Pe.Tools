@@ -1,6 +1,6 @@
 import { routeRegistry } from "../route/registry";
 import type { Page, Fields } from "@pe/web-kernel/route/typed-route";
-import type { HostRead } from "@pe/web-kernel/host-read";
+import type { HostRead } from "@pe/agent-contracts/route";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { leaks } from "./visible-text";
 import { fanLabel } from "@pe/ducts-web/calc/model";

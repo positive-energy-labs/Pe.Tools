@@ -3,7 +3,7 @@ import { act, cleanup, render } from "@testing-library/react";
 import { RegistryContext } from "@effect/atom-react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { citation, selection } from "@pe/kit/lang/attention";
-import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { subjectSchema } from "@pe/agent-contracts/route";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import type { Readings } from "../host/resource-stream";
 import { PointerCite, pointerRefs } from "./pointer-list";

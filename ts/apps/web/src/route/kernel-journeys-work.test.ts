@@ -61,7 +61,7 @@ import type { PlaceInput } from "../shell/typed-place";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { routeInput } from "./host";
 import type { Readings } from "../host/resource-stream";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 import { scrollBody, type DrawContext, type TypedRoute } from "@pe/web-kernel/route/typed-route";
 
 const terminals = workSnapshot.nodes.filter((node) => node.kind === "terminal");
@@ -1401,7 +1401,8 @@ test.each(["accepted", "refused"] as const)(
   "JZ audit member switch keeps a late %s Work outcome out of the replacement",
   async (outcome) => {
     const { z } = await import("zod");
-    const { route, field } = await import("@pe/web-kernel/route/typed-route");
+    const { route } = await import("@pe/web-kernel/route/typed-route");
+    const { field } = await import("@pe/agent-contracts/route");
     const j = await journey();
     let held: ReturnType<typeof gate> | undefined;
     try {

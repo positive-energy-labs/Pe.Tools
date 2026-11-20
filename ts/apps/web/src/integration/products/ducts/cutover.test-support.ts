@@ -11,7 +11,7 @@ import { RouteWorkspace, observeResources } from "@pe/runtime";
 import sheet from "../../../../../../products/ducts/web/src/fixtures/fan-sheet.json";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import { placeInput } from "../../../shell/typed-place.test-support.ts";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 import { browserWorkPorts, createWorkFeedClient } from "../../../shell/work-feed-client.ts";
 
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";

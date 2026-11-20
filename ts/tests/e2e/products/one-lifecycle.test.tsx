@@ -5,7 +5,7 @@ import { address } from "@pe/agent-contracts";
 import { historySnapshotSchema } from "../../../apps/web/src/shell/history.ts";
 import { direct, mountTypedRoute, planned } from "../../../apps/web/src/shell/typed-mount.ts";
 import { scrollBody } from "@pe/web-kernel/route/body";
-import type { ReadingContext } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingContext } from "@pe/agent-contracts/route";
 import { createWitness } from "../fans-witness.test-support.ts";
 
 test("typed panes share declared Values; recorded Fans and Ducts use frozen Work and refuse writes", async () => {
@@ -100,10 +100,11 @@ test("typed panes share declared Values; recorded Fans and Ducts use frozen Work
 
 test("optional Work and invocation arguments share one typed scope", async () => {
   const { z } = await import("zod");
-  const { route, field } = await import("@pe/web-kernel/route/typed-route");
+  const { route } = await import("@pe/web-kernel/route/typed-route");
+  const { field } = await import("@pe/agent-contracts/route");
   const { handle } = await import("@pe/agent-contracts/handle");
   const { module: reference } = await import("@pe/fans-web/route");
-  const { hostRead } = await import("@pe/web-kernel/host-read");
+  const { hostRead } = await import("@pe/agent-contracts/route");
   const { workFingerprintSchema } = await import("@pe/agent-contracts");
   const source = vi.fn();
   const read = hostRead({

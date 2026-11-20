@@ -4,7 +4,7 @@ import { z } from "zod";
 import { Publications } from "../../../host/src/reads/publications.ts";
 import { leaf, read, type InputPort } from "@pe/host-internal/reads/evaluator";
 import type { Readings } from "./resource-stream";
-import type { ReadingContext } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingContext } from "@pe/agent-contracts/route";
 
 const stream = vi.hoisted(
   (): {

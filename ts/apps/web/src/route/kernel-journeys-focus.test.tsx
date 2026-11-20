@@ -45,7 +45,7 @@ import { ReviewSurface } from "../shell/review-surface";
 import { RouteVisibility } from "@pe/web-kernel/route/activity";
 
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 import { KeyScopeHost } from "@pe/kit/keys";
 import { module as families } from "../families/route";
 
@@ -1000,7 +1000,7 @@ const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, 
 import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
-import type { ReadingDelivery } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingDelivery } from "@pe/agent-contracts/route";
 const native = vi.hoisted(() => ({ submit: vi.fn(), retained: [] as unknown[] }));
 vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
   ...(await actual<object>()),

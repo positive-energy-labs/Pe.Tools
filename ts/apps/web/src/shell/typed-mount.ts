@@ -56,7 +56,7 @@ import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
-import type { ReadingContext, UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingContext, UseSource } from "@pe/agent-contracts/route";
 import type {
   AnyVerb,
   DrawContext,
@@ -259,7 +259,7 @@ export function mountTypedRoute(
     const applyingDocumentWrite = () =>
       input.target?.kind === "document" && applyingReviews.size > 0;
     const reads = new Map<
-      import("@pe/web-kernel/host-read").HostRead,
+      import("@pe/agent-contracts/route").HostRead,
       { snapshot: Snapshot; args: string; stop(): void }
     >();
     const limitRoster = () => {
@@ -268,14 +268,14 @@ export function mountTypedRoute(
         return subjectSpec.options(snapshot.value).map((option) => option.id);
     };
     const boundedAll = () => subjectSpec?.limit && page[subjectSpec.field].kind === "all";
-    const readInput = (read: import("@pe/web-kernel/host-read").HostRead) => {
+    const readInput = (read: import("@pe/agent-contracts/route").HostRead) => {
       const project =
         "args" in read && typeof read.args === "function"
           ? read.args
           : (spec.core?.args ?? (() => ({})));
       return read.input.parse(project(page as never));
     };
-    const currentPublication = (read: import("@pe/web-kernel/host-read").HostRead) => {
+    const currentPublication = (read: import("@pe/agent-contracts/route").HostRead) => {
       const record = reads.get(read);
       return record?.snapshot.state === "ready" &&
         record.args === canonicalRouteInput(readInput(read))
@@ -1505,7 +1505,7 @@ export function mountTypedRoute(
       current: (token: InvocationToken) => gate.current(token),
       // ponytail: a read the route never declared has not run; no caller draws this state (a pane with no read always draws).
       value: (
-        read: import("@pe/web-kernel/host-read").HostRead | undefined = spec.core,
+        read: import("@pe/agent-contracts/route").HostRead | undefined = spec.core,
       ): Snapshot =>
         read
           ? (reads.get(read)?.snapshot ?? reading())
@@ -1566,7 +1566,7 @@ export function mountTypedRoute(
         return owner ? owner.problem : null;
       },
       // A named read refreshes with the rest: every read is demanded at mount.
-      refresh: (_read?: import("@pe/web-kernel/host-read").HostRead) => {
+      refresh: (_read?: import("@pe/agent-contracts/route").HostRead) => {
         requireCurrent();
         syncReads(true);
       },
@@ -1828,7 +1828,7 @@ export function mountTypedRoute(
         return (render ?? ((ctx: DrawContext<any, any, any, any>) => pane.draw(ctx).node))({
           target: input.target,
           refresh: mounted.refresh,
-          read: (read: import("@pe/web-kernel/host-read").HostRead) => mounted.value(read),
+          read: (read: import("@pe/agent-contracts/route").HostRead) => mounted.value(read),
           absent: absentLine,
           value,
           page: mounted.page,

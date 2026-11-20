@@ -1,4 +1,7 @@
-import type { Effect, ExecutionTarget, WorkKey } from "@pe/agent-contracts";
+import type { Effect } from "./command-handle.ts";
+import type { ExecutionTarget } from "./target.ts";
+import type { HistoryPose } from "./history.ts";
+import type { WorkKey } from "./route-state.ts";
 
 export interface ReadingScope<P = unknown, W = unknown> {
   target: ExecutionTarget;
@@ -56,7 +59,7 @@ export type ReadingPublication<T = unknown> =
 
 export interface ReadingContext extends ReadingScope {
   readonly historyPoint?: string;
-  readonly historyPose?: import("@pe/agent-contracts").HistoryPose;
+  readonly historyPose?: HistoryPose;
   readonly publication?: { readonly subscription: string; readonly generation: number };
   readonly attempt: ReadingAttempt;
   /** Sources subscribe on demand; an expensive capture starts only for an explicit invocation. */

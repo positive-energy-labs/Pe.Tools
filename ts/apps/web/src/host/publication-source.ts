@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { peReadings } from "./resource-stream";
-import type { ReadingContext, UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingContext, UseSource } from "@pe/agent-contracts/route";
 
 export function publicationSource<
   T extends {

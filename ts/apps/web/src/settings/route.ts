@@ -1,10 +1,9 @@
 import * as contracts from "./contract.ts";
 import type { ContextOf } from "@pe/web-kernel/route";
-import { read } from "@pe/web-kernel/route";
+import { read, field, hostRead } from "@pe/agent-contracts/route";
 import { z } from "zod";
 import { SETTINGS_SECTIONS } from "../../../../packages/agent-contracts/src/settings-sections.ts";
-import { field, route } from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { route } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { split } from "@pe/web-kernel/route/typed-route";
 import { setting, type SheetSlot } from "../../../../packages/agent-contracts/src/slots/sheet.ts";

@@ -5,8 +5,8 @@ import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
 import { ductsSettings } from "@pe/ducts-contract/settings";
 
-import { hostRead } from "@pe/web-kernel/host-read";
-import { read, route, scrollBody } from "@pe/web-kernel/route";
+import { hostRead, read } from "@pe/agent-contracts/route";
+import { route, scrollBody } from "@pe/web-kernel/route";
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";
 import { createFixtureWorkDoor } from "../../../shell/fixture-work-door.ts";
 import { module as settingsModule, settingsSheet } from "../../../settings/route.ts";

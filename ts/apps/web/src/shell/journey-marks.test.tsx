@@ -18,7 +18,7 @@ import { mountTypedRoute } from "./typed-mount";
 import { createFixtureWorkDoor } from "./fixture-work-door";
 import { TypedChrome } from "./typed-shell";
 import { settled } from "../test-journey";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 import { route } from "@pe/web-kernel/route/typed-route";
 import { RouteVisibility } from "@pe/web-kernel/route/activity";
 

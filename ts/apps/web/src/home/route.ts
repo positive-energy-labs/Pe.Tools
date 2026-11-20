@@ -1,7 +1,8 @@
 import type { ContextOf } from "@pe/web-kernel/route";
 import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
-import { route, field } from "@pe/web-kernel/route";
+import { field } from "@pe/agent-contracts/route";
+import { route } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { threadListFields } from "../../../../packages/agent-contracts/src/routes/shared";
 /** Home has no subject and no slot data: every Page field is route-owned `query` (ADR 0035 rule 1). */

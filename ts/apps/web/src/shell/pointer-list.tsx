@@ -2,7 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { RegistryContext } from "@effect/atom-react";
 import { cite, clearCitation, type SubjectReference } from "@pe/kit/lang/attention";
 import { z } from "zod";
-import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import { subjectSchema } from "@pe/agent-contracts/route";
 import { subjectCode, subjectOf, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import type { Pointer } from "@pe/agent-contracts";
 import { peReadings, type Readings } from "#/host/resource-stream";

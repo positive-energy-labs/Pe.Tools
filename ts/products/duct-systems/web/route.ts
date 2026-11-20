@@ -3,8 +3,14 @@ import { systemCode } from "@pe/ducts-web/identity";
 import { fanScopeSchema, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./src/bindings.ts";
-import { read } from "@pe/web-kernel/route";
-import { stageField } from "@pe/web-kernel/route";
+import {
+  read,
+  stageField,
+  field,
+  picturePose,
+  subjectSchema,
+  hostRead,
+} from "@pe/agent-contracts/route";
 import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { z } from "zod";
 import { listSearchSchema } from "@pe/agent-contracts";
@@ -15,16 +21,7 @@ import {
   ductDetailLimitMessage,
 } from "@pe/duct-systems-contract/ducts-read";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
-import {
-  route,
-  field,
-  picturePose,
-  subjectSchema,
-  namesOf,
-  split,
-  whenSubject,
-} from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { route, namesOf, split, whenSubject } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { fillBody, scrollBody } from "@pe/web-kernel/route/body";
 import { overlay } from "@pe/web-kernel/route/slots/picture/overlay";
