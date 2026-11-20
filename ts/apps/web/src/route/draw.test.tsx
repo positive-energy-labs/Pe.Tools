@@ -3,7 +3,7 @@
 // `settled` (test-journey.ts) in jsdom, and `readMarks` (tests/e2e/marks.ts), the function a CDP
 // journey runs in Chrome.
 import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -51,7 +51,7 @@ test("D18 a hidden Place's loading drawing does not hold the shown page", () => 
 });
 
 test("D18 one boundary owns the loading fallback: no other source writes it", () => {
-  const root = fileURLToPath(new URL("../../../../", import.meta.url));
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
   const writers = ["apps/web/src", "packages/web-kernel/src"].flatMap(dir =>
     readdirSync(join(root, dir), { recursive: true, encoding: "utf8" })
       .filter((file) => /\.tsx?$/.test(file) && !/\.test\./.test(file))
