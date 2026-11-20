@@ -158,7 +158,7 @@ function fixture(options?: import("../src/machine.ts").MachineOptions) {
   return { sources, machine: machineOwner(sources, { periodMs: 60_000, ...options }) };
 }
 
-test("a new host serves kept years immediately, survives a refusal, and replaces them after success", async () => {
+test("kept years never hold up a census and survive a stalled check until it recovers", async () => {
   const root = stateFixture(await mkdtemp(join(tmpdir(), "pe-kept-years-")));
   const yearsState = stateDirectory(root.machine, "host", "test-host");
   const now = "2026-11-19T00:00:00.000Z";
@@ -169,16 +169,30 @@ test("a new host serves kept years immediately, survives a refusal, and replaces
   await first.machine.refresh();
 
   const second = fixture({ yearsState });
-  vi.mocked(second.sources.years).mockRejectedValueOnce(Error("SDK timed out")).mockResolvedValue([2026]);
+  const waiting = Promise.withResolvers<readonly number[]>();
+  vi.mocked(second.sources.years).mockReturnValue(waiting.promise);
   const received: Machine[] = [];
   const stop = second.machine.observe((value) => received.push(value));
   try {
     expect(received[0]).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now, attemptedAtUtc: null } } });
-    const failed = await second.machine.refresh();
-    expect(failed).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now } } });
-    expect(failed.legs.years?.error).toContain("timed out");
-    expect((await second.machine.refresh()).revit.years).toEqual([2026]);
+    const beforeDoctor = await Promise.race([
+      second.machine.refresh(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
+    ]);
+    expect(beforeDoctor).toMatchObject({
+      revit: { years: [2025], sessions: [expect.anything()] },
+      legs: { years: { observedAtUtc: now } },
+    });
+    expect((await second.machine.refresh()).revit.years).toEqual([2025]);
+    expect(second.sources.years).toHaveBeenCalledTimes(1);
+    waiting.reject(Error("SDK timed out"));
+    await vi.waitFor(() => expect(received.at(-1)?.legs.years?.error).toContain("timed out"));
+    expect(received.at(-1)?.revit.years).toEqual([2025]);
+    vi.mocked(second.sources.years).mockResolvedValue([2026]);
+    await second.machine.refresh();
+    await vi.waitFor(() => expect(received.at(-1)?.revit.years).toEqual([2026]));
   } finally {
+    waiting.resolve([]);
     stop();
   }
   expect(fixture({ yearsState }).machine.current().revit.years).toEqual([2026]);

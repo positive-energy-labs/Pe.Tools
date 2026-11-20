@@ -261,6 +261,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   const updatePeriodMs = options.updatePeriodMs ?? UPDATE_PERIOD_MS;
   let updateDueAt = 0;
   let yearsDueAt = 0;
+  let yearsPending = false;
   let noRevitSince: number | null = null;
   let eligibleBefore = false;
   /** Feed-failure count: the backoff is {@link feedBackoffMs}. */
@@ -343,6 +344,48 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
       );
     });
 
+  const publish = (value: Machine) => {
+    latest = value;
+    if (!closed) for (const accept of listeners) accept(value);
+    return value;
+  };
+
+  const refreshYears = Effect.gen(function* () {
+    const at = yield* Clock.currentTimeMillis;
+    if (yearsPending || at < yearsDueAt) return;
+    const check = Effect.gen(function* () {
+      const readYears = yield* read("years", sources.years(), (value, observedAtUtc) => {
+        years = value;
+        if (yearsFile)
+          try {
+            writeState(yearsFile, JSON.stringify({ years, observedAtUtc }));
+          } catch (error) {
+            console.warn("Could not keep installed Revit versions for the next host start", error);
+          }
+      });
+      if (readYears) yearsDueAt = (yield* Clock.currentTimeMillis) + updatePeriodMs;
+    });
+    // With no evidence yet, the first census still answers with the first check's result.
+    if (years === null) return yield* check;
+    // Keep one scoped check in flight while censuses and their callers use the held evidence.
+    yearsPending = true;
+    yield* Effect.forkIn(
+      Effect.gen(function* () {
+        yield* check;
+        const observedAtUtc = yield* nowIso;
+        publish({
+          ...latest,
+          observedAtUtc,
+          revit: { ...latest.revit, years },
+          legs: { ...latest.legs, years: legs.years },
+        });
+      }).pipe(Effect.ensuring(Effect.sync(() => {
+        yearsPending = false;
+      }))),
+      scope,
+    );
+  });
+
   const automaticFault = (error: unknown) =>
     nowIso.pipe(
       Effect.tap((attemptedAtUtc) =>
@@ -359,7 +402,6 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   /** One census pass over every leg. It never fails: a bad leg is a leg error in the frame. */
   const collect = Effect.gen(function* () {
     let actions: readonly ActionReceipt[] = [];
-    const startedAt = yield* Clock.currentTimeMillis;
     const [censusRead, attachmentsRead] = yield* Effect.all(
       [
         read("sessions", sources.sessions(), (value) => {
@@ -377,31 +419,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
         read("peers", sources.peers(), (value) => {
           peers = value;
         }),
-        startedAt >= yearsDueAt
-          ? read(
-              "years",
-              sources.years().pipe(
-                Effect.tap(() =>
-                  Clock.currentTimeMillis.pipe(
-                    Effect.tap((at) =>
-                      Effect.sync(() => {
-                        yearsDueAt = at + updatePeriodMs;
-                      }),
-                    ),
-                  ),
-                ),
-              ),
-              (value, observedAtUtc) => {
-                years = value;
-                if (yearsFile)
-                  try {
-                    writeState(yearsFile, JSON.stringify({ years, observedAtUtc }));
-                  } catch (error) {
-                    console.warn("Could not keep installed Revit versions for the next host start", error);
-                  }
-              },
-            )
-          : Effect.succeed(true),
+        refreshYears,
         read(
           "providers",
           attempt(sources.providers).pipe(
@@ -642,7 +660,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
     for (const key of holdings.keys()) if (!currentKeys.has(key)) holdings.delete(key);
     for (const key of Object.keys(legs))
       if (key.startsWith("holdings:") && !currentKeys.has(key.slice("holdings:".length))) delete legs[key];
-    latest = {
+    return publish({
       observedAtUtc: yield* nowIso,
       host: host ? { ...host, peers } : null,
       revit: {
@@ -657,9 +675,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
       share,
       providers,
       legs: { ...legs },
-    };
-    if (!closed) for (const accept of listeners) accept(latest);
-    return latest;
+    });
   });
 
   /**
@@ -1083,9 +1099,8 @@ export function machineSources(
     attachments: () => bridgeAttachments(bridge),
     // Doctor can report unrelated wiring refusals while still identifying installed years.
     years: Effect.fn("machine.years")(function* () {
-      // The budget must fit inside LEG_DEADLINE_MS: a 20 s budget ran 15.5 s on a busy machine and
-      // never once beat the 15 s leg (2026-11-19). Doctor reads the installs fifth of 24 checks and
-      // returns what it reached at the budget (3.9 s for a 3 s budget), naming the rest in `partial`.
+      // Doctor names skipped checks in `partial`, but its tool probes have their own timeouts.
+      // A 5 s budget avoids starting optional work; the 15 s Machine leg still owns cancellation.
       const { result } = yield* sdk<DoctorResult>(doctorArgv({ timeoutSeconds: 5 }), [0, 1, 3]);
       if (result.partial.some((check) => check.startsWith("revit-installs")))
         return yield* unreadable("SDK doctor did not reach the Revit installs check.");
