@@ -24,6 +24,21 @@ import type {
   VerbDecl,
 } from "./typed-route.ts";
 
+/** What a review says: one sentence, or a sentence over its rows and cells (`presentationSchema` decodes it). */
+export type Presentation =
+  | string
+  | {
+      readonly sentence: string;
+      readonly rows: readonly string[];
+      readonly cells?: readonly unknown[];
+    };
+export type PlanCell = {
+  pane: string;
+  path: readonly [string, ...string[]];
+  value: unknown;
+  label: string;
+};
+
 export type RoleFields<F extends Fields, R extends Fields[string]["role"]> = {
   [K in keyof F]: R extends F[K]["role"] ? K : never;
 }[keyof F];

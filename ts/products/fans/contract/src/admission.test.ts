@@ -4,6 +4,27 @@ import { expect, test } from "vite-plus/test";
 import { workHandle } from "@pe/agent-contracts";
 import { admissionPreflight } from "./admission.ts";
 
+test("an unscoped Fans preview tells Pea how to stage the port and retry", async () => {
+  const asked = workHandle({ binding: "host", route: fansRouteState.route, target: null }, 1);
+  await expect(
+    admissionPreflight.run({}, asked, async (key) => ({ handle: workHandle(key, 1), doc: {} })),
+  ).rejects.toThrow(
+    'Read route:reads.value with read "fans.roster" for the same document. ' +
+      'Use the intended row\'s unitId and portIndex to stage writeIntent.edit in route:fans Work as {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}}. ' +
+      "Retry sheet.plan with the accepted Work handle and revision. No preview was submitted.",
+  );
+});
+
+test("saving Duct Systems rulings does not require a Fans write scope", async () => {
+  const asked = workHandle({ binding: "host", route: DUCT_SYSTEMS_ROUTE, target: null }, 1);
+  await expect(
+    admissionPreflight.run({}, asked, async (key) => ({
+      handle: workHandle(key, 1),
+      doc: {},
+    })),
+  ).resolves.toBeUndefined();
+});
+
 test("P-096: preflight refuses a stale route-keyed sibling revision", async () => {
   const asked = workHandle({ binding: "host", route: fansRouteState.route, target: null }, 1);
   const sibling = workHandle({ ...asked.key, route: DUCT_SYSTEMS_ROUTE }, 1);

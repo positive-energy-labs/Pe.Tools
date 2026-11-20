@@ -8,6 +8,8 @@ import { schemaOf, type Domain } from "@pe/agent-contracts/slots/sheet";
 import { elementSubjectRecord } from "@pe/ducts-contract/duct-inputs";
 export { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
 
+export const fanWriteScopeMessage = "Choose a fan port in Write scope in Inputs, then plan again.";
+
 const dropSchema = z.strictObject({
   inWg: schemaOf(FAN_CELLS.terminalDrops.domain.fields.inWg),
   /** Where the number came from: a catalog page, a submittal, "rule of thumb". */

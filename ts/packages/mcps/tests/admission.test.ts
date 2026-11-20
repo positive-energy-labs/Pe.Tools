@@ -458,7 +458,7 @@ import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { workHandle } from "@pe/agent-contracts";
 test.each(["open", "address", "workspace", "host"] as const)(
-  "loss preview reads exact %s Work and refuses groups without a fan walk",
+  "Duct Systems preview reads exact %s Work with or without a Fans write scope",
   async (binding) => {
     for (const scoped of [false, true]) {
       const posts: unknown[] = [];
@@ -533,15 +533,8 @@ test.each(["open", "address", "workspace", "host"] as const)(
           },
           { door: "command", mutates: false, needs: "project-document" },
         );
-      if (scoped) {
-        expect(await run()).toMatchObject({ state: "succeeded" });
-        expect(posts).toHaveLength(1);
-      } else {
-        await expect(run()).rejects.toThrow(
-          "Preview needs a fan walk. Read route:reads.value (read fans.roster)",
-        );
-        expect(posts).toEqual([]);
-      }
+      expect(await run()).toMatchObject({ state: "succeeded" });
+      expect(posts).toHaveLength(1);
     }
   },
 );
