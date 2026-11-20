@@ -1,15 +1,12 @@
 import { native } from "@pe/agent-contracts/handle";
 import * as contracts from "@pe/fans-contract/contract";
 import { body } from "@pe/host-internal/read-graph";
-import {
-  FAN_READ_MAX,
-  fansReadArgs,
-  fansCalcData,
-  openFanCalcSchema,
-} from "@pe/fans-contract/fans-read";
+import { fansReadArgs, fansCalcData, openFanCalcSchema } from "@pe/fans-contract/fans-read";
 import { ductsDesign, stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { subjectCode, subjectOf } from "@pe/agent-contracts";
 import { calcSnapshot } from "@pe/ducts-domain/calc/scoped-snapshot";
+import { mergeSnapshots } from "@pe/ducts-domain/system-reads";
+import { DUCTS_IDS_PER_READ } from "@pe/ducts-contract/reading";
 import { calcState } from "@pe/fans-domain/calc/state";
 import { z } from "zod";
 import { designLayers } from "@pe/ducts-host/design-layers";
@@ -85,7 +82,6 @@ export const fansCalc = body(contracts.calc, async function (ctx, args) {
           if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
           return row;
         });
-  if (chosen.length > FAN_READ_MAX) throw Error("Open at most 32 fan ports in one sheet");
   const opened = await ctx.collect(chosen, {
     read: openFan,
     batch: 1,
@@ -145,37 +141,49 @@ export const fansCalc = body(contracts.calc, async function (ctx, args) {
     ),
   ].sort((a, b) => a - b);
   const flow = ids.length ? (await ctx.read(ductsInputs, args.target)).flow : null;
-  const geometry = flow
-    ? await ctx.read(native("ducts.snapshot.walk"), {
-        role: "acquire",
-        request: {
-          slots: flow.slots,
-          labelParameter: staged.labelParameter ?? undefined,
-          selector: { kind: "ids", ids },
-        },
-        target: { kind: "document", ref: args.target },
-      })
-    : null;
-  return ctx.compute(fansCalcData, { opened, rows, fans, geometry }, (data) => ({
-    open: data.opened[0] ?? null,
-    opened: [...data.opened],
-    rows: data.rows,
-    progress: null,
-    calcView: fansCalcData.shape.calcView.parse(calcState(data.opened[0] ?? null)),
-    design: fansCalcData.shape.design.parse(design),
-    settings: { ducts: settings },
-    fans: { ...data.fans, rows: data.rows },
-    ductSystemsWork: ductsDoc,
-    ductSystemsRevision,
-    fansWork: fansDoc,
-    calcSnapshot: data.geometry
-      ? {
-          ...calcSnapshot(data.geometry.body as Parameters<typeof calcSnapshot>[0]),
-          sourceVersion: data.geometry.version ?? undefined,
-          slotSources: flow?.slotSources,
-        }
-      : { kind: "absent" },
-  }));
+  const geometry = [];
+  if (flow) {
+    for (let offset = 0; offset < ids.length; offset += DUCTS_IDS_PER_READ) {
+      geometry.push(
+        await ctx.read(native("ducts.snapshot.walk"), {
+          role: "acquire",
+          request: {
+            slots: flow.slots,
+            labelParameter: staged.labelParameter ?? undefined,
+            selector: { kind: "ids", ids: ids.slice(offset, offset + DUCTS_IDS_PER_READ) },
+          },
+          target: { kind: "document", ref: args.target },
+        }),
+      );
+    }
+  }
+  return ctx.compute(fansCalcData, { opened, rows, fans, geometry }, (data) => {
+    const snapshot = mergeSnapshots(data.geometry.map((part) => part.body));
+    return {
+      open: data.opened[0] ?? null,
+      opened: [...data.opened],
+      rows: data.rows,
+      progress: null,
+      calcView: fansCalcData.shape.calcView.parse(calcState(data.opened[0] ?? null)),
+      design: fansCalcData.shape.design.parse(design),
+      settings: { ducts: settings },
+      fans: { ...data.fans, rows: data.rows },
+      ductSystemsWork: ductsDoc,
+      ductSystemsRevision,
+      fansWork: fansDoc,
+      calcSnapshot: snapshot
+        ? {
+            ...calcSnapshot(snapshot),
+            sourceVersion:
+              data.geometry
+                .map((part) => part.version)
+                .filter(Boolean)
+                .join("+") || undefined,
+            slotSources: flow?.slotSources,
+          }
+        : { kind: "absent" },
+    };
+  });
 });
 
 export const reads = {

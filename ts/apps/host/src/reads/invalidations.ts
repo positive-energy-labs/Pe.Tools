@@ -4,6 +4,7 @@ import {
   keptMachineLegAt,
   machineLegSchema,
   machineSchema,
+  machineSessionSchema,
   workKey,
   workKeySchema,
 } from "@pe/agent-contracts";
@@ -15,16 +16,51 @@ import { workInput } from "@pe/host-internal/reads/evaluator";
 import type { Publication, Publications } from "./publications.ts";
 import { settingsFile } from "@pe/host-internal/read-graph";
 
-const yearEvidence = z.object({
-  revit: machineSchema.unwrap().shape.revit.unwrap().pick({ years: true }),
-  legs: z.object({ years: machineLegSchema.optional() }),
+const sessionEvidence = machineSessionSchema
+  .unwrap()
+  .pick({ row: true, whose: true })
+  .extend({
+    attachment: z.object({ session: z.string() }).nullable(),
+  });
+const machineEvidence = z.object({
+  revit: machineSchema
+    .unwrap()
+    .shape.revit.unwrap()
+    .pick({ years: true })
+    .extend({
+      sessions: z.array(sessionEvidence).nullable(),
+    }),
+  legs: z.object({ years: machineLegSchema.optional(), sessions: machineLegSchema.optional() }),
 });
-const publishedMachine = z.object({ machine: yearEvidence });
-const yearsKey = ({ revit, legs }: z.infer<typeof yearEvidence>) =>
+const publishedMachine = z.object({ machine: machineEvidence });
+const sessionKey = ({ row, whose, attachment }: z.infer<typeof sessionEvidence>) => {
+  const process =
+    row.case === "controlled-pending" && row.attempt.attempt === "launched"
+      ? row.attempt.process
+      : "process" in row
+        ? row.process
+        : null;
+  return canonicalRouteInput([
+    row.case,
+    "id" in row ? row.id : null,
+    row.year,
+    process,
+    row.execution,
+    whose,
+    "bridge" in row ? row.bridge.bridge : null,
+    row.case === "controlled-active" && row.bridge.bridge === "ready" && row.bridge.unresponsive,
+    attachment?.session ?? null,
+  ]);
+};
+// Follow changes people can act on, without invalidating for SDK sampling time or bridge ticks.
+const machineKey = ({ revit, legs }: z.infer<typeof machineEvidence>) =>
   canonicalRouteInput([
     revit.years?.slice().sort((a, b) => a - b) ?? null,
     legs.years?.error != null,
     keptMachineLegAt(legs.years),
+    revit.sessions?.map(sessionKey).sort() ?? null,
+    legs.sessions?.observedAtUtc != null,
+    legs.sessions?.error ?? null,
   ]);
 
 export function readInvalidations(
@@ -128,35 +164,35 @@ export function readInvalidations(
     subscription: string,
     generation: number,
     publish: (publication: Publication<unknown>) => void,
-    machineYears: { recipe: string; observe: ResourceObserver },
+    machineRead: { recipe: string; observe: ResourceObserver },
   ) => {
-    let publishedYears: string | undefined, observedYears: string | undefined;
+    let published: string | undefined, observed: string | undefined;
     let stopMachine: (() => void) | undefined;
     const compare = () => {
       const current = publications.publication(subscription);
       if (
-        publishedYears !== undefined &&
-        observedYears !== undefined &&
-        publishedYears !== observedYears &&
+        published !== undefined &&
+        observed !== undefined &&
+        published !== observed &&
         current?.generation === generation &&
         current.state === "current"
       )
-        publications.invalidate((trace) => trace.name === machineYears.recipe, subscription);
+        publications.invalidate((trace) => trace.name === machineRead.recipe, subscription);
     };
     const stop = publications.observe(subscription, (publication) => {
       if (publication.generation !== generation) return;
       publish(publication);
       if (recorded || publication.state !== "current") return;
       // Keep the existing machine poll observed for the lifetime of the subscription.
-      const data = publication.value?.trace.some((trace) => trace.name === machineYears.recipe)
+      const data = publication.value?.trace.some((trace) => trace.name === machineRead.recipe)
         ? publishedMachine.safeParse(publication.value.data)
         : undefined;
-      publishedYears = data?.success ? yearsKey(data.data.machine) : undefined;
-      if (publishedYears !== undefined)
-        stopMachine ??= machineYears.observe({ kind: "machine" }, (frame) => {
+      published = data?.success ? machineKey(data.data.machine) : undefined;
+      if (published !== undefined)
+        stopMachine ??= machineRead.observe({ kind: "machine" }, (frame) => {
           if (frame.kind !== "snapshot") return;
-          const evidence = yearEvidence.safeParse(frame.value);
-          if (evidence.success) observedYears = yearsKey(evidence.data);
+          const evidence = machineEvidence.safeParse(frame.value);
+          if (evidence.success) observed = machineKey(evidence.data);
           compare();
         });
       // The poll can get ahead of an in-flight read.

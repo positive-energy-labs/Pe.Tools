@@ -106,7 +106,7 @@ export function renderProductAssembly(checkout: string) {
       const ref = select(pkg);
       if (!ref) return [];
       const alias = prefix + i;
-      return [{ alias, key: ref.key, line: importOf(pkg, ref, alias) }];
+      return [{ alias, key: ref.key, packageName: pkg.name, line: importOf(pkg, ref, alias) }];
     });
   const tools = refs(contracts, "tool", (pkg) => pkg.pe?.tool);
   const ownCommands = refs(contracts, "commands", (pkg) => pkg.pe?.commands);
@@ -189,12 +189,27 @@ export function renderProductAssembly(checkout: string) {
     ...list(ownCommands),
     ...list(tools).map((tool) => tool + ".commands"),
   ];
+  // Command-table generation loads the action registry before it can load the linked catalog.
+  const catalogChecks = [
+    ...axes.map(
+      (row) =>
+        `assertProductCatalogKeys(${JSON.stringify(row.packageName)}, "route axes", ${row.alias});`,
+    ),
+    ...policies.map(
+      (row) =>
+        `assertProductCatalogKeys(${JSON.stringify(row.packageName)}, "call policy", ${row.alias});`,
+    ),
+  ];
   const outputs = {
     [productAssemblyPaths.actions]: source(
       'import { builtinCommands, builtinTools, targetForCommand, withHostActions } from "@pe/agent-contracts/semantic-actions";',
       'import type { DocumentRef, Tool } from "@pe/agent-contracts";',
       'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
-      ...lines(tools, ownCommands),
+      ...(catalogChecks.length
+        ? ['import { assertProductCatalogKeys } from "@pe/agent-contracts/pe-api";']
+        : []),
+      ...lines(tools, ownCommands, axes, policies),
+      ...catalogChecks,
       "const productTools = { " + entries("tool", tools) + " };",
       'assertUniqueProductKeys("tool", [builtinTools, productTools]);',
       'assertUniqueProductKeys("command", [' + commandTables.join(", ") + "]);",

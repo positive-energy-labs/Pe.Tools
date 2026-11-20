@@ -19,7 +19,6 @@ import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value
 import { catalogs } from "@pe/ducts-host/ducts-files";
 import { read } from "@pe/host-internal/read-graph";
 import { systemList } from "@pe/duct-systems-domain/system-list";
-import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";
 import { fanSystems } from "@pe/ducts-contract/fan-scope.neutral";
 
@@ -149,7 +148,6 @@ export const ductsPricing = body(contracts.pricing, async function (ctx, args) {
     { roster, fans, network, snapshot: acquired, layers, catalog, calcs },
     ({ roster, fans, network, snapshot, layers, catalog, calcs }) => {
       const design = ductsDesign(layers.ducts, layers.fans);
-      const stored = withStoredRulings(design, snapshot.store, snapshot) ?? design;
       const result = pricingWire(pricingValue(snapshot, calcs, design, layers.settings));
       const priced = new Map(result.analysis.systems.map((row) => [row.key, row]));
       return {
@@ -158,7 +156,6 @@ export const ductsPricing = body(contracts.pricing, async function (ctx, args) {
           ...result.analysis,
           systems: roster.rows.map((row) => priced.get(row.key) ?? row),
         },
-        effectiveDesign: stored,
         fanRows: fans.rows,
         design,
         network,

@@ -2,9 +2,14 @@
 import { builtinCommands, builtinTools, targetForCommand, withHostActions } from "@pe/agent-contracts/semantic-actions";
 import type { DocumentRef, Tool } from "@pe/agent-contracts";
 import { assertUniqueProductKeys } from "./assembly-checks.ts";
+import { assertProductCatalogKeys } from "@pe/agent-contracts/pe-api";
 import { ductSystemsTool as tool0 } from "@pe/duct-systems-contract/semantic-actions";
 import { fansTool as tool2 } from "@pe/fans-contract/semantic-actions";
 import { sheetCommands as commands1 } from "@pe/ducts-contract/semantic-actions";
+import { ductCatalogRouteAxes as axes1 } from "@pe/ducts-contract/duct-catalog";
+import { ductsReadingCallPolicies as policies1 } from "@pe/ducts-contract/reading";
+assertProductCatalogKeys("@pe/ducts-contract", "route axes", axes1);
+assertProductCatalogKeys("@pe/ducts-contract", "call policy", policies1);
 const productTools = { "ducts": tool0, "fans": tool2 };
 assertUniqueProductKeys("tool", [builtinTools, productTools]);
 assertUniqueProductKeys("command", [builtinCommands, commands1, tool0.commands, tool2.commands]);

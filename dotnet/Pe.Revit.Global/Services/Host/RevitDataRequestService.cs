@@ -373,6 +373,9 @@ internal sealed class RevitDataRequestService {
             return result;
         } catch (BridgeOperationException) {
             throw;
+        } catch (RoomsViewMissingException ex) {
+            throw BridgeOperationExceptions.BadRequest(ex.Message,
+                [BridgeOperationExceptions.Issue("$.view", "RoomsViewMissing", ex.Message, "Choose a plan view in this document.")]);
         } catch (TakeoffCarrierPrerequisiteException ex) {
             throw BridgeOperationExceptions.Conflict(
                 ex.Message,

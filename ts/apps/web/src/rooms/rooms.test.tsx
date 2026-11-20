@@ -29,6 +29,27 @@ test("rooms attention decodes as a region with its stable carrier GUID", () => {
   }
 });
 
+test("the Rooms table distinguishes an unset native room type from a real hall", () => {
+  const [, room, hall] = DEMO_ROOMS.regions;
+  if (!room || !hall) throw Error("The Rooms fixture needs two rooms");
+  const regions = [{ ...room, type: "" }, hall];
+  const view = render(
+    <RoomsTable
+      rows={roomRows(regions, ["Fixture level"])}
+      onSelect={() => {}}
+      empty={{ says: "empty", exit: "none" }}
+    />,
+  );
+  try {
+    const row = (guid: string) =>
+      view.container.querySelector(`tr[data-subject="${regionSubject(guid)}"]`);
+    expect(row(room.guid)?.textContent).toContain("No type");
+    expect(row(hall.guid)?.textContent).toContain("hall");
+  } finally {
+    cleanup();
+  }
+});
+
 test("stagedRoomWrites sends both authors staged values per guid", () => {
   const doc = roomsRouteState.schema.parse({
     edits: {
@@ -84,6 +105,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   );
   const rows = roomRows(regions, ["Fixture level"]);
   const page = roomsPageSchema.parse({ view: DEMO_VIEW });
+  const capture = `/captures/${"a".repeat(64)}.png`;
   const onSelect = vi.fn();
   const view = render(
     <>
@@ -95,7 +117,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
           </Pane>
         )}
         rows={rows}
-        plan={DEMO_PLAN}
+        plan={{ ...DEMO_PLAN, href: capture }}
         planRefusal={null}
         planError={null}
         empty={null}
@@ -109,6 +131,10 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     `path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`,
   )!;
   expect(path.getAttribute("data-state")).toBe("locked");
+  const image = view.container.querySelector('image[data-layer="plan-image"]');
+  const href = new URL(image?.getAttribute("href") ?? "", window.location.href);
+  expect(href.pathname).toBe(capture);
+  expect(href.searchParams.get("peRuntimeService")).toBe(import.meta.env.PE_RUNTIME_SERVICE);
   expect(path.getAttribute("data-stale")).toBe("true");
   await waitFor(() => expect(path.getAttribute("aria-description")).toBe("locked · stale"));
   // Locked keeps the outline; the fill takes stale's caution ink.
@@ -225,11 +251,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     const current = ctx();
     return (
       <RoomsProvider ctx={current}>
-        <ScopeBody
-          ctx={current}
-          page={roomsPageSchema.parse({ view: current.page.read().view })}
-          verbs={() => null}
-        />
+        <ScopeBody />
         <output>{retainedLine(current.value)}</output>
       </RoomsProvider>
     );
@@ -238,9 +260,20 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     emit(0, "Fixture level");
     await vi.waitFor(() => expect(ctx().cells.state.state).toBe("ready"));
     render(<Chooser />);
+    await act(async () => ctx().page.query({ view: "Missing view" }));
+    await act(async () => emit(frames.length - 1, "Fixture level"));
+    expect(screen.getByText("That view is not in this document.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear plan view" }));
+    expect(mount.page.read().view).toBe("");
+    await act(async () => emit(frames.length - 1, "Fixture level"));
+    const rosterReads = frames.length;
     fireEvent.click(screen.getByRole("button", { name: "Choose level" }));
     fireEvent.click(await screen.findByRole("option", { name: /Fixture level/ }));
-    expect(mount.page.read().view).toBe("First view");
+    expect(mount.page.read().view).toBe("");
+    expect(mount.page.read().level).toBe("Fixture level");
+    expect(frames).toHaveLength(rosterReads);
+    fireEvent.click(await screen.findByRole("option", { name: "Second view" }));
+    expect(mount.page.read().view).toBe("Second view");
     expect(ctx().value).toMatchObject({
       state: "refreshing",
       publication: { freshness: "refresh-needed" },
@@ -252,8 +285,6 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
         .cells.at(["edits", roomEditKey(DEMO_ROOMS.regions[0]!.guid, "name")])
         .stage("Unsafe"),
     ).not.toBeNull();
-    fireEvent.click(await screen.findByRole("option", { name: "Second view" }));
-    expect(mount.page.read().view).toBe("Second view");
     await act(async () => emit(frames.length - 1, "Replacement floor"));
     expect(ctx().value.state === "ready").toBe(true);
     expect(screen.queryByText("Showing previous Value; refreshing")).toBeNull();

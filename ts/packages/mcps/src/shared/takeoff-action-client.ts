@@ -169,6 +169,7 @@ export async function recoverAction(
   target: ExecutionTarget | undefined,
   base = "",
   waitMs = Infinity,
+  resolveSession?: (session: string) => Promise<string>,
 ): Promise<ActionReceipt | DetachedAction | undefined> {
   const slot = retentionKey(base, id, null);
   const pending = getRetained(slot);
@@ -185,6 +186,18 @@ export async function recoverAction(
   }
   const script = retainedScriptIntent(key, input, original.input);
   if (script) ({ key, input } = script);
+  if (
+    resolveSession &&
+    target?.kind === "document" &&
+    original.target.kind === "document" &&
+    target.ref.openId === original.target.ref.openId &&
+    target.ref.session !== original.target.ref.session
+  ) {
+    target = {
+      kind: "document",
+      ref: { ...target.ref, session: await resolveSession(target.ref.session) },
+    };
+  }
   await assertIdentity(original, { id, key, input, target: target ?? original.target });
   if (row) {
     retain(slot, { id });

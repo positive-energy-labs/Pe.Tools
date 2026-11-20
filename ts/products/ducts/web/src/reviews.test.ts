@@ -12,6 +12,27 @@ test("review discloses Required ESP writes nowhere", () => {
     presentLosses({ writes: [], derivedRequest: { slots: { requiredEsp: "" } } }, scope()).sentence,
   ).toContain("Required ESP writes nowhere");
 });
+test("re-planning the same fan pressure reports an unchanged loss record", () => {
+  const review = presentLosses(
+    {
+      previewOnly: true,
+      writes: [
+        {
+          id: 8775469,
+          kind: "equipment",
+          outcome: "unchanged",
+          before: "0.12851 in-wg",
+          after: "0.12851 in-wg",
+        },
+        { kind: "store", outcome: "unchanged", before: "revision 1", after: "revision 1" },
+      ],
+      counts: { planned: 0, written: 0, refused: 0, unchanged: 2 },
+    },
+    scope(),
+  );
+  expect(review.sentence).toBe("Nothing to write: all native targets are unchanged.");
+  expect(review.cells.find((cell) => cell.key === "store:")?.after).toBe("revision 1 · unchanged");
+});
 test("fan review names targets from the Place sheet snapshot even when network scope is empty", () => {
   const review = presentLosses(
     {

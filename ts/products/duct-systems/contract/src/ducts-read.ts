@@ -155,7 +155,6 @@ export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
   fanRows: fansCalcData.shape.rows,
   design: fansDocumentSchema.extend(ductsDocumentSchema.shape),
-  effectiveDesign: fansDocumentSchema.extend(ductsDocumentSchema.shape),
   network: ductsNetworkData,
   ductSystemsWork: ductsDocumentSchema,
   fansWork: fansDocumentSchema,

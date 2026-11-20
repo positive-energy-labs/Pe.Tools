@@ -51,7 +51,10 @@ const args = (page: {
   system:
     | z.output<typeof system>
     | import("@pe/agent-contracts").Immutable<z.output<typeof system>>;
-}) => ({ system: namesOf(page.system), fan: page.fan });
+}) => {
+  const system = namesOf(page.system);
+  return { system, fan: system === "all" || system.length ? null : page.fan };
+};
 export const roster = read(hostRead(reads.roster, () => fixtures().then((m) => m.rosterFixtures)));
 export const network = read(
   hostRead(reads.network, () => fixtures().then((m) => m.networkValueFixtures)),

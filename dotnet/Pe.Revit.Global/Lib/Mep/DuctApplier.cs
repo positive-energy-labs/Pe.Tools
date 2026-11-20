@@ -116,9 +116,11 @@ public static class DuctApplier {
             | SharedTypes(doc, items, "equipment-flow", (request.EquipmentFlows ?? []).Select(w => (w.Id, w.Cfm)), "fan flows");
 
         var storeRevision = stored?.WorkRevision ?? 0;
+        var now = DateTimeOffset.UtcNow;
+        var next = Compose(request, stored, items, now, slots, storeRevision + 1);
         // The store entries this write changes against the model's store, one line each, from the same merged next
         // store the write lands, so plan and apply review one truth (they land with the store).
-        items.AddRange(StoreEntries(stored, Compose(request, stored, items, DateTimeOffset.FromUnixTimeSeconds(0), slots, storeRevision + 1)));
+        items.AddRange(StoreEntries(stored, next));
         var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
             After = $"revision {storeRevision + 1}"
         };
@@ -133,6 +135,9 @@ public static class DuctApplier {
             foreach (var i in items.Where(i => i.Outcome == "planned"))
                 i.Refuse("not written: a shared type parameter in this apply would move units it does not name (see the refused equipment)");
 
+        if (store.Outcome == "planned" && SameStoreContent(stored, next))
+            store.Unchanged($"revision {storeRevision}");
+
         if (preview)
             return Result(true, items, null, storeRevision) with { Worksharing = Borrows(doc, items) };
         if (items.All(i => i.Outcome != "planned"))
@@ -142,16 +147,12 @@ public static class DuctApplier {
             return Result(false, items, null, storeRevision);
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var next = Compose(request, stored, items, now, slots, storeRevision + 1);
-        if (stored is not null && Content(stored) == Content(next) && items.All(i => i.Outcome != "planned" || ReferenceEquals(i, store))) {
-            store.Unchanged($"revision {storeRevision}");
-            return Result(false, items, null, storeRevision);
-        }
+        // Other writes can change which provenance lands. Recheck against their actual outcomes.
+        store.Outcome = "planned";
         store.Write = () => {
             // Composed at write time: terminals and equipment ran first in this stage, so a refused write is not recorded.
             next = Compose(request, stored, items, now, slots, storeRevision + 1);
-            if (stored is not null && Content(stored) == Content(next)) {
+            if (SameStoreContent(stored, next)) {
                 store.Outcome = "unchanged";
                 return $"revision {storeRevision}";
             }
@@ -623,6 +624,9 @@ public static class DuctApplier {
                 slots.TerminalDrop, slots.FittingCoefficient, slots.TerminalFlow), WorkRevision = revision, AppliedAt = now, Unknown = unknown
         };
     }
+
+    private static bool SameStoreContent(DuctLossStore? stored, DuctLossStore next) =>
+        stored is not null && Content(stored) == Content(next);
 
     private static string Content(DuctLossStore s) => (s with {
         WorkRevision = 0,

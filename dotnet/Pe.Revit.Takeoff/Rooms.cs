@@ -8,6 +8,9 @@ using PartitionVerbs = Pe.Revit.Partition.Verbs;
 
 namespace Pe.Revit.Takeoff;
 
+public sealed class RoomsViewMissingException()
+    : InvalidOperationException("That view is not in this document.");
+
 /// <summary>What a /rooms rerun does to the regions already on the level scope.</summary>
 public sealed record RoomsPlan(
     IReadOnlyList<ExistingRegion> Locked,
@@ -195,7 +198,8 @@ public static class Rooms
     public static RoomsSnapshotData Snapshot(Document doc, string viewName)
     {
         var viewScope = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-            .Single(v => !v.IsTemplate && v.GenLevel != null && v.Name == viewName);
+            .SingleOrDefault(v => !v.IsTemplate && v.GenLevel != null && v.Name == viewName)
+            ?? throw new RoomsViewMissingException();
         var levels = Levels(doc);
         var byId = new Dictionary<long, ViewPlan> { [viewScope.Id.Value()] = viewScope };
 
@@ -237,7 +241,7 @@ public static class Rooms
                 },
                 RoomsRerun.ZoneOf(guid, provenance, zone => zones.Contains((view.Id.Value(), zone))),
                 provenance.Flags.Contains(FlagPerson) ? "person" : provenance.RunId == RunDrawn ? "inferred" : null,
-                fields.Name ?? "", fields.Type ?? "hall",
+                fields.Name ?? "", fields.Type ?? "",
                 fields.CeilingFt, fields.People, fields.LightingW,
                 fields.EquipSensible, fields.EquipLatent, fields.VentilationCfm,
                 Sqft(fr, loops), outer, loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),

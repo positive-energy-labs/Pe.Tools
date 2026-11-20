@@ -9,6 +9,7 @@ import {
   instancesReading,
   workKeySchema,
   workHandleSchema,
+  bridgeSessionFor,
   type WorkHandle,
   type ActionControlKey,
   type ScheduleReadKey,
@@ -143,6 +144,17 @@ export async function runCapability(
       target,
       context.hostBaseUrl,
       context.timeoutMs ?? 30_000,
+      async (session) =>
+        bridgeSessionFor(
+          session,
+          (
+            await new HostRpcCaller({
+              hostBaseUrl: context.hostBaseUrl,
+              timeoutMs: context.timeoutMs ?? 30_000,
+              catalogOverride: tsOnlyOperationCatalog,
+            }).call("bridge.sessions.list")
+          ).sessions,
+        ),
     );
     if (recovered) return context.receipt ? recovered : actionResult(recovered);
   }

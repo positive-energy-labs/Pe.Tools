@@ -38,6 +38,7 @@ import {
 } from "@pe/web-kernel/lib/affine-frame";
 import { token } from "@pe/kit/lib/token";
 import { PlanImageLayer, planCorners } from "#/scene/plan-image";
+import { runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 import { pathD, PLAN_REFUSAL } from "./plan-drawing";
 import type { PlanImage, PlanRefusal } from "./plan-reading";
 import { ROOMS_LAYERS, toggleLayer } from "@pe/agent-contracts";
@@ -485,7 +486,16 @@ export function RoomsPlan({
                   aria-label="rooms plan"
                 >
                   <SvgTip content={"room regions"} />
-                  {plan ? <PlanImageLayer plan={plan} frame={world.frame} /> : null}
+                  {plan ? (
+                    <PlanImageLayer
+                      plan={
+                        plan.href.startsWith("/captures/")
+                          ? { ...plan, href: runtimeStreamUrl(plan.href) }
+                          : plan
+                      }
+                      frame={world.frame}
+                    />
+                  ) : null}
                   {world.shapes.map(({ region, state, d }) => {
                     const ink = token(REGION_INK[state].ink!);
                     const stale = lockedStale(region);

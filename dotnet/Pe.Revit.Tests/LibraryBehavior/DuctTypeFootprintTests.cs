@@ -106,6 +106,17 @@ public sealed class DuctTypeFootprintTests {
                 Assert.That(TypeValue(), Is.EqualTo(before));
                 Assert.That(UnitUtils.ConvertFromInternalUnits(one.LookupParameter(InstanceStatic).AsDouble(), UnitTypeId.InchesOfWater60DegreesFahrenheit), Is.EqualTo(0.8).Within(1e-6));
             });
+
+            // Repeat the same intent at the new store revision, as the Fans plan does after Apply.
+            var saved = DuctApplier.ReadStore(project).Store!;
+            foreach (var preview in new[] { true, false }) {
+                var repeated = DuctApplier.Apply(project, espOnly with { Store = saved }, preview);
+                Assert.Multiple(() => {
+                    Assert.That(repeated.Writes.Select(w => w.Outcome), Is.All.EqualTo("unchanged"));
+                    Assert.That(repeated.Writes.Single(w => w.Kind == "store").After, Is.EqualTo($"revision {saved.WorkRevision}"));
+                    Assert.That(DuctApplier.ReadStore(project).Store!.WorkRevision, Is.EqualTo(saved.WorkRevision));
+                });
+            }
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(family);
             RevitFamilyFixtureHarness.CloseDocument(project);

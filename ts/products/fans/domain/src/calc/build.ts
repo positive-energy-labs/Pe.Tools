@@ -72,7 +72,6 @@ import { criteriaCellOf, type DuctsInputs, type Resolved } from "@pe/ducts-contr
 import { resolveValue } from "@pe/agent-contracts";
 import { coverageOf } from "@pe/ducts-domain/calc/coverage";
 import { observed, PROPOSED_KEY, sourced, terminalCfmOf } from "@pe/ducts-domain/calc/inputs";
-import { sectionOf } from "@pe/ducts-domain/loss-physics";
 import type { CoverageGap, Encounter, FanIssue, LegEvidence } from "@pe/fans-contract/fans-inputs";
 import {
   backflowId,
@@ -726,12 +725,7 @@ class Pricer {
       elementId: duct.id,
       lossInWg: loss,
       velocityFpm: head?.velocityFpm ?? null,
-      source: {
-        kind: "friction",
-        f: head?.source?.kind === "friction" ? head.source.f : 0,
-        roughnessFt: duct.roughness.valueFt,
-        rateInWgPer100Ft: rate,
-      },
+      source: head?.source?.kind === "friction" ? { ...head.source, rateInWgPer100Ft: rate } : null,
       unpriced: null,
       // Equivalent feet: the straight length, plus any Cs charged on it at this duct's own rate.
       equivalentFt: rate ? (loss / rate) * 100 : length,
@@ -974,9 +968,6 @@ class Pricer {
     for (const leg of Object.values(this.legs)) {
       const done = this.priced.get(leg.id);
       const src = done?.p?.source;
-      const el = this.g.byId.get(leg.elementId);
-      const section =
-        el && isSegment(el) ? sectionOf(el.shape, el.diameterIn, el.widthIn, el.heightIn) : null;
       const typed = this.typedOn.get(leg.id);
       const stated =
         inputs.components[String(leg.elementId)]?.drop ??
@@ -990,7 +981,7 @@ class Pricer {
                 kind: "friction",
                 roughnessFt: src.roughnessFt,
                 lengthFt: done!.p!.lengthFt ?? 0,
-                hydraulicDiameterFt: (section?.dhIn ?? 0) / 12,
+                hydraulicDiameterFt: src.hydraulicDiameterFt,
                 ref: "Altshul-Tsal",
               }
             : src?.kind === "rule"

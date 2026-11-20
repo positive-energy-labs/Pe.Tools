@@ -330,7 +330,7 @@ public static class TakeoffAtlas
         var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).FirstOrDefault()
                     ?? throw new InvalidOperationException($"FilledRegion {fr.Id} has no boundary");
         return new TakeoffLiveRegion(fr.Id.Value(), role, guid, Area(fr, loops),
-            role == TakeoffCarriers.RoleRoomRegion ? TakeoffCarriers.ReadRoomType(fr) : "", blob, outer,
+            role == TakeoffCarriers.RoleRoomRegion ? TakeoffCarriers.ReadRoomType(fr) ?? "" : "", blob, outer,
             loops.Where(loop => !ReferenceEquals(loop, outer)).ToList(),
             RegionMeasurements.Read(provenance, geometryKey + RegionMeasurements.GeometryKey(
                 ((View)doc.GetElement(fr.OwnerViewId)).GenLevel.ProjectElevation, [loops])));

@@ -1,4 +1,4 @@
-import { canonicalRouteInput, type Machine } from "@pe/agent-contracts";
+import { canonicalRouteInput, type Machine, type MachineSession } from "@pe/agent-contracts";
 import type { ResourceObserver } from "@pe/runtime";
 import { createJiti } from "jiti";
 import { expect, test } from "vite-plus/test";
@@ -13,6 +13,10 @@ const { EMPTY_DRAFT, launchPlan } = await createJiti(import.meta.url).import<{
   EMPTY_DRAFT: object;
   launchPlan(draft: object, machine: Machine, rows: readonly never[]): unknown;
 }>("../../web/src/machine/open-model.ts");
+const { BACKGROUND_BOOTING, CHECKOUT_HOT } = await createJiti(import.meta.url).import<{
+  BACKGROUND_BOOTING: MachineSession;
+  CHECKOUT_HOT: MachineSession;
+}>("../../web/src/machine/open-examples.ts");
 
 async function openYears(years: Machine["revit"]["years"], error: string | null) {
   const leg = unreadLeg();
@@ -87,12 +91,16 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
         text += decoder.decode(chunk.value, { stream: true });
       }
     },
-    pass(years: Machine["revit"]["years"], error: string | null) {
+    pass(
+      years: Machine["revit"]["years"],
+      error: string | null,
+      sessions = machine.revit.sessions,
+    ) {
       const now = "2026-11-19T00:00:05Z";
       machine = {
         ...machine,
         observedAtUtc: now,
-        revit: { ...machine.revit, years },
+        revit: { ...machine.revit, years, sessions },
         legs: { years: { ...leg, attemptedAtUtc: now, error } },
       };
       for (const notify of listeners) notify();
@@ -120,6 +128,75 @@ test("an open tab reacquires its publication when the installed-year check recov
     const next = await open.read();
     expect(next.version).toBeGreaterThan(first.version);
     expect(plan(next.value.data.machine)).toMatchObject({ year: 2025, refusal: null });
+  } finally {
+    await open.close();
+  }
+});
+
+test("the shared Open and Sessions publication follows a start through attachment or removal", async () => {
+  const open = await openYears([2026], null);
+  const pending = BACKGROUND_BOOTING;
+  const attached = CHECKOUT_HOT;
+  if (pending.row.case !== "controlled-pending" || attached.row.case !== "controlled-active")
+    throw Error("Expected pending and attached session fixtures");
+  const ready = {
+    ...attached,
+    row: { ...attached.row, id: pending.row.id, year: pending.row.year },
+  };
+  try {
+    const initial = await open.read();
+    expect(initial.value.data.machine.revit.sessions).toEqual([]);
+
+    open.pass([2026], null, [pending]);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    await open.nextEvent("refresh-needed");
+    const starting = await open.read();
+    expect(starting.value.data.machine.revit.sessions).toMatchObject([
+      { row: { id: pending.row.id, case: "controlled-pending" } },
+    ]);
+
+    open.pass([2026], null, [
+      { ...pending, row: { ...pending.row, observedAtUtc: "2026-11-19T01:00:00Z" } },
+    ]);
+    expect(open.publication()?.state).toBe("current");
+
+    open.pass([2026], null, [ready]);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    const afterAttach = await open.read();
+    expect(afterAttach.value.data.machine.revit.sessions).toMatchObject([
+      { row: { id: pending.row.id, case: "controlled-active" } },
+    ]);
+
+    open.pass([2026], null, [pending]);
+    await open.read();
+    open.pass([2026], null, [
+      {
+        ...pending,
+        row: {
+          ...pending.row,
+          case: "failed-receipt",
+          failure: {
+            source: "journal",
+            event: "failed",
+            journalFile: "launch.jsonl",
+            message: "Startup failed.",
+            process: ready.row.process,
+          },
+        },
+      },
+    ]);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    const afterFailure = await open.read();
+    expect(afterFailure.value.data.machine.revit.sessions).toMatchObject([
+      { row: { id: pending.row.id, case: "failed-receipt" } },
+    ]);
+
+    open.pass([2026], null, [pending]);
+    await open.read();
+    open.pass([2026], null, []);
+    expect(open.publication()?.state).toBe("refresh-needed");
+    const afterCancel = await open.read();
+    expect(afterCancel.value.data.machine.revit.sessions).toEqual([]);
   } finally {
     await open.close();
   }

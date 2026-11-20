@@ -91,7 +91,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 "layers": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"default","anyOf":[{"maxItems":64,"type":"array","items":{"type":"string","minLength":1,"maxLength":200}},{"type":"string","const":"default"}]}) as z.ZodType<Immutable<Array<string> | "default">>).default("default"), "push"),
 "encoding": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string","maxLength":200}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "picture": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"model","type":"string","minLength":1,"maxLength":200}) as z.ZodType<Immutable<string>>).default("model"), "push"),
-"fan": field(subjectSchema(32).default({"kind":"ids","ids":[]}), "push"),
+"fan": field(subjectSchema(9007199254740991).default({"kind":"ids","ids":[]}), "push"),
 "stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["calc"]}) as z.ZodType<Immutable<"calc">>).default("calc"), "push"),
 "inputSearch": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"v":{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},"keywords":{"type":"string","maxLength":4000},"pills":{"maxItems":32,"type":"array","items":{"type":"object","properties":{"field":{"type":"string"},"op":{"type":"string"},"value":{"type":"string"}},"required":["field","op","value"]}}},"required":["v","keywords","pills"]}) as z.ZodType<Immutable<{"v": number; "keywords": string; "pills": Array<{"field": string; "op": string; "value": string}>}>>).default({"keywords":"","pills":[],"v":1}), "replace"),
 "inputSort": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","enum":["","name"]}) as z.ZodType<Immutable<"" | "name">>).default(""), "replace"),
@@ -126,6 +126,7 @@ selected: {...field(focusSelectionSchema,"replace"),agent:undefined}
 }, agent: { policy: "Choose member through member, using the module's local identities." }, module: "pods" },
 "rooms": { path: "/rooms" as const, title: "Rooms", fields: {
 "view": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
+"level": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"","type":"string"}) as z.ZodType<Immutable<string>>).default(""), "push"),
 "room": field(subjectSchema(512).default({"kind":"ids","ids":[]}), "push"),
 "stage": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":"partition","type":"string","enum":["partition","review","history"]}) as z.ZodType<Immutable<"partition" | "review" | "history">>).default("partition"), "push"),
 "layers": field((z.fromJSONSchema({"$schema":"https://json-schema.org/draft/2020-12/schema","default":[],"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"all"}]}) as z.ZodType<Immutable<Array<string> | "all">>).default([]), "replace"),

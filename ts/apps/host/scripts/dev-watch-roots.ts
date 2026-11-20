@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, globSync, readFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 const run = promisify(execFile);
@@ -54,12 +54,14 @@ export function createDevDependencyRepair(
 /** Vite owns frontend HMR. A package edit restarts the host only if its runtime graph uses it;
  * kit page assets are read on request, so serving them is not a host-code dependency. */
 export function devWatchRoots(hostRoot: URL): URL[] {
-  const packages = new URL("../../packages/", hostRoot);
+  const checkout = new URL("../../", hostRoot);
   const workspace = new Map<string, { root: URL; manifest: Manifest }>();
-  for (const entry of readdirSync(packages, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const root = new URL(`${entry.name}/`, packages);
-    if (!existsSync(new URL("package.json", root))) continue;
+  const manifests = globSync(["packages/*/package.json", "products/*/*/package.json"], {
+    cwd: checkout,
+    exclude: ["products/*/web/package.json"],
+  });
+  for (const file of manifests) {
+    const root = new URL(".", new URL(file.replaceAll("\\", "/"), checkout));
     const manifest = readManifest(root);
     workspace.set(manifest.name, { root, manifest });
   }

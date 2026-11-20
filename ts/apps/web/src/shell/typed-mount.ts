@@ -1187,6 +1187,9 @@ export function mountTypedRoute(
             {
               plan: (supplied?: unknown) => press(id, () => review(id, verb, false, supplied)),
               apply: () => press(id, () => review(id, verb, true)),
+              get applying() {
+                return applyingReviews.has(id);
+              },
               cancel: () => mounted.cancel(id),
               read: () => mounted.review(id),
             },

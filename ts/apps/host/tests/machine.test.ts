@@ -260,6 +260,11 @@ test("only an answering Revit in the SDK execution boundary is asked for holding
   const result = await f.machine.refresh();
   expect(f.sources.holdings).toHaveBeenCalledExactlyOnceWith(row.process);
   expect(f.sources.documents).toHaveBeenCalledExactlyOnceWith(row.process);
+  expect(result.revit.sessions?.[1]).toMatchObject({
+    row: starting,
+    documents: null,
+    holdings: null,
+  });
   expect(result.revit.sessions?.map((entry) => entry.holdingsLeg.error)).toEqual([
     null,
     null,
@@ -290,7 +295,7 @@ test("lifecycle gets the exact document census while years and holdings are stil
   }
 });
 
-test("a stuck document census refuses with a next step before the machine deadline", async () => {
+test("a stuck document census refuses with retry advice before the display deadline", async () => {
   vi.useFakeTimers(FAKE_CLOCK);
   const f = fixture();
   vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
@@ -299,11 +304,19 @@ test("a stuck document census refuses with a next step before the machine deadli
     error = caught;
   });
   try {
-    await vi.advanceTimersByTimeAsync(3_001);
-    expect(error).toMatchObject({ message: expect.stringContaining("Switch to Revit") });
+    await vi.advanceTimersByTimeAsync(8_001);
+    expect(error).toMatchObject({ message: "Pe couldn’t check this Revit in time. Try again." });
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("an unsuccessful document list advises saving before another attempt", async () => {
+  const f = fixture();
+  vi.mocked(f.sources.documents).mockRejectedValue(Error("The bridge did not list documents."));
+  await expect(readMachineSession(row.process)).rejects.toThrow(
+    "Pe couldn’t list the open documents in this Revit. Switch to Revit and save or sync your work, then retry when Revit responds.",
+  );
 });
 
 /** A Pea acquisition receipt as instances-actions records it: intent first, then its steps. */

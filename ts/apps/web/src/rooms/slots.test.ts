@@ -31,6 +31,7 @@ test("/rooms declares subject, query and goal, and no carry key", () => {
   });
   expect(Object.fromEntries(Object.entries(data.fields).map(([k, f]) => [k, f.role]))).toEqual({
     view: "query",
+    level: "query",
     room: "subject",
     stage: "stage",
     layers: "pose",

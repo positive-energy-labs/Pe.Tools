@@ -43,7 +43,7 @@ const NO_STORE = {};
 export function withStoredRulings(
   doc: DuctsDesign | null,
   store: Store,
-  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
+  snapshot: { readonly nodes: readonly { readonly id: number; readonly uniqueId: string }[] },
 ): DuctsDesign | null {
   const verdicts = Object.entries(store?.verdicts ?? {});
   const roles = Object.entries(store?.roles ?? {}).flatMap(([id, value]) => {

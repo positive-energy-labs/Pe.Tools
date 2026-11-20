@@ -2151,6 +2151,23 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
       expect
         .soft(screen.getByRole("button", { name: "Write to Revit" }).hasAttribute("disabled"))
         .toBe(false);
+      const write = Promise.withResolvers<unknown>();
+      native.submit.mockImplementationOnce(() => write.promise);
+      fireEvent.click(screen.getByRole("button", { name: "Write to Revit" }));
+      try {
+        await waitFor(() =>
+          expect(native.submit).toHaveBeenLastCalledWith(
+            expect.objectContaining({ key: "sheet.apply" }),
+          ),
+        );
+        expect(screen.queryByText("Apply is held: Plan the current Work first")).toBeNull();
+        expect(screen.getByText("Applying…")).toBeTruthy();
+      } finally {
+        await act(async () =>
+          write.resolve({ id: "native-write", state: "succeeded", result: {} }),
+        );
+      }
+      expect(screen.getByText("Write to Revit sent")).toBeTruthy();
     }
     cleanup();
     closes

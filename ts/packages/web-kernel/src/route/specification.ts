@@ -61,6 +61,8 @@ export type Specification<
   directory: RouteGraphJson["directory"];
   needs?: "project" | "family" | "document" | "host" | "browser";
   optionalTarget?: "document" | "project" | "family" | "session";
+  /** Page fields whose values belong to the current open document. */
+  documentFields?: readonly (keyof (F & NoInfer<Q>) & string)[];
   /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {

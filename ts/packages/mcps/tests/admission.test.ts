@@ -75,7 +75,11 @@ const receipt = (admission: Record<string, unknown>) => {
   };
 };
 
-function host(prior?: Record<string, unknown>, scriptResponse?: Record<string, unknown>) {
+function host(
+  prior?: Record<string, unknown>,
+  scriptResponse?: Record<string, unknown>,
+  sdkSessionId?: string,
+) {
   const posts: Record<string, unknown>[] = [];
   const reads: string[] = [];
   let saved: Record<string, unknown> | undefined;
@@ -95,7 +99,8 @@ function host(prior?: Record<string, unknown>, scriptResponse?: Record<string, u
       }
       return Response.json(saved);
     }
-    if (prior) throw Error("Replay must not consult a live catalog or target");
+    if (prior && !(sdkSessionId && url.pathname === "/call"))
+      throw Error("Replay must not consult a live catalog or target");
     if (url.pathname === "/pe/capabilities")
       return Response.json({
         at: new Date(0).toISOString(),
@@ -112,6 +117,7 @@ function host(prior?: Record<string, unknown>, scriptResponse?: Record<string, u
           sessions: [
             {
               sessionId: "A",
+              sdkSessionId,
               connected: true,
               openDocuments: [{ openId: "open-A", address: "C:/A.rvt", isFamilyDocument: false }],
             },
@@ -298,6 +304,39 @@ test("pe_do replays the original receipt without catalog or target discovery and
   ).toMatchObject({ isError: true, content: expect.stringContaining("target") });
   expect(posts).toHaveLength(0);
   expect(new Set(reads)).toEqual(new Set(["/actions"]));
+});
+
+test("pe_do recovers a draw by its public session name and exact original intent", async () => {
+  const work = { key: { binding: "address", route: "rooms", target: "C:/A.rvt" }, revision: 1 };
+  const { posts, reads } = host(
+    {
+      ...receipt({ id: "draw", key: "rooms.draw", target: destination, input: { work } }),
+      result: { value: { elementId: 13006878 } },
+    },
+    undefined,
+    "public-A",
+  );
+  const retry = {
+    key: "op:rooms.draw",
+    actionId: "draw",
+    target: { kind: "open", ref: { session: "public-A", openId: target.ref.openId } },
+    input: { work },
+  };
+  expect(await call(peDo, retry)).toMatchObject({
+    ok: true,
+    result: { id: "draw", result: { value: { elementId: 13006878 } } },
+  });
+  for (const changed of [
+    { ...retry, input: { work: { ...work, revision: 2 } } },
+    { ...retry, target: { ...retry.target, ref: { ...retry.target.ref, openId: "other" } } },
+    { ...retry, target: { ...retry.target, ref: { ...retry.target.ref, session: "other" } } },
+  ])
+    expect(await call(peDo, changed)).toMatchObject({
+      isError: true,
+      content: expect.stringContaining("different intent or target"),
+    });
+  expect(posts).toEqual([]);
+  expect(new Set(reads)).toEqual(new Set(["/actions", "/call"]));
 });
 
 test("pe_do admits a lifecycle action at the session its input names, with no head lifetime", async () => {
