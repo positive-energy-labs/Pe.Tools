@@ -16,7 +16,7 @@ import {
   currentRouteStartupProjection,
   routeStartupOwner,
   routeStartupSourceHash,
-} from "../../packages/host-contracts/src/route-startup.ts";
+} from "../../scripts/route-startup.ts";
 // Source identity witnesses the emitted discovery graph, independently of body-kind fixtures.
 const { stages: _stages, stageOrder: _order, predicates: _predicates, ...baseData } = bodyData;
 const builtinData = { ...baseData, verbs: {}, band: [] };

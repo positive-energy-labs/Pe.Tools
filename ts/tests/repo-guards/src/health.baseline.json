@@ -302,7 +302,6 @@
     "ts/packages/host-contracts/src/native-schemas.ts": 3,
     "ts/packages/host-contracts/src/operation-types.ts": 2,
     "ts/packages/host-contracts/src/pe-api.ts": 68,
-    "ts/packages/host-contracts/src/route-startup.ts": 2,
     "ts/packages/host-contracts/src/store.ts": 1,
     "ts/packages/host-contracts/src/vendor/pe-revit-cli.ts": 6,
     "ts/packages/host-contracts/src/vendor/pe-service.ts": 11,
@@ -455,7 +454,8 @@
     "ts/products/fans/web/src/calc/calc-breakdown-table.tsx": 1,
     "ts/products/fans/web/src/calc/calc-cell.tsx": 2,
     "ts/products/fans/web/src/calc/picture.tsx": 1,
-    "ts/products/fans/web/src/mount.tsx": 2
+    "ts/products/fans/web/src/mount.tsx": 2,
+    "ts/scripts/route-startup.ts": 2
   },
   "nonNull": {
     "tools/space-proof/picture.ts": 2,
@@ -1084,7 +1084,6 @@
     "ts/packages/host-contracts/scripts/native-adapter-schema.ts": 1,
     "ts/packages/host-contracts/scripts/ops-catalog-hash.ts": 1,
     "ts/packages/host-contracts/scripts/sdk-wire.ts": 1,
-    "ts/packages/host-contracts/src/route-startup.ts": 4,
     "ts/packages/host-contracts/src/store.ts": 10,
     "ts/packages/mcps/src/pea/skill-publication.ts": 3,
     "ts/packages/mcps/src/shared/autodesk-docs/tbc.ts": 2,

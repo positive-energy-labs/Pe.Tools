@@ -9,7 +9,7 @@ import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
  * (`ts/products/<product>/web`, ADR 0046). The host's registry is the generated
  * `apps/host/src/routes.generated.ts`; this file never reaches a `host.ts`.
  */
-// Literal globs mirror routeFolderCandidates in @pe/host-contracts/route-startup.
+// Literal globs mirror routeFolderCandidates in ts/scripts/route-startup.ts.
 const declarations = import.meta.glob<{
   module: TypedRoute;
   router?: { dock?: boolean };

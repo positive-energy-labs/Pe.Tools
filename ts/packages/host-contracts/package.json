@@ -83,7 +83,6 @@
       "default": "./src/pe-api.ts"
     },
     "./settings-schema": "./src/settings-schema.ts",
-    "./route-startup": "./src/route-startup.ts",
     "./native-adapter": "./src/native-adapter.ts",
     "./host-descriptor": "./src/host-descriptor.ts",
     "./decoders": "./src/decoders.ts",

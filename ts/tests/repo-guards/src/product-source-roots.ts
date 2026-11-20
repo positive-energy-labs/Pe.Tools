@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
-import { routeFolderCandidates } from "@pe/host-contracts/route-startup";
+import { routeFolderCandidates } from "../../../scripts/route-startup.ts";
 import { ROOT } from "./import-census.ts";
 
 export const productWebDirectories = () => readdirSync(join(ROOT, "products"))

@@ -20,8 +20,7 @@
 import { compile } from "json-schema-to-typescript";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { regenerateCommandTable } from "../../../scripts/refresh-command-table.ts";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol.ts";
 import { generateNativeEffect } from "./native-effect-generator.ts";
 
@@ -281,7 +280,7 @@ if (checkMode) {
   console.log(
     `Host contracts and catalog are in sync with ${catalogSource} (${operations.length} operations).`,
   );
-  regenerateCommandTable(true);
+  if (resolve(outPath) === DEFAULT_OUT) regenerateCommandTable(true);
   process.exit(0);
 }
 
@@ -290,16 +289,4 @@ for (const [path, content] of outputs) {
   await writeFile(path, content, "utf8");
   console.log(`Wrote ${operations.length} operations to ${path}`);
 }
-regenerateCommandTable(false);
-
-function regenerateCommandTable(check: boolean) {
-  // Custom outputs are isolated artifacts; only the checkout catalog refreshes its command table.
-  if (resolve(outPath) !== DEFAULT_OUT) return;
-  // A fresh process reads the just-written catalog, not this process's cached modules.
-  const cwd = fileURLToPath(new URL("../../mcps/", import.meta.url));
-  const result = spawnSync(process.execPath,
-    ["--import", "jiti/register", "scripts/command-axes.ts", ...(check ? ["--check"] : [])],
-    { cwd, stdio: "inherit" });
-  if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
-}
+if (resolve(outPath) === DEFAULT_OUT) regenerateCommandTable(false);

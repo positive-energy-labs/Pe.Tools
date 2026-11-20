@@ -20,7 +20,7 @@ import {
   routeStartupOwner,
   routeStartupSourceHash,
   type RouteStartupProjection,
-} from "@pe/host-contracts/route-startup";
+} from "../../scripts/route-startup.ts";
 
 const checkout = fileURLToPath(new URL("../../../", import.meta.url));
 const stampPath = join(import.meta.dirname, "node_modules", ".cache", "source-closures.json");

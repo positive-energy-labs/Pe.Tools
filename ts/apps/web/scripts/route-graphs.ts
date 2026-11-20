@@ -26,7 +26,7 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
-import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "@pe/host-contracts/route-startup";
+import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "../../../scripts/route-startup.ts";
 import { buildBuiltinClosures, writeBuiltinClosurePin } from "../route-source-hash.ts";
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
