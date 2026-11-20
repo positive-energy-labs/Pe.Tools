@@ -254,14 +254,21 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     }
     if (write.id == null) {
       const label = "Pe loss record (Project Information)";
+      const from = write.before === "absent" ? "none yet" : before;
+      const after =
+        write.outcome === "unchanged"
+          ? (spoken(write.after) ?? "unchanged")
+          : write.before === "absent"
+            ? "created"
+            : "updated";
       return {
-        row: `${label}: ${write.before === "absent" ? "none yet → created" : `${before ?? "not available"} → updated`} · ${tail}`,
+        row: `${label}: ${write.outcome === "unchanged" ? after : `${from ?? "not available"} → ${after}`} · ${tail}`,
         cell: {
           key,
           label,
           group: "Pe loss record",
-          before: write.before === "absent" ? "none yet" : before,
-          after: `${write.before === "absent" ? "created" : "updated"} · ${tail}`,
+          before: from,
+          after: `${after} · ${tail}`,
           author: null,
         },
       };
@@ -311,7 +318,9 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     sentence:
       (slots.requiredEsp === "" ? "Required ESP writes nowhere. " : "") +
       (response.writes.length
-        ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
+        ? response.previewOnly && response.writes.every((write) => write.outcome === "unchanged")
+          ? "Nothing to write: all native targets are unchanged."
+          : `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
         : "Nothing to write: no native targets were derived from this Work in the selected scope."),
     rows: lines.map((line) => line.row),
     cells: lines

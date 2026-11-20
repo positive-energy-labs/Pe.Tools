@@ -68,6 +68,13 @@ public sealed class DuctStoreOverlayReadbackTests {
                 Assert.That(next.Unknown["future"].ToString(), Is.EqualTo("kept"));
                 Assert.That(next.WorkRevision, Is.EqualTo(4));
             });
+
+            // A retained ruling request can still reach the native door with the current revision.
+            var repeated = DuctApplier.Apply(document, request with {
+                Store = request.Store with { WorkRevision = next.WorkRevision }
+            }, true);
+            Assert.That(repeated.Writes.Select(w => (w.Kind, w.Outcome, w.After)),
+                Is.EqualTo(new[] { ("store", "unchanged", "revision 4") }));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);
         }
