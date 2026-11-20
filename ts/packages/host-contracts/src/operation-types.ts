@@ -759,7 +759,6 @@ export const builtinLocalSchemas = {
  * contract package (`declare module`), so this package names no product; the values are assembled
  * by import at the generated registration site, which this type checks for completeness.
  */
-// oxlint-disable-next-line typescript/no-empty-object-type -- the merge point is empty here by design
 export interface ProductLocalSchemas {}
 export type TsOnlyOperationSchemas = typeof builtinLocalSchemas & ProductLocalSchemas;
 export type TsOnlyOperationKey = keyof TsOnlyOperationSchemas;
