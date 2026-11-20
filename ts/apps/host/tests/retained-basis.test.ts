@@ -18,7 +18,8 @@ import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-in
 import { admittedRequestIdentity, RequestIdentity } from "@pe/host-internal/request-identity";
 import { admitNativeCaller } from "../src/native-read-policy.ts";
 import { nativeInputIdentity } from "@pe/host-internal/input-recording";
-import { hostNativeReadFor, nativeCatalogIdentity, openRecordingWriter, openRecordingReader } from "../src/native-recording.ts";
+import { nativeCatalogIdentity, openRecordingWriter, openRecordingReader } from "../src/native-recording.ts";
+import { hostNativeReadFor } from "../src/recorded-native-read.ts";
 import { inputBindingKey, type HostInputLane, type Taking } from "@pe/host-internal/input-recording";
 import { createDuctsBodyBasis, ductBodySubject } from "@pe/ducts-host/ducts-body-basis";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";

@@ -24,12 +24,10 @@ import {
   takeoffDecisionKey,
   takeoffEditKey,
   type StagedRoomEdit,
-  type ModelRoom,
 } from "@pe/agent-contracts";
 import { commands, tools } from "@pe/mcps/product-actions";
 import type { RouteWorkspace } from "@pe/runtime";
 import type {
-  RhvacInsertRoomData,
   RhvacExtractData,
   RhvacSyncRequest,
   RhvacSyncResult,
@@ -37,7 +35,7 @@ import type {
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { ActionExecution, Step } from "@pe/host-internal/action-execution";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
-import { rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
+import { applyStaged, buildRhvacInsert, rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
 
 export const fileVersion = async (path: string) =>
   createHash("sha256")
@@ -520,76 +518,5 @@ export function takeoffExecutors(
         }).pipe(Effect.ensuring(Effect.sync(() => captures.invalidate(target))));
       },
     }),
-  };
-}
-
-const WALL_ASSEMBLY =
-  "R-3 insulated sheathing, R-13 closed cell sprayfoam in a 2x6 wood stud cavity, R-15 Fiberglass batt";
-const ROOF_ASSEMBLY = "R49 closed cell sprayfoam in 2x14 joist cavity";
-const FLOOR_ASSEMBLY =
-  "R-19 open cell 1/2 lb. spray foam insulation, 5 inches in 2 x 10 joist cavity, any cover";
-
-function buildRhvacInsert(
-  room: ModelRoom,
-  number: number,
-  systemNumber: number,
-): RhvacInsertRoomData {
-  if (!Number.isFinite(room.ceilingFt) || room.ceilingFt <= 0)
-    throw refused(`room '${room.name}' has invalid ceiling height ${room.ceilingFt}`);
-  const height = room.ceilingFt;
-  const outer = room.outer ?? [];
-  const walls = outer.map(([x1, y1], index) => {
-    const [x2, y2] = outer[(index + 1) % outer.length]!;
-    const angle = Math.atan2(y2 - y1, x2 - x1);
-    const octant = ((Math.round((angle + Math.PI / 2) / (Math.PI / 4)) % 8) + 8) % 8;
-    return {
-      index1: index + 1,
-      assembly: WALL_ASSEMBLY,
-      uValue: 0.036,
-      lengthFeet: Math.hypot(x2 - x1, y2 - y1),
-      heightFeet: height,
-      direction: octant + 1,
-    };
-  });
-  return {
-    number,
-    name: room.name,
-    systemNumber,
-    zoneNumber: 1,
-    areaSquareFeet: room.sqft,
-    ceilingHeightFeet: height,
-    people: room.data!.people,
-    lightingWatts: room.data!.lightingW,
-    equipmentSensibleBtuh: room.data!.equipSensible,
-    equipmentLatentBtuh: room.data!.equipLatent,
-    ventilationCfm: room.data!.ventilationCfm,
-    floors: [
-      {
-        assembly: FLOOR_ASSEMBLY,
-        uValue: 0.051,
-        areaSquareFeet: room.sqft,
-        exposedPerimeterFeet: walls.reduce((sum, wall) => sum + wall.lengthFeet, 0),
-      },
-    ],
-    roofs: [
-      { assembly: ROOF_ASSEMBLY, uValue: 0.024, areaSquareFeet: room.sqft, areaMultiplier: 1.2 },
-    ],
-    walls,
-    glass: [],
-    doors: [],
-  };
-}
-
-function applyStaged<A extends Record<string, unknown>>(room: A, edit: StagedRoomEdit): A {
-  const next = edit.next;
-  return {
-    ...room,
-    ...(next.name === undefined ? {} : { name: next.name }),
-    ...(next.ceilingFt === undefined ? {} : { ceilingHeightFeet: next.ceilingFt }),
-    ...(next.people === undefined ? {} : { people: next.people }),
-    ...(next.lightingW === undefined ? {} : { lightingWatts: next.lightingW }),
-    ...(next.equipSensible === undefined ? {} : { equipmentSensibleBtuh: next.equipSensible }),
-    ...(next.equipLatent === undefined ? {} : { equipmentLatentBtuh: next.equipLatent }),
-    ...(next.ventilationCfm === undefined ? {} : { ventilationCfm: next.ventilationCfm }),
   };
 }

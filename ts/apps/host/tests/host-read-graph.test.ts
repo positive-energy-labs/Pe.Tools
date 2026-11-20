@@ -27,7 +27,8 @@ import { BridgeError } from "@pe/host-internal/dispatch";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { CurrentInputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
 import { HostInputReadSets } from "../src/input-occurrence.ts";
-import { hostNativeReadFor, openRecordingWriter, openRecordingReader } from "../src/native-recording.ts";
+import { openRecordingWriter, openRecordingReader } from "../src/native-recording.ts";
+import { hostNativeReadFor } from "../src/recorded-native-read.ts";
 import { type HostInputLane } from "@pe/host-internal/input-recording";
 import { settle } from "./effect-test.ts";
 import {
