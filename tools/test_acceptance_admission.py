@@ -24,7 +24,8 @@ def trapped(*args, **kwargs):
 
 def barriers(stack):
     for name in ("owner_home", "main_checkout", "installed_identity", "pick_models", "owner_files",
-                 "copy_hashed", "sdk", "dev_session", "setup_installed", "adopt_host", "processes", "revit_pids"):
+                 "copy_hashed", "sdk", "dev_session", "setup_installed", "adopt_host", "processes", "listeners",
+                 "revit_pids"):
         stack.enter_context(patch.object(a, name, side_effect=trapped))
     stack.enter_context(patch.object(a.subprocess, "Popen", side_effect=trapped))
     stack.enter_context(patch.object(a.shutil, "copytree", side_effect=trapped))
@@ -194,8 +195,9 @@ class AdmissionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     if "--hold-probe" in sys.argv:
-        with ExitStack() as stack:
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             barriers(stack)
+            stack.enter_context(patch.object(a, "run_dir", return_value=Path(directory)))
             stack.enter_context(patch.object(a.subprocess, "run", return_value=machine_result()))
             a.main(["setup", "guard"])
     else:
