@@ -12262,6 +12262,12 @@ export namespace TakeoffsSnapshot {
 }
 
 /** Contract constants shared with C#; read these instead of re-typing the numbers. */
+export const nativeHomes = {
+  "roomsRegions": "owner-blob:b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020",
+  "roomsRunTraces": "machine-file:rooms"
+} as const;
+
+/** Contract constants shared with C#; read these instead of re-typing the numbers. */
 export const opCardinality = {
   "One": "One",
   "Many": "Many"

@@ -4,6 +4,18 @@ using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Shared.RevitData.Takeoffs;
 
+/// <summary>
+///     The homes native code writes that a product declaration names (ruling 4 of docs/features/routes/MAP.md).
+///     Typegen emits these as <c>nativeHomes</c>; TypeScript mints a handle from that table and never restates a key.
+///     RoomsRegions is RoomsRegionRecord.Owner's Guid, which this assembly cannot see; NativeHomesTests pins the two.
+/// </summary>
+public static class NativeHomes
+{
+    public const string RoomsRegions = "owner-blob:b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020";
+    // The Rooms module's state folder (RoomsRunTraces.Root): one solve's evidence per zone, on this machine.
+    public const string RoomsRunTraces = "machine-file:rooms";
+}
+
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
 public enum TakeoffCarrierStage
 {

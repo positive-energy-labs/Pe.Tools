@@ -475,7 +475,7 @@ public sealed record HostOpsCatalogData(
     /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, object>> ReadConstants() {
         var result =
-        new[] { typeof(Scripting.ScriptPodSourceBounds), typeof(Scripting.ScriptPodMemberBounds), typeof(Pe.Shared.RevitData.ParameterValueApplyBounds) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
+        new[] { typeof(Scripting.ScriptPodSourceBounds), typeof(Scripting.ScriptPodMemberBounds), typeof(Pe.Shared.RevitData.ParameterValueApplyBounds), typeof(Pe.Shared.RevitData.Takeoffs.NativeHomes) }.OrderBy(type => type.Name, StringComparer.Ordinal).ToDictionary(
             type => CamelCase(type.Name),
             type => (IReadOnlyDictionary<string, object>)type
                 .GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

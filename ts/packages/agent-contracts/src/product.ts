@@ -6,6 +6,7 @@
  * missing or extra body is a compile error. Runtime-neutral: nothing here imports a host or web package.
  */
 import { z } from "zod";
+import { nativeHomes } from "@pe/host-contracts/generated";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
 import { draftCellSchema } from "./draft.ts";
@@ -45,13 +46,22 @@ export type Home<Takes extends CellKey = CellKey> = {
   readonly place: (cell: string) => Placement;
 };
 /**
- * A home C# declares and writes (ruling 4): its generated handle, never a restated name. Nothing
- * exported makes one; S8a adds the reader of its generated table here, as `handle()` reads K1's.
+ * A home C# declares and writes (ruling 4): its generated handle, never a restated name. Only
+ * `nativeHome()` makes one, from the table typegen emits from C#'s `NativeHomes`.
  */
 export type NativeHome<Prefix extends string> = {
   readonly [made]: "native";
   readonly key: `${Prefix}:${string}`;
 };
+type NativeHomeName = keyof typeof nativeHomes;
+type PrefixOf<K> = K extends `${infer P}:${string}` ? P : never;
+/** The handle of a home C# declared, by its C# name, as `handle()` reads the command table. */
+export function nativeHome<N extends NativeHomeName>(
+  name: N,
+): NativeHome<PrefixOf<(typeof nativeHomes)[N]>>;
+export function nativeHome(name: NativeHomeName): NativeHome<string> {
+  return { [made]: "native", key: nativeHomes[name] };
+}
 
 /*
  * The home ladder in code (ADR 0058). Ask in order and stop at the first yes: a fact the model can
