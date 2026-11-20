@@ -237,7 +237,11 @@ test.each(products.filter((p) => p.field === "fan"))(
       "layout",
       expect.objectContaining({ [product.field]: "all" }),
     );
-    expect(screen.getByText(new RegExp(`/ ${product.limit} open`))).toBeTruthy();
+    expect(
+      within(screen.getByRole("listbox", { name: product.list })).getByRole("option", {
+        name: /Port 0/,
+      }),
+    ).toBeTruthy();
   },
 );
 
