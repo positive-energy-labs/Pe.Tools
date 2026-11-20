@@ -707,7 +707,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                 : chosen.kind === "session"
                   ? { bridgeSessionId: chosen.session }
                   : {};
-              const answer = await take(native.read({ key, input, scope }));
+              const answer = await take(
+                native.read({ key, input, scope, waitForRetirement: true }),
+              );
               return new Response(JSON.stringify(answer.value), {
                 // Admission generations fence native flights; sealed read versions describe content.
                 // Keep freshness evidence in the native taking, outside the Value's content identity.
