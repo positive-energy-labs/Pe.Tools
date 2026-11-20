@@ -1,4 +1,4 @@
-import { productGateway } from "./product-executors.generated.ts";
+import { commandCodes as nativeCommandCodes } from "@pe/host-contracts/native-commands";
 import { peRoutes } from "@pe/mcps/product-catalog";
 import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
@@ -111,42 +111,8 @@ type ExportEvent = {
   /** A fixed event id, so a replayed send is the same PostHog event. */
   uuid?: string;
 };
-// Compiled Pe.App command types, never ribbon labels or authored task/Pod ids.
-export const commandCodes = new Set([
-  "StartupCommand",
-  "CmdAutoTag",
-  "CmdApsAuth",
-  "CmdMep2040",
-  "CmdCloseModel",
-  "CmdCacheParametersService",
-  "CmdTapMaker",
-  "CmdScheduleManagerSerialize",
-  "CmdScheduleManager",
-  "CmdPeTools",
-  "CmdPeToolsHome",
-  "CmdPea",
-  "CmdFamilyAudit",
-  ...productGateway.ribbonTelemetry,
-  "CmdPodsWeb",
-  "CmdPltMruViews",
-  "CmdFFMigrator",
-  "CmdFFManager",
-  "CmdPltFamilyElements",
-  "CmdPltFamilyElementsFamilies",
-  "CmdPltFamilyElementsParams",
-  "CmdPltFamilyElementsDims",
-  "CmdPltFamilyElementsRefPlanes",
-  "CmdPltFamilyElementsConnectors",
-  "CmdPltFamilyInstances",
-  "CmdPltTasks",
-  "CmdPltCommands",
-  "CmdPltFamilies",
-  "CmdPltFamilyTypes",
-  "CmdPltViews",
-  "CmdPltViewsOnly",
-  "CmdPltSchedules",
-  "CmdPltSheets",
-]);
+// Compiled Pe.App command types, never ribbon labels or authored task/Pod ids. C# emits the list.
+export const commandCodes: ReadonlySet<string> = new Set(nativeCommandCodes);
 const readings = new Set(
   readingRequestSchema.options.flatMap((s) => {
     const shape = "shape" in s ? s.shape : null;
