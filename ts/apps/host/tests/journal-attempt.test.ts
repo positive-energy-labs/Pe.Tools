@@ -1,7 +1,7 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { journalFixture } from "./storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
-import { rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
@@ -232,6 +232,7 @@ async function fixture(
     return holds()[before]!.requestId;
   };
   return {
+    dir,
     journal,
     calls,
     seen,
@@ -592,6 +593,29 @@ test.each([
       });
       expect(bound).toBe(0);
     }
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("a succeeded action links the picture its result names; a line without the link still loads", async () => {
+  const f = await fixture();
+  try {
+    await f.submit("pictured");
+    const sha256 = "a".repeat(64);
+    f.answer(Effect.succeed({ capture: { sha256 } }));
+    const row = await f.journal.wait("pictured");
+    expect(row.emitted).toEqual([{ store: "picture", sha: sha256 }]);
+    // The reopened journal decodes the linked line and, written before the field, a bare one.
+    const path = join(f.dir, "partition-operations.json");
+    const lines = (await readFile(path, "utf8")).trimEnd().split("\n");
+    const bare = lines.map((line) => line.replace(/,?"emitted":\[[^\]]*\]/, ""));
+    expect(bare.join("\n")).not.toContain("emitted");
+    expect((await f.reopen().list(undefined, "pictured"))[0]?.emitted).toEqual(row.emitted);
+    await writeFile(path, bare.join("\n") + "\n");
+    const old = (await f.reopen().list(undefined, "pictured"))[0];
+    expect(old).toMatchObject({ id: "pictured", state: "succeeded" });
+    expect(old).not.toHaveProperty("emitted");
   } finally {
     await f.dispose();
   }

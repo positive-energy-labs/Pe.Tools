@@ -190,8 +190,20 @@ export const nativeProgressSchema = z
   .refine(({ zonesDone, zonesTotal }) => zonesDone <= (zonesTotal ?? 0));
 export type NativeProgress = z.output<typeof nativeProgressSchema>;
 
+/**
+ * A capture an action produced, by the store that holds it: a picture by its bytes, a kept reading
+ * by its declared kind and id. The two stores keep their own id spaces.
+ */
+export const captureRefSchema = z.discriminatedUnion("store", [
+  z.strictObject({ store: z.literal("picture"), sha: z.string().regex(/^[0-9a-f]{64}$/) }),
+  z.strictObject({ store: z.literal("reading"), kind: z.string().min(1), id: z.string().min(1) }),
+]);
+export type CaptureRef = z.infer<typeof captureRefSchema>;
+
 const actionAttempt = z.object({
   snapshots: z.array(timelineSnapshotSchema).optional(),
+  /** Optional and never defaulted: a receipt written before this field decodes without it. */
+  emitted: z.array(captureRefSchema).optional(),
   id: z.string().min(1),
   key: z.string(),
   outcome: invocationOutcomeSchema.optional(),

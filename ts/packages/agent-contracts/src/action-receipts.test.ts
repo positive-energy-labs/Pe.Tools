@@ -132,3 +132,25 @@ test.each([
   });
   expect(row.outcome?.recovery).toBeUndefined();
 });
+
+test("a receipt written before `emitted` still decodes, and one with it keeps both stores", () => {
+  const old = {
+    id: "one",
+    key: "write",
+    state: "succeeded",
+    result: null,
+    caller: { kind: "human", via: "local" },
+    basis: null,
+    target: { kind: "host" },
+    input: {},
+    startedAt: "now",
+  };
+  const before = actionStatusSchema.parse(old);
+  expect("emitted" in before).toBe(false);
+  const emitted = [
+    { store: "picture", sha: "a".repeat(64) },
+    { store: "reading", kind: "takeoff", id: "b".repeat(64) },
+  ];
+  expect(actionStatusSchema.parse({ ...old, emitted }).emitted).toEqual(emitted);
+  expect(() => actionStatusSchema.parse({ ...old, emitted: [{ store: "other", id: "x" }] })).toThrow();
+});

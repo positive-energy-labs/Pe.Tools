@@ -402,6 +402,15 @@ type SettleCause =
   | { kind: "interrupted" };
 /** A terminal state and its fields; every caller parses the whole receipt against the schema. */
 type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<string, unknown>;
+// ponytail: a result names its picture by convention (`capture.sha256`, or a taking's `capture.sha`).
+// A command that declares `emits` replaces this when the first command keeps a reading.
+const pictureSha = z.string().regex(/^[0-9a-f]{64}$/);
+const producedPicture = z.object({
+  capture: z.union([
+    z.object({ sha256: pictureSha, sha: z.undefined().optional() }),
+    z.object({ sha: pictureSha, sha256: z.undefined().optional() }),
+  ]),
+});
 
 /**
  * The one terminal decision for an attempt, from its preparation, its recorded steps, and what ended
@@ -459,7 +468,15 @@ function settle(
       notDispatched: true,
       ...(thrown && "issues" in thrown && thrown.issues ? { issues: thrown.issues } : {}),
     };
-  if (cause.kind === "returned") return { state: "succeeded", result: cause.result ?? null };
+  if (cause.kind === "returned") {
+    // The one place a succeeded action has what it produced: the picture its result names.
+    const picture = producedPicture.safeParse(cause.result).data?.capture;
+    return {
+      state: "succeeded",
+      result: cause.result ?? null,
+      ...(picture ? { emitted: [{ store: "picture", sha: picture.sha256 ?? picture.sha }] } : {}),
+    };
+  }
   const cancelled =
     cause.kind !== "threw" ? steps.find((step) => step.state === "cancelled") : undefined;
   if (cancelled?.state === "cancelled")
