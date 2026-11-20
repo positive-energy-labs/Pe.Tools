@@ -58,7 +58,9 @@ public sealed class BridgeRequestPumpTests {
         var pump = new BridgeRequestPump(pair.Client, async (request, token) => {
             started.TrySetResult();
             try { await Task.Delay(Timeout.Infinite, token); }
-            catch (OperationCanceledException cancelled) { throw new OpCancelledException(wrote, cancelled); }
+            catch (OperationCanceledException cancelled) {
+                throw new OpCancelledException(wrote, cancelled, "Stopped after the duct was placed.");
+            }
         });
         _ = pump.RunAsync(shutdown.Token);
         await pair.Server.WriteAsync(RequestFrame("slow"), CancellationToken.None);
@@ -69,6 +71,7 @@ public sealed class BridgeRequestPumpTests {
 
         Assert.Multiple(() => {
             Assert.That(frame?.Response?.StatusCode, Is.EqualTo(499));
+            Assert.That(frame?.Response?.ErrorMessage, Is.EqualTo("Stopped after the duct was placed."));
             Assert.That(frame?.Response?.Touched, Is.InstanceOf<Touched.Wrote>());
             Assert.That((frame?.Response?.Touched as Touched.Wrote)?.Transactions, Is.EqualTo(new[] { "PE place duct" }));
         });

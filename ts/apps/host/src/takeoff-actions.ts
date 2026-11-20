@@ -227,13 +227,18 @@ export function takeoffExecutors(
             }),
           ),
         ),
-      run: (ctx, execution) =>
-        runCarrier(ctx, execution, captures, bridge, "Rooms", (native) => {
-          return value(ctx, native, "rooms.partition", {
+      run: (ctx, execution) => {
+        const target = modelTarget(ctx);
+        const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
+        const invalidate = Effect.sync(() => captures.invalidate(target));
+        return Effect.andThen(
+          invalidate,
+          value(ctx, native, "rooms.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
-          });
-        }),
+          }),
+        ).pipe(Effect.ensuring(invalidate));
+      },
     }),
     "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
       seal: (p) => ({ request: { process: p.process } }),

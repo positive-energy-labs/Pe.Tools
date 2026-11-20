@@ -263,9 +263,11 @@ internal sealed class RevitDataRequestService {
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
 
-    [Op("rooms.partition", OpSubject.View, OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
-    private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request), "Pe Partition Rooms");
+    [Op("rooms.partition", OpSubject.View, OpTouches.Metadata | OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument,
+        ModelWrite scope, CancellationToken cancellationToken) =>
+        RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request, cancellationToken,
+            progress => _ = RevitReceiptTransport.ReportRoomsProgressAsync(progress)), opensOwnTransaction: true);
 
     [Op("rooms.draw", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Draw one room or zone region from loops on a plan view; a person's designation, so a room is locked.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsDrawResult DrawRoomCore(RoomsDrawRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
@@ -349,8 +351,10 @@ internal sealed class RevitDataRequestService {
         );
     }
 
-    private static T RunTakeoff<T>(DbDocument document, Func<DbDocument, T> run, string? transactionName = null) {
-        if (transactionName != null && document.IsReadOnly)
+    private static T RunTakeoff<T>(DbDocument document, Func<DbDocument, T> run, string? transactionName = null,
+        bool opensOwnTransaction = false) {
+        var writes = transactionName != null || opensOwnTransaction;
+        if (writes && document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
                 "The active project document is read-only.",
                 [BridgeOperationExceptions.Issue(
@@ -380,13 +384,13 @@ internal sealed class RevitDataRequestService {
                     "TakeoffCarriersNeedInitialization",
                     $"Missing carrier GUIDs: {string.Join(", ", ex.Preflight.MissingCarrierGuids.Select(guid => guid.ToString("D")))}",
                     $"Call takeoffs.initialize-carrier with stage '{ex.Preflight.Stage}' until status is ready.")]);
-        } catch (System.InvalidOperationException ex) when (transactionName != null) {
+        } catch (System.InvalidOperationException ex) when (writes) {
             // Takeoff verbs refuse a failed precondition (cross-zone merge, no zone drawn) with this type, inside the
             // sandbox, so nothing committed: a conflict the host settles `failed`, never an uncertain fault.
             throw BridgeOperationExceptions.Conflict(
                 ex.Message,
                 [BridgeOperationExceptions.Issue("$", "TakeoffRefused", ex.Message, "Fix what the message names, then retry.")]);
-        } catch (Exception ex) {
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
             throw BridgeOperationExceptions.Unexpected(
                 "TakeoffOperationException",
                 ex,

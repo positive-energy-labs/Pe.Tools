@@ -11012,7 +11012,7 @@ export namespace RoomsMerge {
   }
 }
 
-/** Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. */
+/** Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction. */
 export namespace RoomsPartition {
   export namespace Req {
     export interface Request {
@@ -12421,7 +12421,7 @@ export const hostOpSafety = {
   "revit.resolve.unit-value": {"costTier":"Bounded","subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
   "rooms.draw": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "rooms.merge": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
-  "rooms.partition": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
+  "rooms.partition": {"costTier":"Mutation","subject":"View","touches":"Metadata, Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "rooms.roster": {"costTier":"Cheap","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
   "rooms.snapshot": {"costTier":"Bounded","subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
   "rooms.trace": {"costTier":"Bounded","subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},

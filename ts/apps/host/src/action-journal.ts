@@ -1537,7 +1537,9 @@ export class ActionJournal implements ReceiptReader {
       const save = (update: (current: ExecutableActionReceipt) => ExecutableActionReceipt) =>
         this.serial(async () => {
           row = executableActionReceiptSchema.parse(this.rows.get(row.id) ?? row);
-          const next = executableActionReceiptSchema.parse(actionReceiptSchema.parse(update(row)));
+          const changed = update(row);
+          if (changed === row) return;
+          const next = executableActionReceiptSchema.parse(actionReceiptSchema.parse(changed));
           await this.commit([next]);
           this.notify();
           row = next;
@@ -1748,6 +1750,15 @@ export class ActionJournal implements ReceiptReader {
                       refusal: () => journal.dispatchRefusal(step.id),
                       validate: () => journal.validateDispatch(step.id),
                       dispatched: (transport) => journal.markDispatched(step.id, transport),
+                      progress: (progress) =>
+                        save((current) =>
+                          current.state === "running" &&
+                          current.steps.some(
+                            (held) => held.id === step.id && held.state === "running",
+                          )
+                            ? { ...current, progress }
+                            : current,
+                        ),
                       terminal: async (touched, evidenceJson) => {
                         const parsed = touchedSchema.safeParse(touched);
                         let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;

@@ -9,9 +9,10 @@ public record OpCancelRequest(string RequestId);
 public record OpCancelData(bool Cancelled, string RequestId, string Message);
 
 /// <summary>A cancelled op whose runner already knows what it touched; the pump puts that on the cancelled frame.</summary>
-public sealed class OpCancelledException(Touched touched, OperationCanceledException inner)
+public sealed class OpCancelledException(Touched touched, OperationCanceledException inner, string? receiptMessage = null)
     : OperationCanceledException(inner.Message, inner, inner.CancellationToken) {
     public Touched Touched { get; } = touched;
+    public string? ReceiptMessage { get; } = receiptMessage;
 }
 
 /// <summary>
@@ -75,7 +76,7 @@ public sealed class BridgeRequestPump(
             try {
                 await handle(request, source.Token).ConfigureAwait(false);
             } catch (OperationCanceledException cancelled) when (source.IsCancellationRequested) {
-                await this.WriteCancelledAsync(request, (cancelled as OpCancelledException)?.Touched).ConfigureAwait(false);
+                await this.WriteCancelledAsync(request, cancelled as OpCancelledException).ConfigureAwait(false);
             } catch (Exception exception) {
                 log?.Invoke($"Host bridge request '{request.RequestId}' escaped its handler.", exception);
             } finally {
@@ -90,8 +91,8 @@ public sealed class BridgeRequestPump(
     ///     A cancelled op answers cancelled (499), never a fault, with the same touched its receipt states. Null when
     ///     the op was cancelled before a runner saw it; the host reads that as unknown.
     /// </summary>
-    private async Task WriteCancelledAsync(BridgeRequest request, Touched? touched) {
-        var message = $"Operation '{request.OperationKey}' was cancelled.";
+    private async Task WriteCancelledAsync(BridgeRequest request, OpCancelledException? cancelled) {
+        var message = cancelled?.ReceiptMessage ?? $"Operation '{request.OperationKey}' was cancelled.";
         try {
             await session.WriteAsync(
                 new BridgeFrame(
@@ -104,7 +105,7 @@ public sealed class BridgeRequestPump(
                         BridgeOperationExceptions.CancelledStatusCode,
                         [BridgeOperationExceptions.Issue("$", "Cancelled", message, null)],
                         new PerformanceMetrics(0, 0, 0, 0, 0),
-                        Touched: touched
+                        Touched: cancelled?.Touched
                     )
                 ),
                 CancellationToken.None

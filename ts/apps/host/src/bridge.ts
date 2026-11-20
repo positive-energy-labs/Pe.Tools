@@ -28,8 +28,10 @@ import {
   dispatchRefusal,
   markDispatched,
   validateDispatch,
+  recordNativeProgress,
   recordNativeTerminal,
   recordNativeUncertainty,
+  ROOMS_PARTITION_PROGRESS_EVENT,
 } from "./action-dispatch.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
@@ -461,6 +463,16 @@ export const RevitBridgeLive = Layer.effect(
           case "Event": {
             if (!frame.event) {
               yield* Effect.logWarning("bridge Event frame missing event");
+              return;
+            }
+            if (frame.event.eventName === ROOMS_PARTITION_PROGRESS_EVENT) {
+              if (!session || !(yield* current)) return;
+              const payload = frame.event.payloadJson;
+              const requests = yield* Ref.get(session.requests);
+              yield* Effect.tryPromise({
+                try: () => recordNativeProgress(payload, (id) => requests.get(id)),
+                catch: (cause) => Error("Could not record rooms partition progress", { cause }),
+              }).pipe(Effect.ignore({ log: true }));
               return;
             }
             // This is producer evidence, never a browser event, including when malformed.

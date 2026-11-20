@@ -1,6 +1,10 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { actionReceiptListDecoder, actionStatusSchema } from "./action-receipts.ts";
+import {
+  actionReceiptListDecoder,
+  actionStatusSchema,
+  roomsPartitionProgressSchema,
+} from "./action-receipts.ts";
 
 test.each([
   ["running", "running", undefined],
@@ -30,6 +34,26 @@ test.each([
 
 test("receipt projections remain representable as the public JSON schema", () => {
   expect(z.toJSONSchema(actionStatusSchema)).toBeDefined();
+});
+
+test("rooms partition progress carries known counts through the action status", () => {
+  const progress = { phase: "Solve", zonesDone: 1, zonesTotal: 2 };
+  const row = actionStatusSchema.parse({
+    id: "one",
+    key: "rooms.partition",
+    state: "running",
+    caller: { kind: "human", via: "local" },
+    basis: null,
+    target: { kind: "host" },
+    input: {},
+    startedAt: "now",
+    progress,
+  });
+  expect(row.progress).toEqual(progress);
+  expect(roomsPartitionProgressSchema.safeParse({ ...progress, zonesDone: 3 }).success).toBe(false);
+  expect(
+    roomsPartitionProgressSchema.parse({ phase: "Prepare", zonesDone: 0 }).zonesTotal,
+  ).toBeNull();
 });
 
 test.each([
