@@ -2,7 +2,8 @@ import { fansRouteState } from "./fans.ts";
 import { DUCT_SYSTEMS_ROUTE } from "@pe/ducts-contract/system-work";
 import { expect, test } from "vite-plus/test";
 import { workHandle } from "@pe/agent-contracts";
-import { admissionPreflight } from "./admission.ts";
+import { product } from "./product.ts";
+const { admissionPreflight } = product;
 
 test("P-096: preflight refuses a stale route-keyed sibling revision", async () => {
   const asked = workHandle({ binding: "host", route: fansRouteState.route, target: null }, 1);

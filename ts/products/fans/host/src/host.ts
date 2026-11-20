@@ -20,12 +20,12 @@ import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 
 import { read } from "@pe/host-internal/read-graph";
 import {
-  ductCalc,
   fanElements,
   fanInputs,
   fanLegs,
   fanOverview,
   fanRoster,
+  fanPressureRows,
   fanCalcBreakdown,
 } from "./fan-calc.ts";
 const openFan = read("fans.open", {
@@ -74,23 +74,20 @@ const openFan = read("fans.open", {
 
 /** The Fans read owns the join; its adapter has no untracked Work/file/native access. */
 export const fansCalc = body(contracts.calc, async function (ctx, args) {
-  const fans = await ctx.read(fanRoster, { target: args.target });
-  const requested = args.fan === "all" ? null : [...new Set(args.fan)];
-  if ((requested?.length ?? fans.rows.length) > FAN_DETAIL_LIMIT)
-    throw Error(fanDetailLimitMessage);
-  const chosen =
-    requested === null
-      ? fans.rows
-      : requested.map((key) => {
-          const ref = subjectOf(key);
-          const port = ref.sub && "port" in ref.sub ? ref.sub.port : null;
-          const row = fans.rows.find(
-            (row) =>
-              ref.keyKind === "UniqueId" && row.uniqueId === ref.key && row.portIndex === port,
-          );
-          if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
-          return row;
-        });
+  const fans = await ctx.read(args.fan === "all" ? fanPressureRows : fanRoster, {
+    target: args.target,
+  });
+  const requested = args.fan === "all" ? [] : [...new Set(args.fan)];
+  if (requested.length > FAN_DETAIL_LIMIT) throw Error(fanDetailLimitMessage);
+  const chosen = requested.map((key) => {
+    const ref = subjectOf(key);
+    const port = ref.sub && "port" in ref.sub ? ref.sub.port : null;
+    const row = fans.rows.find(
+      (row) => ref.keyKind === "UniqueId" && row.uniqueId === ref.key && row.portIndex === port,
+    );
+    if (!row) throw Error(`Fan '${key}' is unavailable; choose it from the roster`);
+    return row;
+  });
   const opened = await ctx.collect(chosen, {
     read: openFan,
     batch: 1,
@@ -194,10 +191,3 @@ export const fansCalc = body(contracts.calc, async function (ctx, args) {
     };
   });
 });
-
-export const reads = {
-  calc: fansCalc,
-  roster: fanRoster,
-  calcDetail: ductCalc,
-  calcBreakdown: fanCalcBreakdown,
-};

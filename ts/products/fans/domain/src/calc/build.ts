@@ -67,7 +67,7 @@ import {
   type Walk,
 } from "./walk.ts";
 import { assumedFanFlows, type AssumedFlow } from "./assumed-flow.ts";
-import { FAN_INPUTS } from "@pe/fans-contract/fans-inputs";
+import type { FansDocument } from "@pe/fans-contract/fans";
 import { criteriaCellOf, type DuctsInputs, type Resolved } from "@pe/ducts-contract/duct-inputs";
 import { resolveValue } from "@pe/agent-contracts";
 import { coverageOf } from "@pe/ducts-domain/calc/coverage";
@@ -2097,14 +2097,12 @@ function issueOf(
 ): FanIssue {
   const el = g.byId.get(b.elementId);
   const kind = el && !isSegment(el) ? el.kind : "duct";
-  // The one inputs table says which Work and segment a parameter's cell lives in (L1-1).
   const cell = (
-    parameter: NonNullable<(typeof FAN_INPUTS)[number]["parameter"]>,
+    segment: keyof FansDocument,
     offers: Extract<FanIssue["closer"], { kind: "cell" }>["offers"] = [],
   ): FanIssue["closer"] => {
-    const row = FAN_INPUTS.find((r) => r.parameter === parameter && r.segment != null);
-    return b.subject && row?.segment
-      ? { kind: "cell", target: { work: row.owner, segment: row.segment, row: b.subject }, offers }
+    return b.subject
+      ? { kind: "cell", target: { work: "fans", segment, row: b.subject }, offers }
       : { kind: "none", reason: b.closer.note };
   };
   const encounter = encounters.find((e) => backflowId(e) === b.id);
@@ -2119,13 +2117,13 @@ function issueOf(
           : b.kind === "unknown-drop" && kind === "terminal"
             ? // No offer rides here: an offer names its caller, and the engine has none. The firm's terminal
               // drop a caller may take is `inputs.criteria.terminalDropInWg`, with its own source and ref.
-              cell("terminalDrop")
+              cell("terminalDrops")
             : b.kind === "unknown-drop" || b.kind === "not-priced" || b.kind === "implausible-loss"
-              ? cell("componentDrop")
+              ? cell("componentDrops")
               : b.kind === "no-flow" && kind === "terminal"
-                ? cell("terminalFlow")
+                ? cell("flows")
                 : b.kind === "no-flow" && kind === "equipment"
-                  ? cell("fanFlow")
+                  ? cell("equipmentFlows")
                   : { kind: "none", reason: b.closer.note };
   return {
     id: b.id,

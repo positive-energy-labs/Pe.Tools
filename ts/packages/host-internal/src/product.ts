@@ -31,7 +31,10 @@ export function implement(
     Object.entries(product.readings).map(([key, { handle }]) => {
       const run = bodies.readings[key];
       if (!run) throw Error(`No host body for ${handle.key}`);
-      return [key, body(handle, run)];
+      if (typeof run === "function") return [key, body(handle, run)];
+      if (run.contract && (run.contract !== handle || run.name !== handle.key))
+        throw Error(`Wrong host body for ${handle.key}`);
+      return [key, run.contract ? run : body(handle, run.run)];
     }),
   );
   return {

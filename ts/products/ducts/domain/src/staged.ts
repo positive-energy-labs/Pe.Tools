@@ -1,7 +1,7 @@
 /** What the Work has edit for a write, counted from the document alone. */
 import { workElementId } from "./work-subject.ts";
 import { decode } from "@pe/agent-contracts";
-import { fanBindingRows } from "@pe/fans-contract/fans-inputs";
+import { fanWriteSegments } from "@pe/fans-contract/product";
 import type { DuctsApplyInput, DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import type { WorkPath } from "@pe/agent-contracts";
 import type { FansDocument } from "@pe/fans-contract/fans";
@@ -9,21 +9,6 @@ import type { DuctsApply } from "@pe/host-contracts/generated";
 
 import { pendingRulings } from "./rulings.ts";
 import type { DuctSnapshot } from "./types.ts";
-
-type Segment = "terminalDrops" | "componentDrops" | "flows" | "equipmentFlows" | "roles";
-/** The Fans Work segments apply carries, from the one inputs table. Rated ESP is read only. */
-const WRITTEN_SEGMENTS: Record<Segment, true> = {
-  terminalDrops: true,
-  componentDrops: true,
-  flows: true,
-  equipmentFlows: true,
-  roles: true,
-};
-const isSegment = (segment: string | null): segment is Segment =>
-  segment != null && segment in WRITTEN_SEGMENTS;
-const SEGMENTS = fanBindingRows().flatMap((row) =>
-  row.owner === "fans" && isSegment(row.segment) ? [row.segment] : [],
-);
 
 /**
  * Fan targets are a projection of current edits, never a list frozen when scope was chosen. The walk
@@ -36,7 +21,7 @@ export function fanWriteCells(
   const here = new Set(
     [...snapshot.nodes, ...snapshot.segments].map((element) => element.uniqueId),
   );
-  return SEGMENTS.flatMap((segment) =>
+  return fanWriteSegments.flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([id, cell]) => {
       const ref = decode(id);
       return cell.edit != null &&

@@ -1,7 +1,8 @@
 /** Sheet presentation on the kernel's in-memory Work journal; the route owns no undo stack. */
 import { z } from "zod";
 import { decode } from "@pe/agent-contracts";
-import type { CalcEdits } from "@pe/ducts-contract/duct-inputs";
+import type { FansCalcEdits } from "@pe/fans-contract/product";
+import type { DuctsCalcEdits } from "@pe/ducts-contract/duct-inputs";
 import type { WorkHistoryEntry } from "@pe/agent-contracts/route-kernel-bodies";
 import { CRITERION_WORDS } from "@pe/ducts-contract/criterion-words.neutral";
 
@@ -73,7 +74,10 @@ const NOUNS: Record<string, string> = {
 };
 
 /** A short name for an edit made outside the inputs list (a worksheet cell, a ledger closer). */
-export function editLabel(edits: CalcEdits, nameOf: (subject: string) => string | null): string {
+export function editLabel(
+  edits: DuctsCalcEdits & FansCalcEdits,
+  nameOf: (subject: string) => string | null,
+): string {
   for (const [field, noun] of Object.entries(NOUNS)) {
     const record = (edits as Record<string, Record<string, unknown> | undefined>)[field];
     const [key, value] = Object.entries(record ?? {})[0] ?? [];

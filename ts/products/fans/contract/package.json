@@ -4,9 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./semantic-actions": "./src/semantic-actions.ts",
-    "./read-discovery": "./src/read-discovery.ts",
-    "./admission": "./src/admission.ts",
     "./calc-read": "./src/calc-read.ts",
     "./contract": "./src/contract.ts",
     "./fan-calc-data": "./src/fan-calc-data.ts",

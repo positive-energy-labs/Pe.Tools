@@ -1,20 +1,17 @@
 import { z } from "zod";
 import { DUCTS_CRITERIA_CELLS } from "@pe/ducts-contract/duct-inputs";
 import { slotLayer } from "@pe/ducts-contract/system-work";
-import { DUCT_UNIT_ROLES } from "@pe/ducts-contract/duct-inputs";
-import { FAN_CELLS } from "@pe/fans-contract/fans-inputs";
+import { product } from "@pe/fans-contract/product";
+import { sheetCells } from "@pe/agent-contracts/product";
 import { routeAddress, subjectCode, type Immutable } from "@pe/agent-contracts";
 import { type fansCalcData } from "@pe/fans-contract/fans-read";
 import {
   cellSource,
-  local,
-  parameter,
-  store,
   type BindingDraw,
   type CellLayer,
-  type Domain,
   type EnumChoice,
   type SheetSlot,
+  type SheetBinding,
 } from "@pe/agent-contracts/slots";
 import type { ValueSource } from "@pe/agent-contracts/work-value";
 import { fanWriteCells } from "@pe/ducts-domain/staged";
@@ -142,29 +139,26 @@ const scopeChoices = (read: Read): readonly EnumChoice[] => {
     { value: null, label: "None", description: "Clear the write scope" },
   ];
 };
-/**
- * One writable fan input as a sheet binding: its slot and domain come from the one inputs table
- * (`FAN_INPUTS`); only how many digits a unit draws is decided here.
- */
-const DIGITS: Readonly<Record<string, number>> = { "in-wg": 4, cfm: 0 };
-const drawn = (domain: Domain): Domain =>
-  domain.kind === "number" && domain.unit && domain.unit in DIGITS
-    ? { ...domain, digits: DIGITS[domain.unit] }
-    : domain.kind === "object"
-      ? {
-          ...domain,
-          fields: Object.fromEntries(
-            Object.entries(domain.fields).map(([key, field]) => [key, drawn(field)]),
-          ),
-        }
-      : domain;
-const input = (
-  row: { readonly parameter: string | null; readonly domain: Domain; readonly name: string },
-  draw: BindingDraw,
-) => {
-  if (!row.parameter) throw Error(`${row.name} is not a writable fan input`);
-  return parameter(row.parameter, drawn(row.domain), draw);
-};
+const bindCells = (
+  draws: Record<keyof typeof product.cells, BindingDraw<Read>> &
+    Readonly<Record<string, BindingDraw<Read>>>,
+): Record<string, SheetBinding> =>
+  Object.fromEntries(
+    Object.entries(sheetCells(product)).map(([name, { domain, home, per, ...cell }]) => {
+      if (home.at === "setting" || per === "name")
+        throw Error(`Unexpected Fans Work placement for ${name}`);
+      const draw = { ...cell, ...draws[name] };
+      const rendered =
+        name === "writeIntent" && domain.kind === "enum"
+          ? { ...domain, choices: scopeChoices }
+          : domain;
+      if (home.at === "parameter") {
+        if (per !== "subject") throw Error(`Parameter ${name} needs an element`);
+        return [name, { ...draw, home, per, domain: rendered }];
+      }
+      return [name, { ...draw, home, per, domain: rendered }];
+    }),
+  );
 
 export const fansCalc = {
   draft: true,
@@ -235,37 +229,9 @@ export const fansCalc = {
           },
         ]),
     ),
-    writeIntent: local(
-      {
-        kind: "enum",
-        shape: z.strictObject({
-          walk: z.strictObject({
-            unitId: z.number().int().positive(),
-            portIndex: z.number().int().nonnegative(),
-          }),
-        }),
-        choices: scopeChoices,
-      },
-      "route",
-      { label: "Write scope" },
-    ),
-    roles: store(
-      "_PE_DuctLosses",
-      {
-        kind: "object",
-        fields: {
-          role: {
-            kind: "enum",
-            shape: z.enum(DUCT_UNIT_ROLES),
-            choices: DUCT_UNIT_ROLES.map((role) => ({
-              value: role,
-              label: role === "fan" ? "Fan" : "Passive",
-            })),
-          },
-        },
-      },
-      "subject",
-      {
+    ...bindCells({
+      writeIntent: {},
+      roles: {
         rows: (read: Read) =>
           rowsOf(
             read,
@@ -284,71 +250,77 @@ export const fansCalc = {
             : null;
         },
       },
-    ),
-    equipmentFlows: input(FAN_CELLS.equipmentFlows, {
-      rows: (read: Read) => rowsOf(read, units(read)),
-      rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
-      model: (read: Read, row) => {
-        const id = idOf(read, row),
-          node = snapshotOf(read)?.nodes.find((n) => n.id === id);
-        const conflict =
-          id === fanUnit(read)
-            ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text
-            : undefined;
-        const base = live(
-          read,
-          "equipmentFlows",
-          row,
-          inputsOf(read)?.units[String(id)]?.cfm,
-          (v) => v,
-        ) ?? { value: null };
-        return {
-          ...base,
-          ...(conflict
-            ? {
-                note: [conflict.replace(/^fan \d+: /, "Conflict: "), base.note]
-                  .filter(Boolean)
-                  .join(". "),
-              }
-            : {}),
-          ...(node && node.flowParameter === null
-            ? {
-                refusal: `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${snapshotOf(read)?.slots.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter`,
-              }
-            : {}),
-        };
+      equipmentFlows: {
+        rows: (read: Read) => rowsOf(read, units(read)),
+        rowLabel: (read, row) => nameOf(read, row, "Unit airflow"),
+        model: (read: Read, row) => {
+          const id = idOf(read, row),
+            node = snapshotOf(read)?.nodes.find((n) => n.id === id);
+          const conflict =
+            id === fanUnit(read)
+              ? read?.open?.inputs?.notes.find((n) => n.kind === "flow-conflict")?.text
+              : undefined;
+          const base = live(
+            read,
+            "equipmentFlows",
+            row,
+            inputsOf(read)?.units[String(id)]?.cfm,
+            (v) => v,
+          ) ?? { value: null };
+          return {
+            ...base,
+            ...(conflict
+              ? {
+                  note: [conflict.replace(/^fan \d+: /, "Conflict: "), base.note]
+                    .filter(Boolean)
+                    .join(". "),
+                }
+              : {}),
+            ...(node && node.flowParameter === null
+              ? {
+                  refusal: `${[node.type, node.family].filter(Boolean).join(" / ") || "This fan"} has no ${snapshotOf(read)?.slots.fanFlow ?? "selected airflow"} parameter; add it to the family or map flow to an existing parameter`,
+                }
+              : {}),
+          };
+        },
       },
-    }),
-    // The ESP a fan is rated for: stated here or read from its separately named parameter (P-030).
-    ratedEsp: local(drawn(FAN_CELLS.ratedEsp.domain), "subject", {
-      rows: (read: Read) => rowsOf(read, units(read)),
-      rowLabel: (read, row) => nameOf(read, row, "Unit rated ESP"),
-      model: (read: Read, row) =>
-        layer(inputsOf(read)?.units[String(idOf(read, row))]?.esp, (v) => ({ inWg: v })),
-    }),
-    flows: input(FAN_CELLS.flows, {
-      rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
-      rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
-      model: (read: Read, row) =>
-        live(read, "flows", row, inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm, (v) => v),
-    }),
-    terminalDrops: input(FAN_CELLS.terminalDrops, {
-      rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
-      rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
-      model: (read: Read, row) =>
-        live(
-          read,
-          "terminalDrops",
-          row,
-          inputsOf(read)?.terminals[String(idOf(read, row))]?.drop,
-          (v) => ({ inWg: v }),
-        ),
-    }),
-    componentDrops: input(FAN_CELLS.componentDrops, {
-      rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
-      rowLabel: (read, row) => nameOf(read, row, "Part drop"),
-      model: (read: Read, row) =>
-        layer(inputsOf(read)?.components[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
+      // The ESP a fan is rated for: stated here or read from its separately named parameter (P-030).
+      ratedEsp: {
+        rows: (read: Read) => rowsOf(read, units(read)),
+        rowLabel: (read, row) => nameOf(read, row, "Unit rated ESP"),
+        model: (read: Read, row) =>
+          layer(inputsOf(read)?.units[String(idOf(read, row))]?.esp, (v) => ({ inWg: v })),
+      },
+      flows: {
+        rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
+        rowLabel: (read, row) => nameOf(read, row, "Terminal airflow"),
+        model: (read: Read, row) =>
+          live(
+            read,
+            "flows",
+            row,
+            inputsOf(read)?.terminals[String(idOf(read, row))]?.cfm,
+            (v) => v,
+          ),
+      },
+      terminalDrops: {
+        rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.terminals ?? {})),
+        rowLabel: (read, row) => nameOf(read, row, "Terminal drop"),
+        model: (read: Read, row) =>
+          live(
+            read,
+            "terminalDrops",
+            row,
+            inputsOf(read)?.terminals[String(idOf(read, row))]?.drop,
+            (v) => ({ inWg: v }),
+          ),
+      },
+      componentDrops: {
+        rows: (read: Read) => rowsOf(read, Object.keys(inputsOf(read)?.components ?? {})),
+        rowLabel: (read, row) => nameOf(read, row, "Part drop"),
+        model: (read: Read, row) =>
+          layer(inputsOf(read)?.components[String(idOf(read, row))]?.drop, (v) => ({ inWg: v })),
+      },
     }),
   },
 } as const satisfies SheetSlot;

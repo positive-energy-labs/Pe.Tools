@@ -11,11 +11,11 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** Providers answer the same semantic read; selection changes never reuse a per-route seed. */
 const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly string[] }) => {
-  const rows = ductsRosterResponseSchema
+  const roster = ductsRosterResponseSchema
     .parse(fixture.roster)
     .rows.filter((row) => snapshot.nodes.some((node) => node.id === row.unitId));
   const requested =
-    args.fan === "all" ? rows : rows.filter((row) => args.fan.includes(stableFanKey(row)));
+    args.fan === "all" ? roster : roster.filter((row) => args.fan.includes(stableFanKey(row)));
   const candidate = openFanCalcSchema.parse({
     overview: fixture.overview,
     inputs: fixture.inputs,
@@ -24,17 +24,34 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     worstLegs: [],
     calcBreakdown: null,
   });
-  const opened = requested.flatMap((row) =>
+  const known = requested.flatMap((row) =>
     row.unitId === candidate.overview.fan?.unitId &&
     row.portIndex === candidate.overview.fan.portIndex
       ? [candidate]
       : [],
   );
+  const opened = args.fan === "all" ? [] : known;
+  const rows =
+    args.fan === "all"
+      ? roster.map((row) =>
+          known.some(
+            ({ overview }) =>
+              overview.fan?.unitId === row.unitId && overview.fan.portIndex === row.portIndex,
+          )
+            ? {
+                ...row,
+                complete: candidate.overview.claim?.kind === "complete",
+                requiredEspInWg: candidate.overview.totals?.requiredEspInWg ?? null,
+                blockerCount: candidate.overview.blockers.length,
+              }
+            : row,
+        )
+      : roster;
   const open = opened[0] ?? null;
   const unknown = requested
     .filter(
       (row) =>
-        !opened.some(
+        !known.some(
           (sheet) =>
             sheet.overview.fan?.unitId === row.unitId &&
             sheet.overview.fan.portIndex === row.portIndex,
@@ -49,7 +66,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     rows,
     progress: null,
     fans: { ...fixture.roster, rows },
-    calcSnapshot: snapshot,
+    calcSnapshot: args.fan === "all" ? { kind: "absent" } : snapshot,
     calcView: calcState(open),
     ductSystemsWork,
     ductSystemsRevision: 0,
@@ -62,7 +79,7 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     data,
     coverage: {
       requested: requested.map(stableFanKey),
-      covered: opened.map((sheet) =>
+      covered: known.map((sheet) =>
         stableFanKey({
           uniqueId: rows.find((row) => row.unitId === sheet.overview.fan!.unitId)!.uniqueId,
           portIndex: sheet.overview.fan!.portIndex,

@@ -177,7 +177,7 @@ test.each(products)(
       expect(extra().getAttribute("aria-disabled"), extra().outerHTML).toBe("true"),
     );
     expect(extra().getAttribute("aria-description")).toBe(product.message);
-    expect(screen.getByText(product.message)).toBeTruthy();
+    if (product.field === "system") expect(screen.getByText(product.message)).toBeTruthy();
     expect(screen.getByText(new RegExp(`/ ${product.limit} open`))).toBeTruthy();
     const over = address.read();
     over.set(product.field, JSON.stringify({ kind: "ids", ids }));
@@ -193,7 +193,9 @@ test.each(products)(
 
 test.each(
   products.flatMap((product) =>
-    (["ids", "all"] as const).map((choice) => ({ product, choice, list: product.list })),
+    (["ids", "all"] as const)
+      .filter((choice) => choice === "ids" || product.field === "system")
+      .map((choice) => ({ product, choice, list: product.list })),
   ),
 )(
   "$list opens only the first allowed batch from an oversized $choice address",
@@ -224,16 +226,34 @@ test.each(
   },
 );
 
-test.each(products)("$list All opens a roster at its limit", async (product) => {
-  const { mount, acquire } = await arrive(product, product.limit);
-  const button = screen.getByRole("button", { name: `All ${product.list}` });
-  expect(button.getAttribute("aria-disabled")).not.toBe("true");
-  fireEvent.click(button);
+test.each(products.filter(({ field }) => field === "system"))(
+  "$list All opens a roster at its limit",
+  async (product) => {
+    const { mount, acquire } = await arrive(product, product.limit);
+    const button = screen.getByRole("button", { name: `All ${product.list}` });
+    expect(button.getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.click(button);
+    await waitFor(() => expect(mount.value().state).toBe("ready"));
+    expect(mount.page.read()[product.field]).toEqual({ kind: "all" });
+    expect(acquire).toHaveBeenLastCalledWith(
+      "layout",
+      expect.objectContaining({ [product.field]: "all" }),
+    );
+    expect(screen.getByText(new RegExp(`/ ${product.limit} open`))).toBeTruthy();
+  },
+);
+
+test("Fans All keeps a large overview and opens a single worksheet on row selection", async () => {
+  const product = products[0]!;
+  const { mount, acquire, ids } = await arrive(product, 112);
+  const all = screen.getByRole("button", { name: "All fans" });
+  expect(all.getAttribute("aria-disabled")).not.toBe("true");
+  fireEvent.click(all);
   await waitFor(() => expect(mount.value().state).toBe("ready"));
-  expect(mount.page.read()[product.field]).toEqual({ kind: "all" });
-  expect(acquire).toHaveBeenLastCalledWith(
-    "layout",
-    expect.objectContaining({ [product.field]: "all" }),
-  );
-  expect(screen.getByText(new RegExp(`/ ${product.limit} open`))).toBeTruthy();
+  expect(mount.page.read().fan).toEqual({ kind: "all" });
+  expect(acquire).toHaveBeenLastCalledWith("layout", expect.objectContaining({ fan: "all" }));
+  act(() => typedSubjectDoor(mount)?.toggle(ids[0]));
+  await waitFor(() => expect(mount.value().state).toBe("ready"));
+  expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [ids[0]] });
+  expect(acquire).toHaveBeenLastCalledWith("layout", expect.objectContaining({ fan: [ids[0]] }));
 });

@@ -34,7 +34,7 @@ export type Domain =
       choices: readonly EnumChoice[] | ((read: any, row?: string) => readonly EnumChoice[]);
     }
   | OptionsDomain
-  | { kind: "object"; fields: Readonly<Record<string, Domain>> };
+  | { kind: "object"; fields: Readonly<Record<string, Domain>>; metadata?: z.ZodRawShape };
 /** Where the sheet reads and writes one cell. A product declaration derives it from the home the cell lands in. */
 export type Placement = z.output<typeof placementSchema>;
 
@@ -45,7 +45,11 @@ export type DomainValue<D extends Domain> = D extends NumberDomain
     : D extends { kind: "options" }
       ? string
       : D extends { kind: "object"; fields: infer F extends Record<string, Domain> }
-        ? { [K in keyof F]: DomainValue<F[K]> }
+        ? { [K in keyof F]: DomainValue<F[K]> } & (D extends {
+            metadata: infer M extends z.ZodRawShape;
+          }
+            ? z.output<z.ZodObject<M>>
+            : unknown)
         : never;
 /** Decode is independent of the choices a current read happens to offer. */
 export function schemaOf<const D extends Domain>(domain: D): z.ZodType<DomainValue<D>>;
@@ -63,11 +67,12 @@ export function schemaOf(domain: Domain): z.ZodType {
     case "options":
       return z.string().min(1);
     case "object":
-      return z.strictObject(
-        Object.fromEntries(
+      return z.strictObject({
+        ...Object.fromEntries(
           Object.entries(domain.fields).map(([key, field]) => [key, schemaOf(field)]),
         ),
-      );
+        ...domain.metadata,
+      });
   }
 }
 

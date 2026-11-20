@@ -1,5 +1,6 @@
 import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
-import { fansTool } from "@pe/fans-contract/semantic-actions";
+import { product as fans } from "@pe/fans-contract/product";
+const fansTool = fans.tool;
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import type { WorkPath } from "@pe/agent-contracts";
