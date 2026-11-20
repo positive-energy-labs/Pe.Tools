@@ -1,0 +1,12 @@
+#!/bin/sh
+# Formats the staged TypeScript-workspace files, so a format red never reaches the source gate.
+# A file with unstaged changes is left alone, because re-adding it would stage them.
+# Silent where the workspace is not installed: the source gate still checks format.
+root=$(git rev-parse --show-toplevel) || exit 0
+cd "$root/ts" 2>/dev/null || exit 0
+[ -x node_modules/.bin/vp ] || exit 0
+unstaged=$(git diff --name-only --relative -- .)
+files=$(git diff --cached --name-only --diff-filter=ACMR --relative -- . | grep -vxF -e "$unstaged")
+[ -n "$files" ] || exit 0
+echo "$files" | tr '\n' '\0' | xargs -0 node_modules/.bin/vp fmt --no-error-on-unmatched-pattern || exit 1
+echo "$files" | tr '\n' '\0' | xargs -0 git add --
