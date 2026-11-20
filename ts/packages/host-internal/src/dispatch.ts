@@ -8,6 +8,10 @@ import type {
 } from "./request-contracts.d.ts";
 import { Clock, Context, Deferred, Effect, Exit, Queue, Ref, Schema } from "effect";
 import { randomUUID } from "node:crypto";
+import type { DocumentRef } from "@pe/agent-contracts/target";
+import type { QueueHolder } from "@pe/agent-contracts/value";
+import { hostOpCatalog } from "@pe/host-contracts/catalog";
+import type { ReadingDemand } from "./native-read.ts";
 import type {
   BridgeFrame,
   BridgeResponse,
@@ -77,6 +81,8 @@ export type Session = {
   // jobs that hold a place (waiting or running) and bounds the line at limits.entries.
   readonly line: Queue.Queue<Job>;
   readonly depth: Ref.Ref<number>;
+  holder: QueueHolder;
+  readonly holderListeners: Set<(holder: QueueHolder) => void>;
   /** Done when a newer incarnation of this pid registers: death evidence the pid probe cannot see. */
   readonly ended: Deferred.Deferred<void>;
 };
@@ -95,6 +101,8 @@ type Job = {
   readonly bytes: number;
   readonly openDocumentId: string | undefined;
   readonly requestId: string;
+  readonly demand?: ReadingDemand;
+  readonly label?: string;
   /** The ALS command context, captured at enqueue: the worker fiber does not inherit it. */
   readonly command: string | undefined;
   readonly reply: Deferred.Deferred<BridgeResponse, BridgeError>;
@@ -395,6 +403,34 @@ export const makeDispatcher = (ports: DispatchPorts) =>
     const processAlive = yield* RevitProcessAlive;
     const sessions = yield* Ref.make(new Map<string, Session>());
     yield* Effect.addFinalizer(() => Ref.set(sessions, new Map()));
+    const observeHolder = (id: string, notify: (holder: QueueHolder) => void) => {
+      const registry = Ref.getUnsafe(sessions);
+      const session =
+        registry.get(id) ??
+        [...registry.values()].find(
+          (session) => Ref.getUnsafe(session.connection)?.sdkSessionId === id,
+        );
+      if (!session) return () => {};
+      session.holderListeners.add(notify);
+      notify(session.holder);
+      return () => void session.holderListeners.delete(notify);
+    };
+    const documentAddress = (ref: DocumentRef) => {
+      const session = Ref.getUnsafe(sessions).get(ref.session);
+      if (session && Ref.getUnsafe(session.connection))
+        return Ref.getUnsafe(session.state).openDocuments.find((row) => row.openId === ref.openId)
+          ?.address;
+    };
+    const setHolder = (session: Session, holder: QueueHolder) => {
+      session.holder = holder;
+      for (const notify of session.holderListeners) {
+        try {
+          notify(holder);
+        } catch {
+          session.holderListeners.delete(notify);
+        }
+      }
+    };
     /** A session is targetable only while a transport is attached. */
     const attached = Effect.fn("Dispatcher.attached")(function* (
       bridgeSessionId: string | undefined,
@@ -585,6 +621,7 @@ export const makeDispatcher = (ports: DispatchPorts) =>
               return ["cancelled", requests] as const;
             if (reserved && fence !== revocation) return ["waiting", requests] as const;
             if (refusal) return [{ refusal }, requests] as const;
+            if (job?.demand && !job.demand.current()) return ["cancelled", requests] as const;
             const next = new Map(requests);
             next.set(requestId, {
               operationKey,
@@ -935,6 +972,8 @@ export const makeDispatcher = (ports: DispatchPorts) =>
       payload: unknown,
       openDocumentId?: string | null,
       requestId?: string,
+      demand?: ReadingDemand,
+      label?: string,
     ) {
       const state = yield* Ref.get(session.state);
       const selectedDocument =
@@ -983,6 +1022,8 @@ export const makeDispatcher = (ports: DispatchPorts) =>
             bytes,
             openDocumentId: selectedDocument,
             requestId: wireId,
+            demand,
+            label,
             command,
             reply: yield* Deferred.make<BridgeResponse, BridgeError>(),
             result: yield* Deferred.make<JobAnswer, BridgeError | NoRevitSession>(),
@@ -1054,6 +1095,8 @@ export const makeDispatcher = (ports: DispatchPorts) =>
       bridgeSessionId?: string,
       openDocumentId?: string | null,
       requestId?: string,
+      demand?: ReadingDemand,
+      label?: string,
     ) {
       if (operationKey === CANCEL_OPERATION_KEY)
         return yield* Effect.fail(
@@ -1061,7 +1104,15 @@ export const makeDispatcher = (ports: DispatchPorts) =>
         );
       const session = (yield* attached(bridgeSessionId))?.session;
       if (!session) return yield* Effect.fail(new NoRevitSession());
-      const handle = yield* enqueue(session, operationKey, payload, openDocumentId, requestId);
+      const handle = yield* enqueue(
+        session,
+        operationKey,
+        payload,
+        openDocumentId,
+        requestId,
+        demand,
+        label,
+      );
       return {
         terminal: handle.terminal,
         answer: Effect.map(handle.answer, (result) => ({
@@ -1150,6 +1201,16 @@ export const makeDispatcher = (ports: DispatchPorts) =>
           state === "queued" ? ([true, "running"] as const) : ([false, state] as const),
         );
         if (!started) return;
+        const { requestId, operationKey } = job;
+        const holder = {
+          requestId,
+          operationKey,
+          label:
+            job.label ??
+            hostOpCatalog.find((op) => op.key === operationKey)?.displayName ??
+            operationKey,
+        };
+        setHolder(session, holder);
         yield* restore(
           Effect.gen(function* () {
             const startedAt = yield* Clock.currentTimeMillis;
@@ -1209,7 +1270,15 @@ export const makeDispatcher = (ports: DispatchPorts) =>
                   ),
                 ),
           ),
-          Effect.ensuring(retire(session, job)),
+          Effect.ensuring(
+            retire(session, job).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (session.holder === holder) setHolder(session, null);
+                }),
+              ),
+            ),
+          ),
         );
       });
 
@@ -1275,6 +1344,8 @@ export const makeDispatcher = (ports: DispatchPorts) =>
           state: yield* Ref.make(input.state),
           line: yield* Queue.unbounded<Job>(),
           depth: yield* Ref.make(0),
+          holder: null,
+          holderListeners: new Set(),
           ended: yield* Deferred.make<void>(),
         };
         yield* Effect.forkIn(serve(session), bridgeScope);
@@ -1303,6 +1374,8 @@ export const makeDispatcher = (ports: DispatchPorts) =>
       settleTerminal,
       invoke,
       invokeHandle,
+      observeHolder,
+      documentAddress,
       cancelQueued,
       register,
     };

@@ -59,8 +59,121 @@ import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
 import { routeRegistry } from "./registry";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { contract } from "@pe/agent-contracts/handle";
+import { z } from "zod";
 
 const render = (node: import("react").ReactNode) => renderView(node, { wrapper: StandaloneBand });
+
+test("S6 the route publishes its roster while a separately demanded image is held", async () => {
+  const independent = { alone: true } as const;
+  const read = (key: string) => ({
+    ...hostRead(contract(key, { input: z.object({}), data: z.string(), uses: [] })),
+    args: () => ({}),
+    load: independent,
+  });
+  const roster = read("probe.roster");
+  const image = read("probe.image");
+  const module = route({
+    key: "s6-plans",
+    name: "Test plans",
+    directory: family.spec.directory,
+    fields: {},
+    core: roster,
+    reads: { image },
+    panes: {
+      main: {
+        title: "Plans",
+        purpose: "Show available plans",
+        body: "scroll",
+        draw: () => scrollBody(null),
+      },
+    },
+    layout: { kind: "pane", id: "main" },
+  });
+  const packet = (data: string) => ({
+    key: data,
+    version: 1,
+    generation: 0,
+    state: "current",
+    value: {
+      data,
+      evaluation: data,
+      inputs: data,
+      coverage: {
+        requested: [],
+        unknown: [],
+        covered: [],
+        refused: [],
+      },
+      trace: [],
+      works: [],
+      origin: {},
+      freshness: "current",
+    },
+  });
+  let deliverImage!: Parameters<UseSource["open"]>[1];
+  const mount = mounts.mountTypedRoute(
+    module,
+    {
+      target: { kind: "document", ref },
+      fixture: null,
+      work: { address: path, open: ref },
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      custody: { current: () => true },
+      memory: () => ({}),
+    },
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+    {
+      sources: {
+        [roster.key]: {
+          kind: "use",
+          open(_context, deliver) {
+            deliver({ kind: "complete", value: packet("Level 1"), revision: 1 });
+          },
+        },
+        [image.key]: {
+          kind: "use",
+          open(_context, deliver) {
+            deliverImage = deliver;
+          },
+        },
+      },
+    },
+  );
+  const router = createRouter({
+    routeTree: createRootRoute({
+      component: () => <TypedChrome mount={mount} document={<span>Test document</span>} />,
+    }),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  const view = render(<RouterProvider router={router} />);
+  try {
+    expect(valueOf(mount.value())).toBe("Level 1");
+    expect(mount.readiness().kind).toBe("ready");
+    let settled = false;
+    const waiting = mount.whenReady().then(() => {
+      settled = true;
+    });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    act(() =>
+      deliverImage({
+        kind: "queue-holder",
+        holder: { requestId: "A", operationKey: "export", label: "Exporting plan image" },
+      }),
+    );
+    expect(await screen.findAllByText("Exporting plan image")).toHaveLength(1);
+    expect(valueOf(mount.value())).toBe("Level 1");
+    act(() => deliverImage({ kind: "queue-holder", holder: null }));
+    expect(screen.queryByText("Exporting plan image")).toBeNull();
+    act(() => deliverImage({ kind: "complete", value: packet("Plan image"), revision: 1 }));
+    await waiting;
+  } finally {
+    view.unmount();
+    mount.dispose();
+  }
+});
 
 test("JZ Families History offers published values and marks ambiguous publications Unavailable", async () => {
   const browserHref = window.location.href;

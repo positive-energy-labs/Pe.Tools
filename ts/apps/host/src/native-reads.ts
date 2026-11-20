@@ -14,6 +14,7 @@ import {
   decodePreparedRead,
 } from "../../../packages/host-internal/src/read-admission.ts";
 import { RevitBridge } from "@pe/host-internal/bridge";
+import type { ReadingDemand } from "@pe/host-internal/native-read";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 
 import { InvalidRead, ReadBusy, ReadRetiring } from "@pe/host-internal/read-errors";
@@ -37,6 +38,7 @@ type Flight = {
   readonly ready: Deferred.Deferred<boolean>;
   readonly settled: Deferred.Deferred<void>;
   readonly answer: Deferred.Deferred<NativeAnswer<unknown>, DoorFailure>;
+  readonly demands: Set<ReadingDemand>;
   callers: number;
   retiring: boolean;
   terminal: boolean;
@@ -51,6 +53,8 @@ export class NativeReads extends Context.Service<
       session: string,
       owner?: RequestIdentityData,
       waitForRetirement?: boolean,
+      demand?: ReadingDemand,
+      label?: string,
     ) => Effect.Effect<NativeAnswer<A>, DoorFailure>;
     readonly state: (owner: RequestIdentityData) => CausalTerminalState;
     readonly settle: (owner: RequestIdentityData) => Effect.Effect<CausalTerminalState>;
@@ -88,6 +92,8 @@ export class NativeReads extends Context.Service<
         session: string,
         owner?: RequestIdentityData,
         waitForRetirement = false,
+        demand?: ReadingDemand,
+        label?: string,
       ) {
         const descriptor = read.descriptor;
         const identity = canonicalJson(Schema.decodeUnknownSync(Schema.Json)(descriptor));
@@ -116,6 +122,7 @@ export class NativeReads extends Context.Service<
               );
               flight = flights.get(identity);
             }
+            let start: Effect.Effect<void> | undefined;
             if (!flight) {
               if (flights.size >= limits.entries)
                 return yield* busy("Native read capacity reached");
@@ -124,6 +131,7 @@ export class NativeReads extends Context.Service<
                 ready: yield* Deferred.make<boolean>(),
                 settled: yield* Deferred.make<void>(),
                 answer: yield* Deferred.make<NativeAnswer<unknown>, DoorFailure>(),
+                demands: new Set(),
                 callers: 0,
                 retiring: false,
                 terminal: false,
@@ -134,7 +142,7 @@ export class NativeReads extends Context.Service<
                 "openId" in descriptor.openDocumentLifetime
                   ? descriptor.openDocumentLifetime.openId
                   : null;
-              const dispatch = Effect.gen(function* () {
+              start = Effect.gen(function* () {
                 const acquired = yield* Effect.exit(
                   bridge.invokeHandle(
                     descriptor.operationKey,
@@ -142,6 +150,15 @@ export class NativeReads extends Context.Service<
                     session,
                     openId,
                     created.requestId,
+                    {
+                      current() {
+                        for (const join of created.demands) if (join.current()) return true;
+                        // A rejected claim cannot be revived by a join that arrives during retirement.
+                        created.retiring = true;
+                        return false;
+                      },
+                    },
+                    label,
                   ),
                 );
                 if (Exit.isFailure(acquired)) {
@@ -207,7 +224,6 @@ export class NativeReads extends Context.Service<
                   `Native read terminal op=${descriptor.operationKey} request=${created.requestId} outcome=${outcome}`,
                 );
               });
-              yield* dispatch.pipe(Effect.forkIn(scope));
             }
             const joined = flight;
             if (joined.callers >= limits.joiners)
@@ -217,7 +233,10 @@ export class NativeReads extends Context.Service<
               held.add(joined);
               owned.set(owner, held);
             }
+            const active = { current: () => demand?.current() ?? true };
+            joined.demands.add(active);
             joined.callers++;
+            if (start) yield* start.pipe(Effect.forkIn(scope));
             return yield* restore(
               Effect.logInfo(
                 `Native read joined op=${descriptor.operationKey} request=${joined.requestId} callers=${joined.callers}`,
@@ -243,6 +262,7 @@ export class NativeReads extends Context.Service<
               ),
               Effect.onExit((exit) =>
                 Effect.gen(function* () {
+                  joined.demands.delete(active);
                   joined.callers--;
                   if (joined.callers !== 0 || joined.terminal || joined.retiring) return;
                   // Unknown failures also leave no consumer; keep the identity fenced until terminal.

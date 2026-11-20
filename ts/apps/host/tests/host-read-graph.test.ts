@@ -19,7 +19,13 @@ import { nativeRead } from "@pe/host-internal/reads/evaluator";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
-import { read, leaf, RefusedPartition } from "@pe/host-internal/reads/evaluator";
+import {
+  read,
+  leaf,
+  documentMark,
+  RefusedPartition,
+  type InputPort,
+} from "@pe/host-internal/reads/evaluator";
 import { Publications } from "../src/reads/publications.ts";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { BridgeError } from "@pe/host-internal/dispatch";
@@ -46,6 +52,69 @@ import {
 import { subjectCode, type UniqueId } from "@pe/agent-contracts";
 const fanCode = (row: { uniqueId: string; portIndex: number }) =>
   subjectCode({ keyKind: "UniqueId", key: row.uniqueId as UniqueId, sub: { port: row.portIndex } });
+
+test("S6 a completed read reuses only the same definition, arguments and marked opening", async () => {
+  const publications = new Publications();
+  const input = z.object({
+    target: documentMark.input,
+    option: z.number(),
+    extra: z.boolean().optional(),
+  });
+  const extra = leaf("untracked", z.null(), z.number(), false);
+  let reads = 0,
+    revision = 0,
+    open = true;
+  const kept: string[] = [];
+  const definition = {
+    ...read("probe.plans", {
+      input,
+      output: z.number(),
+      async run(ctx, args) {
+        reads++;
+        const mark = await ctx.read(documentMark, args.target);
+        return mark.generation + (args.extra ? await ctx.read(extra, null) : args.option);
+      },
+    }),
+    load: { freshBy: ["document-mark"] } as const,
+  };
+  const run = (option = 2, target = ref, extra = false) => {
+    const port: InputPort = {
+      evaluation: String(reads),
+      origin: {},
+      revision: () => revision,
+      async take(name) {
+        return name === "document-mark"
+          ? { observedSince: 0, changedAt: null, generation: revision }
+          : 10;
+      },
+      reuse: { target, scope: "local", ready: async () => true, current: () => open },
+    };
+    return publications.publish(
+      "probe",
+      0,
+      definition,
+      { target, option, extra },
+      port,
+      async (publication) => () => {
+        kept.push(publication.value!.inputs);
+      },
+    );
+  };
+  const first = await run();
+  expect((await run()).value?.evaluation).toBe(first.value?.evaluation);
+  expect(kept).toEqual([first.value?.inputs, first.value?.inputs]);
+  expect(reads).toBe(1);
+  revision++;
+  expect((await run()).value?.data).toBe(3);
+  await run(3);
+  await run(2, { ...ref, openId: "reopened" });
+  open = false;
+  await run();
+  open = true;
+  await run(2, ref, true);
+  await run(2, ref, true);
+  expect(reads).toBe(7);
+});
 
 test("JZ read subscriptions reclaim capacity through release and reject released flights", async () => {
   const hold = gate();

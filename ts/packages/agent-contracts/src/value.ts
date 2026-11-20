@@ -1,6 +1,25 @@
 import { z } from "zod";
 import { workKeySchema, type WorkKey } from "./route-state.ts";
 
+export type ReadingLoad = Readonly<{
+  alone?: true;
+  freshBy?: readonly ["document-mark"];
+  slow?: string;
+}>;
+
+export type QueueHolder = Readonly<{
+  requestId: string;
+  operationKey: string;
+  label: string;
+}> | null;
+export const queueHolderSchema = z
+  .object({
+    requestId: z.string(),
+    operationKey: z.string(),
+    label: z.string(),
+  })
+  .nullable();
+
 /** A host read publishes one semantic Value; the envelope never varies by route. */
 export const publicationRequest = <S extends z.ZodType>(args: S) =>
   z.object({

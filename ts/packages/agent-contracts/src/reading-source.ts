@@ -2,6 +2,7 @@ import type { Effect } from "./command-handle.ts";
 import type { ExecutionTarget } from "./target.ts";
 import type { HistoryPose } from "./history.ts";
 import type { WorkKey } from "./route-state.ts";
+import type { QueueHolder } from "./value.ts";
 
 export interface ReadingScope<P = unknown, W = unknown> {
   target: ExecutionTarget;
@@ -54,6 +55,7 @@ export type ReadingPublication<T = unknown> =
       reason?: string;
     }
   | { kind: "pending" | "stale" | "document-changed" }
+  | { kind: "queue-holder"; holder: QueueHolder }
   | { kind: "failure"; error: unknown }
   | { kind: "log"; value: unknown; id?: string };
 

@@ -565,6 +565,8 @@ export const RevitBridgeLive = Layer.effect(
     return {
       invoke,
       invokeHandle: dispatcher.invokeHandle,
+      observeHolder: dispatcher.observeHolder,
+      documentAddress: dispatcher.documentAddress,
       cancelQueued,
       snapshot,
       list,

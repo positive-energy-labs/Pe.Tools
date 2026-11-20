@@ -4,7 +4,7 @@ import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot, settingsSchemaRoute } from "../src/app.ts";
 import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
-import { Context, Deferred, Effect, Fiber, Layer, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Queue, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect, test, vi } from "vite-plus/test";
 import { detachedBridge, sessionView, effectTest, settle, captureLogs } from "./effect-test.ts";
@@ -23,6 +23,102 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
 import type { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { completeBridgeRequest, makeDispatcher } from "@pe/host-internal/dispatch";
+import type { BridgeFrame } from "@pe/host-contracts/contracts";
+import { Publications } from "../src/reads/publications.ts";
+
+for (const supersedes of ["queued", "at-claim"] as const)
+  effectTest(`S6 only the current reading claims the native send (${supersedes})`, () =>
+    Effect.gen(function* () {
+      const sends = yield* Queue.unbounded<NonNullable<BridgeFrame["request"]>>();
+      const atClaim = Promise.withResolvers<void>(),
+        resume = Promise.withResolvers<void>();
+      const dispatcher = yield* makeDispatcher({
+        command: () => undefined,
+        commandLeafRefusal: () => null,
+        bridgeValidateDispatch: async () => null,
+        bridgeDispatchRefusal: async (requestId) => {
+          if (requestId === "B" && supersedes === "at-claim") {
+            atClaim.resolve();
+            await resume.promise;
+          }
+          return null;
+        },
+        markBridgeDispatched: async () => {},
+        recordBridgeQueue: async () => {},
+      });
+      const session = yield* dispatcher.register({
+        sessionId: "plans",
+        processId: 42,
+        processStartUtcUnixMs: 1000,
+        state: sessionView({ connected: true }).state!,
+        connection: {
+          epoch: 1,
+          send: (frame) => Queue.offer(sends, frame.request!).pipe(Effect.asVoid),
+          lane: null,
+          sourceRoot: null,
+          installedRoot: null,
+          serviceName: "test",
+          sdkSessionId: null,
+          buildStamp: null,
+        },
+      });
+      const terminal = (requestId: string) =>
+        completeBridgeRequest(
+          session.requests,
+          {
+            requestId,
+            ok: true,
+            payloadJson: "{}",
+            errorMessage: null,
+            evidenceJson: null,
+            openDocumentId: null,
+            metrics: {
+              requestBytes: 0,
+              responseBytes: 0,
+              revitExecutionMs: 0,
+              roundTripMs: 0,
+              serializationMs: 0,
+            },
+          },
+          1,
+        );
+      const publications = new Publications();
+      const holders: string[] = [];
+      const observe = dispatcher.observeHolder?.("plans", (holder) =>
+        holders.push(holder?.requestId ?? "idle"),
+      );
+      const enqueue = (id: string, generation: number) => {
+        const demand = publications.admission("reading", generation);
+        return dispatcher.invokeHandle("rooms.roster", {}, "plans", null, id, demand);
+      };
+      const a = yield* enqueue("A", 1);
+      expect((yield* Queue.take(sends)).requestId).toBe("A");
+      const b = yield* enqueue("B", 2);
+      if (supersedes === "at-claim") {
+        yield* terminal("A");
+        yield* Effect.promise(() => atClaim.promise);
+      }
+      // B stays admitted. No release, interruption or op.cancel can cover a missing claim check.
+      const c = yield* enqueue("C", 3);
+      if (supersedes === "queued") yield* terminal("A");
+      resume.resolve();
+      const next = (yield* Queue.take(sends)).requestId;
+      if (next === "B") {
+        yield* terminal("B");
+        yield* Queue.take(sends);
+      }
+      yield* terminal("C");
+      yield* a.answer;
+      yield* c.answer;
+      expect(next).toBe("C");
+      expect(yield* b.terminal).toBe("never-dispatched");
+      yield* until(() => holders.at(-1) === "idle");
+      expect(holders).toEqual(["idle", "A", "idle", "B", "idle", "C", "idle"]);
+      observe?.();
+      expect(Queue.sizeUnsafe(sends)).toBe(0);
+    }),
+  );
 
 const descriptor = {
   operationKey: "read",
