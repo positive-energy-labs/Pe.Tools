@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { promisify } from "node:util";
 
@@ -19,28 +20,35 @@ const runtimeDependencies = (manifest: Manifest) =>
     ...manifest.peerDependencies,
   });
 
-/** Frozen Vite+ installs keep a copy of the workspace lock in the virtual store. */
-export async function ensureDevDependencies(
+/** One watcher remembers the workspace lock accepted by its last successful frozen install. */
+export function createDevDependencyRepair(
   workspace: URL,
   execute: (command: string, args: string[], options: { cwd: URL }) => Promise<unknown> = run,
-): Promise<void> {
+) {
   const installed = new URL("node_modules/.pnpm/lock.yaml", workspace);
   const wanted = new URL("pnpm-lock.yaml", workspace);
-  const current = () => existsSync(installed) && readFileSync(installed).equals(readFileSync(wanted));
-  if (current()) return;
+  let repairedHash: string | undefined;
+  return async () => {
+    const lock = readFileSync(wanted);
+    const hash = createHash("sha256").update(lock).digest("hex");
+    if (hash === repairedHash) return;
+    repairedHash = undefined;
+    if (existsSync(installed) && readFileSync(installed).equals(lock)) return;
 
-  const args = ["i", "--frozen-lockfile", "--prefer-offline"];
-  const command = `vp ${args.join(" ")}`;
-  console.log(`Dev server dependencies are out of date. Running \`${command}\` from ts.`);
-  const recovery = `Dev server dependencies are out of date. Run \`${command}\` from ts, then start the dev server again.`;
-  try {
-    await execute("vp", args, { cwd: workspace });
-  } catch (error) {
-    throw new Error(`${recovery}\n${error instanceof Error ? error.message : String(error)}`, {
-      cause: error,
-    });
-  }
-  if (!current()) throw new Error(recovery);
+    const args = ["i", "--frozen-lockfile", "--prefer-offline"];
+    const command = `vp ${args.join(" ")}`;
+    console.log(`Dev server dependencies are out of date. Running \`${command}\` from ts.`);
+    try {
+      await execute("vp", args, { cwd: workspace });
+    } catch (error) {
+      const recovery = `Dev server dependencies are out of date. Run \`${command}\` from ts, then start the dev server again.`;
+      throw new Error(`${recovery}\n${error instanceof Error ? error.message : String(error)}`, {
+        cause: error,
+      });
+    }
+    // A successful no-op install may leave the virtual store's lock bytes untouched.
+    repairedHash = hash;
+  };
 }
 
 /** Vite owns frontend HMR. A package edit restarts the host only if its runtime graph uses it;
