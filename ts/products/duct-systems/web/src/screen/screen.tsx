@@ -337,6 +337,11 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const systemRows = analysis?.systems ?? roster?.rows ?? NO_SYSTEMS;
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
+  useEffect(() => {
+    // Once a system has been opened, clearing it should leave the sheet empty.
+    if (page.fan && (page.system.kind === "all" || page.system.ids.length))
+      ctx.page.query({ fan: null });
+  }, [ctx.page, page.fan, page.system]);
   const system = systems;
   const version = captureSource?.version ?? "";
   const systemKeys = { version, system, active, systemSearch, systemSort };
