@@ -11,6 +11,7 @@ import { DockBand } from "../shell/pane-actions";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
+import { PaneFloorBoundary } from "@pe/kit/lang/pane-resize";
 import { useThreadWorks } from "#/workbench/thread-work";
 import {
   GraphLayoutView,
@@ -144,9 +145,9 @@ export function RouteDock({
           pea: (frame) =>
             frame(
               tabs.route || pea ? (
-                <DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
+                <PaneFloorBoundary><DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
                   <TypedShell module={chat.module} fingerprint={chat.fingerprint} address={tabs.route ? chatAddress : undefined} />
-                </DockSurface></DockBand>
+                </DockSurface></DockBand></PaneFloorBoundary>
               ) : (
                 children
               ),
