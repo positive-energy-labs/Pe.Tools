@@ -5,23 +5,35 @@
     python tools/acceptance.py call <run> <who> <METHOD> <path> [body.json] [--out NAME]
     python tools/acceptance.py census <run> [label]
     python tools/acceptance.py teardown <run>
+    python tools/acceptance.py run <run> -- <command...>
 
 Evidence lives under <checkout>/.artifacts/accept/<run>/ (run.json is the custody record).
 The isolated dev product home lives under the system temp directory, outside the checkout.
 Without --model, setup copies the Chadds model from the main checkout's .artifacts/revit/detached, or refuses.
 Dev copies the product home. Installed uses the actual MSI and product home; its writes are censused.
 --host-only starts a dev host with an empty isolated home and no pre-launched Revit or models.
-`who` is cli (this host's human/cli context), anon, or ctx:<token>. Teardown stops only the
-session ids and host this run recorded; anything else it finds is printed as residue.
+`who` is cli (this host's human/cli context), anon, or ctx:<token>.
+Setup snapshots existing processes and TCP listeners. SDK actions and host calls refuse
+protected targets. Use explicit SDK targets when another Revit was present at setup.
+Commands append to ev/commands.jsonl with argv, cwd, local start/end, exitCode and output.
+Run streams a trusted driver command in the caller's cwd with the run environment
+and returns its exit code.
+Use machine.py run for reservations, and the sdk and call verbs for guarded dispatch.
 --wait-admission re-reads the machine every 30 s until it admits or the minutes run out, so a
-drive starts when memory frees and not on some thread's next wake. Teardown prints and writes
-ev/teardown.json, the custody receipt a driver links instead of writing its own.
+drive starts when memory frees. Teardown stops only the sessions and host it already owns.
+It prints and writes ev/teardown.json with observed stops, surviving recorded PIDs and
+listeners, checkout status, and private home existence after cleanup. Owned browser receipts
+in the isolated home supply PIDs and ports. A browser started outside that home can be
+recorded in run.json under "browser" with its pid and optional port.
 """
 
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.error, urllib.request
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from datetime import datetime
 from itertools import batched
 from pathlib import Path
+from urllib.parse import urlsplit
 
 CHECKOUT = Path(__file__).resolve().parents[1]
 # Local fixture in the main checkout's ignored artifacts; never searched for. Without it, --model is required.
@@ -47,6 +59,35 @@ def log(run: str, text: str) -> None:
     print(line, flush=True)
     with (run_dir(run) / "LOG.md").open("a", encoding="utf8") as f:
         f.write(line + "\n")
+
+
+@contextmanager
+def command_record(run: str, argv: list[str], cwd: Path, output: Path | None = None):
+    start = datetime.now().astimezone().isoformat()
+    record = {"argv": argv, "cwd": str(cwd), "start": start, "exitCode": 0}
+    try:
+        yield record
+    except SystemExit as error:
+        record["exitCode"] = error.code if isinstance(error.code, int) else int(error.code is not None)
+        raise
+    except KeyboardInterrupt:
+        record["exitCode"] = 130
+        raise
+    except Exception:
+        record["exitCode"] = 1
+        raise
+    finally:
+        record["end"] = datetime.now().astimezone().isoformat()
+        record.setdefault("output", str(output) if output is not None and output.is_file() else None)
+        path = run_dir(run) / "ev" / "commands.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("ab", buffering=0) as file:
+            if os.name == "nt":
+                import msvcrt
+                # Windows CRT append seeks then writes. Serialize the append on this file.
+                file.seek(0)
+                msvcrt.locking(file.fileno(), msvcrt.LK_LOCK, 1)
+            file.write((json.dumps(record) + "\n").encode("utf8"))
 
 
 def owner_home() -> Path:
@@ -147,13 +188,16 @@ def sdk(run: str, name: str, args: list[str]) -> dict:
     installed = state.get("lane") == "installed"
     command = ([state["installation"]["sdk"], "--installed"] if installed
                else ["dotnet", "tool", "run", "pe-revit", "--"])
-    result = subprocess.run(
-        [*command, *args, "--json"],
-        cwd=state["installation"]["root"] if installed else CHECKOUT,
-        env=env(state), capture_output=True,
-    )
-    (out / f"{name}.json").write_bytes(result.stdout)
-    (out / f"{name}.stderr").write_bytes(result.stderr)
+    argv = [*command, *args, "--json"]
+    cwd = Path(state["installation"]["root"] if installed else state.get("checkout", CHECKOUT))
+    with command_record(run, argv, cwd) as record:
+        guard_sdk(run, name, state, args)
+        result = subprocess.run(argv, cwd=cwd, env=env(state), capture_output=True)
+        record["exitCode"] = result.returncode
+        stdout = out / f"{name}.json"
+        stdout.write_bytes(result.stdout)
+        record["output"] = str(stdout)
+        (out / f"{name}.stderr").write_bytes(result.stderr)
     try:
         envelope = json.loads(result.stdout)
     except json.JSONDecodeError:
@@ -167,7 +211,77 @@ def sdk(run: str, name: str, args: list[str]) -> dict:
             raise RuntimeError(f"SDK {name} did not answer from the installed resolver; see its saved envelope")
     codes = [d.get("code") for d in envelope.get("diagnostics") or []]
     log(run, f"sdk {name}: exit {result.returncode} state={(envelope.get('result') or {}).get('state')} {codes}")
+    record_revit(run, state, envelope)
     return envelope
+
+
+def refuse_owner(state: dict, pid: int | None = None, port: int | None = None) -> None:
+    sockets = state.get("listenersBefore", [])
+    if pid is not None and (pid in state.get("revitBefore", [])
+                            or any(pid == p["ProcessId"] for p in state.get("processesBefore", []))
+                            or any(pid == row["pid"] for row in sockets)):
+        sys.exit(f"Refusing to target owner process {pid} present before setup")
+    if port is not None and any(port == row["port"] for row in sockets):
+        sys.exit(f"Refusing to target owner port {port} listening before setup")
+
+
+def session_pid(row: dict) -> int | None:
+    # Active, launched-pending, and journal-failed observations carry the process in different arms.
+    process = row.get("process") or (row.get("attempt") or {}).get("process") or (row.get("failure") or {}).get("process")
+    return (process or {}).get("pid")
+
+
+def guard_sdk(run: str, name: str, state: dict, args: list[str]) -> None:
+    # The SDK owns target resolution and process identity. Use its census for a named target.
+    verb = list(args)
+    while verb and verb[0] in ("--installed", "--json", "--plan"):
+        verb.pop(0)
+    family, action = (verb + ["", ""])[:2]
+    if "update" in args and "apply" in args and "--plan" not in args:
+        if state.get("processesBefore") or state.get("revitBefore"):
+            sys.exit("Refusing SDK update apply while this run protects pre-existing owner processes")
+    if "-h" in args or "--help" in args:
+        return
+    if ((family, action) in (("session", "list"), ("session", "logs"), ("op", "list"))
+            or family == "test" and "--attach" not in args
+            or "--plan" in args and (family == "start" or (family, action) == ("session", "start"))):
+        return
+    if family not in ("session", "doc", "op", "test", "start", "stop", "hr", "open") and not family.startswith("-"):
+        return
+    pids = value_list(args, "--pid")
+    for pid in pids:
+        if pid.isdecimal():
+            refuse_owner(state, pid=int(pid))
+    if not state.get("revitBefore"):
+        return
+    if (family, action) in (("op", "cancel"), ("op", "wait")):
+        sys.exit(f"Refusing SDK op {action}: its request ID may target the owner's Revit")
+    if pids and pids[-1].isdecimal():
+        return
+    ids = value_list(args, "--id")
+    if not ids or (family, action) == ("op", "result"):
+        sys.exit(f"Refusing SDK {family} {action}: select a target away from the owner's Revit")
+    observed = sdk(run, f"{name}-guard", ["session", "list", "--id", ids[-1]])
+    census = observed.get("result") or {}
+    for row in census.get("sessions", []):
+        refuse_owner(state, pid=session_pid(row))
+    missing = any(d.get("code") == "session.no-match" for d in observed.get("diagnostics") or [])
+    if (not (sdk_ok(observed) or missing) or census.get("unreadableReceipts") or census.get("processReadErrors")):
+        sys.exit(f"Refusing SDK {family} {action}: cannot verify session {ids[-1]} against the owner snapshot")
+
+
+def record_revit(run: str, state: dict, envelope: dict) -> None:
+    result = envelope.get("result") or {}
+    resolved = envelope.get("resolved") or {}
+    rows = result.get("sessions") or ([result["session"]] if result.get("session") else [])
+    targets = [(resolved.get("id"), resolved.get("pid")),
+               *((row.get("id"), session_pid(row)) for row in rows)]
+    owned = {name.lower() for name in state.get("sessions", [])}
+    found = {pid for name, pid in targets if pid and name and name.lower() in owned} - set(state.get("revitBefore", []))
+    if found - set(state.get("revitPids", [])):
+        current = load(run)
+        current["revitPids"] = sorted(found | set(current.get("revitPids", [])))
+        save(run, current)
 
 
 def service(state: dict) -> dict | None:
@@ -222,6 +336,8 @@ def setup_installed(run: str, state: dict, args: list[str]) -> None:
     # Installed machine state belongs to the canonical MSI root; content uses the user root.
     # PE_TOOLS_PRODUCT_HOME would move that root and is deliberately absent in this lane.
     log(run, f"installed {state['installation']['version']}: actual home {state['home']}; writes will be recorded")
+    prior_host = state["serviceBefore"] or {}
+    refuse_owner(state, prior_host.get("pid"), prior_host.get("port"))
     before = sdk(run, "sessions-before", ["session", "list", "--all"])
     if not sdk_ok(before):
         sys.exit("Installed SDK census failed; no session was started")
@@ -244,6 +360,7 @@ def setup_installed(run: str, state: dict, args: list[str]) -> None:
     started = sdk(run, "session-start", start)
     if not sdk_ok(started):
         sys.exit("Installed start failed; inspect session-start receipt and run census/teardown")
+    state = load(run)
     resolved = started.get("resolved") or {}
     if resolved.get("payload") != "installed" or not same_path(resolved.get("installedRoot"), state["installation"]["root"]):
         sys.exit("SDK start identity differs from installed root; inspect receipt before further work")
@@ -254,9 +371,9 @@ def setup_installed(run: str, state: dict, args: list[str]) -> None:
         svc = service(state)
     if not svc:
         sys.exit("Installed payload did not bootstrap canonical host; inspect session and dialogs")
-    old_pids = {p["ProcessId"] for p in state["processesBefore"]}
+    refuse_owner(state, svc["pid"], svc["port"])
     state["host"] = {"pid": svc["pid"], "port": svc["port"], "service": svc["file"],
-                     "instanceId": svc.get("instanceId"), "owned": svc["pid"] not in old_pids}
+                     "instanceId": svc.get("instanceId"), "owned": True}
     state["web"] = f"http://127.0.0.1:{svc['port']}"
     save(run, state)
     status = http(state, "anon", "GET", "/host/status")
@@ -277,10 +394,18 @@ def setup_installed(run: str, state: dict, args: list[str]) -> None:
     census(run, "setup")
 
 
-def http(state: dict, who: str, method: str, path: str, body: bytes | None = None) -> dict:
-    svc = service(state)
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None  # The service file only authorizes requests to its own endpoint.
+
+
+def http(state: dict, who: str, method: str, path: str, body: bytes | None = None, *, svc=None) -> dict:
+    if not path.startswith("/"):
+        sys.exit("Host call path must begin with /")
+    svc = svc or service(state)
     if not svc:
         return {"status": None, "body": "no service file for this run lane"}
+    refuse_owner(state, svc["pid"], svc["port"])
     headers = {"content-type": "application/json", "accept": "application/json"}
     if who == "cli":
         headers["x-pe-context"] = Path(svc["file"]).with_suffix(".context").read_text().strip()
@@ -290,7 +415,7 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
         headers["x-pe-service-token"] = svc["token"]
     request = urllib.request.Request(f"http://127.0.0.1:{svc['port']}{path}", data=body, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=300) as response:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=300) as response:
             status, raw = response.status, response.read()
     except urllib.error.HTTPError as error:
         status, raw = error.code, error.read()
@@ -344,7 +469,7 @@ def setup(run: str, args: list[str]) -> None:
         sys.exit("--web is a checkout frontend option; installed serves its packaged frontend")
     installation = installed_identity() if installed else None
     root = run_dir(run)
-    if root.exists():
+    if root.exists() and any(p.name != "ev" for p in root.iterdir()):
         prior = load(run) if (root / "run.json").exists() else {}
         host = prior.get("host") or {}
         if "launcher" in host and "pid" not in host and not prior["sessions"]:  # a wait that timed out
@@ -357,7 +482,11 @@ def setup(run: str, args: list[str]) -> None:
             return
         sys.exit(f"{root} exists; pick a new run name or tear it down and delete it")
     models = [] if host_only else pick_models(args, main_checkout() / DEFAULT_MODEL)
-    (root / "ev").mkdir(parents=True)
+    existing_listeners = listeners()
+    listener_pids = {row["pid"] for row in existing_listeners}
+    owner_processes = [{"ProcessId": p["ProcessId"], "Name": p["Name"]} for p in processes()
+                       if p["ProcessId"] in listener_pids or is_revit(p) or (p.get("Name") or "").lower() == "pe.host.exe"]
+    (root / "ev").mkdir(parents=True, exist_ok=True)
     (root / "docs").mkdir()
     home = owner if installed else Path(tempfile.mkdtemp(prefix="pe-accept-")) / "Pe.Tools"
     if not installed:
@@ -395,12 +524,11 @@ def setup(run: str, args: list[str]) -> None:
         "productHomeIsolated": not installed, "detach": "--detach" in args, "modelCopies": model_copies,
         "ownerRoots": roots, "ownerBefore": str(before), "sessions": [], "host": None,
         "web": "--web" in args, "hostOnly": host_only,
-        "commit": git("rev-parse", "HEAD"), "revitBefore": revit_pids(),
+        "commit": git("rev-parse", "HEAD"), "revitBefore": [p["ProcessId"] for p in owner_processes if is_revit(p)],
+        "processesBefore": owner_processes, "listenersBefore": existing_listeners,
     }
     if installed:
-        state["processesBefore"] = processes()
-        prior = service(state)
-        state["serviceBefore"] = prior
+        state["serviceBefore"] = service(state)
         state["unrelatedServicesBefore"] = owner_files([str(LOCAL / "state" / "service")])
     save(run, state)
     log(run, f"setup {run} at {state['commit']}: home {home}, docs {docs}, Revit before {state['revitBefore']}")
@@ -409,13 +537,13 @@ def setup(run: str, args: list[str]) -> None:
         setup_installed(run, state, args)
         return
 
-    host_log = open(root / "host.log", "ab")
     script = "attach" if state["web"] else "start"
-    process = subprocess.Popen(
-        [shutil.which("vp") or "vp", "run", script], cwd=CHECKOUT / "ts" / "apps" / "host", env=env(state),
-        stdout=host_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-        creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
-    )
+    with (root / "host.log").open("ab") as host_log:
+        process = subprocess.Popen(
+            [shutil.which("vp") or "vp", "run", script], cwd=CHECKOUT / "ts" / "apps" / "host", env=env(state),
+            stdout=host_log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
     adopt_host(run, state, process.pid, lambda: process.poll() is None)
     if not host_only:
         dev_session(run, state, args)
@@ -435,6 +563,7 @@ def adopt_host(run: str, state: dict, launcher: int, launcher_alive, patience: i
         why = (f"is still booting after {patience}s; run `setup {run}` again to adopt it, never start a second host"
                if launcher_alive() else "exited without a service file")
         sys.exit(f"host launcher {launcher} {why}; see {root / 'host.log'}")
+    refuse_owner(state, svc["pid"], svc["port"])
     state["host"] = {"launcher": launcher, "pid": svc["pid"], "port": svc["port"], "service": svc["file"]}
     if web:
         # The registered frontend binds its checkout's own port; the attach launcher prints it.
@@ -492,69 +621,134 @@ def census(run: str, label: str = "census") -> None:
 
 def teardown(run: str) -> None:
     state = load(run)
+    sessions_stopped = []
+    browser_pids, browser_ports = set(), set()
     try:
         for session in state["sessions"]:
             stopped = sdk(run, f"teardown-stop-{session}", ["session", "stop", "--id", session, "--unsaved",
                                                           "keep" if state.get("lane") == "installed" else "discard"])
-            if state.get("lane") == "installed" and not sdk_ok(stopped):
+            result = stopped.get("result") or {}
+            if (sdk_ok(stopped) and result.get("phase") == "stopped"
+                    and result.get("id", "").lower() == session.lower()):
+                sessions_stopped.append(session)
+            elif state.get("lane") == "installed":
                 census(run, "teardown-refused")
                 sys.exit("Owned installed session did not stop; host preserved; inspect receipt")
         svc = service(state)
         if (svc and state["host"] and state["host"].get("owned", True)
                 and svc["pid"] == state["host"].get("pid")  # absent while a timed-out launcher is unadopted
                 and (not state["host"].get("instanceId") or svc.get("instanceId") == state["host"]["instanceId"])):
-            result = http(state, "service", "POST", "/admin/shutdown", b"{}")
+            result = http(state, "service", "POST", "/admin/shutdown", b"{}", svc=svc)
             log(run, f"host shutdown {result['status']}")
             deadline = time.time() + 30
             while pid_alive(svc["pid"]) and time.time() < deadline:
                 time.sleep(1)
         census(run, "teardown")
-        residue = [p for p in processes() if str(CHECKOUT).lower() in (p.get("CommandLine") or "").lower()]
-        revit = [p for p in revit_pids() if p not in state["revitBefore"]]
-        log(run, f"teardown residue: {len(residue)} checkout processes {[p['ProcessId'] for p in residue]}, new Revit {revit}")
-        receipt = {"run": run, "lane": state.get("lane"), "commit": state.get("commit"),
-                   "sessionsStopped": state["sessions"], "hostPid": (state.get("host") or {}).get("pid"),
-                   "hostAlive": bool(svc) and pid_alive(svc["pid"]), "newRevit": revit,
-                   "residue": [p["ProcessId"] for p in residue],
-                   # the source model is re-read: a drive that wrote to it, not its copy, shows here
-                   "sourceModelsUnchanged": all(sha256_file(Path(m["source"])) == m["sourceSha256"]
-                                                for m in state.get("modelCopies", []))}
-        (run_dir(run) / "ev").mkdir(parents=True, exist_ok=True)
-        (run_dir(run) / "ev" / "teardown.json").write_text(json.dumps(receipt, indent=2), encoding="utf8")
-        print(json.dumps(receipt))
     finally:
-        if state.get("lane") != "installed" and os.environ.get("PE_ACCEPT_KEEP_HOME") != "1":
-            # Only remove the system-temp container created by setup, never an arbitrary saved home.
-            home = Path(state["home"]).resolve()
-            container = home.parent
-            if (home.name == "Pe.Tools" and container.name.startswith("pe-accept-")
-                    and container.parent == Path(tempfile.gettempdir()).resolve()):
-                target = str(container)
-                if os.name == "nt" and not target.startswith("\\\\?\\"):
-                    # Recording history can exceed MAX_PATH; container is already resolved and guarded.
-                    target = "\\\\?\\UNC\\" + target[2:] if target.startswith("\\\\") else "\\\\?\\" + target
+        try:
+            browser_pids, browser_ports = browser_targets(state)
+        finally:
+            try:
+                clean_home(state)
+            finally:
+                teardown_receipt(run, load(run), sessions_stopped, browser_pids, browser_ports)
+
+
+def browser_targets(state: dict) -> tuple[set[int], set[int]]:
+    browser = state.get("browser") or {}
+    pids, ports = {browser.get("pid")}, {browser.get("port")}
+    if state.get("lane") != "installed":
+        folder = Path(state["home"]) / ".local-state" / "state" / "browser"
+        for file in folder.glob("*/*.json"):
+            if file.name not in ("session.json", "terminal.json"):
+                continue
+            receipt = json.loads(file.read_bytes())
+            info = receipt["info"]
+            if info["custody"] == "owned":
+                pids.update(info.get(key) for key in ("pid", "guardianPid", "keeperPid"))
+                ports.update((receipt.get("controlPort"), urlsplit(info.get("endpoint") or "").port))
+    return pids - {None}, ports - {None, 0}
+
+
+def teardown_receipt(run: str, state: dict, sessions_stopped: list[str],
+                     browser_pids: set[int], browser_ports: set[int]) -> None:
+    checkout = Path(state.get("checkout", CHECKOUT))
+    host = state.get("host") or {}
+    pids = set(state.get("revitPids", [])) | browser_pids | {host.get("launcher"), host.get("pid")}
+    web_port = urlsplit(state["web"]).port if isinstance(state.get("web"), str) else None
+    ports = browser_ports | {host.get("port"), web_port}
+    active = processes()
+    live_pids = {p["ProcessId"] for p in active}
+    receipt = {"run": run, "lane": state.get("lane"), "commit": state.get("commit"),
+               "sessionsStopped": sessions_stopped, "hostPid": host.get("pid"),
+               "hostAlive": host.get("pid") in live_pids,
+               "newRevit": [p["ProcessId"] for p in active if is_revit(p) and p["ProcessId"] not in state["revitBefore"]],
+               "residue": [p["ProcessId"] for p in active if str(checkout).lower() in (p.get("CommandLine") or "").lower()],
+               "livePids": sorted(live_pids & pids),
+               "listeners": [row for row in listeners() if row["pid"] in pids or row["port"] in ports],
+               "gitStatus": git("status", "--porcelain", cwd=checkout),
+               "privateHomeExists": state.get("lane") != "installed" and Path(state["home"]).exists(),
+               "sourceModelsUnchanged": all(sha256_file(Path(m["source"])) == m["sourceSha256"]
+                                            for m in state.get("modelCopies", []))}
+    (run_dir(run) / "ev").mkdir(parents=True, exist_ok=True)
+    (run_dir(run) / "ev" / "teardown.json").write_text(json.dumps(receipt, indent=2), encoding="utf8")
+    print(json.dumps(receipt))
+
+
+def clean_home(state: dict) -> None:
+    if state.get("lane") != "installed" and os.environ.get("PE_ACCEPT_KEEP_HOME") != "1":
+        # Only remove the system-temp container created by setup, never an arbitrary saved home.
+        home = Path(state["home"]).resolve()
+        container = home.parent
+        if (home.name == "Pe.Tools" and container.name.startswith("pe-accept-")
+                and container.parent == Path(tempfile.gettempdir()).resolve()):
+            target = str(container)
+            if os.name == "nt" and not target.startswith("\\\\?\\"):
+                # Recording history can exceed MAX_PATH; container is already resolved and guarded.
+                target = "\\\\?\\UNC\\" + target[2:] if target.startswith("\\\\") else "\\\\?\\" + target
+            try:
                 shutil.rmtree(target)
+            except FileNotFoundError:
+                if container.exists():
+                    raise
+
+
+def powershell_rows(query: str) -> list[dict]:
+    out = subprocess.run(
+        ["powershell", "-NoProfile", "-Command",
+         "[Console]::OutputEncoding = [Text.Encoding]::UTF8; $ErrorActionPreference = 'Stop'; "
+         f"ConvertTo-Json -Compress -InputObject @({query})"],
+        capture_output=True, encoding="utf8", check=True,
+    ).stdout
+    return json.loads(out)
 
 
 def processes() -> list[dict]:
-    out = subprocess.run(
-        ["powershell", "-NoProfile", "-Command",
-         "Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress"],
-        capture_output=True, text=True,
-    ).stdout
-    return [p for p in json.loads(out or "[]") if p.get("ProcessId") != os.getpid()]
+    rows = powershell_rows("Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine")
+    return [p for p in rows if p["ProcessId"] != os.getpid()]
+
+
+def listeners() -> list[dict]:
+    rows = powershell_rows("Get-NetTCPConnection | Where-Object State -eq Listen | "
+                           "Select-Object LocalAddress,LocalPort,OwningProcess")
+    return [{"pid": row["OwningProcess"], "address": row["LocalAddress"], "port": row["LocalPort"]} for row in rows]
+
+
+def is_revit(p: dict) -> bool:
+    return (p.get("Name") or "").lower() == "revit.exe"
 
 
 def revit_pids() -> list[int]:
-    return [p["ProcessId"] for p in processes() if (p.get("Name") or "").lower() == "revit.exe"]
+    return [p["ProcessId"] for p in processes() if is_revit(p)]
 
 
 def pid_alive(pid: int) -> bool:
     return any(p["ProcessId"] == pid for p in processes())
 
 
-def git(*args: str) -> str:
-    return subprocess.run(["git", *args], cwd=CHECKOUT, capture_output=True, text=True).stdout.strip()
+def git(*args: str, cwd: Path | None = None) -> str:
+    return subprocess.run(["git", *args], cwd=cwd or CHECKOUT, capture_output=True,
+                          text=True, check=True).stdout.rstrip("\r\n")
 
 
 def read_log(root: Path) -> str:
@@ -572,24 +766,37 @@ def main(argv: list[str]) -> None:
     if len(argv) < 2:
         sys.exit(__doc__)
     verb, run, rest = argv[0], argv[1], argv[2:]
-    if verb == "setup":
-        setup(run, rest)
-    elif verb == "sdk":
+    if verb == "sdk":
         sdk(run, rest[0], rest[1:])
-    elif verb == "call":
-        who, method, path = rest[:3]
-        body = Path(rest[3]).read_bytes() if len(rest) > 3 and rest[3] != "--out" else None
-        result = http(load(run), who, method, path, body)
-        name = value_list(rest, "--out")
-        if name:
-            (run_dir(run) / "ev" / f"{name[0]}.json").write_text(json.dumps(result, indent=2), encoding="utf8")
-        print(json.dumps(result, indent=2)[:4000])
-    elif verb == "census":
-        census(run, rest[0] if rest else "census")
-    elif verb == "teardown":
-        teardown(run)
-    else:
+        return
+    if verb == "run":
+        if len(rest) < 2 or rest[0] != "--":
+            sys.exit("Usage: acceptance.py run <run> -- <command...>")
+        state = load(run)
+        cwd = Path.cwd()
+        with command_record(run, rest[1:], cwd):
+            sys.exit(subprocess.run(rest[1:], cwd=cwd, env=env(state)).returncode)
+    if verb not in ("setup", "call", "census", "teardown"):
         sys.exit(__doc__)
+    root = run_dir(run)
+    name = value_list(rest, "--out") if verb == "call" else []
+    output = {"setup": root / "host.log", "teardown": root / "ev" / "teardown.json"}.get(verb)
+    if name:
+        output = root / "ev" / f"{name[0]}.json"
+    with command_record(run, [sys.executable, str(Path(__file__).resolve()), *argv], Path.cwd(), output):
+        if verb == "setup":
+            setup(run, rest)
+        elif verb == "call":
+            who, method, path = rest[:3]
+            body = Path(rest[3]).read_bytes() if len(rest) > 3 and rest[3] != "--out" else None
+            result = http(load(run), who, method, path, body)
+            if output:
+                output.write_text(json.dumps(result, indent=2), encoding="utf8")
+            print(json.dumps(result, indent=2)[:4000])
+        elif verb == "census":
+            census(run, rest[0] if rest else "census")
+        else:
+            teardown(run)
 
 
 if __name__ == "__main__":

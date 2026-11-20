@@ -29,7 +29,10 @@ class TeardownTests(unittest.TestCase):
         self.stack.enter_context(patch.object(a, "service", return_value=None))
         self.stack.enter_context(patch.object(a, "census"))
         self.stack.enter_context(patch.object(a, "processes", return_value=[]))
-        self.stack.enter_context(patch.object(a, "revit_pids", return_value=[]))
+        self.stack.enter_context(patch.object(a, "listeners", return_value=[]))
+        self.stack.enter_context(patch.object(a, "git", return_value=""))
+        evidence = self.stack.enter_context(tempfile.TemporaryDirectory())
+        self.stack.enter_context(patch.object(a, "run_dir", return_value=Path(evidence)))
         self.stack.enter_context(patch.object(a, "log"))
         for name in ("sdk", "http", "owner_files", "owner_home", "installed_identity"):
             self.stack.enter_context(patch.object(a, name, side_effect=AssertionError("runtime contact: " + name)))
@@ -65,6 +68,7 @@ class TeardownTests(unittest.TestCase):
         self.state["home"] = str(home)
         with patch.object(a, "Path") as paths, patch.object(a.shutil, "rmtree") as remove:
             paths.return_value.resolve.side_effect = [home, temp]
+            paths.return_value.exists.return_value = False
             a.teardown("fixture")
         remove.assert_called_once_with(r"\\?\UNC\server\share\temp\pe-accept-fixture")
 
