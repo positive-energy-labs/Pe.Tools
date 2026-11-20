@@ -224,6 +224,12 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
   const css = document.createElement("style");
   css.textContent = '[data-slot="popover-content"] { overflow-y: auto; }';
   document.head.append(css);
+  const scrollDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  const reveal = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: reveal,
+  });
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   vi.stubGlobal(
     "ResizeObserver",
@@ -235,6 +241,7 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
   );
   const timeline = workTimelineSchema.parse({
     rows: [
+      { kind: "point", id: "older", reason: "captured", at: 0 },
       {
         kind: "receipt",
         id: "partition-rooms",
@@ -300,7 +307,10 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
     const [activity] = screen.getAllByRole("region", { name: "Timeline activity" });
     if (!activity) throw Error("Timeline activity is absent");
     expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
-    fireEvent.click(within(activity).getByRole("button", { name: "Stop command" }));
+    const stop = within(activity).getByRole("button", { name: "Stop command" });
+    expect.soft(stop.closest("[data-row-actions-persistent]")).not.toBeNull();
+    expect.soft(reveal.mock.contexts).toContain(stop.closest("[data-key]"));
+    fireEvent.click(stop);
     expect(within(activity).getByText(/Stopping…/)).toBeTruthy();
     expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
     expect(within(activity).queryByRole("button", { name: "Stop command" })).toBeNull();
@@ -313,6 +323,9 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
   } finally {
     cleanup();
     css.remove();
+    if (scrollDescriptor)
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", scrollDescriptor);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }

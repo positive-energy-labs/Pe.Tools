@@ -120,6 +120,11 @@ export function LangListSpecimens() {
               meta="3m"
               actions={<Button icon={MoreHorizontal} label="Row actions" />}
             />
+            <Row
+              label="Running command"
+              persistentActions
+              actions={<Button label="Stop command">Stop</Button>}
+            />
           </div>
         )}
       />
