@@ -5,7 +5,6 @@ import { projectTakeoffSnapshot } from "./takeoff-ops.ts";
 const rawSnapshot = {
   status: {
     systems: [],
-    carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
   },
   zoneFrs: [
     {

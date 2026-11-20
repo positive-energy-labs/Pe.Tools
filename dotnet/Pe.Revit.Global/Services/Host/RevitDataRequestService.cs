@@ -81,13 +81,6 @@ internal sealed class RevitDataRequestService {
     private static TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(activeDocument.Value, (document, notices) => TakeoffAtlas.AdoptZones(document, request, notices), "Pe Adopt Takeoff Regions");
 
-    [Op("takeoffs.initialize-carrier", OpSubject.Document, OpTouches.Metadata, Internal = true, Does = "Bind the next missing Takeoff carrier for the requested stage in one transaction.", Title = "Initialize Next Takeoff Carrier", Finds = ["takeoffs", "initialize", "carriers", "shared-parameters"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
-    private static TakeoffCarrierInitializationData InitializeTakeoffCarrierCore(TakeoffCarrierInitializationRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(
-            activeDocument.Value,
-            document => TakeoffCarriers.InitializeNext(document, request.Stage),
-            "Pe Initialize Takeoff Carrier");
-
     [Op("takeoffs.partition", OpSubject.Region, OpTouches.Geometry, Internal = true, Does = "Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction.", Title = "Partition Takeoff Zone", Finds = ["takeoffs", "partition", "zones", "rooms", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffPartitionResult PartitionTakeoffCore(TakeoffPartitionRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         // ADR 0011: TakeoffAtlas.Partition calls Pe.Revit.Partition.Verbs.Partition and hands the

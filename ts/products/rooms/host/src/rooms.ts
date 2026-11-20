@@ -1,6 +1,11 @@
 /** The Rooms model writes. Each is one native leaf behind the carrier pattern of `takeoffs.ts`. */
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import { command, nativeStep, refused, type CommandContext } from "@pe/host-internal/command-executor";
+import {
+  command,
+  nativeStep,
+  refused,
+  type CommandContext,
+} from "@pe/host-internal/command-executor";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { Effect } from "effect";
 import { z } from "zod";
@@ -36,7 +41,10 @@ async function requireRoomsSelection(
   const { levels, trackedRegionIds } = roster.parse(
     await Effect.runPromise(nativeStep(bridge, target.ref, "rooms.roster", {})),
   );
-  if (view !== undefined && !levels.some((level) => level.views.some((row) => row.uniqueId === view)))
+  if (
+    view !== undefined &&
+    !levels.some((level) => level.views.some((row) => row.uniqueId === view))
+  )
     throw refused(
       "The selected plan is missing from this document. Choose a plan here.",
       "rooms.selection-missing",
@@ -82,7 +90,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         return bindRooms(ctx, "rooms.partition", { view, rejected, runId: ctx.admission.id });
       },
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, null, (native) => {
+        runModel(ctx, execution, deps, bridge, (native) => {
           const { view, rejected } = ctx.admission.input;
           return native("rooms.partition", {
             view,
@@ -101,7 +109,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         return bindRooms(ctx, "rooms.draw", { view, loops, name, role });
       },
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, null, (native) => {
+        runModel(ctx, execution, deps, bridge, (native) => {
           const { view, loops, name, role } = ctx.admission.input;
           return native("rooms.draw", {
             view,
@@ -120,7 +128,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         return bindRooms(ctx, "rooms.merge", { view, uniqueIds: regions.map(regionId), name });
       },
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, null, (native) => {
+        runModel(ctx, execution, deps, bridge, (native) => {
           const { view, regions, name } = ctx.admission.input;
           return native("rooms.merge", {
             view,
@@ -186,7 +194,7 @@ export const roomsSheet =
           });
         const asked = new Map(regions.map((row) => [row.uniqueId, new Map(Object.entries(row))]));
         const { key: work } = sheetInput.parse(ctx.admission.input).work;
-        return runModel(ctx, execution, deps, bridge, null, (native) =>
+        return runModel(ctx, execution, deps, bridge, (native) =>
           Effect.gen(function* () {
             const value = yield* native("rooms.write", {
               regions,

@@ -89,7 +89,7 @@ test("every live write plan is recognised by the browser and no retired plan is 
 
 test("Takeoffs native model writes have a generated plan and the existing write boundary", () => {
   const table = generateCommandTable();
-  for (const key of ["takeoffs.initialize", "takeoffs.sync"] as const) {
+  for (const key of ["takeoffs.adopt", "takeoffs.sync"] as const) {
     expect(table[key]).toMatchObject({ effect: "ModelWrite", plan: key + ".preview" });
     expect(hostActions[key].writeBoundary).toMatchObject({
       phase: "apply",

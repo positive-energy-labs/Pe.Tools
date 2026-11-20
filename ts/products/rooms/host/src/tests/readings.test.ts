@@ -43,7 +43,6 @@ const port = (native: Native, work: unknown = null, taken: string[] = []): Input
             version: null,
             observedAt: "2026-11-20T00:00:00.000Z",
           },
-          carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
           world: { docName: "Snowdon", r10Path: null, lanes: [], zones: [], systems: [] },
           zoneFrs: [],
           regionsByZone: {},
@@ -140,11 +139,6 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
         snapshot: {
           status: {
             systems: [],
-            carriers: {
-              stage: "Adoption",
-              status: "needs-initialization",
-              missingCarrierGuids: ["00000000-0000-4000-8000-000000000001"],
-            },
           },
           unreadable: [],
           zoneFrs: [],
@@ -190,11 +184,6 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
     [`${FLOOR}:21`, false, "Office zone", ""],
     [`${CEILING}:21`, true, "West office", "AHU-1"],
   ]);
-  expect(data.carriers).toEqual({
-    stage: "Adoption",
-    status: "needs-initialization",
-    missing: ["00000000-0000-4000-8000-000000000001"],
-  });
   // The native boundary is asked by UniqueId, never by the shared name "L2".
   expect(requests.filter(([key]) => key === "takeoffs.candidates")).toEqual([
     ["takeoffs.candidates", { view: FLOOR }],

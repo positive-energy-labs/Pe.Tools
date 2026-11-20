@@ -10,7 +10,7 @@ import { PreviewAction } from "@pe/kit/lang/write-action";
 type Row = AdoptionContext["value"]["value"]["rows"][number];
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   const page = ctx.page.read();
-  const { rows, carriers, unreadable, missingViews } = ctx.value.value;
+  const { rows, unreadable, missingViews } = ctx.value.value;
   const catalogue = ctx.read(plans);
   const levels = "value" in catalogue ? (catalogue.value?.levels ?? []) : [];
   const saved = ctx.read(captures);
@@ -71,25 +71,11 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
           refresh
         </Button>
         <PreviewAction
-          handle={ctx.verb("initialize")}
-          label="initialize"
-          refusal={
-            carriers.status === "needs-initialization"
-              ? null
-              : "The document already carries every shared parameter"
-          }
-        />
-        <PreviewAction
           handle={ctx.verb("adopt")}
           label="adopt"
           refusal={rows.some((row) => row.checked) ? null : "Select regions to adopt"}
         />
       </div>
-      {carriers.missing.length > 0 && (
-        <p>
-          {carriers.stage}: {carriers.missing.length} shared parameters are missing.
-        </p>
-      )}
       {rows.length === 0 ? (
         <EmptyState story="scope" exit="Choose plans that hold designer-drawn regions">
           No regions on the chosen plans

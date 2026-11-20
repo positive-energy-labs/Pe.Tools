@@ -11982,24 +11982,6 @@ export namespace TakeoffsCandidates {
   }
 }
 
-/** Bind the next missing Takeoff carrier for the requested stage in one transaction. */
-export namespace TakeoffsInitializeCarrier {
-  export namespace Req {
-    export type TakeoffCarrierStage = "Adoption" | "Materialization";
-
-    export interface Request {
-      stage?: TakeoffCarrierStage;
-    }
-  }
-  export namespace Res {
-    export interface Response {
-      status: string;
-      bound?: null | string;
-      remaining: string[];
-    }
-  }
-}
-
 /** Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction. */
 export namespace TakeoffsPartition {
   export namespace Req {
@@ -12225,7 +12207,6 @@ export namespace TakeoffsSnapshot {
     }
   }
   export namespace Res {
-    export type TakeoffCarrierStage = "Adoption" | "Materialization";
     /**
      * Where a set of model points sits against a view's model crop. Outside means it can never draw under that view's image.
      */
@@ -12250,16 +12231,10 @@ export namespace TakeoffsSnapshot {
     }
     export interface TakeoffModelStatus {
       systems: TakeoffRegistrySystem[];
-      carriers: TakeoffCarrierPreflight;
     }
     export interface TakeoffRegistrySystem {
       guid: string;
       tag: string;
-    }
-    export interface TakeoffCarrierPreflight {
-      stage: TakeoffCarrierStage;
-      status: string;
-      missingCarrierGuids: string[];
     }
     export interface TakeoffRegionFacts {
       elementId: number;
@@ -12472,7 +12447,6 @@ export interface HostOps {
   "settings.validate": { request: SettingsValidate.Req.Request; response: SettingsValidate.Res.Response };
   "takeoffs.adopt": { request: TakeoffsAdopt.Req.Request; response: TakeoffsAdopt.Res.Response };
   "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
-  "takeoffs.initialize-carrier": { request: TakeoffsInitializeCarrier.Req.Request; response: TakeoffsInitializeCarrier.Res.Response };
   "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
   "takeoffs.record-replacements": { request: TakeoffsRecordReplacements.Req.Request; response: TakeoffsRecordReplacements.Res.Response };
   "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
@@ -12579,7 +12553,6 @@ export const hostOpKeys = [
   "settings.validate",
   "takeoffs.adopt",
   "takeoffs.candidates",
-  "takeoffs.initialize-carrier",
   "takeoffs.partition",
   "takeoffs.record-replacements",
   "takeoffs.rhvac-links",
@@ -12686,7 +12659,6 @@ export const hostOpSafety = {
   "settings.validate": {"costTier":"Cheap","subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
   "takeoffs.adopt": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "takeoffs.candidates": {"costTier":"Bounded","subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
-  "takeoffs.initialize-carrier": {"costTier":"Mutation","subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true},
   "takeoffs.partition": {"costTier":"Mutation","subject":"Region","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "takeoffs.record-replacements": {"costTier":"Bounded","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":true},
   "takeoffs.rhvac-links": {"costTier":"Mutation","subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true},

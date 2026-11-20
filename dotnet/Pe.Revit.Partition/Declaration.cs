@@ -9,8 +9,7 @@ namespace Pe.Revit.Partition;
 /// <summary>
 ///     Enclosure is declared per document, never inferred (ledger ruling 3). One owner blob on Project Information
 ///     carries it through <see cref="OwnerBlobStore" />; when it is absent or refused the default applies and the
-///     answer says which and why. No UI and no production writer yet: a second project has to prove the list
-///     changes before anything else is built.
+///     answer says which and why.
 /// </summary>
 public static class EnclosureDeclaration {
     /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
@@ -26,10 +25,6 @@ public static class EnclosureDeclaration {
         NullValueHandling = NullValueHandling.Ignore,
         MissingMemberHandling = MissingMemberHandling.Error
     });
-
-    /// <summary>Idempotent; the caller owns the transaction.</summary>
-    public static void EnsureBound(Document document) =>
-        SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(Owner), [BuiltInCategory.OST_ProjectInformation]);
 
     public static bool IsBound(Document document) {
         var element = SharedParameterElement.Lookup(document, Owner.Guid);
@@ -55,10 +50,18 @@ public static class EnclosureDeclaration {
             : (Enclosure.Default, "default: " + parsed.Refusal);
     }
 
+    /// <summary>Records the default for adoption while preserving existing declarations and unreadable records.</summary>
+    public static void WriteDefaultIfAbsent(Document document) {
+        if (string.IsNullOrWhiteSpace(OwnerBlobStore.Read(document, Owner).Raw))
+            _ = OwnerBlobStore.Write(document, Owner, Encode(Enclosure.Default));
+    }
+
     /// <summary>Writes a declaration. The caller owns the transaction.</summary>
     public static void Write(Document document, Enclosure enclosure, OwnerBlobNotices notices) {
-        _ = OwnerBlobStore.WriteWithoutPreview(document, Owner, JObject.FromObject(Declared.From(enclosure), Json), notices);
+        _ = OwnerBlobStore.WriteWithoutPreview(document, Owner, Encode(enclosure), notices);
     }
+
+    private static JObject Encode(Enclosure enclosure) => JObject.FromObject(Declared.From(enclosure), Json);
 
     /// <summary>The declaration, or the reason it is "can't read, kept" (the default then applies).</summary>
     internal static OwnerValue<Declared> Parse(OwnerBlobRead read) =>

@@ -212,7 +212,6 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
         snapshot: response,
         views: candidates.map(({ plan }) => plan),
       });
-    const { carriers } = snapshot.status;
     return {
       missingViews: requested.filter((view) => !liveViews.has(view)),
       rows: candidates.flatMap(({ body, view }) =>
@@ -238,11 +237,6 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
           };
         }),
       ),
-      carriers: {
-        stage: carriers.stage,
-        status: carriers.status,
-        missing: carriers.missingCarrierGuids,
-      },
       unreadable: unreadable(snapshot.unreadable),
     };
   },

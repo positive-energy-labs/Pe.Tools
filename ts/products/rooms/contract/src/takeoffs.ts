@@ -203,13 +203,6 @@ const viewFactsSchema = z.object({
 });
 export type ViewFacts = z.infer<typeof viewFactsSchema>;
 
-export const takeoffCarrierPreflightSchema = z.object({
-  stage: z.enum(["Adoption", "Materialization"]),
-  status: z.enum(["ready", "needs-initialization"]),
-  missingCarrierGuids: z.array(z.string()),
-});
-export type TakeoffCarrierPreflight = z.infer<typeof takeoffCarrierPreflightSchema>;
-
 const detectedRoomSchema = z.object({
   id: z.string(),
   rawSqft: z.number(),
@@ -275,7 +268,6 @@ const takeoffUnreadableBlobSchema =
   );
 export const takeoffSnapshotSchema = z.object({
   reading: observationSchema,
-  carriers: takeoffCarrierPreflightSchema,
   world: takeoffModelSchema,
   unreadable: z.array(takeoffUnreadableBlobSchema).optional(),
   zoneFrs: z.array(candidateRegionSchema),

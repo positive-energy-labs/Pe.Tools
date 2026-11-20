@@ -25,8 +25,6 @@ public sealed class TakeoffOwnerCropProofTests {
                     .Cast<ViewFamilyType>().First(t => t.ViewFamily == ViewFamily.FloorPlan);
                 var source = ViewPlan.Create(doc, planType.Id, level.Id);
                 source.Name = "Owner crop source";
-                while (TakeoffCarriers.Preflight(doc, TakeoffCarrierStage.Materialization).MissingCarrierGuids.Count > 0)
-                    TakeoffCarriers.InitializeNext(doc, TakeoffCarrierStage.Materialization);
                 var type = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType)).FirstElementId();
                 _ = FilledRegion.Create(doc, type, source.Id, Kernel.ToLoops(Square(40, 0, 20), [], 0));
                 _ = FilledRegion.Create(doc, type, source.Id, Kernel.ToLoops(Square(-80, 0, 20), [], 0));

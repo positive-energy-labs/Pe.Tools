@@ -7,11 +7,9 @@ import { captures } from "../routes/takeoffs/route.ts";
 import { CEILING, FLOOR, GONE, levels, reading, journey } from "./fixtures.ts";
 import { Pane, type Native } from "../../../../tests/e2e/mounted.test-support.tsx";
 
-const MISSING = ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"];
 /** One designer region on each of two plans of one name; the shared parameters are not bound yet. */
 function model() {
   const state = {
-    carriers: "needs-initialization",
     unreadable: [] as { elementId: number | null; parameter: string; reason: string }[],
   };
   const native: Native = (key, input) => {
@@ -37,11 +35,6 @@ function model() {
         snapshot: {
           status: {
             systems: [],
-            carriers: {
-              stage: "Adoption",
-              status: state.carriers,
-              missingCarrierGuids: state.carriers === "ready" ? [] : MISSING,
-            },
           },
           unreadable: state.unreadable,
           zoneFrs: [],
@@ -71,7 +64,6 @@ function model() {
           },
         ],
       };
-    if (key === "command:takeoffs.initialize") state.carriers = "ready";
     if (key.startsWith("command:")) return {};
     throw Error(`Unexpected native read ${key}`);
   };
@@ -84,15 +76,14 @@ const Screen = ({ mount }: { mount: Parameters<typeof Pane>[0]["mount"] }) => (
 );
 const keys = (j: { actions: { key: string }[] }) => j.actions.map((row) => row.key);
 
-test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, initialize, adopt, then open the saved capture", async () => {
+test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, adopt, then open the saved capture", async () => {
   const { native } = model();
   const j = await journey("takeoffs", native);
   try {
     render(<Screen mount={j.mount} />);
     await j.ready();
-    // No plan chosen: nothing to adopt, and the document says what it is missing.
+    // No plan chosen: nothing to adopt,.
     expect(await screen.findByText("No regions on the chosen plans")).toBeTruthy();
-    expect(screen.getByText("Adoption: 2 shared parameters are missing.")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "plan adopt" }).getAttribute("aria-description"),
     ).toBe("Select regions to adopt");
@@ -121,35 +112,13 @@ test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, initial
       expect(j.mount.owner()?.doc.adopt[cell]?.edit?.value.name).toBe("West office"),
     );
     await j.ready();
-    // Initialize: planned, then applied; afterwards the document carries every shared parameter.
-    fireEvent.click(screen.getByRole("button", { name: "plan initialize" }));
-    await waitFor(() => expect(keys(j)).toContain("takeoffs.initialize.preview"));
-    expect(keys(j)).toEqual(["takeoffs.initialize.preview"]);
-    expect(await screen.findByText("Initialize the missing shared parameters.")).toBeTruthy();
-    expect(keys(j)).toEqual(["takeoffs.initialize.preview"]);
-    fireEvent.click(screen.getByRole("button", { name: "initialize" }));
-    await waitFor(() => expect(keys(j)).toContain("takeoffs.initialize"), { timeout: 20000 });
-    expect(keys(j).indexOf("takeoffs.initialize.preview")).toBe(0);
-    expect(j.mount.owner()?.doc.writeIntent["takeoffs.initialize"].edit.value).toEqual({
-      stage: "Adoption",
-    });
-    await waitFor(() => expect(screen.queryByText(/shared parameters are missing/)).toBeNull(), {
-      timeout: 20000,
-    });
-    await j.ready();
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "plan adopt" }).getAttribute("aria-disabled"),
-      ).toBeNull(),
-    );
-    expect(
-      screen.getByRole("button", { name: "plan initialize" }).getAttribute("aria-description"),
-    ).toBe("The document already carries every shared parameter");
     // Adopt: the sealed command reads its request from Work, the plan named by UniqueId.
     fireEvent.click(screen.getByRole("button", { name: "plan adopt" }));
-    fireEvent.click(await screen.findByRole("button", { name: "adopt" }));
+    const apply = await screen.findByRole("button", { name: "adopt" });
+    expect(keys(j)).toEqual(["takeoffs.adopt.preview"]);
+    fireEvent.click(apply);
     await waitFor(() => expect(keys(j)).toContain("takeoffs.adopt"), { timeout: 20000 });
-    expect(keys(j)).toContain("takeoffs.adopt.preview");
+    expect(keys(j)).toEqual(["takeoffs.adopt.preview", "takeoffs.adopt"]);
     expect(j.mount.owner()?.doc.writeIntent["takeoffs.adopt"].edit.value).toEqual({
       views: [
         {

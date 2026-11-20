@@ -162,7 +162,7 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
                 var view = CreateRoomsView(document);
                 var zone = Rooms.Draw(document, new(view.UniqueId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
-                _ = TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Adoption);
+                _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
                 Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
                 request = new(view.UniqueId, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]);
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));

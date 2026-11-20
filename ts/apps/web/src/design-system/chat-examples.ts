@@ -456,12 +456,6 @@ const CATALOG = {
       "Read the stored parameter-link profile and runtime status, and optionally evaluate the authored links.",
     ),
     row(
-      "op:takeoffs.initialize",
-      "op",
-      "takeoffs.initialize",
-      "Write the shared parameters this document is missing before any takeoff runs.",
-    ),
-    row(
       "op:parameters.list",
       "op",
       "parameters.list",

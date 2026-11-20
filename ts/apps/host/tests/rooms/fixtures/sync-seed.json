@@ -24,11 +24,6 @@
           "version": null,
           "observedAt": "2026-08-17T00:20:00.000Z"
         },
-        "carriers": {
-          "stage": "Adoption",
-          "status": "ready",
-          "missingCarrierGuids": []
-        },
         "world": {
           "docName": "project-a Residence.rvt",
           "r10Path": "C:\\projects\\project-a\\projectA.local.r10",
