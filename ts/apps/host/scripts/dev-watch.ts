@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
 import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
 import { devWatchRoots, requireDevDependencies } from "./dev-watch-roots.ts";
 
@@ -10,7 +10,10 @@ if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkou
 const hostDirectory = new URL("../", import.meta.url);
 const workspace = new URL("../../", hostDirectory);
 requireDevDependencies(workspace);
-const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"));
+const hostRoot = process.argv.includes("--no-revit")
+  ? undefined
+  : productRoot({ lane: "dev", sourceRoot, installedRoot: null });
+const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"), hostRoot);
 
 let child: ChildProcess | undefined;
 let restart = false;

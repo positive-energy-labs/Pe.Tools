@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.Loader;
 using System.Text.Json;
@@ -251,6 +252,36 @@ namespace Pe.Revit.Tests {
                 Throws.InvalidOperationException.With.Message.Contains("already configured"));
             Assert.That(TsHostLauncher.ServiceAppBase, Is.EqualTo(ProductRuntimeLayout.Current.RootPath));
             Assert.That(HostEndpoint.RuntimeServiceName, Is.EqualTo(HostEndpoint.SourceServiceName(TestRuntime.Checkout)));
+        }
+
+        [Test]
+        public void The_active_checkout_watcher_owns_dev_host_launch() {
+            var runtime = ProductRuntimeLayout.Current;
+            var directory = Path.Combine(runtime.OwnerRoot, ".artifacts", "dev-tray");
+            var receipt = Path.Combine(directory, "supervisor.json");
+            Directory.CreateDirectory(directory);
+            using var process = Process.GetCurrentProcess();
+            var started = process.StartTime.ToUniversalTime();
+            void WriteReceipt(string root, string? hostRoot, DateTime start) =>
+                File.WriteAllText(receipt, JsonSerializer.Serialize(new {
+                    schemaVersion = 1, sourceRoot = root, watchedHostRoot = hostRoot,
+                    pid = process.Id, processStartUtc = start
+                }));
+
+            try {
+                WriteReceipt(runtime.OwnerRoot, runtime.RootPath, started);
+                Assert.That(TsHostLauncher.EnsureRunning().Message, Does.Contain("dev watcher is responsible"));
+                WriteReceipt(runtime.OwnerRoot, null, started);
+                Assert.That(TsHostLauncher.EnsureRunning().Message, Does.Contain("has no node_modules"), "A tray attached to an existing pair has no watcher.");
+                WriteReceipt(runtime.OwnerRoot, directory, started);
+                Assert.That(TsHostLauncher.EnsureRunning().Message, Does.Contain("has no node_modules"), "Another isolated home has a separate host.");
+                WriteReceipt(directory, runtime.RootPath, started);
+                Assert.That(TsHostLauncher.EnsureRunning().Message, Does.Contain("has no node_modules"), "Another checkout has a separate host.");
+                WriteReceipt(runtime.OwnerRoot, runtime.RootPath, started.AddMinutes(-1));
+                Assert.That(TsHostLauncher.EnsureRunning().Message, Does.Contain("has no node_modules"), "A reused PID is not the watcher.");
+            } finally {
+                File.Delete(receipt);
+            }
         }
 
         // A fresh load context has fresh statics: an unconfigured process reads nothing, it refuses.

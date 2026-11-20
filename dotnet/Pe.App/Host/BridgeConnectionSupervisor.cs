@@ -108,12 +108,14 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
 
         var hostLaunchResult = HostBridgeConnector.EnsureTsHostRunning();
         // Signal before queuing bridge connection: a synchronous caller may hold Revit's UI thread.
-        if (hostLaunchResult.Success)
+        // A watched host has no local launcher to wait for. The socket below determines readiness.
+        var canDiscover = hostLaunchResult.Success || hostLaunchResult.WatcherOwnsStartup;
+        if (canDiscover) {
             this._hostStartup?.Succeed();
-        else
+        } else {
             this._hostStartup?.Fail(hostLaunchResult.Message);
-        if (!hostLaunchResult.Success)
             Log.Warning("Host bridge supervisor could not ensure a TS host; trying the service file's address anyway: {Message}", hostLaunchResult.Message);
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
         // The WebSocket connect is the real proof of a host. EnsureRunning's share predicate and its
@@ -121,7 +123,7 @@ internal sealed class BridgeConnectionSupervisor : IDisposable {
         // mismatch); refusing to connect on that evidence is the livelock seen 2026-08-20.
         var connect = await this.ConnectRuntimeAsync(cancellationToken).ConfigureAwait(false);
         if (connect.Success) Analytics.RevitReceipts.FlushPending();
-        return connect.Success || hostLaunchResult.Success
+        return connect.Success || canDiscover
             ? connect
             : new RuntimeActionResult(false, $"{connect.Message} (host launch: {hostLaunchResult.Message})");
     }

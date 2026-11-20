@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { createServer } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
-import { Context, Deferred, Effect, Layer } from "effect";
+import { Context, Deferred, Effect, Layer, Schedule } from "effect";
 import { HttpRouter, HttpServer, HttpServerResponse as Response } from "effect/http";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 import {
@@ -340,7 +340,7 @@ function buildHostDescriptor(port: number): ServiceHostDescriptor {
  * incumbent end-to-end (SDK-owned — no local probe/takeover), and its handle deletes the file on
  * graceful shutdown. Depends on `HttpServer` so it runs after bind (the bound port is authoritative,
  * A10 discovery is file-based), and on `HostLifecycle` to publish the claim handle for the shutdown
- * route. A refused claim is fatal — this host cannot own the service.
+ * route. A source host can wait out another supervisor's startup lease.
  */
 export const ServiceFileLive = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -388,15 +388,32 @@ export const ServiceFileLive = Layer.effectDiscard(
           return yield* Effect.die(new Error(`Dev host service claim refused: ${rejection}`));
       }
     }
-    const handle = yield* Effect.acquireRelease(
+    const acquireClaim = Effect.acquireRelease(
       Effect.promise(() => claimServiceHost(appBase, buildHostDescriptor(port))).pipe(
         Effect.flatMap((result) =>
           result.claimed
             ? Effect.succeed(result.handle)
-            : Effect.die(new Error(`host service claim refused: ${result.reason}`)),
+            : Effect.fail(result.reason),
         ),
       ),
       (handle) => Effect.promise(() => handle.release()),
+    );
+    const handle = yield* acquireClaim.pipe(
+      Effect.retry({
+        // Seven 15-second SDK attempts cover the loader's 90-second startup budget.
+        times: 6,
+        schedule: Schedule.spaced("1 second"),
+        while: (reason) => {
+          // The SDK exposes lease contention only in its reason text. Match this one refusal;
+          // a disappearing lock can look unreadable at the boundary of an attempt.
+          const busy =
+            hostOwnership.lane === "dev" &&
+            reason.startsWith(`service '${hostOwnership.serviceName}' is busy in another supervisor (`);
+          if (busy) console.warn(`Dev host waiting to claim its service: ${reason}`);
+          return busy;
+        },
+      }),
+      Effect.catch((reason) => Effect.die(new Error(`host service claim refused: ${reason}`))),
     );
     // The owner's terminal context belongs to the claim holder alone: written after the claim,
     // removed with it. A host that loses the claim never touches the holder's file.
