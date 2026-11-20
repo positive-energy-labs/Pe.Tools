@@ -1,3 +1,4 @@
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings } from "./native-recordings.ts";
 import { testDocumentMarks } from "./effect-test.ts";
 
-test.each(["current", "moved"] as const)(
+test.each(["current", "moved", "unreadable"] as const)(
   "recorded parameter-links %s base runs real plan/apply admission and preserves unstaged stored ids",
   async (mode) => {
     const dir = await mkdtemp(join(tmpdir(), "pe-catalog-recorded-"));
@@ -38,6 +39,25 @@ test.each(["current", "moved"] as const)(
     const body = nativeRecordings("sdk-revit.detail.parameter-links").responses[
       "revit.detail.parameter-links"
     ] as any;
+    const replacement = {
+      owner: "parameter-links",
+      status: "Invalid" as const,
+      reason: "unreadable profile",
+      rawUtf8Sha256: "c".repeat(64),
+    };
+    if (mode === "unreadable") {
+      const reply = native.transport.reply;
+      native.transport.reply = (action, operation, input) => {
+        const value = reply(action, operation, input);
+        return operation === "revit.detail.parameter-links"
+          ? {
+              ...nativeResponseSchema("revit.detail.parameter-links").parse(value),
+              profile: null,
+              replacement,
+            }
+          : value;
+      };
+    }
     const { id: _id, ...definition } = body.profile.definitions[0];
     const post = native.actions({ workspace, marks: testDocumentMarks(native.bridge) });
     const execute = async (id: string, command: string) => {
@@ -78,10 +98,14 @@ test.each(["current", "moved"] as const)(
           action: "parameter-links.apply",
           input: {
             reconcile: true,
+            ...(mode === "unreadable" && { replacement }),
             profile: {
               formatVersion: body.profile.formatVersion,
-              assignments: body.profile.assignments,
-              definitions: [...body.profile.definitions, { ...definition, id: "authored-extra" }],
+              assignments: mode === "unreadable" ? [] : body.profile.assignments,
+              definitions: [
+                ...(mode === "unreadable" ? [] : body.profile.definitions),
+                { ...definition, id: "authored-extra" },
+              ],
             },
           },
         });

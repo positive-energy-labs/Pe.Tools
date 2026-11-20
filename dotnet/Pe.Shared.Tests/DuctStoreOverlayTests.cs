@@ -17,10 +17,15 @@ public sealed class DuctStoreOverlayTests {
 
     [Test]
     public void Every_store_map_is_a_DuctStoreDeletes_key_so_none_can_only_be_replaced_whole() {
-        var deletable = typeof(DuctStoreDeletes).GetProperties().Select(p => p.Name).ToHashSet();
+        var deletes = typeof(DuctStoreDeletes).GetProperties().ToDictionary(p => p.Name);
+        var deletable = deletes.Keys;
         var maps = Maps().Select(p => p.Name).ToList();
         Assert.That(maps, Is.SubsetOf(deletable));
         Assert.That(maps, Has.Count.EqualTo(7));
+        foreach (var map in Maps()) {
+            Assert.That(map.PropertyType.GetGenericArguments()[0], Is.EqualTo(typeof(string)), map.Name);
+            Assert.That(deletes[map.Name].PropertyType, Is.EqualTo(typeof(List<string>)), map.Name);
+        }
     }
 
     [TestCaseSource(nameof(MapNames))]
@@ -28,7 +33,7 @@ public sealed class DuctStoreOverlayTests {
         var property = typeof(DuctLossStore).GetProperty(map)!;
         var key = property.PropertyType.GetGenericArguments()[0];
         var value = property.PropertyType.GetGenericArguments()[1];
-        object K(int n) => key == typeof(string) ? $"k{n}" : (object)(long)n;
+        string K(int n) => $"5191cd54-1806-4a9d-8e57-bb8a93975f4a-{n:x8}";
         object V(string tag) => Activator.CreateInstance(value, value.GetConstructors()[0].GetParameters()
             .Select(p => p.ParameterType == typeof(string) ? tag : p.ParameterType == typeof(double) ? 1.0
                 : p.ParameterType == typeof(DateTimeOffset) ? DateTimeOffset.UnixEpoch : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null)

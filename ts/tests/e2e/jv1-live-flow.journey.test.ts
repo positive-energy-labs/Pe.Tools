@@ -31,7 +31,7 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
   const terminal = model.nodes.find((n) => n.id === 3)!;
   const subject = elementSubject(terminal);
   model.store = {
-    version: 2,
+    version: 3,
     workRevision: 1,
     appliedAt: CLOSED_AT,
     rules: {},
@@ -40,7 +40,14 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
     equipmentFlows: {},
     verdicts: {},
     roles: {},
-    terminalFlows: { "3": { cfm: 200, source: "human", appliedAt: CLOSED_AT } },
+    terminalFlows: {
+      [terminal.uniqueId]: {
+        cfm: 200,
+        source: "human",
+        parameter: model.slots.terminalFlow,
+        appliedAt: CLOSED_AT,
+      },
+    },
   };
   const terminalWrites: unknown[] = [];
   const f = await nativeFixture("real", (key, raw) => {
@@ -112,7 +119,7 @@ test("J-V1: live terminal edit after receipt reprices, shows drift, and writes t
         .find((n: { id: number }) => n.id === 3)
         .facts.find((v: { key: string }) => v.key === "flow").value,
     ).toBe(400);
-    expect(live.store.terminalFlows["3"].cfm).toBe(200);
+    expect(live.store.terminalFlows[terminal.uniqueId]!.cfm).toBe(200);
     const after = calculate(live);
     const resolved = after.input.inputs.terminals["3"]!.cfm;
     console.log("J-V1 outside edit", JSON.stringify({ live: 400, receipt: 200, resolved }));

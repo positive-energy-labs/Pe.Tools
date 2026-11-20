@@ -56,7 +56,7 @@ test("the real /fans apply asks to retire its own role only, and retires it unde
     writes: [
       { kind: "verdict", key: "open-end:101:1", outcome: "written" },
       { kind: "fitting", id: 7, outcome: "written" },
-      { kind: "role", id: 5, outcome: "written" },
+      { kind: "role", id: 99, uniqueId: role.slice("UniqueId:".length), outcome: "written" },
     ],
   };
   const input = {
@@ -113,6 +113,19 @@ test("fan preview survives identical re-pricing but rejects changed model inputs
         "utf8",
       ),
     ),
+  );
+  // The raw seal must change even when the owner reports the same decode reason.
+  const unreadable = {
+    owner: "duct-losses",
+    status: "UnknownVersion" as const,
+    reason: "version 2",
+    rawUtf8Sha256: "a".repeat(64),
+  };
+  expect(ductWriteEvidence({ ...snapshot, storeReplacement: unreadable })).not.toEqual(
+    ductWriteEvidence({
+      ...snapshot,
+      storeReplacement: { ...unreadable, rawUtf8Sha256: "b".repeat(64) },
+    }),
   );
   const work = ductsDesign(
     null,
@@ -438,7 +451,7 @@ test("a /fans apply stores its own roles only: a staged /duct-systems verdict st
   const verdicts = { "open-end:101:1": { verdict: "ignore", ruledAt: at } };
   const { input, context } = manualD(true, {
     store: {
-      version: 2,
+      version: 3,
       rules: {},
       instances: {},
       terminals: {},
@@ -449,7 +462,8 @@ test("a /fans apply stores its own roles only: a staged /duct-systems verdict st
       workRevision: 3,
     },
   });
-  const fan = elementSubject(input.snapshot.nodes.find((n) => n.id === 14577391)!);
+  const unit = input.snapshot.nodes.find((n) => n.id === 14577391)!;
+  const fan = elementSubject(unit);
   const design = designOf({
     assumptions: {
       "open-end:202:1": { edit: { by: "human", value: { kind: "verdict", verdict: "ignore" } } },
@@ -464,5 +478,7 @@ test("a /fans apply stores its own roles only: a staged /duct-systems verdict st
   // The stored verdict Work takes back is neither re-ruled nor deleted here; the staged one is not sent.
   expect(request.store!.verdicts).toEqual(verdicts);
   expect(request.storeDeletes).toEqual({ roles: [] });
-  expect(request.store!.roles).toEqual({ 14577391: { role: "fan", ruledAt: context.appliedAt } });
+  expect(request.store!.roles).toEqual({
+    [unit.uniqueId]: { role: "fan", ruledAt: context.appliedAt },
+  });
 });

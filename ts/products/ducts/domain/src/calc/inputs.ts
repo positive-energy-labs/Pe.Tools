@@ -152,17 +152,17 @@ const WRITTEN = {
     writtenFlow(
       slots.terminalFlow,
       slotFlowOf(n, slots.terminalFlow).cfm,
-      store.terminalFlows?.[n.id],
+      store.terminalFlows?.[n.uniqueId],
     ),
   terminalDrops: (n: Node, slots: Slots, store: StoreLayer) =>
     written(
       slots.terminalDrop,
       n.terminalDrop?.catalogDropInWg,
-      store.terminals?.[n.id]?.inWg,
+      store.terminals?.[n.uniqueId]?.inWg,
       "in-wg",
     ),
   equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) =>
-    writtenFlow(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]),
+    writtenFlow(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.uniqueId]),
 };
 
 /** Drift: the one place a receipt is compared with the live parameter. Null where Pe never wrote or the two agree; else what the cell says beside its value. Shown, never blocking, and no write re-asserts it. */
@@ -410,7 +410,7 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
           "model-store": observed(
             "model-store",
             `${id}/${STORE}`,
-            store.roles?.[id]?.role as "fan" | "passive",
+            store.roles?.[n.uniqueId]?.role as "fan" | "passive",
           ),
           default: observed("default", `${id}/name`, suggestRole(n, kind.value ?? suggestion.kind)),
         },

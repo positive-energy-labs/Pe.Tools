@@ -1,3 +1,4 @@
+using Pe.Shared.RevitData.Serialization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System.Runtime.Serialization;
@@ -223,7 +224,7 @@ public sealed record DuctParameterSlots(
 
 /// <summary>
 ///     Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
-///     the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+///     the blob is unreadable and StoreReplacement identifies the bytes a later apply would preserve.
 ///     AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
 ///     FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
 /// </summary>
@@ -247,7 +248,8 @@ public sealed record DuctSnapshotData(
     DuctWalk? Walk = null,
     DuctHealthTolerances? Tolerances = null,
     DuctReach? Reach = null,
-    IReadOnlyList<DuctFanParameterCohort>? ParameterCohorts = null) {
+    IReadOnlyList<DuctFanParameterCohort>? ParameterCohorts = null,
+    OwnerBlobReplacement? StoreReplacement = null) {
     public DuctFanVocabulary Vocabulary => DuctFanVocabulary.All;
 }
 

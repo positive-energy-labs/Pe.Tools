@@ -37,9 +37,7 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
             _ = transaction.Start();
-            // A stored blob this build cannot read is never written over: the parse throws, and so does the store.
-            _ = AutoTagSettings.Read(OwnerBlobStore.Read(doc, AutoTagSettings.Owner)).OrThrow();
-            _ = OwnerBlobStore.Write(doc, AutoTagSettings.Owner, settings.ToData());
+            _ = OwnerBlobStore.WriteWithoutPreview(doc, AutoTagSettings.Owner, settings.ToData());
             _ = transaction.Commit();
         }
         var tracked = this._documents?.Find(doc);

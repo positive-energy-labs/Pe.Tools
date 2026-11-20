@@ -37,8 +37,15 @@ public static class DuctApplier {
     private static readonly ForgeTypeId Cfm = UnitTypeId.CubicFeetPerMinute;
 
     public static (DuctLossStore? Store, string? Error) ReadStore(Document doc) {
-        var read = DuctLossStore.Read(OwnerBlobStore.Read(doc, DuctLossStore.Owner));
+        var (_, read, _) = ReadStoreState(doc);
         return (read.Value, read.Refusal);
+    }
+
+    internal static (OwnerBlobRead Blob, OwnerValue<DuctLossStore> Read, OwnerBlobReplacement? Replacement) ReadStoreState(Document doc, bool reportReplacement = true) {
+        var blob = OwnerBlobStore.Read(doc, DuctLossStore.Owner);
+        var read = DuctLossStore.Read(blob);
+        var replacement = reportReplacement ? blob.Replacement : null;
+        return (blob, read, replacement);
     }
 
     /// <summary>One planned target. Write runs inside the stage's transaction and returns the After text.</summary>
@@ -76,7 +83,8 @@ public static class DuctApplier {
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request, bool preview) {
         // Request slot overrides win over C# defaults; stored slots are write receipts only.
-        var (stored, storeError) = ReadStore(doc);
+        var (blob, read, replacement) = ReadStoreState(doc, reportReplacement: preview);
+        var stored = read.Value;
         var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve();
         var schemas = new Dictionary<Guid, Schema?> {
             [SpecificCoefficient] = Schema(SpecificCoefficient),
@@ -120,12 +128,13 @@ public static class DuctApplier {
         var next = Compose(request, stored, items, now, slots, storeRevision + 1);
         // The store entries this write changes against the model's store, one line each, from the same merged next
         // store the write lands, so plan and apply review one truth (they land with the store).
-        items.AddRange(StoreEntries(stored, next));
-        var store = new Item(null, "store", stored is null ? storeError is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
+        items.AddRange(StoreEntries(doc, stored, next));
+        var store = new Item(null, "store", stored is null ? read.Refusal is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
             After = $"revision {storeRevision + 1}"
         };
-        if (storeError is not null) store.Refuse($"the model's {DuctLossStore.Owner.Name} is unreadable ({storeError}); refusing to overwrite it");
-        else if (UnbackedProvenance(request, stored) is { } unbacked) store.Refuse(unbacked);
+        if (!preview && read.Refusal is not null && request.Replacement is null)
+            store.Refuse("Preview before replacing the unreadable duct loss store.");
+        else if (UnbackedProvenance(request, stored, items) is { } unbacked) store.Refuse(unbacked);
         else if (request.Store.WorkRevision < storeRevision)
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
         items.Add(store);
@@ -135,11 +144,11 @@ public static class DuctApplier {
             foreach (var i in items.Where(i => i.Outcome == "planned"))
                 i.Refuse("not written: a shared type parameter in this apply would move units it does not name (see the refused equipment)");
 
-        if (store.Outcome == "planned" && SameStoreContent(stored, next))
+        if (store.Outcome == "planned" && request.Replacement is null && SameStoreContent(stored, next))
             store.Unchanged($"revision {storeRevision}");
 
         if (preview)
-            return Result(true, items, null, storeRevision) with { Worksharing = Borrows(doc, items) };
+            return Result(true, items, null, storeRevision) with { Worksharing = Borrows(doc, items), Replacement = replacement };
         if (items.All(i => i.Outcome != "planned"))
             return Result(false, items, null, storeRevision);
         if (store.Outcome == "refused") {
@@ -152,11 +161,17 @@ public static class DuctApplier {
         store.Write = () => {
             // Composed at write time: terminals and equipment ran first in this stage, so a refused write is not recorded.
             next = Compose(request, stored, items, now, slots, storeRevision + 1);
-            if (SameStoreContent(stored, next)) {
+            if (request.Replacement is null && SameStoreContent(stored, next)) {
                 store.Outcome = "unchanged";
                 return $"revision {storeRevision}";
             }
-            _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData());
+            if (request.Replacement is { } replacing) {
+                _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData(), replacing);
+            } else {
+                if (!string.Equals(OwnerBlobStore.Read(doc, DuctLossStore.Owner).Raw, blob.Raw, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The duct loss store changed after planning; re-read ducts.snapshot.");
+                _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData());
+            }
             return $"revision {next.WorkRevision}";
         };
 
@@ -185,7 +200,7 @@ public static class DuctApplier {
     ///     The slots and rulings this write changes against the model's store: a slot whose name moves, a verdict or a
     ///     role added, changed or taken back. Each writes nothing itself; the store item carries them.
     /// </summary>
-    private static IEnumerable<Item> StoreEntries(DuctLossStore? stored, DuctLossStore next) {
+    private static IEnumerable<Item> StoreEntries(Document doc, DuctLossStore? stored, DuctLossStore next) {
         Item Entry(long? id, string kind, string? key, string before, string after) =>
             new(id, kind, before) { Key = key, After = after, Write = () => after };
         // A model with no record held no slot: "none", never the C# defaults (Manual D #5 defect 8 read
@@ -206,23 +221,32 @@ public static class DuctApplier {
                 yield return Entry(null, "slot", name, before ?? "none", after ?? "none");
         // Every map, per key, against the merged next store: an entry is removed only by an explicit delete, never
         // by omission. Values are shown without their timestamps, so a plan and its apply disclose the same change.
-        foreach (var e in Changes("verdict", stored?.Verdicts, next.Verdicts, v => v.Verdict, FirstId, k => k)) yield return e;
-        foreach (var e in Changes("role", stored?.Roles, next.Roles, v => v.Role, k => k, _ => null)) yield return e;
-        foreach (var e in Changes("store-rule", stored?.Rules, next.Rules, v => v.Table ?? "none", _ => null, k => k)) yield return e;
-        foreach (var e in Changes("store-instance", stored?.Instances, next.Instances, v => $"{v.Table ?? "no table"} c={v.Coefficient:0.#####}", k => k, _ => null)) yield return e;
-        foreach (var e in Changes("store-drop", stored?.Terminals, next.Terminals, v => $"{v.InWg:0.#####} in-wg ({v.Source ?? "no source"})", k => k, _ => null)) yield return e;
-        foreach (var e in Changes("store-terminal-flow", stored?.TerminalFlows, next.TerminalFlows, FlowReceipt, k => k, _ => null)) yield return e;
-        foreach (var e in Changes("store-equipment-flow", stored?.EquipmentFlows, next.EquipmentFlows, FlowReceipt, k => k, _ => null)) yield return e;
+        foreach (var e in Changes("verdict", stored?.Verdicts, next.Verdicts, v => v.Verdict, FirstId)) yield return e;
+        foreach (var e in Changes("role", stored?.Roles, next.Roles, v => v.Role)) yield return e;
+        foreach (var e in Changes("store-rule", stored?.Rules, next.Rules, v => v.Table ?? "none")) yield return e;
+        foreach (var e in Changes("store-instance", stored?.Instances, next.Instances, v => $"{v.Table ?? "no table"} c={v.Coefficient:0.#####}")) yield return e;
+        foreach (var e in Changes("store-drop", stored?.Terminals, next.Terminals, v => $"{v.InWg:0.#####} in-wg ({v.Source ?? "no source"})")) yield return e;
+        foreach (var e in Changes("store-terminal-flow", stored?.TerminalFlows, next.TerminalFlows, FlowReceipt)) yield return e;
+        foreach (var e in Changes("store-equipment-flow", stored?.EquipmentFlows, next.EquipmentFlows, FlowReceipt)) yield return e;
 
         static string FlowReceipt(DuctFlowRecord v) => $"{v.Cfm:0.###} cfm to {v.Parameter ?? "unknown parameter"} ({v.Source ?? "no source"})";
 
-        IEnumerable<Item> Changes<TKey, TValue>(string kind, IReadOnlyDictionary<TKey, TValue>? had, IReadOnlyDictionary<TKey, TValue> will,
-            Func<TValue, string> show, Func<TKey, long?> id, Func<TKey, string?> key) where TKey : notnull {
-            had ??= new Dictionary<TKey, TValue>();
-            foreach (var k in had.Keys.Union(will.Keys).OrderBy(k => k)) {
-                var before = had.TryGetValue(k, out var b) ? show(b) : "none";
-                var after = will.TryGetValue(k, out var a) ? show(a) : "none";
-                if (before != after) yield return Entry(id(k), kind, key(k), before, after);
+        IEnumerable<Item> Changes<TValue>(string kind, IReadOnlyDictionary<string, TValue>? had, IReadOnlyDictionary<string, TValue> will,
+            Func<TValue, string> show, Func<string, long?>? semanticId = null) {
+            had ??= new Dictionary<string, TValue>();
+            foreach (var key in had.Keys.Union(will.Keys).OrderBy(key => key, StringComparer.Ordinal)) {
+                var before = had.TryGetValue(key, out var b) ? show(b) : "none";
+                var after = will.TryGetValue(key, out var a) ? show(a) : "none";
+                if (before == after) continue;
+                if (kind is "verdict" or "store-rule") {
+                    yield return Entry(semanticId?.Invoke(key), kind, key, before, after);
+                    continue;
+                }
+
+                Element? target;
+                try { target = doc.GetElement(key); }
+                catch (Exception ex) when (DuctSnapshots.IsRevitFailure(ex) || ex is ArgumentException) { target = null; }
+                yield return Entry(target?.Id.Value(), kind, null, before, after) with { UniqueId = target?.UniqueId ?? key };
             }
         }
     }
@@ -231,17 +255,18 @@ public static class DuctApplier {
     ///     Provenance records only writes that land (Compose). A request entry that changes stored provenance with no
     ///     write of its id in this request would be silently dropped, so it is named and the store refuses instead.
     /// </summary>
-    private static string? UnbackedProvenance(DuctApplyRequest request, DuctLossStore? stored) {
+    private static string? UnbackedProvenance(DuctApplyRequest request, DuctLossStore? stored, List<Item> items) {
         var asked = request.Store;
-        IEnumerable<string> Unbacked<TValue>(string map, IReadOnlyDictionary<long, TValue>? had, IReadOnlyDictionary<long, TValue>? want,
-            IEnumerable<long> written, Func<TValue, string> show) =>
-            (want ?? new Dictionary<long, TValue>())
+        IEnumerable<string?> Targets(params string[] kinds) => items.Where(i => kinds.Contains(i.Kind)).Select(i => i.UniqueId);
+        IEnumerable<string> Unbacked<TValue>(string map, IReadOnlyDictionary<string, TValue>? had, IReadOnlyDictionary<string, TValue>? want,
+            IEnumerable<string?> written, Func<TValue, string> show) =>
+            (want ?? new Dictionary<string, TValue>())
             .Where(kv => !written.Contains(kv.Key) && (had is null || !had.TryGetValue(kv.Key, out var h) || show(h) != show(kv.Value)))
             .Select(kv => $"{map} {kv.Key}");
-        var unbacked = Unbacked("instances", stored?.Instances, asked.Instances, (request.Fittings ?? []).Select(w => w.Id), v => $"{v.Table}|{v.Inputs}|{v.Coefficient:R}")
-            .Concat(Unbacked("terminals", stored?.Terminals, asked.Terminals, (request.Terminals ?? []).Concat(request.Components ?? []).Select(w => w.Id), v => $"{v.InWg:R}|{v.Source}"))
-            .Concat(Unbacked("terminalFlows", stored?.TerminalFlows, asked.TerminalFlows, (request.TerminalFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}|{v.Parameter}"))
-            .Concat(Unbacked("equipmentFlows", stored?.EquipmentFlows, asked.EquipmentFlows, (request.EquipmentFlows ?? []).Select(w => w.Id), v => $"{v.Cfm:R}|{v.Source}|{v.Parameter}"))
+        var unbacked = Unbacked("instances", stored?.Instances, asked.Instances, Targets("fitting"), v => $"{v.Table}|{v.Inputs}|{v.Coefficient:R}")
+            .Concat(Unbacked("terminals", stored?.Terminals, asked.Terminals, Targets("terminal", "component"), v => $"{v.InWg:R}|{v.Source}"))
+            .Concat(Unbacked("terminalFlows", stored?.TerminalFlows, asked.TerminalFlows, Targets("terminal-flow"), v => $"{v.Cfm:R}|{v.Source}|{v.Parameter}"))
+            .Concat(Unbacked("equipmentFlows", stored?.EquipmentFlows, asked.EquipmentFlows, Targets("equipment-flow"), v => $"{v.Cfm:R}|{v.Source}|{v.Parameter}"))
             .ToList();
         return unbacked.Count == 0 ? null
             : $"the request authors provenance with no write of its own ({string.Join(", ", unbacked)}); provenance records only writes that land, so stage the write or delete the entry";
@@ -602,18 +627,24 @@ public static class DuctApplier {
         DuctParameterSlots slots, int revision) {
         var asked = request.Store;
         var deletes = request.StoreDeletes ?? new DuctStoreDeletes();
-        bool Lands(string kind, long id) => items.Any(i => i.Kind == kind && i.Id == id && i.Outcome is "planned" or "unchanged" or "written");
+        var landed = items.Where(i => WritingKinds.Contains(i.Kind) && i.Id is not null && i.UniqueId is not null
+            && i.Outcome is "planned" or "unchanged" or "written")
+            .ToDictionary(i => (i.Kind, i.Id!.Value), i => i.UniqueId!);
         var rules = DuctLossStore.Overlay(stored?.Rules, asked.Rules, deletes.Rules, StringComparer.Ordinal);
         var instances = DuctLossStore.Overlay(stored?.Instances, null, deletes.Instances);
-        foreach (var w in (request.Fittings ?? []).Where(w => Lands("fitting", w.Id)))
-            instances[w.Id] = new DuctInstanceRecord(w.Table, w.Inputs, w.Coefficient, now);
+        foreach (var w in request.Fittings ?? [])
+            if (landed.TryGetValue(("fitting", w.Id), out var key)) instances[key] = new DuctInstanceRecord(w.Table, w.Inputs, w.Coefficient, now);
         var drops = DuctLossStore.Overlay(stored?.Terminals, null, deletes.Terminals);
-        foreach (var w in (request.Terminals ?? []).Where(w => Lands("terminal", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
-        foreach (var w in (request.Components ?? []).Where(w => Lands("component", w.Id))) drops[w.Id] = new DuctDropRecord(w.InWg, w.Source, now);
+        foreach (var w in request.Terminals ?? [])
+            if (landed.TryGetValue(("terminal", w.Id), out var key)) drops[key] = new DuctDropRecord(w.InWg, w.Source, now);
+        foreach (var w in request.Components ?? [])
+            if (landed.TryGetValue(("component", w.Id), out var key)) drops[key] = new DuctDropRecord(w.InWg, w.Source, now);
         var terminalFlows = DuctLossStore.Overlay(stored?.TerminalFlows, null, deletes.TerminalFlows);
-        foreach (var w in (request.TerminalFlows ?? []).Where(w => Lands("terminal-flow", w.Id))) terminalFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now, w.Slot);
+        foreach (var w in request.TerminalFlows ?? [])
+            if (landed.TryGetValue(("terminal-flow", w.Id), out var key)) terminalFlows[key] = new DuctFlowRecord(w.Cfm, w.Source, now, w.Slot);
         var equipmentFlows = DuctLossStore.Overlay(stored?.EquipmentFlows, null, deletes.EquipmentFlows);
-        foreach (var w in (request.EquipmentFlows ?? []).Where(w => Lands("equipment-flow", w.Id))) equipmentFlows[w.Id] = new DuctFlowRecord(w.Cfm, w.Source, now, slots.FanFlow);
+        foreach (var w in request.EquipmentFlows ?? [])
+            if (landed.TryGetValue(("equipment-flow", w.Id), out var key)) equipmentFlows[key] = new DuctFlowRecord(w.Cfm, w.Source, now, slots.FanFlow);
         var unknown = new Dictionary<string, Newtonsoft.Json.Linq.JToken>(stored?.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>());
         foreach (var kv in asked.Unknown ?? new Dictionary<string, Newtonsoft.Json.Linq.JToken>()) unknown[kv.Key] = kv.Value;
         return new DuctLossStore {

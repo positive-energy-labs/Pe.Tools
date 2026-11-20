@@ -8,6 +8,8 @@ import {
 import { type DuctAssumption } from "@pe/ducts-contract/system-work";
 import { neutralFansWork } from "@pe/fans-contract/fans";
 
+import { decode } from "@pe/agent-contracts";
+
 import { elementSubject, workElementId } from "./work-subject.ts";
 import type { DuctSnapshot } from "./types.ts";
 
@@ -35,6 +37,11 @@ const keeps = (verdict: string | undefined | null) =>
 export const storedRuling = (store: Store, segment: RulingSegment, key: string) =>
   (segment === "assumptions" ? store?.verdicts?.[key]?.verdict : store?.roles?.[key]?.role) ?? null;
 
+const workRoleKey = (snapshot: Pick<DuctSnapshot, "nodes" | "segments">, key: string) => {
+  const id = workElementId(snapshot, key);
+  return [...snapshot.nodes, ...snapshot.segments].find((element) => element.id === id)!.uniqueId;
+};
+
 const EMPTY = ductsDesign(null, neutralFansWork);
 const memo = new WeakMap<object, WeakMap<object, WeakMap<object, DuctsDesign>>>();
 const NO_STORE = {};
@@ -47,7 +54,7 @@ export function withStoredRulings(
 ): DuctsDesign | null {
   const verdicts = Object.entries(store?.verdicts ?? {});
   const roles = Object.entries(store?.roles ?? {}).flatMap(([id, value]) => {
-    const node = snapshot.nodes.find((n) => n.id === Number(id));
+    const node = snapshot.nodes.find((n) => n.uniqueId === id);
     return node ? [[elementSubject(node), value] as const] : [];
   });
   const deletes = Object.values(doc?.assumptions ?? {}).some((cell) => cell.edit?.delete);
@@ -120,7 +127,7 @@ export function pendingRulings(
   }
   for (const [key, cell] of Object.entries(doc?.roles ?? {})) {
     if (!cell.edit) continue;
-    const from = roleOf(storedRuling(store, "roles", String(workElementId(snapshot, key))));
+    const from = roleOf(storedRuling(store, "roles", workRoleKey(snapshot, key)));
     const to = roleOf(cell.edit.value.role);
     if (to !== from) out.push({ segment: "roles", key, from, to });
   }
@@ -157,7 +164,7 @@ export function storeRulings(
   );
   const roles = Object.fromEntries(
     Object.entries(edit.roles)
-      .map(([key, value]) => [String(workElementId(snapshot, key)), value] as const)
+      .map(([key, value]) => [workRoleKey(snapshot, key), value] as const)
       .flatMap(([id, { role }]) =>
         isRole(role)
           ? [
@@ -182,7 +189,12 @@ export function rulingRung(
   key: string,
   choice: string | null,
 ): { value: unknown } | { delete: true } | "unstage" {
-  const stored = storedRuling(store, segment, key);
+  const ref = segment === "roles" ? decode(key) : null;
+  const stored = storedRuling(
+    store,
+    segment,
+    ref?.ok && ref.value.keyKind === "UniqueId" ? ref.value.key : key,
+  );
   const held = segment === "roles" ? roleOf(stored) : stored;
   if (choice === held) return "unstage";
   if (choice === null) return segment === "assumptions" ? { delete: true } : "unstage";
@@ -219,7 +231,7 @@ export function rulingsRequest(
     equipment: [],
     terminalFlows: [],
     equipmentFlows: [],
-    store: { version: 2, workRevision: store?.workRevision ?? 0, appliedAt, rules, verdicts },
+    store: { version: 3, workRevision: store?.workRevision ?? 0, appliedAt, rules, verdicts },
     // The native store overlays per key (K3): a verdict Work takes back is removed only by naming it here.
     storeDeletes: {
       verdicts: Object.keys(store?.verdicts ?? {}).filter((key) => !(key in verdicts)),

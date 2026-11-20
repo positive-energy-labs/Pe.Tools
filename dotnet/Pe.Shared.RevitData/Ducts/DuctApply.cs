@@ -18,7 +18,8 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctFlowWrite> TerminalFlows,
     IReadOnlyList<DuctFlowWrite> EquipmentFlows,
     DuctLossStore Store,
-    DuctStoreDeletes? StoreDeletes = null);
+    DuctStoreDeletes? StoreDeletes = null,
+    OwnerBlobReplacement? Replacement = null);
 
 /// <summary>
 ///     Store keys this write removes. The store is overlaid per key: a key the request omits keeps its stored entry,
@@ -26,12 +27,12 @@ public sealed record DuctApplyRequest(
 /// </summary>
 public sealed record DuctStoreDeletes {
     public List<string> Rules { get; init; } = [];
-    public List<long> Instances { get; init; } = [];
-    public List<long> Terminals { get; init; } = [];
-    public List<long> TerminalFlows { get; init; } = [];
-    public List<long> EquipmentFlows { get; init; } = [];
+    public List<string> Instances { get; init; } = [];
+    public List<string> Terminals { get; init; } = [];
+    public List<string> TerminalFlows { get; init; } = [];
+    public List<string> EquipmentFlows { get; init; } = [];
     public List<string> Verdicts { get; init; } = [];
-    public List<long> Roles { get; init; } = [];
+    public List<string> Roles { get; init; } = [];
 }
 
 /// <summary>Results are the host engine's priced legs, including their velocity-pressure basis. Table and Inputs are provenance only.</summary>
@@ -80,7 +81,7 @@ public sealed record DuctFlowWrite(long Id, double Cfm, string? Source, string? 
 
 /// <summary>
 ///     StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
-///     workshared document: what the commit will borrow.
+///     workshared document: what the commit will borrow. Replacement is set on preview when the old store is unreadable.
 /// </summary>
 public sealed record DuctApplyResult(
     bool PreviewOnly,
@@ -88,13 +89,15 @@ public sealed record DuctApplyResult(
     DuctApplyCounts Counts,
     IReadOnlyList<DuctSystem>? SystemsAfter,
     int StoreRevision,
-    WorksharingDisclosure? Worksharing = null);
+    WorksharingDisclosure? Worksharing = null,
+    OwnerBlobReplacement? Replacement = null);
 
 /// <summary>
 ///     One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
 ///     store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
 ///     element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
-///     (already holds the value). Before and After are display text; "none" is no entry. ElementLabel and UniqueId identify an extant target;
+///     (already holds the value). Before and After are display text; "none" is no entry. UniqueId is the durable key.
+///     Id and ElementLabel identify an extant native target;
 ///     Parameter and Scope name its native setting and owner. Changes expands a target into parameter review rows without
 ///     multiplying execution targets or counts. ReportedPressureDropInWg is effective pressure, not a stored setting.
 /// </summary>
@@ -132,25 +135,25 @@ public sealed record DuctRoleRecord(string Role, DateTimeOffset RuledAt);
 ///     Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
 ///     `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
 ///     carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
-///     v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
-///     finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-///     edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
+///     Element maps use Revit UniqueId. Rules use authored rule keys and Verdicts use issue or finding IDs.
+///     Older envelopes are unreadable. Only explicit replacement can supersede one.
+///
 /// </summary>
 public sealed record DuctLossStore {
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     public static readonly OwnerDescriptor Owner = new("duct-losses", CurrentVersion,
-        new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"), "_PE_DuctLosses", "Versioned Pe.Tools duct loss provenance (ducts.apply).");
+        new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"), "_PE_DuctLosses", "Versioned Pe.Tools duct loss provenance (ducts.apply).") { ValidateData = read => Read(read).Refusal };
 
     /// <summary>On the wire only. In the model the version is the envelope's, so the stored data holds none.</summary>
     public int Version { get; init; } = CurrentVersion;
     public Dictionary<string, DuctRuleChoice> Rules { get; init; } = new(StringComparer.Ordinal);
-    public Dictionary<long, DuctInstanceRecord> Instances { get; init; } = new();
-    public Dictionary<long, DuctDropRecord> Terminals { get; init; } = new();
-    public Dictionary<long, DuctFlowRecord> TerminalFlows { get; init; } = new();
-    public Dictionary<long, DuctFlowRecord> EquipmentFlows { get; init; } = new();
+    public Dictionary<string, DuctInstanceRecord> Instances { get; init; } = new();
+    public Dictionary<string, DuctDropRecord> Terminals { get; init; } = new();
+    public Dictionary<string, DuctFlowRecord> TerminalFlows { get; init; } = new();
+    public Dictionary<string, DuctFlowRecord> EquipmentFlows { get; init; } = new();
     public Dictionary<string, DuctVerdictRecord> Verdicts { get; init; } = new(StringComparer.Ordinal);
-    public Dictionary<long, DuctRoleRecord> Roles { get; init; } = new();
+    public Dictionary<string, DuctRoleRecord> Roles { get; init; } = new();
     public DuctParameterSlotOverrides? Slots { get; init; }
     public int WorkRevision { get; init; }
     public DateTimeOffset? AppliedAt { get; init; }
@@ -188,7 +191,12 @@ public sealed record DuctLossStore {
         if (data.ContainsKey("version"))
             throw new InvalidOperationException("duct loss store data holds a version; the version belongs to the envelope");
         try {
-            return data.ToObject<DuctLossStore>(RevitDataJson.CreateStoredSerializer())!;
+            var store = data.ToObject<DuctLossStore>(RevitDataJson.CreateStoredSerializer())!;
+            var keys = store.Instances.Keys.Concat(store.Terminals.Keys).Concat(store.TerminalFlows.Keys)
+                .Concat(store.EquipmentFlows.Keys).Concat(store.Roles.Keys);
+            if (keys.Any(key => string.IsNullOrEmpty(key) || long.TryParse(key, out _)))
+                throw new InvalidOperationException("duct loss store element keys must be Revit UniqueIds");
+            return store;
         } catch (JsonException ex) {
             throw new InvalidOperationException($"duct loss store data is not valid: {ex.Message}");
         }

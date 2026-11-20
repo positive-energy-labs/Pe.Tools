@@ -36,7 +36,7 @@ public sealed class SystemRegistryTests
     {
         var read = Read(blob);
         Assert.That(read.Value, Is.Null);
-        Assert.That(read.Refusal, Does.Contain("refused and kept"));
+        Assert.That(read.Refusal, Does.Contain("unreadable"));
     }
 
     [TestCase(null)]

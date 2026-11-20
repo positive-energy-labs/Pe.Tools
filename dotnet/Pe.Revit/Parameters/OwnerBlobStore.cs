@@ -1,5 +1,8 @@
+using Pe.Revit.Extensions.ProjDocument;
 using Newtonsoft.Json.Linq;
+using Pe.Shared.Product;
 using Pe.Shared.RevitData.Serialization;
+using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Parameters;
 
@@ -10,11 +13,13 @@ namespace Pe.Revit.Parameters;
 ///     (the owner binds its parameter to the element's category first). Extensible Storage is banned; the duct
 ///     per-fitting results entity is the one exception, because Revit's pressure-drop server API requires it.
 ///     <para>
-///         Every write is inside the caller's transaction, refuses a stored blob this build cannot read (ADR 0026 D4:
-///         unknown is not old, so its bytes are never overwritten), and reads the written value back exactly.
+///         Every write is inside the caller's transaction, keeps unreadable bytes locally and posts a notice before
+///         replacing them, and reads the written value back exactly.
 ///     </para>
 /// </summary>
 public static class OwnerBlobStore {
+    internal static readonly AsyncLocal<string?> RecoveryStateOverride = new();
+
     public static SharedDefinitionSpec Spec(OwnerDescriptor owner) =>
         new(owner.Name, SpecTypeId.String.Text, Description: owner.Description, Guid: owner.Guid, Visible: false, UserModifiable: false);
 
@@ -28,23 +33,61 @@ public static class OwnerBlobStore {
 
     /// <summary>Binds on first use. False when the value is already there.</summary>
     public static bool Write(Document document, OwnerDescriptor owner, JObject data) {
+        RequireTransaction(document, owner);
+        return Write(EnsureOnProjectInformation(document, owner), document, owner, data);
+    }
+
+    /// <summary>Replaces a sealed record. A missing or changed parameter refuses before binding or recovery.</summary>
+    public static bool Write(Document document, OwnerDescriptor owner, JObject data, OwnerBlobReplacement replacing) {
+        if (replacing is null) throw new ArgumentNullException(nameof(replacing));
+        RequireTransaction(document, owner);
+        var parameter = document.ProjectInformation?.get_Parameter(owner.Guid)
+            ?? throw new InvalidOperationException($"The stored '{owner.Name}' disappeared since replacement was planned.");
+        return Write(parameter, document, owner, data, replacing);
+    }
+
+    /// <summary>Saves an owner that has no preview. The caller's transaction owns the read and the write.</summary>
+    public static bool WriteWithoutPreview(Document document, OwnerDescriptor owner, JObject data) {
+        RequireTransaction(document, owner);
+        return Read(document, owner).Replacement is { } replacing
+            ? Write(document, owner, data, replacing)
+            : Write(document, owner, data);
+    }
+
+    private static void RequireTransaction(Document document, OwnerDescriptor owner) {
         if (!document.IsModifiable)
             throw new InvalidOperationException($"'{owner.Name}' writes require an open Revit transaction.");
-        return Write(EnsureOnProjectInformation(document, owner), owner, data);
     }
 
     /// <summary>False when the value is already there. Throws when the owner's parameter is not bound on the element.</summary>
     public static bool Write(Element element, OwnerDescriptor owner, JObject data) =>
-        Write(element.get_Parameter(owner.Guid)
-              ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first."),
-            owner, data);
+        Write(RequireParameter(element, owner), element.Document, owner, data);
 
-    private static bool Write(Parameter parameter, OwnerDescriptor owner, JObject data) {
-        // The refusal to write over a blob this build cannot read is OwnerBlob.Replace's, where a test can reach it.
-        if (OwnerBlob.Replace(owner, parameter.AsString(), data) is not { } text)
-            return false;
+    /// <summary>Replaces a sealed unreadable record on an already bound element.</summary>
+    public static bool Write(Element element, OwnerDescriptor owner, JObject data, OwnerBlobReplacement replacing) {
+        if (replacing is null) throw new ArgumentNullException(nameof(replacing));
+        RequireTransaction(element.Document, owner);
+        return Write(RequireParameter(element, owner), element.Document, owner, data, replacing);
+    }
+
+    private static Parameter RequireParameter(Element element, OwnerDescriptor owner) =>
+        element.get_Parameter(owner.Guid)
+        ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first.");
+
+    private static bool Write(Parameter parameter, Document document, OwnerDescriptor owner, JObject data,
+        OwnerBlobReplacement? replacing = null) {
+        var raw = parameter.AsString();
+        var stored = OwnerBlob.Decode(owner, raw);
+        if (OwnerBlob.Replace(stored, data, (replacement, replacedRaw) => {
+            if (parameter.IsReadOnly)
+                throw new InvalidOperationException($"'{owner.Name}' is read-only.");
+            StoredFile.KeepModelRecord(RecoveryStateOverride.Value ?? ProductRuntimeLayout.Current.State.RootPath,
+                replacement.Owner, document.GetDocumentKey(), replacedRaw, replacement.Reason);
+        }, replacing) is not { } text) return false;
         if (parameter.IsReadOnly)
             throw new InvalidOperationException($"'{owner.Name}' is read-only.");
+        if (!string.Equals(parameter.AsString(), raw, StringComparison.Ordinal))
+            throw new InvalidOperationException($"'{owner.Name}' changed before replacement.");
         if (!parameter.Set(text))
             throw new InvalidOperationException($"Revit rejected the '{owner.Name}' value.");
         if (!string.Equals(parameter.AsString(), text, StringComparison.Ordinal))
