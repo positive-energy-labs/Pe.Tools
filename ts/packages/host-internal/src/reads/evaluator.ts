@@ -131,7 +131,7 @@ export interface InputPort {
   readonly reuse?: {
     readonly target: DocumentRef;
     readonly scope: string;
-    readonly ready: () => Promise<boolean>;
+    readonly ready: (nativeKeys: readonly string[]) => Promise<boolean>;
     readonly current: () => boolean;
   };
 }

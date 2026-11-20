@@ -17,9 +17,9 @@ import {
 } from "@pe/host-internal/reads/evaluator";
 import { startFlight, type Flight, type ReadLease } from "./read-ownership.ts";
 import { ReadBusy } from "@pe/host-internal/read-errors";
-import type { QueueHolder, ReadingLoad } from "@pe/agent-contracts/value";
-import { nativeArgs } from "@pe/agent-contracts/native-output-read";
+import type { QueueHolder } from "@pe/agent-contracts/value";
 import type { ReadingDemand } from "@pe/host-internal/native-read";
+import { CompletedReads } from "./completed-reads.ts";
 
 export interface Publication<T> {
   readonly key: string;
@@ -56,26 +56,6 @@ type Admission = {
   holderVersion?: number;
 };
 type HolderListener = (generation: number, holder: QueueHolder, version: number) => void;
-type Completed = {
-  definition: object;
-  value: Value<unknown>;
-  basis: readonly InputRevision[];
-  bytes: number;
-};
-
-// Roster reads only ViewPlan and Level element metadata. Exports also depend on temporary
-// graphics state, for which the host has no mark. Unknown leaves have no reuse proof either.
-const reusableInput = ({ name, args }: InputRevision, target: unknown) => {
-  if (name === "document-mark") return fingerprint(args) === fingerprint(target);
-  if (name !== "native") return false;
-  const native = nativeArgs.safeParse(args);
-  return (
-    native.success &&
-    native.data.key === "rooms.roster" &&
-    native.data.target.kind === "document" &&
-    fingerprint(native.data.target.ref) === fingerprint(target)
-  );
-};
 /** How a publication starts its shared read. Pass `(run) => ownership.flight(owner, run)` to bind it to a `ReadOwner`. */
 export type StartFlight = <T>(run: (signal: AbortSignal) => Promise<T>) => Flight<T>;
 /** One entry per (read,args), one generation per client subscription; no client acknowledgement. */
@@ -87,8 +67,7 @@ export class Publications {
   private readonly admissions = new Map<string, Admission>();
   private readonly holderListeners = new Map<string, Set<HolderListener>>();
   private holderVersion = 0;
-  private readonly completed = new Map<string, Completed>();
-  private completedBytes = 0;
+  private readonly completed = new CompletedReads();
   private readonly retainedBytes = new Map<string, number>();
   private bytes = 0;
   private readonly keys = new Map<
@@ -135,23 +114,12 @@ export class Publications {
     this.holderListeners.set(id, listeners);
     listeners.add(notify);
     const active = this.admissions.get(id);
-    if (active?.holder !== undefined)
-      notify(active.generation, active.holder, active.holderVersion!);
+    if (active?.holder !== undefined && active.holderVersion !== undefined)
+      notify(active.generation, active.holder, active.holderVersion);
     return () => {
       listeners.delete(notify);
       if (!listeners.size) this.holderListeners.delete(id);
     };
-  }
-  private keepCompleted(key: string, entry: Completed) {
-    this.completedBytes -= this.completed.get(key)?.bytes ?? 0;
-    this.completed.delete(key);
-    this.completed.set(key, entry);
-    this.completedBytes += entry.bytes;
-    while (this.completed.size > 32 || this.completedBytes > this.byteLimit) {
-      const oldest = this.completed.keys().next().value!;
-      this.completedBytes -= this.completed.get(oldest)!.bytes;
-      this.completed.delete(oldest);
-    }
   }
   history() {
     return immutable(
@@ -360,7 +328,7 @@ export class Publications {
   async publish<I>(
     id: string,
     generation: number,
-    definition: Read<I, unknown> & { readonly load?: ReadingLoad },
+    definition: Read<I, unknown>,
     args: I,
     port: InputPort,
     keep?: (publication: Publication<unknown>) => Promise<() => void>,
@@ -421,13 +389,15 @@ export class Publications {
       ]);
       const reuse = load?.freshBy?.[0] === "document-mark" ? port.reuse : undefined;
       const cacheKey = reuse ? fingerprint([key, reuse.target, reuse.scope]) : undefined;
-      const candidate = cacheKey ? this.completed.get(cacheKey) : undefined;
+      const candidate = cacheKey ? this.completed.get(cacheKey, definition) : undefined;
       const matches = (basis: readonly InputRevision[]) =>
         reuse?.current() &&
         basis.every(({ name, args, revision }) => port.revision(name, args) === revision);
-      const ready = candidate?.definition === definition && (await reuse!.ready());
+      const cached =
+        candidate && reuse && (await reuse.ready(candidate.nativeKeys)) && matches(candidate.basis)
+          ? candidate
+          : undefined;
       if (!mine()) return obsolete();
-      const cached = ready && matches(candidate.basis) ? candidate : undefined;
       let flight = cached ? undefined : owner.flights.get(flightKey);
       // One lease per subscriber. A retiring flight refuses the join, and the read starts again.
       let lease: ReadLease | undefined;
@@ -446,6 +416,7 @@ export class Publications {
       const demand = { current: () => mine() && !pending.superseded };
       pending.demands.add(demand);
       if (!flight && !cached) {
+        const retries = slot.published?.value ? 0 : 2;
         const evaluation = (signal: AbortSignal) => {
           const live = {
             current: () => {
@@ -480,7 +451,7 @@ export class Publications {
               return settle(left - 1);
             }
           };
-          return settle(slot!.published?.value ? 0 : 2).then((value) => {
+          return settle(retries).then((value) => {
             const version = ++owner.version;
             return immutable({ key, generation, version, value, state: "current" as const });
           });
@@ -500,7 +471,7 @@ export class Publications {
       slot.lease?.release();
       slot.lease = lease;
       try {
-        const result: Publication<unknown> = cached
+        const result: Publication<unknown> | undefined = cached
           ? {
               key,
               generation,
@@ -508,16 +479,18 @@ export class Publications {
               value: cached.value,
               state: "current",
             }
-          : await flight!.result;
+          : await flight?.result;
         if (!mine()) return obsolete();
+        if (!result?.value) throw Error("Completed read has no Value");
+        const { value } = result;
         const published = immutable({ ...result, generation });
         const bytes = Buffer.byteLength(JSON.stringify(published));
         const nextBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
         if (nextBytes > this.byteLimit)
           throw Error("Published Values exceed the shared byte bound; old Value retained");
         const dependencies = keep
-          ? published
-              .value!.trace.filter((trace) => trace.outcome === "answered")
+          ? value.trace
+              .filter((trace) => trace.outcome === "answered")
               .map((trace) => ({ trace, revision: port.revision(trace.name, trace.args) }))
           : [];
         const commit = await keep?.(published);
@@ -544,24 +517,17 @@ export class Publications {
         this.retainedBytes.set(id, bytes);
         slot.inputRaced = false;
         slot.published = published;
-        const value = published.value!;
-        if (
-          cacheKey &&
-          (cached ||
-            (matches(pending.basis) &&
-              pending.basis.some(({ name }) => name === "document-mark") &&
-              pending.basis.every((input) => reusableInput(input, reuse!.target)) &&
-              value.trace.every(({ outcome }) => outcome === "answered") &&
-              !value.coverage.refused.length &&
-              !value.coverage.unknown.length))
-        ) {
-          this.keepCompleted(cacheKey, {
+        const basis = cached?.basis ?? pending.basis;
+        if (reuse && cacheKey && matches(basis))
+          this.completed.keep(
+            cacheKey,
             definition,
             value,
-            basis: cached?.basis ?? pending.basis,
+            basis,
+            reuse.target,
             bytes,
-          });
-        }
+            this.byteLimit,
+          );
         this.pruneKeys();
         commit?.();
         this.notify(id);

@@ -15,7 +15,7 @@ import {
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { nativeAxes, type CatalogAxes } from "./catalog.ts";
 import type { SubjectKeyKind } from "./subject-ref.ts";
-import { publicationSchema, type Publication } from "./value.ts";
+import { publicationSchema, type Publication, type ReadingLoad } from "./value.ts";
 
 import { effects, mint, type minted } from "./command-handle.ts";
 export * from "./command-handle.ts";
@@ -32,6 +32,7 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
   /** Dotted collection path to its row key; an unnamed collection is unkeyed. */
   readonly keyedBy: Readonly<Record<string, RowKey>>;
   readonly demand?: "mount" | "explicit";
+  readonly load?: ReadingLoad;
 }
 /** A read handle with its input and data erased: what a registry or a `uses` list holds. */
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
@@ -128,6 +129,7 @@ export function contract<
     subject?: CatalogAxes["subject"];
     keyedBy?: Readonly<Record<string, RowKey>>;
     demand?: "mount" | "explicit";
+    load?: ReadingLoad;
   },
 ): ReadContract<K, I, D> {
   const handles = def.uses.map((use) => (typeof use === "string" ? native(use) : use));
@@ -160,6 +162,7 @@ export function contract<
     },
     keyedBy: def.keyedBy ?? {},
     ...(def.demand ? { demand: def.demand } : {}),
+    ...(def.load && { load: def.load }),
   });
   used.set(
     made,
