@@ -3,6 +3,8 @@ import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import type { Machine, ReadingRequest } from "@pe/agent-contracts";
 import { useEnvironmentReading } from "../host/environment-state";
+// The hook loads the seeds lazily. Load them here, so the waits below never time their transform.
+import "../design-system/environment-examples";
 const selection = vi.hoisted(() => ({ name: "missing", calls: [] as (ReadingRequest | null)[] }));
 vi.mock("@pe/web-kernel/route/activity", () => ({
   useRouteSearchSlice: (select: (search: Record<string, unknown>) => unknown) =>
