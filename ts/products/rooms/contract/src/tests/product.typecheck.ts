@@ -77,3 +77,19 @@ define({
   },
 });
 export const used = [staged, drifted, marks, absent, key, placed];
+
+const proofRoute = {
+  name: "Proof",
+  directory: product.routes.rooms.directory,
+  fields: {},
+  panes: ["room"],
+  subject: { field: "room", noun: "room", pane: "room", options: () => [] },
+} as const;
+define({ ...base, routes: { proof: proofRoute } });
+define({
+  ...base,
+  // @ts-expect-error a misspelled subject property must be refused through a spread
+  routes: { proof: { ...proofRoute, subject: { ...proofRoute.subject, optons: 1 } } },
+});
+// @ts-expect-error a misspelled route property must be refused through a spread
+define({ ...base, routes: { proof: { ...proofRoute, optons: 1 } } });

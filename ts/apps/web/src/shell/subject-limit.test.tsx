@@ -242,6 +242,7 @@ test.each(products.filter((p) => p.field === "fan"))(
         name: /Port 0/,
       }),
     ).toBeTruthy();
+    expect(screen.getByText(`${product.limit} fan ports / 0 open`)).toBeTruthy();
   },
 );
 

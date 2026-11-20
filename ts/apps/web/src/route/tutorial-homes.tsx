@@ -1,4 +1,9 @@
-import { landings, type HomeCost, type ProductDeclaration } from "@pe/agent-contracts/product";
+import {
+  landings,
+  productWrites,
+  type HomeCost,
+  type ProductDeclaration,
+} from "@pe/agent-contracts/product";
 import { Table } from "@pe/kit/table/table";
 import type { Column } from "@pe/kit/table/model";
 
@@ -121,6 +126,7 @@ const columns: readonly Column<HomeRow>[] = [
 
 export function TutorialHomes({ product }: { product: ProductDeclaration }) {
   const lands = landings(product);
+  const writes = productWrites(product);
   const cells = Object.keys(product.cells);
   const rows: HomeRow[] = [
     ...platformHomes.map((home) => ({
@@ -135,9 +141,7 @@ export function TutorialHomes({ product }: { product: ProductDeclaration }) {
       name,
       owner: product.id,
       cells: cells.filter((cell) => lands[cell] === name),
-      commands: Object.keys(product.commands).filter((key) =>
-        Object.hasOwn(product.commands[key].writes, name),
-      ),
+      commands: Object.keys(writes).filter((key) => Object.hasOwn(writes[key], name)),
     })),
   ];
   return (

@@ -6,7 +6,7 @@
 // Fixture mode proves linkage only, never J-V3 acceptance.
 import { assertPageBinding } from "../../../../tests/e2e/page-binding.ts";
 import { readFileSync } from "node:fs";
-import { criterionCellLabel } from "@pe/ducts-contract/settings";
+import { criterionCellLabel } from "@pe/ducts-contract/product";
 import { run, type Action, type Rule } from "../../../../tests/e2e/walk.ts";
 import { WEB, type Page } from "../../../../tests/e2e/cdp.ts";
 

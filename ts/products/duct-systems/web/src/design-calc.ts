@@ -8,7 +8,7 @@ import { cellSource, type CellLayer, type SheetSlot } from "@pe/agent-contracts/
 import { settingLayer, NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
 import { sheetCells } from "@pe/agent-contracts/product";
 import { product } from "@pe/duct-systems-contract/product";
-import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/settings";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/product";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 
 type DesignRead = {

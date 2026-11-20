@@ -4,7 +4,7 @@ import { RegistryContext } from "@effect/atom-react";
 import { cleanup, render } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { local } from "@pe/agent-contracts/slots";
+import { local } from "../sheet/binding.test-support.ts";
 import { route, paneLayout, scrollBody } from "@pe/web-kernel/route";
 import {
   subjectCode,

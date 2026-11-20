@@ -3,7 +3,7 @@ import { native } from "@pe/agent-contracts/handle";
 import * as resources from "../../../host/resource-state";
 import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { workFingerprintSchema, type WorkJournalDoor } from "@pe/agent-contracts";
-import { ductsSettings } from "@pe/ducts-contract/settings";
+import { ductsSettings } from "@pe/ducts-contract/product";
 
 import { hostRead, read } from "@pe/agent-contracts/route";
 import { route, scrollBody } from "@pe/web-kernel/route";
@@ -17,7 +17,8 @@ import { RegistryContext } from "@effect/atom-react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
-import { local, setting, sheetSlotData, store } from "@pe/agent-contracts/slots";
+import { sheetSlotData } from "@pe/agent-contracts/slots";
+import { local, setting, store } from "./binding.test-support.ts";
 import { makeAtomRegistry } from "../../../shell/owner";
 import { homeHandle, sheetCells } from "./index.ts";
 import { SheetPane } from "./pane.tsx";

@@ -116,32 +116,11 @@ export interface BindingDraw<R = any> {
   readonly model?: (read: R, row: string | undefined) => CellLayer | null | undefined;
 }
 
-export type SheetBinding = BindingDraw & { readonly domain: Domain } & (
-    | { readonly home: Extract<Placement, { at: "parameter" }>; readonly per: "subject" }
-    | {
-        readonly home: Extract<Placement, { at: "setting" }>;
-        readonly per: "route";
-        readonly model: NonNullable<BindingDraw["model"]>;
-      }
-    | { readonly home: Extract<Placement, { at: "store" | "local" }>; readonly per: BindingPer }
-  );
-export const parameter = (parameter: string, domain: Domain, draw?: BindingDraw): SheetBinding => ({
-  ...draw,
-  domain,
-  home: { at: "parameter", parameter },
-  per: "subject",
-});
-export const store = (
-  store: string,
-  domain: Domain,
-  per: BindingPer = "subject",
-  draw?: BindingDraw,
-): SheetBinding => ({ ...draw, domain, home: { at: "store", store }, per });
-export const local = (
-  domain: Domain,
-  per: BindingPer = "route",
-  draw?: BindingDraw,
-): SheetBinding => ({ ...draw, domain, home: { at: "local" }, per });
+export type SheetBinding = BindingDraw & {
+  readonly domain: Domain;
+  readonly per: BindingPer;
+  readonly home: Placement;
+};
 export const settingLayer = (
   b: Pick<SheetBinding, "home" | "domain" | "default">,
   tiers?: readonly SettingTierRead[],
@@ -150,28 +129,6 @@ export const settingLayer = (
   const served = serveSetting(tiers, b.home.tiers, b.home.path, schemaOf(b.domain), b.default);
   return { value: served.value, source: served.tier, ref: served.ref, note: served.note };
 };
-export const setting = (
-  owner: string,
-  path: readonly string[],
-  domain: Domain,
-  tiers: readonly SettingTier[],
-  draw?: BindingDraw,
-): SheetBinding => {
-  const binding = {
-    ...draw,
-    domain,
-    home: { at: "setting" as const, owner, path, tiers },
-    per: "route" as const,
-  };
-  return {
-    ...binding,
-    model:
-      draw?.model ??
-      ((read: { settings?: Record<string, readonly SettingTierRead[]> }) =>
-        settingLayer(binding, read?.settings?.[owner])),
-  };
-};
-
 /** The declaration: bindings by cell name. Rows are the route subject; the kernel supplies them. */
 export interface SheetSlot<
   B extends Readonly<Record<string, SheetBinding>> = Readonly<Record<string, SheetBinding>>,

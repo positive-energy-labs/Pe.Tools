@@ -3,19 +3,13 @@ import { z } from "zod";
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { commands } from "@pe/mcps/product-actions";
 import type { CatalogAxes } from "../../../../../../packages/agent-contracts/src/catalog.ts";
-import {
-  SHEET_COMMANDS,
-  local,
-  parameter,
-  setting,
-  settingLayer,
-  sheetSlotDataSchema,
-} from "@pe/agent-contracts/slots";
+import { SHEET_COMMANDS, settingLayer, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
 import {
   subjectCode,
   uniqueIdSchema,
 } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { sheetCells } from "./index.ts";
+import { local, parameter, setting } from "./binding.test-support.ts";
 
 /*
  * Slice 7's red falsifier (routes MAP row 7). The Pod half is the Pod author's own red tests on

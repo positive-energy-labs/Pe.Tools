@@ -22,7 +22,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { elementSubject, workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
-import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/settings";
+import { ductsSettings, ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/product";
 
 /*
  * /fans' sheet (ruling 2026-11-10: /fans keeps Fans Work only). Every binding stages Fans Work; the
