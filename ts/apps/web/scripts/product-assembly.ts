@@ -58,9 +58,6 @@ export function renderProductAssembly(checkout: string) {
   const tools = ["builtinTools", ...members("tools")];
   const contractImports = imports("contract", "product");
   const hosts = declared.map((_, index) => `host${index}`);
-  const gateways = rows.flatMap(({ host }) =>
-    host && Object.hasOwn(host.exports ?? {}, "./gateway") ? [host.name] : [],
-  );
   const operations = rows.flatMap(({ contract }) =>
     contract && Object.hasOwn(contract.exports ?? {}, "./local-operations") ? [contract.name] : [],
   );
@@ -176,13 +173,9 @@ export function renderProductAssembly(checkout: string) {
       ),
       [productAssemblyPaths.executors]: source(
         ...imports("host", "host"),
-        ...gateways.map(
-          (name, index) => `import { gateway as gateway${index} } from "${name}/gateway";`,
-        ),
         'import { bindProducts } from "./product-runtime.ts";',
         `export type ProductDependencies = ${hosts.map((host) => `Parameters<typeof ${host}.executors>[1]`).join(" & ") || "object"};`,
         `export const { productExecutors, productReads, productHttp, productLocal, productFiles, productEmitters } = bindProducts<ProductDependencies>([${hosts.join(", ")}], {});`,
-        `export const productGateway = { ${spread(gateways.map((_, index) => `gateway${index}`))} };`,
       ),
     },
     dependencies: {
