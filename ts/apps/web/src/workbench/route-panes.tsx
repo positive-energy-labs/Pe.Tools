@@ -11,6 +11,7 @@ import { DockBand } from "../shell/pane-actions";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { chipRecipe } from "@pe/kit/lang/chip";
+import { PaneFloorBoundary } from "@pe/kit/lang/pane-resize";
 import { useThreadWorks } from "#/workbench/thread-work";
 import {
   GraphLayoutView,
@@ -25,7 +26,7 @@ import { DOCK_PANES } from "./dock-layout";
 import { paneFrame } from "@pe/web-kernel/route/body";
 import { readLayoutState, writeLayoutState } from "#/shell/layout-state";
 
-/** Where the dock keeps its device layout (the Pea fold); the tools width keeps its own key. */
+/** Where the dock keeps its device layout (the Pea fold); the Pea width keeps its own key. */
 const DOCK_LAYOUT = "pe.dock";
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
 const DOCK_FLOOR = { pea: 140, tools: 420 };
@@ -68,7 +69,7 @@ export function RouteDock({
   }, [plan, tabs.route, store]);
   // Route view state never controls the conversation pane.
   // D10 (implementor ruling 2026-11-13, reopenable): the Pea fold is device state, kept the way the
-  // tools width beside it is (`pe.toolsWidth`), so a collapsed Pea stays collapsed across loads.
+  // Pea width beside it is (`pe.peaWidth`), so a collapsed Pea stays collapsed across loads.
   // Only Pea's fold is kept, and only beside an open tool: the tools fold follows the open Place,
   // and a load with no tool never opens on two rails.
   const [layout, setLayout] = useState<GraphLayoutState>(() => ({
@@ -115,11 +116,14 @@ export function RouteDock({
           "route-dock",
           {
             axis: "h",
-            sized: "end",
-            size: 720,
-            minSize: DOCK_FLOOR.tools,
-            minOtherSize: DOCK_FLOOR.pea,
-            persist: "pe.toolsWidth",
+            // Owner ruling 2026-11-19: "pea is just a helper on a route, the route is meant for the
+            // human". Pea holds a reading width and the tool takes the rest; before, the tool held
+            // 720 and Pea took the rest, which was half of a fresh browser.
+            sized: "start",
+            size: 400,
+            minSize: DOCK_FLOOR.pea,
+            minOtherSize: DOCK_FLOOR.tools,
+            persist: "pe.peaWidth",
             rails: {
               start: { title: "pea", collapseBelow: DOCK_FLOOR.pea },
               end: { title: "tools", collapseBelow: DOCK_FLOOR.tools },
@@ -141,9 +145,9 @@ export function RouteDock({
           pea: (frame) =>
             frame(
               tabs.route || pea ? (
-                <DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
+                <PaneFloorBoundary><DockBand value={{ node: peaHead }}><DockSurface value={{ docked: Boolean(tabs.route), target: tabs.target }}>
                   <TypedShell module={chat.module} fingerprint={chat.fingerprint} address={tabs.route ? chatAddress : undefined} />
-                </DockSurface></DockBand>
+                </DockSurface></DockBand></PaneFloorBoundary>
               ) : (
                 children
               ),

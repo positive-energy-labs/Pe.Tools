@@ -97,7 +97,7 @@ function measureDocument() {
       rect: box(el),
     })),
     saved: {
-      tools: localStorage.getItem("pe.toolsWidth"),
+      pea: localStorage.getItem("pe.peaWidth"),
       threads: localStorage.getItem("pe.sideWidth"),
     },
   };
@@ -276,8 +276,8 @@ try {
               const narrow = await record(`shrink-to-1280-${cycle}`);
               await page.setViewportSize({ width: 1920, height: 1080 });
               const restored = await record(`restore-1920-${cycle}`);
-              assert.equal(narrow.saved.tools, wide.saved.tools);
-              assert.equal(restored.saved.tools, wide.saved.tools);
+              assert.equal(narrow.saved.pea, wide.saved.pea);
+              assert.equal(restored.saved.pea, wide.saved.pea);
               assert(!restored.panes.find((p) => p.id === "e-inbox")!.rail);
             }
           }

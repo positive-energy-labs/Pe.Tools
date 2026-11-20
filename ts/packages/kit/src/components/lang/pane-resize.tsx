@@ -367,6 +367,12 @@ const NO_RESIZE: PaneSizeSpec & { target: PaneSide } = {
 // Width requirements cross component/graph boundaries, including splits inside vertical panes.
 type PaneWidths = { open: number; compact: number };
 const PaneMinimum = createContext<((id: symbol, width: PaneWidths) => () => void) | null>(null);
+/** The floors of what is inside stop here: the enclosing seam sizes this side by its own declared
+ * floor, and the content yields internally (folds a rail) when given less. The dock's Pea side is
+ * the case: a chat's reading measure must not hold a helper pane at 891px. */
+export function PaneFloorBoundary({ children }: { children: ReactNode }) {
+  return <PaneMinimum value={null}>{children}</PaneMinimum>;
+}
 function useChildMinimum() {
   const widths = useRef(new Map<symbol, PaneWidths>());
   const [minimum, setMinimum] = useState<PaneWidths>({ open: 0, compact: 0 });

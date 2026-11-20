@@ -792,7 +792,7 @@ test("fan selection with picture pose preserves Pea open state and width", async
   await settle();
   const dock = () =>
     [...document.querySelectorAll<HTMLElement>("[data-layout-split]")].find(
-      (el) => el.dataset.layoutSplit === JSON.stringify(["route-dock", "tools"]),
+      (el) => el.dataset.layoutSplit === JSON.stringify(["route-dock", "pea"]),
     )!;
   const size = dock().style.getPropertyValue("--pane-size");
   await act(() => router.navigate({
@@ -926,13 +926,13 @@ test("D10 a folded Pea pane is still folded after a remount, and an expanded one
   const folded = () => screen.queryByRole("button", { name: "Expand pea" });
   const separator = () =>
     [...document.querySelectorAll<HTMLElement>("[data-layout-split]")].find(
-      (el) => el.dataset.layoutSplit === JSON.stringify(["route-dock", "tools"]),
+      (el) => el.dataset.layoutSplit === JSON.stringify(["route-dock", "pea"]),
     )!.querySelector<HTMLElement>(':scope > [role="separator"], [role="separator"]')!;
   await mount("/fans?fixture=layout");
   await settle();
   expect(folded()).toBeNull();
-  // The person drags the tools wide enough that Pea folds to its rail (here, by the arrow keys).
-  for (let step = 0; step < 8 && !folded(); step++) fireEvent.keyDown(separator(), { key: "ArrowLeft" });
+  // The person drags Pea narrow enough that it folds to its rail (here, by the arrow keys).
+  for (let step = 0; step < 24 && !folded(); step++) fireEvent.keyDown(separator(), { key: "ArrowLeft" });
   await waitFor(() => expect(folded()).not.toBeNull());
   cleanup();
   await mount("/fans?fixture=layout");
