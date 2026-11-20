@@ -375,6 +375,7 @@ public static class Rooms
         var holds = new List<string>();
         var failures = new List<string>();
         var bufferedBands = new Pe.Revit.Partition.Solve.BufferedBands(captured);
+        using var traces = new RoomsRunTraces.Pending(TraceRoot, runId);
         zonesTotal = zones.Count;
         BeginPhase("Solve");
         SolveZones(zones.OrderBy(z => z.Fr.Id.Value()), zone =>
@@ -421,8 +422,8 @@ public static class Rooms
                     request.View, zoneId, sw.Elapsed.TotalMilliseconds - zoneStart, probeMs, zonesDone, zonesTotal);
                 Report();
             }
-            // Layer 1's trace stands for the solve that ran, whether or not the materialization below lands.
-            WriteTrace(runId, zone.Guid, zone.Label, answer);
+            traces.Write(zone.Guid.ToString("N") + ".json", Newtonsoft.Json.Linq.JObject.FromObject(
+                new { ZoneGuid = zone.Guid, zone.Label, answer.Trace, answer.Accounting }, Newtonsoft.Json.JsonSerializer.Create(TraceJson)));
             if (answer.Hold != null) holds.Add($"{zone.Label}: {answer.Hold}");
             var (accepted, residues) = Results(answer);
             var mine = machine.Where(r => r.Provenance.ZoneGuid == zone.Guid).ToList();
@@ -567,6 +568,13 @@ public static class Rooms
         BeginPhase("Commit");
         transaction.Complete();
         EndPhase();
+        // The committed model determines which solve the plan can show. A trace I/O failure here
+        // cannot undo a Revit transaction or turn its committed result into a failed partition.
+        try { traces.Publish(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Could not publish rooms traces for {RunId} after commit", runId);
+        }
         return result;
     }
 
@@ -590,13 +598,9 @@ public static class Rooms
 
     private static string TraceRoot => new Pe.Shared.StorageRuntime.ModuleStorage("rooms").State().DirectoryPath;
 
-    private static void WriteTrace(string runId, Guid zone, string label, Pe.Revit.Partition.PartitionAnswer answer) =>
-        RoomsRunTraces.Write(TraceRoot, runId, zone.ToString("N") + ".json", Newtonsoft.Json.Linq.JObject.FromObject(
-            new { ZoneGuid = zone, Label = label, answer.Trace, answer.Accounting }, Newtonsoft.Json.JsonSerializer.Create(TraceJson)));
-
     /// <summary>
     ///     rooms.trace: layer 1 per zone for one run on a view. The view's regions name the zones; a run without
-    ///     runId is the one whose trace of those zones was written last.
+    ///     runId is the one whose published trace of those zones was written last.
     /// </summary>
     public static RoomsTraceData Trace(Document doc, RoomsTraceRequest request)
     {
@@ -604,19 +608,12 @@ public static class Rooms
         var files = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .Select(fr => TakeoffCarriers.ReadIdentity(fr).Guid).OfType<Guid>()
             .Select(g => g.ToString("N") + ".json").ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var runs = request.RunId != null
-            ? [new DirectoryInfo(RoomsRunTraces.Folder(TraceRoot, request.RunId))]
-            : new DirectoryInfo(TraceRoot).EnumerateDirectories().ToList();
-        var run = runs.Where(d => d.Exists)
-            .Select(d => (Dir: d, Files: d.EnumerateFiles("*.json").Where(f => files.Contains(f.Name)).ToList()))
-            .Where(r => r.Files.Count > 0)
-            .OrderByDescending(r => r.Files.Max(f => f.LastWriteTimeUtc))
-            .FirstOrDefault();
-        if (run.Dir == null)
+        var traces = RoomsRunTraces.Find(TraceRoot, request.RunId, files);
+        if (traces.Count == 0)
             throw new InvalidOperationException(request.RunId != null
                 ? $"run '{request.RunId}' traced no zone on '{view.Name}'"
                 : $"no rooms.partition run has traced a zone on '{view.Name}'");
-        return new RoomsTraceData(RoomsRunTraces.RunId(File.ReadAllText(run.Files[0].FullName)), run.Files.OrderBy(f => f.Name, StringComparer.Ordinal)
+        return new RoomsTraceData(RoomsRunTraces.RunId(File.ReadAllText(traces[0].FullName)), traces.OrderBy(f => f.Name, StringComparer.Ordinal)
             .Select(f => Newtonsoft.Json.JsonConvert.DeserializeObject<RoomsZoneTrace>(File.ReadAllText(f.FullName), TraceJson)!)
             .ToList());
     }
