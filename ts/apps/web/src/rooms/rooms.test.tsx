@@ -105,6 +105,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   );
   const rows = roomRows(regions, ["Fixture level"]);
   const page = roomsPageSchema.parse({ view: DEMO_VIEW });
+  const capture = `/captures/${"a".repeat(64)}.png`;
   const onSelect = vi.fn();
   const view = render(
     <>
@@ -116,7 +117,7 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
           </Pane>
         )}
         rows={rows}
-        plan={DEMO_PLAN}
+        plan={{ ...DEMO_PLAN, href: capture }}
         planRefusal={null}
         planError={null}
         empty={null}
@@ -130,6 +131,10 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
     `path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`,
   )!;
   expect(path.getAttribute("data-state")).toBe("locked");
+  const image = view.container.querySelector('image[data-layer="plan-image"]');
+  const href = new URL(image?.getAttribute("href") ?? "", window.location.href);
+  expect(href.pathname).toBe(capture);
+  expect(href.searchParams.get("peRuntimeService")).toBe(import.meta.env.PE_RUNTIME_SERVICE);
   expect(path.getAttribute("data-stale")).toBe("true");
   await waitFor(() => expect(path.getAttribute("aria-description")).toBe("locked · stale"));
   // Locked keeps the outline; the fill takes stale's caution ink.
