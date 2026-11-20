@@ -1561,10 +1561,13 @@ test("JZ B05 retain Family Work and its spec across folding, first-thread promot
     render(<RouterProvider router={router} />);
     await screen.findByText("retained-spec.pdf");
     const seam = screen.getAllByRole("separator", { name: "Resize pane" }).find(node =>
-      node.closest("[data-layout-split]")?.getAttribute("data-layout-split") === JSON.stringify(["route-dock", "tools"]));
+      node.closest("[data-layout-split]")?.getAttribute("data-layout-split") === JSON.stringify(["route-dock", "pea"]));
     if (!seam) throw Error("The tools dock has no resize separator");
+    // jsdom lays nothing out: give the dock a width so widening Pea can push the tools under their floor.
+    const rect = vi.spyOn(Element.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 800, 600));
     for (let i = 0; i < 40 && !screen.queryByRole("button", { name: "Expand tools" }); i++)
       fireEvent.keyDown(seam, { key: "ArrowRight" });
+    rect.mockRestore();
     expect(screen.getByRole("button", { name: "Expand tools" }), "B05: the actual tools Activity is folded").toBeTruthy();
     // fedd433a retired the duplicate context row (routes LEDGER); folding retains the actual Work.
     expect(screen.queryByLabelText("Pea context")).toBeNull();

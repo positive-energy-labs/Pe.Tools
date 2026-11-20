@@ -25,7 +25,7 @@ import { DOCK_PANES } from "./dock-layout";
 import { paneFrame } from "#/route/body";
 import { readLayoutState, writeLayoutState } from "#/shell/layout-state";
 
-/** Where the dock keeps its device layout (the Pea fold); the tools width keeps its own key. */
+/** Where the dock keeps its device layout (the Pea fold); the Pea width keeps its own key. */
 const DOCK_LAYOUT = "pe.dock";
 /** Under these a side folds to its rail: Pea reads thin, a tool needs room for its table. */
 const DOCK_FLOOR = { pea: 140, tools: 420 };
@@ -68,7 +68,7 @@ export function RouteDock({
   }, [plan, tabs.route, store]);
   // Route view state never controls the conversation pane.
   // D10 (implementor ruling 2026-11-13, reopenable): the Pea fold is device state, kept the way the
-  // tools width beside it is (`pe.toolsWidth`), so a collapsed Pea stays collapsed across loads.
+  // Pea width beside it is (`pe.peaWidth`), so a collapsed Pea stays collapsed across loads.
   // Only Pea's fold is kept, and only beside an open tool: the tools fold follows the open Place,
   // and a load with no tool never opens on two rails.
   const [layout, setLayout] = useState<GraphLayoutState>(() => ({
@@ -115,11 +115,14 @@ export function RouteDock({
           "route-dock",
           {
             axis: "h",
-            sized: "end",
-            size: 720,
-            minSize: DOCK_FLOOR.tools,
-            minOtherSize: DOCK_FLOOR.pea,
-            persist: "pe.toolsWidth",
+            // Owner ruling 2026-11-19: "pea is just a helper on a route, the route is meant for the
+            // human". Pea holds a reading width and the tool takes the rest; before, the tool held
+            // 720 and Pea took the rest, which was half of a fresh browser.
+            sized: "start",
+            size: 400,
+            minSize: DOCK_FLOOR.pea,
+            minOtherSize: DOCK_FLOOR.tools,
+            persist: "pe.peaWidth",
             rails: {
               start: { title: "pea", collapseBelow: DOCK_FLOOR.pea },
               end: { title: "tools", collapseBelow: DOCK_FLOOR.tools },
