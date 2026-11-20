@@ -79,7 +79,7 @@ internal sealed class RevitDataRequestService {
 
     [Op("takeoffs.adopt", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Adopt Filled Regions as Zoning Regions and register their System tags in one transaction.", Title = "Adopt Takeoff Regions", Finds = ["takeoffs", "adopt", "zones", "filled-regions", "register"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffAdoptResult AdoptTakeoffRegionsCore(TakeoffAdoptRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.AdoptZones(document, request), "Pe Adopt Takeoff Regions");
+        RunTakeoff(activeDocument.Value, (document, notices) => TakeoffAtlas.AdoptZones(document, request, notices), "Pe Adopt Takeoff Regions");
 
     [Op("takeoffs.initialize-carrier", OpSubject.Document, OpTouches.Metadata, Internal = true, Does = "Bind the next missing Takeoff carrier for the requested stage in one transaction.", Title = "Initialize Next Takeoff Carrier", Finds = ["takeoffs", "initialize", "carriers", "shared-parameters"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffCarrierInitializationData InitializeTakeoffCarrierCore(TakeoffCarrierInitializationRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
@@ -93,7 +93,7 @@ internal sealed class RevitDataRequestService {
         // ADR 0011: TakeoffAtlas.Partition calls Pe.Revit.Partition.Verbs.Partition and hands the
         // PartitionAnswer to ZoneMaterializer. The call cannot live in this file: Pe.Revit.Space
         // references Pe.Revit.Global, so Global referencing Partition is a project cycle.
-        RunTakeoff(activeDocument.Value, document => TakeoffAtlas.Partition(document, request), "Pe Partition Takeoff Zone");
+        RunTakeoff(activeDocument.Value, (document, notices) => TakeoffAtlas.Partition(document, request, notices), "Pe Partition Takeoff Zone");
 
     [Op("takeoffs.rhvac-links.preflight", OpSubject.Elements, OpTouches.Metadata, Internal = true,
         Does = "Check that the proposed RHVAC links fit the staged Rooms record without writing.",
@@ -105,7 +105,7 @@ internal sealed class RevitDataRequestService {
     private static TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(
             activeDocument.Value,
-            document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request)),
+            (document, notices) => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request, notices: notices)),
             "Pe Link Takeoff Rooms to RHVAC");
 
     [Op("rooms.roster", OpSubject.Document, OpTouches.Metadata,
@@ -281,7 +281,7 @@ internal sealed class RevitDataRequestService {
 
     [Op("rooms.draw", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Draw one room or zone region from loops on a plan view by numeric Revit view id; a person's designation, so a room is locked.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsDrawResult DrawRoomCore(RoomsDrawRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(activeDocument.Value, document => Rooms.Draw(document, request), "Pe Draw Room Region");
+        RunTakeoff(activeDocument.Value, (document, notices) => Rooms.Draw(document, request, notices), "Pe Draw Room Region");
 
     [Op("rooms.write", OpSubject.Elements, OpTouches.Metadata, Internal = true, Does = "Write submitted Rooms fields by FilledRegion UniqueId and return cells confirmed by committed readback.", Title = "Write Room Fields", Finds = ["rooms", "write", "room-regions", "fields", "parameters"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsWriteReceipt WriteRoomsCore(RoomsWriteRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
@@ -289,7 +289,7 @@ internal sealed class RevitDataRequestService {
 
     [Op("rooms.merge", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources.", Title = "Merge Room Regions", Finds = ["rooms", "merge", "combine", "room-regions", "filled-regions"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsMergeResult MergeRoomsCore(RoomsMergeRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(activeDocument.Value, document => Rooms.Merge(document, request), "Pe Merge Room Regions");
+        RunTakeoff(activeDocument.Value, (document, notices) => Rooms.Merge(document, request, notices), "Pe Merge Room Regions");
 
     [Op("revit.apply.parameters-service-cache.refresh", OpSubject.None, OpTouches.Metadata, Does = "Refresh the global APS Parameters Service cache through the connected Revit runtime.", Title = "Refresh Parameters Service Cache", Finds = ["aps", "parameters", "cache", "refresh", "parameter-service"], Actor = OpActor.Any, Cost = OpCost.Mutation, Tier = OpTier.Expert, Thread = OpThread.Revit)]
     private static Task<ParametersServiceCacheData> RefreshParametersServiceCacheCore(
@@ -362,7 +362,11 @@ internal sealed class RevitDataRequestService {
     }
 
     private static T RunTakeoff<T>(DbDocument document, Func<DbDocument, T> run, string? transactionName = null,
-        bool opensOwnTransaction = false) {
+        bool opensOwnTransaction = false) =>
+        RunTakeoff(document, (doc, _) => run(doc), transactionName, opensOwnTransaction);
+
+    private static T RunTakeoff<T>(DbDocument document, Func<DbDocument, OwnerBlobNotices, T> run,
+        string? transactionName, bool opensOwnTransaction = false) {
         var writes = transactionName != null || opensOwnTransaction;
         if (writes && document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
@@ -373,13 +377,15 @@ internal sealed class RevitDataRequestService {
                     "The active project document is read-only.",
                     "Open a writable project document and retry.")]);
 
+        var notices = new OwnerBlobNotices();
         try {
             if (transactionName == null)
-                return run(document);
+                return run(document, notices);
 
             using var sandbox = DocumentSandbox.BeginCommit(document, transactionName);
-            var result = run(document);
+            var result = run(document, notices);
             sandbox.Complete();
+            notices.Publish();
             return result;
         } catch (BridgeOperationException) {
             throw;

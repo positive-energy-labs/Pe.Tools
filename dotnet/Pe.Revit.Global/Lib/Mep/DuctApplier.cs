@@ -166,6 +166,7 @@ public static class DuctApplier {
 
         // Other writes can change which provenance lands. Recheck against their actual outcomes.
         store.Outcome = "planned";
+        var notices = new OwnerBlobNotices();
         store.Write = () => {
             // Composed at write time: terminals and equipment ran first in this stage, so a refused write is not recorded.
             next = Compose(request, stored, items, now, slots, storeRevision + 1);
@@ -174,7 +175,7 @@ public static class DuctApplier {
                 return $"revision {storeRevision}";
             }
             if (request.Replacement is { } replacing) {
-                _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData(), replacing);
+                _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData(), replacing, notices);
             } else {
                 if (!string.Equals(OwnerBlobStore.Read(doc, DuctLossStore.Owner).Raw, blob.Raw, StringComparison.Ordinal))
                     throw new InvalidOperationException("The duct loss store changed after planning; re-read ducts.snapshot.");
@@ -190,6 +191,7 @@ public static class DuctApplier {
             return Result(false, items, null, storeRevision);
         }
 
+        notices.Publish();
         foreach (var i in items.Where(i => i.Outcome == "written" && i.Element is { IsValidObject: true } && i.Loss is not null))
             if (Pressure(i.Element!.get_Parameter(BuiltInParameter.RBS_DUCT_PRESSURE_DROP)) is { } effective)
                 i.After += $"; reported effective pressure {effective:0.#####} in-wg";
@@ -343,8 +345,9 @@ public static class DuctApplier {
                 return detail.Length > 0 ? $"{name} ({ex.Message}: {detail})" : $"{name} ({ex.Message})";
             }
         }
-        _ = group.Assimilate();
-        return null;
+        if (group.Assimilate() == TransactionStatus.Committed) return null;
+        foreach (var i in items.Where(i => i.Outcome == "written")) i.Outcome = "planned";
+        return "assimilate";
     }
 
     private static void Write(Item i) {

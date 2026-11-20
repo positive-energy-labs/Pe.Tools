@@ -367,6 +367,42 @@ public sealed class ParameterLinksBehaviorTests {
                 Assert.That(secondSheet.Name, Is.EqualTo(firstSheet.SheetNumber));
                 Assert.That(secondSheet.SheetNumber, Is.EqualTo("PE-A200"));
             });
+
+            UpdaterRegistry.UnregisterUpdater(updater.GetUpdaterId());
+            var owner = ParameterLinkProfile.Owner;
+            const string raw = "unreadable parameter-links profile";
+            using (var seed = new Transaction(document, "Seed unreadable parameter-links profile")) {
+                _ = seed.Start();
+                Assert.That(new ParameterLinksProfileStorage().Write(document, profile), Is.True);
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
+                Assert.That(seed.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var service = ParameterLinksService.Instance;
+            var request = new ParameterLinksApplyRequest(profile, Reconcile: true);
+            var plan = service.Apply(document, request, preview: true);
+            Assert.That(plan.Evaluation!.Issues, Is.Empty);
+            Assert.That(plan.Evaluation.ChangedWriteCount, Is.EqualTo(2));
+            Assert.That(plan.Replacement, Is.Not.Null);
+
+            var backup = Path.Combine(isolated.Root, "model-recovery", "owner-parameter-links",
+                plan.Replacement!.RawUtf8Sha256 + ".txt");
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.Exists(backup), Is.False);
+
+            var sealedRequest = request with { Replacement = plan.Replacement };
+            var rejected = service.Apply(document, sealedRequest, preview: false);
+            Assert.Multiple(() => {
+                Assert.That(rejected.Evaluation!.Issues.Any(issue => issue.Code is "WriteFailed" or "WriteRejected"), Is.True);
+                Assert.That(rejected.ProfileChanged, Is.False);
+                Assert.That(document.ProjectInformation.get_Parameter(targetGuid).AsDouble(), Is.Zero);
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).AsString(), Is.EqualTo(raw));
+                Assert.That(File.ReadAllText(backup), Is.EqualTo(raw));
+                Assert.That(File.Exists(notices), Is.False);
+            });
+            Assert.That(service.Apply(document, sealedRequest with { Reconcile = false }, preview: false).ProfileChanged, Is.True);
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
         } finally {
             if (updater != null && UpdaterRegistry.IsUpdaterRegistered(updater.GetUpdaterId()))
                 UpdaterRegistry.UnregisterUpdater(updater.GetUpdaterId());
