@@ -1,5 +1,5 @@
 /**
- * The eight commands of the product over the recorded native boundary. Work, the action registry,
+ * The commands of the product over the recorded native boundary. Work, the action registry,
  * consent, the journal and the executors are production; only native replies are recordings.
  */
 import { rm, writeFile } from "node:fs/promises";
@@ -73,35 +73,9 @@ const recordedRoomWrites = nativeRecordingRequest("fresh-rooms.write").regions a
   uniqueId: string;
   name: string;
 }[];
-test("JZ Initialize declaration must also pass the recording transport leaf admission", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "jz-initialize-transport-"));
-  const native = await fixtureNative(dir, "fresh-takeoffs.initialize-carrier");
-  try {
-    const response = await native.transport.fetch(
-      new Request("http://fixture/call", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "takeoffs.initialize",
-          key: "takeoffs.initialize-carrier",
-          request: { stage: "Adoption" },
-        }),
-      }),
-    );
-    expect(response.status, await response.clone().text()).toBe(200);
-  } finally {
-    await native.close();
-    await rm(dir, { recursive: true, force: true });
-  }
-});
-
 test("JZ recorded bridge rejects obsolete native DTOs behind actual Adopt admission", async () => {
   const dir = await mkdtemp(join(tmpdir(), "jz-recording-schema-"));
-  const native = await fixtureNative(
-    join(dir, "native"),
-    "fresh-takeoffs.initialize-carrier",
-    "manuella-adopt",
-  );
+  const native = await fixtureNative(join(dir, "native"), "manuella-adopt");
   const socket = await native.connect();
   let state: unknown;
   const workspace = new RouteWorkspace({
@@ -148,10 +122,7 @@ test("JZ recorded bridge rejects obsolete native DTOs behind actual Adopt admiss
         expect(JSON.stringify(receipt)).toContain("array");
       }
     }
-    expect(native.calls.map((call) => call.key)).toEqual([
-      "takeoffs.initialize-carrier",
-      "takeoffs.adopt",
-    ]);
+    expect(native.calls.map((call) => call.key)).toEqual(["takeoffs.adopt"]);
   } finally {
     await native.close();
     await rm(dir, { recursive: true, force: true });
@@ -162,7 +133,6 @@ test("JZ recorded bridge rejects obsolete native DTOs behind actual Adopt admiss
 const { uniqueIds, ...merge } = recordedInput("fresh-rooms.merge");
 const mergeIntent = { ...merge, regions: (uniqueIds as string[]).map(regionCode) };
 test.each([
-  ["takeoffs.initialize", recordedInput("fresh-takeoffs.initialize-carrier")],
   ["takeoffs.adopt", { views: [recordedInput("fresh-takeoffs.adopt")] }],
   ["takeoffs.partition", recordedInput("fresh-takeoffs.partition")],
   ["rooms.partition", recordedInput("fresh-rooms.partition")],
@@ -192,7 +162,6 @@ test.each([
     );
     const native = await fixtureNative(
       join(dir, "native"),
-      "fresh-takeoffs.initialize-carrier",
       "fresh-takeoffs.adopt",
       "fresh-takeoffs.partition",
       "fresh-rooms.partition",
@@ -366,21 +335,9 @@ test.each([
         ]);
         return;
       }
-      const initialize = commandKey === "takeoffs.initialize";
-      const adopt = commandKey === "takeoffs.adopt";
-      if (initialize || adopt)
-        expect(calls[0]).toEqual({
-          key: "takeoffs.initialize-carrier",
-          input: { stage: "Adoption" },
-          action: commandKey,
-        });
-      expect(calls.map((row) => row.key)).toEqual(
-        initialize
-          ? ["takeoffs.initialize-carrier"]
-          : adopt
-            ? ["takeoffs.initialize-carrier", commandKey]
-            : [commandKey === "sheet.apply" ? "rooms.write" : commandKey],
-      );
+      expect(calls.map((row) => row.key)).toEqual([
+        commandKey === "sheet.apply" ? "rooms.write" : commandKey,
+      ]);
       if (commandKey === "sheet.apply") {
         expect(calls[0]).toEqual({
           key: "rooms.write",

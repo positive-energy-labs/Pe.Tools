@@ -5,23 +5,7 @@ using Pe.Shared.RevitData.Serialization;
 namespace Pe.Shared.RevitData.Takeoffs;
 
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
-public enum TakeoffCarrierStage
-{
-    Adoption,
-    Materialization,
-}
-public sealed record TakeoffCarrierPreflight(
-    TakeoffCarrierStage Stage,
-    string Status,
-    IReadOnlyList<Guid> MissingCarrierGuids);
-public sealed record TakeoffCarrierInitializationRequest(TakeoffCarrierStage Stage = TakeoffCarrierStage.Adoption);
-public sealed record TakeoffCarrierInitializationData(
-    string Status,
-    Guid? Bound,
-    IReadOnlyList<Guid> Remaining);
-public sealed record TakeoffModelStatus(
-    IReadOnlyList<TakeoffRegistrySystem> Systems,
-    TakeoffCarrierPreflight Carriers);
+public sealed record TakeoffModelStatus(IReadOnlyList<TakeoffRegistrySystem> Systems);
 public sealed record TakeoffRegionFacts(
     long ElementId,
     string TypeName,

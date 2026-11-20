@@ -73,7 +73,7 @@ test("JZ fixture HTTP boundary refuses uncataloged, undeclared and invalid nativ
     expect(await undeclared.text()).toContain("does not declare native leaf");
     const uncataloged = await post({
       key: "fixture.unknown",
-      action: "takeoffs.initialize",
+      action: "takeoffs.adopt",
       request: {},
     });
     expect(uncataloged.status).toBe(409);

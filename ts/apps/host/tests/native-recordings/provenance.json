@@ -43,22 +43,6 @@
     "originalCanonicalResponseSha256": "6ce4cc315aa1f7e7a7945ae8f6e8f729984d22324ff1a4657388be8ef9c3684a",
     "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
   },
-  "fresh-takeoffs.initialize-carrier": {
-    "operation": "takeoffs.initialize-carrier",
-    "source": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-1aa26db4-8bbc1cfe5695f336\\.artifacts\\s8a-fresh\\recordings-final\\01-takeoffs.initialize-carrier.json",
-    "sourceSha256": "dc6fe8de57cb01e2b3ca0d2c53dcb46804a6ca49ba2bec2f72a3379d0445daaf",
-    "responseSha256": "f8e78e7889a901f81d28ed3ba52b4d4650a6caf57b0d676d17d85183471b4eec",
-    "pointer": "response",
-    "requestFile": "fresh-takeoffs.initialize-carrier-request.json",
-    "baseCommit": "8d3a507c848f388ed5905728eda7a6e103592f90",
-    "branch": "pd/s8a-rooms-record",
-    "lane": "fresh",
-    "date": "2026-11-20T08:41:56.7350499Z",
-    "modelCopy": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-1aa26db4-8bbc1cfe5695f336\\.artifacts\\s8a-fresh\\recordings-final\\native-fixture-model.rvt",
-    "modelCopySha256": "f013c12410d7ee020c7d62b0d4a1d6abd999f176b4bb656d9fb04a2f66e253fb",
-    "resultsFile": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-1aa26db4-8bbc1cfe5695f336\\.artifacts\\test-results\\pe-revit-fresh-20261120T084026734.trx",
-    "canonicalResponseSha256": "0b5c40fdcb98f2d006cb55ab70b27e7f6c39a03715fc138b94e48702cdd978b1"
-  },
   "fresh-takeoffs.adopt": {
     "operation": "takeoffs.adopt",
     "source": "C:\\Users\\kaitp\\.t3\\worktrees\\Pe.Tools\\t3-1aa26db4-8bbc1cfe5695f336\\.artifacts\\s8a-fresh\\recordings-final\\02-takeoffs.adopt.json",
@@ -602,13 +586,13 @@
     "source": "C:/Users/kaitp/.t3/worktrees/Pe.Tools/t3-3b950b02-4b2d98da810b31fd/ts/packages/host-contracts/.cache/ops-catalog.json",
     "sourceSha256": "0bd17bad38aa1bc707e1b483a580879f6b3efef7091a5696951c152e8cc41eb2",
     "pointer": "$",
-    "canonicalResponseSha256": "754fa6ce2b7fb5c122fea0dce6ac79673bdd9689b3483829e6deeccd41c985ac",
+    "canonicalResponseSha256": "4c2e4118ea1fcfb738544177f9f1a31b21a95660b4184ebbb0c0c5eeecedcd96",
     "lane": "deterministic",
     "commit": "53bc79617da25875cd7a34381da85c7783dbfbc1",
     "date": "2026-11-13",
     "dirty": true,
     "originalCanonicalResponseSha256": "e33a17997d94c83880f13f2d3ae4936997997196b93d36e78b03c04996dd5eaf",
-    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged."
+    "fixtureAdaptation": "Phase-3 RequiredEsp slot rename; fixture contract projection only, not new native evidence. Source file and source hash remain unchanged. Removed Takeoffs Initialize and its snapshot field from replay."
   },
   "retained-view-image": {
     "operation": "revit.context.view-image",

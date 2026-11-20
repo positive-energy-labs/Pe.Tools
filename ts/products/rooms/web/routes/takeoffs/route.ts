@@ -16,7 +16,7 @@ export type AdoptionContext = ContextOf<
   typeof declared.core,
   typeof takeoffsWork,
   typeof patches,
-  Verbs<never, "initialize" | "adopt">
+  Verbs<never, "adopt">
 >;
 type Row = AdoptionContext["value"]["value"]["rows"][number];
 /** The ticked rows as the adopt command takes them: one entry per plan, by its UniqueId. */
@@ -53,22 +53,6 @@ export const module = screen(
       describe: (history) => ({ label: history.label }),
     },
     verbs: {
-      initialize: {
-        handle: handle("takeoffs.initialize"),
-        label: "Initialize",
-        stageForPlan: ({ doc, value }) => {
-          if (value?.carriers.status !== "needs-initialization")
-            throw Error("The document already carries every shared parameter");
-          return stageIntent(
-            "adoption",
-            "takeoffs.initialize",
-            "Prepare initialize",
-            { stage: value.carriers.stage },
-            doc,
-          );
-        },
-        present: (preview) => presentIntent(preview, "Initialize the missing shared parameters."),
-      },
       adopt: {
         handle: handle("takeoffs.adopt"),
         label: "Adopt",
@@ -101,7 +85,7 @@ export const module = screen(
       adoption: {
         title: "View adoption",
         purpose: "Choose plans and stage designer region names and system tags",
-        verbs: ["initialize", "adopt"] as const,
+        verbs: ["adopt"] as const,
         body: "scroll" as const,
         draw: adoptionBody,
       },

@@ -72,8 +72,7 @@ public static class TakeoffAtlas
         if (registry.Refusal != null)
             unreadable.Add(new TakeoffUnreadableBlob(null, SystemRegistry.Owner.Name, registry.Refusal));
         var status = new TakeoffModelStatus(
-            (registry.Value?.Systems ?? []).Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList(),
-            TakeoffCarriers.Preflight(doc));
+            (registry.Value?.Systems ?? []).Select(s => new TakeoffRegistrySystem(s.Guid, s.Tag)).ToList());
         return new TakeoffSnapshotData(status, zones, grouped, unreadable);
     }
 
@@ -125,6 +124,7 @@ public static class TakeoffAtlas
 
         TakeoffCarriers.Save(doc, SystemRegistry.Owner, registry.ToData(), request.ReplacingRegistry, notices);
         record.Save(doc, replacing: request.Replacing, notices: notices);
+        Pe.Revit.Partition.EnclosureDeclaration.WriteDefaultIfAbsent(doc);
         return new TakeoffAdoptResult(adopted);
     }
 

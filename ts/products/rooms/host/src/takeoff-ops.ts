@@ -1,8 +1,5 @@
 import { observationSchema } from "@pe/agent-contracts";
-import {
-  takeoffCarrierPreflightSchema,
-  takeoffRegionAnalysisSchema,
-} from "@pe/rooms-contract/takeoffs";
+import { takeoffRegionAnalysisSchema } from "@pe/rooms-contract/takeoffs";
 import type {
   LiveRegion,
   PartitionReviewData,
@@ -193,7 +190,6 @@ export function projectTakeoffSnapshot(
   });
   return {
     reading: observationSchema.parse(response.reading),
-    carriers: takeoffCarrierPreflightSchema.parse(snapshot.status.carriers),
     unreadable: snapshot.unreadable ?? [],
     zoneFrs,
     regionsByZone,

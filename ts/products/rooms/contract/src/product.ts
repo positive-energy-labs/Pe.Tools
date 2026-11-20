@@ -171,11 +171,6 @@ const adoption = contract("takeoffs.adoption", {
         unreadable: z.string().nullable(),
       }),
     ),
-    carriers: z.object({
-      stage: z.string(),
-      status: z.string(),
-      missing: z.array(z.string()),
-    }),
     unreadable,
   }),
   uses: ["rooms.roster", "takeoffs.candidates", "takeoffs.snapshot"],
@@ -387,14 +382,6 @@ export const product = define({
       native: ["takeoffs.record-replacements", "rooms.merge"],
       writes: { regions: [] },
     }),
-    // Setup binds the registry and enclosure carriers on Project Information.
-    ...workWriteCommands("takeoffs", "takeoffs.initialize", {
-      ...edit,
-      says: "Write the shared parameters this document is missing before any takeoff runs.",
-      input: z.object({ stage: z.string().min(1) }),
-      native: ["takeoffs.initialize-carrier"],
-      writes: { registry: [], enclosure: [] },
-    }),
     ...workWriteCommands("takeoffs", "takeoffs.adopt", {
       ...edit,
       says: "Adopt selected regions using the submitted names and system tags.",
@@ -402,7 +389,7 @@ export const product = define({
         views: z.array(z.object({ view, items: z.array(adoptItem).min(1) })).min(1),
       }),
       dirties: ["snapshot", "takeoff-views", "candidates"],
-      native: ["takeoffs.record-replacements", "takeoffs.initialize-carrier", "takeoffs.adopt"],
+      native: ["takeoffs.record-replacements", "takeoffs.adopt"],
       writes: { regions: [], registry: [], enclosure: [] },
     }),
     ...workWriteCommands("takeoffs", "takeoffs.partition", {
