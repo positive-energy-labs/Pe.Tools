@@ -106,13 +106,16 @@ export async function targetJourney(
 ) {
   const route = module.spec.key;
   const names = Object.keys(documents) as JourneyDoc[];
-  const hosts = Object.fromEntries(
+  // One host per file: Chadds reopened is served by the host that holds Chadds's saved Work.
+  const files = names.filter((doc) => doc !== "again");
+  const served = Object.fromEntries(
     await Promise.all(
-      names.map(
+      files.map(
         async (doc) => [doc, await hosted(route, reads, native(doc), documents[doc])] as const,
       ),
     ),
   ) as Record<JourneyDoc, Awaited<ReturnType<typeof hosted>>>;
+  const hosts = { ...served, again: served.chadds };
   const of = (openId: string | undefined) =>
     names.find((doc) => documents[doc].ref.openId === openId);
   world.ports = (openId) => (of(openId) ? hosts[of(openId)!].ports : {});
@@ -155,12 +158,15 @@ export async function targetJourney(
     { wrapper: StandaloneBand },
   );
   const mount = () => world.mounts.at(-1) as TypedMount | undefined;
+  let started = false;
   return {
     hosts,
+    /** Whether the last `bound` had to start Work: false means saved Work was already there. */
+    started: () => started,
     mount,
     search: () => new URLSearchParams(history.location.search),
     /** The shell has bound this document, its address is settled, and its Work is started. */
-    async bound(doc: JourneyDoc) {
+    async bound(doc: JourneyDoc, work = true) {
       await waitFor(
         () => {
           expect(mount()?.target()).toEqual({ kind: "document", ref: documents[doc].ref });
@@ -169,8 +175,14 @@ export async function targetJourney(
         { timeout: 20000 },
       );
       const live = mount()!;
+      // An entry that names an open subject is bound once its target and address are: its Work
+      // was started on the first visit.
+      if (!work) return live;
       // A document whose Work an earlier visit started has nothing to start.
-      await waitFor(() => expect(live.startAction() ?? live.workBasis()).toBeTruthy());
+      await waitFor(() => expect(live.startAction() ?? live.workBasis()).toBeTruthy(), {
+        timeout: 20000,
+      });
+      started = !!live.startAction();
       await act(async () => void (await live.startAction()?.run()));
       return live;
     },
@@ -187,10 +199,11 @@ export async function targetJourney(
     /** An address somebody else wrote: Pea, a shared link, or a history entry. */
     go: (next: URLSearchParams) => act(() => history.push(`/${route}?${next}`)),
     back: () => act(() => history.back()),
+    forward: () => act(() => history.forward()),
     async close() {
       cleanup();
       world.mounts.length = 0;
-      await Promise.all(names.map((doc) => hosts[doc].close()));
+      await Promise.all(files.map((doc) => hosts[doc].close()));
     },
   };
 }
@@ -217,6 +230,8 @@ const paths: Record<
   {
     open: JourneyDoc[];
     pinned?: false;
+    /** `to` is named by its Address while no Revit holds it open: nothing binds, and nothing is kept. */
+    closed?: true;
     from: JourneyDoc;
     to: JourneyDoc;
     change(j: Journey): Promise<void> | void;
@@ -249,40 +264,55 @@ const paths: Record<
     to: "snowdon",
     change: (j) => j.open(["snowdon"]),
   },
-  // Chadds's history entry names no field, so only Place memory could fill it: with Snowdon's.
-  Back: {
-    open: both,
-    from: "snowdon",
-    to: "chadds",
-    async change(j) {
-      for (let step = 0; step < 8 && j.search().get("target") !== pin("chadds"); step++)
-        await j.back();
+  "a closed document's Address": {
+    open: ["chadds"],
+    closed: true,
+    from: "chadds",
+    to: "snowdon",
+    change(j) {
+      const search = j.search();
+      search.set("target", documents.snowdon.path);
+      return j.go(search);
     },
   },
 };
 
 /** One mounted journey per path: the new target holds nothing of the old one, and can be used. */
 export async function targetChange(product: TargetProduct, path: keyof typeof paths) {
-  const { open, pinned, from, to, change } = paths[path]!;
+  const { open, pinned, closed, from, to, change } = paths[path]!;
   const fields = [...Object.keys(product.module.spec.fields), "selected"];
-  const first = path === "Back" ? to : from;
   const j = await targetJourney(product.module, product.reads, product.native, {
     open,
-    search: new URLSearchParams(pinned === false ? {} : { target: pin(first) }),
+    search: new URLSearchParams(pinned === false ? {} : { target: pin(from) }),
   });
   try {
-    await j.bound(first);
-    if (first !== from) {
-      await repin(j, from);
-      await j.bound(from);
-    }
+    await j.bound(from);
     await product.use(from, j);
     const old = j.mount()!;
+    // The old target holds a subject, so "no subject" below can fail.
+    const subject = product.module.spec.subject!.field;
+    expect((old.page.read() as Record<string, unknown>)[subject]).not.toEqual(
+      product.module.spec.fields[subject]!.initial,
+    );
     const held = fields.flatMap((field) => j.search().get(field) ?? []);
     expect(held.length).toBeGreaterThan(0);
     await change(j);
+    if (closed) {
+      await waitFor(() => {
+        expect(j.mount()).not.toBe(old);
+        expect(j.mount()!.target()).toBeNull();
+        expect(fields.filter((field) => j.search().has(field))).toEqual([]);
+      });
+      const page: Record<string, unknown> = j.mount()!.page.read();
+      for (const [name, field] of Object.entries(product.module.spec.fields))
+        expect(page[name], name).toEqual(field.initial);
+      expect(document.body.textContent).not.toMatch(product.shows(from));
+      return;
+    }
     const live = await j.bound(to);
     expect(live).not.toBe(old);
+    // A saved file's Work is keyed by its Address: the reopened lifetime finds it, and starts none.
+    if (documents[from].path === documents[to].path) expect(j.started()).toBe(false);
     // The settled address and the Page hold no selection and no field of the old target.
     expect(fields.filter((field) => j.search().has(field))).toEqual([]);
     const page: Record<string, unknown> = live.page.read();
@@ -290,9 +320,9 @@ export async function targetChange(product: TargetProduct, path: keyof typeof pa
     for (const [name, field] of Object.entries(product.module.spec.fields))
       expect(page[name], name).toEqual(field.initial);
     // No reading of the old target is drawn or held. A reopened file is the same model.
-    const { subject, core } = product.module.spec;
+    const { subject: door, core } = product.module.spec;
     const seen = () =>
-      document.body.textContent + JSON.stringify(live.value(subject?.read ?? core));
+      document.body.textContent + JSON.stringify(live.value(door?.read ?? core));
     if (documents[from].path !== documents[to].path)
       expect(seen()).not.toMatch(product.shows(from));
     // The new target's own controls work.
@@ -303,3 +333,48 @@ export async function targetChange(product: TargetProduct, path: keyof typeof pa
   }
 }
 export const targetPaths = Object.keys(paths);
+
+/**
+ * A history entry names its own Page. Back from Snowdon lands on Chadds with the plan and the
+ * subject its entry names, the entry is not rewritten, and Forward lands on Snowdon's own.
+ */
+export async function backRestores(product: TargetProduct) {
+  const j = await targetJourney(product.module, product.reads, product.native, {
+    open: both,
+    search: new URLSearchParams({ target: pin("chadds") }),
+  });
+  const walk = async (step: () => Promise<void> | void, until: () => boolean) => {
+    for (let steps = 0; steps < 12 && !until(); steps++) await step();
+    expect(until()).toBe(true);
+  };
+  const subject = product.module.spec.subject!.field;
+  const initial = product.module.spec.fields[subject]!.initial;
+  const { subject: door, core } = product.module.spec;
+  // The roster may be a virtual list that draws no row here: the mount's own reading also counts.
+  const seen = (mount: TypedMount) =>
+    document.body.textContent + JSON.stringify(mount.value(door?.read ?? core));
+  const held = (mount: TypedMount) => (mount.page.read() as Record<string, unknown>)[subject];
+  try {
+    await j.bound("chadds");
+    await product.use("chadds", j);
+    const chadds = j.search().toString();
+    await j.pick("snowdon");
+    await j.bound("snowdon");
+    await product.use("snowdon", j);
+    const snowdon = j.search().toString();
+    await walk(j.back, () => j.search().get("target") === pin("chadds"));
+    const back = await j.bound("chadds", false);
+    expect(j.search().toString()).toBe(chadds);
+    expect(held(back)).not.toEqual(initial);
+    await waitFor(() => expect(seen(back)).toMatch(product.shows("chadds")), { timeout: 20000 });
+    await walk(j.forward, () => j.search().toString() === snowdon);
+    const forward = await j.bound("snowdon", false);
+    expect(j.search().toString()).toBe(snowdon);
+    expect(held(forward)).not.toEqual(initial);
+    await waitFor(() => expect(seen(forward)).toMatch(product.shows("snowdon")), {
+      timeout: 20000,
+    });
+  } finally {
+    await j.close();
+  }
+}

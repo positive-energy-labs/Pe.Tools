@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
+import { address } from "@pe/agent-contracts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
 import { ActionJournal } from "../src/action-journal.ts";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
@@ -528,6 +529,69 @@ test("closing the host scope joins the attempt; it never interrupts it", async (
     expect(
       f.logged().some((event) => event.includes('"joined"') && event.includes('"succeeded"')),
     ).toBe(true);
+  } finally {
+    await f.dispose();
+  }
+});
+
+// The kernel's one Work fence (`admitWorkTarget`): no Work command and no write boundary is involved
+// here, so only admission can refuse. `address` is what the composition's document resolver answers:
+// a string, null for an unsaved document, and nothing at all where no resolver is composed.
+const here = { session: "s", openId: "here" };
+const savedWork = { binding: "address" as const, route: "fence", target: address("C:/model.rvt") };
+test.each([
+  ["an open lifetime's Work on another lifetime", { binding: "open" as const, route: "fence", target: null, open: { ...here, openId: "gone" } }, "C:/model.rvt", "Work belongs to another document"],
+  ["saved Work on another file", savedWork, "C:/other.rvt", "Work belongs to another document"],
+  ["saved Work on an unsaved target", savedWork, null, "Work belongs to a saved document, and the target document is unsaved"],
+  ["saved Work where no resolver reads the target's Address", savedWork, undefined, "Work belongs to a saved document, and this host cannot read the target's Address"],
+  ["saved Work on its own file", savedWork, "C:/model.rvt", null],
+] as const)("the Work fence at admission: %s", async (_name, key, resolved, refusal) => {
+  let bound = 0;
+  const f = await fixture(undefined, false, {
+    probe: async () => null,
+    ...(resolved === undefined ? {} : { target: async () => resolved }),
+    resolve: () =>
+      command(
+        {
+          says: "Spend Work",
+          needs: "project-document",
+          effect: "command",
+          dirties: [],
+          input: z.record(z.string(), z.unknown()),
+        },
+        z.null(),
+        {
+          bind: async () => (bound++, { effects: [] }),
+          run: () => Effect.fail(new StepFailure("ran", 409, "refused")),
+        },
+      ),
+  });
+  try {
+    await settle(
+      Effect.tryPromise(() =>
+        f.journal.invoke(
+          {
+            id: "fence",
+            key: "test.fence",
+            target: { kind: "document", ref: here },
+            input: { work: { key, revision: 0 } },
+          },
+          { caller: human, basis: null, parent: f.submitter.requestId },
+        ),
+      ).pipe(Effect.ignore, Effect.provideService(RequestIdentity, f.submitter)),
+    );
+    const receipt = await f.journal.wait("fence");
+    if (refusal === null) {
+      expect(bound).toBe(1);
+      expect(receipt).not.toMatchObject({ refusal: { code: "work.target" } });
+    } else {
+      expect(receipt).toMatchObject({
+        state: "failed",
+        notDispatched: true,
+        refusal: { kind: "domain", code: "work.target", message: refusal },
+      });
+      expect(bound).toBe(0);
+    }
   } finally {
     await f.dispose();
   }

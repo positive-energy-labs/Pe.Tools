@@ -539,21 +539,27 @@ const RETAIN_RECEIPTS = 10_000;
  * The kernel's Work fence, for every product: Work is staged against one document, and no command
  * spends it on another. It runs at admission and at every Work selection, before any native step.
  * The document's identity is the Work key's own: the exact open lifetime, or the saved Address.
- * An unsaved target has no Address, so Address-keyed Work refuses there and says why. `address` is
- * undefined only where the composition has no document resolver; the open lifetime still fences.
+ * An unsaved target has no Address, so Address-keyed Work refuses there and says why. A composition
+ * with no document resolver cannot confirm an Address, so Address-keyed Work refuses there too.
+ * This is the only fence: the Work write boundary derives from Work that admission already fenced.
+ * `workspace` is given for the Work a Work command writes from (its `workIntent.workspace`), where
+ * every binding is ruled; other handles are fenced on their document bindings alone.
  */
 function admitWorkTarget(
   target: ExecutionTarget,
   address: string | null | void,
   { key }: WorkHandle,
+  workspace?: boolean,
 ) {
-  if (target.kind !== "document" || (key.binding !== "open" && key.binding !== "address")) return;
-  if (key.binding === "address" && address === undefined) return;
-  if (!workBinding(key).admits(target.ref, address ?? null))
+  if (target.kind !== "document") return;
+  if (workspace === undefined && key.binding !== "open" && key.binding !== "address") return;
+  if (!workBinding(key).admits(target.ref, address ?? null, workspace))
     throw refused(
-      key.binding === "address" && address === null
-        ? "Work belongs to a saved document, and the target document is unsaved"
-        : "Work belongs to another document",
+      key.binding !== "address" || address
+        ? "Work belongs to another document"
+        : address === null
+          ? "Work belongs to a saved document, and the target document is unsaved"
+          : "Work belongs to a saved document, and this host cannot read the target's Address",
       "work.target",
     );
 }
@@ -1451,9 +1457,16 @@ export class ActionJournal implements ReceiptReader {
       if (!retirementOnly) {
         located.address = await this.environment?.target?.(admission.target, definition.needs);
         const { work, readWorks } = admission.input;
+        const intent = (definition as { workIntent?: { workspace: boolean } }).workIntent;
         for (const held of [work, ...Object.values(readWorks ?? {})]) {
           const handle = workHandleSchema.safeParse(held);
-          if (handle.success) admitWorkTarget(admission.target, located.address, handle.data);
+          if (handle.success)
+            admitWorkTarget(
+              admission.target,
+              located.address,
+              handle.data,
+              held === work ? intent?.workspace : undefined,
+            );
         }
       }
       if (prior?.prepared.state === "ready") executor.prepared.parse(prior.prepared.value);

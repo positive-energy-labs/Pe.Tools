@@ -5,6 +5,7 @@ import { product } from "@pe/rooms-contract/product";
 import { module } from "../routes/rooms/route.ts";
 import { CEILING, FLOOR, code, levels, region, zone } from "./fixtures.ts";
 import {
+  backRestores,
   targetChange,
   targetPaths,
   type JourneyDoc,
@@ -61,4 +62,7 @@ const rooms: TargetProduct = {
 
 test.each(targetPaths)("Rooms: %s leaves the old document's plan and room behind", (path) =>
   targetChange(rooms, path),
+);
+test("Rooms: Back restores the plan and room its entry names, and Forward the other document's", () =>
+  backRestores(rooms),
 );

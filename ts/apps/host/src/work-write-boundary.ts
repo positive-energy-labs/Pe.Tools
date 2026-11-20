@@ -11,7 +11,6 @@ import {
   writeResponseSchema,
   writePreviewSchema,
   workAdmissionSchema,
-  workBinding,
   ANY_ROUTE,
   type Tool,
   type WorkHandle,
@@ -114,7 +113,7 @@ const specFor =
     return spec as WorkSpec;
   };
 
-/** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
+/** Primitive 1 on the host: read the authored cells of the admitted Work, derive the input. */
 async function deriveFromWork(
   ctx: CommandContext,
   definition: import("@pe/agent-contracts").Command,
@@ -129,12 +128,7 @@ async function deriveFromWork(
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
-  const address = observed.session.state?.openDocuments.find(
-    (doc) => doc.openId === target.openId,
-  )?.address;
-  if (!workBinding(work.key).admits(target, address, hooks.workspace))
-    throw refused("Work belongs to another document", "work.target");
-  // Foreign Work refuses before any owner lookup (an ANY_ROUTE door resolves its owner's spec here).
+  // Kernel admission already fenced this Work to the target (action-journal.ts `admitWorkTarget`).
   const spec = specOf(work);
   // Each owner also resolves the native incarnation. The address check uses that same bound dependency below.
   const doc = (await ctx.selectWork(spec, work, (_doc, cells) => ({

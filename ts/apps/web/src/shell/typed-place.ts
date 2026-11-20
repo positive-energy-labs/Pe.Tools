@@ -50,9 +50,13 @@ export function createAdmittedPlace<State extends Disposable>(options: {
   let owner: string | null = null;
   const addressListeners = new Set<() => void>();
   const current = () => !disposed && visible && scope.current();
-  const unsubscribe = options.address.subscribe(() => {
+  // Back or Forward onto an entry that names another `?target`: that entry names its own Page.
+  let arrived = false;
+  const unsubscribe = options.address.subscribe((traversed) => {
     if (!current()) return;
-    captured = new URLSearchParams(options.address.read());
+    const next = new URLSearchParams(options.address.read());
+    arrived = !!traversed && next.get("target") !== captured.get("target");
+    captured = next;
     addressListeners.forEach((listener) => listener());
   });
   const place: AdmittedPlace<State> = {
@@ -95,11 +99,16 @@ export function createAdmittedPlace<State extends Disposable>(options: {
         // The old target's mount goes first, so it can neither follow nor remember the reset.
         state?.dispose();
         state = undefined;
-        const search = place.address.read();
-        for (const field of fields) search.delete(field);
         memory = freezePage({});
-        place.address.write(search, "replace");
+        // Default taken: a history entry names its own Page, as a link does. Back and Forward adopt
+        // its fields and never rewrite it; only Place memory and the old mount are dropped.
+        if (!arrived) {
+          const search = place.address.read();
+          for (const field of fields) search.delete(field);
+          place.address.write(search, "replace");
+        }
       }
+      arrived = false;
       owner = next;
       return true;
     },

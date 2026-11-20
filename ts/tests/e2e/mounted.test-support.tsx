@@ -20,6 +20,7 @@ export { planned, typedSubjectDoor } from "../../apps/web/src/shell/typed-mount"
 export { roster, snapshot } from "../../apps/host/tests/host-read-graph.test-support";
 export {
   targetChange,
+  backRestores,
   targetPaths,
   type JourneyDoc,
   type TargetProduct,
