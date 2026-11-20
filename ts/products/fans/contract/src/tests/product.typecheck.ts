@@ -7,7 +7,7 @@ const rated: FanEdit = ["ratedEsp", "*"];
 const esp: FanEdit = ["esp", "*"];
 void [rated, esp];
 
-const { requiredEsp: _esp, ...missingHome } = product.commands["sheet.apply"].writes;
+const { requiredEsp: _esp, ...missingHome } = product.sheetWrites;
 // @ts-expect-error The Fans apply request can write Required ESP even without an editable cell.
 const incomplete: Record<keyof typeof lossWrites, readonly string[]> = missingHome;
 void incomplete;

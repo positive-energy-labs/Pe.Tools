@@ -449,7 +449,7 @@ export function product<
   readonly guide?: Guide;
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
-}) {
+} & ([Sheet] extends [undefined] ? unknown : { readonly sheetWrites: Sheet })) {
   for (const key of [writeSettingTier.key, ...Object.values(SHEET_COMMANDS)])
     if (Object.hasOwn(declaration.commands, key)) throw Error(`${key} belongs to the platform`);
   const work: RouteStateSpec<z.ZodObject<WorkShape<C>, z.core.$strict>> & {
