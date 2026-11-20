@@ -711,7 +711,8 @@ tr.dl-row[data-active] {
 }
 @container list (max-width: 240px) {
   .dl-row-damage,
-  [data-list-column][data-priority="0"] {
+  [data-list-column][data-priority="0"],
+  .dl-row-actions[data-row-actions-persistent] > [data-priority="2"] {
     display: none;
   }
 }
@@ -800,6 +801,10 @@ tr.dl-row[data-active] {
 .dl-row-actions[data-row-actions-persistent] {
   visibility: visible;
   opacity: 1;
+}
+.dl-row-actions[data-row-actions-persistent] .dl-button:not([data-icon-only]) {
+  flex: none;
+  aspect-ratio: auto;
 }
 .dl-row-meta:has(> .dl-row-actions[data-row-actions-persistent]) > .dl-row-fact {
   visibility: hidden;

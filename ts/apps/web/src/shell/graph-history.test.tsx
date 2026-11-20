@@ -332,12 +332,17 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
     if (!activity) throw Error("Timeline activity is absent");
     expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
     const stop = within(activity).getByRole("button", { name: "Stop command" });
+    expect(within(stop).getByText("Stop", { exact: true })).toBeTruthy();
+    expect(
+      within(activity).getByRole("link", { name: "Inspect" }).getAttribute("data-priority"),
+    ).toBe("2");
     expect.soft(stop.closest("[data-row-actions-persistent]")).not.toBeNull();
     expect.soft(reveal.mock.contexts).toContain(stop.closest("[data-key]"));
     fireEvent.click(stop);
     expect(within(activity).getByText(/Stopping…/)).toBeTruthy();
     expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
     expect(within(activity).queryByRole("button", { name: "Stop command" })).toBeNull();
+    expect(within(activity).getByRole("link", { name: "Inspect" })).toBeTruthy();
     const list = activity.querySelector("[data-list-view]");
     expect(list).not.toBeNull();
     expect(list?.closest("[data-scroll]")).not.toBeNull();

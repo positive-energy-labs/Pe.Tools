@@ -79,7 +79,9 @@ export function GraphHistory({ owner }: { owner: TimelineOwner }) {
       actions:
         row.kind === "receipt" ? (
           <>
-            <a href={routeAddress("ops").link({ actionId: row.id })}>Inspect</a>
+            <a data-priority="2" href={routeAddress("ops").link({ actionId: row.id })}>
+              Inspect
+            </a>
             {["queued", "running", "outcome-unknown"].includes(row.state) && (
               <Button label="Stop command" onClick={() => void owner.stopCommand(row.id)}>
                 Stop
