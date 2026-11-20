@@ -4,7 +4,7 @@ import {
   manyCodec,
   resolveMany,
 } from "../../../../packages/agent-contracts/src/route-field";
-import { openSet } from "@pe/web-kernel/shell/open-set.neutral";
+import { openSet } from "@pe/web-kernel/shell/subject-set";
 import { module as ownerModule } from "@pe/duct-systems-web/route";
 import { module as presenterModule } from "@pe/fans-web/route";
 import { admitModules } from "@pe/ducts-web/admission.test-support";

@@ -1,4 +1,4 @@
-import { openSet } from "@pe/web-kernel/shell/open-set.neutral";
+import { openSet } from "@pe/web-kernel/shell/subject-set";
 import { homeHandle } from "../route/slots/sheet/index.ts";
 import { peReadings, type Readings } from "#/host/resource-stream";
 import { kernelVerbs, type KernelVerbKey } from "@pe/web-kernel/route/slots/findings";

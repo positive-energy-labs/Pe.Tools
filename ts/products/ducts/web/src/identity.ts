@@ -1,7 +1,7 @@
 import type { Many } from "@pe/agent-contracts/route-kernel-page";
 import { subjectCode, subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import { elementIndex } from "@pe/web-kernel/element-index";
-import { openSet } from "@pe/web-kernel/shell/open-set.neutral";
+import { openSet } from "@pe/web-kernel/shell/subject-set";
 import type { FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 export { fanScopeSchema, fanSystems, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 export { namesOf } from "@pe/web-kernel/route/typed-route";
