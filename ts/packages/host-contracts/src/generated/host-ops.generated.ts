@@ -11067,13 +11067,13 @@ export namespace RevitResolveUnitValue {
   }
 }
 
-/** Draw one room or zone region from loops on a plan view by numeric Revit view id; a person's designation, so a room is locked. */
+/** Draw one room or zone region from loops on a plan view by view UniqueId; a person's designation, so a room is locked. */
 export namespace RoomsDraw {
   export namespace Req {
     export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Request {
-      view: number;
+      view: string;
       loops: number[][][];
       name?: null | string;
       role?: null | string;
@@ -11094,13 +11094,13 @@ export namespace RoomsDraw {
   }
 }
 
-/** Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
+/** Combine two or more rooms or held regions of one zone on one plan view by view UniqueId into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
 export namespace RoomsMerge {
   export namespace Req {
     export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Request {
-      view: number;
+      view: string;
       uniqueIds: string[];
       name?: null | string;
       replacing?: null | OwnerBlobReplacement;
@@ -11122,13 +11122,13 @@ export namespace RoomsMerge {
   }
 }
 
-/** Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record. */
+/** Partition each zone drawn on one plan view by view UniqueId into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record. */
 export namespace RoomsPartition {
   export namespace Req {
     export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Request {
-      view: number;
+      view: string;
       runId?: null | string;
       rejected?: number[][][] | null;
       replacing?: null | OwnerBlobReplacement;
@@ -11167,6 +11167,7 @@ export namespace RoomsRoster {
       levels: RoomsLevel[];
       regions: RoomsRegion[];
       unreadable?: TakeoffUnreadableBlob[] | null;
+      trackedRegionIds?: string[] | null;
     }
     export interface RoomsLevel {
       name: string;
@@ -11174,14 +11175,14 @@ export namespace RoomsRoster {
       views: RoomsPlanView[];
     }
     export interface RoomsPlanView {
-      id: number;
+      uniqueId: string;
       name: string;
       type: string;
     }
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
-      view: number;
+      view: string;
       level: string;
       role: string;
       zone?: null | string;
@@ -11217,11 +11218,11 @@ export namespace RoomsRoster {
   }
 }
 
-/** Read zones, rooms and held regions on one plan view by numeric Revit view id, with geometry and provenance. rooms.roster lists available views without geometry. */
+/** Read zones, rooms and held regions on one plan view by view UniqueId, with geometry and provenance. rooms.roster lists available views without geometry. */
 export namespace RoomsSnapshot {
   export namespace Req {
     export interface Request {
-      view: number;
+      view: string;
     }
   }
   export namespace Res {
@@ -11229,6 +11230,7 @@ export namespace RoomsSnapshot {
       levels: RoomsLevel[];
       regions: RoomsRegion[];
       unreadable?: TakeoffUnreadableBlob[] | null;
+      trackedRegionIds?: string[] | null;
     }
     export interface RoomsLevel {
       name: string;
@@ -11236,14 +11238,14 @@ export namespace RoomsSnapshot {
       views: RoomsPlanView[];
     }
     export interface RoomsPlanView {
-      id: number;
+      uniqueId: string;
       name: string;
       type: string;
     }
     export interface RoomsRegion {
       elementId: number;
       uniqueId: string;
-      view: number;
+      view: string;
       level: string;
       role: string;
       zone?: null | string;
@@ -11279,11 +11281,11 @@ export namespace RoomsSnapshot {
   }
 }
 
-/** Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the view's latest committed run when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
+/** Read the solver's layer 1 for each zone on one plan view by view UniqueId from a rooms.partition run, the view's latest committed run when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
 export namespace RoomsTrace {
   export namespace Req {
     export interface Request {
-      view: number;
+      view: string;
       runId?: null | string;
     }
   }
@@ -11947,7 +11949,7 @@ export namespace TakeoffsAdopt {
   }
 }
 
-/** Read Filled Regions and their boundary loops from one named plan view. */
+/** Read Filled Regions and their boundary loops from one plan view by its UniqueId. */
 export namespace TakeoffsCandidates {
   export namespace Req {
     export interface Request {
@@ -11967,6 +11969,7 @@ export namespace TakeoffsCandidates {
       elementId: number;
       typeName: string;
       view: string;
+      viewUniqueId: string;
       color: string;
       sqft: number;
       role?: null | string;
@@ -12210,7 +12213,7 @@ export namespace TakeoffsRhvacLinksPreflight {
   }
 }
 
-/** Read Takeoff zones and rooms for explicit view names or zone GUIDs. Empty scope reads only model status and source identity without region geometry. */
+/** Read Takeoff zones and rooms for explicit plan view UniqueIds or zone UniqueIds. Empty scope reads only model status and source identity without region geometry. */
 export namespace TakeoffsSnapshot {
   export namespace Req {
     /**
@@ -12262,6 +12265,7 @@ export namespace TakeoffsSnapshot {
       elementId: number;
       typeName: string;
       view: string;
+      viewUniqueId: string;
       color: string;
       sqft: number;
       role?: null | string;

@@ -26,6 +26,7 @@ import { sheetWritesFor } from "./slots/sheet-command.ts";
 import { defineSettingOwners } from "./setting-owners.ts";
 import { subjectRefCodeSchema, type SubjectRefCode } from "./subject-ref.ts";
 import { writeSettingTier } from "./tiered-setting.ts";
+import { writeIntentSchema } from "./write-intent.ts";
 import type { Publication } from "./value.ts";
 
 /** Unexported, so only cell() makes a cell. */
@@ -106,6 +107,63 @@ export function workSchema(cells: Cells, record: SubjectRecord = subjectRecord) 
 function editable<C extends Cells>(cells: C): readonly EditablePath<C>[];
 function editable(cells: Cells): readonly (readonly string[])[] {
   return Object.entries(cells).map(([name, { per }]) => (per === "route" ? [name] : [name, "*"]));
+}
+
+/**
+ * One Work per route, for a product of several routes (G7: Work stays route-scoped). Each holds the
+ * cells its route names and `writeIntent`, where `workWriteCommands` stages a sealed command's input.
+ */
+type RouteWorks<C extends Cells> = Readonly<Record<string, readonly (keyof C & string)[]>>;
+type RouteWork<C extends Cells> = RouteStateSpec<
+  z.ZodObject<
+    WorkShape<C> & { writeIntent: z.ZodDefault<typeof writeIntentSchema> },
+    z.core.$strict
+  >
+> & {
+  readonly editable: readonly (EditablePath<C> | readonly ["writeIntent", "*"])[];
+  readonly schemaVersion: number;
+};
+type RouteTools<C extends Cells, W extends RouteWorks<C>> = {
+  readonly [K in keyof W]: Tool & { readonly work: RouteWork<Pick<C, W[K][number]>> };
+};
+/** One tool per Work: the commands staged in it. Every command of such a product is staged in one. */
+function routeTools(
+  says: string,
+  cells: Cells,
+  works: RouteWorks<Cells>,
+  commands: Readonly<Record<string, Command>>,
+) {
+  for (const [key, { work }] of Object.entries(commands))
+    if (!work || !Object.hasOwn(works, work.route))
+      throw Error(`${key} is staged in no declared Work`);
+  return Object.fromEntries(
+    Object.entries(works).map(([route, names]) => {
+      const own = Object.fromEntries(
+        Object.entries(cells).filter(([name]) => names.includes(name)),
+      );
+      return [
+        route,
+        {
+          name: route,
+          says,
+          work: {
+            route,
+            title: route,
+            description: says,
+            schemaVersion: 1,
+            schema: z.strictObject({
+              writeIntent: writeIntentSchema.default({}),
+              ...workSchema(own).shape,
+            }),
+            editable: [["writeIntent", "*"], ...editable(own)],
+          },
+          commands: Object.fromEntries(
+            Object.entries(commands).filter(([, command]) => command.work?.route === route),
+          ),
+        },
+      ];
+    }),
+  );
 }
 
 /** Load policy (S6 owns the meaning). Absent is today's behaviour. */
@@ -216,7 +274,10 @@ function bind(readings: Readings, routes: Readonly<Record<string, ProductRoute>>
     const [name, args] = typeof named === "string" ? [named] : named;
     const reading = readings[name];
     if (!reading) throw Error(`No reading ${name}`);
-    return read(hostRead(reading.handle), args);
+    const handle = hostRead(reading.handle);
+    if (!reading.load) return read(handle, args);
+    const { alone, freshBy, slow } = { ...handle.load, ...reading.load };
+    return read({ ...handle, load: { alone, freshBy, slow } }, args);
   };
   return Object.fromEntries(
     Object.entries(routes).map(([key, { core, reads, subject, ...route }]) => [
@@ -301,18 +362,35 @@ export const sheetCells = (declared: Stored) => {
 /** Refuses a key the declaration does not have, even through a variable or a spread. */
 export type NoExtras<Actual, Expected> = Record<Exclude<keyof Actual, keyof Expected>, never>;
 const noGuide: Guide = { instructions: "", skills: [] };
-function toolTable<K extends string, T, Publish extends boolean>(
+type Declared = Pick<ProductDeclaration, "says" | "cells" | "commands"> & {
+  readonly works?: RouteWorks<Cells>;
+};
+function toolTable<
+  K extends string,
+  T,
+  Publish extends boolean,
+  C extends Cells,
+  W extends RouteWorks<C>,
+>(
   id: string,
   alias: K | undefined,
   value: T,
   publish: Publish | undefined,
-): Publish extends false ? Record<never, never> : { readonly [P in K]: T };
+  declared: Declared & { readonly cells: C; readonly works?: W },
+): [keyof W] extends [never]
+  ? Publish extends false
+    ? Record<never, never>
+    : { readonly [P in K]: T }
+  : RouteTools<C, W>;
 function toolTable(
   id: string,
   alias: string | undefined,
   value: unknown,
   publish: boolean | undefined,
+  declared: Declared,
 ) {
+  if (declared.works)
+    return routeTools(declared.says, declared.cells, declared.works, declared.commands);
   return publish === false ? {} : { [alias ?? id]: value };
 }
 
@@ -327,6 +405,7 @@ export function product<
   const Publish extends boolean = true,
   const ToolName extends string = Id,
   const Sheet extends Writes<H, C> | undefined = undefined,
+  const Works extends RouteWorks<C> = Record<never, never>,
 >(declaration: {
   /** The product folder, Work route and default name of its Pea tool. */
   readonly id: Id;
@@ -340,6 +419,8 @@ export function product<
   > & {
     readonly subjectRecord?: SubjectRecord;
   };
+  /** Only for a product of several routes: each Work by its route, with the cells it holds. */
+  readonly works?: Works;
   readonly readings: R & {
     readonly [K in keyof R]: R[K] extends { load: { resource: true } }
       ? { readonly handle: { readonly input: z.ZodType<{ kind: string }> } }
@@ -401,7 +482,14 @@ export function product<
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,
     actions: declaration.commands,
-    tools: toolTable(declaration.id, declaration.toolName, tool, declaration.publishTool),
+    // With `works`, each tool carries its route's Work, and `work` and `tool` are not the product's.
+    tools: toolTable<ToolName, typeof tool, Publish, C, Works>(
+      declaration.id,
+      declaration.toolName,
+      tool,
+      declaration.publishTool,
+      declaration,
+    ),
     settingOwners: defineSettingOwners(sheetCells(declaration)),
     basisHeaders: Object.fromEntries(
       readings.flatMap(({ load }) => Object.entries(load?.basisHeaders ?? {})),
@@ -440,9 +528,10 @@ export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
           readonly run: ReadingBody<P, K, Context>;
         };
   };
-  readonly commands: { readonly [K in keyof P["commands"]]: Executor } & ([
-    NonNullable<P["sheetWrites"]>,
-  ] extends [never]
+  /** A plan built by `workWriteCommands` is its write's body in the preview phase, so it takes none. */
+  readonly commands: {
+    readonly [K in keyof P["commands"] as K extends `${string}.preview` ? never : K]: Executor;
+  } & ([NonNullable<P["sheetWrites"]>] extends [never]
     ? unknown
     : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
 };

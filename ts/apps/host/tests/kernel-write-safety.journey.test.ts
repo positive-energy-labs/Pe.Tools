@@ -1,3 +1,4 @@
+import { regionCode, roomsWork } from "@pe/rooms-contract/product";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
@@ -10,7 +11,6 @@ import { RouteWorkspace } from "@pe/runtime";
 import {
   address,
   catalogWorkSpecs,
-  roomEditKey,
   type Caller,
   type Touched,
   type WorkKey,
@@ -36,7 +36,7 @@ async function fixture(withPage = false) {
   const makeWorkspace = () =>
     new RouteWorkspace({
       publicationAuthor: () => "human",
-      registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: tools.rooms.work }],
+      registrations: [{ spec: catalogWorkSpecs["parameter-links"] }, { spec: roomsWork }],
       store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
     });
   let workspace = makeWorkspace();
@@ -583,7 +583,7 @@ test("E9 a queued Page command loses authority before its first effect", async (
         rooms,
         "rooms",
         request.regions.map((room: any) => ({
-          path: ["edits", roomEditKey(room.uniqueId, "name")],
+          path: ["name", regionCode(room.uniqueId)],
           value: { edit: { value: room.name } },
         })),
         0,

@@ -13,11 +13,19 @@ import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 const declarations = import.meta.glob<{
   module: TypedRoute;
   router?: { dock?: boolean };
-}>(["../*/route.ts", "../../../../products/*/web/route.ts"], { eager: true });
+}>(
+  [
+    "../*/route.ts",
+    "../../../../products/*/web/route.ts",
+    "../../../../products/*/web/routes/*/route.ts",
+  ],
+  { eager: true },
+);
 const closures = import.meta.glob<unknown>(
   [
     "../*/source-closure.generated.json",
     "../../../../products/*/web/source-closure.generated.json",
+    "../../../../products/*/web/routes/*/source-closure.generated.json",
   ],
   {
     eager: true,

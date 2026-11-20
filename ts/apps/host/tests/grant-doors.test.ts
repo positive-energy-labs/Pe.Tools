@@ -4,7 +4,7 @@ import { serviceHeaders, contextHeaders } from "./callers.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, bindWork } from "@pe/agent-contracts";
-import { tools } from "@pe/mcps/product-actions";
+import { takeoffsWork } from "@pe/rooms-contract/product";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { Layer } from "effect";
@@ -30,7 +30,7 @@ beforeEach(async () => {
   native = await fixtureNative(join(root, "native"));
   journal = native.journal;
   const workspace = new RouteWorkspace({
-    registrations: [{ spec: tools.takeoffs.work }],
+    registrations: [{ spec: takeoffsWork }],
     store: fileRouteDocumentStore(stateFixture(join(root, "work"))),
   });
   server = await serveRoutes(
@@ -45,7 +45,7 @@ beforeEach(async () => {
       target: { kind: "host" },
       input: {
         key: bindWork("takeoffs", address("C:/Models/guard.rvt")),
-        seed: tools.takeoffs.work.schema.parse({}),
+        seed: takeoffsWork.schema.parse({}),
       },
     },
     contextHeaders(),

@@ -6,7 +6,6 @@ export * from "./route-address.ts";
 export * from "./route-view.ts";
 export {
   FAMILIES_DEFAULT_QUERY,
-  ROOMS_LAYERS,
   SETTINGS_SECTIONS,
   SPACE_LAYERS,
   spaceElementKey,
@@ -24,7 +23,6 @@ export * from "./family.ts";
 export * from "./grounded-doc.ts";
 export * from "./families.ts";
 export * from "./takeoffs.ts";
-export * from "./rooms.ts";
 export * from "./parameter-links.ts";
 export * from "./settings.ts";
 export * from "./schedule-actions.ts";

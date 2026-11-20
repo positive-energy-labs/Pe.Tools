@@ -45,13 +45,14 @@ export function paneReadCopies(
 // copied default. Retargeted from the deleted `*/graph.ts` declarations (none since 6ecbc716).
 test("route modules do not copy the kernel's pane read default", () => {
   const modules = [...files("ts/apps/web/src"), ...files("ts/products")].filter((p) =>
-    /^ts\/(?:apps\/web\/src\/[^/]+|products\/[^/]+\/web)\/route\.ts$/.test(p),
+    /^ts\/(?:apps\/web\/src\/[^/]+|products\/[^/]+\/web(?:\/routes\/[^/]+)?)\/route\.ts$/.test(p),
   );
   const results = modules.map((file) =>
     paneReadCopies(file, readFileSync(resolve(root, file), "utf8")),
   );
   // Never vacuous: the old guard read a file shape that stopped existing and stayed green.
-  expect(results.filter((r) => r.declarations).length).toBeGreaterThanOrEqual(15);
+  // 13 since Rooms and Takeoffs declare through `screen()`, which has no pane read to copy.
+  expect(results.filter((r) => r.declarations).length).toBeGreaterThanOrEqual(13);
   expect(results.flatMap((r) => r.copies)).toEqual([]);
 });
 

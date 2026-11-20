@@ -159,11 +159,14 @@ function bindIntent(
 ): WorkIntentBinding {
   const derive =
     options.derive ??
-    ((work: unknown) =>
-      definition.input.parse(
-        (work as { writeIntent?: Record<string, { edit?: { value: unknown } }> }).writeIntent?.[key]
-          ?.edit?.value ?? {},
-      ));
+    ((work: unknown) => {
+      const staged = (work as { writeIntent?: Record<string, { edit?: { value: unknown } }> })
+        .writeIntent?.[key]?.edit?.value;
+      // A consumed or never-staged intent reads as a sentence, never as a schema dump.
+      if (staged === undefined && !definition.input.safeParse({}).success)
+        throw Error(`No ${key} is staged: stage writeIntent["${key}"].edit first.`);
+      return definition.input.parse(staged ?? {});
+    });
   return { route, key, workspace: options.workspace ?? false, derive };
 }
 

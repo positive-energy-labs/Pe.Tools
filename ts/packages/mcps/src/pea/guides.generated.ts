@@ -2,6 +2,7 @@
 import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
-const products = [product0, product1, product2] as const;
+import { product as product3 } from "@pe/rooms-contract/product";
+const products = [product0, product1, product2, product3] as const;
 export const productGuides = products.map(product => product.guide);
 export const productAdmissionPreflights = products.flatMap(product => "admissionPreflight" in product ? [product.admissionPreflight] : []);

@@ -127,7 +127,7 @@ export function gatewayExecutor(
   const observe = async ({ admission }: CommandContext) => {
     if (
       Object.values(commands).some(
-        (command) => "native" in command && command.native?.includes(key as never),
+        (command) => "native" in command && (command.native as readonly string[] | undefined)?.includes(key),
       )
     )
       throw refused("This native implementation is owned by its public command");

@@ -45,13 +45,13 @@ public sealed class TakeoffOwnerCropProofTests {
             Assert.That(owned, Has.Count.EqualTo(2), "precondition: Duplicate with Detailing copies both regions into the duplicate");
             var inside = owned.Single(fr => fr.GetBoundaries()[0].First().GetEndPoint(0).X > 0);
             var outside = owned.Single(fr => fr.GetBoundaries()[0].First().GetEndPoint(0).X < 0);
-            var candidates = TakeoffAtlas.CandidateRegions(doc, new TakeoffCandidatesRequest(duplicate.Name));
+            var candidates = TakeoffAtlas.CandidateRegions(doc, new TakeoffCandidatesRequest(duplicate.UniqueId));
             Console.WriteLine($"[PE_OWNER_CROP] candidates in the view collector: {string.Join(", ", candidates.Select(r => $"{r.ElementId}={r.OwnerCrop}"))}");
 
             TakeoffAdoptResult result;
             using (var tx = new Transaction(doc, "Adopt both")) {
                 _ = tx.Start();
-                result = TakeoffAtlas.AdoptZones(doc, new TakeoffAdoptRequest(duplicate.Name, [
+                result = TakeoffAtlas.AdoptZones(doc, new TakeoffAdoptRequest(duplicate.UniqueId, [
                     new TakeoffAdoptItem(inside.Id.Value(), inside.UniqueId, "Inside", ""),
                     new TakeoffAdoptItem(outside.Id.Value(), outside.UniqueId, "Outside", "")
                 ]));

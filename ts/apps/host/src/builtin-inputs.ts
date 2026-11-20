@@ -8,7 +8,6 @@ import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, type RecordedInput } from "@pe/host-internal/input-recording";
 import { nativeInputIdentity } from "@pe/host-internal/input-recording";
 import { CaptureStore } from "./takeoff-captures.ts";
-import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
 import { readLocal } from "./local-inputs.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
@@ -18,6 +17,7 @@ import { hostOpSafety } from "@pe/host-contracts/generated";
 import {
   executionTargetSchema,
   documentRefSchema,
+  takeoffSnapshotInput,
   NATIVE_BODY_VERSION_HEADER,
 } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";

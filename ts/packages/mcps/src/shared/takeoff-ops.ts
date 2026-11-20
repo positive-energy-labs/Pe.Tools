@@ -15,7 +15,7 @@ import type {
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { Schema, SchemaGetter } from "effect";
 
-/** The native Takeoffs projection exposes each zone's provenance as JSON. */
+/** The native Takeoffs projection exposes each room row's provenance as JSON. */
 export const ZoneProvenance = Schema.fromJsonString(
   Schema.Struct({
     view: Schema.optionalKey(Schema.String),
@@ -135,7 +135,7 @@ export function projectTakeoffSnapshot(
     const ordinal = (ordinals.get(view) ?? 0) + 1;
     ordinals.set(view, ordinal);
     const materialized = regionsByZone[region.guid ?? ""] ?? [];
-    const rooms = materialized.filter((item) => item.role !== "held-residue").map(room);
+    const drawn = materialized.filter((item) => item.role !== "held-residue").map(room);
     const residues = materialized
       .filter((item) => item.role === "held-residue")
       .map((item) => {
@@ -157,7 +157,7 @@ export function projectTakeoffSnapshot(
         ? tags.length > 0
           ? "registered"
           : "declared"
-        : residues.length > 0 || rooms.some((item) => item.flags.length > 0)
+        : residues.length > 0 || drawn.some((item) => item.flags.length > 0)
           ? "partitioned"
           : "reviewed";
     return {
@@ -175,7 +175,7 @@ export function projectTakeoffSnapshot(
       stage,
       tags,
       name,
-      rooms,
+      rooms: drawn,
       residues,
       heldSqft: residues
         .filter((item) => item.reason !== ORIGINAL_UNAVAILABLE)

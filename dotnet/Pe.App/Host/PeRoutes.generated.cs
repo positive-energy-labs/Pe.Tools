@@ -189,13 +189,15 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
-            public const string View = "view";
-            public const string Level = "level";
-            public const string Room = "room";
-            public const string Stage = "stage";
-            public const string Layers = "layers";
+            public const string ContextRadiusFt = "contextRadiusFt";
+            public const string SceneView = "sceneView";
             public const string Viewport = "viewport";
-            public const string Card = "card";
+            public const string Context = "context";
+            public const string Layers = "layers";
+            public const string Encoding = "encoding";
+            public const string Picture = "picture";
+            public const string View = "view";
+            public const string Room = "room";
             public const string Selected = "selected";
         }
     }
@@ -231,15 +233,8 @@ internal static class PeRoutes {
         internal static class Keys {
             public const string ThreadSearch = "threadSearch";
             public const string ThreadSort = "threadSort";
-            public const string Level = "level";
-            public const string Zone = "zone";
-            public const string Room = "room";
-            public const string Viewport = "viewport";
             public const string Views = "views";
-            public const string Zones = "zones";
-            public const string Work = "work";
-            public const string R10 = "r10";
-            public const string Stage = "stage";
+            public const string Capture = "capture";
             public const string Selected = "selected";
         }
     }

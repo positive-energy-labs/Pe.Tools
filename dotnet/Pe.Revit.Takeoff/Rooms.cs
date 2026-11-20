@@ -189,7 +189,13 @@ public static class Rooms
     // FOOTGUN: kaitpw tie-break (rooms LEDGER 2026-09-24), used only when no knee piece is near the region at all.
     private const double ZoneTieBreakSqft = 300.0;
 
-    public static RoomsSnapshotData Roster(Document doc) => new(Levels(doc), []);
+    public static RoomsSnapshotData Roster(Document doc)
+    {
+        var read = RoomsRegionRecord.Read(doc);
+        return new(Levels(doc), [], TrackedRegionIds: read.Refusal is null
+            ? read.Value?.Regions.Keys.Where(id => doc.GetElement(id) is FilledRegion).ToList() ?? []
+            : null);
+    }
 
     private static List<RoomsLevel> Levels(Document doc)
     {
@@ -197,16 +203,16 @@ public static class Rooms
             .Where(v => !v.IsTemplate && v.GenLevel != null).ToList();
         var levels = views.GroupBy(v => v.GenLevel.Name)
             .Select(g => new RoomsLevel(g.Key, g.First().GenLevel.ProjectElevation,
-                g.Select(v => new RoomsPlanView(v.Id.Value(), v.Name, v.ViewType.ToString()))
+                g.Select(v => new RoomsPlanView(v.UniqueId, v.Name, v.ViewType.ToString()))
                     .OrderBy(v => v.Name, StringComparer.Ordinal).ThenBy(v => v.Type, StringComparer.Ordinal)
-                    .ThenBy(v => v.Id).ToList()))
+                    .ThenBy(v => v.UniqueId, StringComparer.Ordinal).ToList()))
             .OrderBy(l => l.Elevation).ThenBy(l => l.Name, StringComparer.Ordinal).ToList();
         return levels;
     }
 
-    public static RoomsSnapshotData Snapshot(Document doc, long viewId) => Snapshot(doc, viewId, null);
+    public static RoomsSnapshotData Snapshot(Document doc, string viewId) => Snapshot(doc, viewId, null);
 
-    internal static RoomsSnapshotData Snapshot(Document doc, long viewId, string? traceRoot)
+    internal static RoomsSnapshotData Snapshot(Document doc, string viewId, string? traceRoot)
     {
         var viewScope = LevelView(doc, viewId);
         var levels = Levels(doc);
@@ -224,7 +230,7 @@ public static class Rooms
             var outer = loops.OrderByDescending(loop => Math.Abs(Kernel.Shoelace(loop))).First();
             bool touched = Touched(provenance, loops);
             regions.Add(new RoomsRegion(
-                fr.Id.Value(), fr.UniqueId, viewScope.Id.Value(), viewScope.GenLevel.Name,
+                fr.Id.Value(), fr.UniqueId, viewScope.UniqueId, viewScope.GenLevel.Name,
                 role switch
                 {
                     TakeoffCarriers.RoleZoningRegion => "zone",
@@ -831,8 +837,10 @@ public static class Rooms
             ? provenance
             : provenance with { Flags = [.. provenance.Flags, FlagAuthored] };
 
-    private static ViewPlan LevelView(Document doc, long id) =>
-        doc.GetElement(id.ToElementId()) is ViewPlan { IsTemplate: false, GenLevel: not null } view
+    // A plan is its view UniqueId (TakeoffAtlas.PlanView); Rooms also needs its level, and answers the typed
+    // refusal the route recovers from for a missing, template or non-plan element alike.
+    private static ViewPlan LevelView(Document doc, string uniqueId) =>
+        TakeoffAtlas.PlanView(doc, uniqueId) is { GenLevel: not null } view
             ? view
             : throw new RoomsViewMissingException();
 

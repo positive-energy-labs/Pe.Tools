@@ -67,13 +67,13 @@ public sealed class TakeoffNativeFixtureRecorder {
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
             var adopted = Capture<TakeoffAdoptResult>("takeoffs.adopt", "AdoptTakeoffRegionsCore",
-                new TakeoffAdoptRequest(view.Name, [new TakeoffAdoptItem(zone.Id.Value(), zone.UniqueId, "Fixture zone", "FIXTURE-1")]));
+                new TakeoffAdoptRequest(view.UniqueId, [new TakeoffAdoptItem(zone.Id.Value(), zone.UniqueId, "Fixture zone", "FIXTURE-1")]));
             Assert.That(adopted, Is.Not.Null, "Adopt native path must answer; see retained error");
 
             var a = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
-                new RoomsDrawRequest(view.Id.Value(), [Square(0, 0, 10)], "Office"));
+                new RoomsDrawRequest(view.UniqueId, [Square(0, 0, 10)], "Office"));
             var b = Capture<RoomsDrawResult>("rooms.draw", "DrawRoomCore",
-                new RoomsDrawRequest(view.Id.Value(), [Square(10, 0, 10)], "Lobby"));
+                new RoomsDrawRequest(view.UniqueId, [Square(10, 0, 10)], "Lobby"));
             Assert.That(a, Is.Not.Null, "Draw native path must answer; see retained error");
             Assert.That(b, Is.Not.Null, "Draw native path must answer; see retained error");
             var written = Capture<RoomsWriteReceipt>("rooms.write", "WriteRoomsCore", new RoomsWriteRequest([
@@ -105,19 +105,19 @@ public sealed class TakeoffNativeFixtureRecorder {
                 .Select(entry => entry.Key).ToList();
             Assert.That(members, Has.Count.EqualTo(2));
             var merged = Capture<RoomsMergeResult>("rooms.merge", "MergeRoomsCore",
-                new RoomsMergeRequest(view.Id.Value(), members, "Recorded combined room"));
+                new RoomsMergeRequest(view.UniqueId, members, "Recorded combined room"));
             Assert.That(merged, Is.Not.Null, "Merge native path must answer; see retained error");
             Assert.That(merged!.MergedFrom, Is.EquivalentTo(members));
             Assert.That(doc.GetElement(merged.UniqueId), Is.TypeOf<FilledRegion>());
             var takeoff = Capture<TakeoffPartitionResult>("takeoffs.partition", "PartitionTakeoffCore",
-                new TakeoffPartitionRequest(zone.Id.Value(), view.Name, "Fixture zone", zoneUniqueId, "recorded-fixture"));
+                new TakeoffPartitionRequest(zone.Id.Value(), view.UniqueId, "Fixture zone", zoneUniqueId, "recorded-fixture"));
             Assert.That(takeoff, Is.Not.Null, "Takeoff partition must answer; see retained error");
             Assert.That(takeoff!.Failures, Is.Empty);
             Assert.That(takeoff.Review!.Zone.Key, Is.EqualTo(zoneUniqueId));
-            var partitioned = Capture<RoomsPartitionResult>("rooms.partition", "PartitionRoomsCore", new RoomsPartitionRequest(view.Id.Value()));
+            var partitioned = Capture<RoomsPartitionResult>("rooms.partition", "PartitionRoomsCore", new RoomsPartitionRequest(view.UniqueId));
             Assert.That(partitioned, Is.Not.Null, "Rooms partition must answer; see retained error");
             Assert.That(partitioned!.Failures, Is.Empty);
-            var trace = Capture<RoomsTraceData>("rooms.trace", "GetRoomsTraceCore", new RoomsTraceRequest(view.Id.Value()));
+            var trace = Capture<RoomsTraceData>("rooms.trace", "GetRoomsTraceCore", new RoomsTraceRequest(view.UniqueId));
             Assert.That(trace, Is.Not.Null, "Rooms trace must answer; see retained error");
             Assert.That(trace!.RunId, Is.EqualTo(partitioned.RunId));
             Assert.That(trace.Zones.Select(item => item.ZoneUniqueId), Does.Contain(zoneUniqueId));
@@ -137,7 +137,7 @@ public sealed class TakeoffNativeFixtureRecorder {
         RoomsRunTraces.RootOverride.Value = root.FullName;
         try
         {
-            long viewId;
+            string viewId;
             RoomsDrawResult zone;
             using (var tx = new Transaction(doc, "Draw a zoning region"))
             {
@@ -145,7 +145,7 @@ public sealed class TakeoffNativeFixtureRecorder {
                 var level = Level.Create(doc, 0);
                 var planType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
                     .Cast<ViewFamilyType>().First(type => type.ViewFamily == ViewFamily.FloorPlan);
-                viewId = ViewPlan.Create(doc, planType.Id, level.Id).Id.Value();
+                viewId = ViewPlan.Create(doc, planType.Id, level.Id).UniqueId;
                 zone = Rooms.Draw(doc, new(viewId, [Square(0, 0, 30)], Role: "zone"));
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
@@ -181,14 +181,14 @@ public sealed class TakeoffNativeFixtureRecorder {
             {
                 _ = tx.Start();
                 var record = RoomsRegionRecord.Stage(doc);
-                var viewUniqueId = doc.GetElement(viewId.ToElementId()).UniqueId;
+                var viewUniqueId = viewId;
                 record.Runs[viewUniqueId] = record.Runs[viewUniqueId] with { Zones = 0 };
                 record.Save(doc);
                 Assert.That(() => Rooms.Trace(doc, request),
                     Throws.TypeOf<RoomsTraceUnavailableException>().With.Message.Contains("No zone solved"));
 
                 var ids = new FilteredElementCollector(doc).OfClass(typeof(FilledRegion))
-                    .WherePasses(new ElementOwnerViewFilter(viewId.ToElementId())).ToElementIds();
+                    .WherePasses(new ElementOwnerViewFilter(doc.GetElement(viewId).Id)).ToElementIds();
                 _ = doc.Delete(ids);
                 record.Save(doc);
                 Assert.That(RoomsRegionRecord.Read(doc).OrThrow()!.Runs.ContainsKey(viewUniqueId), Is.False);
@@ -217,7 +217,7 @@ public sealed class TakeoffNativeFixtureRecorder {
             string State() => string.Join("|", new FilteredElementCollector(doc).OfClass(typeof(FilledRegion))
                 .Cast<FilledRegion>().OrderBy(fr => fr.Id.Value())
                 .Select(fr => $"{fr.UniqueId}:{fr.GetTypeId().Value()}:{Rooms.GeometryHash(TakeoffAtlas.Boundaries(fr))}"));
-            long viewId;
+            string viewId;
             RoomsDrawResult filler, a, b;
             using (var tx = new Transaction(doc, "Seed cap test zones and rooms"))
             {
@@ -225,7 +225,7 @@ public sealed class TakeoffNativeFixtureRecorder {
                 var level = Level.Create(doc, 0);
                 var type = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
                     .Cast<ViewFamilyType>().First(candidate => candidate.ViewFamily == ViewFamily.FloorPlan);
-                viewId = ViewPlan.Create(doc, type.Id, level.Id).Id.Value();
+                viewId = ViewPlan.Create(doc, type.Id, level.Id).UniqueId;
                 var zone = Rooms.Draw(doc, new(viewId, [Square(-5, -5, 30)], "Zone", "zone"));
                 a = Rooms.Draw(doc, new(viewId, [Square(0, 0, 10)], "A"));
                 b = Rooms.Draw(doc, new(viewId, [Square(10, 0, 10)], "B"));
@@ -315,14 +315,14 @@ public sealed class TakeoffNativeFixtureRecorder {
         try
         {
             RoomsDrawResult room;
-            long viewId;
+            string viewId;
             using (var transaction = new Transaction(doc, "Draw proof room"))
             {
                 Assert.That(transaction.Start(), Is.EqualTo(TransactionStatus.Started));
                 var level = Level.Create(doc, 0);
                 var planType = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
                     .Cast<ViewFamilyType>().First(type => type.ViewFamily == ViewFamily.FloorPlan);
-                viewId = ViewPlan.Create(doc, planType.Id, level.Id).Id.Value();
+                viewId = ViewPlan.Create(doc, planType.Id, level.Id).UniqueId;
                 room = Rooms.Draw(doc, new(viewId, [Square(0, 0, 10)], "Office"));
                 Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }

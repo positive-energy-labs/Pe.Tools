@@ -4,11 +4,11 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { routeAddress, type RoomsPartitionProgress } from "@pe/agent-contracts";
+import { routeAddress, type NativeProgress } from "@pe/agent-contracts";
 import type { TimelineOwner } from "./situation-band";
 import { activityTime, timelineRowKey } from "./timeline";
 
-const phaseLabel: Record<RoomsPartitionProgress["phase"], string> = {
+const phaseLabel: Record<NativeProgress["phase"], string> = {
   Prepare: "Reading model geometry",
   Capture: "Finding walls and openings",
   Designation: "Identifying zones",

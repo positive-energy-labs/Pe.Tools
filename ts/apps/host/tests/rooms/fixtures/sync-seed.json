@@ -1,0 +1,202 @@
+{
+  "zones": [
+    "7a4e0000-0000-4000-8000-000000000001"
+  ],
+  "snapshot": {
+    "kind": "ready",
+    "target": {
+      "session": "demo",
+      "openId": "demo"
+    },
+    "capture": {
+      "id": "0000000000000000000000000000000000000000000000000000000000000000",
+      "capturedAt": "2026-08-17T00:20:00.000Z",
+      "provenance": {
+        "kind": "live",
+        "target": {
+          "session": "demo",
+          "openId": "demo"
+        }
+      },
+      "snapshot": {
+        "reading": {
+          "at": "C:\\Fixtures\\project-a Residence.rvt",
+          "version": null,
+          "observedAt": "2026-08-17T00:20:00.000Z"
+        },
+        "carriers": {
+          "stage": "Adoption",
+          "status": "ready",
+          "missingCarrierGuids": []
+        },
+        "world": {
+          "docName": "project-a Residence.rvt",
+          "r10Path": "C:\\projects\\project-a\\projectA.local.r10",
+          "lanes": [
+            {
+              "view": "Mechanical Zoning Plan - Lower Level",
+              "label": "Lower",
+              "replayPath": null
+            }
+          ],
+          "zones": [
+            {
+              "zone": {
+                "guid": "7a4e0000-0000-4000-8000-000000000001",
+                "elementId": 101,
+                "key": "Lower#01",
+                "ordinal": 1,
+                "lane": {
+                  "view": "Mechanical Zoning Plan - Lower Level",
+                  "label": "Lower",
+                  "replayPath": null
+                },
+                "color": "0,210,210",
+                "loops": [
+                  [
+                    [
+                      100,
+                      100
+                    ],
+                    [
+                      112,
+                      100
+                    ],
+                    [
+                      112,
+                      120
+                    ],
+                    [
+                      100,
+                      120
+                    ]
+                  ]
+                ],
+                "declaredSqft": 240,
+                "bounds": {
+                  "minX": 100,
+                  "minY": 100,
+                  "maxX": 112,
+                  "maxY": 120
+                }
+              },
+              "stage": "synced",
+              "tags": [
+                "FC-1"
+              ],
+              "name": "Great Room",
+              "rooms": [
+                {
+                  "guid": "7a4e-room-27b77e60-0000",
+                  "elementId": null,
+                  "name": "Laundry",
+                  "type": "laundry",
+                  "sqft": 83,
+                  "ceilingFt": 9,
+                  "label": [
+                    108.14998345449567,
+                    102.21058257855475
+                  ],
+                  "flags": [],
+                  "provenance": {
+                    "runId": "run-2026-08-10-364",
+                    "sourceSqft": 83,
+                    "sourceRoomId": "7a4e-room-27b77e60-0000"
+                  },
+                  "r10": {
+                    "fileIdentity": "seed",
+                    "identifier": 101,
+                    "syncedAt": "2026-08-13T09:12:00Z",
+                    "lastSyncedSqft": 83
+                  },
+                  "data": {
+                    "people": 0,
+                    "lightingW": 21,
+                    "equipSensible": 0,
+                    "equipLatent": 600,
+                    "ventilationCfm": 10
+                  },
+                  "outer": null,
+                  "holes": []
+                }
+              ],
+              "residues": [],
+              "heldSqft": 1,
+              "runs": [
+                {
+                  "runId": "run-02026-08-10-364",
+                  "created": 1,
+                  "rebound": 0,
+                  "held": 1,
+                  "orphaned": 0,
+                  "failures": 0,
+                  "declaredSqft": 240,
+                  "roomSqft": 208,
+                  "excludedSqft": 31,
+                  "voidSqft": 0
+                },
+                {
+                  "runId": "run-2026-08-10-364",
+                  "created": 2,
+                  "rebound": 0,
+                  "held": 1,
+                  "orphaned": 0,
+                  "failures": 0,
+                  "declaredSqft": 240,
+                  "roomSqft": 208,
+                  "excludedSqft": 31,
+                  "voidSqft": 0
+                }
+              ],
+              "driftSqft": 0
+            }
+          ],
+          "systems": [
+            {
+              "guid": "5y5-3321191160",
+              "tag": "FC-1",
+              "zoneKeys": [
+                "Lower#01"
+              ],
+              "sensibleBtuh": 3767,
+              "overCap": false
+            }
+          ]
+        },
+        "zoneFrs": [
+          {
+            "elementId": 1,
+            "typeName": "Great Room",
+            "view": "Mechanical Zoning Plan - Lower Level",
+            "color": "0,210,210",
+            "sqft": 240,
+            "role": "zoning-region",
+            "guid": "7a4e0000-0000-4000-8000-000000000001",
+            "blob": "{\"view\":\"Mechanical Zoning Plan - Lower Level\",\"name\":\"Great Room\",\"systemTag\":\"FC-1\"}",
+            "loops": [
+              [
+                [
+                  100,
+                  100
+                ],
+                [
+                  112,
+                  100
+                ],
+                [
+                  112,
+                  120
+                ],
+                [
+                  100,
+                  120
+                ]
+              ]
+            ]
+          }
+        ],
+        "regionsByZone": {}
+      }
+    }
+  }
+}
