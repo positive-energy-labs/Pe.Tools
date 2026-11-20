@@ -1,6 +1,6 @@
 /** One body per declared reading. Each maps a native read to the shape the declaration gives it. */
 import { z } from "zod";
-import { readingRequestSchema, type DocumentRef } from "@pe/agent-contracts";
+import type { DocumentRef } from "@pe/agent-contracts";
 import {
   stagedAdoptChoices,
   takeoffCaptureSchema,
@@ -25,10 +25,15 @@ const xy = (point: readonly number[]) => point2.parse(point.slice(0, 2));
 const ring = (points: readonly (readonly number[])[]) => points.map(xy);
 const unreadable = (rows: readonly { parameter: string; reason: string }[] | null | undefined) =>
   (rows ?? []).map(({ parameter, reason }) => ({ parameter, reason }));
-const savedCapture = leaf("resource", readingRequestSchema, takeoffCaptureSchema.nullable());
 const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
-const savedCaptures = leaf("resource", readingRequestSchema, z.array(takeoffCaptureSummarySchema));
 const observations = product.readings.observations.handle;
+// The saved captures are the same host file the `observations` reading takes, by id or as a list.
+const savedCapture = leaf("file:observation", observations.input, takeoffCaptureSchema.nullable());
+const savedCaptures = leaf(
+  "file:observation",
+  observations.input,
+  z.array(takeoffCaptureSummarySchema),
+);
 
 export const readings: HostBodies<typeof product, ReadContext, never>["readings"] = {
   observations: (ctx, args) =>
@@ -245,8 +250,8 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
   },
   async captures(ctx, { capture }) {
     return {
-      captures: await ctx.read(savedCaptures, { kind: "takeoff-saved" }),
-      saved: capture ? await ctx.read(savedCapture, { kind: "takeoff-saved", id: capture }) : null,
+      captures: await ctx.read(savedCaptures, { saved: true }),
+      saved: capture ? await ctx.read(savedCapture, { capture, saved: true }) : null,
     };
   },
 };

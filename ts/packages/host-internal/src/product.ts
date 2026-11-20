@@ -1,10 +1,20 @@
+import type { Effect } from "effect";
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
-import type { HomeBodies, HostBodies, ProductDeclaration } from "@pe/agent-contracts/product";
+import type { HostSessionScope } from "@pe/host-contracts/operation-types";
+import type {
+  FileBody,
+  HostBodies,
+  HttpRequest,
+  OwedBodies,
+  ProductDeclaration,
+} from "@pe/agent-contracts/product";
+import type { AttemptHost } from "./action-execution.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
 import { declareHome, type HomeReader } from "./home-files.ts";
 import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
+import type { RequestIdentity } from "./request-contracts.d.ts";
 import { body, type Read, type ReadContext } from "./reads/door.ts";
 
 type Dependencies = {
@@ -12,38 +22,68 @@ type Dependencies = {
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
 };
 
-const hasHomes = (
-  bodies: object,
-): bodies is { readonly homes: Readonly<Record<string, HomeReader | undefined>> } =>
-  "homes" in bodies;
-
 /** A command's host body. The command registry calls it once with the services it owns. */
 export type CommandBody<D = Dependencies> = (
   bridge: RevitBridge["Service"],
   deps: D,
 ) => CommandExecutor;
+/** What a local operation's body answers with: the host's own services, and any failure. */
+export type LocalRun = Effect.Effect<unknown, unknown, AttemptHost>;
+/**
+ * A native call the product answers itself through `/call` (a `snapshot` call policy names it).
+ * `selected` reads the open document again, so the body can tell that the target moved.
+ */
+export type CallBody<D> = (
+  call: {
+    readonly target: DocumentRef;
+    readonly key: string;
+    readonly request: unknown;
+    readonly scope: HostSessionScope;
+    readonly selected: Effect.Effect<
+      { readonly address?: string | null; readonly title: string } | undefined,
+      unknown,
+      RequestIdentity
+    >;
+  },
+  deps: D,
+) => Effect.Effect<
+  {
+    readonly captureId?: string;
+    readonly value: unknown;
+    readonly nativeRequestId?: string;
+    readonly target: { session: string; document: string | null; documentRef?: DocumentRef };
+  },
+  unknown,
+  HostNativeRead | RequestIdentity
+>;
 
 /**
- * The host half of a product: one body per declared reading and command, and one reader per home
- * only the product can read, or `tsc` fails. Its retained readings are the kernel's from here.
+ * The host half of a product: one body per declared reading, command, `http` route and local
+ * operation, and one reader per home only the product can read, or `tsc` fails. Its retained
+ * readings are the kernel's from here.
  */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  bodies: HostBodies<P, ReadContext, CommandBody<D>> & HomeBodies<P, HomeReader>,
+  bodies: HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader> &
+    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader>>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
   executors: (...args: Parameters<CommandBody<D>>) => Record<string, CommandExecutor>;
+  /** Outside a command the host hands these bodies what it holds, so each takes a partial `D`. */
+  http: Record<string, (request: HttpRequest, deps: Partial<D>) => Promise<unknown>>;
+  local: Record<string, (input: unknown, deps: Partial<D>) => LocalRun>;
+  files: Record<string, FileBody<Partial<D>>>;
+  calls: Record<string, CallBody<Partial<D>>>;
 };
 export function implement<D>(
   product: ProductDeclaration,
-  // The overload decides whether `homes` is owed; `tsc` cannot relate that condition to an erased
-  // declaration, so the readers are read back by name here.
-  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>>,
+  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader>,
 ) {
+  const readers: Readonly<Record<string, HomeReader | undefined>> = bodies.homes ?? {};
   for (const [key, home] of Object.entries(product.homes)) {
     if (home.read !== "product") continue;
-    const reader = hasHomes(bodies) ? bodies.homes[key] : undefined;
+    const reader = readers[key];
     if (!reader) throw Error(`No host reader for home ${key}`);
     const place = home.place(key);
     declareHome(key, { ...reader, directory: place.at === "setting" ? place.owner : key });
@@ -66,5 +106,10 @@ export function implement<D>(
       Object.fromEntries(
         Object.entries(bodies.commands).map(([key, make]) => [key, make(...args)]),
       ),
+    // A product that declares none passes none: `HostBodies` asks for a table only when a key exists.
+    http: { ...bodies.http },
+    local: { ...bodies.local },
+    files: { ...bodies.files },
+    calls: { ...bodies.calls },
   };
 }

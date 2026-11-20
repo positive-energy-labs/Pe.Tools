@@ -6,6 +6,16 @@ import type { ProductDeclaration } from "@pe/agent-contracts/product";
 type SheetOwner = Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], CommandExecutor>;
 export type SheetExecutors = ReadonlyMap<string, SheetOwner>;
 
+/** One table from every product's, refusing a key two products claim. */
+function merged<T>(what: string, tables: readonly Readonly<Record<string, T>>[]) {
+  const all: Record<string, T> = Object.create(null);
+  for (const [key, value] of tables.flatMap((table) => Object.entries(table))) {
+    if (Object.hasOwn(all, key)) throw Error(`Duplicate product ${what} ${key}`);
+    all[key] = value;
+  }
+  return all;
+}
+
 /** Work selects the admitted product's sheet body. */
 export function bindProducts<Deps>(
   hosts: readonly ReturnType<typeof implement<ProductDeclaration, Deps>>[],
@@ -13,6 +23,40 @@ export function bindProducts<Deps>(
 ) {
   return {
     productReads: hosts.map(({ reads }) => ({ reads })),
+    /** Every declared `http` route with its body: the call route mounts each, and names none. */
+    productHttp: hosts.flatMap(({ product, http }) =>
+      Object.entries(product.http).map(([key, route]) => {
+        const run = http[key];
+        if (!run) throw Error(`No host body for the HTTP route ${key}`);
+        return { route, run };
+      }),
+    ),
+    /** Every declared local operation with its request schema and body, by catalog key. */
+    productLocal: merged(
+      "local operation",
+      hosts.map(({ product, local }) =>
+        Object.fromEntries(
+          Object.entries(product.local).map(([key, { request }]) => {
+            const run = local[key];
+            if (!run) throw Error(`No host body for the local operation ${key}`);
+            return [key, { request, run }];
+          }),
+        ),
+      ),
+    ),
+    productFiles: merged(
+      "host file",
+      hosts.map(({ files }) => files),
+    ),
+    /** A `snapshot` call policy with no body is refused here, at registration. G3's `emits` replaces it. */
+    productCalls: merged(
+      "call",
+      hosts.map(({ product, calls }) => {
+        for (const [key, policy] of Object.entries(product.callPolicies))
+          if (policy.snapshot && !calls[key]) throw Error(`No host body for the call ${key}`);
+        return calls;
+      }),
+    ),
     productExecutors(bridge: RevitBridge["Service"], deps: Deps = defaults) {
       const executors: Record<string, CommandExecutor> = Object.create(null);
       const sheets = new Map<string, SheetOwner>();

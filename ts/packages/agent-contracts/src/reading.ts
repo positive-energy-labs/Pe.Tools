@@ -236,13 +236,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     /** The workspace id for `work` and `history`, the basis id for `saved`. */
     id: z.string().min(1).optional(),
   }),
-  /** An immutable saved takeoff capture by id, or every capture of one document. */
-  z.strictObject({
-    kind: z.literal("takeoff-saved"),
-    id: z.string().min(1).optional(),
-    document: z.string().min(1).optional(),
-    text: z.boolean().optional(),
-  }),
 ]);
 /** What a retained reading's stream carries: the state of the one shared body, never the body. */
 export const retainedReadingEnvelopeSchema = z.strictObject({

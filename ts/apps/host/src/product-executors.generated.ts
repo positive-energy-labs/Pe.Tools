@@ -6,6 +6,6 @@ import { host as host3 } from "@pe/rooms-host/product";
 import { gateway as gateway0 } from "@pe/ducts-host/gateway";
 import { gateway as gateway1 } from "@pe/rooms-host/gateway";
 import { bindProducts } from "./product-runtime.ts";
-type Dependencies = Parameters<typeof host0.executors>[1] & Parameters<typeof host1.executors>[1] & Parameters<typeof host2.executors>[1] & Parameters<typeof host3.executors>[1];
-export const { productExecutors, productReads } = bindProducts<Dependencies>([host0, host1, host2, host3], {});
+export type ProductDependencies = Parameters<typeof host0.executors>[1] & Parameters<typeof host1.executors>[1] & Parameters<typeof host2.executors>[1] & Parameters<typeof host3.executors>[1];
+export const { productExecutors, productReads, productHttp, productLocal, productFiles, productCalls } = bindProducts<ProductDependencies>([host0, host1, host2, host3], {});
 export const productGateway = { ...gateway0, ...gateway1 };

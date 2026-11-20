@@ -30,7 +30,6 @@ import { observeSdkReading } from "./session-route.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef, MarkFrame } from "./document-marks.ts";
 import type { MachineOwnerPromise } from "./machine.ts";
-import { productGateway } from "./product-executors.generated.ts";
 import {
   canonicalRetained,
   retainedReadings,
@@ -67,7 +66,6 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
       }),
     },
   ],
-  ...productGateway.observationResources,
   "rhvac-file-version": (r: { path: string }) => [`/actions?file=${encodeURIComponent(r.path)}`],
 };
 
@@ -360,7 +358,6 @@ export function hostResourceObserver(
         case "capabilities":
         case "ops-catalog":
         case "schedule-reading":
-        case "takeoff-saved":
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":

@@ -19,7 +19,7 @@ import {
   retainedRequest,
 } from "@pe/host-internal/retained-readings";
 import { bindWork, type RetainedReadingEnvelope } from "@pe/agent-contracts";
-import { productGateway } from "./product-executors.generated.ts";
+import { productFiles } from "./product-executors.generated.ts";
 import { readLocal } from "./local-inputs.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
 import { createHash } from "node:crypto";
@@ -562,16 +562,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       };
       const takeFile = (name: string, args: unknown, current: InputConsumption) =>
         takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
-          name === "observation"
-            ? captureStore().query(productGateway.observationInput.parse(args))
-            : name === "takeoff-capture"
-              ? productGateway.retainInput(
-                  captureStore(),
-                  args,
-                  (target) => invoke(inventory.document(target)),
-                  () => invoke(inventory.list()),
-                )
-              : name === "settings"
+          // A product's own host file: its body, with the stores and the inventory this host holds.
+          Object.hasOwn(productFiles, name)
+            ? productFiles[name]!(args, {
+                deps: { captures: captureStore() },
+                document: (target) => invoke(inventory.document(target)),
+                sessions: () => invoke(inventory.list()),
+              })
+            : name === "settings"
                 ? (async () => {
                     // The project tier is the home the target model's pointer names (homes freeze shape 4).
                     const { owner, target } = settingsFile.input.parse(args);
@@ -633,10 +631,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   current,
                   { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
                   () => {
-                    const resource = resourceReadingSchema.parse(request);
-                    const saved = productGateway.savedResource(resource);
-                    if (saved)
-                      return captureStore().query({ ...saved, capture: saved.id, saved: true });
+                    resourceReadingSchema.parse(request);
                     return new Promise((resolve, reject) => {
                       let settled = false,
                         stop = () => {};
