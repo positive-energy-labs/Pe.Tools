@@ -2,6 +2,7 @@ import { authorSchema } from "./author.ts";
 import { z } from "zod";
 import { callerSchema } from "./caller.ts";
 import { workKeySchema } from "./route-state.ts";
+import { roomsPartitionProgressSchema } from "./action-receipts.ts";
 
 /**
  * The host Timeline (ADR 0042): one ordered list of steps across the Works of a Place, one read
@@ -69,6 +70,7 @@ export const timelineRowSchema = z.union([
     label: z.string(),
     by,
     state: z.string(),
+    progress: roomsPartitionProgressSchema.optional(),
     // ponytail: Sight's `Touched` (sight.md C2) has no TS type yet; k2/evidence-ts narrows this.
     touched: z.unknown().optional(),
     at: z.number(),

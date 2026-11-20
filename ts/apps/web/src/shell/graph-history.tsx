@@ -44,6 +44,11 @@ export function GraphHistory({ owner }: { owner: TimelineOwner }) {
             ? `${row.by === "pea" ? "Pea" : "you"} / ${row.state}`
             : row.kind,
         activityTime(row.at),
+        row.kind === "receipt" && row.state === "running" && row.progress
+          ? row.progress.zonesTotal === null
+            ? row.progress.phase
+            : `${row.progress.phase} · ${row.progress.zonesDone}/${row.progress.zonesTotal} zones done`
+          : null,
         "blockedBy" in row
           ? row.blockedBy && "receipt" in row.blockedBy
             ? row.blockedBy.label

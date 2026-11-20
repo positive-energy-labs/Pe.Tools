@@ -1,10 +1,20 @@
 /** Transient routing to the journal that owns a wire request. No execution or writable state lives here. */
+import { roomsPartitionProgressSchema, type RoomsPartitionProgress } from "@pe/agent-contracts";
+import { z } from "zod";
+
+export const ROOMS_PARTITION_PROGRESS_EVENT = "rooms.partition.progress";
+const roomsProgressFrame = z.strictObject({
+  requestId: z.string().min(1),
+  progress: roomsPartitionProgressSchema,
+});
+
 export type DispatchRefusal = { kind: "cancelled" | "refused"; message: string };
 type Owner = {
   refusal(): DispatchRefusal | null | Promise<DispatchRefusal | null>;
   validate(): Promise<DispatchRefusal | null>;
   dispatched(transport: "bridge" | "sdk"): Promise<void>;
   terminal?(touched: unknown, evidenceJson?: string | null): Promise<void>;
+  progress?(value: RoomsPartitionProgress): Promise<void>;
   uncertain?(reason: "lost-response" | "process-exit"): Promise<void>;
 };
 const owners = new Map<string, Owner>();
@@ -21,5 +31,14 @@ export const markDispatched = (id: string, transport: "bridge" | "sdk") =>
   owners.get(id)?.dispatched(transport) ?? Promise.resolve();
 export const recordNativeTerminal = (id: string, touched: unknown, evidenceJson?: string | null) =>
   owners.get(id)?.terminal?.(touched, evidenceJson) ?? Promise.resolve();
+export async function recordNativeProgress(
+  payload: string | null | undefined,
+  lookup: (requestId: string) => { operationKey: string; phase: string } | undefined,
+): Promise<void> {
+  const { requestId, progress } = roomsProgressFrame.parse(JSON.parse(payload ?? "null"));
+  const request = lookup(requestId);
+  if (request?.phase === "dispatched" && request.operationKey === "rooms.partition")
+    await owners.get(requestId)?.progress?.(progress);
+}
 export const recordNativeUncertainty = (id: string, reason: "lost-response" | "process-exit") =>
   owners.get(id)?.uncertain?.(reason) ?? Promise.resolve();

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { z } from "zod";
 import {
   createMemoryHistory,
@@ -47,7 +47,18 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
     },
   );
   const timeline = workTimelineSchema.parse({
-    rows: [],
+    rows: [
+      {
+        kind: "receipt",
+        id: "partition-rooms",
+        work: null,
+        label: "rooms.partition",
+        by: "human",
+        state: "running",
+        at: 0,
+        progress: { phase: "Solve", zonesDone: 1, zonesTotal: 2 },
+      },
+    ],
     undo: null,
     redo: null,
     refusal: { undo: null, redo: null },
@@ -87,7 +98,10 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Open the Timeline" }));
-    const activity = screen.getByRole("region", { name: "Timeline activity" });
+    const [activity] = screen.getAllByRole("region", { name: "Timeline activity" });
+    if (!activity) throw Error("Timeline activity is absent");
+    expect(within(activity).getByText(/Solve · 1\/2 zones done/)).toBeTruthy();
+    expect(within(activity).getByRole("button", { name: "Stop command" })).toBeTruthy();
     const list = activity.querySelector("[data-list-view]");
     expect(list).not.toBeNull();
     expect(list?.closest("[data-scroll]")).not.toBeNull();

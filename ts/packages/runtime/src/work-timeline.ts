@@ -148,6 +148,7 @@ export function projectWorks(
       label: receipt.key,
       by: receipt.caller.kind === "pea" ? "pea" : "human",
       state: receipt.state,
+      ...(receipt.progress ? { progress: receipt.progress } : {}),
       at: Date.parse(receipt.startedAt) || 0,
     });
   }

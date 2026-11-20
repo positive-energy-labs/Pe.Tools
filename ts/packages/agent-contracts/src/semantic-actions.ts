@@ -66,7 +66,7 @@ const definitions = {
     dirties: ["snapshot", "rhvac-open"],
   },
   "rooms.partition": {
-    native: ["takeoffs.initialize-carrier", "rooms.partition"],
+    native: ["rooms.partition"],
     says: "Partition every zone drawn on one plan view into rooms, keeping locked and matched rooms.",
     needs: "project-document",
     effect: "command",

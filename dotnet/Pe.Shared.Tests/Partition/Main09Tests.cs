@@ -102,13 +102,13 @@ public sealed class Main09Tests {
             200.0, 0.0);
 
         var answer = Solve.RunRails(new PartitionInput(knee, header, [loop], levelZ, Knobs.Default,
-            [knee.Evidence.Resolved], "historical synthetic fixture", []), Probe);
+            [], "historical synthetic fixture", []), Probe);
 
         var acc = answer.Accounting;
         var residual = acc.ZoneSqft - (acc.Accepted + acc.Held + acc.Void + acc.Excluded);
 
         TestContext.Out.WriteLine(
-            $"zone {acc.ZoneSqft:F4} sqft, {answer.Rooms.Count} rooms, {answer.Ms:F0} ms, epoch {answer.Evidence.Revision}");
+            $"zone {acc.ZoneSqft:F4} sqft, {answer.Rooms.Count} rooms, {answer.Ms:F0} ms");
         TestContext.Out.WriteLine(
             $"accounting  accepted {acc.Accepted:F4}  held {acc.Held:F4}  void {acc.Void:F4}  excluded {acc.Excluded:F4}  residual {residual:E3}");
         TestContext.Out.WriteLine("");

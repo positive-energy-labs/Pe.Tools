@@ -45,19 +45,37 @@ public sealed class Bench {
 
     [Test]
     public void SharedWallInkPreservesCapturedAnswers() {
+        static (string Result, bool Refused) Replay(PartitionInput input, RecordedProbes probes,
+            Solve.BufferedBands? bands = null) {
+            try {
+                var answer = Solve.RunRails(input, probes.For(input), bands);
+                return (JsonConvert.SerializeObject(answer with { Ms = 0 }), false);
+            } catch (PartitionException ex) {
+                return (ex.Message, true);
+            }
+        }
+
         var checkedZones = 0;
         foreach (var (name, inputs, probeDir) in Fixtures()) {
             var shared = new Solve.BufferedBands(inputs[0].Input);
             var freshProbes = RecordedProbes.For(probeDir);
             var sharedProbes = RecordedProbes.For(probeDir);
+            var refusals = new HashSet<string>();
             foreach (var (zoneName, input) in inputs) {
-                var freshAnswer = Solve.RunRails(input, freshProbes.For(input));
-                var sharedAnswer = Solve.RunRails(input, sharedProbes.For(input), shared);
-                Assert.That(JsonConvert.SerializeObject(sharedAnswer with { Ms = 0 }),
-                    Is.EqualTo(JsonConvert.SerializeObject(freshAnswer with { Ms = 0 })), zoneName);
-                checkedZones++;
+                var fresh = Replay(input, freshProbes);
+                Assert.That(Replay(input, sharedProbes, shared), Is.EqualTo(fresh), zoneName);
+                if (fresh.Refused) {
+                    refusals.Add(fresh.Result);
+                    // The bench also uses each capture without proposals. Compare that answer when a
+                    // malformed proposal refused the captured run before it reached the wall ink.
+                    var geometry = input with { Proposals = [] };
+                    fresh = Replay(geometry, freshProbes);
+                    Assert.That(Replay(geometry, sharedProbes, shared), Is.EqualTo(fresh), zoneName);
+                }
+                if (!fresh.Refused) checkedZones++;
             }
-            TestContext.Out.WriteLine($"{name}: {inputs.Length} identical zone answers");
+            TestContext.Out.WriteLine($"{name}: {inputs.Length} identical zone outcomes"
+                + (refusals.Count == 0 ? "" : $" (refused with proposals: {string.Join(", ", refusals)})"));
         }
         Assert.That(checkedZones, Is.GreaterThan(0));
     }
@@ -154,7 +172,8 @@ public sealed class Bench {
         var knee = Load("knee.json");
         var zone = JObject.Parse(File.ReadAllText(Path.Combine(dir, "zone.json")));
         return new PartitionInput(knee, Load("header.json"), [zone["loop"]!.Select(v => (double)v!).ToArray()], (double)zone["levelZ"]!,
-            Knobs.Default, [knee.Evidence.Resolved], "historical synthetic fixture", []);
+            // Main Level#09 predates SpatialEvidence. Replay its geometry without fabricating a native stamp.
+            Knobs.Default, [], "historical synthetic fixture", []);
     }
 
     private static (string Name, PartitionInput Input)[] ProjectD() {

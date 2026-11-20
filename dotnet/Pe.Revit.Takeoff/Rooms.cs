@@ -1,7 +1,9 @@
 using Pe.Shared.Product;
 using System.Security.Cryptography;
 using Pe.Revit.Space;
+using Pe.Revit.Tasks;
 using Serilog;
+using System.Threading;
 using PartitionVerbs = Pe.Revit.Partition.Verbs;
 
 namespace Pe.Revit.Takeoff;
@@ -151,7 +153,9 @@ public static class RoomsMerge
     }
 }
 
-/// <summary>Bodies of the rooms.* ops. Callers own the transaction.</summary>
+public sealed record RoomsPartitionProgress(string Phase, int ZonesDone, int? ZonesTotal);
+
+/// <summary>Bodies of the rooms.* ops. Partition opens its write transaction after all zones are solved.</summary>
 public static class Rooms
 {
     public const string RunDrawn = "drawn";
@@ -267,8 +271,10 @@ public static class Rooms
         return TakeoffCarriers.RoleRoomRegion;
     }
 
-    public static RoomsPartitionResult Partition(Document doc, RoomsPartitionRequest request)
+    public static RoomsPartitionResult Partition(Document doc, RoomsPartitionRequest request,
+        CancellationToken cancellationToken = default, Action<RoomsPartitionProgress>? report = null)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var phase = "Prepare";
         double phaseStart = 0;
@@ -276,6 +282,9 @@ public static class Rooms
         int? zonesTotal = null;
         long? zoneId = null;
         Log.Information("Rooms partition {View} started {Phase}", request.View, phase);
+        Report();
+
+        void Report() => report?.Invoke(new RoomsPartitionProgress(phase, zonesDone, zonesTotal));
 
         void EndPhase() => Log.Information(
             "Rooms partition {View} finished {Phase} in {ElapsedMs:F3} ms, zone {ZoneId}, {ZonesDone}/{ZonesTotal} done",
@@ -288,9 +297,9 @@ public static class Rooms
             phaseStart = sw.Elapsed.TotalMilliseconds;
             Log.Information("Rooms partition {View} started {Phase}, zone {ZoneId}, {ZonesDone}/{ZonesTotal} done",
                 request.View, phase, zoneId, zonesDone, zonesTotal);
+            Report();
         }
 
-        TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var view = LevelView(doc, request.View);
         var level = view.GenLevel;
         var runId = string.IsNullOrWhiteSpace(request.RunId) ? Guid.NewGuid().ToString("N") : request.RunId!;
@@ -312,11 +321,13 @@ public static class Rooms
             View: view.Id.Value());
         // Every zone lies inside the rectangle, so each zone's solve probes inside this one scoped read.
         var world = PartitionVerbs.PrepareSpace(doc, capture);
+        cancellationToken.ThrowIfCancellationRequested();
         BeginPhase("Capture");
         var captured = PartitionVerbs.Capture(doc, capture, world);
         var knee = captured.Knee.Elements.SelectMany(e => e.Pieces).ToList();
 
         // Designate and classify in memory; nothing is written until every zone is solved.
+        cancellationToken.ThrowIfCancellationRequested();
         BeginPhase("Designation");
         var zones = new List<(FilledRegion Fr, Guid Guid, List<List<double[]>> Loops, string Label, bool Declared)>();
         var rooms = new List<(FilledRegion Fr, bool Held, ExistingRegion Region, RegionProvenance Provenance)>();
@@ -362,7 +373,7 @@ public static class Rooms
         var bufferedBands = new Pe.Revit.Partition.Solve.BufferedBands(captured);
         zonesTotal = zones.Count;
         BeginPhase("Solve");
-        foreach (var zone in zones.OrderBy(z => z.Fr.Id.Value()))
+        SolveZones(zones.OrderBy(z => z.Fr.Id.Value()), zone =>
         {
             zoneId = zone.Fr.Id.Value();
             var zoneStart = sw.Elapsed.TotalMilliseconds;
@@ -386,7 +397,7 @@ public static class Rooms
             };
             Pe.Revit.Partition.PartitionAnswer answer;
             try { answer = PartitionVerbs.Run(doc, input, world, elapsed => probeMs += elapsed, bufferedBands); }
-            catch (Exception ex) when (ex is not Pe.Revit.Partition.PartitionException)
+            catch (Exception ex) when (ex is not (Pe.Revit.Partition.PartitionException or OperationCanceledException))
             {
                 // One zone's topology failure names itself and leaves the other zones solved.
                 var frame = new System.Diagnostics.StackTrace(ex).GetFrames()?.Select(f => f.GetMethod()?.DeclaringType?.Name + "." + f.GetMethod()?.Name)
@@ -396,7 +407,7 @@ public static class Rooms
                 Directory.CreateDirectory(Path.GetDirectoryName(dump)!);
                 File.WriteAllText(dump, Newtonsoft.Json.JsonConvert.SerializeObject(new { input.ZoneLoops, input.Proposals }));
                 failures.Add($"{zone.Label}: {ex.GetType().Name} {ex.Message} at {frame ?? "?"} (inputs {dump})");
-                continue;
+                return;
             }
             finally
             {
@@ -404,6 +415,7 @@ public static class Rooms
                 Log.Information(
                     "Rooms partition {View} finished zone {ZoneId} in {ElapsedMs:F3} ms including {HeightProbeMs:F3} ms of height probes, {ZonesDone}/{ZonesTotal} done",
                     request.View, zoneId, sw.Elapsed.TotalMilliseconds - zoneStart, probeMs, zonesDone, zonesTotal);
+                Report();
             }
             // Layer 1's trace stands for the solve that ran, whether or not the materialization below lands.
             WriteTrace(runId, zone.Guid, zone.Label, answer);
@@ -415,10 +427,21 @@ public static class Rooms
                 mine.Where(r => r.Held).Select(r => r.Region).ToList(),
                 lockedIn.Select(r => r.Region).ToList(), accepted, residues,
                 zone.Declared ? null : answer.Accounting.ZoneSqft)));
-        }
+        }, cancellationToken);
 
         zoneId = null;
+        // The last checkpoint is before this phase. From here the one transaction owns the outcome,
+        // including first-run parameter bindings. A late Stop lets it commit or fail normally.
         BeginPhase("Materialization");
+        using var transaction = DocumentSandbox.BeginCommit(doc, "Pe Partition Rooms");
+        var pending = TakeoffCarriers.Preflight(doc, TakeoffCarrierStage.Rooms).MissingCarrierGuids.Count;
+        while (pending > 0)
+        {
+            var initialized = TakeoffCarriers.InitializeNext(doc, TakeoffCarrierStage.Rooms);
+            if (initialized.Remaining.Count >= pending)
+                throw new InvalidOperationException("Room parameter binding made no progress.");
+            pending = initialized.Remaining.Count;
+        }
         double elevation = level.ProjectElevation;
         var frType = RegionType(doc);
 
@@ -533,11 +556,24 @@ public static class Rooms
                 { GeometryHash = GeometryHash(loops), WallHash = WallHash(knee, loops), Flags = flags }).ToJson());
         }
 
-        EndPhase();
-        return new RoomsPartitionResult(level.Name, runId, zones.Count, createdRooms,
+        var result = new RoomsPartitionResult(level.Name, runId, zones.Count, createdRooms,
             solved.Sum(s => s.Plan.Keep.Count), solved.Sum(s => s.Plan.Locked.Count),
             orphans.Count + solved.Sum(s => s.Plan.Delete.Count), createdHeld, failures,
             holds.Count > 0 ? string.Join("; ", holds) : null, Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+        BeginPhase("Commit");
+        transaction.Complete();
+        EndPhase();
+        return result;
+    }
+
+    internal static void SolveZones<T>(IEnumerable<T> zones, Action<T> solve, CancellationToken cancellationToken)
+    {
+        foreach (var zone in zones)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            solve(zone);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     // ---------------------------------------------------------------- traces: RoomsRunTraces names the folder
