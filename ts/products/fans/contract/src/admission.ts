@@ -34,10 +34,14 @@ export const admissionPreflight = {
       throw Error("Ducts Work changed; read its current revision before preview");
     if (fansHandle && !same(fans.handle, fansHandle))
       throw Error("Fans Work changed; read its current revision before preview");
-    const walk = fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk;
-    if (!walk)
+    if (
+      asked.key.route === fansRoute &&
+      !fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk
+    )
       throw Error(
-        'Preview needs a fan walk. Read route:reads.value (read fans.roster), then stage writeIntent.edit = {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}} in route:fans Work. Retry with the accepted Work revision. No preview was submitted.',
+        'Read route:reads.value with read "fans.roster" for the same document. ' +
+          'Use the intended row\'s unitId and portIndex to stage writeIntent.edit in route:fans Work as {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}}. ' +
+          "Retry sheet.plan with the accepted Work handle and revision. No preview was submitted.",
       );
   },
 };

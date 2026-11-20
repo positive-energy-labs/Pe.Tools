@@ -5,6 +5,7 @@ import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 import { ductsPricingData } from "@pe/duct-systems-contract/ducts-read";
 import { type DuctsApplyInput } from "@pe/duct-systems-contract/ducts";
 import { type FanClaim } from "@pe/fans-contract/fans-inputs";
+import { fanWriteScopeMessage } from "@pe/fans-contract/fans";
 
 import { TABLE_IDS } from "@pe/ducts-domain/table-ids";
 import { toGrids } from "@pe/ducts-domain/loss-grid";
@@ -49,10 +50,7 @@ export async function lossSnapshot(
   intent: { walk?: { unitId: number; portIndex: number } } | undefined,
   read: (selector: Record<string, unknown>) => Promise<DuctSnapshot>,
 ): Promise<DuctSnapshot> {
-  if (!intent?.walk)
-    throw refused(
-      "Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses",
-    );
+  if (!intent?.walk) throw refused(fanWriteScopeMessage);
   const snapshot = await read({ kind: "from", unitId: intent.walk.unitId });
   if (snapshot.walk?.truncated)
     throw refused("The fan walk is truncated; no writes can be previewed from this scope");
@@ -176,10 +174,7 @@ async function prepareLosses(p: DuctActionPreparation) {
   } = p;
 
   const walk = intent.walk;
-  if (!walk)
-    throw refused(
-      "Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses",
-    );
+  if (!walk) throw refused(fanWriteScopeMessage);
   const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
   const grids = toGrids(tables);
   const catalogs = await runPods(catalogsFor(deps.files!, pointer));
