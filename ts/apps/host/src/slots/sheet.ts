@@ -192,7 +192,9 @@ function parameterExecutor(
   });
 }
 
-const preparedBy = z.object({ product: z.string().nullable(), value: z.unknown() });
+const preparedBy = z.object({ route: z.string().nullable(), value: z.unknown() });
+const missingExecutor = (route: string) =>
+  refused(`No sheet executor for Work route ${route}`, "sheet.executor-unknown");
 
 export function sheetExecutors(
   bridge: RevitBridge["Service"],
@@ -202,14 +204,11 @@ export function sheetExecutors(
   return Object.fromEntries(
     Object.values(SHEET_COMMANDS).map((key) => {
       const parameters = parameterExecutor(bridge, deps, key);
-      const byProduct = new Map(
-        [...sheets.values()].map((owner) => [owner.id, owner.executors[key]!]),
-      );
       const inner = (value: unknown) => {
         const prepared = preparedBy.parse(value);
-        const executor = prepared.product === null ? parameters : byProduct.get(prepared.product);
+        const executor = prepared.route === null ? parameters : sheets.get(prepared.route)?.[key];
         if (!executor)
-          throw refused(`Unknown sheet product: ${prepared.product}`, "sheet.executor-unknown");
+          throw missingExecutor(prepared.route!);
         return { executor, value: executor.prepared.parse(prepared.value) };
       };
       const executor: CommandExecutor = {
@@ -222,16 +221,23 @@ export function sheetExecutors(
         },
         bind: async (ctx) => {
           const { work, doc } = sheetInput.parse(ctx.admission.input);
-          const sheet = deps.workspace?.sheet(work.key.route);
+          const { route } = work.key;
+          const sheet = deps.workspace?.sheet(route);
           if (!sheet)
-            throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
+            throw refused(`Route ${route} declares no sheet slot`, "sheet.undeclared");
+          const owner = sheets.get(route);
+          if (!owner) {
+            // Only an explicitly parameter-backed sheet can use the platform executor.
+            const places = Object.values(sheet.bindings).map(({ home }) => home.at);
+            if (places.includes("store") || !places.includes("parameter"))
+              throw missingExecutor(route);
+          }
           validateSheetValues(sheet, doc);
-          const owner = sheets.get(work.key.route);
-          const bound = await (owner?.executors[key] ?? parameters).bind(ctx);
+          const bound = await (owner ? owner[key] : parameters).bind(ctx);
           return {
             ...bound,
             prepare: async () => ({
-              product: owner?.id ?? null,
+              route: owner ? route : null,
               value: await bound.prepare?.(),
             }),
           };

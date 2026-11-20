@@ -6,10 +6,8 @@ import { detachedBridge } from "./effect-test.ts";
 test("the shared sheet pair binds to each admitted Work owner's executor", () => {
   const { executors, sheets } = productExecutors(detachedBridge());
   expect([...sheets.keys()].sort()).toEqual(["duct-systems", "fans", "rooms"]);
-  for (const [route, sheet] of sheets) {
-    expect(sheet.id).toBe(route);
-    expect(Object.keys(sheet.executors).sort()).toEqual(Object.values(SHEET_COMMANDS).sort());
-  }
+  for (const sheet of sheets.values())
+    expect(Object.keys(sheet).sort()).toEqual(Object.values(SHEET_COMMANDS).sort());
   expect(executors).toHaveProperty(["ducts.refresh"]);
   expect(executors).not.toHaveProperty([SHEET_COMMANDS.apply]);
 });

@@ -2,8 +2,9 @@ import { expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts";
 import { evaluate, read, type InputPort } from "@pe/host-internal/reads/evaluator";
+import { host as rooms } from "@pe/rooms-host/product";
 import { sheetExecutors, sheetWrites } from "../src/slots/sheet.ts";
-import { productExecutors } from "../src/product-executors.generated.ts";
+import { bindProducts } from "../src/product-runtime.ts";
 
 // Slice 7, the host half of the sheet slot: what sheet.plan derives from a route's Work, and the Pod's document Work door.
 test("sheetWrites derives one parameter write per staged row, by UniqueId, and none for a local binding", () => {
@@ -94,7 +95,7 @@ test.each([
     const executors = sheetExecutors(
       {} as never,
       { workspace: { sheet: () => sheet } } as never,
-      new Map([["duct-systems", { id: "duct-systems", executors: losses as never }]]),
+      new Map([["duct-systems", losses as never]]),
     );
     await expect(
       executors["sheet.plan"]!.bind({
@@ -110,18 +111,33 @@ test.each([
   },
 );
 
-test("registered sheet routes select their product executor; unregistered routes use parameters", async () => {
-  const { sheets } = productExecutors({} as never);
+test("Rooms dispatches by Work route even when the product id differs", async () => {
   const bind = vi.fn(async () => ({ prepare: async () => "product" }));
+  const { sheets } = bindProducts([
+    {
+      ...rooms,
+      product: { ...rooms.product, id: "renamed-rooms" },
+      executors: () => ({ "sheet.plan": { bind } as never, "sheet.apply": { bind } as never }),
+    },
+  ]).productExecutors({} as never);
   const executors = sheetExecutors(
     {} as never,
-    { workspace: { sheet: () => ({ bindings: {} }) } } as never,
-    new Map(
-      [...sheets].map(([route, sheet]) => [
-        route,
-        { ...sheet, executors: { "sheet.plan": { bind } } as never },
-      ]),
-    ),
+    {
+      workspace: {
+        sheet: (route: string) => ({
+          bindings: {
+            field: {
+              home: route.startsWith("pod.")
+                ? { at: "parameter", parameter: "Diameter" }
+                : { at: "store", store: "_PE_Regions" },
+              domain: { kind: "number" },
+              per: "subject",
+            },
+          },
+        }),
+      },
+    } as never,
+    sheets,
   );
   const context = (route: string) =>
     ({
@@ -130,20 +146,19 @@ test("registered sheet routes select their product executor; unregistered routes
         input: { work: { key: { route } }, doc: {} },
       },
     }) as never;
-  const specialized = await executors["sheet.plan"]!.bind(context("fans"));
-  expect(await specialized.prepare!()).toEqual({ product: "fans", value: "product" });
-  for (const route of ["pod.other", "toString"]) {
-    const generic = await executors["sheet.plan"]!.bind(context(route));
-    await expect(generic.prepare!()).rejects.toThrow(
-      "Nothing to write: stage a parameter cell first",
-    );
-  }
+  const specialized = await executors["sheet.plan"]!.bind(context("rooms"));
+  expect(await specialized.prepare!()).toEqual({ route: "rooms", value: "product" });
+  await expect(executors["sheet.plan"]!.bind(context("renamed-rooms"))).rejects.toMatchObject({
+    refusal: { code: "sheet.executor-unknown" },
+  });
+  const generic = await executors["sheet.plan"]!.bind(context("pod.other"));
+  await expect(generic.prepare!()).rejects.toThrow("Nothing to write: stage a parameter cell first");
   expect(bind).toHaveBeenCalledTimes(1);
 });
 
-test.each(["unknown", "toString"])("an unknown sealed product %s refuses", (product) => {
+test.each(["unknown", "toString"])("an unknown sealed Work route %s refuses", (route) => {
   const executors = sheetExecutors({} as never, {});
-  expect(() => executors["sheet.plan"]!.seal!({ product, value: {} })).toThrow(
-    `Unknown sheet product: ${product}`,
+  expect(() => executors["sheet.plan"]!.seal!({ route, value: {} })).toThrow(
+    `No sheet executor for Work route ${route}`,
   );
 });

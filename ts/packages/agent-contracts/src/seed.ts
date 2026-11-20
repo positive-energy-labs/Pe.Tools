@@ -10,7 +10,6 @@ import { familiesRouteState } from "./families.ts";
 import { parameterLinkProfileSchema, parameterLinksRouteState } from "./parameter-links.ts";
 import { settingsRouteState, podMemberSchema } from "./settings.ts";
 import {
-  takeoffsRouteState,
   takeoffSnapshotSchema,
   candidateRegionSchema,
   partitionRunSchema,
@@ -57,14 +56,14 @@ const common = {
   originalEvidence: z.unknown(),
 };
 const file = z.object({ member: podMemberSchema, rawContent: z.string() });
-export const demoSeedSchema = z.discriminatedUnion("route", [
+const demoSeedSchema = <S extends z.ZodType>(takeoffs: S) => z.discriminatedUnion("route", [
   z.object({
     ...common,
     route: z.literal("takeoffs"),
     work: z.object({
       key: workKeySchema,
       revision: z.number().int().nonnegative(),
-      candidate: takeoffsRouteState.schema,
+      candidate: takeoffs,
     }),
     readings: z.object({
       snapshot: takeoffSnapshotSchema,
@@ -168,10 +167,6 @@ export const demoSeedSchema = z.discriminatedUnion("route", [
     page: z.object({}),
   }),
 ]);
-export type DemoSeed = z.infer<typeof demoSeedSchema>;
-export type DemoExport =
-  | { kind: "complete"; seed: DemoSeed }
-  | { kind: "incomplete"; missing: string[] };
 
 /** Tag every container, so an original object cannot masquerade as a codec tag. */
 function encode(value: unknown): unknown {
@@ -209,10 +204,16 @@ function decode(value: unknown): unknown {
     );
   throw Error(`Unsupported seed codec tag: ${tag}`);
 }
-export const exportSeed = (seed: DemoSeed) => JSON.stringify(encode(demoSeedSchema.parse(seed)));
-export const importSeed = (text: string): DemoSeed =>
-  demoSeedSchema.parse(decode(JSON.parse(text)));
-export const demoExportWireSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("complete"), seed: z.string().transform(importSeed) }),
-  z.object({ kind: z.literal("incomplete"), missing: z.array(z.string()).min(1) }),
-]);
+/** The caller supplies the declared Work so the contracts package stays below product declarations. */
+export function demoSeedCodec<S extends z.ZodType>(takeoffsWork: { readonly schema: S }) {
+  const schema = demoSeedSchema(takeoffsWork.schema);
+  const importSeed = (text: string) => schema.parse(decode(JSON.parse(text)));
+  return {
+    exportSeed: (seed: z.input<typeof schema>) => JSON.stringify(encode(schema.parse(seed))),
+    importSeed,
+    wire: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("complete"), seed: z.string().transform(importSeed) }),
+      z.object({ kind: z.literal("incomplete"), missing: z.array(z.string()).min(1) }),
+    ]),
+  };
+}

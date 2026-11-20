@@ -311,7 +311,7 @@ export type ProductDeclaration = {
   readonly cells: Cells;
   readonly readings: Readonly<Record<string, Reading>>;
   readonly commands: Readonly<Record<string, ProductCommand>>;
-  readonly sheetWrites?: ProductCommand["writes"];
+  readonly sheetWrites?: { readonly route: string; readonly writes: ProductCommand["writes"] };
   readonly routes: Readonly<Record<string, { readonly key: string }>>;
   readonly guide?: Guide;
 };
@@ -324,7 +324,7 @@ export const productWrites = ({
   sheetWrites,
 }: Stored): Readonly<Record<string, ProductCommand["writes"]>> => ({
   ...Object.fromEntries(Object.entries(commands).map(([key, { writes }]) => [key, writes])),
-  ...sheetWritesFor(sheetWrites),
+  ...sheetWritesFor(sheetWrites?.writes),
   [writeSettingTier.key]: Object.fromEntries(
     Object.entries(homes).flatMap(([name, home]) => {
       const settings = home.settingCells?.filter((cell) => cells[cell]?.per === "route");
@@ -434,7 +434,10 @@ export function product<
       };
     };
   };
-  readonly sheetWrites?: Sheet & NoExtras<NonNullable<Sheet>, H>;
+  readonly sheetWrites?: {
+    readonly route: keyof NoInfer<Works> extends never ? NoInfer<Id> : keyof NoInfer<Works> & string;
+    readonly writes: Sheet & NoExtras<NonNullable<Sheet>, H>;
+  };
   /** Zero or several, keyed by the route key. A subject's pane is one of the route's panes. */
   readonly routes: Routes & {
     readonly [K in keyof Routes]: NoExtras<Routes[K], ProductRoute> & {
@@ -449,7 +452,7 @@ export function product<
   readonly guide?: Guide;
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
-} & ([Sheet] extends [undefined] ? unknown : { readonly sheetWrites: Sheet })) {
+}) {
   for (const key of [writeSettingTier.key, ...Object.values(SHEET_COMMANDS)])
     if (Object.hasOwn(declaration.commands, key)) throw Error(`${key} belongs to the platform`);
   const work: RouteStateSpec<z.ZodObject<WorkShape<C>, z.core.$strict>> & {
@@ -531,7 +534,7 @@ export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
   /** A plan built by `workWriteCommands` is its write's body in the preview phase, so it takes none. */
   readonly commands: {
     readonly [K in keyof P["commands"] as K extends `${string}.preview` ? never : K]: Executor;
-  } & ([NonNullable<P["sheetWrites"]>] extends [never]
+  } & (NonNullable<P["sheetWrites"]>["writes"] extends undefined
     ? unknown
     : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
 };

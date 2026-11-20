@@ -1,28 +1,28 @@
-/// <reference lib="es2024.collection" />
-import { actionAdmissionSchema, stagedTakeoffEdits, takeoffsRouteState } from "@pe/agent-contracts";
-import { test, expect } from "vite-plus/test";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
-import { checkoutRoot } from "../../../web/checkout-paths.ts";
+import { expect, test } from "vite-plus/test";
+import {
+  address,
+  stagedTakeoffEdits,
+  takeoffEditKey,
+  takeoffObservationSchema,
+} from "@pe/agent-contracts";
+import { product, takeoffsWork } from "@pe/rooms-contract/product";
 import { RouteWorkspace } from "@pe/runtime";
-import { address, takeoffEditPatches } from "@pe/agent-contracts";
-import type { TakeoffCaptures } from "../../src/takeoff-captures.ts";
-import { captureStore, journalAt, settle } from "../effect-test.ts";
-import { applyStaged, buildRhvacInsert, fileVersion, rhvacOpen, rhvacSync } from "../../src/rhvac-ops.ts";
-import { takeoffExecutors } from "../../../../products/rooms/host/src/takeoffs.ts";
+import { checkoutRoot } from "../../../web/checkout-paths.ts";
+import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
+import { fileVersion } from "../../src/rhvac-ops.ts";
+import { captureStore, settle, testDocumentMarks } from "../effect-test.ts";
+import { fixtureNative } from "../fixture-native.ts";
+import { readRhvacFixture, sdkSessions } from "../native-receipt-fixture.ts";
 import syncSeed from "./fixtures/sync-seed.json" with { type: "json" };
-import { sdkSessions, readRhvacFixture } from "../native-receipt-fixture.ts";
-import type { RevitBridge } from "@pe/host-internal/bridge";
-import { crossingOf } from "../callers.ts";
-import { ActionJournal } from "../../src/action-journal.ts";
-import { commandResources } from "../../src/command-reads.ts";
 
-const crossing = crossingOf("human");
+const command = product.commands["takeoffs.sync"];
 
-/** Explicit native integration only. Ordinary catalogue tests never need this file or Jet. */
+/** Explicit Jet integration: real file writes on an owned copy, with recorded native replies. */
 test.skipIf(process.env.PE_DEMO_JET !== "1")(
   "real Jet Sync on an owned copy retains native receipts, Work publication and stale-file refusal",
   async () => {
@@ -31,27 +31,21 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       throw Error("PE_DEMO_RHVAC_FIXTURE must name an explicitly supplied integration fixture");
     const root = await mkdtemp(join(tmpdir(), "pe-native-rhvac-integration-"));
     const path = join(root, "integration.r10");
-    let owner:
-      | {
-          id: string;
-          at: ReturnType<typeof address>;
-          target: { session: string; openId: string };
-          scope: { binding: "address"; route: string; target: ReturnType<typeof address> };
-          work: RouteWorkspace;
-          captures: TakeoffCaptures;
-        }
-      | undefined;
-    let journal: ActionJournal | undefined;
+    let native: Awaited<ReturnType<typeof fixtureNative>> | undefined;
     try {
       await copyFile(fixture, path);
       const beforeHash = await fileVersion(path);
       const before = await readRhvacFixture(path);
-      const seed = structuredClone(syncSeed) as { zones: string[]; snapshot: { capture: { snapshot: any } } };
-      seed.snapshot.capture.snapshot.world.zones[0]!.tags = [before.systems[0]!.name];
-      const at = address("C:/Models/RhvacIntegration.rvt");
+      native = await fixtureNative(join(root, "native"), "fresh-takeoffs.rhvac-links");
+      const { bridge, calls, journal } = native;
+      const { target: ref } = await native.connect();
+      const at = address("C:/model.rvt");
+      const key = { binding: "address" as const, route: takeoffsWork.route, target: at };
+      const captures = captureStore(join(root, "captures"));
       let state: unknown;
-      const work = new RouteWorkspace({
-        registrations: [{ spec: takeoffsRouteState }],
+      const workspace = new RouteWorkspace({
+        publicationAuthor: () => "human",
+        registrations: [{ spec: takeoffsWork }],
         store: {
           getState: async () => state,
           setState: async ({ value }) => {
@@ -59,152 +53,106 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           },
         },
       });
-      owner = {
-        id: randomUUID(),
-        at,
-        target: { session: "integration", openId: "integration" },
-        scope: { binding: "address", route: "takeoffs", target: at },
-        work,
-        captures: captureStore(join(root, "captures")),
-      };
-      const room = seed.snapshot.capture.snapshot.world.zones[0]!.rooms[0]!;
-      await work.apply(
-        owner.scope,
-        "takeoffs",
-        "human",
-        takeoffEditPatches(takeoffsRouteState.schema.parse({}), room.guid, room, {
-          name: "Reviewed demo room",
-        }),
+
+      const recorded = takeoffObservationSchema.parse(syncSeed.snapshot);
+      if (recorded.kind !== "ready") throw Error("Expected a saved snapshot seed");
+      const snapshot = structuredClone(recorded.capture.snapshot);
+      snapshot.reading.at = at;
+      snapshot.world.r10Path = path;
+      const zone = snapshot.world.zones[0]!;
+      const room = zone.rooms.find((row) => row.data !== null)!;
+      zone.rooms = [room];
+      zone.tags = [before.systems[0]!.name];
+      zone.driftSqft = 0;
+      zone.runs = [];
+      room.elementId = 21;
+      room.r10 = null;
+      room.flags = [];
+      room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
+      snapshot.world.zones = [zone];
+      const capture = await settle(
+        captures.refresh(ref, Effect.succeed({ result: null, snapshot }), Effect.succeed(true)),
+      );
+
+      const staged = await workspace.publish(
+        key,
+        key.route,
+        [
+          {
+            path: ["edits", takeoffEditKey(room.guid, "name")],
+            value: { edit: { value: "Reviewed demo room" } },
+          },
+          {
+            path: ["writeIntent", "takeoffs.sync"],
+            value: {
+              edit: {
+                value: {
+                  path,
+                  zones: [zone.zone.guid],
+                  captureId: capture.capture.id,
+                  fileVersion: beforeHash,
+                },
+              },
+            },
+          },
+        ],
         0,
       );
-      const current = owner;
-      const snapshot = {
-        ...seed.snapshot.capture.snapshot,
-        reading: { ...seed.snapshot.capture.snapshot.reading, at: owner.at },
-        world: { ...seed.snapshot.capture.snapshot.world, r10Path: path },
+      if (!staged.ok) throw Error(JSON.stringify(staged));
+      const work = { key, revision: staged.revision };
+      const target = { kind: "document", ref };
+      const post = native.actions(
+        { workspace, sdk: sdkSessions, marks: testDocumentMarks(bridge) },
+        captures,
+      );
+      const invoke = async (id: string, commandKey: string, input: { work: typeof work }) => {
+        const response = await post({ id, key: commandKey, target, input });
+        expect([200, 202], await response.clone().text()).toContain(response.status);
+        return journal.wait(id);
       };
-      const capture = await settle(
-        owner.captures.refresh(
-          owner.target,
-          Effect.succeed({ result: null, snapshot }),
-          Effect.succeed(true),
-        ),
-      );
-      const nativeLinks: unknown[] = [];
-      const bridge = {
-        list: Effect.succeed([
-          {
-            sessionId: owner.target.session,
-            processId: 42,
-            processStartUtcUnixMs: 1000,
-            state: {
-              openDocuments: [
-                { openId: owner.target.openId, address: owner.at, isFamilyDocument: false },
-              ],
-            },
-          },
-        ]),
-        invoke: (key: string, input: unknown) =>
-          Effect.sync(() => {
-            if (key === "takeoffs.rhvac-links.preflight") return { value: { writes: [] } };
-            if (key !== "takeoffs.rhvac-links") throw Error(`Unexpected native operation ${key}`);
-            nativeLinks.push(input);
-            return {
-              value: { simulated: true },
-              target: { session: current.target.session, document: current.at },
-            };
-          }),
-      } as unknown as RevitBridge["Service"];
-      const currentWork = await owner.work.read(owner.scope, "takeoffs");
-      const admission = actionAdmissionSchema.parse({
-        id: `${owner.id}:jet`,
-        key: "takeoffs.sync",
-        target: { kind: "document", ref: owner.target },
-        input: {
-          path,
-          zones: seed.zones,
-          captureId: capture.capture.id,
-          fileVersion: beforeHash,
-          work: { key: owner.scope, revision: currentWork!.revision },
-        },
-      });
-      const deps = { workspace: owner.work, sdk: sdkSessions };
-      const executors = takeoffExecutors(bridge, {
-        ...deps,
-        captures: owner.captures,
-        // The real RHVAC file lane: this test exists to run Jet on an owned copy.
-        rhvac: {
-          open: (file) => rhvacOpen({ path: file }),
-          sync: rhvacSync,
-          applyStaged,
-          buildInsert: buildRhvacInsert,
-        },
-      });
-      const runtime = (journal = journalAt(join(root, "integration-journal.jsonl"), Date.now));
-      runtime.bindCommands({
-        ...commandResources(bridge, deps, async (id) => (await runtime.list(undefined, id))[0]),
-        resolve: (key) => {
-          const entry = executors[key as keyof typeof executors];
-          if (!entry) throw Error(`No integration executor for ${key}`);
-          return entry;
-        },
-      });
-      await runtime.invoke(admission, crossing);
-      const receipt = await runtime.wait(admission.id);
-      expect(receipt.state).toBe("succeeded");
-      expect(await fileVersion(path)).not.toBe(beforeHash);
-      expect(nativeLinks).toHaveLength(1);
-      const after = await readRhvacFixture(path);
-      expect(after.rooms.some((room) => room.name === "Reviewed demo room")).toBe(true);
-      // Proven consumed edits retire; the receipt remains the record.
-      expect(
-        stagedTakeoffEdits(
-          takeoffsRouteState.schema.parse((await owner.work.read(owner.scope, "takeoffs"))!.doc),
-        ),
-      ).toEqual({});
+
+      const previewKey = command.writeBoundary.previewKey;
+      const plan = await invoke("plan", previewKey, { work });
+      expect(plan.state, "error" in plan ? plan.error : undefined).toBe("succeeded");
+      const receipt = await invoke("sync", "takeoffs.sync", { work });
+      expect(receipt.state, "error" in receipt ? receipt.error : undefined).toBe("succeeded");
+      expect(receipt.steps.map(({ kind }) => kind)).toEqual(["file", "native", "publication"]);
+      expect(calls.map(({ key }) => key)).toEqual([
+        "takeoffs.rhvac-links.preflight",
+        "takeoffs.rhvac-links",
+      ]);
       const afterHash = await fileVersion(path);
-      await runtime.invoke(admission, crossing);
-      expect(nativeLinks).toHaveLength(1);
-      expect(await fileVersion(path)).toBe(afterHash);
-      const staleId = `${owner.id}:stale`;
-      await runtime.invoke(
-        {
-          ...admission,
-          id: staleId,
-          input: {
-            ...admission.input,
-            work: {
-              key: owner.scope,
-              revision: (await owner.work.read(owner.scope, "takeoffs"))!.revision,
-            },
-          },
-        },
-        crossing,
-      );
-      expect(await runtime.wait(staleId)).toMatchObject({
+      expect(afterHash).not.toBe(beforeHash);
+      const after = await readRhvacFixture(path);
+      expect(after.rooms.some((row) => row.name === "Reviewed demo room")).toBe(true);
+      const saved = (await workspace.read(key, key.route))!;
+      expect(stagedTakeoffEdits(takeoffsWork.schema.parse(saved.doc))).toEqual({});
+
+      expect((await invoke("sync", "takeoffs.sync", { work })).state).toBe("succeeded");
+      const stale = await invoke("stale", previewKey, { work: { key, revision: saved.revision } });
+      expect(stale).toMatchObject({
         state: "failed",
         steps: [],
-        error: "RHVAC file changed before admission",
+        refusal: { kind: "stale", consumed: [{ kind: "file", probe: { path } }] },
       });
-      expect(
-        JSON.stringify(await readFile(join(root, "integration-journal.jsonl"), "utf8")),
-      ).toContain(admission.id);
+      expect(calls).toHaveLength(2);
+      expect(await fileVersion(path)).toBe(afterHash);
     } finally {
-      // Preserve failed/unknown receipts before deleting only this integration test's owned root.
+      // Preserve the command receipts before deleting the owned copy.
       const evidence = join(
         checkoutRoot,
         ".artifacts/handoffs/route-goal",
         `demo-native-rhvac-${randomUUID()}.json`,
       );
-      await mkdir(join(evidence, ".."), { recursive: true });
       try {
+        await mkdir(join(evidence, ".."), { recursive: true });
         await writeFile(
           evidence,
           JSON.stringify(
             {
               fixture,
-              receipts: journal ? await journal.list() : [],
-              proof: "Real Jet integration; simulated native links; no application launch",
+              receipts: native ? await native.journal.list() : [],
+              proof: "Real Jet integration; recorded native links; no Revit launch",
             },
             null,
             2,
@@ -212,9 +160,10 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
           "utf8",
         );
       } finally {
+        await native?.close();
         await rm(root, { recursive: true, force: true });
       }
     }
   },
-  300000,
+  300_000,
 );

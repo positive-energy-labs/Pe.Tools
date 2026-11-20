@@ -31,6 +31,7 @@ kaitpw, 2026-11-20:
 ## Consequences
 
 - A product cannot add a home kind without a constructor, so a new kind is a kernel change that a reviewer sees.
+- Beside the ladder, `machineFile` keeps machine evidence and `externalFile` holds named cells in a file whose path the command's input supplies.
 - Rung 6 costs what Ducts already pays. Every write borrows Project Information, so two people cannot write the same product's facts in one central model between syncs. The record must fit the 256 KiB cap of the storage amendment, which is provisional until measure M1 of the map reports.
 - A fact at rung 6 shows in no tag, filter, schedule or Properties row. The owner accepted that for elements our tool makes.
 - Rooms loses eleven carriers, three binding stages and the scan of every Filled Region (ruling 14, [rooms ledger](../features/rooms/LEDGER.md)).

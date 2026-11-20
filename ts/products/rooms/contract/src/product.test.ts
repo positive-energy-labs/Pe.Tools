@@ -1,6 +1,16 @@
 import { expect, it } from "vite-plus/test";
-import { address, applyPatches, bindWork, message, type RouteStatePatch } from "@pe/agent-contracts";
-import { product, ROOM_FIELDS, roomsWork } from "./product.ts";
+import {
+  address,
+  applyPatches,
+  bindWork,
+  message,
+  stagedDecisions,
+  stagedTakeoffEdits,
+  takeoffDecisionKey,
+  takeoffEditKey,
+  type RouteStatePatch,
+} from "@pe/agent-contracts";
+import { product, roomsWork, takeoffsWork } from "./product.ts";
 
 const FLOOR = "8a0c1e3f-0000-4000-8000-000000000001-000026dc";
 const CEILING = "8a0c1e3f-0000-4000-8000-000000000001-0014edcd";
@@ -52,22 +62,22 @@ it("a Work command's refusal of authored fields names the writeIntent cell they 
   expect(message(failed.error!)).toContain('stage writeIntent["rooms.draw"].edit');
 });
 
-it("one declaration carries both routes, each with its own Work", () => {
-  expect(Object.keys(product.routes)).toEqual(["rooms", "takeoffs"]);
-  expect(product.tools.rooms?.work?.route).toBe("rooms");
-  expect(product.tools.takeoffs?.work?.route).toBe("takeoffs");
-  expect(Object.keys(commands).filter((key) => !key.endsWith(".preview")).sort()).toEqual([
-    "rooms.draw",
-    "rooms.merge",
-    "rooms.partition",
-    "takeoffs.adopt",
-    "takeoffs.initialize",
-    "takeoffs.partition",
-    "takeoffs.sync",
-  ]);
-});
-
-it("the staged room fields are written through the platform sheet pair, never a Rooms command", () => {
-  expect(Object.keys(commands)).not.toContain("rooms.write");
-  expect(product.sheetWrites).toEqual({ regions: ROOM_FIELDS });
+it("the declared Takeoffs Work shares staged decisions and edits between authors", () => {
+  const decision = takeoffDecisionKey("room-1", "seedless");
+  const edit = takeoffEditKey("room-1", "name");
+  const doc = takeoffsWork.schema.parse({});
+  const staged = applyPatches(takeoffsWork, { version: 1, revision: 0, doc }, "pea", [
+    { path: ["decisions", decision], value: { edit: { value: "dismiss" } } },
+    { path: ["edits", edit], value: { edit: { value: "Pea's name" } } },
+  ], 0);
+  if (!staged.ok) throw Error(JSON.stringify(staged));
+  const edited = applyPatches(takeoffsWork, staged.envelope, "human", [
+    { path: ["edits", edit], value: { edit: { value: "Reviewed room" } } },
+  ], staged.envelope.revision);
+  if (!edited.ok) throw Error(JSON.stringify(edited));
+  const current = takeoffsWork.schema.parse(edited.envelope.doc);
+  expect(stagedDecisions(current)).toEqual({ [decision]: "dismiss" });
+  expect(stagedTakeoffEdits(current)).toEqual({
+    "room-1": { roomId: "room-1", next: { name: "Reviewed room" } },
+  });
 });

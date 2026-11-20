@@ -230,6 +230,5 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
 });
 
 test("a region's Work key is its UniqueId SubjectRef, the same code the regions read answers with", () => {
-  expect(regionCode(FLOOR)).toBe(regionCode(FLOOR));
   expect(() => regionCode("9948")).toThrow();
 });

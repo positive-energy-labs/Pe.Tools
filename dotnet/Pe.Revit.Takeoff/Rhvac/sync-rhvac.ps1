@@ -58,7 +58,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../../../tools/product-paths.ps1')
-$scratch = Join-Path (Resolve-ProductRuntimeRoot) 'scratch'
+$scratch = Join-Path (Resolve-ProductRuntimeRoot -Lane dev -Root (Join-Path $PSScriptRoot '../../..')) 'scratch'
 [void][IO.Directory]::CreateDirectory($scratch)
 $lane = $PSCmdlet.ParameterSetName
 $ps32 = 'C:\Windows\SysWOW64\WindowsPowerShell\v1.0\powershell.exe'
