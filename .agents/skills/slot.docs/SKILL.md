@@ -25,6 +25,7 @@ There is no external issue tracker: no GitHub issues, no `.scratch/`, no ticket 
 | `docs/adr/NNNN-slug.md` | Decisions that constrain other features |
 | Nearest package `AGENTS.md` Shared Language table; feature terms in `docs/features/<name>/GLOSSARY.md` (created when first needed; `grill` grows them; formats in `GLOSSARY-FORMAT.md` and `ADR-FORMAT.md` beside this skill) | Domain vocabulary |
 | Authority docs (registry below) | Hard-won rationale of wide breadth |
+| `docs/DRIVE.md`; each product's card at `ts/products/<name>/DRIVE.md` | How a person or an agent drives the product. Project-specific cases (models, views, tags, seconds) go in the private `pe-drive-witnesses` pod, never in git |
 | `.artifacts/handoffs/<date>-<topic>.md` | Session-to-session bridges |
 | The relevant `docs/features/<feat>`, else `docs/research/` | Research findings |
 | Code comments at the site; a scoped grounding doc only when no code site exists | Behavior-proven platform facts (gotchas, quirks) |
