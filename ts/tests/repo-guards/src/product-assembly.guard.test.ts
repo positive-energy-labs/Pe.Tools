@@ -13,6 +13,10 @@ import {
   renderProductAssembly,
 } from "../../../apps/web/scripts/product-assembly.ts";
 import { routeFolderCandidates } from "@pe/web/route-startup";
+import {
+  commandTableSource,
+  generateCommandTable,
+} from "../../../packages/mcps/scripts/command-axes.ts";
 import { ROOT } from "./import-census.ts";
 
 const checkout = resolve(ROOT, "..");
@@ -34,6 +38,7 @@ test("every product declaration is in the checked-in assembly and workspace link
 });
 
 const reference = (name: string) => ({ module: "./registration", export: name });
+const freshCommand = "proof.inspect-fresh-assembly";
 const contractManifest = {
   name: "@pe/proof-contract",
   exports: { "./registration": "./registration.ts" },
@@ -54,7 +59,7 @@ const fixtureFiles = {
     'import { z } from "zod";',
     'import { route } from "@pe/host-contracts/pe-api";',
     'export const tool = { name: "proof", says: "Fixture tool", commands: {',
-    '  "document.temporary.status": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", dirties: [] },',
+    `  "${freshCommand}": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", catalogEffect: "Read", dirties: [] },`,
     "} };",
     'export const reads = { inputs: { "proof.echo": z.object({ text: z.string() }) }, help: "A proof reading." };',
     'export const routes = { "proof.stats": route("GET", "/pe/proof", z.undefined(), z.object({ ok: z.boolean() }), "read", "gateway", "read") };',
@@ -100,7 +105,7 @@ function writeAssemblyFixture(
   return { assembly, authored, write };
 }
 
-function loadFixtureModules(root: string) {
+function loadFixtureModules(root: string, commandTable?: string) {
   const modules = [
     "@pe/agent-contracts/semantic-actions",
     "@pe/agent-contracts/pe-api",
@@ -110,6 +115,8 @@ function loadFixtureModules(root: string) {
     "effect",
   ];
   const jiti = createJiti(import.meta.url, {
+    // The production generator loads the catalog in a fresh process after writing the table.
+    moduleCache: !commandTable,
     alias: {
       ...Object.fromEntries(
         modules.map((name) => [name, fileURLToPath(import.meta.resolve(name))]),
@@ -117,6 +124,7 @@ function loadFixtureModules(root: string) {
       zod: createRequire(new URL("../../../apps/web/package.json", import.meta.url)).resolve("zod"),
       "@pe/proof-contract/registration": join(root, product, "contract/registration.ts"),
       "@pe/proof-host/registration": join(root, product, "host/registration.ts"),
+      ...(commandTable ? { "./generated/command-axes.generated.ts": commandTable } : {}),
     },
   });
   return { jiti, load: <T>(file: string) => jiti.import<T>(join(root, file)) };
@@ -161,7 +169,13 @@ test("an authored product folder feeds Host, web and Pea without editing their s
     const actions = await load<typeof import("@pe/mcps/product-actions")>(
       productAssemblyPaths.actions,
     );
-    const catalog = await load<typeof import("@pe/mcps/product-catalog")>(
+    await expect(load(productAssemblyPaths.catalog).then(() => undefined)).rejects.toThrow(
+      `Command ${freshCommand} has no declared catalog axes`,
+    );
+    const table = "ts/packages/agent-contracts/src/generated/command-axes.generated.ts";
+    write(table, commandTableSource(generateCommandTable(actions.hostActions)));
+    const { load: loadWithGeneratedTable } = loadFixtureModules(root, join(root, table));
+    const catalog = await loadWithGeneratedTable<typeof import("@pe/mcps/product-catalog")>(
       productAssemblyPaths.catalog,
     );
     const contracts = await load<typeof import("@pe/mcps/product-contracts")>(
@@ -186,7 +200,11 @@ test("an authored product folder feeds Host, web and Pea without editing their s
       await server.dispose();
     }
     expect(actions.tools).toHaveProperty("proof");
-    expect(actions.commands).toHaveProperty(["document.temporary.status"]);
+    expect(actions.commands).toHaveProperty([freshCommand]);
+    expect(catalog.linkedCatalog().entries.get(`command:${freshCommand}`)).toMatchObject({
+      effect: "Read",
+      discovery: { title: freshCommand },
+    });
     expect(guides.productGuides).toEqual([{ instructions: "Fixture guide.", skills: [] }]);
     expect(hostExecutors.productExecutors({} as never).executors).toHaveProperty(["proof.execute"]);
     const discovery = catalog.linkedCatalog().entries.get("route:reads.value")?.discovery;
