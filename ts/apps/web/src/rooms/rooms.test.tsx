@@ -246,11 +246,7 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     const current = ctx();
     return (
       <RoomsProvider ctx={current}>
-        <ScopeBody
-          ctx={current}
-          page={roomsPageSchema.parse({ view: current.page.read().view })}
-          verbs={() => null}
-        />
+        <ScopeBody />
         <output>{retainedLine(current.value)}</output>
       </RoomsProvider>
     );
@@ -265,9 +261,14 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     fireEvent.click(screen.getByRole("button", { name: "Clear plan view" }));
     expect(mount.page.read().view).toBe("");
     await act(async () => emit(frames.length - 1, "Fixture level"));
+    const rosterReads = frames.length;
     fireEvent.click(screen.getByRole("button", { name: "Choose level" }));
     fireEvent.click(await screen.findByRole("option", { name: /Fixture level/ }));
-    expect(mount.page.read().view).toBe("First view");
+    expect(mount.page.read().view).toBe("");
+    expect(mount.page.read().level).toBe("Fixture level");
+    expect(frames).toHaveLength(rosterReads);
+    fireEvent.click(await screen.findByRole("option", { name: "Second view" }));
+    expect(mount.page.read().view).toBe("Second view");
     expect(ctx().value).toMatchObject({
       state: "refreshing",
       publication: { freshness: "refresh-needed" },
@@ -279,8 +280,6 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
         .cells.at(["edits", roomEditKey(DEMO_ROOMS.regions[0]!.guid, "name")])
         .stage("Unsafe"),
     ).not.toBeNull();
-    fireEvent.click(await screen.findByRole("option", { name: "Second view" }));
-    expect(mount.page.read().view).toBe("Second view");
     await act(async () => emit(frames.length - 1, "Replacement floor"));
     expect(ctx().value.state === "ready").toBe(true);
     expect(screen.queryByText("Showing previous Value; refreshing")).toBeNull();

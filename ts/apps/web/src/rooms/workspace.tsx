@@ -25,8 +25,12 @@ function useWorkspace(ctx: RoomsContext) {
       : raw.room.ids.flatMap((id) => regionOf(id) ?? []);
   const page = roomsPageSchema.parse({ ...raw, selected });
   const setPage = (patch: Partial<RoomsPage>) => {
-    const { view, selected, ...pose } = patch;
-    if (view !== undefined) ctx.page.query({ view });
+    const { level, view, selected, ...pose } = patch;
+    if (level !== undefined || view !== undefined)
+      ctx.page.query({
+        ...(level !== undefined ? { level } : {}),
+        ...(view !== undefined ? { view } : {}),
+      });
     if (selected !== undefined)
       door?.select((selected === "all" ? [] : selected).map(regionSubject));
     // A new pick or view lets go of the pinned mark; the picked rooms' first mark shows instead.

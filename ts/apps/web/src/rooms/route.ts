@@ -16,7 +16,7 @@ const address = roomsPageSchema.shape;
 /** The rooms a person or Pea may hold open at once; "all" is the whole roster. */
 const room = subjectSchema(512);
 /*
- * Slice 10 (MAP row 10): the room is the subject, the view is route-owned query, and the plan's own
+ * Slice 10 (MAP row 10): the room is the subject, the level and view are route-owned query, and the plan's own
  * pose (its solver layers and its plane camera) stays in `fields`: the kernel's picture pose is the
  * 3D scene's (`route/slots/picture/pose.ts`), and no pane draws from the picture slot yet.
  */
@@ -28,7 +28,10 @@ export const fields = {
   // The feedback mark pinned on the plan; empty pins the first mark of the picked rooms.
   card: field(z.string(), "", "pose"),
 };
-export const query = { view: field(address.view, "", "query", "push") };
+export const query = {
+  view: field(address.view, "", "query", "push"),
+  level: field(address.level, "", "query", "push"),
+};
 export const loaded = read(hostRead(contracts.workspace), (page: { view: string }) => ({
   view: page.view,
 }));
@@ -43,7 +46,7 @@ export const module = route({
   key: "rooms",
   name: "Rooms",
   needs: "project",
-  documentFields: ["view", "room", "viewport", "card"],
+  documentFields: ["view", "level", "room", "viewport", "card"],
   host: "./host.ts",
   directory: {
     label: "Manual J",
