@@ -13,11 +13,15 @@ const command = {
   needs: "nothing",
   effect: "query",
   dirties: [],
+  native: [],
+  writes: {},
 } as const;
 const tiny = product({
   id: "tiny",
   says: "Tiny",
-  readings: { roster: { handle: roster }, calc: { handle: calc } },
+  homes: {},
+  cells: {},
+  readings: { roster: { handle: roster, sources: [] }, calc: { handle: calc, sources: [] } },
   commands: { "tiny.write": command, "tiny.draw": command },
   routes: {},
 });
