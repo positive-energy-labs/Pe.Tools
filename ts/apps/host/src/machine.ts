@@ -1083,7 +1083,12 @@ export function machineSources(
     attachments: () => bridgeAttachments(bridge),
     // Doctor can report unrelated wiring refusals while still identifying installed years.
     years: Effect.fn("machine.years")(function* () {
-      const { result } = yield* sdk<DoctorResult>(doctorArgv({ timeoutSeconds: 20 }), [0, 1, 3]);
+      // The budget must fit inside LEG_DEADLINE_MS: a 20 s budget ran 15.5 s on a busy machine and
+      // never once beat the 15 s leg (2026-11-19). Doctor reads the installs fifth of 24 checks and
+      // returns what it reached at the budget (3.9 s for a 3 s budget), naming the rest in `partial`.
+      const { result } = yield* sdk<DoctorResult>(doctorArgv({ timeoutSeconds: 5 }), [0, 1, 3]);
+      if (result.partial.some((check) => check.startsWith("revit-installs")))
+        return yield* unreadable("SDK doctor did not reach the Revit installs check.");
       return yield* Effect.forEach(result.revitYears, (year) => {
         const number = Number(year);
         return Number.isInteger(number)
