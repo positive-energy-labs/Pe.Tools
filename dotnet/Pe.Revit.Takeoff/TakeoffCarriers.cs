@@ -82,6 +82,7 @@ internal sealed record RegionRow(
 /// <summary>The document's Rooms rows, staged in memory by the caller that owns the transaction.</summary>
 public sealed class RoomsRegionRecord
 {
+    [Pe.Shared.Product.NativeHome("regionRecord")]
     public static readonly OwnerDescriptor Owner = new("rooms-regions", 1,
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020"), "_PE_RoomsRegions",
         "Pe Rooms roles, fields and provenance keyed by FilledRegion UniqueId.",
