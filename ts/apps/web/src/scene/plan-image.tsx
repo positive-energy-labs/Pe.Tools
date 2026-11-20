@@ -4,9 +4,9 @@ type PlanRegistration = {
   imageSha256?: string;
   width: number;
   height: number;
-  topLeft: [number, number];
-  topRight: [number, number];
-  bottomLeft: [number, number];
+  topLeft: readonly [number, number];
+  topRight: readonly [number, number];
+  bottomLeft: readonly [number, number];
 };
 
 function planCanvasTransform(
@@ -40,13 +40,19 @@ export const planCorners = (plan: TakeoffPlanImage): Point2[] => {
  * (tx + s·x, ty − s·y), which is `toPx` with pxPerFt = s, minX = −tx/s, maxY = ty/s: the SVG's
  * own frame, handed to `planCanvasTransform` unchanged. Revit's registration stays the authority.
  */
-function planViewport(frame: AffineFrame) {
+function planViewport(frame: Pick<AffineFrame, "scale" | "toViewport">) {
   const [tx, ty] = frame.toViewport([0, 0]);
   return { minX: -tx / frame.scale, maxY: ty / frame.scale, pxPerFt: frame.scale };
 }
 
 /** The one plan image layer, under the zones, in the zones' coordinate frame. */
-export function PlanImageLayer({ plan, frame }: { plan: TakeoffPlanImage; frame: AffineFrame }) {
+export function PlanImageLayer({
+  plan,
+  frame,
+}: {
+  plan: TakeoffPlanImage;
+  frame: Pick<AffineFrame, "scale" | "toViewport">;
+}) {
   const { registration } = plan;
   return (
     <image
