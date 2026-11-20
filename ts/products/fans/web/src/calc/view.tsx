@@ -1,5 +1,6 @@
 import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { cellSource, espWord } from "@pe/agent-contracts/slots";
+import { FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
 /**
  * The fan sheet view of /ducts (`?stage=sheet`, the head's "Pricing fans" stage; protoui rounds 1 to 3, 2026-10-28, variant A "Ledger"
  * promoted): pane bodies for the kernel's graph layout, using the house `ListView`. The
@@ -97,13 +98,20 @@ export function Roster({ props }: { props: RosterProps }) {
               {props.roster.length} fan ports / {props.picked?.length ?? 0} open
             </span>
             <span className="flex gap-1">
-              <Button label="All fans" onPress={() => subject?.all()}>
+              <Button
+                label="All fans"
+                refusal={props.roster.length > FAN_DETAIL_LIMIT ? fanDetailLimitMessage : null}
+                onPress={() => subject?.all()}
+              >
                 All
               </Button>
               <Button label="Clear fans" onPress={() => subject?.clear()}>
                 Clear
               </Button>
             </span>
+            {props.roster.length > FAN_DETAIL_LIMIT && (
+              <span className="t-small text-ink-2">{fanDetailLimitMessage}</span>
+            )}
           </div>
         }
         list={list}
