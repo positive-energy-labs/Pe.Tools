@@ -689,7 +689,15 @@ export function mountTypedRoute(
                     valueOf(record.snapshot),
                     record.snapshot.publication,
                   )
-                : reading(valueOf(record.snapshot), record.snapshot.publication);
+                : reading(
+                    valueOf(record.snapshot),
+                    retain(record.snapshot.publication),
+                    frame.kind === "document-changed"
+                      ? "The document changed. Refreshing…"
+                      : record.snapshot.state === "refreshing"
+                        ? record.snapshot.reason
+                        : undefined,
+                  );
           if (read === subjectRead && record.snapshot.state === "ready" && boundedAll())
             queueMicrotask(() => syncReads());
           connectTimeline();

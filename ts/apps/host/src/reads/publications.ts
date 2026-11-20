@@ -24,6 +24,7 @@ export interface Publication<T> {
   readonly value: Value<T> | null;
   readonly state: "current" | "refresh-needed" | "superseded";
   readonly reason?: string;
+  readonly refreshCause?: "document-changed";
 }
 type Dependency = Pick<Trace, "name" | "args">;
 type Pending = { inputs: Dependency[]; superseded: boolean };
@@ -128,6 +129,8 @@ export class Publications {
       if (!slot) continue;
       const previous = slot.published;
       const pending = slot.pending?.inputs.some((input) => input.name === "work" && matches(input));
+      const documentChanged = (trace: Dependency) =>
+        trace.name === "document-mark" && matches(trace);
       if (pending || previous?.value?.trace.some(matches)) {
         // Work creation or editing replaces the pending basis, including the first publication.
         if (pending && slot.pending) {
@@ -142,6 +145,7 @@ export class Publications {
           generation: slot.generation,
           version: previous?.version ?? 0,
           state: "refresh-needed",
+          ...(previous?.value?.trace.some(documentChanged) && { refreshCause: "document-changed" }),
           value: previous?.value ? { ...previous.value, freshness: "refresh-needed" } : null,
         });
         this.notify(id);
@@ -370,12 +374,14 @@ export class Publications {
           : [];
         const commit = await keep?.(published);
         if (!mine()) return obsolete();
-        if (
-          dependencies.some(
-            ({ trace, revision }) => port.revision(trace.name, trace.args) !== revision,
-          )
-        )
-          throw new RefreshNeeded("Inputs invalidated while persisting the publication");
+        const changed = dependencies.find(
+          ({ trace, revision }) => port.revision(trace.name, trace.args) !== revision,
+        );
+        if (changed)
+          throw new RefreshNeeded(
+            "Inputs invalidated while persisting the publication",
+            changed.trace.name,
+          );
         const retainedBytes = this.bytes - (this.retainedBytes.get(id) ?? 0) + bytes;
         if (retainedBytes > this.byteLimit)
           throw Error("Published Values exceed the shared byte bound; old Value retained");
@@ -399,6 +405,10 @@ export class Publications {
           version: previous?.version ?? 0,
           value: retained,
           state: "refresh-needed",
+          ...(error instanceof RefreshNeeded &&
+            error.input === "document-mark" && {
+              refreshCause: "document-changed",
+            }),
           reason: error instanceof Error ? error.message : String(error),
         });
         // Old data retains its original key/version, but its non-current label is host-owned too.

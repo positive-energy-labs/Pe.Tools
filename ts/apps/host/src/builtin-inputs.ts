@@ -1039,6 +1039,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   generation,
                   version: publication.version,
                   state: publication.state,
+                  refreshCause: publication.refreshCause,
                   retry,
                 },
               });

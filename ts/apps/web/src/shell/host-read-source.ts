@@ -7,6 +7,7 @@ const publicationFrame = z.looseObject({
   version: z.number(),
   state: z.string(),
   reason: z.string().optional(),
+  refreshCause: z.literal("document-changed").optional(),
   value: z
     .looseObject({
       evaluation: z.string(),
