@@ -40,7 +40,9 @@ public sealed record DuctFittingWrite(long Id, DuctFittingMethod Method, double 
     IReadOnlyList<DuctLossResult>? Results = null);
 
 /// <summary>A signed host coefficient at one velocity pressure in in-wg. Native code refuses changed or ambiguous bases.</summary>
-public sealed record DuctLossResult(double VelocityPressureInWg, double Coefficient) {
+public sealed record DuctLossResult(
+    [property: JsonProperty(Required = Required.Always)] double VelocityPressureInWg,
+    [property: JsonProperty(Required = Required.Always)] double Coefficient) {
     /// <summary>
     ///     The per-fitting results entity of Pe's pressure-loss server. It is the one Extensible Storage Pe writes,
     ///     because Revit's server API requires it (ADR 0032 storage amendment, rule 7). The GUID and name are the
@@ -48,21 +50,19 @@ public sealed record DuctLossResult(double VelocityPressureInWg, double Coeffici
     /// </summary>
     public static readonly OwnerDescriptor Owner = new("duct-loss-results", 1,
         new Guid("5e1f0c0e-7e10-4c0e-9e1f-0000c0ef0003"), "PeDuctLossResults",
-        "Host-priced coefficients and velocity-pressure bases. Reapply from Pe when the basis changes.");
+        "Host-priced coefficients and velocity-pressure bases. Reapply from Pe when the basis changes.",
+        static read => Read(read).Refusal);
 
     public static string Encode(IReadOnlyList<DuctLossResult> results) =>
         OwnerBlob.Encode(Owner, new JObject { ["results"] = JArray.FromObject(results, RevitDataJson.CreateStoredSerializer()) });
 
     /// <summary>Null when the text is absent or refused: the server then prices nothing and the person reapplies.</summary>
-    public static IReadOnlyList<DuctLossResult>? Decode(string? text) {
-        if (OwnerBlob.Decode(Owner, text) is not { Status: OwnerBlobStatus.Ok, Data: { Count: 1 } data } || data["results"] is not JArray results)
-            return null;
-        try {
-            return results.ToObject<List<DuctLossResult>>(RevitDataJson.CreateStoredSerializer());
-        } catch (JsonException) {
-            return null;
-        }
-    }
+    public static IReadOnlyList<DuctLossResult>? Decode(string? text) => Read(OwnerBlob.Decode(Owner, text)).Value;
+
+    private static OwnerValue<List<DuctLossResult>> Read(OwnerBlobRead read) => read.Parse(data =>
+        data is { Count: 1 } && data["results"] is JArray results && results.All(row => row is JObject)
+            ? results.ToObject<List<DuctLossResult>>(RevitDataJson.CreateStoredSerializer())
+            : throw new InvalidOperationException("results data is not exactly { results: [object, ...] }"));
 }
 
 /// <summary>Consume host results in Pe's server, or freeze one coefficient for export.</summary>
@@ -143,7 +143,8 @@ public sealed record DuctLossStore {
     public const int CurrentVersion = 3;
 
     public static readonly OwnerDescriptor Owner = new("duct-losses", CurrentVersion,
-        new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"), "_PE_DuctLosses", "Versioned Pe.Tools duct loss provenance (ducts.apply).") { ValidateData = read => Read(read).Refusal };
+        new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"), "_PE_DuctLosses", "Versioned Pe.Tools duct loss provenance (ducts.apply).",
+        static read => Read(read).Refusal);
 
     /// <summary>On the wire only. In the model the version is the envelope's, so the stored data holds none.</summary>
     public int Version { get; init; } = CurrentVersion;

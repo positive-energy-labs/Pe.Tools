@@ -45,7 +45,8 @@ public sealed record ParameterLinkProfile {
 
     /// <summary>The model's stored profile. Its version is the envelope's, so the stored data holds no formatVersion.</summary>
     public static readonly Serialization.OwnerDescriptor Owner = new("parameter-links", CurrentFormatVersion,
-        new Guid("ceb230bf-9e1b-485a-a05e-0cda66558efd"), "_PE_ParameterLinksProfile", "Versioned Pe.Tools parameter-link profile.") { ValidateData = read => Read(read).Refusal };
+        new Guid("ceb230bf-9e1b-485a-a05e-0cda66558efd"), "_PE_ParameterLinksProfile", "Versioned Pe.Tools parameter-link profile.",
+        static read => Read(read).Refusal);
 
     private const string VersionKey = "formatVersion";
 

@@ -121,14 +121,12 @@ public sealed class DuctLossStoreTests {
             var owner = DuctLossStore.Owner;
             var raw = Stored("{\"roles\":{\"42\":{\"role\":\"fan\"}},\"note\":\"donn\u00e9e\"}");
             var bytes = Encoding.UTF8.GetBytes(raw);
-            var envelope = owner with { ValidateData = null };
-            var blob = OwnerBlob.Decode(envelope, raw);
+            var blob = OwnerBlob.Decode(owner, raw);
             var refused = DuctLossStore.Read(blob);
-            Assert.That(blob.Status, Is.EqualTo(OwnerBlobStatus.Ok));
-            Assert.That(blob.Replacement, Is.Null);
+            Assert.That(blob.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
             Assert.That(refused.Value, Is.Null);
 
-            var replacement = blob.DataRefused(refused.Refusal!);
+            var replacement = blob.Replacement!;
             var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
             Assert.That(replacement, Is.EqualTo(new OwnerBlobReplacement(owner.Owner, OwnerBlobStatus.Invalid, refused.Refusal!, sha)));
             Assert.That(Encoding.UTF8.GetBytes(blob.Raw!), Is.EqualTo(bytes));

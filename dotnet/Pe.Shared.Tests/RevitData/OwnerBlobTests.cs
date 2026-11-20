@@ -18,7 +18,8 @@ namespace Pe.Shared.Tests.RevitData;
 /// </summary>
 [TestFixture]
 public sealed class OwnerBlobTests {
-    private static readonly OwnerDescriptor Owner = new("test-owner", 3, new Guid("00000000-0000-0000-0000-0000000000a1"), "_PE_Test", "test");
+    // The envelope tests deliberately use arbitrary owner data.
+    private static readonly OwnerDescriptor Owner = new("test-owner", 3, new Guid("00000000-0000-0000-0000-0000000000a1"), "_PE_Test", "test", static _ => null);
 
     private static string Stored(string data, int version = 3, string owner = "test-owner") =>
         $$"""{"owner":"{{owner}}","version":{{version}},"data":{{data}}}""";
@@ -205,9 +206,8 @@ public sealed class OwnerBlobTests {
             }
             if (unparseableData is null) return;
             var enveloped = OwnerBlob.Decode(owner, $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{{{unparseableData}}}}""");
-            var validatesData = owner.ValidateData is not null;
-            Assert.That(enveloped.Status, Is.EqualTo(validatesData ? OwnerBlobStatus.Invalid : OwnerBlobStatus.Ok));
-            Assert.That(enveloped.Replacement is not null, Is.EqualTo(validatesData));
+            Assert.That(enveloped.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
+            Assert.That(enveloped.Replacement, Is.Not.Null);
             (bool HasValue, string? Refusal) parsed = default;
             Assert.That(() => parsed = read(enveloped), Throws.Nothing);
             Assert.That(parsed.HasValue, Is.False);
@@ -319,7 +319,7 @@ public sealed class OwnerBlobTests {
     public void A_matching_seal_cannot_recover_a_readable_record() {
         var raw = OwnerBlob.Encode(Owner, NewData);
         var stored = OwnerBlob.Decode(Owner, raw);
-        var evidence = stored.DataRefused("caller claims the data is unreadable");
+        var evidence = OwnerBlob.Decode(Owner with { Version = Owner.Version + 1 }, raw).Replacement!;
         Assert.That(() => OwnerBlob.Replace(stored, new JObject { ["a"] = 2 },
                 (_, _) => Assert.Fail("a readable record must not be backed up or noticed"), evidence),
             Throws.InvalidOperationException.With.Message.Contains("is readable"));
@@ -344,6 +344,17 @@ public sealed class OwnerBlobTests {
     public void The_duct_results_entity_prices_nothing_from_text_it_cannot_read(string? text) =>
         Assert.That(DuctLossResult.Decode(text), Is.Null);
 
+    [TestCase("""{"results":[null]}""")]
+    [TestCase("""{"results":[{"velocityPressureInWg":0.5}]}""")]
+    [TestCase("""{"results":[{"velocityPressureInWg":"x","coefficient":1.25}]}""")]
+    public void The_duct_results_descriptor_seals_unparseable_owner_data(string data) {
+        var raw = $$"""{"owner":"duct-loss-results","version":1,"data":{{data}}}""";
+        var read = OwnerBlob.Decode(DuctLossResult.Owner, raw);
+        Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
+        Assert.That(read.Replacement, Is.Not.Null);
+        Assert.That(read.Raw, Is.EqualTo(raw));
+    }
+
     [Test]
     public void The_system_registry_stores_the_envelope_with_no_inner_version() {
         var registry = new SystemRegistry();
@@ -351,6 +362,13 @@ public sealed class OwnerBlobTests {
 
         Assert.That(OwnerBlob.Encode(SystemRegistry.Owner, registry.ToData()), Is.EqualTo(
             $$$"""{"owner":"takeoff-systems","version":1,"data":{"systems":[{"guid":"{{{entry.Guid:D}}}","tag":"FC-8"}]}}"""));
+    }
+
+    [Test]
+    public void The_owner_constructor_requires_a_validator() {
+        Assert.That(typeof(OwnerDescriptor).GetConstructors().All(ctor => ctor.GetParameters().Any(parameter =>
+            parameter.ParameterType == typeof(Func<OwnerBlobRead, string>) && !parameter.IsOptional)), Is.True);
+        Assert.Throws<ArgumentNullException>(() => new OwnerDescriptor("test", 1, Guid.Empty, "_PE_Test", "test", null!));
     }
 
     [Test]
@@ -365,6 +383,7 @@ public sealed class OwnerBlobTests {
             Assert.That(owners.Select(o => o.Guid), Is.Unique);
             Assert.That(owners.Select(o => o.Name), Is.Unique);
             Assert.That(owners.Select(o => o.Version), Is.All.GreaterThan(0));
+            Assert.That(owners.Select(o => o.ValidateData), Is.All.Not.Null);
         });
     }
 }

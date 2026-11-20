@@ -166,6 +166,7 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
 
+            Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Invalid));
             var evidence = TakeoffCarriers.Replacements(document).Registry!;
             Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
             using (var tx = new Transaction(document, "Apply adoption with registry replacement")) {
@@ -179,9 +180,11 @@ public sealed class OwnerBlobRoundTripTests {
 
             Assert.That(TakeoffCarriers.ReadRegistry(document).Systems.Single().Tag, Is.EqualTo("FC-8"));
             var backup = Path.Combine(isolated.Root, "model-recovery", "owner-takeoff-systems", evidence.RawUtf8Sha256 + ".txt");
-            Assert.That(File.ReadAllText(backup), Is.EqualTo(raw));
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
             var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
-            Assert.That(File.ReadLines(notices).Single(), Does.Contain(evidence.RawUtf8Sha256));
+            var notice = JObject.Parse(File.ReadLines(notices).Single());
+            Assert.That(notice.Value<string>("sha256"), Is.EqualTo(evidence.RawUtf8Sha256));
+            Assert.That(notice.Value<string>("documentKey"), Is.EqualTo(document.GetDocumentKey()));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);
         }
@@ -446,7 +449,8 @@ public sealed class OwnerBlobRoundTripTests {
 
             using var edit = new Transaction(document, "Check the sealed element writer");
             _ = edit.Start();
-            Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(), readable.DataRefused("claimed unreadable")),
+            Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(),
+                    OwnerBlob.Decode(owner with { Version = owner.Version + 1 }, readable.Raw).Replacement!),
                 Throws.InvalidOperationException.With.Message.Contains("is readable"));
             Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
             Assert.That(OwnerBlobStore.Write(anchor, owner, settings.ToData(), evidence), Is.True);
