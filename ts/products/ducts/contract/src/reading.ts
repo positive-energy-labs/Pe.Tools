@@ -2,11 +2,16 @@ import { documentRefSchema } from "@pe/agent-contracts/target";
 import { z } from "zod";
 import { DUCT_PARAMETER_KEYS } from "./duct-inputs.ts";
 
+export const DUCTS_IDS_PER_READ = 4096;
+
 /** Selectors bound acquisition by document, system, element ids or connector walk. */
 export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
   /** The fan roster's read: every HVAC equipment node and air terminal, and Revit's systems without sections. Health without open-end neighbourhoods (as `ids`). */
   z.strictObject({ kind: z.literal("roster") }),
-  z.strictObject({ kind: z.literal("ids"), ids: z.array(z.number().int()).min(1).max(4096) }),
+  z.strictObject({
+    kind: z.literal("ids"),
+    ids: z.array(z.number().int()).min(1).max(DUCTS_IDS_PER_READ),
+  }),
   /** The named Revit systems' groups, whole, in the document read's cooked shape: the network page's read. */
   z.strictObject({
     kind: z.literal("systems"),

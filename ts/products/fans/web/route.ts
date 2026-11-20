@@ -25,7 +25,8 @@ import { presentLosses } from "@pe/ducts-web/reviews";
 import { fansCalc } from "./src/calc.ts";
 import { fansPanes } from "./src/panes.ts";
 
-const fan = subjectSchema(32);
+// All opens the roster. Removing one port leaves an explicit list of every other port.
+const fan = subjectSchema(Number.MAX_SAFE_INTEGER);
 
 export const fields = {
   ...picturePose,

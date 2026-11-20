@@ -272,7 +272,13 @@ it("counts a pressure-gaining fitting as 0 ft and keeps its signed loss", () => 
     elementId: 1,
     lossInWg: 0.0000585,
     velocityFpm: 144,
-    source: { kind: "friction", f: 0.03, roughnessFt: 0.0003, rateInWgPer100Ft: 0.000585 },
+    source: {
+      kind: "friction",
+      f: 0.03,
+      roughnessFt: 0.0003,
+      hydraulicDiameterFt: 0.5,
+      rateInWgPer100Ft: 0.000585,
+    },
     unpriced: null,
     lengthFt: 10,
   };

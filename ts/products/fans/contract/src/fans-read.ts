@@ -29,11 +29,10 @@ export const fanCalcSchema = z.object({
     .object({ done: z.number(), total: z.number(), mark: z.string(), stopped: z.boolean() })
     .nullable(),
 });
-export const FAN_READ_MAX = 32;
 export const fansReadArgs = z.strictObject({
   target: documentRefSchema,
   /** Fan ports as SubjectRef `UniqueId:<unit>#port:<n>` codes, decoded at this door. */
-  fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema).max(FAN_READ_MAX)]),
+  fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema)]),
   calcPath: z.string().default(""),
 });
 export const fansReadRequest = publicationRequest(fansReadArgs);
