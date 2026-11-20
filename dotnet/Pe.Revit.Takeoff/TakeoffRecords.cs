@@ -114,8 +114,6 @@ public sealed class RoomsRegionRecord
     {
         var read = Decode(stored);
         var record = read.Value ?? new RoomsRegionRecord { Refusal = read.Refusal };
-        if (stored.Replacement != null && replacing == null)
-            throw new InvalidOperationException($"Preview before replacing '{Owner.Name}': {record.Recovery}");
         _ = OwnerBlob.Replace(stored, record.ToData(), (_, _) => { }, replacing);
         return record;
     }

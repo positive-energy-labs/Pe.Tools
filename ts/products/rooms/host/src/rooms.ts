@@ -38,7 +38,7 @@ async function requireRoomsSelection(
 ) {
   const { target } = ctx.admission;
   if (target.kind !== "document") throw refused("Exact document target required");
-  const { levels, trackedRegionIds } = roster.parse(
+  const { levels, trackedRegionIds, unreadable } = roster.parse(
     await Effect.runPromise(nativeStep(bridge, target.ref, "rooms.roster", {})),
   );
   if (
@@ -51,8 +51,9 @@ async function requireRoomsSelection(
     );
   if (!uniqueIds.length) return;
   if (!trackedRegionIds)
+    // The native reason as given: it names the recovery for a replaceable record and "update Pe" for a newer one.
     throw refused(
-      "The Rooms record is unreadable. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.",
+      unreadable?.[0]?.reason ?? "The Rooms record is unreadable.",
       "rooms.record-unreadable",
     );
   const tracked = new Set(trackedRegionIds);
