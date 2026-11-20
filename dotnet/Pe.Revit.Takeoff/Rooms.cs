@@ -1,6 +1,7 @@
 using Pe.Shared.Product;
 using System.Security.Cryptography;
 using Pe.Revit.Space;
+using Serilog;
 using PartitionVerbs = Pe.Revit.Partition.Verbs;
 
 namespace Pe.Revit.Takeoff;
@@ -269,6 +270,26 @@ public static class Rooms
     public static RoomsPartitionResult Partition(Document doc, RoomsPartitionRequest request)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        var phase = "Prepare";
+        double phaseStart = 0;
+        int zonesDone = 0;
+        int? zonesTotal = null;
+        long? zoneId = null;
+        Log.Information("Rooms partition {View} started {Phase}", request.View, phase);
+
+        void EndPhase() => Log.Information(
+            "Rooms partition {View} finished {Phase} in {ElapsedMs:F3} ms, zone {ZoneId}, {ZonesDone}/{ZonesTotal} done",
+            request.View, phase, sw.Elapsed.TotalMilliseconds - phaseStart, zoneId, zonesDone, zonesTotal);
+
+        void BeginPhase(string next)
+        {
+            EndPhase();
+            phase = next;
+            phaseStart = sw.Elapsed.TotalMilliseconds;
+            Log.Information("Rooms partition {View} started {Phase}, zone {ZoneId}, {ZonesDone}/{ZonesTotal} done",
+                request.View, phase, zoneId, zonesDone, zonesTotal);
+        }
+
         TakeoffCarriers.Require(doc, TakeoffCarrierStage.Rooms);
         var view = LevelView(doc, request.View);
         var level = view.GenLevel;
@@ -291,10 +312,12 @@ public static class Rooms
             View: view.Id.Value());
         // Every zone lies inside the rectangle, so each zone's solve probes inside this one scoped read.
         var world = PartitionVerbs.PrepareSpace(doc, capture);
+        BeginPhase("Capture");
         var captured = PartitionVerbs.Capture(doc, capture, world);
         var knee = captured.Knee.Elements.SelectMany(e => e.Pieces).ToList();
 
         // Designate and classify in memory; nothing is written until every zone is solved.
+        BeginPhase("Designation");
         var zones = new List<(FilledRegion Fr, Guid Guid, List<List<double[]>> Loops, string Label, bool Declared)>();
         var rooms = new List<(FilledRegion Fr, bool Held, ExistingRegion Region, RegionProvenance Provenance)>();
         var adopt = new List<(FilledRegion Fr, string Role, ExistingRegion Region)>();
@@ -336,8 +359,15 @@ public static class Rooms
         var solved = new List<(FilledRegion Zone, Guid Guid, string Label, RoomsPlan Plan)>();
         var holds = new List<string>();
         var failures = new List<string>();
+        zonesTotal = zones.Count;
+        BeginPhase("Solve");
         foreach (var zone in zones.OrderBy(z => z.Fr.Id.Value()))
         {
+            zoneId = zone.Fr.Id.Value();
+            var zoneStart = sw.Elapsed.TotalMilliseconds;
+            double probeMs = 0;
+            Log.Information("Rooms partition {View} started zone {ZoneId}, {ZonesDone}/{ZonesTotal} done",
+                request.View, zoneId, zonesDone, zonesTotal);
             var lockedIn = locked.Where(r =>
             {
                 var at = Interior(r.Region.Loops);
@@ -354,7 +384,7 @@ public static class Rooms
                 ],
             };
             Pe.Revit.Partition.PartitionAnswer answer;
-            try { answer = PartitionVerbs.Run(doc, input, world); }
+            try { answer = PartitionVerbs.Run(doc, input, world, elapsed => probeMs += elapsed); }
             catch (Exception ex) when (ex is not Pe.Revit.Partition.PartitionException)
             {
                 // One zone's topology failure names itself and leaves the other zones solved.
@@ -366,6 +396,13 @@ public static class Rooms
                 File.WriteAllText(dump, Newtonsoft.Json.JsonConvert.SerializeObject(new { input.ZoneLoops, input.Proposals }));
                 failures.Add($"{zone.Label}: {ex.GetType().Name} {ex.Message} at {frame ?? "?"} (inputs {dump})");
                 continue;
+            }
+            finally
+            {
+                zonesDone++;
+                Log.Information(
+                    "Rooms partition {View} finished zone {ZoneId} in {ElapsedMs:F3} ms including {HeightProbeMs:F3} ms of height probes, {ZonesDone}/{ZonesTotal} done",
+                    request.View, zoneId, sw.Elapsed.TotalMilliseconds - zoneStart, probeMs, zonesDone, zonesTotal);
             }
             // Layer 1's trace stands for the solve that ran, whether or not the materialization below lands.
             WriteTrace(runId, zone.Guid, zone.Label, answer);
@@ -379,6 +416,8 @@ public static class Rooms
                 zone.Declared ? null : answer.Accounting.ZoneSqft)));
         }
 
+        zoneId = null;
+        BeginPhase("Materialization");
         double elevation = level.ProjectElevation;
         var frType = RegionType(doc);
 
@@ -493,6 +532,7 @@ public static class Rooms
                 { GeometryHash = GeometryHash(loops), WallHash = WallHash(knee, loops), Flags = flags }).ToJson());
         }
 
+        EndPhase();
         return new RoomsPartitionResult(level.Name, runId, zones.Count, createdRooms,
             solved.Sum(s => s.Plan.Keep.Count), solved.Sum(s => s.Plan.Locked.Count),
             orphans.Count + solved.Sum(s => s.Plan.Delete.Count), createdHeld, failures,

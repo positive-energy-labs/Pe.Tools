@@ -265,7 +265,13 @@ internal sealed class RevitDataRequestService {
 
     [Op("rooms.partition", OpSubject.View, OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
-        RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request), "Pe Partition Rooms");
+        RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request), "Pe Partition Rooms",
+            commitTiming: elapsed => {
+                if (elapsed is { } ms)
+                    Serilog.Log.Information("Rooms partition {View} finished Commit in {ElapsedMs:F3} ms", request.View, ms);
+                else
+                    Serilog.Log.Information("Rooms partition {View} started Commit", request.View);
+            });
 
     [Op("rooms.draw", OpSubject.View, OpTouches.Geometry, Internal = true, Does = "Draw one room or zone region from loops on a plan view; a person's designation, so a room is locked.", Title = "Draw Room Region", Finds = ["rooms", "draw", "room-regions", "filled-regions", "loops"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsDrawResult DrawRoomCore(RoomsDrawRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
@@ -349,7 +355,8 @@ internal sealed class RevitDataRequestService {
         );
     }
 
-    private static T RunTakeoff<T>(DbDocument document, Func<DbDocument, T> run, string? transactionName = null) {
+    private static T RunTakeoff<T>(DbDocument document, Func<DbDocument, T> run, string? transactionName = null,
+        Action<double?>? commitTiming = null) {
         if (transactionName != null && document.IsReadOnly)
             throw BridgeOperationExceptions.Conflict(
                 "The active project document is read-only.",
@@ -363,9 +370,15 @@ internal sealed class RevitDataRequestService {
             if (transactionName == null)
                 return run(document);
 
-            using var sandbox = DocumentSandbox.BeginCommit(document, transactionName);
-            var result = run(document);
-            sandbox.Complete();
+            T result;
+            long commitStart;
+            using (var sandbox = DocumentSandbox.BeginCommit(document, transactionName)) {
+                result = run(document);
+                commitTiming?.Invoke(null);
+                commitStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                sandbox.Complete();
+            }
+            commitTiming?.Invoke(System.Diagnostics.Stopwatch.GetElapsedTime(commitStart).TotalMilliseconds);
             return result;
         } catch (BridgeOperationException) {
             throw;
