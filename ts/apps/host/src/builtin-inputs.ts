@@ -1030,12 +1030,17 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           const stop = invalidations.observePublication(
             canonicalJson([identity.caller, reading.subscription]),
             generation,
-            (publication) => {
+            (publication, retry) => {
               answered = true;
               publish({
                 kind: "snapshot",
                 key,
-                value: { generation, version: publication.version, state: publication.state },
+                value: {
+                  generation,
+                  version: publication.version,
+                  state: publication.state,
+                  retry,
+                },
               });
             },
             { recipe: "open.documents", observe: fallback },

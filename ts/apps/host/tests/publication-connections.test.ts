@@ -35,6 +35,22 @@ function fixture(capacity = 4) {
   return { publications, connect, publish };
 }
 
+test("an input that invalidates on publication cannot leave a current HTTP response", async () => {
+  const publications = new Publications();
+  const stop = publications.observe("tab", (publication) => {
+    if (publication.state === "current")
+      publications.invalidate((trace) => trace.name === definition.name, "tab");
+  });
+  try {
+    expect(await publications.publish("tab", 0, definition, 1, port)).toMatchObject({
+      state: "refresh-needed",
+      value: { data: 1, freshness: "refresh-needed" },
+    });
+  } finally {
+    stop();
+  }
+});
+
 test("D37 disconnect without explicit releases returns every slot to a new client", async () => {
   const f = fixture();
   const old = f.connect(["a", "b", "c", "d"]);
