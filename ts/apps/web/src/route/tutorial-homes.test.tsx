@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from "@testing-library/react";
-import { homeFile, landings } from "@pe/agent-contracts/product";
+import { homeFile, landings, productWrites } from "@pe/agent-contracts/product";
 import { afterEach, expect, test } from "vite-plus/test";
 import { TutorialHomes } from "./tutorial-homes";
 import { tutorialProducts } from "./tutorial-products.generated";
@@ -29,9 +29,9 @@ test.each(tutorialProducts)(
         expect(row.textContent).toContain(text);
       }
       expect(within(row).getByText(home.rung ?? "Outside ladder")).toBeTruthy();
-      for (const [key, command] of Object.entries(product.commands)) {
+      for (const [key, writes] of Object.entries(productWrites(product))) {
         const writers = row.querySelector('[data-column-key="commands"]')?.textContent?.split(", ");
-        expect(writers?.includes(key)).toBe(Object.hasOwn(command.writes, name));
+        expect(writers?.includes(key)).toBe(Object.hasOwn(writes, name));
       }
     }
     for (const cell of Object.keys(product.cells)) {

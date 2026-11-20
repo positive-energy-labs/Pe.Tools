@@ -16,14 +16,22 @@ export type SettingOwner = {
   at(path: readonly string[]): SettingDeclaration | null;
   accepts(path: readonly string[], value: unknown, tier: SettingTier): boolean;
 };
-export const defineSettingOwner = (
-  bindings: Readonly<Record<string, SheetBinding>>,
-): SettingOwner => {
-  const declared = Object.entries(bindings).flatMap(([name, b]) =>
-    b.home.at === "setting"
-      ? [{ name, label: b.label ?? name, default: b.default, domain: b.domain, home: b.home }]
-      : [],
+export function defineSettingOwners(
+  bindings: Readonly<Record<string, Pick<SheetBinding, "home" | "domain" | "label" | "default">>>,
+) {
+  const groups = new Map<string, SettingDeclaration[]>();
+  for (const [name, { home, domain, label, default: fallback }] of Object.entries(bindings)) {
+    if (home.at !== "setting") continue;
+    const group = groups.get(home.owner) ?? [];
+    group.push({ name, label: label ?? name, default: fallback, domain, home });
+    groups.set(home.owner, group);
+  }
+  return Object.fromEntries(
+    [...groups].map(([owner, bindings]) => [owner, settingOwner(bindings)]),
   );
+}
+
+function settingOwner(declared: readonly SettingDeclaration[]): SettingOwner {
   const at = (path: readonly string[]) =>
     declared.find(
       (b) => b.home.path.length === path.length && b.home.path.every((key, i) => key === path[i]),
@@ -40,4 +48,4 @@ export const defineSettingOwner = (
       );
     },
   };
-};
+}

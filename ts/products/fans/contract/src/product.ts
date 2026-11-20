@@ -219,7 +219,7 @@ const writes = {
   fanFlow: ["equipmentFlows"],
   terminalFlow: ["flows"],
   terminalDrop: ["terminalDrops"],
-} as const;
+} as const satisfies Record<keyof typeof lossWrites, readonly string[]>;
 const declaration = declare({
   id: "fans",
   says: "Inspect fan paths, inputs and pressure requirements",
@@ -309,11 +309,6 @@ export const product = {
   tools: { fans: tool },
   actions: {},
   admissionPreflight: admissionPreflight(declaration.work.schema),
-  sheet: {
-    writes: Object.fromEntries(
-      Object.entries(lossWrites).filter(([name]) => Object.hasOwn(writes, name)),
-    ),
-  },
 };
 export const fanWriteSegments = Object.values(writes).flat();
 

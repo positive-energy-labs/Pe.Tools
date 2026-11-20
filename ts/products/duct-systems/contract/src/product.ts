@@ -6,9 +6,8 @@ import type { Many } from "@pe/agent-contracts/route-kernel-page";
 import { subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import { workIntent, workWriteCommands } from "@pe/agent-contracts/write-intent";
 import { DUCTS_CRITERIA_CELLS, isCriteriaCell } from "@pe/ducts-contract/duct-inputs";
-import { criterionCellLabel } from "@pe/ducts-contract/settings";
 import { DUCT_SYSTEMS_ROUTE, ductsDocumentSchema } from "@pe/ducts-contract/system-work";
-import { losses, product as base } from "@pe/ducts-contract/product";
+import { criterionCellLabel, losses, product as base } from "@pe/ducts-contract/product";
 import { sheetCommands } from "@pe/ducts-contract/semantic-actions";
 import { fanScopeSchema, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 import { DUCTS_SYSTEM_MAX } from "./ducts-read.ts";
@@ -216,7 +215,7 @@ const declarations = define({
   },
 });
 
-const { "sheet.plan": _plan, "sheet.apply": apply, ...commands } = declarations.commands;
+const { "sheet.plan": _plan, "sheet.apply": _apply, ...commands } = declarations.commands;
 export const ductSystemsWork = {
   ...state,
   editable: declarations.work.editable
@@ -231,12 +230,6 @@ export const product = {
   tool: ductSystemsTool,
   tools: { ducts: ductSystemsTool },
   actions: commands,
-  // The shared dispatcher consumes this projection of the route's sheet command.
-  sheet: {
-    writes: Object.fromEntries(
-      Object.entries(declarations.homes).filter(([name]) => Object.hasOwn(apply.writes, name)),
-    ),
-  },
 };
 
 type DuctSystemCommands = typeof commands;

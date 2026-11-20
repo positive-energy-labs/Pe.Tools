@@ -237,7 +237,7 @@ test.each(products.filter((p) => p.field === "fan"))(
       "layout",
       expect.objectContaining({ [product.field]: "all" }),
     );
-    expect(screen.getByText(new RegExp(`/ ${product.limit} open`))).toBeTruthy();
+    expect(screen.getByText(`${product.limit} fan ports / 0 open`)).toBeTruthy();
   },
 );
 

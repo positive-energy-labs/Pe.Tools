@@ -11,7 +11,7 @@ import { contract } from "@pe/agent-contracts/handle";
 
 export function productTypeRefusals() {
   // @ts-expect-error Settings paths have string segments.
-  homeFile("proof", ["firm"], () => [1]);
+  homeFile("proof", ["firm"], { bad: [1] });
   // @ts-expect-error Native identities are selected from the generated C# descriptor table.
   ownerBlob("other");
   // @ts-expect-error A Revit entity is not a document record.

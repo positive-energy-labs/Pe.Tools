@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { expect, test } from "vite-plus/test";
 import { contract } from "./handle.ts";
-import { cell, familyParameter, homeFile, landings, product, sheetCells } from "./product.ts";
+import {
+  cell,
+  familyParameter,
+  homeFile,
+  landings,
+  product,
+  productWrites,
+  sheetCells,
+} from "./product.ts";
 
 const rows = contract("probe.rows", {
   input: z.object({ level: z.string() }),
@@ -32,7 +40,10 @@ const directory = {
 const tiny = product({
   id: "tiny",
   says: "Tiny",
-  homes: { flow: familyParameter("flow"), standards: homeFile("tiny", ["firm"]) },
+  homes: {
+    flow: familyParameter("flow"),
+    standards: homeFile("tiny", ["firm"], { "criteria.velocity": ["criteria", "supply"] }),
+  },
   cells: {
     cfm: cell(number, "subject", { label: "Flow", default: 0 }),
     "criteria.velocity": cell(number, "route"),
@@ -41,7 +52,6 @@ const tiny = product({
   readings: { rows: { handle: rows, sources: [] } },
   commands: {
     "tiny.write": { ...command, writes: { flow: ["cfm"] } },
-    "tiny.save": { ...command, writes: { standards: ["criteria.velocity"] } },
   },
   routes: {
     tiny: {
@@ -57,6 +67,8 @@ const tiny = product({
 
 test("a cell's sheet placement follows from the home a command lands it in", () => {
   expect(landings(tiny)).toEqual({ cfm: "flow", "criteria.velocity": "standards" });
+  expect(productWrites(tiny)["settings.tiers.write"]).toEqual({ standards: ["criteria.velocity"] });
+  expect(tiny.settingOwners.tiny.at(["criteria", "supply"])?.name).toBe("criteria.velocity");
   const cells = sheetCells(tiny);
   expect(cells.cfm).toMatchObject({
     home: { at: "parameter", parameter: "flow" },
@@ -67,7 +79,7 @@ test("a cell's sheet placement follows from the home a command lands it in", () 
   expect(cells["criteria.velocity"]?.home).toEqual({
     at: "setting",
     owner: "tiny",
-    path: ["criteria", "velocity"],
+    path: ["criteria", "supply"],
     tiers: ["firm"],
   });
   // No command lands it, so it stays in Work.

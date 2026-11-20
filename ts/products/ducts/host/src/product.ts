@@ -1,13 +1,11 @@
-import { losses, product } from "@pe/ducts-contract/product";
+import { product } from "@pe/ducts-contract/product";
 import { body } from "@pe/host-internal/read-graph";
-import { ductsRulingsExecutors } from "./action-runtime.ts";
 import { catalogs } from "./ducts-files.ts";
 
 const { snapshot, tables, catalogs: catalog } = product.readings;
 
 export const host = {
   product,
-  sheetRecords: { [losses.key]: ductsRulingsExecutors },
   reads: {
     snapshot: body(snapshot.handle, (ctx, { kind: _, target, ...request }) =>
       request.selector.kind === "roster"
