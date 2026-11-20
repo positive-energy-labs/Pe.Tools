@@ -35,7 +35,8 @@ export type Domain =
     }
   | OptionsDomain
   | { kind: "object"; fields: Readonly<Record<string, Domain>> };
-export type Home = z.output<typeof homeSchema>;
+/** Where the sheet reads and writes one cell. A product declaration derives it from the home the cell lands in. */
+export type Placement = z.output<typeof placementSchema>;
 
 export type DomainValue<D extends Domain> = D extends NumberDomain
   ? number
@@ -111,13 +112,13 @@ export interface BindingDraw<R = any> {
 }
 
 export type SheetBinding = BindingDraw & { readonly domain: Domain } & (
-    | { readonly home: Extract<Home, { at: "parameter" }>; readonly per: "subject" }
+    | { readonly home: Extract<Placement, { at: "parameter" }>; readonly per: "subject" }
     | {
-        readonly home: Extract<Home, { at: "setting" }>;
+        readonly home: Extract<Placement, { at: "setting" }>;
         readonly per: "route";
         readonly model: NonNullable<BindingDraw["model"]>;
       }
-    | { readonly home: Extract<Home, { at: "store" | "local" }>; readonly per: BindingPer }
+    | { readonly home: Extract<Placement, { at: "store" | "local" }>; readonly per: BindingPer }
   );
 export const parameter = (parameter: string, domain: Domain, draw?: BindingDraw): SheetBinding => ({
   ...draw,
@@ -210,7 +211,7 @@ export const espWord = (complete: boolean | null | undefined) =>
 
 /** Every value Pea can touch (ADR 0030 rule 8): current, model (struck), pending author, drift, freshness, source. */
 export interface StateCell<V = unknown> extends CellAddress {
-  readonly home: Home;
+  readonly home: Placement;
   readonly value: V | null;
   /** What Revit or the store holds now; shown struck when it disagrees with `value`. */
   readonly model: V | null;
@@ -260,7 +261,7 @@ export const domainDataSchema: z.ZodType<DomainData> = z.lazy(() =>
     z.strictObject({ kind: z.literal("object"), fields: z.record(z.string(), domainDataSchema) }),
   ]),
 );
-export const homeSchema = z.discriminatedUnion("at", [
+export const placementSchema = z.discriminatedUnion("at", [
   z.strictObject({ at: z.literal("parameter"), parameter: z.string().min(1) }),
   z.strictObject({ at: z.literal("store"), store: z.string().min(1) }),
   z.strictObject({ at: z.literal("local") }),
@@ -277,7 +278,7 @@ export const sheetSlotDataSchema = z.strictObject({
     z.string(),
     z
       .strictObject({
-        home: homeSchema,
+        home: placementSchema,
         domain: domainDataSchema,
         per: z.enum(["subject", "route"]),
         label: z.string().optional(),

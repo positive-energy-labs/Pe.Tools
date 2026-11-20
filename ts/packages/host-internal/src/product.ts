@@ -1,5 +1,5 @@
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
-import type { HostBodies, NoExtras, ProductDeclaration } from "@pe/agent-contracts/product";
+import type { HostBodies, ProductDeclaration } from "@pe/agent-contracts/product";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
 import type { HostNativeRead } from "./native-read.ts";
@@ -13,17 +13,9 @@ export type CommandBody = (
     projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
   },
 ) => CommandExecutor;
-type Bodies<P extends ProductDeclaration> = HostBodies<P, ReadContext, CommandBody>;
 
 /** The host half of a product: one body per declared reading and command, or `tsc` fails. */
-export const implement = <
-  P extends ProductDeclaration,
-  R extends Bodies<P>["readings"],
-  C extends Bodies<P>["commands"],
->(
+export const implement = <P extends ProductDeclaration>(
   product: P,
-  bodies: {
-    readonly readings: R & NoExtras<R, Bodies<P>["readings"]>;
-    readonly commands: C & NoExtras<C, Bodies<P>["commands"]>;
-  },
+  bodies: HostBodies<P, ReadContext, CommandBody>,
 ) => ({ product, ...bodies });

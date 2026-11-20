@@ -1,7 +1,7 @@
 /**
  * Rooms and Takeoffs: one product with two routes (ruling 6 of docs/features/routes/MAP.md).
  * Clean-room: written from the Rooms spec and the native operation contracts. S9 builds the host
- * bodies and the screen against this value; S10 fills the Takeoffs route.
+ * bodies and the screen against this value; S10 writes the Takeoffs route.
  */
 import { z } from "zod";
 import { contract } from "@pe/agent-contracts/handle";
@@ -12,7 +12,7 @@ import {
   product as define,
   type NativeHome,
 } from "@pe/agent-contracts/product";
-import { field, hostRead, read, subjectSchema } from "@pe/agent-contracts/route";
+import { field, subjectSchema } from "@pe/agent-contracts/route";
 import { subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 
@@ -132,7 +132,9 @@ const planImage = contract("rooms.plan-image", {
 
 const room = subjectSchema(Number.MAX_SAFE_INTEGER);
 const onPlan = (page: { view: string }) => ({ view: page.view });
-const roster = read(hostRead(regions), onPlan);
+/** Free text: a value domain with no choices to acquire. */
+const text = { kind: "enum", shape: z.string(), choices: [] } as const;
+const count = { kind: "number", min: 0 } as const;
 const edit = { needs: "project-document", effect: "command", dirties: ["snapshot"] } as const;
 
 export const product = define({
@@ -145,26 +147,41 @@ export const product = define({
     traces: machineFile(runTraces),
   },
   cells: {
-    name: cell(z.string(), "subject"),
-    type: cell(z.string(), "subject"),
-    ceilingFt: cell(amount, "subject"),
-    people: cell(amount, "subject"),
-    lightingW: cell(amount, "subject"),
-    equipSensible: cell(amount, "subject"),
-    equipLatent: cell(amount, "subject"),
-    ventilationCfm: cell(amount, "subject"),
+    name: cell(text, "subject", { label: "Name" }),
+    type: cell(text, "subject", { label: "Type" }),
+    ceilingFt: cell({ ...count, unit: "ft" }, "subject", { label: "Ceiling height" }),
+    people: cell(count, "subject", { label: "People" }),
+    lightingW: cell({ ...count, unit: "W" }, "subject", { label: "Lighting" }),
+    equipSensible: cell(count, "subject", { label: "Equipment sensible" }),
+    equipLatent: cell(count, "subject", { label: "Equipment latent" }),
+    ventilationCfm: cell({ ...count, unit: "CFM" }, "subject", { label: "Ventilation" }),
     /** A person's designation of a region. */
-    role: cell(z.enum(["room", "zone"]), "subject"),
+    role: cell(
+      {
+        kind: "enum",
+        shape: z.enum(["room", "zone"]),
+        choices: [
+          { value: "room", label: "Room" },
+          { value: "zone", label: "Zone" },
+        ],
+      },
+      "subject",
+      { label: "Role" },
+    ),
     /** A person's or Pea's mark on the plan. No command lands it, so it stays in Work. */
     marks: cell(
-      z.object({
-        kind: z.enum(["merge", "reject", "wall", "split"]),
-        view,
-        polygon: ring,
-        runId: z.string(),
-        regions: z.array(region).optional(),
-        note: z.string().optional(),
-      }),
+      {
+        kind: "enum",
+        shape: z.object({
+          kind: z.enum(["merge", "reject", "wall", "split"]),
+          view,
+          polygon: ring,
+          runId: z.string(),
+          regions: z.array(region).optional(),
+          note: z.string().optional(),
+        }),
+        choices: [],
+      },
       "name",
     ),
   },
@@ -231,7 +248,20 @@ export const product = define({
   },
   routes: {
     rooms: {
-      key: "rooms",
+      name: "Rooms",
+      directory: {
+        aliases: ["room", "zone", "space", "partition"],
+        exposure: "Main",
+        group: "Calculate loads & airflow",
+        icon: "LayoutGrid",
+        label: "Rooms",
+        listed: true,
+        resume: "document",
+        runtimeNeed: "Revit for model reads and writes",
+        satellites: [],
+        summary: "Partition a plan into rooms and state each room's fields",
+        surfaces: { pwa: "full", tray: false, web: "full" },
+      },
       fields: {
         view: field(z.string(), "", "query", "push"),
         room: field(room, { kind: "ids", ids: [] }, "subject", "push"),
@@ -240,19 +270,13 @@ export const product = define({
         field: "room",
         noun: "room",
         pane: "roster",
-        read: roster,
+        read: ["regions", onPlan],
         options: (data: z.output<typeof regions.data>) =>
           data.regions.map((row) => ({ id: row.subject, label: row.name })),
       },
-      core: roster,
-      reads: {
-        plans: read(hostRead(plans)),
-        trace: read(hostRead(trace), onPlan),
-        planImage: read(hostRead(planImage), onPlan),
-      },
+      core: ["regions", onPlan],
+      reads: { plans: "plans", trace: ["trace", onPlan], planImage: ["planImage", onPlan] },
       panes: ["roster", "plan", "fields"],
     },
-    // Owed to S10: the Takeoffs address, subject, readings and panes.
-    takeoffs: { key: "takeoffs", fields: {}, panes: [] },
   },
 });

@@ -1,6 +1,9 @@
 /**
  * ADR 0046: generic code names no product outside declared composition sites.
  * FANS-P4-NAMES-25 freezes existing mentions; counts must fall to zero and never rise.
+ * One recorded rise: S2b of the product-declaration run added the `rooms` product folder, which made the
+ * name a product name in 18 files of old Rooms code. S9 deletes that code and returns those 18 files
+ * to their earlier counts; that is a line of S9's falsifier.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
