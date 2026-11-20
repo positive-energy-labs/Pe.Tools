@@ -66,7 +66,6 @@ export * from "./families-read.ts";
 export * from "./open-read.ts";
 export * from "./ops-read.ts";
 export * from "./pods-read.ts";
-export * from "./rooms-read.ts";
 export * from "./settings-read.ts";
 export * from "./tiered-setting.ts";
 

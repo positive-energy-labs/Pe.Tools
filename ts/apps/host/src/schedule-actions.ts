@@ -20,7 +20,7 @@ import {
 import { invokeBridge as invoke } from "./bridge.ts";
 import { type RevitBridge } from "@pe/host-internal/bridge";
 import { refused } from "@pe/host-internal/command-executor";
-import type { TakeoffActionDependencies } from "./takeoff-actions.ts";
+import type { TakeoffActionDependencies } from "./rhvac-ops.ts";
 import { readOriginalProcess, type NativeProcess } from "./native-receipts.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 

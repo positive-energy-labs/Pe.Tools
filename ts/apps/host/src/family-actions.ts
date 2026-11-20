@@ -78,7 +78,7 @@ import {
 } from "@pe/host-internal/command-executor";
 import { z } from "zod";
 import type { Consumed as Dependency, WorkHandle } from "@pe/agent-contracts";
-import { type TakeoffActionDependencies } from "./takeoff-actions.ts";
+import { type TakeoffActionDependencies } from "./rhvac-ops.ts";
 import type { NativeProcess } from "./native-receipts.ts";
 import {
   composedSpec,

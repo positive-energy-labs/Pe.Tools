@@ -8,3 +8,14 @@ test("Rooms declares its C# record and trace homes", () => {
   expect(product.homes.traces.key).toBe(machineFileHandle("runTraces").key);
   expect(product.homes.traces.key).toBe("machine-file:rooms");
 });
+
+test("Takeoffs setup and adoption declare the carrier homes they touch", () => {
+  expect(product.homes.registry.key).toBe(ownerBlob("takeoffRegistry").key);
+  expect(product.homes.enclosure.key).toBe(ownerBlob("partitionEnclosure").key);
+  expect(product.commands["takeoffs.initialize"].writes).toEqual({ registry: [], enclosure: [] });
+  expect(product.commands["takeoffs.adopt"].writes).toEqual({
+    regions: [],
+    registry: [],
+    enclosure: [],
+  });
+});

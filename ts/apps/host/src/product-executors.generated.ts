@@ -2,5 +2,6 @@
 import { host as host0 } from "@pe/duct-systems-host/product";
 import { host as host1 } from "@pe/ducts-host/product";
 import { host as host2 } from "@pe/fans-host/product";
+import { host as host3 } from "@pe/rooms-host/product";
 import { bindProducts } from "./product-runtime.ts";
-export const { productExecutors, productReads } = bindProducts([host0, host1, host2]);
+export const { productExecutors, productReads } = bindProducts([host0, host1, host2, host3]);

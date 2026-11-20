@@ -14,7 +14,6 @@ import { Table } from "@pe/kit/table/table";
 import { CHAT_SEEDS, CHAT_SEED_STATE, CHAT_SEED_THREADS } from "#/design-system/chat-examples";
 import { DEMO_FAMILIES } from "#/design-system/family-fixtures";
 import { DEMO_PODS } from "#/route/seeds";
-import { ZoneThumb } from "#/takeoff/zone-plan";
 import { selectSkillCommands } from "@pe/agent-contracts/chat-state";
 import { emptyListState, useList, type ListState } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
@@ -125,17 +124,6 @@ const ZONES: Zone[] = [
     color: null,
   },
 ];
-const bounds = (loops: [number, number][][]) => {
-  const points = loops.flat();
-  const xs = points.map((p) => p[0]);
-  const ys = points.map((p) => p[1]);
-  return {
-    minX: Math.min(...xs),
-    minY: Math.min(...ys),
-    maxX: Math.max(...xs),
-    maxY: Math.max(...ys),
-  };
-};
 
 const COMMANDS = selectSkillCommands(CHAT_SEED_STATE).map((c) => ({
   key: c.name,
@@ -366,16 +354,6 @@ export function ZonesPanel({ say }: { say: (text: string) => void }) {
       empty="no zones declared on this level"
       onPick={(z) => say(`zone ${z.label}`)}
       row={(z) => ({
-        lead: (
-          <ZoneThumb
-            className="size-4"
-            zone={{
-              loops: z.loops,
-              bounds: bounds(z.loops),
-              color: `rgb(${z.color ?? "128,128,128"})`,
-            }}
-          />
-        ),
         label: z.label,
         meta: (
           <FactChip title="How many boundary loops the declared zone has.">

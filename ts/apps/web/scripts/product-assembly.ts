@@ -37,7 +37,8 @@ export function renderProductAssembly(checkout: string) {
     contract: read(id, "contract"),
     host: read(id, "host"),
     web: read(id, "web"),
-    route: existsSync(join(root, id, "web/route.ts")),
+    // One route is `web/route.ts`; a product of several keeps each under `web/routes/<name>/`.
+    route: ["web/route.ts", "web/routes"].some((path) => existsSync(join(root, id, path))),
   }));
   const declared = rows.flatMap(({ id, contract, host }) => {
     const has = (pkg: typeof contract) => Object.hasOwn(pkg?.exports ?? {}, "./product");

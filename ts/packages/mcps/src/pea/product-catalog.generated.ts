@@ -5,8 +5,9 @@ import { hostActions } from "./product-actions.generated.ts";
 import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
-const callPolicies = [product0, product1, product2].map(product => product.callPolicies);
-const reads = [product0, product1, product2].map(product => product.reads);
+import { product as product3 } from "@pe/rooms-contract/product";
+const callPolicies = [product0, product1, product2, product3].map(product => product.callPolicies);
+const reads = [product0, product1, product2, product3].map(product => product.reads);
 assertUniqueProductKeys("call policy", callPolicies);
 assertUniqueProductKeys("named read", reads.map(read => read.inputs));
 const catalog = createPeCatalog(hostActions, {

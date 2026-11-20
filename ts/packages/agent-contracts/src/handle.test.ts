@@ -2,21 +2,17 @@ import { expect, expectTypeOf, test } from "vite-plus/test";
 import { z } from "zod";
 import type { OpRequestOf } from "@pe/host-contracts/operation-types";
 import { contract, handle, native, type CommandHandle, type InputOf } from "./handle.ts";
-import { builtinCommands as commands } from "./semantic-actions.ts";
 import { minted } from "./command-handle.ts";
 
 test("handle() mints a command from the generated table, with its plan when it is a sealed write", () => {
   const apply = handle("rooms.partition");
   expect(apply).toMatchObject({ key: "rooms.partition", effect: "ModelWrite", via: "command" });
-  expect(apply.plan.key).toBe(commands["rooms.partition"].writeBoundary.previewKey);
+  expect(apply.plan.key).toBe("rooms.partition.preview");
   expect(["Read", "TransactRead"]).toContain(apply.plan.effect);
   expect(handle("rooms.partition")).toBe(apply);
   expect(apply[minted]).toBe(true);
   expect(Object.isFrozen(apply)).toBe(true);
   expectTypeOf(apply.effect).toEqualTypeOf<"ModelWrite">();
-  expectTypeOf<InputOf<typeof apply>>().toEqualTypeOf<
-    z.input<(typeof commands)["rooms.partition"]["input"]>
-  >();
   // A verb declaration demands `present` exactly when the handle carries a plan.
   expectTypeOf(apply).toExtend<{ plan: object }>();
   expectTypeOf(handle("rooms.partition.preview")).not.toExtend<{ plan: object }>();

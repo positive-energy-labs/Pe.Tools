@@ -79,15 +79,12 @@ test("many round trips all and exact ids; cap refusal never truncates", () => {
 });
 test("formerly narrowed routes preserve all through URL and Pea", () => {
   for (const [route, key] of [
-    ["rooms", "layers"],
     ["space", "hidden"],
     ["space", "isolated"],
     ["space", "layers"],
   ] as const) {
     const address = routeAddress(route);
-    expect(
-      address.read({ [key]: route === "rooms" ? JSON.stringify("all") : "all" }).page,
-    ).toHaveProperty(key, "all");
+    expect(address.read({ [key]: "all" }).page).toHaveProperty(key, "all");
   }
   // Slice 10: the open rooms are the subject, so every room is the subject's own `all`.
   expect(routeAddress("rooms").read({ room: JSON.stringify({ kind: "all" }) }).page).toHaveProperty(
@@ -95,6 +92,11 @@ test("formerly narrowed routes preserve all through URL and Pea", () => {
     { kind: "all" },
   );
   // Slice 8: a picture route's layers are the kernel pose; `default` is the picture's own set and there is no `all`.
+  // Rooms is a picture route since its rebuild on the product grammar, so its layers follow the same rule.
+  expect(routeAddress("rooms").read({ layers: JSON.stringify("all") }).page).toHaveProperty(
+    "layers",
+    "default",
+  );
   expect(
     routeAddress("duct-systems").read({ layers: JSON.stringify("default") }).page,
   ).toHaveProperty("layers", "default");

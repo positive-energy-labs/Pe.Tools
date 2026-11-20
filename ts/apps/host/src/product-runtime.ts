@@ -1,15 +1,10 @@
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
-import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import type { HostNativeRead } from "@pe/host-internal/native-read";
 import type { CommandExecutor } from "@pe/host-internal/command-executor";
-import type { implement } from "@pe/host-internal/product";
+import type { CommandBody, implement } from "@pe/host-internal/product";
 import type { FamilyActionDependencies } from "./family-actions.ts";
 
-type Deps = FamilyActionDependencies & {
-  nativeRead?: HostNativeRead["Service"];
-  projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
-};
+type Deps = FamilyActionDependencies & Parameters<CommandBody>[1];
 type SheetOwner = {
   id: string;
   executors: Record<string, CommandExecutor>;

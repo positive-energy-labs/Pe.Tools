@@ -339,13 +339,14 @@ test("live native terminal facts survive the step write and journal reopen", asy
 test("only the dispatched rooms request updates its journal receipt with native progress", async () => {
   const f = await fixture(undefined, false, undefined, {
     key: "rooms.partition",
-    input: { view: 9948 },
+    input: { view: "04a06654-51ab-45b8-8154-c4e534d88aec-0012d9ca" },
   });
   try {
     const id = await f.submit("rooms-progress");
     const progress = { phase: "Solve", zonesDone: 1, zonesTotal: 2 };
     const report = (operationKey: string, phase: string, zonesDone = 1) =>
       recordNativeProgress(
+        "rooms.partition.progress",
         JSON.stringify({ requestId: id, progress: { ...progress, zonesDone } }),
         (requestId) => (requestId === id ? { operationKey, phase } : undefined),
       );

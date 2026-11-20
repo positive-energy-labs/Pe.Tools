@@ -1,6 +1,7 @@
 import type { ModelRoom, StagedRoomEdit } from "@pe/agent-contracts";
 import { refused } from "@pe/host-internal/command-executor";
 import { createHash, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, join, resolve } from "node:path";
@@ -39,7 +40,7 @@ import { runHostChild } from "./host-child.ts";
  */
 
 const PS32_EXE = "C:\\Windows\\SysWOW64\\WindowsPowerShell\\v1.0\\powershell.exe";
-// project-a (150 rooms, the firm's most complex file) extracts in ~10-30s in the
+// project-a (150 room rows, the firm's most complex file) extracts in ~10-30s in the
 // 32-bit lane; edits do per-room queries on top of a full copy. Generous but bounded.
 const EXTRACT_TIMEOUT_MS = 120_000;
 const SAVE_TIMEOUT_MS = 300_000;
@@ -49,6 +50,20 @@ function rhvacScriptDirectory(): string | null {
     ? null
     : resolve(hostOwnership.sourceRoot, checkoutLayout.dotnet, "Pe.Revit.Takeoff", "Rhvac");
 }
+
+export const fileVersion = async (path: string) =>
+  createHash("sha256")
+    .update(await readFile(path))
+    .digest("hex");
+/** Test seams of the RHVAC file lane and the Work reads every command family shares. */
+export type TakeoffActionDependencies = {
+  workspace?: import("@pe/runtime").RouteWorkspace;
+  workReads?: import("./command-executor.ts").CommandResources["workReads"];
+  sdk?: import("./native-receipts.ts").SdkReceiptReader;
+  fileVersion?: typeof fileVersion;
+  openFile?: (path: string) => Promise<RhvacExtractData>;
+  syncFile?: (input: RhvacSyncRequest, expectedVersion: string) => Promise<RhvacSyncResult>;
+};
 
 export const rhvacOpen = Effect.fnUntraced(function* (input: RhvacPathRequest) {
   const key = "rhvac.open";
@@ -83,7 +98,7 @@ export const rhvacAssemblies = Effect.fnUntraced(function* (input: RhvacPathRequ
 });
 
 /**
- * The one atomic write lane for a .r10 the engineer keeps: seed systems, insert new rooms, update
+ * The one atomic write lane for a .r10 the engineer keeps: seed systems, insert each new room, update
  * existing ones, optionally drop the template's blank seed room — then swap the target in place
  * behind a lock check, a working copy, validation, and a timestamped backup (sync-rhvac.ps1 owns
  * that envelope; export-rhvac.ps1 owns every SQL statement).

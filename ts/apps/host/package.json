@@ -25,14 +25,9 @@
     "@effect/platform-node": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
-    "@pe/duct-systems-contract": "workspace:*",
-    "@pe/duct-systems-host": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
-    "@pe/ducts-host": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
-    "@pe/fans-host": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/host-internal": "workspace:*",
     "@pe/mcps": "workspace:*",
@@ -44,7 +39,14 @@
     "jiti": "^2.7.0",
     "parse5": "^8.0.1",
     "posthog-node": "5.55.2",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/duct-systems-host": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "@pe/rooms-contract": "workspace:*",
+    "@pe/rooms-host": "workspace:*"
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "catalog:",
@@ -66,7 +68,9 @@
       "@pe/duct-systems-host",
       "@pe/ducts-host",
       "@pe/fans-contract",
-      "@pe/fans-host"
+      "@pe/fans-host",
+      "@pe/rooms-contract",
+      "@pe/rooms-host"
     ]
   }
 }

@@ -68,3 +68,4 @@ __pycache__/
 
 # Route closures are regenerated build output in product workspaces too.
 ts/products/*/web/source-closure.generated.json
+ts/products/*/web/routes/*/source-closure.generated.json

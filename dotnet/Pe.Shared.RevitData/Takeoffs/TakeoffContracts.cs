@@ -25,7 +25,9 @@ public sealed record TakeoffModelStatus(
 public sealed record TakeoffRegionFacts(
     long ElementId,
     string TypeName,
+    // The owner view: View is its name for display, ViewUniqueId its identity.
     string View,
+    string ViewUniqueId,
     string Color,
     double Sqft,
     string? Role,
@@ -62,6 +64,7 @@ public sealed record TakeoffSnapshotData(
 public sealed record TakeoffUnreadableBlob(long? ElementId, string Parameter, string Reason);
 public sealed record TakeoffSnapshotResponse(Reading Reading, TakeoffSnapshotData Snapshot);
 
+// View is a plan view UniqueId everywhere a request names a plan; a name never selects one.
 public sealed record TakeoffCandidatesRequest(string View);
 public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Regions);
 
@@ -143,12 +146,12 @@ public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Wri
 // with Takeoffs. Loops are [x,y] host feet, outer CCW, even-odd holes.
 // Role is "zone" | "room" | "held". Zone is the parent zone's UniqueId (null = not in a zone on this view).
 // Designation is "person" | "inferred" for hand-drawn regions, null for machine regions.
-public sealed record RoomsPlanView(long Id, string Name, string Type);
+public sealed record RoomsPlanView(string UniqueId, string Name, string Type);
 public sealed record RoomsLevel(string Name, double Elevation, IReadOnlyList<RoomsPlanView> Views);
 public sealed record RoomsRegion(
     long ElementId,
     string UniqueId,
-    long View,
+    string View,
     string Level,
     string Role,
     string? Zone,
@@ -172,11 +175,11 @@ public sealed record RoomsRegion(
     bool Stale,
     IReadOnlyList<string>? MergedFrom = null);
 public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOnlyList<RoomsRegion> Regions,
-    IReadOnlyList<TakeoffUnreadableBlob>? Unreadable = null);
+    IReadOnlyList<TakeoffUnreadableBlob>? Unreadable = null, IReadOnlyList<string>? TrackedRegionIds = null);
 
 // Rejected: a person's standing "not a room" marks, each an outer ring of x y points in model feet on the view. A face
 // overlapping one at IoU 0.6 or more is held as rejected instead of becoming a room.
-public sealed record RoomsPartitionRequest(long View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null,
+public sealed record RoomsPartitionRequest(string View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null,
     OwnerBlobReplacement? Replacing = null);
 public sealed record RoomsPartitionResult(
     string Level,
@@ -192,7 +195,7 @@ public sealed record RoomsPartitionResult(
     double Ms);
 
 // Role is "room" (default) or "zone".
-public sealed record RoomsDrawRequest(long View, List<List<double[]>> Loops, string? Name = null, string? Role = null,
+public sealed record RoomsDrawRequest(string View, List<List<double[]>> Loops, string? Name = null, string? Role = null,
     OwnerBlobReplacement? Replacing = null);
 public sealed record RoomsDrawResult(long ElementId, string UniqueId);
 
@@ -214,7 +217,7 @@ public sealed record RoomsWriteCell(string UniqueId, RoomField Field,
 public sealed record RoomsWriteReceipt(IReadOnlyList<RoomsWriteCell> Cells);
 
 // Combine two or more rooms or held regions of one zone on one view into one locked Room Region; the sources are deleted.
-public sealed record RoomsMergeRequest(long View, List<string> UniqueIds, string? Name = null,
+public sealed record RoomsMergeRequest(string View, List<string> UniqueIds, string? Name = null,
     OwnerBlobReplacement? Replacing = null);
 public sealed record RoomsMergeResult(long ElementId, string UniqueId, IReadOnlyList<string> MergedFrom, double Sqft);
 
@@ -236,10 +239,10 @@ public sealed record RoomsTraceAccounting(double ZoneSqft, double Accepted, doub
 public sealed record RoomsZoneTrace(string ZoneUniqueId, string Label, RoomsTrace Trace, RoomsTraceAccounting Accounting);
 
 // RunId null reads the view's latest committed partition run.
-public sealed record RoomsTraceRequest(long View, string? RunId = null);
+public sealed record RoomsTraceRequest(string View, string? RunId = null);
 public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones,
     string? OriginalIssue = null, IReadOnlyList<string>? MissingOriginals = null);
 
 /// <summary>Geometry scope. Empty scope reads only the geometry-free roster.</summary>
 public sealed record TakeoffReadRequest(IReadOnlyList<string>? Views = null, IReadOnlyList<string>? ZoneUniqueIds = null);
-public sealed record RoomsReadRequest(long View);
+public sealed record RoomsReadRequest(string View);

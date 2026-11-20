@@ -52,7 +52,6 @@
     "./space-view": "./src/space-view.ts",
     "./value": "./src/value.ts",
     "./takeoff-adoption": "./src/takeoff-adoption.ts",
-    "./takeoff-read": "./src/takeoff-read.ts",
     "./slots": "./src/slots/index.ts",
     "./target": "./src/target.ts",
     "./tiered-setting": "./src/tiered-setting.ts",

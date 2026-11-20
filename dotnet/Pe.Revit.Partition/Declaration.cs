@@ -14,6 +14,7 @@ namespace Pe.Revit.Partition;
 /// </summary>
 public static class EnclosureDeclaration {
     /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
+    [Pe.Shared.Product.NativeHome("partitionEnclosure")]
     public static readonly OwnerDescriptor Owner = new("partition-enclosure", 1,
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9006"), "_PE_PartitionEnclosure",
         "Pe partition enclosure declaration (which categories and DWG layers draw enclosure).",

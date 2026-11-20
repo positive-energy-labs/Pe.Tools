@@ -26,18 +26,13 @@
     "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
-    "@pe/duct-systems-contract": "workspace:*",
     "@pe/duct-systems-domain": "workspace:*",
     "@pe/duct-systems-host": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
-    "@pe/ducts-contract": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
     "@pe/ducts-web": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
     "@pe/fans-host": "workspace:*",
-    "@pe/fans-web": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/host-internal": "workspace:*",
     "@pe/kit": "workspace:*",
@@ -63,7 +58,14 @@
     "tailwindcss": "^4.1.18",
     "three": "catalog:",
     "tw-animate-css": "^1.3.6",
-    "zod": "4.3.6"
+    "zod": "4.3.6",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
+    "@pe/fans-web": "workspace:*",
+    "@pe/rooms-contract": "workspace:*",
+    "@pe/rooms-web": "workspace:*"
   },
   "devDependencies": {
     "@effect/platform-node": "4.0.2",
@@ -96,7 +98,9 @@
       "@pe/duct-systems-web",
       "@pe/ducts-contract",
       "@pe/fans-contract",
-      "@pe/fans-web"
+      "@pe/fans-web",
+      "@pe/rooms-contract",
+      "@pe/rooms-web"
     ]
   }
 }

@@ -37,7 +37,7 @@ public static class TakeoffAtlas
 {
     public static TakeoffSnapshotData Snapshot(Document doc, TakeoffReadRequest request)
     {
-        var views = (request.Views ?? []).Select(name => FindView(doc, name).Id).ToHashSet();
+        var views = (request.Views ?? []).Select(id => PlanView(doc, id).Id).ToHashSet();
         var zoneIds = (request.ZoneUniqueIds ?? []).ToHashSet(StringComparer.Ordinal);
         var read = RoomsRegionRecord.Read(doc);
         var zones = new List<TakeoffRegionFacts>();
@@ -79,7 +79,7 @@ public static class TakeoffAtlas
 
     public static List<TakeoffRegionFacts> CandidateRegions(Document doc, TakeoffCandidatesRequest request)
     {
-        var view = FindView(doc, request.View);
+        var view = PlanView(doc, request.View);
         var read = RoomsRegionRecord.Read(doc);
         return new FilteredElementCollector(doc, view.Id)
             .OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
@@ -94,7 +94,7 @@ public static class TakeoffAtlas
         var unnamed = request.Items.FirstOrDefault(item => string.IsNullOrWhiteSpace(item.Name));
         if (unnamed != null)
             throw new InvalidOperationException($"FilledRegion {unnamed.ElementId} requires a zone name");
-        var view = FindView(doc, request.View);
+        var view = PlanView(doc, request.View);
         var registry = TakeoffCarriers.StageRegistry(doc, request.ReplacingRegistry);
         var adopted = new List<TakeoffAdopted>();
 
@@ -104,7 +104,7 @@ public static class TakeoffAtlas
                      ?? throw new InvalidOperationException($"element {item.ElementId} is not a FilledRegion");
             RequireRegionIdentity(item.ElementId, item.UniqueId, fr.UniqueId);
             if (fr.OwnerViewId != view.Id)
-                throw new InvalidOperationException($"FilledRegion {item.ElementId} is not on '{request.View}'");
+                throw new InvalidOperationException($"FilledRegion {item.ElementId} is not on '{view.Name}'");
             var row = record[fr.UniqueId] ?? new RegionRow(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default);
             if (row.Role != TakeoffCarriers.RoleZoningRegion)
                 throw new InvalidOperationException($"element {item.ElementId} already carries role '{row.Role}'");
@@ -137,7 +137,7 @@ public static class TakeoffAtlas
             ?? throw new InvalidOperationException("Partition requires a native Zoning Region");
         var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         if (zone.UniqueId != request.ZoneUniqueId || record[zone.UniqueId]?.Role != TakeoffCarriers.RoleZoningRegion
-            || zone.OwnerViewId != FindView(doc, request.View).Id)
+            || zone.OwnerViewId != PlanView(doc, request.View).Id)
             throw new InvalidOperationException(record.Recovery ?? "Partition target does not match the adopted zone identity and view");
         ValidateRunId(request.RunId);
         // The partition's own scope also holds every room label the measurement probes: rooms lie inside their zone.
@@ -164,7 +164,7 @@ public static class TakeoffAtlas
     {
         ValidateRunId(request.RunId);
         Action<string> log = static _ => { };
-        var view = FindView(doc, request.View);
+        var view = PlanView(doc, request.View);
         var level = view.GenLevel;
         double elevation = level?.ProjectElevation ?? 0.0;
 
@@ -290,10 +290,14 @@ public static class TakeoffAtlas
             throw new InvalidOperationException($"FilledRegion {elementId} no longer matches UniqueId '{expectedUniqueId}'.");
     }
 
-    internal static ViewPlan FindView(Document doc, string name) =>
-        new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-            .FirstOrDefault(v => !v.IsTemplate && v.Name == name)
-        ?? throw new InvalidOperationException($"no ViewPlan named '{name}'");
+    /// <summary>
+    ///     The one plan resolver: a plan is its view UniqueId within this Document. Name and view type are
+    ///     display metadata, so two plans of one name never resolve by collector order.
+    /// </summary>
+    internal static ViewPlan PlanView(Document doc, string uniqueId) =>
+        (string.IsNullOrWhiteSpace(uniqueId) ? null : doc.GetElement(uniqueId)) is ViewPlan { IsTemplate: false } view
+            ? view
+            : throw new RoomsViewMissingException();
 
     private static TakeoffRegionFacts ToRegionFacts(Document doc, FilledRegion fr, RegionRow? row, string? refusal = null)
     {
@@ -313,6 +317,7 @@ public static class TakeoffAtlas
             fr.Id.Value(),
             type?.Name ?? "",
             owner?.Name ?? "",
+            owner?.UniqueId ?? "",
             color,
             Area(fr, loops),
             row?.Role,

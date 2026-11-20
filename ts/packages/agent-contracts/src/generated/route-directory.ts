@@ -302,28 +302,28 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   {
     "key": "rooms",
     "directory": {
-      "label": "Manual J",
-      "icon": "LayoutDashboard",
-      "exposure": "Preview",
+      "label": "Rooms",
+      "icon": "LayoutGrid",
+      "exposure": "Main",
       "surfaces": {
         "web": "full",
         "pwa": "full",
         "tray": false
       },
       "aliases": [
-        "manual",
-        "j",
-        "loads",
-        "regions"
+        "room",
+        "zone",
+        "space",
+        "partition"
       ],
-      "runtimeNeed": "Revit for room plans and writes",
+      "runtimeNeed": "Revit for model reads and writes",
       "listed": true,
       "satellites": [],
       "resume": "document",
       "path": "/rooms",
       "title": "Rooms",
       "category": "Calculate loads & airflow",
-      "blurb": "Inspect room regions, stage loads and review anchored feedback"
+      "blurb": "Partition a plan into rooms and state each room's fields"
     }
   },
   {

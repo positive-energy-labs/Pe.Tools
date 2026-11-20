@@ -97,6 +97,44 @@ public sealed class RoomsRerunTests
         });
     }
 
+    // A second machine holds the record but none of the first machine's solver originals (falsifier 6).
+    [Test]
+    public void A_machine_without_the_solver_originals_still_keeps_matched_rooms()
+    {
+        var empty = Directory.CreateTempSubdirectory("pe-rooms-second-machine-").FullName;
+        var previous = RoomsRunTraces.RootOverride.Value;
+        RoomsRunTraces.RootOverride.Value = empty;
+        try
+        {
+            var matched = Region(1, 0, 0, 10, 10);
+            var gone = Region(2, 20, 0, 30, 10);
+            // What the record carries after the first machine's save: the original's digest, never the original.
+            var stored = new RegionProvenance("zone", "run-1", "R01", 100)
+            {
+                OriginalTrace = RoomsRunTraces.Hash("the first machine's original"),
+                GeometryHash = Rooms.GeometryHash(matched.Loops),
+            };
+            var read = new RoomsRegionRecord().ProjectOriginal(stored);
+            var kept = Room("R01", 5, 5, 100);
+            var plan = RoomsRerun.Plan([matched, gone], [], [], [kept], [], null);
+            Assert.Multiple(() => {
+                Assert.That(read.OriginalUnavailable, Is.True);
+                // Still a machine room: the rerun may rebind it, and it is not frozen as a person's.
+                Assert.That(Rooms.Locked(read, matched.Loops), Is.False);
+                Assert.That(plan.Keep.Single().Region, Is.SameAs(matched));
+                Assert.That(plan.Keep.Single().Room, Is.SameAs(kept));
+                Assert.That(plan.Delete.Single(), Is.SameAs(gone));
+                Assert.That(plan.Create, Is.Empty);
+                Assert.That(Directory.EnumerateFileSystemEntries(empty), Is.Empty);
+            });
+        }
+        finally
+        {
+            RoomsRunTraces.RootOverride.Value = previous;
+            Directory.Delete(empty, true);
+        }
+    }
+
     [Test]
     public void Locked_is_never_deleted_or_recreated()
     {

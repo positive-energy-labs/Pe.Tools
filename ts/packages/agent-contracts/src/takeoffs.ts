@@ -8,6 +8,7 @@ import { cellPatches, draftCellSchema, type CellLike } from "./draft.ts";
 import { observationSchema } from "./reading.ts";
 import { addressSchema } from "./target.ts";
 import { documentRefSchema } from "./target.ts";
+import { nativeOutputSchema } from "./native-output-read.ts";
 
 const pointSchema = z.tuple([z.number(), z.number()]);
 const worldLoopsSchema = z
@@ -37,7 +38,7 @@ export const roomEditSchema = z.object({
   equipSensible: z.number().optional(),
   equipLatent: z.number().optional(),
   ventilationCfm: z.number().optional(),
-  /** /rooms only: a person's designation of a hand-drawn region. */
+  /** A person's designation of a hand-drawn region. */
   role: z.enum(["room", "zone"]).optional(),
 });
 
@@ -309,6 +310,12 @@ export const takeoffCaptureSchema = z.object({
   snapshot: takeoffSnapshotSchema,
 });
 export type TakeoffCapture = z.infer<typeof takeoffCaptureSchema>;
+/** What the host retains as one capture: a native snapshot with the display facts of its plans. */
+export const takeoffSnapshotInput = z.object({
+  target: documentRefSchema,
+  snapshot: nativeOutputSchema("takeoffs.snapshot"),
+  views: z.array(z.object({ name: z.string(), level: z.string() })),
+});
 export const takeoffCaptureSummarySchema = takeoffCaptureSchema
   .omit({ snapshot: true })
   .extend({ document: addressSchema, title: z.string() });
@@ -461,19 +468,22 @@ const stagedOf = <V>(cells: Record<string, CellLike>) =>
   );
 
 /** Current room edits, one per room: what sync consumes. Optional suggestions never appear. */
-export function stagedTakeoffEdits(doc: TakeoffsRouteDocument): Record<string, StagedRoomEdit> {
-  const rooms: Record<string, StagedRoomEdit> = {};
+export function stagedTakeoffEdits(
+  // The product's Work holds only cells, so it has no `bases`; no reader of a staged edit uses one.
+  doc: Pick<TakeoffsRouteDocument, "edits"> & Partial<Pick<TakeoffsRouteDocument, "bases">>,
+): Record<string, StagedRoomEdit> {
+  const edits: Record<string, StagedRoomEdit> = {};
   for (const [key, value] of stagedOf<string | number>(doc.edits)) {
     const { roomId, field } = takeoffEditAddress(key);
-    const edit = (rooms[roomId] ??= { roomId, base: doc.bases[roomId] ?? {}, next: {} });
+    const edit = (edits[roomId] ??= { roomId, base: doc.bases?.[roomId] ?? {}, next: {} });
     (edit.next as Record<string, unknown>)[field] = value;
   }
-  return rooms;
+  return edits;
 }
-export const stagedAdoptChoices = (doc: TakeoffsRouteDocument): Record<string, AdoptChoice> =>
+export const stagedAdoptChoices = (doc: Pick<TakeoffsRouteDocument, "adopt">): Record<string, AdoptChoice> =>
   Object.fromEntries(stagedOf<AdoptChoice>(doc.adopt));
 /** Current flag verdict edits, keyed by `takeoffDecisionKey`. */
-export const stagedDecisions = (doc: TakeoffsRouteDocument): Record<string, "accept" | "dismiss"> =>
+export const stagedDecisions = (doc: Pick<TakeoffsRouteDocument, "decisions">): Record<string, "accept" | "dismiss"> =>
   Object.fromEntries(stagedOf<"accept" | "dismiss">(doc.decisions));
 /** Current review flag edits per zone. */
 export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, string[]> {

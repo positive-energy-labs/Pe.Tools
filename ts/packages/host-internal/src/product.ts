@@ -1,4 +1,17 @@
-import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
+import type {
+  DocumentRef,
+  ModelRoom,
+  NativeProcess,
+  StagedRoomEdit,
+  TakeoffCapture,
+} from "@pe/agent-contracts";
+import type {
+  RhvacExtractData,
+  RhvacInsertRoomData,
+  RhvacSyncRequest,
+  RhvacSyncResult,
+} from "@pe/host-contracts/operation-types";
+import type { Step } from "./action-execution.ts";
 import type { HostBodies, ProductDeclaration } from "@pe/agent-contracts/product";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
@@ -11,6 +24,22 @@ export type CommandBody = (
   deps: {
     nativeRead?: HostNativeRead["Service"];
     projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
+    /** Saved takeoff observations. A model write invalidates the document's retained one. */
+    captures?: {
+      invalidate(target: DocumentRef): void;
+      saved(id: string): Promise<TakeoffCapture>;
+      savedText(id: string): Promise<{ path: string; text: string }>;
+    };
+    /**
+     * ponytail: the RHVAC file lane (sync-rhvac.ps1 and its temp files) lives in the host app, so
+     * the host hands it in. Move the lane to a package when a second product writes an .r10.
+     */
+    rhvac?: {
+      open(path: string): Step<RhvacExtractData>;
+      sync(request: RhvacSyncRequest, expectedVersion: string): Step<RhvacSyncResult>;
+      applyStaged<A extends Record<string, unknown>>(room: A, edit: StagedRoomEdit): A;
+      buildInsert(room: ModelRoom, number: number, systemNumber: number): RhvacInsertRoomData;
+    };
   },
 ) => CommandExecutor;
 

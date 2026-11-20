@@ -44,7 +44,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 "GetTakeoffSnapshotCore", doc, new TakeoffReadRequest(ZoneUniqueIds: [zoneUniqueId]))
                 .Snapshot.RegionsByZone[zoneUniqueId].Single();
             void Rerun(string runId) => _ = TakeoffNativeFixtureRecorder.Invoke<TakeoffPartitionResult>(
-                "PartitionTakeoffCore", doc, new TakeoffPartitionRequest(zone.Id.Value(), view.Name, "Zone", zoneUniqueId, runId));
+                "PartitionTakeoffCore", doc, new TakeoffPartitionRequest(zone.Id.Value(), view.UniqueId, "Zone", zoneUniqueId, runId));
 
             Rerun("measurement-1");
             var before = Read();

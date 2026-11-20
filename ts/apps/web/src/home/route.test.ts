@@ -1,7 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { module, query } from "./route";
 import { module as chat } from "../chat/route";
-import { module as takeoff } from "../takeoff/route";
 import { decodeField, encodeField } from "@pe/web-kernel/route/field-codec";
 import { routeAddress, routeKeys, threadListFields } from "@pe/agent-contracts";
 
@@ -39,7 +38,7 @@ test("slice 10 index: home declares only query and one pane, no subject and no s
 });
 
 test("every thread-list Page uses the shared fields and one encoding", () => {
-  for (const route of [module, chat, takeoff]) {
+  for (const route of [module, chat]) {
     const fields = route.spec.fields;
     expect(fields.threadSort, route.data.key).toBe(threadListFields.threadSort);
     expect(fields.threadSearch, route.data.key).toBe(threadListFields.threadSearch);

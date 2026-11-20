@@ -3,4 +3,5 @@ import type { ProductDeclaration } from "@pe/agent-contracts/product";
 import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
-export const tutorialProducts: readonly ProductDeclaration[] = [product0, product1, product2];
+import { product as product3 } from "@pe/rooms-contract/product";
+export const tutorialProducts: readonly ProductDeclaration[] = [product0, product1, product2, product3];

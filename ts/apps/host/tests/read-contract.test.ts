@@ -21,14 +21,14 @@ import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { product as fans } from "@pe/fans-contract/product";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
 import { peRoutes } from "@pe/mcps/product-catalog";
-import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
-import { BridgeError } from "@pe/host-internal/bridge";
+import { picker } from "../../web/src/pages-bind/contract.ts";
+import { product as roomsProduct } from "@pe/rooms-contract/product";
 
 const contracts = [
   ...Object.values(
     import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
   ).flatMap((module) => Object.values(module)),
-  ...[ducts, ductSystems, fans].flatMap(({ readings }) =>
+  ...[ducts, ductSystems, fans, roomsProduct].flatMap(({ readings }) =>
     Object.values(readings).map(({ handle }) => handle),
   ),
 ];
@@ -73,61 +73,15 @@ test("the browser door binds the target in the host contract's shape", () => {
   expect(fans.request?.({ fan: [], calcPath: "" }, { kind: "document", ref })).toMatchObject({
     args: { target: ref },
   });
-  const rooms = hostRead(roomsWorkspace);
-  expect(
-    rooms.request?.(rooms.input.parse({ view: null }), { kind: "document", ref }),
-  ).toMatchObject({ args: { target: { kind: "document", ref } } });
-});
-
-test("Rooms recovers the chosen document's roster when a linked plan no longer exists", async () => {
-  const levels = [
-    {
-      name: "Snowdon level",
-      elevation: 0,
-      views: [
-        { id: 9948, name: "L2", type: "FloorPlan" },
-        { id: 1371629, name: "L2", type: "CeilingPlan" },
-      ],
-    },
-  ];
-  const operations: string[] = [];
-  const read = await evaluate(
-    bodyOf(roomsWorkspace),
-    { target: { kind: "document", ref: { session: "s", openId: "snowdon" } }, view: 7426391 },
-    port(async (name, args) => {
-      if (name === "document-mark") return { observedSince: 1, changedAt: null, generation: 0 };
-      if (name === "work-scope")
-        return { binding: "open", route: "rooms", target: null, open: args };
-      if (name === "work") return null;
-      if (name !== "native" || !args || typeof args !== "object" || !("key" in args))
-        throw Error(`Unexpected input: ${name}`);
-      operations.push(String(args.key));
-      if (args.key === "rooms.snapshot")
-        throw new BridgeError("That view is not in this document.", 400, {
-          dispatched: true,
-          issues: [
-            {
-              instancePath: "$.view",
-              code: "RoomsViewMissing",
-              message: "That view is not in this document.",
-              severity: "error",
-            },
-          ],
-        });
-      if (args.key === "rooms.roster") return { body: { levels, regions: [] }, version: null };
-      throw Error(`Unexpected native read: ${args.key}`);
-    }),
-  );
-  expect(operations).toEqual(["rooms.snapshot", "rooms.roster"]);
-  expect(read.data).toMatchObject({
-    snapshot: { levels, regions: [] },
-    unresolved: [{ id: "view", says: "Choose a level and a plan view", resolver: "person" }],
+  const bind = hostRead(picker);
+  expect(bind.request?.(bind.input.parse({}), { kind: "document", ref })).toMatchObject({
+    args: { target: { kind: "document", ref } },
   });
 });
 
 test("declared reads are served by the host with their original schemas", () => {
   const handles = [...new Set(contracts)];
-  for (const { readings } of [ductSystems, fans])
+  for (const { readings } of [ductSystems, fans, roomsProduct])
     for (const { handle } of Object.values(readings))
       expect(registeredReads.reads.get(handle.key)?.contract, handle.key).toBe(handle);
   // Mutant: register read(name, ...) with copied schemas instead of body(handle, ...).
