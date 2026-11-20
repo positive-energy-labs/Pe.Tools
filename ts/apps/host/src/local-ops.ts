@@ -19,7 +19,7 @@ import {
   type HostSessionSummaryData,
 } from "@pe/host-contracts/operation-types";
 import type { BridgeSessionView } from "@pe/host-internal/bridge";
-import { readFileStringOrEmpty, statOrNull } from "./files/index.ts";
+import { readFileStringOrEmpty, statOrNull } from "@pe/host-internal/local-files";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
 import { resolveHostVersion } from "./host-lifecycle.ts";
 import { hostCapabilities, hostOwnership } from "./host-ownership.ts";
@@ -35,7 +35,7 @@ function hostVersion(): string {
     return "unknown";
   }
 }
-import { LocalOpError } from "./local-error.ts";
+import { LocalOpError } from "@pe/host-internal/local-error";
 
 const RUNTIME_IDENTITY = `pe-host-ts/${process.version}`;
 

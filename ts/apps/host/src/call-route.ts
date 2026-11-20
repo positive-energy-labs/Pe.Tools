@@ -1,3 +1,4 @@
+import { hostOwnership } from "./host-ownership.ts";
 import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
 import { captureReceiptSchema } from "@pe/agent-contracts";
@@ -44,7 +45,7 @@ import {
   projectTakeoffSnapshot,
   projectTakeoffViews,
   takeoffProjectIndexRequest,
-} from "../../../packages/mcps/src/shared/takeoff-ops.ts";
+} from "@pe/rooms-host/takeoff-projection";
 import { ActionJournal } from "./action-journal.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
 import { RevitBridge, BridgeError, NoRevitSession } from "@pe/host-internal/bridge";
@@ -76,7 +77,7 @@ import { operationDefinition, gatewayTarget, requireEligibleCaller } from "./gat
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { HostInputContext } from "./input-context.ts";
 import type { InstancesActionDependencies } from "./instances-actions.ts";
-import { LocalOpError, localOpHttpStatus } from "./local-error.ts";
+import { LocalOpError, localOpHttpStatus } from "@pe/host-internal/local-error";
 import {
   getBridgeSessionSummary,
   getHostStatus,
@@ -93,13 +94,14 @@ import { recordHostFact } from "./receipt-export.ts";
 import { ReadFreshness } from "./request-services.ts";
 import { RequestIdentity } from "@pe/host-internal/request-identity";
 import {
+  fileVersion,
   rhvacAssemblies,
   rhvacLaunch,
   rhvacList,
   rhvacOpen,
   rhvacSync,
   rhvacTakeoff,
-} from "./rhvac-ops.ts";
+} from "@pe/rooms-host/rhvac";
 import { readSchedule } from "./schedule-actions.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { HostSessionInventory } from "./session-inventory.ts";
@@ -115,7 +117,6 @@ import {
 } from "./settings.ts";
 import { readSettingTiers } from "@pe/host-internal/settings-files";
 import { writeSettingTier } from "./tiered-settings.ts";
-import { fileVersion } from "./rhvac-ops.ts";
 import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
 
@@ -1305,13 +1306,13 @@ const localEntries = {
     });
   }),
   "rhvac.open": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacOpen(yield* decodeRequest("rhvac.open", request));
+    return yield* rhvacOpen(hostOwnership, yield* decodeRequest("rhvac.open", request));
   }),
   "rhvac.assemblies": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacAssemblies(yield* decodeRequest("rhvac.assemblies", request));
+    return yield* rhvacAssemblies(hostOwnership, yield* decodeRequest("rhvac.assemblies", request));
   }),
   "rhvac.sync": Effect.fnUntraced(function* ({ request }: LocalCall) {
-    return yield* rhvacSync(yield* decodeRequest("rhvac.sync", request));
+    return yield* rhvacSync(hostOwnership, yield* decodeRequest("rhvac.sync", request));
   }),
   "rhvac.launch": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* rhvacLaunch(yield* decodeRequest("rhvac.launch", request));

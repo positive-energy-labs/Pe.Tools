@@ -9,6 +9,12 @@ import { win32 } from "node:path";
 import { Effect } from "effect";
 import {
   nativeProcessSchema,
+  workAdmissionSchema,
+  type Consumed,
+  type DocumentRef,
+  type NativeProcess,
+} from "@pe/agent-contracts";
+import {
   stagedDecisions,
   stagedRoomEditSchema,
   stagedTakeoffEdits,
@@ -17,13 +23,16 @@ import {
   takeoffDecisionKey,
   takeoffEditAddress,
   takeoffEditKey,
-  workAdmissionSchema,
-  type Consumed,
-  type NativeProcess,
   type StagedRoomEdit,
-} from "@pe/agent-contracts";
+  type TakeoffCapture,
+} from "@pe/rooms-contract/takeoffs";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
-import type { HostOperationKey, RhvacSyncRequest } from "@pe/host-contracts/operation-types";
+import type {
+  HostOperationKey,
+  RhvacExtractData,
+  RhvacSyncRequest,
+  RhvacSyncResult,
+} from "@pe/host-contracts/operation-types";
 import type { ActionExecution, Step } from "@pe/host-internal/action-execution";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import {
@@ -32,11 +41,25 @@ import {
   refused,
   type CommandContext,
 } from "@pe/host-internal/command-executor";
+import type { applyStaged, buildRhvacInsert } from "./rhvac-ops.ts";
 import type { CommandBody } from "@pe/host-internal/product";
 import { product, takeoffsWork } from "@pe/rooms-contract/product";
 
 const { commands } = product;
-export type Deps = Parameters<CommandBody>[1];
+export type Deps = Parameters<CommandBody>[1] & {
+  captures?: {
+    invalidate(target: DocumentRef): void;
+    saved(id: string): Promise<TakeoffCapture>;
+    savedText(id: string): Promise<{ path: string; text: string }>;
+  };
+  rhvac?: {
+    open(path: string): Step<RhvacExtractData>;
+    sync(request: RhvacSyncRequest, expectedVersion: string): Step<RhvacSyncResult>;
+    applyStaged: typeof applyStaged;
+    buildInsert: typeof buildRhvacInsert;
+  };
+};
+
 /** Admission context is no native field. */
 export const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
@@ -58,7 +81,8 @@ export const sealCarrier = ({ process, replacement }: z.infer<typeof preparedCar
   request: { process, replacement },
   evidence: replacement,
 });
-export const replacing = (p: z.infer<typeof preparedCarrierSchema>) => p.replacement?.regions ?? undefined;
+export const replacing = (p: z.infer<typeof preparedCarrierSchema>) =>
+  p.replacement?.regions ?? undefined;
 const modelTarget = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
   return ctx.admission.target.ref;
@@ -199,8 +223,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
     }),
     "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
       seal: sealCarrier,
-      bind: (ctx) =>
-        bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
+      bind: (ctx) => bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, null, (native) => {
           return value(ctx, native, "takeoffs.partition", {

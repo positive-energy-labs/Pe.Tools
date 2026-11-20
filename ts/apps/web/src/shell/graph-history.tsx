@@ -4,18 +4,10 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { routeAddress, type NativeProgress } from "@pe/agent-contracts";
+import { routeAddress } from "@pe/agent-contracts";
+import { phaseLabel } from "@pe/rooms-contract/progress";
 import type { TimelineOwner } from "./situation-band";
 import { activityTime, timelineRowKey } from "./timeline";
-
-const phaseLabel: Record<NativeProgress["phase"], string> = {
-  Prepare: "Reading model geometry",
-  Capture: "Finding walls and openings",
-  Designation: "Identifying zones",
-  Solve: "Finding rooms",
-  Materialization: "Drawing room outlines",
-  Commit: "Applying changes",
-};
 
 /** Draw host order directly, including the findings Work. No browser reconstruction. */
 export function GraphHistory({ owner }: { owner: TimelineOwner }) {

@@ -15,8 +15,8 @@ import {
 } from "@pe/host-contracts/operation-types";
 import { setAside, stateKind } from "@pe/host-contracts/kinds";
 import { z } from "zod";
-import { LocalOpError } from "./local-error.ts";
-import { runHostChild } from "./host-child.ts";
+import { LocalOpError } from "@pe/host-internal/local-error";
+import { runHostChild } from "@pe/host-internal/host-child";
 import { hostState } from "./host-ownership.ts";
 
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";

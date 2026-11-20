@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { expect, test } from "vite-plus/test";
-import { RegionProvenance, ZoneProvenance } from "../src/shared/takeoff-ops.ts";
+import { RegionProvenance, ZoneProvenance } from "./takeoff-ops.ts";
 
 // The blobs `Pe.Revit.Takeoff` writes (camelCase Newtonsoft): a decode, never a cast.
 test("takeoff blobs decode the writer's shape and refuse a malformed one with its path", () => {

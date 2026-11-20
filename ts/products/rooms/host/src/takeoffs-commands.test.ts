@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { address } from "@pe/agent-contracts";
-import { projectTakeoffSnapshot } from "../src/shared/takeoff-ops.ts";
+import { projectTakeoffSnapshot } from "./takeoff-ops.ts";
 
 const rawSnapshot = {
   status: {

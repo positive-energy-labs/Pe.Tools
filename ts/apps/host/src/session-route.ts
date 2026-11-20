@@ -21,7 +21,7 @@ import {
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import { type HostLane } from "./host-ownership.ts";
 import { peRevitLauncher, validatePeRevitEnvelope, withStderr } from "./pe-revit-launch.ts";
-import { runHostChild } from "./host-child.ts";
+import { runHostChild } from "@pe/host-internal/host-child";
 
 /**
  * Control plane for Revit sessions — NOT a catalog op. Session lifecycle belongs to the SDK

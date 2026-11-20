@@ -44,18 +44,20 @@ import { mkdir, readFile, readdir, writeFile, rm, stat } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path";
 import {
   sameAddress,
-  takeoffCaptureSchema,
-  takeoffObservationSchema,
-  takeoffSnapshotSchema,
   summarizeFamiliesObservation,
   type Address,
   type DocumentRef,
   type AppliedFilter,
   type FamiliesMatrixEnvelope,
+} from "@pe/agent-contracts";
+import {
+  takeoffCaptureSchema,
+  takeoffObservationSchema,
+  takeoffSnapshotSchema,
   type TakeoffCapture,
   type TakeoffObservation,
   type TakeoffSnapshot,
-} from "@pe/agent-contracts";
+} from "@pe/rooms-contract/takeoffs";
 import { hostOwnership, hostState } from "./host-ownership.ts";
 
 const keyOf = (target: DocumentRef) => JSON.stringify([target.session, target.openId]);

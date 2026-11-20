@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./product": "./src/product.ts"
+    "./product": "./src/product.ts",
+    "./rhvac": "./src/rhvac-ops.ts",
+    "./takeoff-projection": "./src/takeoff-ops.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

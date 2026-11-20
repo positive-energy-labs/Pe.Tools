@@ -1,15 +1,19 @@
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { CommandExecutor } from "@pe/host-internal/command-executor";
-import type { CommandBody, implement } from "@pe/host-internal/product";
+import type { implement } from "@pe/host-internal/product";
+import type { ProductDeclaration } from "@pe/agent-contracts/product";
+import type { host } from "@pe/rooms-host/product";
 import type { FamilyActionDependencies } from "./family-actions.ts";
 
-type Deps = FamilyActionDependencies & Parameters<CommandBody>[1];
+type Deps = FamilyActionDependencies & Parameters<typeof host.executors>[1];
 type SheetOwner = Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], CommandExecutor>;
 export type SheetExecutors = ReadonlyMap<string, SheetOwner>;
 
 /** Work selects the admitted product's sheet body. */
-export function bindProducts(hosts: readonly ReturnType<typeof implement>[]) {
+export function bindProducts(
+  hosts: readonly ReturnType<typeof implement<ProductDeclaration, Deps>>[],
+) {
   return {
     productReads: hosts.map(({ reads }) => ({ reads })),
     productExecutors(bridge: RevitBridge["Service"], deps: Deps = {}) {
