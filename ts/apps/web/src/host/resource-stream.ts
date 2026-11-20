@@ -335,7 +335,9 @@ export class PeReadings {
       retryDelayMs(
         ++this.attempts,
         1000,
-        document.visibilityState === "hidden" ? RETRY_CEILING_MS : VISIBLE_RECONNECT_CEILING_MS,
+        typeof document !== "undefined" && document.visibilityState === "hidden"
+          ? RETRY_CEILING_MS
+          : VISIBLE_RECONNECT_CEILING_MS,
       ),
     );
   }

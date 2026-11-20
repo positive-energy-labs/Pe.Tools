@@ -24,13 +24,30 @@
       "entry": ["scripts/*.ts", "tests/e2e/*.ts"]
     },
     "apps/host": {
-      "entry": ["src/index.ts", "src/dev.ts", "scripts/*.{ts,mjs}", "tests/fake-acp-agent.mjs"]
+      "entry": [
+        "src/index.ts",
+        "src/dev.ts",
+        "scripts/*.{ts,mjs}",
+        "tests/fake-acp-agent.mjs",
+        "tests/native-recordings/record-view-image.ts"
+      ]
     },
     "apps/web": {
-      "entry": ["src/routes/**/*.{ts,tsx}!", "src/revit/revit.js", "scripts/*"]
+      "entry": [
+        "src/routes/**/*.{ts,tsx}!",
+        "src/revit/revit.js",
+        "src/route/ducts-chooser-layout.test.fixture.tsx",
+        "scripts/*"
+      ]
+    },
+    "packages/agent-contracts": {
+      "entry": ["src/*.typecheck.ts"]
     },
     "packages/host-contracts": {
-      "entry": ["scripts/*.ts"]
+      "entry": ["scripts/*.ts", "src/generated/native-effect-direction.typecheck.ts"]
+    },
+    "packages/host-internal": {
+      "entry": ["src/request-contracts.typecheck.ts"]
     },
     "packages/kit": {
       "entry": ["tests/browser.mjs"]
@@ -51,7 +68,7 @@
       "entry": ["journeys/*.{ts,tsx}"]
     },
     "tests/journey-fixtures": {
-      "entry": ["*.ts"]
+      "entry": ["*.ts", "jv3-field-fixture.tsx"]
     },
     "tests/repo-guards": {}
   }
