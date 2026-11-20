@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { tsOnlyOperationCatalog, tsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";
+import { builtinLocalCatalog, builtinLocalSchemas } from "@pe/host-contracts/operation-types";
 import { Schema } from "effect";
 import * as generated from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -10,25 +10,25 @@ test("browser contracts exclude the full discovery catalog; the host catalog cov
 });
 
 test("host-local op catalog covers every TS-only op exactly once (GET /ops discovery)", () => {
-  const catalogKeys = tsOnlyOperationCatalog.map((entry) => entry.key);
-  const schemaKeys = Object.keys(tsOnlyOperationSchemas);
+  const catalogKeys = builtinLocalCatalog.map((entry) => entry.key);
+  const schemaKeys = Object.keys(builtinLocalSchemas);
   expect(new Set(catalogKeys).size).toBe(catalogKeys.length); // no dupes
   expect(new Set(catalogKeys)).toEqual(new Set(schemaKeys)); // 1:1 with the schema map
-  for (const entry of tsOnlyOperationCatalog) {
+  for (const entry of builtinLocalCatalog) {
     expect(entry.origin).toBe("host-local"); // marks them for host-typegen to skip
-    expect(entry.key in tsOnlyOperationSchemas).toBe(true);
+    expect(entry.key in builtinLocalSchemas).toBe(true);
   }
 });
 
 test("pod member ops decode the member address and split create from save", () => {
   // The host decodes requests with excess properties refused; so does this check.
-  const write = Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.member.write"].request, {
+  const write = Schema.decodeUnknownSync(builtinLocalSchemas["pod.member.write"].request, {
     onExcessProperty: "error",
   });
   expect(() =>
     write({ pod: "p", path: "settings/a.json", content: "{}", expectedSha256: "x" }),
   ).toThrow();
-  const save = Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.member.save"].request);
+  const save = Schema.decodeUnknownSync(builtinLocalSchemas["pod.member.save"].request);
   expect(() => save({ pod: "p", path: "settings/a.json", content: "{}" })).toThrow();
   expect(save({ pod: "p", path: "settings/a.json", content: "{}", expectedSha256: "x" })).toEqual({
     pod: "p",

@@ -26,7 +26,7 @@ import {
   type HarnessEvent,
 } from "@pe/agent-contracts";
 import { analyticsConfig, readOrCreateInstallId, writeFatalEvidence } from "@pe/runtime";
-import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { isAnyOperationKey, isTsOnlyOperationKey } from "@pe/mcps/product-operations";
 import { ActionJournal } from "./action-journal.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import { hostOwnership, hostState } from "./host-ownership.ts";

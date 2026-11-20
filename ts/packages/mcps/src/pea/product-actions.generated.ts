@@ -4,6 +4,7 @@ import { assertProductCatalogKeys } from "@pe/agent-contracts/pe-api";
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import type { DocumentRef, Tool } from "@pe/agent-contracts";
 import { assertUniqueProductKeys } from "./assembly-checks.ts";
+import { tsOnlyOperationCatalog } from "./product-operations.generated.ts";
 import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
@@ -21,7 +22,7 @@ const sheet = (phase: keyof typeof SHEET_COMMANDS) => {
   return { ...action, native: [...new Set([...action.native, ...products.flatMap(product => product.sheetWrites?.native?.[phase] ?? [])])] };
 };
 export const commands = { ...builtinCommands, ...product0.actions, ...product1.actions, ...product2.actions, ...product3.actions, [SHEET_COMMANDS.plan]: sheet("plan"), [SHEET_COMMANDS.apply]: sheet("apply") };
-export const hostActions = withHostActions(commands);
+export const hostActions = withHostActions(commands, tsOnlyOperationCatalog);
 export type SemanticActionKey = keyof typeof commands;
 export type HostActionKey = keyof typeof hostActions;
 export const commandTarget = (key: string, input: Record<string, unknown>, document?: DocumentRef) =>

@@ -11,7 +11,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
-import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { createCapabilityCatalogSource } from "@pe/mcps";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";

@@ -128,6 +128,7 @@ function loadFixtureModules(root: string, commandTable?: string) {
     "@pe/agent-contracts/slots",
     "@pe/agent-contracts",
     "@pe/host-contracts/catalog",
+    "@pe/host-contracts/operation-types",
     "@pe/host-contracts/pe-api",
     "effect/http",
     "effect",

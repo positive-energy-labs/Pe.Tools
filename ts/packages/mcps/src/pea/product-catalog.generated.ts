@@ -2,6 +2,7 @@
 import { createPeCatalog, type PeCatalog } from "@pe/agent-contracts/pe-api";
 import { assertUniqueProductKeys } from "./assembly-checks.ts";
 import { hostActions } from "./product-actions.generated.ts";
+import { tsOnlyOperationCatalog } from "./product-operations.generated.ts";
 import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
@@ -15,7 +16,7 @@ const http = { ...product0.http, ...product1.http, ...product2.http, ...product3
 const catalog = createPeCatalog(hostActions, {
   inputs: Object.assign({}, ...reads.map(read => read.inputs)),
   help: reads.map(read => read.help).filter(Boolean).join(" "),
-}, Object.assign({}, ...callPolicies), http);
+}, Object.assign({}, ...callPolicies), http, tsOnlyOperationCatalog);
 export const peRoutes: PeCatalog<typeof http>["peRoutes"] = catalog.peRoutes;
 export const linkedCatalog: PeCatalog<typeof http>["linkedCatalog"] = catalog.linkedCatalog;
 export const matchPeRoute: PeCatalog<typeof http>["matchPeRoute"] = catalog.matchPeRoute;

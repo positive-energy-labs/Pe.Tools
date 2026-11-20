@@ -1,4 +1,3 @@
-import { productOperationCatalog } from "./generated/product-operations.generated.ts";
 import { z } from "zod";
 import { hostDescriptorSchema } from "./host-descriptor.ts";
 import { homesConfigSchema, homesStatusSchema } from "./homes-config.ts";
@@ -1350,8 +1349,7 @@ export async function readPeError(response: Response) {
   return parsed.data.error;
 }
 
-export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [
-  ...productOperationCatalog,
+export const builtinLocalCatalog: readonly HostLocalCatalogEntry[] = [
   {
     key: "pointers.point",
     subject: "None",

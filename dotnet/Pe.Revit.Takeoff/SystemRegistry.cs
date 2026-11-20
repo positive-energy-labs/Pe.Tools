@@ -16,10 +16,10 @@ namespace Pe.Revit.Takeoff;
 //
 // This file is deliberately Revit-free: pure model + fail-closed data shape + reconciliation. The
 // envelope and its version rule belong to OwnerBlob; the storage is OwnerBlobStore's project anchor
-// (TakeoffCarriers) — nothing here may grow a Revit dependency.
+// (TakeoffRecords) — nothing here may grow a Revit dependency.
 public sealed class SystemRegistry
 {
-    /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
+    /// <summary>Stable owner identity. Changing the GUID orphans deployed models — never reuse.</summary>
     [Pe.Shared.Product.NativeHome("takeoffRegistry")]
     public static readonly OwnerDescriptor Owner = new("takeoff-systems", 1,
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9004"), "_PE_TakeoffSystemRegistry",

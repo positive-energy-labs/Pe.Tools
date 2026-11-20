@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { tsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationSchemas } from "@pe/mcps/product-operations";
 import { listPods, resolvePodIdentity, listRuns, readMember, composeMember } from "./settings.ts";
 import { runPods } from "./family-actions.ts";
 

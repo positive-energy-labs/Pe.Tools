@@ -15,7 +15,7 @@ public sealed class RoomsRerunTests
         const string id = "1a10950e-5cb8-4ed6-a239-d7dfbcc18f16-00000042";
         var request = new RoomsWriteRequest([new(id, Name: "Office", People: 3, CeilingFt: 9)]);
         var record = new RoomsRegionRecord();
-        record.Regions[id] = new(TakeoffCarriers.RoleRoomRegion, new RoomFields(Name: "Office", People: 1), RegionProvenance.Default);
+        record.Regions[id] = new(TakeoffRecords.RoleRoomRegion, new RoomFields(Name: "Office", People: 1), RegionProvenance.Default);
         var commit = false;
         var receipt = Rooms.CommitWrite(request, () =>
         {
@@ -367,10 +367,10 @@ public sealed class RoomsRerunTests
         List<List<double[]>> big = [[[0, 0], [20, 0], [20, 20], [0, 20]]];
         List<List<double[]>> small = [[[0, 0], [10, 0], [10, 10], [0, 10]]];
         Assert.Multiple(() => {
-            Assert.That(Rooms.Designate([crossing], fill, 400), Is.EqualTo(TakeoffCarriers.RoleZoningRegion));
-            Assert.That(Rooms.Designate([onEdge], fill, 400), Is.EqualTo(TakeoffCarriers.RoleRoomRegion));
-            Assert.That(Rooms.Designate([], big, 400), Is.EqualTo(TakeoffCarriers.RoleZoningRegion));
-            Assert.That(Rooms.Designate([], small, 100), Is.EqualTo(TakeoffCarriers.RoleRoomRegion));
+            Assert.That(Rooms.Designate([crossing], fill, 400), Is.EqualTo(TakeoffRecords.RoleZoningRegion));
+            Assert.That(Rooms.Designate([onEdge], fill, 400), Is.EqualTo(TakeoffRecords.RoleRoomRegion));
+            Assert.That(Rooms.Designate([], big, 400), Is.EqualTo(TakeoffRecords.RoleZoningRegion));
+            Assert.That(Rooms.Designate([], small, 100), Is.EqualTo(TakeoffRecords.RoleRoomRegion));
         });
     }
 

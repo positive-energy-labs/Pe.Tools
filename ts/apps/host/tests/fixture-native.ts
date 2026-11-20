@@ -34,6 +34,7 @@ const fetchRecorded = globalThis.fetch;
 export async function fixtureNative(directory: string, ...recordings: string[]) {
   let selected = nativeRecordings(...recordings);
   let trackedRegionIds: readonly string[] | undefined;
+  let roomsUnreadable: string | undefined;
   let roomsPlans: readonly string[] | undefined;
   let linkCapacityRefusal: string | undefined;
   let replacementEvidence: HostOpResponse<"takeoffs.record-replacements"> = {
@@ -111,6 +112,9 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
     },
     reportTrackedRooms(ids: readonly string[]) {
       trackedRegionIds = ids;
+    },
+    reportRoomsUnreadable(reason: string) {
+      roomsUnreadable = reason;
     },
     reportRoomsPlans(ids: readonly string[]) {
       roomsPlans = ids;
@@ -355,7 +359,10 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
                           },
                         ],
                         regions: [],
-                        trackedRegionIds,
+                        unreadable: roomsUnreadable
+                          ? [{ parameter: "_PE_RoomsRegions", reason: roomsUnreadable }]
+                          : [],
+                        trackedRegionIds: roomsUnreadable ? null : trackedRegionIds,
                       }))
                     : linkCapacity
                       ? { writes: [] }

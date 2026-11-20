@@ -49,11 +49,8 @@ import {
 import { commands } from "@pe/mcps/product-actions";
 import { admitScript, consentedRead } from "./control.ts";
 import { guards } from "./guards.ts";
-import {
-  isTsOnlyOperationKey,
-  tsOnlyOperationSchemas,
-  type HostSessionScope,
-} from "@pe/host-contracts/operation-types";
+import { type HostSessionScope } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationSchemas } from "@pe/mcps/product-operations";
 import { checkFailure } from "./action-journal.ts";
 import { type ActionExecution, type AttemptHost } from "@pe/host-internal/action-execution";
 import type { RevitBridge } from "@pe/host-internal/bridge";

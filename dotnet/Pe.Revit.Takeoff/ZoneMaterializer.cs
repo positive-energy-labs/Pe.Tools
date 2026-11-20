@@ -35,7 +35,7 @@ public sealed record RegionProvenance(
     [JsonProperty("mergedFrom", NullValueHandling = NullValueHandling.Ignore)]
     public List<string>? MergedFrom { get; init; }
 
-    // Unknown carrier keys, including legacy `resolutions` (old human dismissals), survive read-modify-write untouched.
+    // Unknown provenance keys, including legacy `resolutions` (old human dismissals), survive read-modify-write untouched.
     // Nothing reads them; no migrator, no silent discard.
     [JsonExtensionData]
     public IDictionary<string, Newtonsoft.Json.Linq.JToken> Unknown { get; init; } = new Dictionary<string, Newtonsoft.Json.Linq.JToken>();
@@ -141,8 +141,8 @@ public static class ZoneMaterializer
     {
         var frType = new FilteredElementCollector(doc).OfClass(typeof(FilledRegionType))
             .Cast<FilledRegionType>().First();
-        var existing = ReadExisting(doc, view, record, zone, TakeoffCarriers.RoleRoomRegion);
-        var existingHeld = ReadExisting(doc, view, record, zone, TakeoffCarriers.RoleHeldResidue);
+        var existing = ReadExisting(doc, view, record, zone, TakeoffRecords.RoleRoomRegion);
+        var existingHeld = ReadExisting(doc, view, record, zone, TakeoffRecords.RoleHeldResidue);
         bool firstRun = existing.Count == 0 && existingHeld.Count == 0;
         var rebind = Rebind(accepted, existing);
         var failures = new List<string>();
@@ -156,7 +156,7 @@ public static class ZoneMaterializer
                 var loops = Kernel.ToLoops(room.Polygon, room.Holes, elevation);
                 if (loops.Count == 0) continue;   // under 1 sf: nothing to draw
                 var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
-                record.Regions.Add(region.UniqueId, new(TakeoffCarriers.RoleRoomRegion, new RoomFields(Type: "hall"),
+                record.Regions.Add(region.UniqueId, new(TakeoffRecords.RoleRoomRegion, new RoomFields(Type: "hall"),
                     new RegionProvenance(zone, runId, room.Id, room.RawSqft)
                         { Flags = room.Flags.ToList(), Partition = room.Partition }));
                 createdRegions.Add(region);
@@ -177,7 +177,7 @@ public static class ZoneMaterializer
                     var loops = Kernel.ToLoops(residue.Polygon, residue.Holes, elevation);
                     if (loops.Count == 0) continue;   // under 1 sf: nothing to draw
                     var region = FilledRegion.Create(doc, frType.Id, view.Id, loops);
-                    record.Regions.Add(region.UniqueId, new(TakeoffCarriers.RoleHeldResidue, new RoomFields(),
+                    record.Regions.Add(region.UniqueId, new(TakeoffRecords.RoleHeldResidue, new RoomFields(),
                         new RegionProvenance(zone, runId, residue.Id, residue.RawSqft) { Partition = residue.Partition }));
                     heldDrawn++;
                 }

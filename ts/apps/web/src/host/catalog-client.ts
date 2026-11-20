@@ -61,7 +61,7 @@ export function opResponseSchema(key: string): Promise<z.ZodType> {
   if (!decoder) {
     decoder = Promise.all([
       import("@pe/host-contracts/catalog"),
-      import("@pe/host-contracts/operation-types"),
+      import("@pe/mcps/product-operations"),
       import("@pe/host-contracts/decoders"),
     ]).then(([{ hostOpCatalog }, { tsOnlyOperationSchemas }, { effectDecoder }]) => {
       if (Object.hasOwn(tsOnlyOperationSchemas, key))

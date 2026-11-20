@@ -9,7 +9,7 @@ export const productAssemblyPaths = {
   contracts: "ts/packages/mcps/src/pea/product-contracts.generated.ts",
   guides: "ts/packages/mcps/src/pea/guides.generated.ts",
   executors: "ts/apps/host/src/product-executors.generated.ts",
-  operations: "ts/packages/host-contracts/src/generated/product-operations.generated.ts",
+  operations: "ts/packages/mcps/src/pea/product-operations.generated.ts",
   tutorial: "ts/apps/web/src/route/tutorial-products.generated.ts",
 };
 
@@ -61,34 +61,24 @@ export function renderProductAssembly(checkout: string) {
   const gateways = rows.flatMap(({ host }) =>
     host && Object.hasOwn(host.exports ?? {}, "./gateway") ? [host.name] : [],
   );
-  // Each product contributes a self-contained schema module. Project source into the protocol
-  // package so it keeps key and codec types without a workspace dependency back on a product.
-  const operations = rows.flatMap(({ id, contract }) => {
-    if (!contract || !Object.hasOwn(contract.exports ?? {}, "./local-operations")) return [];
-    const file = join(root, id, "contract/src/local-operations.ts");
-    return [
-      readFileSync(file, "utf8")
-        .replaceAll("\r\n", "\n")
-        .split("\n")
-        .filter((line) => !line.startsWith("import ") && !line.startsWith("export type "))
-        .map((line) => line.replace(/^export /, ""))
-        .join("\n"),
-    ];
-  });
-  const local = operations.map((_, index) => `local${index}`);
+  const operations = rows.flatMap(({ contract }) =>
+    contract && Object.hasOwn(contract.exports ?? {}, "./local-operations") ? [contract.name] : [],
+  );
   const names = (values: (string | undefined)[]) =>
     [...new Set(values.filter((name) => name !== undefined))].sort();
   return {
     outputs: {
       [productAssemblyPaths.operations]: source(
-        'import { Schema } from "effect";',
-        'import type { HostLocalCatalogEntry } from "../operation-types.ts";',
+        'import { builtinLocalCatalog, builtinLocalSchemas, isHostOperationKey, type AnyOperationKey, type HostLocalCatalogEntry, type TsOnlyOperationKey, type TsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";',
         ...operations.map(
-          (body, index) =>
-            `const local${index} = (() => {\n${body}\nreturn { localOperationSchemas, localOperationCatalog };\n})();`,
+          (name, index) =>
+            `import { localOperationCatalog as catalog${index}, localOperationSchemas as schemas${index} } from "${name}/local-operations";`,
         ),
-        `export const productOperationCatalog = [${spread(local.map((name) => name + ".localOperationCatalog"))}];`,
-        `export const productOperationSchemas = { ${spread(local.map((name) => name + ".localOperationSchemas"))} };`,
+        // The annotation is the completeness check: a product that declares keys and is not spread here fails to compile.
+        `export const tsOnlyOperationSchemas: TsOnlyOperationSchemas = { ...builtinLocalSchemas, ${spread(operations.map((_, index) => `schemas${index}`))} };`,
+        `export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [${spread([...operations.map((_, index) => `catalog${index}`), "builtinLocalCatalog"])}];`,
+        "export const isTsOnlyOperationKey = (key: string): key is TsOnlyOperationKey => Object.hasOwn(tsOnlyOperationSchemas, key);",
+        "export const isAnyOperationKey = (key: string): key is AnyOperationKey => isHostOperationKey(key) || isTsOnlyOperationKey(key);",
       ),
       [productAssemblyPaths.tutorial]: source(
         'import type { ProductDeclaration } from "@pe/agent-contracts/product";',
@@ -106,6 +96,7 @@ export function renderProductAssembly(checkout: string) {
         'import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";',
         'import type { DocumentRef, Tool } from "@pe/agent-contracts";',
         'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
+        'import { tsOnlyOperationCatalog } from "./product-operations.generated.ts";',
         ...contractImports,
         ...declared.map(
           ({ contract }, i) =>
@@ -120,7 +111,7 @@ export function renderProductAssembly(checkout: string) {
         "  return { ...action, native: [...new Set([...action.native, ...products.flatMap(product => product.sheetWrites?.native?.[phase] ?? [])])] };",
         "};",
         `export const commands = { ${spread(commands)}, [SHEET_COMMANDS.plan]: sheet("plan"), [SHEET_COMMANDS.apply]: sheet("apply") };`,
-        "export const hostActions = withHostActions(commands);",
+        "export const hostActions = withHostActions(commands, tsOnlyOperationCatalog);",
         "export type SemanticActionKey = keyof typeof commands;",
         "export type HostActionKey = keyof typeof hostActions;",
         "export const commandTarget = (key: string, input: Record<string, unknown>, document?: DocumentRef) =>",
@@ -133,6 +124,7 @@ export function renderProductAssembly(checkout: string) {
         'import { createPeCatalog, type PeCatalog } from "@pe/agent-contracts/pe-api";',
         'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
         'import { hostActions } from "./product-actions.generated.ts";',
+        'import { tsOnlyOperationCatalog } from "./product-operations.generated.ts";',
         ...contractImports,
         ...["callPolicies", "reads"].map(
           (key) => `const ${key} = [${products.join(", ")}].map(product => product.${key});`,
@@ -144,7 +136,7 @@ export function renderProductAssembly(checkout: string) {
         "const catalog = createPeCatalog(hostActions, {",
         "  inputs: Object.assign({}, ...reads.map(read => read.inputs)),",
         '  help: reads.map(read => read.help).filter(Boolean).join(" "),',
-        "}, Object.assign({}, ...callPolicies), http);",
+        "}, Object.assign({}, ...callPolicies), http, tsOnlyOperationCatalog);",
         ...[
           "peRoutes",
           "linkedCatalog",

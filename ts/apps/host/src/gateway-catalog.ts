@@ -7,7 +7,7 @@ import {
   type Principal,
 } from "@pe/agent-contracts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
-import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { invokeBridge } from "./bridge.ts";
 import { type RevitBridge } from "@pe/host-internal/bridge";
 import { refused } from "@pe/host-internal/command-executor";
