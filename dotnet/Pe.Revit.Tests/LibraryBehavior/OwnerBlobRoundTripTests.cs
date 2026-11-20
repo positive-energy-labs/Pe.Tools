@@ -84,14 +84,14 @@ public sealed class OwnerBlobRoundTripTests {
     }
 
     [Test]
-    public void Rooms_applies_replacement_of_a_future_envelope_and_keeps_its_bytes(UIApplication ui) =>
-        RoomsAppliesReplacement(ui, newerEnvelope: true);
+    public void Rooms_refuses_replacement_of_a_future_envelope_and_keeps_its_bytes(UIApplication ui) =>
+        CheckUnreadableRoomsRecord(ui, newerEnvelope: true);
 
     [Test]
     public void Rooms_applies_replacement_of_malformed_owner_data_and_keeps_its_bytes(UIApplication ui) =>
-        RoomsAppliesReplacement(ui, newerEnvelope: false);
+        CheckUnreadableRoomsRecord(ui, newerEnvelope: false);
 
-    private static void RoomsAppliesReplacement(UIApplication ui, bool newerEnvelope) {
+    private static void CheckUnreadableRoomsRecord(UIApplication ui, bool newerEnvelope) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
         string? path = null;
         var owner = RoomsRegionRecord.Owner;
@@ -116,12 +116,32 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(snapshot.Unreadable!.Single().Reason, Does.Contain(newerEnvelope ? "version" : "regions map"));
             Assert.That(Raw(document, owner), Is.EqualTo(planted));
             using var isolated = new OwnerBlobRecoveryFixture();
-            var evidence = TakeoffCarriers.Replacements(document).Regions!;
+            var replacement = TakeoffCarriers.Replacements(document).Regions;
             var reported = snapshot.Unreadable.Single().Reason;
+            var draw = new RoomsDrawRequest(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Recovered");
+            if (newerEnvelope) {
+                Assert.That(replacement, Is.Null);
+                Assert.That(reported, Does.Contain("a newer Pe wrote").And.Contain("update Pe").And.Not.Contain("rooms.draw"));
+                void AssertRefused(TestDelegate action) =>
+                    Assert.That(action, Throws.InvalidOperationException.With.Message.EqualTo(reported));
+                AssertRefused(() => Rooms.Trace(document, new(viewId)));
+                AssertRefused(() => Rooms.Partition(document, new(viewId)));
+                AssertRefused(() => Rooms.Write(document, new([new("unavailable", Name: "Office")])));
+                using (var tx = new Transaction(document, "Try to replace newer Rooms record")) {
+                    Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                    AssertRefused(() => Rooms.Draw(document, draw));
+                    Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+                }
+                Assert.That(Raw(document, owner), Is.EqualTo(planted));
+                Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+                return;
+            }
+
+            Assert.That(replacement, Is.Not.Null);
+            var evidence = replacement!;
             Assert.That(reported, Does.StartWith(evidence.Reason).And.Contain("rooms.draw"));
             Assert.That(() => Rooms.Trace(document, new(viewId)), Throws.InvalidOperationException.With.Message.EqualTo(reported));
             Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
-            var draw = new RoomsDrawRequest(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Recovered");
             Assert.That(() => Rooms.Partition(document, new(viewId)),
                 Throws.InvalidOperationException.With.Message.Contains(evidence.Reason));
             Assert.That(() => Rooms.Write(document, new([new("unavailable", Name: "Office")], evidence)),
