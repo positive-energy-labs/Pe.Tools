@@ -1,4 +1,4 @@
-import { schemaOf, type Domain, type Home, type SheetBinding } from "./slots/sheet.ts";
+import { schemaOf, type Domain, type Placement, type SheetBinding } from "./slots/sheet.ts";
 import { type SettingTier } from "./tiered-setting.ts";
 export { settingLayer } from "./slots/sheet.ts";
 
@@ -9,7 +9,7 @@ export type SettingDeclaration = {
   label: string;
   default: unknown;
   domain: Domain;
-  home: Extract<Home, { at: "setting" }>;
+  home: Extract<Placement, { at: "setting" }>;
 };
 export type SettingOwner = {
   readonly bindings: readonly SettingDeclaration[];

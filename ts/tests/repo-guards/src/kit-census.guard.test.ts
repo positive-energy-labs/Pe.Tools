@@ -412,7 +412,7 @@ const sources = ["apps", "packages"]
   );
 for (const product of readdirSync(join(ROOT, "products"))) {
   const web = `products/${product}/web`;
-  sources.push(...walk(join(ROOT, web), web));
+  if (existsSync(join(ROOT, web))) sources.push(...walk(join(ROOT, web), web));
 }
 for (const path of RULES.flatMap((rule) => rule.roots))
   if (!sources.includes(path) && existsSync(join(ROOT, path))) sources.push(path);

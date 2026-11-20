@@ -4,7 +4,10 @@ import { routeFolderCandidates } from "@pe/web/route-startup";
 import { ROOT } from "./import-census.ts";
 
 export const productWebDirectories = () =>
-  readdirSync(join(ROOT, "products")).map((product) => join(ROOT, "products", product, "web"));
+  readdirSync(join(ROOT, "products"))
+    .map((product) => join(ROOT, "products", product, "web"))
+    // A product may be declared before its screen exists.
+    .filter(existsSync);
 export const routeModules = () =>
   routeFolderCandidates(join(ROOT, ".."))
     .map((dir) => join(dir, "route.ts"))

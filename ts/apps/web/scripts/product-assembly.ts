@@ -82,7 +82,13 @@ function products(checkout: string) {
       // from that one value. A declaration is in no app until its package exports it.
       declared: Object.hasOwn(row.contract?.exports ?? {}, "./product"),
       implemented: Object.hasOwn(row.host?.exports ?? {}, "./product"),
-    }));
+    }))
+    .map((row) => {
+      // A declared command with no host body would reach Pea's table with no executor.
+      if (row.declared !== row.implemented)
+        throw Error(`Product ${row.id}: the contract and the host must both export ./product`);
+      return row;
+    });
 }
 
 function importOf(pkg: Package, value: Reference, alias: string) {

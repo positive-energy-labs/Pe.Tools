@@ -1,0 +1,19 @@
+{
+  "name": "@pe/rooms-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {},
+  "scripts": {
+    "check": "vp exec tsc --noEmit"
+  },
+  "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "typescript": "^6.0.3",
+    "vite-plus": "catalog:"
+  }
+}
