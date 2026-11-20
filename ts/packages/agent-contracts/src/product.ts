@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
-import { entities, ownerBlobs } from "./generated/native-homes.generated.ts";
+import { entities, machineFiles, ownerBlobs } from "./generated/native-homes.generated.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
@@ -48,8 +48,7 @@ export type Home<Takes extends CellKey = CellKey> = {
   readonly place: (cell: string) => Placement;
 };
 /**
- * A home C# declares and writes (ruling 4): its generated handle, never a restated name. Nothing
- * exported makes one; S8a adds the reader of its generated table here, as `handle()` reads K1's.
+ * A home C# declares and writes (ruling 4), identified by its generated handle.
  */
 export type NativeHome<Prefix extends string> = {
   readonly [made]: "native";
@@ -62,6 +61,10 @@ export const ownerBlob = (name: keyof typeof ownerBlobs): NativeHome<"owner-blob
 export const entity = (name: keyof typeof entities): NativeHome<"entity"> => ({
   [made]: "native",
   key: entities[name],
+});
+export const machineFileHandle = (name: keyof typeof machineFiles): NativeHome<"machine-file"> => ({
+  [made]: "native",
+  key: machineFiles[name],
 });
 
 /*

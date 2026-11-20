@@ -13,6 +13,9 @@ public enum StoredPolicy { Keep, Discard }
 
 /// <summary>ADR 0039's C# boundary. Notices share the TS store's wire format and notice feed.</summary>
 public static class StoredFile {
+    [NativeHome("modelRecovery", "machine-file")]
+    private const string ModelRecoveryDirectory = "model-recovery";
+
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool MoveFileEx(string existing, string destination, uint flags);
@@ -64,7 +67,7 @@ public static class StoredFile {
         var bytes = ModelRecordBytes(raw);
         var sha256 = Hash(bytes);
         var suffix = bytes.Length > 0 && bytes[0] == 0xff ? ".utf16le" : ".txt";
-        var path = Path.GetFullPath(Path.Combine(stateRoot, "model-recovery", "owner-" + Uri.EscapeDataString(owner), sha256 + suffix));
+        var path = Path.GetFullPath(Path.Combine(stateRoot, ModelRecoveryDirectory, "owner-" + Uri.EscapeDataString(owner), sha256 + suffix));
         if (!File.Exists(path)) {
             try { WriteAtomic(path, bytes); }
             catch (IOException) when (File.Exists(path)) { }

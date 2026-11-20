@@ -5,13 +5,23 @@ using Autodesk.Revit.DB.Mechanical;
 using Pe.Revit.Failures;
 using Pe.Revit.Parameters;
 using Pe.Revit.Tasks;
+using Pe.Shared.Product;
 using Pe.Shared.RevitData;
 using Pe.Shared.RevitData.Ducts;
 using Pe.Shared.RevitData.Serialization;
 using Serilog;
 using System.Globalization;
+using static Pe.Revit.Global.Lib.Mep.DuctLossEntities;
 
 namespace Pe.Revit.Global.Lib.Mep;
+
+// These read and write identifiers can be inspected without initializing Revit API state.
+internal static class DuctLossEntities {
+    [NativeHome("specificCoefficient", "entity")]
+    internal static readonly Guid SpecificCoefficient = new("5a598293-1504-46cc-a9c0-de55c82848b9");
+    [NativeHome("specificLoss", "entity")]
+    internal static readonly Guid SpecificLoss = new("46245996-eebb-4536-ac17-9c1cd917d8cf");
+}
 
 /// <summary>
 ///     The Revit half of `ducts.apply`. Plans every write first (preview stops there, no transaction), then follows
@@ -24,8 +34,6 @@ namespace Pe.Revit.Global.Lib.Mep;
 /// </summary>
 public static class DuctApplier {
     private static readonly Guid NotDefined = new("76eff5da-2e71-45f7-b940-cc5716328ba0");
-    private static readonly Guid SpecificCoefficient = new("5a598293-1504-46cc-a9c0-de55c82848b9");
-    private static readonly Guid SpecificLoss = new("46245996-eebb-4536-ac17-9c1cd917d8cf");
     private static readonly Guid AshraeTable = new("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19");
 
     // The entity fields of Revit's servers (campaign s6_schemas, V2 e1_elbowpd). PressureLoss is internal units.

@@ -46,6 +46,7 @@ public sealed record DuctLossResult(double VelocityPressureInWg, double Coeffici
     ///     because Revit's server API requires it (ADR 0032 storage amendment, rule 7). The GUID and name are the
     ///     schema's; the schema's one text field holds the envelope.
     /// </summary>
+    [Pe.Shared.Product.NativeHome("ductLossResults", "entity")]
     public static readonly OwnerDescriptor Owner = new("duct-loss-results", 1,
         new Guid("5e1f0c0e-7e10-4c0e-9e1f-0000c0ef0003"), "PeDuctLossResults",
         "Host-priced coefficients and velocity-pressure bases. Reapply from Pe when the basis changes.");
@@ -142,6 +143,7 @@ public sealed record DuctRoleRecord(string Role, DateTimeOffset RuledAt);
 public sealed record DuctLossStore {
     public const int CurrentVersion = 3;
 
+    [Pe.Shared.Product.NativeHome("ductLosses")]
     public static readonly OwnerDescriptor Owner = new("duct-losses", CurrentVersion,
         new Guid("91e80aa7-f842-43ac-adbe-9b1f6a40c2d2"), "_PE_DuctLosses", "Versioned Pe.Tools duct loss provenance (ducts.apply).") { ValidateData = read => Read(read).Refusal };
 

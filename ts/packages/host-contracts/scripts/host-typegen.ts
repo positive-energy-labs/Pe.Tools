@@ -96,6 +96,7 @@ type CatalogConstants = Record<string, Record<string, unknown>>;
 let catalogSource: string;
 let operations: CatalogEntry[];
 let constants: CatalogConstants = {};
+let nativeHomes: Record<string, Record<string, string>> | undefined;
 
 if (catalogPath) {
   // Offline lane: the catalog file is `pe-dev ops-catalog` output. Deterministic — a missing
@@ -108,7 +109,13 @@ if (catalogPath) {
     );
     process.exit(1);
   }
-  const catalog = JSON.parse(raw) as { operations: CatalogEntry[]; constants?: CatalogConstants };
+  const catalog = JSON.parse(raw) as {
+    operations: CatalogEntry[];
+    constants?: CatalogConstants;
+    nativeHomes?: typeof nativeHomes;
+  };
+  nativeHomes = catalog.nativeHomes;
+  if (!nativeHomes) throw Error(`host-typegen: ${catalogPath} contains no native home table`);
   operations = [...catalog.operations].sort((a, b) => a.key.localeCompare(b.key));
   constants = catalog.constants ?? {};
   if (operations.length === 0) {
@@ -283,11 +290,16 @@ const catalogOutput = [
   )};`,
   "",
 ].join("\n");
-const outputs = [
+const outputs: [string, string][] = [
   [outPath, output],
   [catalogOutPath, catalogOutput],
   [resolve(dirname(outPath), "native-effect.generated.ts"), generateNativeEffect(operations)],
-] as const;
+];
+if (nativeHomes)
+  outputs.push([
+    resolve(dirname(outPath), "native-homes.generated.json"),
+    JSON.stringify(nativeHomes, null, 2) + "\n",
+  ]);
 
 if (checkMode) {
   // Windows checkouts may carry CRLF (git autocrlf); the contract is content, not EOLs.
@@ -314,6 +326,6 @@ if (checkMode) {
 for (const [path, content] of outputs) {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, content, "utf8");
-  console.log(`Wrote ${operations.length} operations to ${path}`);
+  console.log(`Wrote ${path}`);
 }
 if (resolve(outPath) === DEFAULT_OUT) regenerateCommandTable(false);
