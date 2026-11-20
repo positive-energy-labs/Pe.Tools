@@ -51,7 +51,7 @@ export function unitRoles(
     const node = nodes.get(id);
     const ruling = node ? edit[elementSubject(node)]?.role : undefined;
     if (ruling) {
-      const stored = snapshot.store?.roles?.[String(id)]?.role;
+      const stored = node && snapshot.store?.roles?.[node.uniqueId]?.role;
       out.set(
         id,
         stored === ruling

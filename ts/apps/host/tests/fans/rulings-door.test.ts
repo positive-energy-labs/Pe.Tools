@@ -123,7 +123,7 @@ test.each([snapshot.slots.requiredEsp, null])(
 );
 
 const wholeStore = (verdicts: Record<string, unknown>) => ({
-  version: 2,
+  version: 3,
   rules: {},
   instances: {},
   terminals: {},

@@ -16,7 +16,7 @@ public static class EnclosureDeclaration {
     /// <summary>Stable carrier identity. Changing the GUID orphans deployed models — never reuse.</summary>
     public static readonly OwnerDescriptor Owner = new("partition-enclosure", 1,
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9006"), "_PE_PartitionEnclosure",
-        "Pe partition enclosure declaration (which categories and DWG layers draw enclosure).");
+        "Pe partition enclosure declaration (which categories and DWG layers draw enclosure).") { ValidateData = read => Parse(read).Refusal };
 
     // An unknown key is a read error, not a key to drop on the next write (ADR 0032 storage amendment, rule 2).
     private static readonly JsonSerializer Json = JsonSerializer.Create(new JsonSerializerSettings {
@@ -53,9 +53,8 @@ public static class EnclosureDeclaration {
             : (Enclosure.Default, "default: " + parsed.Refusal);
     }
 
-    /// <summary>Writes a declaration. Caller owns the transaction. A stored blob this build cannot read is never written over.</summary>
+    /// <summary>Writes a declaration. The caller owns the transaction.</summary>
     public static void Write(Document document, Enclosure enclosure) {
-        _ = Parse(OwnerBlobStore.Read(document, Owner)).OrThrow();
         _ = OwnerBlobStore.Write(document, Owner, JObject.FromObject(Declared.From(enclosure), Json));
     }
 

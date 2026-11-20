@@ -258,9 +258,9 @@ export namespace DuctsApply {
      * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
-     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
-     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
+     * Element maps use Revit UniqueId. Rules use authored rule keys and Verdicts use issue or finding IDs.
+     * Older envelopes are unreadable. Only explicit replacement can supersede one.
+     *
      *
      */
     export interface DuctLossStore {
@@ -349,18 +349,20 @@ export namespace DuctsApply {
      */
     export interface DuctStoreDeletes {
       rules?: string[];
-      instances?: number[];
-      terminals?: number[];
-      terminalFlows?: number[];
-      equipmentFlows?: number[];
+      instances?: string[];
+      terminals?: string[];
+      terminalFlows?: string[];
+      equipmentFlows?: string[];
       verdicts?: string[];
-      roles?: number[];
+      roles?: string[];
     }
   }
   export namespace Res {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     /**
      * StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
-     * workshared document: what the commit will borrow.
+     * workshared document: what the commit will borrow. Replacement is set on preview when the old store is unreadable.
      *
      */
     export interface Response {
@@ -370,12 +372,14 @@ export namespace DuctsApply {
       systemsAfter?: DuctSystem[] | null;
       storeRevision: number;
       worksharing?: null | WorksharingDisclosure;
+      replacement?: null | OwnerBlobReplacement;
     }
     /**
      * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
      * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
      * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
-     * (already holds the value). Before and After are display text; "none" is no entry. ElementLabel and UniqueId identify an extant target;
+     * (already holds the value). Before and After are display text; "none" is no entry. UniqueId is the durable key.
+     * Id and ElementLabel identify an extant native target;
      * Parameter and Scope name its native setting and owner. Changes expands a target into parameter review rows without
      * multiplying execution targets or counts. ReportedPressureDropInWg is effective pressure, not a stored setting.
      *
@@ -454,6 +458,12 @@ export namespace DuctsApply {
       name: string;
       status: string;
       owner?: null | string;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
 }
@@ -537,9 +547,9 @@ export namespace DuctsApplyPlan {
      * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
-     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
-     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
+     * Element maps use Revit UniqueId. Rules use authored rule keys and Verdicts use issue or finding IDs.
+     * Older envelopes are unreadable. Only explicit replacement can supersede one.
+     *
      *
      */
     export interface DuctLossStore {
@@ -628,18 +638,20 @@ export namespace DuctsApplyPlan {
      */
     export interface DuctStoreDeletes {
       rules?: string[];
-      instances?: number[];
-      terminals?: number[];
-      terminalFlows?: number[];
-      equipmentFlows?: number[];
+      instances?: string[];
+      terminals?: string[];
+      terminalFlows?: string[];
+      equipmentFlows?: string[];
       verdicts?: string[];
-      roles?: number[];
+      roles?: string[];
     }
   }
   export namespace Res {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     /**
      * StoreRevision is the store's WorkRevision after this call (unchanged on preview). Worksharing is set on a preview of a
-     * workshared document: what the commit will borrow.
+     * workshared document: what the commit will borrow. Replacement is set on preview when the old store is unreadable.
      *
      */
     export interface Response {
@@ -649,12 +661,14 @@ export namespace DuctsApplyPlan {
       systemsAfter?: DuctSystem[] | null;
       storeRevision: number;
       worksharing?: null | WorksharingDisclosure;
+      replacement?: null | OwnerBlobReplacement;
     }
     /**
      * One target's outcome. Kind: fitting, terminal, component, equipment, terminal-flow, equipment-flow, store, and the
      * store entries a write changes: slot (Key names the slot), verdict (Key is the issue or finding id, Id its first
      * element) and role (Id is the unit). Outcome: planned (preview), written, refused (Reason says why), unchanged
-     * (already holds the value). Before and After are display text; "none" is no entry. ElementLabel and UniqueId identify an extant target;
+     * (already holds the value). Before and After are display text; "none" is no entry. UniqueId is the durable key.
+     * Id and ElementLabel identify an extant native target;
      * Parameter and Scope name its native setting and owner. Changes expands a target into parameter review rows without
      * multiplying execution targets or counts. ReportedPressureDropInWg is effective pressure, not a stored setting.
      *
@@ -733,6 +747,12 @@ export namespace DuctsApplyPlan {
       name: string;
       status: string;
       owner?: null | string;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
 }
@@ -1296,6 +1316,7 @@ export namespace DuctsSnapshotRoster {
       | "no-terminal-flow"
       | "high-velocity";
     export type DuctParameterOwnerKind = "instance" | "type";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
     export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
     export type FanBlockerKind =
       | "open-end"
@@ -1313,7 +1334,7 @@ export namespace DuctsSnapshotRoster {
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
-     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     * the blob is unreadable and StoreReplacement identifies the bytes a later apply would preserve.
      * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
      * FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
      *
@@ -1339,6 +1360,7 @@ export namespace DuctsSnapshotRoster {
       tolerances?: null | DuctHealthTolerances;
       reach?: null | DuctReach;
       parameterCohorts?: DuctFanParameterCohort[] | null;
+      storeReplacement?: null | OwnerBlobReplacement;
       vocabulary: DuctFanVocabulary;
     }
     /**
@@ -1671,9 +1693,9 @@ export namespace DuctsSnapshotRoster {
      * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
-     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
-     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
+     * Element maps use Revit UniqueId. Rules use authored rule keys and Verdicts use issue or finding IDs.
+     * Older envelopes are unreadable. Only explicit replacement can supersede one.
+     *
      *
      */
     export interface DuctLossStore {
@@ -1872,6 +1894,12 @@ export namespace DuctsSnapshotRoster {
     export interface DuctParameterMember {
       elementId: number;
       uniqueId: string;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
     /**
      * Native words published in the snapshot catalog, projected by host-typegen.
@@ -1981,6 +2009,7 @@ export namespace DuctsSnapshotWalk {
       | "no-terminal-flow"
       | "high-velocity";
     export type DuctParameterOwnerKind = "instance" | "type";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
     export type DuctUnitKind = "fan-coil" | "air-handler" | "erv" | "muas" | "dehumidifier" | "other";
     export type FanBlockerKind =
       | "open-end"
@@ -1998,7 +2027,7 @@ export namespace DuctsSnapshotWalk {
 
     /**
      * Store is Pe's `_PE_DuctLosses` provenance blob, absent when the model has none. StoreError is set instead when
-     * the blob is unreadable or another version (fail-closed: ducts.apply refuses to overwrite it).
+     * the blob is unreadable and StoreReplacement identifies the bytes a later apply would preserve.
      * AirflowCandidates are the air flow parameters the terminals carry, the picker for the TerminalFlow slot;
      * FanFlowCandidates the same over HVAC equipment, the picker for the FanFlow slot (coverage per group the unit roots).
      *
@@ -2024,6 +2053,7 @@ export namespace DuctsSnapshotWalk {
       tolerances?: null | DuctHealthTolerances;
       reach?: null | DuctReach;
       parameterCohorts?: DuctFanParameterCohort[] | null;
+      storeReplacement?: null | OwnerBlobReplacement;
       vocabulary: DuctFanVocabulary;
     }
     /**
@@ -2356,9 +2386,9 @@ export namespace DuctsSnapshotWalk {
      * Pe's provenance for duct losses: one owner blob in the hidden Project Information text parameter
      * `_PE_DuctLosses` (pressure-drop ledger: never extensible storage). WorkRevision counts applies; a request
      * carrying an older revision than the model holds is stale. Unknown keys survive read-modify-write.
-     * v2 adds the rulings that remain after healing (pressure-drop ledger, 2026-10-20): Verdicts keyed by issue or
-     * finding id, Roles keyed by unit id. They live here, not on elements and not in Pe Work; Work holds only pending
-     * edits. An envelope at any other version is refused and kept; an old un-enveloped store reads as absent.
+     * Element maps use Revit UniqueId. Rules use authored rule keys and Verdicts use issue or finding IDs.
+     * Older envelopes are unreadable. Only explicit replacement can supersede one.
+     *
      *
      */
     export interface DuctLossStore {
@@ -2557,6 +2587,12 @@ export namespace DuctsSnapshotWalk {
     export interface DuctParameterMember {
       elementId: number;
       uniqueId: string;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
     /**
      * Native words published in the snapshot catalog, projected by host-typegen.

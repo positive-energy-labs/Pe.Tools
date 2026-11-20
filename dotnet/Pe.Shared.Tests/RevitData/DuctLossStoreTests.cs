@@ -7,23 +7,26 @@ namespace Pe.Shared.Tests.RevitData;
 /// <summary>The `_PE_DuctLosses` blob: round-trips in the owner envelope, keeps unknown keys, and fails closed on any other shape or version.</summary>
 [TestFixture]
 public sealed class DuctLossStoreTests {
+    private const string Elbow = "5191cd54-1806-4a9d-8e57-bb8a93975f4a-0066fcbb";
+    private const string Terminal = "5191cd54-1806-4a9d-8e57-bb8a93975f4a-005d60ca";
+    private const string Unit = "5191cd54-1806-4a9d-8e57-bb8a93975f4a-009385d7";
     private static readonly DateTimeOffset At = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
 
     private static OwnerValue<DuctLossStore> Read(string? stored) => DuctLossStore.Read(OwnerBlob.Decode(DuctLossStore.Owner, stored));
 
-    private static string Stored(string data, int version = 2) => $$"""{"owner":"duct-losses","version":{{version}},"data":{{data}}}""";
+    private static string Stored(string data, int version = DuctLossStore.CurrentVersion) => $$"""{"owner":"duct-losses","version":{{version}},"data":{{data}}}""";
 
     [Test]
     public void Round_trips_every_field() {
         var store = new DuctLossStore {
             Version = DuctLossStore.CurrentVersion,
             Rules = new() { ["Round Elbow:Standard|r/D 1.0"] = new DuctRuleChoice("CD3-1") },
-            Instances = new() { [6749371] = new DuctInstanceRecord("SD4-1", "Ao/A1=0.5", 0.25, At) },
-            Terminals = new() { [6119626] = new DuctDropRecord(0.05, "catalog", At) },
-            TerminalFlows = new() { [6119626] = new DuctFlowRecord(120, "load-preview:FC-17", At, "revit:Flow") },
-            EquipmentFlows = new() { [9668311] = new DuctFlowRecord(1800, "submittal p. 3", At, "Design Fan Flow") },
+            Instances = new() { [Elbow] = new DuctInstanceRecord("SD4-1", "Ao/A1=0.5", 0.25, At) },
+            Terminals = new() { [Terminal] = new DuctDropRecord(0.05, "catalog", At) },
+            TerminalFlows = new() { [Terminal] = new DuctFlowRecord(120, "load-preview:FC-17", At, "revit:Flow") },
+            EquipmentFlows = new() { [Unit] = new DuctFlowRecord(1800, "submittal p. 3", At, "Design Fan Flow") },
             Verdicts = new() { ["open-end:6119626:1"] = new DuctVerdictRecord("ignore", At) },
-            Roles = new() { [9668311] = new DuctRoleRecord("passive", At) },
+            Roles = new() { [Unit] = new DuctRoleRecord("passive", At) },
             Slots = new DuctParameterSlotOverrides(TerminalDrop: "Catalog Drop"),
             WorkRevision = 3,
             AppliedAt = At
@@ -31,26 +34,26 @@ public sealed class DuctLossStoreTests {
 
         var back = Read(store.ToJson()).Value!;
 
-        Assert.That(back.Version, Is.EqualTo(2));
+        Assert.That(back.Version, Is.EqualTo(3));
         Assert.That(back.Rules["Round Elbow:Standard|r/D 1.0"].Table, Is.EqualTo("CD3-1"));
-        Assert.That(back.Instances[6749371], Is.EqualTo(store.Instances[6749371]));
-        Assert.That(back.Terminals[6119626], Is.EqualTo(store.Terminals[6119626]));
-        Assert.That(back.TerminalFlows[6119626], Is.EqualTo(store.TerminalFlows[6119626]));
-        Assert.That(back.EquipmentFlows[9668311], Is.EqualTo(store.EquipmentFlows[9668311]));
+        Assert.That(back.Instances[Elbow], Is.EqualTo(store.Instances[Elbow]));
+        Assert.That(back.Terminals[Terminal], Is.EqualTo(store.Terminals[Terminal]));
+        Assert.That(back.TerminalFlows[Terminal], Is.EqualTo(store.TerminalFlows[Terminal]));
+        Assert.That(back.EquipmentFlows[Unit], Is.EqualTo(store.EquipmentFlows[Unit]));
         Assert.That(back.Verdicts["open-end:6119626:1"], Is.EqualTo(store.Verdicts["open-end:6119626:1"]));
-        Assert.That(back.Roles[9668311], Is.EqualTo(store.Roles[9668311]));
+        Assert.That(back.Roles[Unit], Is.EqualTo(store.Roles[Unit]));
         Assert.That(back.Slots, Is.EqualTo(store.Slots));
         Assert.That(back.WorkRevision, Is.EqualTo(3));
         Assert.That(back.AppliedAt, Is.EqualTo(At));
         Assert.That(back.ToJson(), Is.EqualTo(store.ToJson()));
-        Assert.That(store.ToJson(), Does.StartWith("""{"owner":"duct-losses","version":2,"data":{"rules":"""), "one version, in the envelope");
+        Assert.That(store.ToJson(), Does.StartWith("""{"owner":"duct-losses","version":3,"data":{"rules":"""), "one version, in the envelope");
     }
 
     [Test]
     public void A_receipt_without_a_parameter_does_not_inherit_the_store_slot() {
-        var back = Read(Stored("""{"terminalFlows":{"1":{"cfm":0,"appliedAt":"2026-10-04T12:00:00Z"}},"slots":{"terminalFlow":"Flow"}}""")).Value!;
+        var back = Read(Stored($$$"""{"terminalFlows":{"{{{Terminal}}}":{"cfm":0,"appliedAt":"2026-10-04T12:00:00Z"}},"slots":{"terminalFlow":"Flow"}}""")).Value!;
 
-        Assert.That(back.TerminalFlows[1].Parameter, Is.Null);
+        Assert.That(back.TerminalFlows[Terminal].Parameter, Is.Null);
         Assert.That(back.Slots!.TerminalFlow, Is.EqualTo("Flow"));
     }
 
@@ -83,15 +86,27 @@ public sealed class DuctLossStoreTests {
         Assert.That(written.WorkRevision, Is.EqualTo(3));
     }
 
-    [TestCase("""{"owner":"duct-losses","version":3,"data":{"workRevision":1}}""", "version 3")]
+    [TestCase("""{"owner":"duct-losses","version":4,"data":{"workRevision":1}}""", "version 4")]
     [TestCase("""{"owner":"duct-losses","version":1,"data":{"workRevision":1}}""", "version 1")]
-    [TestCase("""{"owner":"duct-losses","version":2,"data":{"version":2,"workRevision":1}}""", "belongs to the envelope")]
+    [TestCase("""{"owner":"duct-losses","version":3,"data":{"version":3,"workRevision":1}}""", "belongs to the envelope")]
     [TestCase("""{"owner":"duct-losses","version":2,""", "not strict JSON")]
     public void A_store_this_build_cannot_read_is_a_refusal(string json, string message) {
         var read = Read(json);
 
         Assert.That(read.Value, Is.Null);
         Assert.That(read.Refusal, Does.Contain(message).And.Contain("refused and kept"));
+    }
+
+    [TestCase(2, OwnerBlobStatus.UnknownVersion)]
+    [TestCase(3, OwnerBlobStatus.Invalid)]
+    public void Numeric_element_keys_never_become_UniqueIds(int version, OwnerBlobStatus expected) {
+        var raw = Stored("""{"roles":{"42":{"role":"fan","ruledAt":"2026-10-04T12:00:00Z"}}}""", version);
+        var blob = OwnerBlob.Decode(DuctLossStore.Owner, raw);
+
+        Assert.That(blob.Status, Is.EqualTo(expected));
+        Assert.That(blob.Replacement?.Status, Is.EqualTo(expected));
+        Assert.That(blob.Raw, Is.EqualTo(raw));
+        Assert.That(DuctLossStore.Read(blob).Value, Is.Null);
     }
 
     [TestCase(null)]
@@ -117,7 +132,7 @@ public sealed class DuctLossStoreTests {
         Assert.That(read.Value!.Slots!.Resolve().RequiredEsp, Is.EqualTo("PE_M_Fan_ExternalStaticPressure"));
         var store = new DuctLossStore { Slots = new(RequiredEsp: "", RatedEsp: "Rated ESP") };
         var back = Read(store.ToJson()).Value!;
-        Assert.That(back.Version, Is.EqualTo(2));
+        Assert.That(back.Version, Is.EqualTo(3));
         Assert.That(back.Slots!.RequiredEsp, Is.EqualTo(""));
         Assert.That(back.Slots.Resolve().RequiredEsp, Is.Null);
         Assert.That(RevitDataJson.Serialize(back.Slots.Resolve()), Does.Contain("\"requiredEsp\":null"), "the snapshot must preserve resolved none across the wire");

@@ -56,7 +56,8 @@ public static class DuctSnapshots {
 
     private static DuctSnapshotData SnapshotCore(Document doc, DuctParameterSlotOverrides? overrides, string? labelParameter, DuctSnapshotSelector? selector, bool metadataOnly, Func<Connector, IEnumerable<Connector>> peers, Action<MechanicalSystem, string>? beforeSeedRead = null) {
         // Request slot overrides win over C# defaults; stored slots are write receipts only.
-        var (store, storeError) = DuctApplier.ReadStore(doc);
+        var blob = DuctApplier.ReadStoreBlob(doc);
+        var (store, storeError) = DuctLossStore.Read(blob);
         var slots = (overrides ?? new DuctParameterSlotOverrides()).Resolve();
         var clock = Stopwatch.StartNew();
         var readAt = DateTimeOffset.UtcNow;
@@ -130,7 +131,7 @@ public static class DuctSnapshots {
                 AirflowCandidates(RawOf(DuctNodeKind.Equipment), ungrouped),
                 Walk: walk,
                 Tolerances: tolerances,
-                ParameterCohorts: Cohorts(doc, RawOf(DuctNodeKind.Equipment), slots, readAt));
+                ParameterCohorts: Cohorts(doc, RawOf(DuctNodeKind.Equipment), slots, readAt), StoreReplacement: blob.Replacement);
         }
 
         List<DuctSegment> segments;
@@ -191,7 +192,7 @@ public static class DuctSnapshots {
             AirflowCandidates(equipment, rootedBy),
             Tolerances: tolerances,
             Reach: reach,
-            ParameterCohorts: Cohorts(doc, equipment, slots, readAt));
+            ParameterCohorts: Cohorts(doc, equipment, slots, readAt), StoreReplacement: blob.Replacement);
     }
 
     /// <summary>

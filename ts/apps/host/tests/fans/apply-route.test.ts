@@ -26,7 +26,7 @@ test.each([undefined, "CD3-22", "CD3-21"])(
       (_key, input) => ({
         ...closedFan(100, { requiredEsp: input.slots?.requiredEsp }),
         store: {
-          version: 2,
+          version: 3,
           workRevision: 0,
           instances: {},
           terminals: {},

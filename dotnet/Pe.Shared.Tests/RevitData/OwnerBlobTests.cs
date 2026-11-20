@@ -1,4 +1,8 @@
 using Newtonsoft.Json.Linq;
+using Pe.Shared.Product;
+using Pe.Shared.StorageRuntime;
+using System.Security.Cryptography;
+using System.Text;
 using NUnit.Framework;
 using Pe.Revit.Takeoff;
 using Pe.Shared.RevitData;
@@ -206,7 +210,9 @@ public sealed class OwnerBlobTests {
             }
             if (unparseableData is null) return;
             var enveloped = OwnerBlob.Decode(owner, $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{{{unparseableData}}}}""");
-            Assert.That(enveloped.Status, Is.EqualTo(OwnerBlobStatus.Ok), "the envelope reads; the owner's data does not");
+            var validatesData = owner.ValidateData is not null;
+            Assert.That(enveloped.Status, Is.EqualTo(validatesData ? OwnerBlobStatus.Invalid : OwnerBlobStatus.Ok));
+            Assert.That(enveloped.Replacement is not null, Is.EqualTo(validatesData));
             (bool HasValue, string? Refusal) parsed = default;
             Assert.That(() => parsed = read(enveloped), Throws.Nothing);
             Assert.That(parsed.HasValue, Is.False);
@@ -276,26 +282,71 @@ public sealed class OwnerBlobTests {
         Assert.That(RegionProvenance.ReadZone(OwnerBlob.Decode(RegionProvenance.Owner, null)).Value!.RunId, Is.EqualTo(Rooms.RunDrawn));
     }
 
-    // ---- the one write decision (ADR 0026 D4)
+    private static readonly JObject NewData = new() { ["a"] = 1 };
 
-    [TestCase("""{"owner":"test-owner","version":4,"data":{"fromTheFuture":true}}""", Description = "a future version")]
-    [TestCase("""{"owner":"test-owner","version":3,"data":[]}""", Description = "a broken envelope")]
-    [TestCase("""{"owner":"someone-else","version":3,"data":{}}""", Description = "another owner's envelope")]
-    [TestCase("not json", Description = "not provably old")]
-    public void A_write_never_replaces_a_blob_this_build_cannot_read(string stored) =>
-        Assert.That(() => OwnerBlob.Replace(Owner, stored, new JObject { ["a"] = 1 }),
-            Throws.InvalidOperationException.With.Message.Contains("Refusing to overwrite").And.Message.Contains("refused and kept"));
+    [TestCase("")]
+    [TestCase("backup")]
+    [TestCase("notice")]
+    public void Recovery_is_required_before_replacement_and_retries_are_idempotent(string blockedStep) {
+        var state = Directory.CreateTempSubdirectory("pe-model-recovery-").FullName;
+        try {
+            var notices = Path.Combine(state, ProductPathNames.StoredNoticesFileName);
+            var recovery = Path.Combine(state, "model-recovery");
+            if (blockedStep == "backup") File.WriteAllText(recovery, "occupied");
+            if (blockedStep == "notice") Directory.CreateDirectory(notices);
+            var raw = Stored("{\"message\":\"donn\u00e9e\"}", version: 2);
+            var modelText = raw;
+            var bytes = Encoding.UTF8.GetBytes(raw);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            var decoded = OwnerBlob.Decode(Owner, raw);
+            var backup = Path.Combine(recovery, "owner-test-owner", hash + ".txt");
+            Assert.That(decoded.Replacement, Is.EqualTo(new OwnerBlobReplacement(Owner.Owner, decoded.Status, decoded.Error!, hash)));
+            Assert.That(File.Exists(backup), Is.False, "preview leaves the backup untouched");
+            Assert.That(File.Exists(notices), Is.False, "preview posts no notice");
+
+            void Apply() => modelText = OwnerBlob.Replace(OwnerBlob.Decode(Owner, modelText), NewData,
+                (replacement, kept) => StoredFile.KeepModelRecord(state, replacement.Owner, "Fixture model",
+                    kept, replacement.Reason)) ?? modelText;
+
+            if (blockedStep.Length != 0) {
+                Assert.That(Apply, Throws.Exception);
+                Assert.That(Encoding.UTF8.GetBytes(modelText), Is.EqualTo(bytes));
+                Assert.That(File.Exists(backup), Is.EqualTo(blockedStep == "notice"), "backup precedes the notice");
+                if (blockedStep == "backup") File.Delete(recovery);
+                else Directory.Delete(notices);
+            }
+
+            Apply();
+            Assert.That(JToken.DeepEquals(OwnerBlob.Decode(Owner, modelText).Data, NewData), Is.True);
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(bytes));
+            var notice = JObject.Parse(File.ReadLines(notices).Single());
+            Assert.That((string?)notice["class"], Is.EqualTo("keep"));
+            Assert.That((string?)notice["path"], Is.EqualTo(backup));
+            Assert.That((string?)notice["sha256"], Is.EqualTo(hash));
+            Assert.That((string?)notice["place"], Does.Contain("Fixture model").And.Contain(Owner.Owner));
+
+            modelText = raw; // The model transaction may have rolled back after backup and notice.
+            Apply();
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+            Assert.That(Directory.GetFiles(recovery, "*", SearchOption.AllDirectories), Is.EqualTo(new[] { backup }));
+            Assert.That(JToken.DeepEquals(OwnerBlob.Decode(Owner, modelText).Data, NewData), Is.True);
+        } finally {
+            Directory.Delete(state, recursive: true);
+        }
+    }
 
     [TestCase(null)]
     [TestCase("")]
     [TestCase("""{"version":3,"workRevision":1}""", Description = "an old un-enveloped shape")]
     [TestCase("""{"owner":"test-owner","version":3,"data":{"a":0}}""", Description = "this owner's own envelope")]
-    public void A_write_replaces_nothing_an_old_shape_or_its_own_envelope(string? stored) =>
-        Assert.That(OwnerBlob.Replace(Owner, stored, new JObject { ["a"] = 1 }), Is.EqualTo("""{"owner":"test-owner","version":3,"data":{"a":1}}"""));
+    public void A_readable_or_absent_value_can_be_written_without_recovery(string? stored) =>
+        Assert.That(OwnerBlob.Replace(OwnerBlob.Decode(Owner, stored), NewData, (_, _) => Assert.Fail("no recovery needed")),
+            Is.EqualTo("""{"owner":"test-owner","version":3,"data":{"a":1}}"""));
 
     [Test]
     public void A_write_of_the_stored_value_is_a_no_op() =>
-        Assert.That(OwnerBlob.Replace(Owner, """{"owner":"test-owner","version":3,"data":{"a":1}}""", new JObject { ["a"] = 1 }), Is.Null);
+        Assert.That(OwnerBlob.Replace(OwnerBlob.Decode(Owner, OwnerBlob.Encode(Owner, NewData)), NewData,
+            (_, _) => Assert.Fail("no recovery needed")), Is.Null);
 
     // ---- owner shapes
 

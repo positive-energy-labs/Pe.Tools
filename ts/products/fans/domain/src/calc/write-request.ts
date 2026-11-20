@@ -185,6 +185,11 @@ export function mintWriteRequest(
       })),
     );
   }
+  const uniqueId = (id: number) => {
+    const target = nodes.get(id);
+    if (!target) throw Error(`Element ${id} is absent from the write snapshot`);
+    return target.uniqueId;
+  };
   const request: FanWriteRequest = {
     [MINTED]: true,
     slots,
@@ -195,29 +200,32 @@ export function mintWriteRequest(
     terminalFlows,
     equipmentFlows,
     store: {
-      version: 2,
-      workRevision: 0,
       ...snapshot.store,
+      version: 3,
+      workRevision: snapshot.store?.workRevision ?? 0,
       appliedAt,
       slots,
       instances: Object.fromEntries(
         fittings.map((f) => [
-          String(f.id),
+          uniqueId(f.id),
           { table: f.table, inputs: f.inputs, coefficient: f.coefficient, appliedAt },
         ]),
       ),
       terminals: Object.fromEntries(
-        terminals.map((t) => [String(t.id), { inWg: t.inWg, source: t.source, appliedAt }]),
+        [...terminals, ...components].map((t) => [
+          uniqueId(t.id),
+          { inWg: t.inWg, source: t.source, appliedAt },
+        ]),
       ),
       terminalFlows: Object.fromEntries(
         terminalFlows.map((f) => [
-          String(f.id),
+          uniqueId(f.id),
           { cfm: f.cfm, source: f.source, appliedAt, parameter: f.slot },
         ]),
       ),
       equipmentFlows: Object.fromEntries(
         equipmentFlows.map((f) => [
-          String(f.id),
+          uniqueId(f.id),
           { cfm: f.cfm, source: f.source, appliedAt, parameter: f.slot },
         ]),
       ),

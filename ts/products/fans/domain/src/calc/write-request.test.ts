@@ -195,7 +195,7 @@ it("writes exactly the scoped rule's mapped fittings and omits duct-systems ruli
   const snapshot = synthetic();
   const storedRules = { other: { table: "CD3-21" } };
   snapshot.store = {
-    version: 2,
+    version: 3,
     workRevision: 3,
     rules: storedRules,
     instances: {},
@@ -219,7 +219,9 @@ it("writes exactly the scoped rule's mapped fittings and omits duct-systems ruli
     rules,
   );
   expect(scoped.fittings).toEqual([expect.objectContaining({ id: 2 })]);
-  expect(Object.keys(scoped.store?.instances ?? {})).toEqual(["2"]);
+  expect(Object.keys(scoped.store?.instances ?? {})).toEqual([
+    snapshot.nodes.find((n) => n.id === 2)!.uniqueId,
+  ]);
   expect(scoped.store).not.toHaveProperty("rules");
   expect(scoped.store).not.toHaveProperty("verdicts");
 });
@@ -506,8 +508,10 @@ it("never derives terminal or equipment flow; only Work or run can write", () =>
   expect(request.equipmentFlows.map((f) => f.id)).toEqual([100]);
   expect(request.terminalFlows[0]!.source).toContain("Work");
   expect(request.equipmentFlows[0]!.source).toContain("run");
-  expect(request.store.terminalFlows?.["3"]?.parameter).toBe(snapshot.slots.terminalFlow);
-  expect(request.store.equipmentFlows?.["100"]?.parameter).toBe("Fan Flow");
+  expect(request.store.terminalFlows?.[terminal.uniqueId]?.parameter).toBe(
+    snapshot.slots.terminalFlow,
+  );
+  expect(request.store.equipmentFlows?.[fan.uniqueId]?.parameter).toBe("Fan Flow");
 });
 it("includes the domain accessory writes and clips every noncohort row to the sheet walk", () => {
   const p = prepared(component()),
@@ -582,7 +586,11 @@ it("refuses an authored flow slot different from the observed slot", () => {
 it("is pure with an explicit plan timestamp and preserves native slot none on the wire", () => {
   const p = prepared();
   expect(p.mint()).toEqual(p.mint());
-  expect(ductsApplyInputSchema.safeParse(p.mint()).success).toBe(true);
+  const current = p.mint();
+  expect(ductsApplyInputSchema.safeParse(current).success).toBe(true);
+  expect(
+    ductsApplyInputSchema.safeParse({ ...current, storeDeletes: { roles: ["100"] } }).success,
+  ).toBe(false);
   const none = p.mint({ ...p.context, slots: { requiredEsp: null } });
   expect(ductsApplyInputSchema.parse(none).slots?.requiredEsp).toBe("");
   expect(

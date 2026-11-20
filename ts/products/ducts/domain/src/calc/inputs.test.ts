@@ -39,9 +39,9 @@ const snapshotOf = (
   store?: object,
 ) => ({ nodes: [node, unit], segments: [], slots, store }) as never;
 const store = {
-  terminalFlows: { "1": { cfm: 150, parameter: "PE_M_Grd_AirFlow" } },
-  terminals: { "1": { inWg: 0.2 } },
-  equipmentFlows: { "2": { cfm: 800, parameter: "Design Flow" } },
+  terminalFlows: { [uid]: { cfm: 150, parameter: "PE_M_Grd_AirFlow" } },
+  terminals: { [uid]: { inWg: 0.2 } },
+  equipmentFlows: { [unit.uniqueId]: { cfm: 800, parameter: "Design Flow" } },
 };
 const drift = (snapshot: never, segment: string, id: number): string | null =>
   (
@@ -69,13 +69,15 @@ it("w4: the live Revit parameter is the value; a receipt that disagrees is drift
   expect(
     drift(
       snapshotOf(terminal(), undefined, {
-        terminalFlows: { "1": { cfm: 200, parameter: "PE_M_Grd_AirFlow" } },
+        terminalFlows: { [uid]: { cfm: 200, parameter: "PE_M_Grd_AirFlow" } },
       }),
       "flows",
       1,
     ),
   ).toBeNull();
   expect(drift(snapshotOf(terminal()), "flows", 1)).toBeNull();
+  const replacement = { ...terminal(), uniqueId: "replacement-terminal" };
+  expect(drift(snapshotOf(replacement, undefined, store), "flows", 1)).toBeNull();
 });
 
 it("D3: a receipt whose parameter no longer reads is missing, never the stored number or the firm fallback", () => {
@@ -98,9 +100,9 @@ it("D3: a receipt whose parameter no longer reads is missing, never the stored n
 it("a written zero is a value: the reader's 0 resolves 0 from the model with no drift, and an absent parameter is still missing", () => {
   // The reader's real shape: a parameter that reads 0 is a `0` fact; an absent one is a `null` fact or no drop.
   const zeros = {
-    terminalFlows: { "1": { cfm: 0, parameter: "PE_M_Grd_AirFlow" } },
-    terminals: { "1": { inWg: 0 } },
-    equipmentFlows: { "2": { cfm: 0, parameter: "Design Flow" } },
+    terminalFlows: { [uid]: { cfm: 0, parameter: "PE_M_Grd_AirFlow" } },
+    terminals: { [uid]: { inWg: 0 } },
+    equipmentFlows: { [unit.uniqueId]: { cfm: 0, parameter: "Design Flow" } },
   };
   const zeroUnit = { ...unit, facts: [{ key: "fanFlow", value: 0 }] };
   const read = {
@@ -156,8 +158,8 @@ it.each([undefined, "Old Airflow"])(
       slots,
       store: {
         slots,
-        terminalFlows: { "1": { cfm: 150, parameter } },
-        equipmentFlows: { "2": { cfm: 800, parameter } },
+        terminalFlows: { [uid]: { cfm: 150, parameter } },
+        equipmentFlows: { [unit.uniqueId]: { cfm: 800, parameter } },
       },
     } as never;
     const r = resolveInputs({ snapshot: read, firm: TEST_FIRM });
@@ -172,7 +174,7 @@ it("compares Revit Flow receipts at the connector's three-place precision", () =
   const node = { ...terminal(), flowParameter: "revit:Flow", connectors: [{ flowCfm: 150.123 }] };
   const slots = { ...TEST_SLOTS, terminalFlow: "revit:Flow" };
   const receipt = (cfm: number) => ({
-    terminalFlows: { "1": { cfm, parameter: slots.terminalFlow } },
+    terminalFlows: { [uid]: { cfm, parameter: slots.terminalFlow } },
   });
   expect(drift(snapshotOf(node, slots, receipt(150.1234)), "flows", 1)).toBeNull();
   expect(drift(snapshotOf(node, slots, receipt(150.1236)), "flows", 1)).toBe(
@@ -185,7 +187,7 @@ it.each([0, 0.00004, -0.00004])(
   (flowCfm) => {
     const node = { ...terminal(), flowParameter: "revit:Flow", connectors: [{ flowCfm }] };
     const slots = { ...TEST_SLOTS, terminalFlow: "revit:Flow" };
-    const store = { terminalFlows: { "1": { cfm: 0, parameter: slots.terminalFlow } } };
+    const store = { terminalFlows: { [uid]: { cfm: 0, parameter: slots.terminalFlow } } };
     const read = (snapshot: never) =>
       resolveInputs({ snapshot, firm: TEST_FIRM }).terminals["1"]!.cfm;
     expect(read(snapshotOf(node, slots, store))).toMatchObject({
@@ -198,7 +200,7 @@ it.each([0, 0.00004, -0.00004])(
 );
 
 it("a receipt agrees with its parameter as the reader rounds it (4 places): no drift on an untouched model", () => {
-  const wrote = { terminals: { "1": { inWg: 0.07312 } } };
+  const wrote = { terminals: { [uid]: { inWg: 0.07312 } } };
   expect(
     drift(snapshotOf(terminal({ catalogDropInWg: 0.0731 }), undefined, wrote), "terminalDrops", 1),
   ).toBeNull();
@@ -286,10 +288,10 @@ it("P25: a written terminal next to a homeless table prices the parameter and do
     connectors: [{ kind: "end", shape: "round", diameterIn: 8 }],
   };
   const { home: _home, ...homeless } = table("firm");
-  // @ts-expect-error a homeless table is no Catalogs entry
   const priced = resolveInputs({
     snapshot: snapshotOf(node, undefined, store),
     firm: TEST_FIRM,
+    // @ts-expect-error a homeless table is no Catalogs entry
     catalogs: { t: homeless },
   });
   expect(priced.terminals["1"]!.drop).toMatchObject({ value: 0.5, source: "model" });

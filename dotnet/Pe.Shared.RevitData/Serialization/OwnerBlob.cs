@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -10,8 +11,11 @@ namespace Pe.Shared.RevitData.Serialization;
 ///     blob (or, for the duct results entity, the schema Revit's API requires). Changing the GUID orphans every model
 ///     that holds the blob. Owner data never holds secrets: a hidden parameter can leak through IFC or DWG export.
 /// </summary>
-public sealed record OwnerDescriptor(string Owner, int Version, Guid Guid, string Name, string Description);
+public sealed record OwnerDescriptor(string Owner, int Version, Guid Guid, string Name, string Description) {
+    public Func<OwnerBlobRead, string?>? ValidateData { get; init; }
+}
 
+[JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
 public enum OwnerBlobStatus {
     /// <summary>
     ///     No envelope is stored: the parameter is empty, or it holds an old un-enveloped shape (valid JSON with no
@@ -25,10 +29,21 @@ public enum OwnerBlobStatus {
     UnknownVersion
 }
 
+public sealed record OwnerBlobReplacement(string Owner, OwnerBlobStatus Status, string Reason, string RawUtf8Sha256);
+
 /// <summary>A strict read of one stored blob. <see cref="Raw" /> is the stored text, unchanged; it is null only when nothing is stored.</summary>
 public sealed record OwnerBlobRead(OwnerDescriptor Owner, OwnerBlobStatus Status, JObject? Data, string? Raw, string? Error) {
-    /// <summary>ADR 0026 D4: only an absent blob or one this build read may be written over.</summary>
+    /// <summary>Whether a write can proceed without recovery.</summary>
     public bool MayOverwrite => this.Status is OwnerBlobStatus.Absent or OwnerBlobStatus.Ok;
+
+    public OwnerBlobReplacement? Replacement {
+        get {
+            if (this.Status is not (OwnerBlobStatus.Invalid or OwnerBlobStatus.UnknownVersion)) return null;
+            using var sha = SHA256.Create();
+            var hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(this.Raw!))).Replace("-", "").ToLowerInvariant();
+            return new OwnerBlobReplacement(this.Owner.Owner, this.Status, this.Error!, hash);
+        }
+    }
 }
 
 /// <summary>
@@ -76,7 +91,10 @@ public static class OwnerBlob {
             return Refused(OwnerBlobStatus.Invalid, $"belongs to owner '{(string?)storedOwner}', not '{owner.Owner}'");
         if (storedVersion.Value is not long version || version != owner.Version)
             return Refused(OwnerBlobStatus.UnknownVersion, $"is version {storedVersion}; this build reads version {owner.Version}");
-        return new OwnerBlobRead(owner, OwnerBlobStatus.Ok, data, raw, null);
+        var read = new OwnerBlobRead(owner, OwnerBlobStatus.Ok, data, raw, null);
+        return owner.ValidateData?.Invoke(read) is { } error
+            ? read with { Status = OwnerBlobStatus.Invalid, Data = null, Error = error }
+            : read;
     }
 
     /// <summary>The stored text for the data. Throws when it is over the cap or would not decode back to the same data.</summary>
@@ -91,17 +109,12 @@ public static class OwnerBlob {
         return text;
     }
 
-    /// <summary>
-    ///     The one decision every write makes (ADR 0026 D4): the text to store in place of <paramref name="storedRaw" />,
-    ///     or null when the stored text is already that. Throws when the stored text is a refusal, so a blob this
-    ///     build cannot read is never written over. An absent blob, and an old un-enveloped one, are replaced.
-    /// </summary>
-    public static string? Replace(OwnerDescriptor owner, string? storedRaw, JObject data) {
-        var stored = Decode(owner, storedRaw);
-        if (!stored.MayOverwrite)
-            throw new InvalidOperationException($"Refusing to overwrite: {stored.Error}.");
-        var text = Encode(owner, data);
-        return string.Equals(storedRaw, text, StringComparison.Ordinal) ? null : text;
+    /// <summary>Validates the next envelope and completes recovery before returning replacement text.</summary>
+    public static string? Replace(OwnerBlobRead stored, JObject data, Action<OwnerBlobReplacement, string> recover) {
+        var text = Encode(stored.Owner, data);
+        if (string.Equals(stored.Raw, text, StringComparison.Ordinal)) return null;
+        if (stored.Replacement is { } replacement) recover(replacement, stored.Raw!);
+        return text;
     }
 
     /// <summary>
@@ -124,10 +137,10 @@ public static class OwnerBlob {
 
 /// <summary>
 ///     What an owner read gives back. Both null: nothing is stored. <see cref="Refusal" /> set: the stored blob is
-///     "can't read, kept" for this reason, defaults stay in force, and no write may go over it.
+///     "can't read, kept" for this reason, and defaults stay in force until a replacement is written.
 /// </summary>
 public sealed record OwnerValue<T>(T? Value, string? Refusal) where T : class {
-    /// <summary>For a write door only: a write over a blob that cannot be read is refused by throwing its reason.</summary>
+    /// <summary>Require readable data when the caller needs it to compute a change.</summary>
     public T? OrThrow() => this.Refusal is null ? this.Value : throw new InvalidOperationException(this.Refusal);
 }
 
@@ -137,7 +150,7 @@ public sealed record OwnerValue<T>(T? Value, string? Refusal) where T : class {
 /// </summary>
 public sealed record ProjectHomePointer {
     public static readonly OwnerDescriptor Owner = new("project-home", 1,
-        new Guid("3c1f6f0e-7d0b-4a53-9a55-6f2f0f1c7a11"), "_PE_ProjectHome", "Pe.Tools project home pointer.");
+        new Guid("3c1f6f0e-7d0b-4a53-9a55-6f2f0f1c7a11"), "_PE_ProjectHome", "Pe.Tools project home pointer.") { ValidateData = read => Read(read).Refusal };
 
     private static readonly char[] Forbidden = ['\\', ':', '<', '>', '"', '|', '?', '*'];
 

@@ -1,5 +1,7 @@
 using Newtonsoft.Json.Linq;
+using Pe.Shared.Product;
 using Pe.Shared.RevitData.Serialization;
+using Pe.Shared.StorageRuntime;
 
 namespace Pe.Revit.Parameters;
 
@@ -10,8 +12,8 @@ namespace Pe.Revit.Parameters;
 ///     (the owner binds its parameter to the element's category first). Extensible Storage is banned; the duct
 ///     per-fitting results entity is the one exception, because Revit's pressure-drop server API requires it.
 ///     <para>
-///         Every write is inside the caller's transaction, refuses a stored blob this build cannot read (ADR 0026 D4:
-///         unknown is not old, so its bytes are never overwritten), and reads the written value back exactly.
+///         Every write is inside the caller's transaction, keeps unreadable bytes locally and posts a notice before
+///         replacing them, and reads the written value back exactly.
 ///     </para>
 /// </summary>
 public static class OwnerBlobStore {
@@ -30,21 +32,28 @@ public static class OwnerBlobStore {
     public static bool Write(Document document, OwnerDescriptor owner, JObject data) {
         if (!document.IsModifiable)
             throw new InvalidOperationException($"'{owner.Name}' writes require an open Revit transaction.");
-        return Write(EnsureOnProjectInformation(document, owner), owner, data);
+        return Write(EnsureOnProjectInformation(document, owner), document.Title, owner, data);
     }
 
     /// <summary>False when the value is already there. Throws when the owner's parameter is not bound on the element.</summary>
     public static bool Write(Element element, OwnerDescriptor owner, JObject data) =>
         Write(element.get_Parameter(owner.Guid)
               ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first."),
-            owner, data);
+            element.Document.Title, owner, data);
 
-    private static bool Write(Parameter parameter, OwnerDescriptor owner, JObject data) {
-        // The refusal to write over a blob this build cannot read is OwnerBlob.Replace's, where a test can reach it.
-        if (OwnerBlob.Replace(owner, parameter.AsString(), data) is not { } text)
-            return false;
+    private static bool Write(Parameter parameter, string documentTitle, OwnerDescriptor owner, JObject data) {
+        var raw = parameter.AsString();
+        var stored = OwnerBlob.Decode(owner, raw);
+        if (OwnerBlob.Replace(stored, data, (replacement, replacedRaw) => {
+            if (parameter.IsReadOnly)
+                throw new InvalidOperationException($"'{owner.Name}' is read-only.");
+            StoredFile.KeepModelRecord(ProductRuntimeLayout.Current.State.RootPath,
+                replacement.Owner, documentTitle, replacedRaw, replacement.Reason);
+        }) is not { } text) return false;
         if (parameter.IsReadOnly)
             throw new InvalidOperationException($"'{owner.Name}' is read-only.");
+        if (!string.Equals(parameter.AsString(), raw, StringComparison.Ordinal))
+            throw new InvalidOperationException($"'{owner.Name}' changed before replacement.");
         if (!parameter.Set(text))
             throw new InvalidOperationException($"Revit rejected the '{owner.Name}' value.");
         if (!string.Equals(parameter.AsString(), text, StringComparison.Ordinal))

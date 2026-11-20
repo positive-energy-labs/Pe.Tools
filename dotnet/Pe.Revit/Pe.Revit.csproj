@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pe.Shared.Product\Pe.Shared.Product.csproj" />
+    <ProjectReference Include="..\Pe.Shared.StorageRuntime\Pe.Shared.StorageRuntime.csproj" />
   </ItemGroup>
 
   <ItemGroup>
