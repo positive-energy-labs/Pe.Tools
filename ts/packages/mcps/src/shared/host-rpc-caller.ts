@@ -8,7 +8,7 @@ import {
   type DocumentRef,
   type Touched,
 } from "@pe/agent-contracts";
-import { recoverAction } from "./takeoff-action-client.ts";
+import { recoverAction } from "./action-client.ts";
 import { runCapability, CANCEL_KEY, opWrites } from "./admission.ts";
 import { Effect } from "effect";
 import { resolveHostBaseUrl } from "./host-config.ts";

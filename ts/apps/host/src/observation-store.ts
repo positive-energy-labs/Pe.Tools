@@ -14,6 +14,9 @@ export class CaptureStore extends Context.Service<CaptureStore, ObservationFiles
     directory: StateDirectory = hostState().directory(
       "host",
       hostOwnership.serviceName,
+      // Exception to "generic code names no product" (product-names guard, keptLiterals): this
+      // is the on-disk name of every machine's kept Families and schedule readings, and a rename
+      // silently drops them, a loss the owner has not ruled on. No other generic file names it.
       "takeoff-captures",
     ),
     apsCachePath = join(

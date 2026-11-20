@@ -2,7 +2,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { createRouteOwner, makeAtomRegistry } from "#/shell/owner";
 
 const admissions = vi.hoisted(() => vi.fn(async () => []));
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
+vi.mock("../../../../packages/mcps/src/shared/action-client", () => ({
   cancelRunningAdmissions: admissions,
 }));
 
