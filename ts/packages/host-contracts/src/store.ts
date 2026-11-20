@@ -231,7 +231,8 @@ function noteStored(file: string, notice: Omit<StoredNotice, "at">): void {
     // ponytail: a scan of an append-only file per notice, and no pruning;
     // prune by age when the file is measured large.
     const posted = readStoredNotices(file).some(
-      (row) => row.path === path && row.sha256 === notice.sha256,
+      (row) =>
+        row.path === path && row.sha256 === notice.sha256 && row.documentKey === notice.documentKey,
     );
     if (posted) return;
     const row: StoredNotice = {

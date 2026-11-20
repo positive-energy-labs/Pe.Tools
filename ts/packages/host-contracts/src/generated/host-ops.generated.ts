@@ -186,6 +186,7 @@ export namespace DuctsApply {
      * Consume host results in Pe's server, or freeze one coefficient for export.
      */
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     /**
      * Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.
@@ -200,6 +201,7 @@ export namespace DuctsApply {
       equipmentFlows: DuctFlowWrite[];
       store: DuctLossStore;
       storeDeletes?: null | DuctStoreDeletes;
+      replacement?: null | OwnerBlobReplacement;
     }
     /**
      * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
@@ -355,6 +357,12 @@ export namespace DuctsApply {
       equipmentFlows?: string[];
       verdicts?: string[];
       roles?: string[];
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -475,6 +483,7 @@ export namespace DuctsApplyPlan {
      * Consume host results in Pe's server, or freeze one coefficient for export.
      */
     export type DuctFittingMethod = "pe-server" | "specific-coefficient";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     /**
      * Host-priced losses, drops in in-wg and design flows in cfm. The plan opens no transaction.
@@ -489,6 +498,7 @@ export namespace DuctsApplyPlan {
       equipmentFlows: DuctFlowWrite[];
       store: DuctLossStore;
       storeDeletes?: null | DuctStoreDeletes;
+      replacement?: null | OwnerBlobReplacement;
     }
     /**
      * Parameter names the census reads, instance first and then type. RequiredEsp (in-wg) and FanFlow (CFM) on HVAC
@@ -644,6 +654,12 @@ export namespace DuctsApplyPlan {
       equipmentFlows?: string[];
       verdicts?: string[];
       roles?: string[];
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -3758,10 +3774,12 @@ export namespace RevitApplyParameterLinks {
     export type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Request {
       profile?: null | ParameterLinkProfile;
       reconcile?: boolean;
+      replacement?: null | OwnerBlobReplacement;
     }
     export interface ParameterLinkProfile {
       formatVersion?: number;
@@ -3800,6 +3818,12 @@ export namespace RevitApplyParameterLinks {
       definitionId: string;
       enabled?: boolean;
       sourceElementUniqueIds?: string[];
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -3917,10 +3941,12 @@ export namespace RevitApplyParameterLinksPreview {
     export type ParameterLinkSourceScope = "instance" | "type" | "instanceThenType";
     export type ParameterLinkRelationship = "sameElement" | "electricalEquipmentCircuits";
     export type ParameterLinkReducer = "first" | "min" | "max";
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
 
     export interface Request {
       profile?: null | ParameterLinkProfile;
       reconcile?: boolean;
+      replacement?: null | OwnerBlobReplacement;
     }
     export interface ParameterLinkProfile {
       formatVersion?: number;
@@ -3959,6 +3985,12 @@ export namespace RevitApplyParameterLinksPreview {
       definitionId: string;
       enabled?: boolean;
       sourceElementUniqueIds?: string[];
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {

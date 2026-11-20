@@ -32,7 +32,6 @@ public sealed class OwnerBlobTests {
         Assert.Multiple(() => {
             Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Ok));
             Assert.That(read.Raw, Is.EqualTo(text));
-            Assert.That(read.MayOverwrite, Is.True);
             Assert.That(OwnerBlob.Encode(Owner, read.Data!), Is.EqualTo(text), "decode then encode returns the same bytes");
         });
     }
@@ -44,7 +43,6 @@ public sealed class OwnerBlobTests {
         var read = OwnerBlob.Decode(Owner, raw);
 
         Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Absent));
-        Assert.That(read.MayOverwrite, Is.True);
         Assert.That(read.Parse(data => data), Is.EqualTo(new OwnerValue<JObject>(null, null)), "absent is neither a value nor a refusal");
     }
 
@@ -57,7 +55,6 @@ public sealed class OwnerBlobTests {
 
         Assert.Multiple(() => {
             Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Absent));
-            Assert.That(read.MayOverwrite, Is.True);
             Assert.That(read.Error, Is.Null);
             Assert.That(read.Raw, Is.EqualTo(raw));
             Assert.That(read.Parse(data => data), Is.EqualTo(new OwnerValue<JObject>(null, null)), "the owner starts from its defaults");
@@ -82,8 +79,7 @@ public sealed class OwnerBlobTests {
         Assert.Multiple(() => {
             Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.Invalid));
             Assert.That(read.Raw, Is.EqualTo(raw), "the refused bytes are handed back unchanged");
-            Assert.That(read.MayOverwrite, Is.False);
-            Assert.That(read.Error, Does.Contain("refused and kept"));
+            Assert.That(read.Error, Does.Contain("unreadable"));
             Assert.That(read.Parse(data => data).Refusal, Is.EqualTo(read.Error), "a read hands the refusal back as a value");
             Assert.That(() => read.Parse(data => data).OrThrow(), Throws.InvalidOperationException, "only a write door throws it");
         });
@@ -99,7 +95,6 @@ public sealed class OwnerBlobTests {
         Assert.Multiple(() => {
             Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.UnknownVersion));
             Assert.That(read.Raw, Is.EqualTo(raw));
-            Assert.That(read.MayOverwrite, Is.False);
             Assert.That(read.Error, Does.Contain($"version {version}").And.Contain("version 3"));
         });
     }
@@ -205,7 +200,7 @@ public sealed class OwnerBlobTests {
                 (bool HasValue, string? Refusal) result = default;
                 Assert.That(() => result = read(blob), Throws.Nothing, raw);
                 Assert.That(result.HasValue, Is.False, raw);
-                Assert.That(result.Refusal, Does.Contain("refused and kept"), raw);
+                Assert.That(result.Refusal, Does.Contain("unreadable"), raw);
                 Assert.That(blob.Raw, Is.EqualTo(raw), "the bytes are handed back unchanged");
             }
             if (unparseableData is null) return;
@@ -216,7 +211,7 @@ public sealed class OwnerBlobTests {
             (bool HasValue, string? Refusal) parsed = default;
             Assert.That(() => parsed = read(enveloped), Throws.Nothing);
             Assert.That(parsed.HasValue, Is.False);
-            Assert.That(parsed.Refusal, Does.Contain("refused and kept"));
+            Assert.That(parsed.Refusal, Does.Contain("unreadable"));
         });
     }
 
@@ -306,8 +301,10 @@ public sealed class OwnerBlobTests {
 
             void Apply() => modelText = OwnerBlob.Replace(OwnerBlob.Decode(Owner, modelText), NewData,
                 (replacement, kept) => StoredFile.KeepModelRecord(state, replacement.Owner, "Fixture model",
-                    kept, replacement.Reason)) ?? modelText;
+                    kept, replacement.Reason), decoded.Replacement) ?? modelText;
 
+            Assert.That(() => OwnerBlob.Replace(decoded, NewData, (_, _) => Assert.Fail("must not recover")),
+                Throws.InvalidOperationException.With.Message.Contains("Preview before replacing"));
             if (blockedStep.Length != 0) {
                 Assert.That(Apply, Throws.Exception);
                 Assert.That(Encoding.UTF8.GetBytes(modelText), Is.EqualTo(bytes));
@@ -332,6 +329,25 @@ public sealed class OwnerBlobTests {
             Assert.That(JToken.DeepEquals(OwnerBlob.Decode(Owner, modelText).Data, NewData), Is.True);
         } finally {
             Directory.Delete(state, recursive: true);
+        }
+    }
+
+    [Test]
+    public void A_lone_surrogate_has_an_exact_recovery_file_and_two_documents_have_two_notices() {
+        var root = Directory.CreateTempSubdirectory("pe-model-surrogate-").FullName;
+        try {
+            var read = OwnerBlob.Decode(Owner, new string('\ud800', 1));
+            var seal = read.Replacement!;
+            foreach (var key in new[] { "project:a", "project:b", "project:a" })
+                Assert.That(OwnerBlob.Replace(read, NewData, (evidence, kept) =>
+                    StoredFile.KeepModelRecord(root, evidence.Owner, key, kept, evidence.Reason), seal), Is.Not.Null);
+            var backup = Directory.GetFiles(root, "*.utf16le", SearchOption.AllDirectories).Single();
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(new byte[] { 0xff, 0xfe, 0, 0xd8 }));
+            var rows = File.ReadLines(Path.Combine(root, ProductPathNames.StoredNoticesFileName)).Select(JObject.Parse).ToList();
+            Assert.That(rows.Select(row => (string?)row["place"]), Is.EquivalentTo(new[] { "project:a / test-owner", "project:b / test-owner" }));
+            Assert.That(rows.Select(row => (string?)row["sha256"]), Is.All.EqualTo(seal.RawUtf8Sha256));
+        } finally {
+            Directory.Delete(root, recursive: true);
         }
     }
 

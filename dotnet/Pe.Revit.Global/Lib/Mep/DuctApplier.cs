@@ -43,10 +43,10 @@ public static class DuctApplier {
         return (read.Value, read.Refusal);
     }
 
-    internal static (OwnerBlobRead Blob, OwnerValue<DuctLossStore> Read, OwnerBlobReplacement? Replacement) ReadStoreState(Document doc) {
+    internal static (OwnerBlobRead Blob, OwnerValue<DuctLossStore> Read, OwnerBlobReplacement? Replacement) ReadStoreState(Document doc, bool reportReplacement = true) {
         var blob = OwnerBlobStore.Read(doc, StoreEnvelope);
         var read = DuctLossStore.Read(blob);
-        var replacement = blob.Replacement ?? (read.Refusal is { } reason ? blob.DataRefused(reason) : null);
+        var replacement = reportReplacement && read.Refusal is { } reason ? blob.Replacement ?? blob.DataRefused(reason) : null;
         return (blob, read, replacement);
     }
 
@@ -85,7 +85,7 @@ public static class DuctApplier {
 
     public static DuctApplyResult Apply(Document doc, DuctApplyRequest request, bool preview) {
         // Request slot overrides win over C# defaults; stored slots are write receipts only.
-        var (blob, read, replacement) = ReadStoreState(doc);
+        var (blob, read, replacement) = ReadStoreState(doc, reportReplacement: preview);
         var stored = read.Value;
         var slots = (request.Slots ?? new DuctParameterSlotOverrides()).Resolve();
         var schemas = new Dictionary<Guid, Schema?> {
@@ -131,10 +131,12 @@ public static class DuctApplier {
         // The store entries this write changes against the model's store, one line each, from the same merged next
         // store the write lands, so plan and apply review one truth (they land with the store).
         items.AddRange(StoreEntries(doc, stored, next));
-        var store = new Item(null, "store", stored is null ? replacement is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
+        var store = new Item(null, "store", stored is null ? read.Refusal is null ? "absent" : "unreadable" : $"revision {storeRevision}") {
             After = $"revision {storeRevision + 1}"
         };
-        if (UnbackedProvenance(request, stored, items) is { } unbacked) store.Refuse(unbacked);
+        if (!preview && read.Refusal is not null && request.Replacement is null)
+            store.Refuse("Preview before replacing the unreadable duct loss store.");
+        else if (UnbackedProvenance(request, stored, items) is { } unbacked) store.Refuse(unbacked);
         else if (request.Store.WorkRevision < storeRevision)
             store.Refuse($"stale: the model holds store revision {storeRevision}, the request carries {request.Store.WorkRevision}; re-read ducts.snapshot");
         items.Add(store);
@@ -144,7 +146,7 @@ public static class DuctApplier {
             foreach (var i in items.Where(i => i.Outcome == "planned"))
                 i.Refuse("not written: a shared type parameter in this apply would move units it does not name (see the refused equipment)");
 
-        if (store.Outcome == "planned" && SameStoreContent(stored, next))
+        if (store.Outcome == "planned" && request.Replacement is null && SameStoreContent(stored, next))
             store.Unchanged($"revision {storeRevision}");
 
         if (preview)
@@ -161,12 +163,12 @@ public static class DuctApplier {
         store.Write = () => {
             // Composed at write time: terminals and equipment ran first in this stage, so a refused write is not recorded.
             next = Compose(request, stored, items, now, slots, storeRevision + 1);
-            if (SameStoreContent(stored, next)) {
+            if (request.Replacement is null && SameStoreContent(stored, next)) {
                 store.Outcome = "unchanged";
                 return $"revision {storeRevision}";
             }
-            if (blob.Status == OwnerBlobStatus.Ok && replacement is not null) {
-                _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData(), replacement);
+            if (request.Replacement is { } replacing) {
+                _ = OwnerBlobStore.Write(doc, DuctLossStore.Owner, next.ToData(), replacing);
             } else {
                 if (!string.Equals(OwnerBlobStore.Read(doc, StoreEnvelope).Raw, blob.Raw, StringComparison.Ordinal))
                     throw new InvalidOperationException("The duct loss store changed after planning; re-read ducts.snapshot.");

@@ -1,3 +1,5 @@
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/native-schemas";
+import type { DuctsApplyPlan } from "@pe/host-contracts/generated";
 import {
   DUCT_SYSTEMS_ROUTE,
   ductsDocumentSchema,
@@ -191,7 +193,14 @@ const slotsSchema = z
 /** Pe server consumes host-priced leg results; Specific Coefficient freezes one export coefficient. */
 export const DUCT_FITTING_METHODS = ["pe-server", "specific-coefficient"] as const;
 export type DuctFittingMethod = (typeof DUCT_FITTING_METHODS)[number];
+export const ownerBlobReplacementSchema =
+  nativeResponseDefinitionSchema<DuctsApplyPlan.Res.OwnerBlobReplacement>(
+    "ducts.apply.plan",
+    "OwnerBlobReplacement",
+  ).nullish();
+
 export const ductsApplyInputSchema = z.strictObject({
+  replacement: ownerBlobReplacementSchema,
   slots: slotsSchema.nullable().optional(),
   fittings: z.array(
     z

@@ -21,6 +21,12 @@ const RULE = "elbow-1d-gt10",
 test.each([undefined, "CD3-22", "CD3-21"])(
   "a /fans write requires the scoped rule's table to be saved (%s)",
   async (savedTable) => {
+    const replacement = {
+      owner: "duct-losses",
+      status: "UnknownVersion",
+      reason: "version 2",
+      rawUtf8Sha256: "a".repeat(64),
+    };
     const f = await nativeFixture(
       "real",
       (_key, input) => ({
@@ -38,7 +44,20 @@ test.each([undefined, "CD3-22", "CD3-21"])(
         },
       }),
       null,
-      { native: (key) => (key === "ducts.tables" ? recordedTables() : undefined) },
+      {
+        native: (key) =>
+          key === "ducts.tables"
+            ? recordedTables()
+            : key === "ducts.apply.plan"
+              ? {
+                  previewOnly: true,
+                  writes: [],
+                  counts: { planned: 0, written: 0, refused: 0, unchanged: 0 },
+                  storeRevision: 0,
+                  replacement,
+                }
+              : undefined,
+      },
     );
     closes.push(() => f.close());
     const key = { ...f.key, route: "fans" };
@@ -110,6 +129,7 @@ test.each([undefined, "CD3-22", "CD3-21"])(
           },
       );
     expect(sent).toHaveLength(1);
+    expect(sent[0]).toHaveProperty("replacement", replacement);
     // The element write: the elbow's coefficient. No rule key rides it, so the native store composes no rule from it.
     expect(sent[0]!.fittings).toEqual([
       expect.objectContaining({ id: 2, coefficient: expect.any(Number) }),

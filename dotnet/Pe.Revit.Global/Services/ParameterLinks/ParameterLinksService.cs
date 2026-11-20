@@ -64,7 +64,8 @@ public sealed class ParameterLinksService {
             evaluation,
             this.BuildStatus(state),
             false,
-            0);
+            0,
+            state.Replacement);
     }
 
     public ParameterLinksData Apply(RevitDocument document, ParameterLinksApplyRequest request, bool preview) {
@@ -90,7 +91,7 @@ public sealed class ParameterLinksService {
         var committed = false;
         using (var sandbox = DocumentSandbox.BeginCommit(document, "Pe Apply Parameter Links")) {
             if (request.Profile != null)
-                profileChanged = this._storage.Write(document, profile);
+                profileChanged = this._storage.Write(document, profile, request.Replacement);
             if (request.Reconcile)
                 (evaluation, applied) = ParameterLinksEngine.Reconcile(document, profile);
             if ((profileChanged || applied > 0) &&

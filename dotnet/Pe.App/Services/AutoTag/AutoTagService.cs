@@ -37,8 +37,7 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
             _ = transaction.Start();
-            var owner = AutoTagSettings.Owner with { ValidateData = read => AutoTagSettings.Read(read).Refusal };
-            _ = OwnerBlobStore.Write(doc, owner, settings.ToData());
+            _ = OwnerBlobStore.Write(doc, AutoTagSettings.Owner, settings.ToData());
             _ = transaction.Commit();
         }
         var tracked = this._documents?.Find(doc);

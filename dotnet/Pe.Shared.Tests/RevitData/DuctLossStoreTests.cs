@@ -98,7 +98,7 @@ public sealed class DuctLossStoreTests {
         var read = Read(json);
 
         Assert.That(read.Value, Is.Null);
-        Assert.That(read.Refusal, Does.Contain(message).And.Contain("refused and kept"));
+        Assert.That(read.Refusal, Does.Contain(message).And.Contain("unreadable"));
     }
 
     [TestCase(2, OwnerBlobStatus.UnknownVersion)]

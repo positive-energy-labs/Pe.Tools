@@ -16,6 +16,7 @@ export const storedNoticeSchema = z.strictObject({
   class: z.enum(["keep", "discard", "sent"]),
   /** The Place, in words a person knows: "Work for /ducts", "Scheduled tasks". */
   place: z.string(),
+  documentKey: z.string().optional(),
   path: z.string(),
   /** Null when the bytes themselves could not be read. */
   sha256: z.string().nullable(),

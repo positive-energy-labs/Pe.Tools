@@ -513,7 +513,8 @@ public sealed class ParameterLinksBehaviorTests {
             Assert.That(plan.Evaluation!.Issues, Is.Empty);
             Assert.That(plan.ProfileChanged, Is.False);
             Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).AsString(), Is.EqualTo(raw));
-            var state = ProductRuntimeLayout.Current.State.RootPath;
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var state = isolated.Root;
             var fingerprint = plan.Replacement!.RawUtf8Sha256;
             var backup = Path.Combine(state, "model-recovery", "owner-parameter-links", fingerprint + ".txt");
             var notices = Path.Combine(state, ProductPathNames.StoredNoticesFileName);
@@ -521,7 +522,9 @@ public sealed class ParameterLinksBehaviorTests {
                 line.Contains(fingerprint, StringComparison.Ordinal)) : 0;
             Assert.That(File.Exists(backup), Is.False);
             Assert.That(NoticeCount(), Is.Zero);
-            Assert.That(service.Apply(document, request, preview: false).ProfileChanged, Is.True);
+            Assert.That(() => service.Apply(document, request, preview: false),
+                Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+            Assert.That(service.Apply(document, request with { Replacement = plan.Replacement }, preview: false).ProfileChanged, Is.True);
             Assert.That(File.ReadAllBytes(backup), Is.EqualTo(System.Text.Encoding.UTF8.GetBytes(raw)));
             Assert.That(NoticeCount(), Is.EqualTo(1));
             Assert.That(storage.Read(document).Profile?.Definitions.Single().Id, Is.EqualTo("project-info-number"));

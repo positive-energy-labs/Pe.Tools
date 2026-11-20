@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Pe.Shared.StorageRuntime;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -23,9 +24,9 @@ public enum OwnerBlobStatus {
     /// </summary>
     Absent,
     Ok,
-    /// <summary>An envelope that is broken or another owner's, or text that is not JSON. It is refused and its bytes are kept.</summary>
+    /// <summary>An envelope that is broken or another owner's, or text that is not JSON. Replacement requires preview evidence.</summary>
     Invalid,
-    /// <summary>This owner's envelope at a version this build does not read. It is refused and its bytes are kept.</summary>
+    /// <summary>This owner's envelope at a version this build does not read. Replacement requires preview evidence.</summary>
     UnknownVersion
 }
 
@@ -33,9 +34,6 @@ public sealed record OwnerBlobReplacement(string Owner, OwnerBlobStatus Status, 
 
 /// <summary>A strict read of one stored blob. <see cref="Raw" /> is the stored text, unchanged; it is null only when nothing is stored.</summary>
 public sealed record OwnerBlobRead(OwnerDescriptor Owner, OwnerBlobStatus Status, JObject? Data, string? Raw, string? Error) {
-    /// <summary>Whether a write can proceed without recovery.</summary>
-    public bool MayOverwrite => this.Status is OwnerBlobStatus.Absent or OwnerBlobStatus.Ok;
-
     public OwnerBlobReplacement? Replacement => this.Status is OwnerBlobStatus.Invalid or OwnerBlobStatus.UnknownVersion
         ? new OwnerBlobReplacement(this.Owner.Owner, this.Status, this.Error!, OwnerBlob.HashRaw(this.Raw!))
         : null;
@@ -43,8 +41,8 @@ public sealed record OwnerBlobRead(OwnerDescriptor Owner, OwnerBlobStatus Status
 
 /// <summary>
 ///     The one codec for every Pe blob stored in a model: <c>{"owner":"…","version":N,"data":{…}}</c>. There is no
-///     migration. An enveloped blob at an unknown version, a broken envelope and another owner's envelope are refused,
-///     and the caller keeps the stored bytes. An old un-enveloped shape is not an error path: it reads as absent
+///     migration. Unknown versions, broken envelopes and unreadable owner data require sealed replacement.
+///     An old un-enveloped shape reads as absent
 ///     (kaitpw, 2026-11-11: no client model carries one).
 /// </summary>
 public static class OwnerBlob {
@@ -58,7 +56,7 @@ public static class OwnerBlob {
             return new OwnerBlobRead(owner, OwnerBlobStatus.Absent, null, null, null);
 
         OwnerBlobRead Refused(OwnerBlobStatus status, string why) =>
-            new(owner, status, null, raw, $"the stored {owner.Name} blob {why}; it is refused and kept as it is");
+            new(owner, status, null, raw, $"the stored {owner.Name} blob is unreadable ({why})");
 
         JToken root;
         try {
@@ -113,7 +111,7 @@ public static class OwnerBlob {
 
     internal static string HashRaw(string raw) {
         using var sha = SHA256.Create();
-        return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).Replace("-", "").ToLowerInvariant();
+        return BitConverter.ToString(sha.ComputeHash(StoredFile.ModelRecordBytes(raw))).Replace("-", "").ToLowerInvariant();
     }
 
     /// <summary>Validates the next envelope and completes recovery before returning replacement text.</summary>
@@ -122,9 +120,11 @@ public static class OwnerBlob {
         if (replacing is not null && (stored.Raw is null || replacing.Owner != stored.Owner.Owner ||
             !string.Equals(HashRaw(stored.Raw), replacing.RawUtf8Sha256, StringComparison.Ordinal)))
             throw new InvalidOperationException($"The stored '{stored.Owner.Name}' changed since replacement was planned.");
+        if (replacing is null && stored.Replacement is { } unreadable)
+            throw new InvalidOperationException($"Preview before replacing '{stored.Owner.Name}': {unreadable.Reason}.");
         var text = Encode(stored.Owner, data);
         if (replacing is null && string.Equals(stored.Raw, text, StringComparison.Ordinal)) return null;
-        if ((replacing ?? stored.Replacement) is { } replacement) recover(replacement, stored.Raw!);
+        if (replacing is not null) recover(replacing, stored.Raw!);
         return text;
     }
 
@@ -139,9 +139,9 @@ public static class OwnerBlob {
         try {
             return parse(read.Data!) is { } value
                 ? new OwnerValue<T>(value, null)
-                : new OwnerValue<T>(null, $"the stored {read.Owner.Name} data is empty; it is refused and kept as it is");
+                : new OwnerValue<T>(null, $"the stored {read.Owner.Name} data is unreadable: it is empty");
         } catch (Exception ex) when (ex is InvalidOperationException or JsonException) {
-            return new OwnerValue<T>(null, $"the stored {read.Owner.Name} data cannot be read ({ex.Message}); it is refused and kept as it is");
+            return new OwnerValue<T>(null, $"the stored {read.Owner.Name} data is unreadable ({ex.Message})");
         }
     }
 }

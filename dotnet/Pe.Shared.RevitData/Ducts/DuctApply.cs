@@ -18,7 +18,8 @@ public sealed record DuctApplyRequest(
     IReadOnlyList<DuctFlowWrite> TerminalFlows,
     IReadOnlyList<DuctFlowWrite> EquipmentFlows,
     DuctLossStore Store,
-    DuctStoreDeletes? StoreDeletes = null);
+    DuctStoreDeletes? StoreDeletes = null,
+    OwnerBlobReplacement? Replacement = null);
 
 /// <summary>
 ///     Store keys this write removes. The store is overlaid per key: a key the request omits keeps its stored entry,

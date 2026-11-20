@@ -271,21 +271,27 @@ function storedRow(
       detail: notice.reason,
     };
   return {
-    key: `stored:${notice.path}:${notice.sha256}`,
+    key:
+      `stored:${notice.path}:${notice.sha256}` +
+      (notice.documentKey ? ":" + notice.documentKey : ""),
     group: "failed",
-    // One line per path and hash, never rewritten: the row cannot move, so its card raises once.
+    // A model recovery identifies the document as well as the shared backup.
     revision: 0,
     verb: kept ? "kept" : "discarded",
     what: notice.place,
     where: "this computer",
-    says: kept
-      ? `Can't read, kept: ${notice.reason}`
-      : `Could not be read, so it was discarded: ${notice.reason}`,
+    says: notice.documentKey
+      ? notice.reason
+      : kept
+        ? `Can't read, kept: ${notice.reason}`
+        : `Could not be read, so it was discarded: ${notice.reason}`,
     at: notice.at,
     url: null,
-    refusal: kept
-      ? "No address yet: fix or remove the file by hand"
-      : "Nothing to open: the file is gone",
+    refusal: notice.documentKey
+      ? undefined
+      : kept
+        ? "No address yet: fix or remove the file by hand"
+        : "Nothing to open: the file is gone",
     detail: notice.path,
   };
 }

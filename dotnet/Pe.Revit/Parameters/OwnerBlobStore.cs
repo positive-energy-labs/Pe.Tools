@@ -1,3 +1,4 @@
+using Pe.Revit.Extensions.ProjDocument;
 using Newtonsoft.Json.Linq;
 using Pe.Shared.Product;
 using Pe.Shared.RevitData.Serialization;
@@ -17,6 +18,8 @@ namespace Pe.Revit.Parameters;
 ///     </para>
 /// </summary>
 public static class OwnerBlobStore {
+    internal static readonly AsyncLocal<string?> RecoveryStateOverride = new();
+
     public static SharedDefinitionSpec Spec(OwnerDescriptor owner) =>
         new(owner.Name, SpecTypeId.String.Text, Description: owner.Description, Guid: owner.Guid, Visible: false, UserModifiable: false);
 
@@ -31,7 +34,7 @@ public static class OwnerBlobStore {
     /// <summary>Binds on first use. False when the value is already there.</summary>
     public static bool Write(Document document, OwnerDescriptor owner, JObject data) {
         RequireTransaction(document, owner);
-        return Write(EnsureOnProjectInformation(document, owner), document.Title, owner, data);
+        return Write(EnsureOnProjectInformation(document, owner), document, owner, data);
     }
 
     /// <summary>Replaces a sealed record. A missing or changed parameter refuses before binding or recovery.</summary>
@@ -40,7 +43,7 @@ public static class OwnerBlobStore {
         RequireTransaction(document, owner);
         var parameter = document.ProjectInformation?.get_Parameter(owner.Guid)
             ?? throw new InvalidOperationException($"The stored '{owner.Name}' disappeared since replacement was planned.");
-        return Write(parameter, document.Title, owner, data, replacing);
+        return Write(parameter, document, owner, data, replacing);
     }
 
     private static void RequireTransaction(Document document, OwnerDescriptor owner) {
@@ -52,17 +55,17 @@ public static class OwnerBlobStore {
     public static bool Write(Element element, OwnerDescriptor owner, JObject data) =>
         Write(element.get_Parameter(owner.Guid)
               ?? throw new InvalidOperationException($"'{owner.Name}' is not bound on element {element.Id}; initialize its carrier first."),
-            element.Document.Title, owner, data);
+            element.Document, owner, data);
 
-    private static bool Write(Parameter parameter, string documentTitle, OwnerDescriptor owner, JObject data,
+    private static bool Write(Parameter parameter, Document document, OwnerDescriptor owner, JObject data,
         OwnerBlobReplacement? replacing = null) {
         var raw = parameter.AsString();
         var stored = OwnerBlob.Decode(owner, raw);
         if (OwnerBlob.Replace(stored, data, (replacement, replacedRaw) => {
             if (parameter.IsReadOnly)
                 throw new InvalidOperationException($"'{owner.Name}' is read-only.");
-            StoredFile.KeepModelRecord(ProductRuntimeLayout.Current.State.RootPath,
-                replacement.Owner, documentTitle, replacedRaw, replacement.Reason);
+            StoredFile.KeepModelRecord(RecoveryStateOverride.Value ?? ProductRuntimeLayout.Current.State.RootPath,
+                replacement.Owner, document.GetDocumentKey(), replacedRaw, replacement.Reason);
         }, replacing) is not { } text) return false;
         if (parameter.IsReadOnly)
             throw new InvalidOperationException($"'{owner.Name}' is read-only.");
