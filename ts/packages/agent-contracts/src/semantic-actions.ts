@@ -80,7 +80,9 @@ const definitions = {
     needs: "project-document",
     effect: "command",
     input: z.object({
-      view: z.string().min(1),
+      view: z
+        .string({ error: "No room draw is staged with a plan view. Nothing was written." })
+        .min(1),
       loops: z.array(loop).min(1),
       name: z.string().nullable().optional(),
       role: z.enum(["room", "zone"]).optional(),
