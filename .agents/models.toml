@@ -96,7 +96,7 @@ rules = [
 
 [models.sol]
 names = ["Sol"]
-id = "gpt-6.1-sol"
+id = "gpt-6.2-sol" # owner, 2026-11-20
 provider = "codex"
 meter = "codex"
 rules = [

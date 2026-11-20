@@ -160,6 +160,7 @@ Shared base for [Fans](../fans/LEDGER.md) and [Duct systems](../duct-systems/LED
 - 2026-11-19, the owner said of Chadds MUAS-1, “it goes from greenheck to muas-1 to fc-23. and my fireflies meeting notes also show that it was actually designed wrong in the first place. the two ervs should not be on that duct run, they should be on the one below it.” The 373 cfm ERV split describes the fixture as drawn.
 - 2026-11-19, friction evidence uses the hydraulic diameter from the section that priced the loss. On FC-4 port 1, the proposed extension priced from a 17.5 × 21 in equipment connector was looked up as a duct segment and emitted `hydraulicDiameterFt: 0`, which the Fans contract refused. `3dc31db5`, merged in `701320c1`. See the [14-port readback](../fans/LEDGER.md) at `5734987f`.
 - 2026-11-19, the Chadds drive at `f1b2ac94` found 50 cap offers among 468 open ends. Every offered end read exactly zero on a well-connected system. The pricing-contract error stopped the audit of withheld explanations.
+- 2026-11-20, ruling 14: `DuctLossStore` is re-keyed from the numeric element id to `UniqueId`, with a version bump, in slice S8b of the [product-declaration map](../routes/MAP.md). The [rooms ledger](../rooms/LEDGER.md) holds the ruling and the owner's words. The duct record was the outlier: ADR 0035 rule 2 names `UniqueId` as the element key everywhere. The version bump makes every existing duct record unreadable, and [ADR 0057](../../adr/0057-an-unreadable-model-record-may-be-overwritten.md) says what happens to it.
 
 ## Tried & rejected
 

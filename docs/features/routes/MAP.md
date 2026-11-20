@@ -1,236 +1,299 @@
-# Kernel crusade 2 map
+# Product declaration map
 
-Live frontier for [ADR 0042](../../adr/0042-handles-host-timeline-honest-answers.md), which amends [ADR 0028](../../adr/0028-seven-nouns-two-clients-one-catalog.md), [ADR 0034](../../adr/0034-timeline-per-work-places-on-host.md), [ADR 0035](../../adr/0035-route-slots-subjectref-one-notice-feed.md) and [ADR 0037](../../adr/0037-three-content-homes-one-write-door.md). Rebuilt 2026-11-12 from the first kernel crusade's map; git holds that map at 46aeca3a. Written from a read-only review of `crusade/homes` at e02163e0 by twelve sealed readers, then nine plan checks against the code. Nothing here is built. Delete this file when the last slice lands, and promote what survives into the [routes ledger](LEDGER.md). Terms are in the [glossary](GLOSSARY.md).
+Live frontier of the product-declaration run. It answers one question: what does a product declare, in one place, and what do the host, the web, Pea, the Tutorial and the homes derive from it? The specimens are `/rooms`, rebuilt clean-room, and Fans. The rulings are in the ledgers of [routes](LEDGER.md), [rooms](../rooms/LEDGER.md), [homes](../homes/LEDGER.md), [takeoffs](../takeoffs/LEDGER.md) and [ducts](../ducts/LEDGER.md), and in [ADR 0057](../../adr/0057-an-unreadable-model-record-may-be-overwritten.md) and [ADR 0058](../../adr/0058-the-home-ladder.md).
 
-Evidence: `.artifacts/runs/mega-review-20261112/` (`signed.md`, the three packages all twelve readers signed; `digest.md`, every owed line from the review; `crusade/RULES.md`, the owner's rulings in their words; `crusade/plan/`, nine plan files with each plan row's exact file set; `crusade/SLICE-INDEX.md`, the 58 plan rows this map folds). Keep that run while this map exists. The Folds column below names the plan rows by their ids there.
+Written 2026-11-20 from the run's agreed plan. Base: main `8d3a507c`. The plan check is pinned to `09943e6c`, and the diff between the two is ledger files only. This file replaced the kernel crusade 2 map, which closed on 2026-11-14. Git holds that map at `8d3a507c:docs/features/routes/MAP.md`, and the routes ledger owes its sweep. Delete this file when S12 and S11 land, after the sweep the `docs` skill describes.
 
-Stamp for the whole plan: UNPROVEN[nothing is built; each slice names the lane that proves it]. Three limits on the evidence:
+Evidence, all gitignored, kept while this map exists:
 
-- The plans cite `path:line` at e02163e0 and a418c8e2. The base is main at 46aeca3a or later, so every line number is a locator to re-check, not a fact.
-- The Findings and Storage plans were amended after their threads changed model late in the plan check. Their rows in slices 1, 8 and 9 are testimony until the implementor's plan check re-reads the code.
-- Every hour below is a planner's writer-hours with no measured rate.
+```text
+.artifacts/runs/product-decl-20261120/RULES.md
+.artifacts/runs/product-decl-20261120/PLAN.md
+.artifacts/runs/product-decl-20261120/OWNER-QUEUE.md
+.artifacts/runs/product-decl-20261120/plan-check/G1.md to G7.md
+.artifacts/runs/product-decl-20261120/baseline-09943e6c.md
+.artifacts/handoffs/2026-11-19-product-declaration-muse.md
+.artifacts/runs/muse-product-20261119/
+```
 
-The goal, in the owner's words: "architecture first, where it serves Pea, imposes standards, cuts boilerplate, or adds reliability." Restated: this crusade changes the kernel's primitives so that a route declares less, Pea reads a smaller and truer world, and no stored byte is lost. It does the least to each route that keeps it compiling and working. kaitpw: "any overly specific product code that its related to the deep primitive stuff can be left out too".
+Stamp for the whole plan: UNPROVEN[nothing is built; each slice names its falsifier]. Every `path:line` in a plan-check report is at `09943e6c`, so it is a locator to check again and not a fact. The hours and lines are estimates. The plan-check readers ran no compiler, no suite and no Revit.
 
 ## Nouns and invariants
 
-- **Handle**: the one name a route uses for a read or a command. A command handle is a minted key; one generated table per key holds its effect, axes and plan key. A read handle holds its schemas, what it uses, and which collections are keyed.
-- **Verb**: a command handle placed on a route, in the band or in one pane. A verb's plan decides whether it is reviewed. Its effect decides which door it goes through.
-- **Effect**: `Read`, `TransactRead`, `SessionWrite`, `WorkWrite` or `ModelWrite`. Closed. An op does not declare its effect; the effect is the scope the runner hands it.
-- **Touched**: what an operation changed, stated by the runner on the terminal receipt. An op cannot assert it.
-- **Timeline**: the host's one ordered list of steps across the Works of a Place, with one read and one step door. A person and Pea use the same door.
-- **Reading state**: `ready`, `refreshing`, `stale`, `reading`, `refused` or `not-yet-run`. The shell draws every value-less state. A route body sees only a present value.
-- **Evidence**: what a native answer observed and how much of it: payload, observed, coverage. Missing evidence means unavailable.
-- **Kind**: a declared class of stored file. A kind mints the file's path. A bare string is not a path.
-- **Binding**: a domain plus a home. A **setting** is a home with the tiers `user`, `project` and `firm`. The static shape of the domain decides the decode.
-- **Finding**: a statement plus a ruling, keyed by SubjectRef, in one Work per document. It has no `place`.
-- **Subject namer**: the one function from a SubjectRef to the words a person reads. Stored data holds kind and subject, never a label string.
+- **Product**: one contract value at `ts/products/<p>/contract/src/product.ts`, found by path. It holds homes, cells, readings, commands, routes and a guide. A product may have no route or several.
+- **Home**: where a value rests. A product declares only its own homes. A home that C# writes is declared in C# and referenced through a generated handle. The three homes of ADR 0037 are content homes.
+- **Cell**: a schema and a per-subject key. The cell list builds the Work schema. Pea's editable list, the sheet binding homes and the factual part of the description derive from it.
+- **Reading**: a handle with its sources and its load fields (`alone`, `freshBy`, `slow`).
+- **Command**: an input, its native operations, and one `writes` map from each home to the cells it lands. A home with no cell is in the map with no cells.
+- **Route**: address fields, a subject and readings.
+- **Binder**: `implement(product, { readings, commands })` on the host and `screen(product.routes.x, { panes, layout, overlay })` on the web.
+- **Region record**: the one document record of Rooms, keyed by the Filled Region's `UniqueId`.
+- **Door check**: the native refusal of a write to a home the command did not name.
 - Invariants:
-  - Safety is structure and notices, never a pause. Nothing in this crusade adds an approval gate. kaitpw: "it must be through structure and notices, not approval gates that pause pea until the user notices them."
-  - A file is set aside only after its bytes are preserved. A file that cannot be read is kept.
-  - No migration code. Changed Work is set aside with its bytes kept and one notice.
-  - ADR 0035 rule 1 stays closed: five slots, and no new route knob.
-  - A non-test file in a route folder imports no other route folder.
-  - The host imports no code from a Pod.
-  - A positive spatial claim (clear, complete) needs a predicate that can make it. Without one the answer says unknown.
+  - A missing or extra host body or pane is a compile error.
+  - The Work schema is built from the cell list. It is never an annotation on an existing schema, because a Zod annotation does not survive `.extend`, `.optional`, `.default` or a union.
+  - The contract does not import `@pe/web-kernel`.
+  - No cell carries a `lands` line. A cell that no command lands stays in Work.
+  - A home value is never a string in a command declaration.
+  - An element is keyed by `UniqueId` everywhere (ADR 0035 rule 2). ADR 0028 has the route codec refuse an element id.
+  - An unreadable model record does not lock further action (ADR 0057).
+  - A new stored fact walks the home ladder (ADR 0058).
+  - `/rooms` is rebuilt clean-room. Its writer reads the spec, the native operations and the primitives, and never the old `/rooms` web code.
+  - No legacy, no migration of an old stored record, no compatibility shim and no forwarder.
+  - The export names of `@pe/mcps/product-actions`, `product-catalog` and `product-contracts`, and of `productExecutors` and `productHttpRoutes`, do not change.
+  - A slice that changes C# regenerates `ts/packages/host-contracts` in the same commit and again after each merge.
 
 ## Ordered deletable slices
 
-Each slice is stated as what it deletes. "Lane" is the cheapest lane that can falsify it. "Folds" names the plan rows in `SLICE-INDEX.md`. Slice numbers are not strict landing order; the Wave column and the landing notes below hold the order. Writing is parallel from the first day.
+Hours are raw writer-hours multiplied by 0.25, the `estimate_ratio` in `.agents/models.toml`. The box of a slice is twice its hours. Lines are production lines, measured where a report measured them. "Report" names the plan-check file that holds the slice's full file set.
 
-| # | Slice | Settles | Deletes | Red falsifier, and the paths it observes | Lane | Folds | Wave |
-|---|---|---|---|---|---|---|---|
-| 0 | Journey baseline | what "no regression" means for every later slice | the one baseline expectation that contradicts the 2026-11-10 ownership ruling (Fans edits Ducts criteria, `pane-bodies.test.tsx`) | the full web, host, kit, runtime and agent-contracts suites and the e2e journey pack are recorded on the base tip (the homes ledger owes those suites past 7750811e); two known holes stay driver rows: F1 omits its reload, J6 never reads back the native ESP. Observes `ts/tests/e2e/` | deterministic suites; driver lane for the pack | PA-P0 | 0 |
-| 1 | The store keeps bytes | a read error keeps the file; set-aside copies, verifies, then removes; a kind mints every stored path | the delete-on-read-error path and the delete after a failed copy in `ts/packages/host-contracts/src/store.ts`; the Work `upgrade` hook (`work-settings-upgrade.ts`, `preservePrior`); `StoredPolicy` and caller class arguments; bare state, pod, home and package paths | lock a Work file and read it: the file exists and one notice posted. Make the blob root unwritable and discard: the original stays. Plant a Work record at the previous `schemaVersion`: the blob holds its exact bytes and the route opens empty. A witness file with `@ts-expect-error` fails typecheck if a bare string or a home path reaches the state reader. A new guard goes red on an added `writeFileSync` in a zero-baseline host file. Observes `store.ts`, `route-workspace.ts`, `route-document-store.ts` | host and package tests | ST1, ST3, ST4a to d, ST5 | 0 to 2 |
-| 2 | The host imports no Pod code | a Pod contributes data, never host JavaScript | the plugin import block and `hooksOnly` in `ts/apps/host/src/package-lifecycle.ts`; `plugin-receipts.ts`; `hook` and `emit` in the plugin runtime and the five emit sites with no listener; the pre-provider shim in `thread-store.ts` | a test Pod with `plugins/x/index.js` that writes a sentinel on import: the sentinel never appears and the Pod's package contribution still installs. The slice 1 guard names `harness/` (threads and providers) as a written exception with an end condition; removing the comment turns it red. Observes `package-lifecycle.ts` | host tests | ST2, ST8 | 0 |
-| 3 | Effect is the scope | the runner hands an op its scope and states what it touched; a focused capture is a `SessionWrite`; a script's save hold knows whose script it is | `OpAttribute.Intent`, `RollsBack`, `UsesTransactions` and the positional `OpEffect` argument; "rolled back" and `RollsBack = true` on view-image; the throw that replaces a capture's result when its restore fails; the doc comment that every run scope is Pea's (`ScriptRunScope.cs`) | a mutant op with no scope commits a transaction: the call fails with `touched: unauthorized`. Each TransactRead op run once leaves no non-sandbox change event. Make "PE restore crop" fail: the answer names the view left cropped. A script with `Caller = Person` saves the open project: the file changes and `Held` is null; with `Caller = Agent` or omitted it is unchanged and `Held` is set (mutants "caller ignored" and "default flipped" both fail). A Pea script whose result carries `held` produces one `waits` row and a `succeeded` receipt with nothing pending. Observes `Op.cs`, `RevitViewImageExporter.cs`, `ScriptRunScope.cs`, `gateway-actions.ts`, `notice-feed.ts` | `pe-revit test`, controlled, rung from `--plan`; host tests | SI-S0, SI-S1, SI-S4, ST9 | 0 to 1 |
-| 4 | Handles and verbs | one generated table of effect, axes and plan key; `verb()` with placement; one send door that picks its transport | `handAxes` and `route-axes.ts`; the cast in `command-axes.ts`; `command`, `sessionCommand`, `catalogAction`, `commandContract`, the `row` and `pane` flags; `queryAction`, `rpcAction` and their fabricated axes; `invoke` on a command; browser command schemas | change a native effect and regenerate: the browser table changes with no hand edit. Type tests: `ctx.verb("nope")` does not compile; a verb in neither the band nor a pane makes `route()` throw; a route file with a typo in a command entry fails `tsc`. A Pod bundle holds no command zod schema. `/ops` receipt control reads `SessionWrite` in the generated table. Drive `/schedules`: `push` is drawn once, plans, seals and applies; `/ops` cancel still cancels. Observes `command-axes.generated.ts`, `typed-route.ts`, `typed-actions.ts`, `typed-mount.ts` | TS package and web tests; dev session for the two drives | K1, K2, SH-S1, SH-S2, SH-S5, K6 | 0 to 1 |
-| 5 | Reading states | the shell draws reading, refused and not-yet-run; a body sees a present value | the `failed` status; the value-less fallbacks in 23 body sites across 16 routes; `retainedValueLabel` call sites; "computing" in the sheet and goal panes | a fixture that refuses a route's core read: every pane shows the same refusal line and a body that throws on a missing value does not throw. Type test: inside `draw`, `ctx.value.value` is not `undefined`. Drive `/ducts` with pricing refused: the systems pane still lists systems. Observes `typed-shell.tsx`, `typed-mount.ts`, `route-kernel-bodies.ts` | web tests; dev session | SH-S6 | 0 |
-| 6 | One read | one read declaration in `contract.ts`; the host owns a read's lifetime; `ctx.files`; keyed collections; clock and id as recorded leaves | `hostRead` and `valueRead` as two constructors; each per-route `reads.ts`; body-local identity and `runPods` plumbing; the direct field-options bridge path; duplicate cancel ownership; `firm()` and `settings()` on `ReadContext` | change a read's output schema in `contract.ts` only: the host body and the pane both fail `tsc`. A composition whose `uses` cannot join throws at host registration. The last consumer leaving signals only the read, never a submitted write. A recorded read that calls `ctx.files.tiers` replays with no disk. `findings.say` twice mints two ids from `ids.mint()`. Observes `reads/evaluator.ts`, `reads/door.ts`, `reads/inputs.ts`, `reads/history.ts`, `read-ownership.ts`, `native-recording.ts` | host tests; `pe-revit test` for Stop | PI-P2, K3, ST6, K4, F9 | 1 to 3 |
-| 7 | Evidence | a native answer carries payload, observed, coverage and touched; Sweep claims clear only with a capable predicate; seeing ops answer with `lens` and `hidden` | `Fresh`; the lossy optional miss path; bare-id exclusions; unsupported CLEAR and infinity; `effect` as catalog-stamped testimony on a step; `LensClutter` as a private list | partial, unread, empty and failed evidence each survive cache reuse and generated decode. Kill the socket during a focused capture: the recovered terminal says `restored` or `restoreFailed` and one notice posts. A lens around a duct under linked framing lists `Links` in `hidden` with a count. An unfocused `view-image` runs through the read door with no transaction. Observes `dotnet/Pe.Revit.Space/`, `Evidence.cs`, `BridgeRequestEvidence.cs`, `action-journal.ts`, `RevitDataRequestService.cs` | `pe-revit test`, controlled; host tests | PI-P1, SI-S2, SI-S3 | 1 to 2 |
-| 8 | Host Timeline | one host read and one step door; undo per author on every Work, stopping at a consumed Revit write; findings Work and a tier save are members | `ts/apps/web/src/shell/journal.ts` and `restore`, `history`, `revert`, per-cell `undo` in the mount; the nested History popup; `undoOwnFinding`, `ownFindingsLeft`, `findingMoves`; `ductsCellAccepts` and the `owner !== "ducts"` check | host tests: two Works, two undos then one redo through the door succeed; after a Revit write consumed an edit the door refuses the undo for Pea and for a person and names the receipt. Save a tier value, then undo through the door: the file's bytes equal the prior blob. An unknown setting owner is refused with 422. Drive `/fans` with a Ducts edit then a Fans edit: undo, undo, redo names the right Work each time. `createWorkJournal` has no importer under `ts/apps/web/src`. Observes `runtime/work-timeline.ts`, `route-workspace.ts`, `tiered-settings.ts`, `typed-mount.ts` | host and web tests; dev session | C1 to C4, F7, ST7 | 0 to 3 |
-| 9 | Findings | a statement plus a ruling with doors `say`, `rule`, `retract`, `list`; the kernel draws notes and pointers once; one subject namer | `findings.write`, `place`, `editable`, caller-supplied ids, the "person" stamp for every non-Pea caller; `readFindings` and the mount's private load; per-route `FindingVerb` and `PointerCite` mounts; the raw-code namer; the false sentences in `contracts/rooms.ts` and `pe-api.ts` | Pea says a claim, a person rules it, and `findings.list` still shows `said.by: "pea"`; a note with a verdict fails to parse; a caller that is neither is refused. On `/families`, which has no picture, a person's note survives a reload with text, author and time. Pea points at a type and it lights within one stream frame with no poll. No file under `web/families/` or `web/fans/` imports `route/slots/findings`. Observes `host/slots/findings.ts`, `contracts/slots/findings.ts`, `notes.tsx`, `subject-name.ts`, `kit/attention.tsx` | host and web tests | F1 to F6, F8, F10 | 1 to 3 |
-| 10 | Binding is domain plus home | every binding declares `domain` and `home`; a setting is a home; options come through the one read door | `"setting"` in `BINDING_KINDS`; `SettingCell`; `BindingDraw`'s value flags; `SheetChoice`; the 24 hand-written schemas; the orphan `slot-picker.tsx` | type test: a binding with no `domain` does not compile. `sheet.plan` with a staged value outside its domain is refused before any native call. A project-tier save on `/settings` sends `tier: "project"` and the read's hash; a second tab's stale hash draws the 409 on the cell. A stored option the read no longer offers draws standing as "not in the model now". Observes `contracts/slots/sheet.ts`, `slots-sheet.test.ts`, `tiers.test.ts` | TS package, host and web tests | B1, B2, B3 | 1 to 3 |
-| 11 | The shell projects | stages become gates; keys, reference teaching and Pea's route read are projected from the declaration | `stages` and `stageOrder` emission; `ducts/proto/e/teaching.ts` and the `/ducts` pathname special case; the 19 generated graph JSON files under `packages/mcps/src/pea/generated/`; `bindGraphChords` | type test: `when("stage","nope",…)` does not compile. `/ducts` with no system: the tree pane is absent and its read is not requested. A chord on a pane verb fires with focus in that pane and not in a sibling. Projected ducts facts name `design`, never `e-inputs`. Pea's `pe_read route:fans` on a running host: the `losses` verb carries the sheet-apply input schema. Observes `typed-route.ts`, `shell/keys.ts`, `route/teaching.test.tsx`, the host response | web tests; dev session for `pe_read` | SH-S3, SH-S4, PA-P1, K5 | 1 to 3 |
-| 12 | One band, chat as a route, Places on the host | the shell draws the one band; the dock head carries the docked route's controls; chat is an ordinary route folder; Places are stored on the host per device (ADR 0034 rule 4) | `ChatSituationHead`; `web/route/hosted-chrome.ts`; the dock's inline band row; chat's second page contract and its transport imports; the `pe.places` reader and writer in `web/workbench/tabs.ts` and `web/route/url.ts` | mounting two typed routes yields one `[data-slot="situation-band"]`. Drive `/fans` with Pea docked: two chrome layers on each side. Slice 13's guard, narrowed to `web/chat`, reports zero offenders. Two Places opened in one window are listed in a second window and after a host restart. `pe.places` has no match under `ts/apps/web/src`. Observes `typed-shell.tsx`, `route-panes.tsx`, `host/places.ts` | web tests; dev session | C5, C6, C7, C9 | 3 to 4 |
-| 13 | Closed route folders | the rule holds by a guard | every `../ducts/` import under `fans/` and the two in reverse; the cross-route and shared-to-route production edges; dead `shell/use-work-scope.ts` | one repo guard goes red on a planted `fans -> ducts` import, a planted `navigation -> chat` import and a planted `callOp` in a body, and reads zero offenders on the tip. The slice 0 pack is green with only import paths changed in tests. Observes `ts/tests/repo-guards/`, `ts/apps/web/src/fans/`, `ducts/`, `ducts-ui/` | repo guards; the slice 0 pack | SH-S7a, PA-P3, SH-S7b | 0 to 3 |
-| P | Bent-cut section editor | a cut is `sceneView.section` Page pose with one named commit at release | React `sectionDraft` and the replaced control branches | the plan's witnesses P3-D, P3-C and P3-B: no extra renderer, no recapture, no per-frame Page write, no camera snap. Observes `agent-contracts/src/scene-view.ts` and the scene controls | web tests; dev session | PI-P3 | parallel track |
+| Slice | Branch | What it settles and deletes | Falsifier | Paths the falsifier observes | Report |
+|---|---|---|---|---|---|
+| D0 | `pd/d0-docs` | the rulings, two ADRs and this map are tracked | `python .agents/skills/check.py` shows no failure the commit made | `docs/features/`, `docs/adr/`, `.agents/models.toml` | none |
+| W0 | `pd/w0-reds` | main's own reds: 2 format files, 162 type-aware lint errors, the host typecheck order in a fresh worktree | `verify` runs past the stage where it stopped on `09943e6c` | the files `baseline-09943e6c.md` names | baseline |
+| S0 | `pd/s0-archive` | deletes `/schedules`, `/family` and the `/captures` screen, with their Work commands. 7,326 route lines and 560 grid lines leave | the route census shows them gone, no archived door stays advertised, and the suite is green | `ts/packages/agent-contracts/src/routes/table.generated.ts`, `ts/packages/agent-contracts/src/generated/route-directory.ts`, `ts/packages/agent-contracts/src/semantic-actions.ts`, `ts/packages/agent-contracts/src/schedule-actions.ts`, `ts/packages/agent-contracts/src/family-actions.ts` | G1 |
+| S1 | `pd/s1-helpers` | the seven route helpers export from `@pe/agent-contracts`, with no forwarder. All 82 importer files are rewritten | a contract module imports the helpers with no web package installed | `ts/packages/web-kernel/src/route/host-read.ts` and the six other helper files, the new subpath of `@pe/agent-contracts` | G1 |
+| S2a | `pd/s2a-binders` | `product()`, `implement()` and `screen()`, one new generator path for a folder that has `contract/src/product.ts`, and the fixture product rewritten | a missing host body fails `tsc` in a file of `@ts-expect-error` lines, for a reading and for a command. The one-folder fixture still adds a command with no edit outside its folder | the kernel `product.ts` and `product.types.test.ts` in S1's package, `ts/packages/web-kernel/src/route/screen.ts`, `ts/apps/web/scripts/product-assembly.ts`, `ts/tests/repo-guards/src/product-assembly.guard.test.ts` | G2 |
+| S2b | `pd/s2b-grammar` | cells, homes, the home constructors with their cost answers, the `writes` map, and a typed Rooms `product.ts` | a cell Pea may edit that the schema lacks fails `tsc` on the typed Rooms `product.ts`. A home whose key kind the cell lacks fails `tsc` | `ts/products/rooms/contract/src/product.ts`, the kernel `product.ts` | G2 |
+| S4a | `pd/s4a-ducts-base` | the ducts base on the declaration, the shared sheet dispatch, and the generator cutover. Deletes the 13 `pe` pointer kinds and the `pe` path of the generator. One writer | no `pe` pointer key remains in any `package.json`, and the generator has one mode | `ts/products/ducts/host/src/action-runtime.ts`, `ts/apps/web/scripts/product-assembly.ts`, the six product `package.json` files | G3 |
+| S3 | `pd/s3-fans` | Fans on the declaration, with a bounded overview read | the `esp` drift between `fansTool.work.editable` and the Work schema is a compile error. The fixed Fans journeys stay green. The "All" overview stays under the read ceiling of 512 | `ts/products/fans/contract/src/fans.ts`, `ts/products/fans/contract/src/semantic-actions.ts`, `ts/products/fans/host/src/host.ts`, `ts/products/fans/web/src/calc.ts` | G2, G4 |
+| S4b | `pd/s4b-ductsys` | the Duct Systems route on the declaration, with a bounded overview read | the systems overview no longer builds every row's detail. Its journeys stay green | `ts/products/duct-systems/host/src/host.ts`, `ts/products/ducts/contract/src/system-work.ts`, `ts/products/duct-systems/web/src/design-calc.ts` | G3, G4 |
+| S5 | `pd/s5-homes` | the homes table, platform and product, rendered from the home constructors. The Tutorial shows the home each cell lands in and the homes each command writes | the Tutorial text for Fans names every home in the homes split that Fans owns. The project home shows as declared and not reachable | the home constructors of S2b, the Tutorial projection | G2 |
+| S6 | `pd/s6-loading` | the reading load fields, host reuse of a fresh completed read, newest request wins before dispatch, one line for what holds the queue | a slow image no longer holds the roster. A superseded request never dispatches | `ts/apps/web/src/shell/typed-mount.ts` (`syncReads`, `readiness`), `ts/packages/web-kernel/src/route/typed-route.ts` (`visibleReads`), `ts/apps/host/tests/native-read-sharing.test.ts`, `ts/apps/host/tests/host-read-graph.test.ts` | G4 |
+| S7 | `pd/s7-picture2d` | the 2D plan mode of the picture slot | a plan with a raster, polygon marks and a hit test renders from a declaration. A browser drive checks a rotated registration, a polygon with a hole, and a pick after pan and zoom | the picture slot declaration and its web pane, the new plan renderer | G5 |
+| S8a | `pd/s8a-rooms-rec` | Rooms natives: the eleven carriers on Detail Items become the region record, `rooms.write` answers per cell, and a trace is recovered after a commit. The record shape is not fixed until M1 reports | fresh-rung tests for each change: the region record written and read back, a per-cell receipt from committed readback, no receipt on rollback, and a trace found after a failed publish | `dotnet/Pe.Revit.Takeoff/TakeoffCarriers.cs`, `dotnet/Pe.Revit.Takeoff/Rooms.cs`, `dotnet/Pe.Revit.Takeoff/RoomsRunTraces.cs`, `dotnet/Pe.Shared.RevitData/Takeoffs/TakeoffContracts.cs`, `ts/apps/host/src/takeoff-actions.ts` | G6 |
+| S8b | `pd/s8b-ducts-key` | Ducts natives: `DuctLossStore` keyed by `UniqueId` with a version bump, and the one shared backup-and-notice overwrite of ADR 0057 | a fresh-rung test seeds unreadable bytes, writes, finds the bytes on disk, counts one notice and reads the new record back. A numeric key does not decode as a new key | `dotnet/Pe.Shared.RevitData/Serialization/OwnerBlob.cs`, `dotnet/Pe.Revit/Parameters/OwnerBlobStore.cs`, `dotnet/Pe.Shared.RevitData/Ducts/DuctApply.cs`, `dotnet/Pe.Revit.Global/Lib/Mep/DuctApplier.cs` | G6 |
+| S9 with S10 | `pd/s9-rooms` | `/rooms` rebuilt clean-room, then `/takeoffs` as the second route of the same product. One writer, two acceptance checkpoints. 3,351 production lines of the old `/rooms` leave | checkpoint 1: the rooms-fixes tests pass against the new folder, and `/rooms` is driven on a real model. Checkpoint 2: both routes share one `product.ts`, and the Takeoffs journeys are green | `ts/products/rooms/`, `ts/apps/web/src/rooms/` (deleted), `dotnet/Pe.Revit.Takeoff/TakeoffAtlas.cs` (plan by name ends) | G7 |
+| S11 | `pd/s11-door` | the door check at `OwnerBlobStore.Write`, with the allowance carried from the registered command | a fresh-rung test refuses a write to an unnamed home, leaves its bytes and binding unchanged, and lands the same write when the home is named. A host test proves the allowance is forwarded | `dotnet/Pe.Revit/Parameters/OwnerBlobStore.cs`, `dotnet/Pe.Revit.Global/Services/Host/OpRunner.cs`, `ts/packages/host-internal/src/dispatch.ts`, `dotnet/Pe.Revit.Tests/Proofs/OpScopeProofTests.cs` | G5 |
+| S12 | `pd/s12-tail` | the drive and integration tail | one full pass of the journeys on the final candidate, one suite, and every row stamped or ruled Owed | the journey pack and the final tip | none |
 
-### Timing plan
+S11 covers owner records only. A parameter write, an entity write and a trace file write each need their own coverage if they are declared as homes. That census runs after S8.
 
-Replaced 2026-11-12 by the implementor's plan check: four readers re-read every row against the code at ee2d30fd (results in `.artifacts/runs/kernel2-20261112/plancheck/A.md` to `D.md`). The Wave column of the slice table is superseded by this section. Every writer starts as soon as its inputs exist; the order below holds only at landing. A batch is when a writer launches, not a gate. Hours are active writer-hours from the measured rates (about 400 added lines per writer-hour; a heady slice's median 1.6 active hours), and past plans ran 1.1 to 6 times over. Each writer's time box is twice its estimate. Shared contracts are in [CONTRACTS.md](CONTRACTS.md); a reader's writer letters there map to the branches below.
+Measure M1 is the driver's first drive: the bytes of the region record on copies of the Chadds and Snowdon models, against the 256 KiB cap. It uses one Revit, admitted through `python .agents/skills/slot.execute/machine.py admit revit-drive`, with add-ins off. If the record does not fit, the geometry hash stays in the model and the solver's original room goes to the trace file.
 
-Slice 0 is a baseline, not a gate. The integrator's full suite on ee2d30fd, the driver's e2e pack and the purger's test fix (merged at b215fc69) make it.
+```text
+Estimate: pd/d0-docs        0.3h   +0L    0   (docs only)
+Estimate: pd/w0-reds        0.8h   0L     0   (2 fmt files, 162 type-aware lint errors, fresh-worktree host tsc order; then verify again past the stage it stopped at. baseline-09943e6c.md)
+Estimate: pd/s0-archive     1.3h  -7900L  -   (7,326 route + 560 grid, G1)
+Estimate: pd/s1-helpers     0.6h   0L     0
+Estimate: pd/s2a-binders    0.9h  +200L   +
+Estimate: pd/s2b-grammar    1.3h  +300L   +
+Estimate: pd/s4a-ducts-base 1.0h  -300L   -
+Estimate: pd/s3-fans        1.6h  -400L   -
+Estimate: pd/s4b-ductsys    1.0h  -300L   -
+Estimate: pd/s5-homes       1.0h  +150L   +
+Estimate: pd/s6-loading     2.4h  +260L   +
+Estimate: pd/s7-picture2d   2.0h  +180L   +
+Estimate: pd/s8a-rooms-rec  1.9h  +150L   +
+Estimate: pd/s8b-ducts-key  1.0h  +120L   +
+Estimate: pd/s9-rooms       5.0h  -1500L  -   (3,351 out, about 1,850 in; the addition is a guess)
+Estimate: pd/s11-door       1.4h  +100L   +
+Estimate: pd/s12-tail       2.0h   0L     0
+```
 
-Batch 1, at the plan's agreement:
+The raw total is about 98 hours, so about 25 active writer-hours. The net is about 9,000 production lines deleted, by the readers' figures. S0 alone deletes 7,900, so the rest of the run nets near zero. A slice that grows past twice its lines is stopped and planned again.
 
-| Branch | Rows | Slice | Tier | Lands after |
-|---|---|---|---|---|
-| k2/freeze-ts | handle.ts, `Publication` to `C/value.ts`, `ctx.files` (ST6), wire additions | 4, 6 | heady | nothing |
-| k2/freeze-native | `Evidence.cs` lift, `Touched`, `ScriptCaller`, `read-ownership.ts` interfaces, the receipt response shape | 3, 7 | heady | nothing |
-| k2/folders | SH-S7a deletions and moves (`open/bay.tsx`, `lifecycle.tsx`, `typed-owner.ts`), dead `use-work-scope.ts` and `route-environment.ts` | 13 | slog | nothing; first web landing |
-| k2/store | ST1, ST3, ST4a | 1 | heady | nothing |
-| k2/pods | ST2, ST8's written exception (the pre-provider shim stays) | 2 | slog | nothing |
-| k2/timeline-host | C1 (types first, frozen), C2 with the `web/route/host.ts:59` patch, the findings Work as a member | 8 | heady | nothing |
-| k2/shell-states | commit 0 (split the band head and layout view in `typed-shell.tsx`), then SH-S6 | 5 | heady | k2/folders |
-| k2/findings | F1 with the clock and id leaves (F9 folded), F2 | 9 | heady | k2/shell-states on `typed-mount.ts` |
-| k2/script-hold | ST9 | 3 | slog | k2/freeze-native |
-| k2/native-scope | SI-S0 reduced, SI-S1, SI-S2's C# half, SI-S4 | 3, 7 | heady | k2/freeze-native |
-| k2/evidence-native | PI-P1 native | 7 | slog | k2/freeze-native |
-| k2/generated-table | K1 (with `pe-api.ts`), K6 | 4 | slog | k2/freeze-ts |
-| k2/chat-route | C7 | 12 | slog | k2/folders |
-| k2/bent-cut | PI-P3 | P | slog | nothing |
+### Waves and gates
 
-Batch 2, when the freeze commits land:
+```text
+Wave: A pd/d0-docs pd/w0-reds pd/s0-archive pd/s1-helpers
+Wave-Status: A ACTIVE
+Wave: 1 pd/s6-loading pd/s7-picture2d pd/s8a-rooms-rec pd/s8b-ducts-key
+Wave-Status: 1 ACTIVE
+Wave: B pd/s2a-binders pd/s2b-grammar
+Wave: C pd/s4a-ducts-base pd/s3-fans pd/s4b-ductsys pd/s5-homes
+Wave: 2 pd/s9-rooms
+Wave: T pd/s12-tail pd/s11-door
+```
 
-| Branch | Rows | Slice | Tier | Lands after |
-|---|---|---|---|---|
-| k2/verbs | SH-S2 with K2, then SH-S5 | 4 | heady | k2/generated-table, k2/shell-states, k2/findings |
-| k2/read-contract | K3's contract and host half | 6 | heady | k2/freeze-ts |
-| k2/bindings | B1, B2, ST7's owner-registry half | 10 | slog | k2/freeze-ts; B2 after k2/shell-states on `sheet/pane.tsx` |
-| k2/projection | SH-S1, then SH-S3 | 11 | slog | k2/freeze-ts |
-| k2/read-lifetime | PI-P2's helper, `native-output.ts` policy, field-options | 6 | slog | k2/script-hold on `gateway-actions.ts` |
-| k2/evidence-ts | SI-S2's TS half, `native-receipts.ts` included | 7 | slog | k2/script-hold on `notice-feed.ts` |
-| k2/places-host | C9's host half | 12 | slog | k2/store's kinds |
+- Wave A is tasks the root briefs. It started at the plan's agreement.
+- Wave 1 is the run's first wave, under implementor 1. It started at the plan's agreement. S8a writes code and does not fix the record shape until M1 reports.
+- Wave B is tasks. S2a starts after S1 merges. S2b starts after S2a. S2 lands after S0, because S0 regenerates the route table.
+- Wave C is tasks. S4a starts after S2b. Then S3, S4b and S5 run at once.
+- Wave 2 is the run's second wave, under implementor 2. S9 with S10 starts after S2b merges, beside wave C.
+- Wave T: S12 runs on candidates. S11 is a task after the run's end gate.
+- The critical path is S1, S2a, S2b, S9 with S10, S12: about 13 wall hours with four landings.
+- Land gates from G6: the shared recovery of S8b and ADR 0057 merge before the Rooms cutover of S8a. Generated host contracts are regenerated once on the integrated tip.
+- One Revit session runs at a time on this machine, so the fresh-rung tests of S8 and the drives of M1, S9 and S12 queue.
 
-Batch 3, as each input lands:
+### What the plan check changed
 
-| Branch | Rows | Slice | Tier | Lands after |
-|---|---|---|---|---|
-| k2/journal-delete | C3 with F7, then C4; the browser journal owners the purger found (`application-work-registry.ts`, `work-scope-acceptance.ts`, `work-writes.ts`, `situation-band.tsx`) | 8 | slog | k2/timeline-host, k2/shell-states |
-| k2/tier-row | ST7a, the home-write row | 8 | slog | k2/timeline-host |
-| k2/store-sweeps | ST4b, ST4c, ST4d | 1 | slog | k2/store |
-| k2/lens | SI-S3 | 7 | slog | k2/native-scope, k2/read-lifetime |
-| k2/evidence-decode | PI-P1's TS decode | 7 | slog | k2/evidence-native |
-| k2/read-sweep | K3's sweep of 15 `route.ts`, PI-P2's consumer edits, `bindGraphChords` deletion | 6 | slog | k2/verbs, k2/read-contract |
-| k2/projection-pea | PA-P1 without chat, K5's host half | 11 | slog | k2/projection |
-| k2/findings-rest | F3 (its kit edit is in this file set), F4, F5 reduced, F8, F10 | 9 | slog | k2/findings, k2/verbs |
-| k2/verbs-follow | SH-S4 reduced, P1, C5, C6 | 4, 11, 12 | heady | k2/verbs |
-| k2/places-web | C9's web half | 12 | slog | k2/places-host |
+- S2 is two slices, because the binders reach the first falsifier alone and the grammar needed the owner's ruling on `lands` (G2).
+- The generator is reduced in S4a and not in S2, because Fans, Duct Systems and the ducts base keep their `pe` keys until they convert (G2).
+- S2 does not edit `ts/apps/web/src/shell/typed-mount.ts`. `screen()` returns today's `TypedRoute` from a new file (G2).
+- S4 is two slices, because `ts/products/ducts/host/src/action-runtime.ts` dispatches by Work route for both products (G3).
+- The overview reads moved from S6 to S3 and S4b, because a load field cannot shrink 672 recipes or a 47 MiB value (G4).
+- S8 is two slices, Rooms and Ducts (G6).
+- S9 and S10 are one writer, because they share the declaration, the host body and the plan identity (G7).
+- S1 writes no forwarder. G1 had proposed forwarders, and `AGENTS.md` forbids shims.
 
-The purger holds the guards as its assigned seams, because they are repo guards: ST5's write ratchet (after k2/store), the web import guard on `runtime/work-journal.ts` (after k2/journal-delete), and slice 13's route-closure guard (D1), landed early with the existing edges as a frozen list that ratchets down.
+### Shared contracts
 
-Estimate: k2/freeze-ts 1h
-Estimate: k2/freeze-native 1h
-Estimate: k2/folders 1h
-Estimate: k2/store 4h
-Estimate: k2/pods 1.5h
-Estimate: k2/timeline-host 3h
-Estimate: k2/shell-states 4h
-Estimate: k2/findings 3h
-Estimate: k2/script-hold 2.5h
-Estimate: k2/native-scope 8h
-Estimate: k2/evidence-native 7h
-Estimate: k2/generated-table 2.5h
-Estimate: k2/chat-route 2h
-Estimate: k2/bent-cut 3h
-Estimate: k2/verbs 4h
-Estimate: k2/read-contract 3h
-Estimate: k2/bindings 3h
-Estimate: k2/projection 3h
-Estimate: k2/read-lifetime 3h
-Estimate: k2/evidence-ts 4h
-Estimate: k2/places-host 1.5h
-Estimate: k2/journal-delete 3h
-Estimate: k2/tier-row 2h
-Estimate: k2/store-sweeps 3h
-Estimate: k2/lens 3h
-Estimate: k2/evidence-decode 1.5h
-Estimate: k2/read-sweep 2h
-Estimate: k2/projection-pea 3h
-Estimate: k2/findings-rest 4h
-Estimate: k2/verbs-follow 4h
-Estimate: k2/places-web 1.5h
+Each contract is copied word for word from the plan-check report that the plan cites, and each brief quotes it. The readers marked them as proposals. A writer who must change one changes it here first.
 
-Total: about 90 active writer-hours over 31 writers, against the planners' 425 to 463. The critical path is k2/folders, then k2/shell-states, then k2/verbs, then k2/verbs-follow and k2/read-sweep: about 13 active hours. The native chain (k2/freeze-native, k2/native-scope, k2/lens) is about 12. Revit's add-in lease admits one controlled session at a time, so native writers prove on deterministic tests where reader B says that holds, batch their fresh runs, and ask the driver for the lease.
+Reading load, for S2, S6 and S9. From `plan-check/G4.md:55` and `:56`:
 
-Landing order on the two shell files (reader D measured it): k2/shell-states's commit 0, then SH-S6, then k2/findings, then three lanes in any order against each other: verbs (k2/verbs, then k2/verbs-follow and k2/findings-rest), timeline (k2/journal-delete), and small (SH-S3 in k2/projection, B2 in k2/bindings). The forcing collisions: SH-S6 rewrites the snapshot shape read at 33 lines of the mount; `typed-mount.ts:456` reads `FINDINGS_DOORS.write` inside the block SH-S2 rewrites; `placement()` and `verb()` exist only after SH-S2; C3 before C4 and F7 at `typed-mount.ts:641` and `typed-shell.tsx:151`; C5 before C6 at `typed-shell.tsx:156`.
+> - **Paste into S2/S6/S9 briefs, proposed first version.** `type ReadingLoad = Readonly<{ alone?: true; freshBy?: readonly ["document-mark"]; slow?: string }>;` The read contract carries `load?: ReadingLoad`, with absent meaning today's behavior. Each `alone` reading publishes/errs independently and does not gate the roster/core or its Work. Keep full demanded-read settlement for callers explicitly waiting for all readings. `freshBy` is an opt-in host policy. For the first Rooms use, the cache key includes definition, normalized args (including view and export options), and exact target opening. The current document-mark revision must equal the captured one, and any other consumed source that can affect the value must still match. Document mark is the conservative first candidate for graphics, subject to a freshness check, and must not license reuse for graphics changes it cannot observe. No TTL guess. `slow` is a user-facing label, e.g. `"Exporting plan image"`, not a bypass or another timeout. If the proof cannot establish the graphics basis, leave image reuse disabled until there is a trustworthy signal. Numeric plan ids in the current route are not a new S9 contract. Use the settled S9 identity direction and resolve to the native id at the boundary.
+> - **Host/wire agreement.** `type ReadingDemand = Readonly<{ current(): boolean }>;` is host-only, one predicate per live join and disjunction across shared jobs. At the dispatcher claim, check it within the same synchronous transition as the send reservation, without a network lookup. Existing native cancellation/reconciliation still governs a job already dispatched. Proposed stream payload `type QueueHolder = Readonly<{ requestId: string; operationKey: string; label: string }> | null;` is scoped to the requesting subscription's resolved session, delivery generation fenced, and displayed once for the route while it is waiting. A status-only delivery must have distinct wire identity without advancing freshness or rerunning the Value.
 
-Other landing orders: ST9 before PI-P2 on `gateway-actions.ts:376-387` and before SI-S2 on `notice-feed.ts`; SI-S1 before SI-S3 on `RevitDataRequestService.cs`; SI-S1 before K1's regeneration of `host-typegen.ts`; PI-P2's `native-output.ts` edit before SI-S3; SH-S7a's moves before SH-S6 and SH-S2 edit those files. Generated outputs: the landing that changes a generator's source regenerates its output.
+2D plan picture, for S2, S7 and S9. From `plan-check/G5.md:53`:
 
-### Plan check corrections, 2026-11-12
+```ts
+type XY = readonly [number, number];
+type PlanRaster = {
+  readonly href: string;
+  readonly registration: {
+    readonly width: number;
+    readonly height: number;
+    readonly topLeft: XY;
+    readonly topRight: XY;
+    readonly bottomLeft: XY;
+  };
+};
+type PlanPicture = {
+  readonly raster: PlanRaster | null;
+  readonly polygons: readonly {
+    readonly subject: SubjectRefCode;
+    readonly rings: readonly (readonly XY[])[];
+    readonly ink?: string;
+  }[];
+};
+type PlanPictureSlot<C> = { readonly mode: "plan"; plan(ctx: C): PlanPicture };
+// PictureSlot<C> = ModelPictureSlot<C> | PlanPictureSlot<C>
+// Keep the existing model case as the default and project the plan mode explicitly.
+```
 
-The implementor took these defaults from the four readers and the purger's first scour. Each is re-openable.
+Command writes allowlist, for S2 and S11. From `plan-check/G5.md:117`:
 
-- Cut: K4's `history.compare` door and extractor (no reader in this crusade; `keyedBy` stays, written in K3). SH-S4's key-scope capability and `chord` on the wire (`bindGraphChords`'s deletion stays). B3's six duct slot names (product code; B1's `options` arm stays). `contract()` for K3's 13 host-only recipes. PA-P1's chat projection (C7 rewrites chat). ST1's C# rename. ST5's separate census (the guard's first run is the baseline). C4 only if k2/journal-delete has no room. SI-S3's enum members with no falsifier (`Annotations`, `Rows`, `TemplateLocked`, `FilteredBySheet`, `LensUse`). The `pea/index.ts` split of `document` from `target`. The margin coercion deletion (no row owns its wire default). The three-doc spatial rewrite, reduced to the false sentences. F6 picture inks. F5's `pointers.keep` op and person-facing list. The explicit-read demand state, S6's evidence fields and F3's `data-noted` mark.
-- Kept against a reader's cut: PI-P1's qualified exclusions (witness P1-C), because slice 7 deletes bare-id exclusions on purpose. The bent-cut editor, at the lowest priority, because the owner ticked it and it shares no file. Places (C9), the first to drop if the run is long.
-- Kept against the map: the pre-provider shim at `thread-store.ts:95-96`, because deleting it hides a person's chat with only a log line. ST8 writes the exception at the site.
-- Moved: ST7's owner-registry half to slice 10. F7 into C3's writer. F9 into F1. SH-S3 beside SH-S1. K3 split into its contract and host half, and its route-file sweep. One writer takes both C# halves of SI-S1 and SI-S2 (`Op.cs:101-139`, `BridgeAgent.cs`). `RollsBack = true` leaves with SI-S1's capture split, because `Op.cs:514` refuses a TransactRead without it.
-- Assumption B holds: the read-lifetime helper lands in k2/read-lifetime before both consumers. Assumption C is half false: `touched` rides in the response file `BridgeAgent.cs` writes, so `pe-revit op result` carries it with no SDK change; only a typed field on the SDK receipt stays an Owed line. Assumption A holds: spike A (fresh Revit 2025, spike/kernel2-a 55cfb68c) saw a crop or scope-box commit list the view itself, the sheet-filter flip list its ViewSchedule, a FailuresProcessing handler force "PE restore crop" to roll back with no failures (the injection seam for slice 3's restore falsifier), `Document.Equals` tell family.loadTest's scratch document apart while `ReferenceEquals` never does, and ProjectInformation.UniqueId collide across two documents from one template (never a document key). A views-only classifier of a capture's changed ids is falsified: the crop commit also modifies non-view auxiliary elements (49831, 1235368).
-- The browser journal has three owners, not one file: the purger found `createWorkJournal` in `application-work-registry.ts` and the `acquireWorkJournal` map in `shell/journal.ts`. `runtime/work-journal.ts` stays as the host engine; slice 8 deletes every web importer.
-- File sets grew where readers found them short: K1 gains `pe-api.ts`; SI-S2 gains `native-receipts.ts`; SI-S3's callers gain `captures-route.ts`, `captures/list.tsx`, `ops/renderers.ts`, `rooms/rooms-plan.ts`, `takeoff/plan.ts`, `HostProtocolContracts.cs` and the recorded fixtures; SH-S6 gains `rooms/plan.tsx`, `typed-route.ts:367`, `route-environment.ts` and `route-kernel-environment.ts`; F1 gains `typed-mount.ts:456`, `graph-history.tsx:35`, `ducts/sheet/types.ts`, `findings/verb.tsx`; C3 gains `input-history.neutral.test.ts` and `fans/native.test-support.ts`; C9 gains three tests that seed `pe.places`. Each writer's brief carries its reader's file set.
-- The purger's first scour (P2 to P20, checked against the code at ee2d30fd; full list in `.artifacts/runs/kernel2-20261112/` and the purger's thread) lands in these file sets:
-  - k2/store: preservation is carried by the kind, never by a caller's optional `blobRoot` (`store.ts:51,188`; ten discard sites pass none), and the falsifier plants a kind with no blob root. A person's clear (`route-document-store.ts:46`) is a set-aside with bytes kept, so slice 8 can undo it. One path table mints machine-state paths: `host-contracts/src/service-identity.ts`; `host/src/product-paths.ts` stops minting its own. `work-upgrade.test.ts` and `ducts-analysis.test.ts:250` are this slice's intended reds, rewritten or deleted in its file set.
-  - k2/read-contract: one firm-settings reader, `tiered-settings.ts`; the raw reader in `ducts-files.ts:39,48` goes.
-  - k2/script-hold: the hold is caller-blind at construction (`ScriptRunScope.cs:29,35`, `RevitScriptExecutionService.cs:72`), so the caller is carried through execution, not only named in a comment.
-  - k2/native-scope: `host/src/input-context.ts:47-49` (it reads `intent` and `rollsBack`); the sheet-filter flip in `RevitViewImageExporter.cs:158-166` is classified like the crop, a `SessionWrite` with a restore outcome; the dead `HostOperationContracts.cs:111,130` factories.
-  - k2/freeze-native: `Evidence.cs` is a new file (evidence lives in `Space/Types.cs:219` and `Scene.cs:106` today); the bridge terminal's `restored` and `restoreFailed` field in `BridgeContracts.cs:145` is part of the receipt response shape.
-  - k2/evidence-native: `Fresh`'s consumers outside Space (`Pe.Revit.Partition/Verbs.cs:269`, `Pe.Revit.Takeoff/RegionMeasurements.cs:69`); dead `Partition.cs:123` `CaptureScene`.
-  - k2/generated-table: the inline hand-axes `sheetContract` at `route/typed-route.ts:22-30`.
-  - k2/projection-pea: extract `DUCTS_LAYER_OPTIONS` before `ducts/proto/e/teaching.ts` is deleted.
-  - k2/findings-rest: slice 9's falsifier also covers `ducts/proto/e/screen.tsx:251` and `ducts/sheet/view.tsx:86`; F10's one namer replaces the family and type rule in `ducts/claims.tsx:15` and `ducts-domain/src/loss-breakdown.ts:27`.
-  - k2/journal-delete: dead `shell/work-scope-acceptance.ts`.
-  - The purger's guards: the write ratchet counts every fs mutator spelling (37 files, 108 calls in CENSUS.md), not `writeFileSync` alone; the route-closure guard's frozen list holds every production route-to-route edge the scour found, `open/`, `sessions/`, `settings/` and `__root.tsx` included.
-  - `route/slots/sheet/pane.tsx` joins the landing-order list: it is touched by k2/verbs, k2/tier-row, k2/findings-rest, k2/bindings and the route-closure guard, in that order after k2/shell-states.
-  - The map's counts that no list backs ("23 body sites", "24 hand-written schemas") are not acceptance counts; each slice's compile break is its census.
+```ts
+type OwnerBlobHomeKey = `owner-blob:${string}`; // canonical lowercase Guid D
+type GeneratedOwnerBlobHome = { readonly key: OwnerBlobHomeKey };
+// HomeHandle is the S2 union; GeneratedOwnerBlobHome is its native blob branch.
+type CommandWriteContract = { readonly writes: readonly HomeHandle[] };
+type NativeCommandAllowance = {
+  readonly derivedCommand: string;
+  readonly allowedHomeKeys: readonly string[];
+};
+```
 
-### Assumptions that no run has checked
+From `plan-check/G5.md:132`:
 
-| # | Assumption | Spike | Fallback if it fails |
-|---|---|---|---|
-| A | Revit's change event for a crop commit lists the view, so the runner can tell a held restore from a failed one without a third effect | inside slice 3, on the fresh rung | the owner reopens a `Restored` effect; nothing else in the map depends on its absence |
-| B | The read-lifetime helper can land before both of its consumers | the implementor's plan check of slice 6 | slice 6 lands as one piece, and slices 7 and 9's leaves wait on it |
-| C | `touched` can reach `pe-revit op result` | none here: the SDK's `OpReceipt` is outside this checkout | `touched` is on the host receipt only, and one Owed line goes to the SDK |
-| D | 58 plan rows fold into 14 slices without hiding a collision | the implementor's plan check lists each slice's file set | the implementor splits a slice and logs it here |
+```csharp
+// Document home, on Project Information via OwnerBlobStore.
+OwnerBlobStore.Write(document, RegionRecord.Owner, regionRecord.ToData());
+// Proposed payload contract. Envelope is { owner, version, data }.
+// data.byUniqueId: map from FilledRegion.UniqueId to
+// { role, provenance, fields }
+// fields: { name, type, ceilingFt, people, lightingW,
+//           equipSensible, equipLatent, ventilationCfm }
+```
+
+The owner's ruling on `lands` came after G5 was written. It makes `writes` a map from each home to the cells the command lands, so `CommandWriteContract` above is out of date in that one field. The allowlist is the keys of the map. S2b writes the new type here before S11 reads it.
+
+The two reports also name the region map differently: `data.byUniqueId` in G5 and `data.regions` in G6. S8a owns the record, so G6's name stands unless S8a changes it here.
+
+Region record, per-cell receipt, backup and notice, for S8a, S8b, S9 and S11. From `plan-check/G6.md:32`:
+
+```text
+{owner, version, data:{regions:{[UniqueId]:{
+  role: "zoning-region" | "room-region" | "held-residue",
+  fields:{name,type,ceilingFt,people,lightingW,equipSensible,equipLatent,ventilationCfm},
+  provenance:{zone:UniqueId|null,runId,sourceRoomId,sourceSqft,
+              partition?,measurement?,r10?,geometryHash?,wallHash?,flags,mergedFrom?:UniqueId[],
+              view?,name?,systemTag?,...ownerExtensionData}
+}}}}
+RoomField = name | type | ceilingFt | people | lightingW | equipSensible | equipLatent | ventilationCfm | role
+RoomsWriteReceipt = {cells:[{uniqueId: string, field: RoomField, value: string|number|null}]}
+DuctElementMap<T> = Record<UniqueId,T>
+DuctStoreDeletes = {instances?:UniqueId[],terminals?:UniqueId[],terminalFlows?:UniqueId[],
+                    equipmentFlows?:UniqueId[],roles?:UniqueId[],verdicts?:string[]}
+ReplacementEvidence = {documentIdentity,owner,versionOrDecodeReason,rawUtf8Sha256,localBackupRef}
+```
+
+The C# write set of S8a and S8b. From `plan-check/G6.md:62`:
+
+```text
+dotnet/Pe.Revit.Takeoff/TakeoffCarriers.cs
+dotnet/Pe.Revit.Takeoff/Rooms.cs
+dotnet/Pe.Revit.Takeoff/RoomsRunTraces.cs
+dotnet/Pe.Revit.Takeoff/ZoneMaterializer.cs
+dotnet/Pe.Revit.Takeoff/TakeoffAtlas.cs
+dotnet/Pe.Revit.Takeoff/RegionMeasurements.cs
+dotnet/Pe.Revit.Takeoff/SystemRegistry.cs
+dotnet/Pe.Shared.RevitData/Takeoffs/TakeoffContracts.cs
+dotnet/Pe.Revit.Global/Services/Host/RevitDataRequestService.cs
+dotnet/Pe.Shared.RevitData/Serialization/OwnerBlob.cs
+dotnet/Pe.Revit/Parameters/OwnerBlobStore.cs
+dotnet/Pe.Shared.RevitData/Ducts/DuctApply.cs
+dotnet/Pe.Shared.RevitData/Ducts/DuctContracts.cs
+dotnet/Pe.Revit.Global/Lib/Mep/DuctApplier.cs
+dotnet/Pe.App/Services/AutoTag/AutoTagService.cs
+dotnet/Pe.Revit.Partition/Declaration.cs
+```
+
+The TypeScript cutover paths and generated outputs of S8a and S8b. From `plan-check/G6.md:85`:
+
+```text
+ts/apps/host/src/takeoff-actions.ts
+ts/packages/agent-contracts/src/rooms.ts
+ts/packages/agent-contracts/src/semantic-actions.ts
+ts/packages/mcps/src/shared/takeoff-ops.ts
+ts/products/ducts/domain/src/calc/inputs.ts
+ts/products/ducts/domain/src/rulings.ts
+ts/products/ducts/domain/src/staged.ts
+ts/products/ducts/domain/src/unit-roles.ts
+ts/products/ducts/domain/src/write-evidence.ts
+ts/products/fans/domain/src/calc/write-request.ts
+ts/products/fans/host/src/actions.ts
+ts/products/duct-systems/contract/src/ducts.ts
+ts/packages/host-contracts/src/generated/host-catalog.generated.ts
+ts/packages/host-contracts/src/generated/host-ops.generated.ts
+ts/packages/host-contracts/src/generated/native-effect.generated.ts
+ts/packages/host-contracts/src/generated/ops-catalog.sha
+```
+
+S1 package: the seven helpers export from `@pe/agent-contracts`. The first commit of the S1 writer fixes the exact subpath, and it is copied into the brief of S2.
 
 ### Deliberately unbuilt
 
-- Fans numbers: the one table, the total as a claim, `ENCOUNTERS`, and the group engine's deletion. A later, smaller crusade; the ducts ledger holds its signed package and its three open rulings.
-- The ducts tutorial and its 60 cases. `ducts/proto/e`. The seven view prototypes. Scene presets as named lenses. Fans declaring a setting of its own. A verb that binds a project or firm home.
-- A containment-capable clearance solver. Slice 7 says unknown where none exists.
-- The `CloudProvider` contract and stub (ADR 0031 rule 9).
-- Threads and providers under the store's rules. Slice 2 writes the exception at the site, with its end condition.
-- A recorded clock and id for the host files outside findings. Slice 6 converts findings only.
-- Decoding a staged value on the host for the `/fans` and `/ducts` losses executors. Slice 10 guards the door.
-- A script's `Close(false)` on a modified project, and the other save doors the homes ledger lists as untested. Whether `DocumentClosing` can cancel is unproven.
-- Merging the resource-stream `Reading<T>` with the route reading state.
-- A lint against raw transactions outside ops.
+- Pods and Pages (ruling 12). One fact for a later effort: `pod.json` has two parsers and no schema, and the Page event log has no version.
+- The project-home round. The homes ledger owes it.
+- A bound-parameter home constructor, until a product needs one (ADR 0058).
+- Coverage of the door check for parameter, entity and trace writes, until the census after S8 says which of them are homes.
+- A token for Stop inside the Prepare and Capture phases of partition. Partition already has cooperative Stop and progress (G6).
 
 ## Deletion criteria
 
-- A slice merges into the integration branch when its writer's typecheck and touched tests pass. Its falsifier is a driver row stamped on a merged tip, and the end gate reads it. A slice is done when every item in its Deletes column is gone or was cut in the plan check above.
-- A guard is admitted only when a named mutant or a planted offender turns it red.
-- No slice writes migration code or a compatibility shim. A compile break is the census.
-- No slice adds a prompt, an approval window or a wait on the person.
-- A kit change is made inside the file set of the slice that needs it, as F3 does; no other thread patches the kit.
-- The crusade ends when slice 13's guard and slice 1's write ratchet hold, the browser journal engine and the hand-typed axes are gone, and every proof row is stamped on the final tip or ruled Owed by the owner.
+- A slice merges when its writer's typecheck and touched tests pass. Its falsifier is a row stamped on a merged tip.
+- A slice is done when everything its row says it deletes is gone.
+- No slice writes migration code, a compatibility shim or a forwarder. A compile break is the census.
+- A generated file is regenerated after a merge and never merged by hand.
+- The effort ends when no `pe` pointer key remains in any `package.json`, the generator has one mode, the old `ts/apps/web/src/rooms/` folder and the eleven carriers on Detail Items are gone, the door check refuses in a fresh-rung test, and every proof row is stamped on the final tip or ruled Owed by the owner.
+- Branch `spike/muse-product-decl` (`f7e68a81`) is deleted when S2a starts.
 
 ## Risk tier per surface
 
 | Surface | Tier | Why |
 |---|---|---|
-| The store (slice 1), tier saves as Timeline rows (slice 8) | integrity | a wrong set-aside or undo loses a person's bytes |
-| Timeline undo (slice 8) | integrity | undo must stop at a consumed Revit write, for both authors |
-| Effect scopes, the script hold, Stop (slices 3, 6) | integrity | they decide what may change a project document and who is held |
-| Pod code admission (slice 2) | integrity | host code run from a content home |
-| Evidence (slice 7) | contract | a machine claim an engineer acts on |
-| Handles, verbs, reads, bindings (slices 4, 6, 10) | contract | generated keys and schemas cross every boundary and reach Pods |
-| Findings (slice 9) | contract | authorship and rulings on shared Work |
-| Reading states, projection, the band, closed folders (slices 5, 11, 12, 13) | presentation | drawing and import structure; no data path |
-| Bent-cut editor (P) | presentation | Page pose only; no Work binding |
+| The unreadable-record overwrite (S8b) | integrity | it replaces bytes in a person's model, and the kept copy is the only other one |
+| The region record and the duct re-key (S8a, S8b) | integrity | stored shapes change, and old records become unreadable on purpose |
+| The door check (S11) | integrity | it decides which home a command may write |
+| The archive (S0) | contract | it removes commands that Pea can call, so no door may stay advertised |
+| The kernel, the grammar and the conversions (S1 to S4b) | contract | generated lists and types cross the host, the web and Pea |
+| Reading load and the queue holder (S6) | contract | it changes when a read is reused and which request reaches Revit |
+| The per-cell receipt of `rooms.write` (S8a, S9) | contract | a wrong receipt retires an edit that did not land |
+| The homes table and the Tutorial text (S5) | presentation | derived text with no data path |
+| The 2D plan picture (S7) and the Rooms and Takeoffs screens (S9 with S10) | presentation | drawing and layout. The host bodies in S9 are contract tier |
 
 ## Decision log
 
-- 2026-11-12, kaitpw: "I want to scope all of your 'crusades' into a single huge one, possibly with some of fan's stuff scoped in as well." And: "I will do the fans crusade later as a separate smaller one once the kernel is complete and can serve as a stronger base."
-- 2026-11-12, kaitpw, on the review page: the host owns the Timeline ("A · Host owns it"); the Work `upgrade` hook is deleted ("A · Delete it"); settings tiers are user, project, firm ("model is the same as project in principle."). The setting as a home was deferred ("im not sure i understand, I defer to u") and taken as the default all six route readers signed.
-- 2026-11-12, kaitpw, scope correction: "the ducts tutorial can probably wait for fans crusade, sorry for the confusing answer. any overly specific product code that its related to the deep primitive stuff can be left out too".
-- 2026-11-12, kaitpw: "no restored i agree with if u do too". Sight and Picture had answered that a focused capture is a `SessionWrite` and the restore outcome is a value of `touched`, at the cost of splitting the capture op in two. Assumption A is its falsifier.
-- 2026-11-12, kaitpw, on the script save hold: "i agree on as long as it doesn't cause approval friction. this is often a ux 'feature' that regresses. safety should be built it, but it must be through structure and notices, not approval gates that pause pea until the user notices them." Taken as an invariant of the whole map.
-- 2026-11-12, kaitpw: "i agree with basically all your recommendations". That is: delete the Pod plugin import; move Places to the host in this crusade, late; undo answers per author on every Work; a finding loses `place`; the `CloudProvider` seam is out.
-- 2026-11-12, on `place`: ADR 0035 rule 9 gave a finding a `place` for symmetry with a pointer's `target: SubjectRef | Place`. The keep verb writes `{}` into it and nothing reads it. It returns with a reader when a finding about an empty spot is needed.
-- 2026-11-12, kaitpw: "crusade is literally merging to main like right now so we'll b cutting from main." Homes closed on main at 26189fe5.
-- 2026-11-12, kaitpw: "take the defaults". Five points the plans left open: slice 8 owns the edit that registers the settings source with the Timeline; an unknown setting owner stays a 422 refusal, as `tiered-settings.ts` does today; a subject is stored as kind and subject and named by the one namer, and the teaching walk reads that namer; the read-context rename needs no adapter patch; the ADR 0038 guards exist (`ts/apps/host/src/guards.ts`, `ScriptRunScope.cs`), and slice 3 builds on them.
-- 2026-11-12, kaitpw, on this map's shape: "i wont nitpick this stuff, I dont think it matters much, please make all the stuff according to the docs skill." The 58 plan rows were folded into 14 slices and one parallel track by the mediator. The fold is re-openable by the implementor (assumption D).
-- 2026-11-12, kaitpw, on the implementor's plan check: "I'd walked away for a while. Anything that needs me? also btw, going forward I wont be around for most of the time that your running so when Im away just capture what needs me in a queue. I trust your defaults tho". Taken as agreement of the plan at f38543da with every default in "Plan check corrections"; owner items go to the run's OWNER-QUEUE.md and the run never waits on them.
-- 2026-11-12, kaitpw, clarifying: "I wasn't saying 'I trust your defaults' in reference to something you said that I read. I moreso meant 'i trust your judgement'. what were the defaults you accepted? no need to stop the runs unless I object to any of them". So the plan stands on the implementor's judgment, reviewed by the owner after launch; any default the owner objects to is reopened then.
-- 2026-11-12, kaitpw, on the owner queue: Fable children: "you will be the primary fable user, and purger maybe sometimes. i think neither driver nor integrator should use fable". Second implementor: "I leave the decision ... up to you. I agree that a second one might cause undue merge friction"; taken as none. The route-closure ratchet: "untangle is really more fans crusade material anyways. yes to ratchet too, dont let it rise meaningfully". A person's clear: "whatever is occam. I said delete because i want absolutely no legacy support or migration stuff. here, but also as a general principle. set aside is fine with me, i dont think i care about it being undo-able tho, especially since pea can perform edge case fixes since its a coding agent". So a clear goes through the one discard door (set aside, bytes kept) and the Timeline owes no undo of a clear.
+- 2026-11-19, kaitpw, rulings 1 and 2: "i hate C, json isnt strong enough. d i doint like bc it brings backend stuff into web code, bleh. A + B seems the way to go".
+- 2026-11-19, kaitpw, rulings 3 to 13: "agreed on all. family is mostly stable but i haent driven it substantially in a long time so its not worth the time. the last i remember we had lots of freshness/reactivity bugs".
+- 2026-11-20, kaitpw, ruling 14: "100% yes to turning the carriers into doc record."
+- 2026-11-20, kaitpw, ruling 15: "yes to placement. prove is kinda weird but not sure where would be better".
+- 2026-11-20, kaitpw, in the launch message: "Delegation stance is mostly sol 6.2, ignore the empty meter we have usage credits. fable low and sometimes medium where judgement counts. dont use partners/leads more than you need. however I would also like a fresh fable smeller after lots of code is written or lots of time has passed. they should always ask, firs principles, if there is a simpler or safer way to do things and steer direction away from smells, even if it costs some scope growth."
+- 2026-11-20, kaitpw, at plan agreement, on the stance table and the charter differences: "Agreed, launch". Restated: the `sol` model of `.agents/models.toml` runs most writers, the integrator and the driver. The `fable` model runs S2 at medium effort and the Rooms rebuild at low effort. The `opus` model runs only the root and one implementor per Rooms wave. S0 and S1 start beside the wave-zero red fixes. The root briefs the task slices S0 to S5 directly.
+- 2026-11-20, kaitpw, at plan agreement, on moves of main: "Every green tip". Restated: the integrator fast-forwards main to every integration tip whose full suite is green, all night, and the tips of the Rooms run are included. The root's default had held the Rooms tips to the end.
+- 2026-11-20, kaitpw, at plan agreement, on the smeller and the purger: "maybe as one?". This is a question and not a ruling. The default the run takes, which can be reopened: one role, the purger charter, run as a fresh thread per pass with no earlier context, after every 1,500 merged production lines or 3 wall hours, and once on the final tip. It asks from first principles whether a simpler or safer way exists.
+- 2026-11-20, kaitpw, on `lands`: "great, i like ur rec on lands. continue without me". Restated: placement is declared on the command and not on the cell. Each command carries one `writes` map from each home to the cells it lands. A cell that no command lands stays in Work. No cell carries a `lands` line. The recommendation the owner names is in `plan-check/G2.md`, under "The rule I would write".
+- 2026-11-20, the root's default, which can be reopened: the pointer for agents to the home ladder is one line in `ts/AGENTS.md`. The owner left the choice between that file and the `prove` skill open.
