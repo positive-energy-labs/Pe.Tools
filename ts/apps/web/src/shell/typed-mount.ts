@@ -87,12 +87,15 @@ const unavailable = (reason: string, value?: unknown, publication: Publication =
   value === undefined
     ? { state: "refused", reason, publication }
     : { state: "stale", value, reason, publication };
-const reading = (value?: unknown, publication: Publication = null): Snapshot =>
+const applyingReadReason = "Applying changes. The view will refresh when the write finishes.";
+const reading = (value?: unknown, publication: Publication = null, reason?: string): Snapshot =>
   value === undefined
     ? { state: "reading", publication }
-    : { state: "refreshing", value, publication };
+    : { state: "refreshing", value, publication, ...(reason ? { reason } : {}) };
 const inFlight = (snapshot: Snapshot) =>
   snapshot.state === "reading" || snapshot.state === "refreshing";
+const retain = (publication: Publication): Publication =>
+  publication && freezePage({ ...publication, freshness: "refresh-needed" as const });
 
 /** Typed routes execute declarations directly. No graph admission, body slots or reading scheduler. */
 export function mountTypedRoute(
@@ -214,6 +217,9 @@ export function mountTypedRoute(
         ],
       );
     let stopTimeline = () => {};
+    const applyingReviews = new Set<string>();
+    const applyingDocumentWrite = () =>
+      input.target?.kind === "document" && applyingReviews.size > 0;
     const reads = new Map<
       import("@pe/web-kernel/host-read").HostRead,
       { snapshot: Snapshot; args: string; stop(): void }
@@ -553,16 +559,17 @@ export function mountTypedRoute(
       for (const read of allReads) {
         const args = readInput(read),
           signature = canonicalRouteInput(args);
-        if (!force && signature === reads.get(read)?.args) continue;
+        if ((!force || applyingDocumentWrite()) && signature === reads.get(read)?.args) continue;
         const previous = reads.get(read)?.snapshot;
-        const retained: Publication = previous?.publication
-          ? freezePage({ ...previous.publication, freshness: "refresh-needed" as const })
-          : null;
         reads.get(read)?.stop();
         const controller = new AbortController();
         const record: { snapshot: Snapshot; args: string; stop(): void } = {
           args: signature,
-          snapshot: reading(valueOf(previous), retained),
+          snapshot: reading(
+            valueOf(previous),
+            retain(previous?.publication ?? null),
+            applyingDocumentWrite() ? applyingReadReason : undefined,
+          ),
           stop: () => controller.abort(),
         };
         reads.set(read, record);
@@ -570,6 +577,8 @@ export function mountTypedRoute(
           frame: Parameters<UseSource["open"]>[1] extends (arg: infer P) => any ? P : never,
         ) => {
           if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
+          // A read may have crossed this mount's accepted write. Refresh it after settlement.
+          if (applyingDocumentWrite()) return;
           if (frame.kind === "complete" || frame.kind === "part") {
             try {
               const packet = read.output.parse(frame.value);
@@ -851,7 +860,6 @@ export function mountTypedRoute(
         presentation: any;
       }
     >();
-    const applyingReviews = new Map<string, ReturnType<typeof reviews.get>>();
     const plans = new Map<string, InvocationToken>();
     const workSignature = () =>
       canonicalRouteInput([...owners].map(([id, o]) => [id, o.ready, o.handle]));
@@ -1072,17 +1080,28 @@ export function mountTypedRoute(
         const held = reviews.get(id);
         if (!held || !reviewCurrent(id, held.token, held.signature))
           throw Error("Review is stale; prepare it again");
-        applyingReviews.set(id, held);
+        applyingReviews.add(id);
         reviews.delete(id);
+        const documentWrite = applyingDocumentWrite();
+        if (documentWrite)
+          for (const record of reads.values()) {
+            const previous = record.snapshot;
+            record.snapshot = reading(
+              valueOf(previous),
+              retain(previous.publication),
+              applyingReadReason,
+            );
+          }
         notify();
         try {
           const result = await settleNative(
             door.submit({ id: crypto.randomUUID(), key, target: input.target!, input: held.input }),
           );
-          syncReads(true);
+          if (!documentWrite) syncReads(true);
           return result;
         } finally {
           applyingReviews.delete(id);
+          if (documentWrite && !applyingDocumentWrite()) syncReads(true);
           notify();
         }
       }
@@ -1451,11 +1470,11 @@ export function mountTypedRoute(
         syncReads(true);
       },
       review: (id: string) => {
-        const r = reviews.get(id) ?? applyingReviews.get(id);
+        const r = reviews.get(id);
         if (!r) return null;
         const stale = !reviewCurrent(id, r.token, r.signature);
         return {
-          preview: stale || !reviews.has(id) ? undefined : r.preview,
+          preview: stale ? undefined : r.preview,
           sentence: stale ? null : r.presentation.sentence,
           rows: stale ? [] : r.presentation.rows,
           cells: stale ? [] : r.presentation.cells,

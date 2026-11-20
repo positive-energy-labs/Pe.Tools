@@ -1983,6 +1983,7 @@ afterEach(() => {
 test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unreadable holds Apply", async () => {
   for (const unreadable of [false, true]) {
     const capture = structuredClone(realMuas);
+    let deliverRead: ReadingDelivery | undefined;
     native.submit.mockImplementation(async () => {
       const input = f.inputs.get("fans:sheet.plan") as { work: unknown };
       return {
@@ -2058,6 +2059,7 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
       "fans.calc-detail-snapshot": {
         kind: "use",
         open(_ctx, deliver) {
+          deliverRead = deliver;
           deliver({ kind: "complete", value: capture, revision: 1 });
         },
       },
@@ -2162,12 +2164,30 @@ test("JZ Fans native before: stage, Plan, inspect method and unset pressure; unr
         );
         expect(screen.queryByText("Apply is held: Plan the current Work first")).toBeNull();
         expect(screen.getByText("Applying…")).toBeTruthy();
+        const previous = f.typed.value();
+        expect(previous).toHaveProperty("value");
+        const raced = deliverRead!;
+        await act(async () =>
+          raced({
+            kind: "failure",
+            error: "The document-mark input changed while this was being read.",
+          }),
+        );
+        expect(f.typed.value()).toMatchObject({
+          state: "refreshing",
+          reason: "Applying changes. The view will refresh when the write finishes.",
+          value: "value" in previous ? previous.value : undefined,
+        });
+        expect(screen.queryByText(/changed since plan/)).toBeNull();
       } finally {
         await act(async () =>
           write.resolve({ id: "native-write", state: "succeeded", result: {} }),
         );
       }
       expect(screen.getByText("Write to Revit sent")).toBeTruthy();
+      await waitFor(() => expect(f.typed.value().state).toBe("ready"));
+      await act(async () => deliverRead!({ kind: "failure", error: "Offline" }));
+      expect(f.typed.value()).toMatchObject({ state: "stale", reason: "Offline" });
     }
     cleanup();
     closes
