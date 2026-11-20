@@ -330,9 +330,12 @@ export type ProductDeclaration = {
     Record<string, { readonly key: string } & Pick<ProductRoute, "captureSubject" | "demoPlace">>
   >;
   readonly guide?: Guide;
-  readonly http: Readonly<Record<string, HttpRead>>;
+  readonly http: HttpRoutes;
   readonly local: LocalOperations;
+  readonly callPolicies: Readonly<Record<string, CallPolicy>>;
 };
+/** A declared HTTP route: the kernel mounts it at its path, so the path is rooted. */
+type HttpRoutes = Readonly<Record<string, HttpRead & { readonly path: `/${string}` }>>;
 /** One local operation: a host body that needs no Revit, called by key through `/call`. */
 type LocalOperation = { readonly request?: Schema.Top; readonly response: Schema.Top };
 type LocalOperations = Readonly<Record<string, LocalOperation>>;
@@ -446,7 +449,7 @@ export function product<
   const ToolName extends string = Id,
   const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
-  const Http extends Readonly<Record<string, HttpRead>> = Record<never, never>,
+  const Http extends HttpRoutes = Record<never, never>,
   const Local extends LocalOperations = Record<never, never>,
 >(declaration: {
   /** The product folder, Work route and default name of its Pea tool. */

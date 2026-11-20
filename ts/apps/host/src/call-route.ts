@@ -1,4 +1,11 @@
-import { productGateway } from "./product-executors.generated.ts";
+import {
+  productCalls,
+  productGateway,
+  productHttp,
+  productLocal,
+  type ProductDependencies,
+} from "./product-executors.generated.ts";
+import { fileVersion } from "@pe/host-internal/local-files";
 import { hostOwnership } from "./host-ownership.ts";
 import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
@@ -136,7 +143,7 @@ function callRoutes(
   operations: ActionJournal,
   captures?: TakeoffCaptures,
   actionDeps: FamilyActionDependencies &
-    Parameters<typeof productGateway.commandFiles>[1] &
+    Partial<ProductDependencies> &
     InstancesActionDependencies & {
       launchShell?: (path: string) => Promise<void>;
     } = {},
@@ -282,7 +289,7 @@ function callRoutes(
 
       if (entry.saved) {
         op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
-        const value = yield* productGateway.saved(request, observations(), decodeRequest);
+        const value = yield* productLocalCall(key, request, observations());
         recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
@@ -441,13 +448,14 @@ function callRoutes(
               const selected = Effect.map(sessions.resolve(readScope), (session) =>
                 session.state?.openDocuments.find((doc) => doc.openId === target.openId),
               );
-              const { captureId: publishedId, ...result } = yield* productGateway.snapshot(
-                observations(),
-                target,
-                key,
-                request,
-                readScope,
-                selected,
+              const answer = productCalls[key];
+              if (!answer)
+                return yield* new BridgeError(`${key} has no host body`, 409, {
+                  notDispatched: true,
+                });
+              const { captureId: publishedId, ...result } = yield* answer(
+                { target, key, request, scope: readScope, selected },
+                { captures: observations() },
               );
               captureId = publishedId;
               return result;
@@ -626,7 +634,34 @@ function callRoutes(
       ),
     );
   });
-  const captured = productGateway.observationRoute(observations);
+  // Every `http` route a product declares, mounted from its declaration: the body gets the declared
+  // input, the query and the bridge target headers, and a thrown error is a 400.
+  const declared = productHttp.map(({ route, run }) =>
+    HttpRouter.add(route.method, route.path, (req) =>
+      Effect.gen(function* () {
+        const body = route.method === "GET" ? undefined : yield* req.json;
+        return Response.jsonUnsafe(
+          yield* Effect.tryPromise({
+            try: async () =>
+              run(
+                {
+                  input: route.input.shape.body.parse(body),
+                  query: new URL(req.url, "http://host").searchParams,
+                  session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
+                  openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
+                },
+                { captures: observations() },
+              ),
+            catch: (error) => error,
+          }),
+        );
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })),
+        ),
+      ),
+    ),
+  );
   const uploads = HttpRouter.add(peRoutes["blobs.put"].method, peRoutes["blobs.put"].path, (req) =>
     Effect.gen(function* () {
       const caller = currentCaller();
@@ -713,7 +748,7 @@ function callRoutes(
           const path = query.get("file")!;
           return Response.jsonUnsafe({
             path,
-            fileVersion: await (actionDeps.fileVersion ?? productGateway.fileVersion)(path),
+            fileVersion: await fileVersion(path),
           });
         }
         // Exported inputs by original action ID; the receipt, not this, says how the action settled.
@@ -931,7 +966,7 @@ function callRoutes(
     post.pipe(Layer.provide(httpProblems)),
     nativeReadResolveRoute.pipe(Layer.provide(httpProblems)),
     familiesReadings,
-    captured,
+    ...declared,
     uploads,
     actions,
     actionReads,
@@ -1037,6 +1072,7 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
 ) {
   // pod.export, pod.import and pod.promote have no local entry: the gateway runs their prepared
   // archive inline (gateway-actions.ts host-leaf), and /call refuses them as mutations.
+  if (Object.hasOwn(productLocal, key)) return yield* productLocalCall(key, request, captures);
   if (!hasLocalEntry(key))
     return yield* Effect.fail(
       new BridgeError(`${key} runs only through /actions`, 409, { notDispatched: true }),
@@ -1200,7 +1236,6 @@ const localEntries = {
   "aps.auth.token": Effect.fnUntraced(function* ({ request }: LocalCall) {
     return yield* apsAuthToken(yield* decodeRequest("aps.auth.token", request));
   }),
-  ...productGateway.calls(hostOwnership, (key, request) => decodeRequest(key, request)),
 };
 
 /** A package refusal keeps its own words; identity misses are 404, twins 409, bad members 422. */
@@ -1241,6 +1276,22 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
   ).pipe(
     Effect.mapError((error) => new InvalidHostRequest(key, error.message)),
   )) as TsOnlyRequest<K>;
+});
+/** A product's local operation: the kernel decodes the request it declared, then calls its body. */
+const productLocalCall = Effect.fnUntraced(function* (
+  key: string,
+  request: unknown,
+  captures: TakeoffCaptures,
+) {
+  const declared = productLocal[key];
+  if (!declared)
+    return yield* new BridgeError(`${key} has no host body`, 409, { notDispatched: true });
+  const input = declared.request
+    ? yield* Schema.decodeUnknownEffect(declared.request as Schema.Codec<unknown>, {
+        onExcessProperty: "error",
+      })(request ?? {}).pipe(Effect.mapError((error) => new InvalidHostRequest(key, error.message)))
+    : {};
+  return yield* declared.run(input, { captures, roots: hostOwnership });
 });
 
 function toProblem(error: unknown): {

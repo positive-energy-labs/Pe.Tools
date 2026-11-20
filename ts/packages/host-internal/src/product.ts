@@ -39,7 +39,8 @@ export type CallBody<D> = (
     readonly scope: HostSessionScope;
     readonly selected: Effect.Effect<
       { readonly address?: string | null; readonly title: string } | undefined,
-      unknown
+      unknown,
+      RequestIdentity
     >;
   },
   deps: D,
@@ -48,7 +49,7 @@ export type CallBody<D> = (
     readonly captureId?: string;
     readonly value: unknown;
     readonly nativeRequestId?: string;
-    readonly target: unknown;
+    readonly target: { session: string; document: string | null; documentRef?: DocumentRef };
   },
   unknown,
   HostNativeRead | RequestIdentity
@@ -65,7 +66,7 @@ export function implement<P extends ProductDeclaration, D = Dependencies>(
   executors: (...args: Parameters<CommandBody<D>>) => Record<string, CommandExecutor>;
   /** Outside a command the host hands these bodies what it holds, so each takes a partial `D`. */
   http: Record<string, (request: HttpRequest, deps: Partial<D>) => Promise<unknown>>;
-  local: Record<string, (input: never, deps: Partial<D>) => LocalRun>;
+  local: Record<string, (input: unknown, deps: Partial<D>) => LocalRun>;
   files: Record<string, FileBody<Partial<D>>>;
   calls: Record<string, CallBody<Partial<D>>>;
 };
