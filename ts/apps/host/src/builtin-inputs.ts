@@ -422,7 +422,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         )
       : null;
     const graphRequest = graph?.publication;
-    const rawTarget = (graph?.args as { target?: unknown } | undefined)?.target;
+    const rawArgs = graph?.args;
+    const rawTarget =
+      rawArgs && typeof rawArgs === "object" && "target" in rawArgs ? rawArgs.target : undefined;
     const historyDocument = documentRefSchema.safeParse(rawTarget);
     const target = executionTargetSchema.safeParse(rawTarget);
     const document = historyDocument.success
@@ -1024,10 +1026,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           const key = readingKey(reading);
           const { generation } = reading;
           const subscription = canonicalJson([identity.caller, reading.subscription]);
-          let state = { version: 0, state: "absent" } as Pick<
-            Publication<unknown>,
-            "version" | "refreshCause"
-          > & { state: string; retry?: number };
+          let state: Pick<Publication<unknown>, "version" | "refreshCause"> & {
+            state: string;
+            retry?: number;
+          } = { version: 0, state: "absent" };
           let holder: QueueHolder = null,
             statusVersion = 0;
           const send = () =>
@@ -1117,7 +1119,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       };
       const source = consumption ? sources(consumption) : undefined;
       return {
-        ...(graph && source
+        ...(graph && source && consumption
           ? {
               readGraph: async () => {
                 const evaluatorPort = inputPort({
@@ -1126,8 +1128,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   source,
                   workspace,
                   marks,
-                  run: scoped(consumption!),
-                  evaluation: consumption!.id,
+                  run: scoped(consumption),
+                  evaluation: consumption.id,
                   origin: () => inputs.source,
                   revision: invalidations.revision,
                 });
@@ -1145,13 +1147,16 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                         reuse: {
                           target: document,
                           scope: canonicalJson([identity.caller, recipe.scope, reuseAddress]),
-                          ready: async () => {
-                            const admitted = await invoke(
-                              Effect.result(admitNativeCaller("rooms.roster")),
-                            );
+                          ready: async (nativeKeys: readonly string[]) => {
+                            for (const key of nativeKeys)
+                              if (
+                                (await invoke(Effect.result(admitNativeCaller(key))))._tag !==
+                                "Success"
+                              )
+                                return false;
                             settledMarks = marks.settled?.();
                             await settledMarks;
-                            return admitted._tag === "Success";
+                            return true;
                           },
                           current: () =>
                             !writer?.capture.truncated() &&
@@ -1169,14 +1174,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                       history && writer && historyDocument.success
                         ? async (publication) => {
                             // Live inventory and seal stay awaited outside History.record (fail closed); only keep/append may fail open (K4).
-                            const row = await scoped(consumption!)(
+                            const row = await scoped(consumption)(
                               inventory
                                 .document(historyDocument.data)
                                 .pipe(Effect.provideService(RequestIdentity, identity)),
                             );
                             const address = addressSchema.parse(row.address);
-                            if (publication.value?.inputs === consumption!.id)
-                              await complete(consumption!);
+                            if (publication.value?.inputs === consumption.id)
+                              await complete(consumption);
                             // A hit keeps its original sealed inputs. History verifies those references.
                             else if (row.address !== reuseAddress)
                               throw new RefreshNeeded(

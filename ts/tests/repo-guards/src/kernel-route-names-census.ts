@@ -14,6 +14,10 @@ const directories = ["ts/packages/runtime/src", "ts/packages/host-internal/src/r
 const readRoot = "ts/apps/host/src/reads";
 // Ownership is reviewed per file, never inferred from a generated-file glob.
 export const readFileOwnership = {
+  "completed-reads.ts": {
+    owner: "kernel",
+    reason: "Bounded completed reads and declared freshness",
+  },
   "history-routes.ts": { owner: "kernel", reason: "Generic History HTTP admission and dispatch" },
   "history.ts": { owner: "kernel", reason: "Durable publication History and replay" },
   "inputs.ts": { owner: "kernel", reason: "Tracked native, Work, file and document inputs" },

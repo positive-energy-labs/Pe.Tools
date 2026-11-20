@@ -51,6 +51,7 @@ import {
 } from "./host-read-graph.test-support.ts";
 import { subjectCode, type UniqueId } from "@pe/agent-contracts";
 import { contract } from "@pe/agent-contracts/handle";
+import { nativeArgs } from "@pe/agent-contracts/native-output-read";
 import { body } from "@pe/host-internal/read-graph";
 const fanCode = (row: { uniqueId: string; portIndex: number }) =>
   subjectCode({ keyKind: "UniqueId", key: row.uniqueId as UniqueId, sub: { port: row.portIndex } });
@@ -63,6 +64,9 @@ test("S6 a completed read reuses only the same definition, arguments and marked 
     extra: z.boolean().optional(),
   });
   const extra = leaf("untracked", z.null(), z.number(), false);
+  const native = leaf("native", nativeArgs, z.number(), false);
+  const operation = "mep.system.members";
+  const admitted: (readonly string[])[] = [];
   let reads = 0,
     revision = 0,
     open = true;
@@ -70,12 +74,17 @@ test("S6 a completed read reuses only the same definition, arguments and marked 
   const plans = contract("probe.plans", {
     input,
     data: z.number(),
-    uses: [],
+    uses: [operation],
     load: { freshBy: ["document-mark"] },
   });
   const definition = body(plans, async (ctx, args) => {
     reads++;
     const mark = await ctx.read(documentMark, args.target);
+    await ctx.read(native, {
+      key: operation,
+      request: {},
+      target: { kind: "document", ref: args.target },
+    });
     return mark.generation + (args.extra ? await ctx.read(extra, null) : args.option);
   });
   const run = (option = 2, target = ref, extra = false) => {
@@ -88,7 +97,15 @@ test("S6 a completed read reuses only the same definition, arguments and marked 
           ? { observedSince: 0, changedAt: null, generation: revision }
           : 10;
       },
-      reuse: { target, scope: "local", ready: async () => true, current: () => open },
+      reuse: {
+        target,
+        scope: "local",
+        ready: async (keys) => {
+          admitted.push(keys);
+          return true;
+        },
+        current: () => open,
+      },
     };
     return publications.publish(
       "probe",
@@ -103,6 +120,7 @@ test("S6 a completed read reuses only the same definition, arguments and marked 
   };
   const first = await run();
   expect((await run()).value?.evaluation).toBe(first.value?.evaluation);
+  expect(admitted).toEqual([[operation]]);
   expect(kept).toEqual([first.value?.inputs, first.value?.inputs]);
   expect(reads).toBe(1);
   revision++;
