@@ -59,7 +59,7 @@ function digest(sources: readonly string[]): string {
     .toString("utf8")
     .trim()
     .split("\n");
-  const homes = new URL("../src/generated/native-homes.generated.json", import.meta.url);
+  const homes = new URL("../src/generated/native-homes.generated.ts", import.meta.url);
   const hash = createHash("sha256").update(readFileSync(homes, "utf8").replaceAll("\r\n", "\n"));
   sources.forEach((f, i) => {
     hash.update(f);

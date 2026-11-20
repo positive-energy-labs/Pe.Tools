@@ -88,13 +88,13 @@ test("Ducts and Fans own independent canonical host Work registrations", async (
         press: "criteria",
         label: "Return allowance",
         expectedRevision: 0,
-        patches: [{ path: ["criteria", "allowanceReturnInWg"], value: { edit: { value: 0.35 } } }],
+        patches: [{ path: ["allowanceReturnInWg"], value: { edit: { value: 0.35 } } }],
       }),
     ).toMatchObject({ ok: true });
     expect(
       (await f.workspace.view(bindWork("duct-systems", null), "duct-systems"))!.doc,
     ).toMatchObject({
-      criteria: { allowanceReturnInWg: { edit: { value: 0.35 } } },
+      allowanceReturnInWg: { edit: { value: 0.35 } },
     });
     expect(presenter.resolvedWork!.spec.route).toBe("fans");
     expect(owner.resolvedWork!.spec.route).toBe("duct-systems");

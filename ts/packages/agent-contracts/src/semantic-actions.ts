@@ -1,4 +1,5 @@
 import { commandTable } from "./command-axes.ts";
+import { sheetCommands } from "./slots/sheet-command.ts";
 import {
   roomsViewId,
   roomRegionUniqueId,
@@ -286,6 +287,7 @@ export const builtinCommandHead = {
 };
 export const builtinCommands = {
   ...builtinCommandHead,
+  ...sheetCommands,
   ...builtinTools.pods.commands,
   ...builtinTools.families.commands,
   ...builtinTools.takeoffs.commands,

@@ -1,6 +1,6 @@
 import { product } from "@pe/fans-contract/product";
 import { implement } from "@pe/host-internal/product";
-import { fansExecutors } from "./actions.ts";
+import { fanLosses } from "./actions.ts";
 import {
   ductCalc,
   fanCalcBreakdown,
@@ -10,7 +10,7 @@ import {
 } from "./fan-calc.ts";
 import { fansCalc } from "./host.ts";
 
-const { reads } = implement(product, {
+export const host = implement(product, {
   readings: {
     calc: fansCalc,
     roster: fanRoster,
@@ -20,8 +20,7 @@ const { reads } = implement(product, {
     networkCalcs: networkCalcsBody,
   },
   commands: {
-    "sheet.plan": (bridge, deps) => fansExecutors(bridge, deps)["sheet.plan"],
-    "sheet.apply": (bridge, deps) => fansExecutors(bridge, deps)["sheet.apply"],
+    "sheet.plan": fanLosses("sheet.plan", "plan"),
+    "sheet.apply": fanLosses("sheet.apply", "apply"),
   },
 });
-export const host = { product, reads, sheet: fansExecutors };

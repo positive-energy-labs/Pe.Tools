@@ -60,12 +60,10 @@ test("V3: duct-systems draws exactly one row per criterion with the priced value
   const rows = cells(designCalc, { settings, criteria });
   for (const cell of Object.keys(DUCTS_CRITERIA_CELLS)) {
     expect(
-      rows.filter(
-        (row) => row.binding === `criteria.${cell}` || row.binding === `setting.ducts.${cell}`,
-      ),
+      rows.filter((row) => row.binding === cell || row.binding === `setting.ducts.${cell}`),
     ).toHaveLength(1);
   }
-  expect(rows.find((row) => row.binding === "criteria.autoJoinGapIn")).toMatchObject({
+  expect(rows.find((row) => row.binding === "autoJoinGapIn")).toMatchObject({
     value: 9,
     source: "work",
   });

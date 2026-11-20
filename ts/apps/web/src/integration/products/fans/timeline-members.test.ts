@@ -83,7 +83,7 @@ test("D25: /fans Timeline names Fans, Ducts, Ducts for undo, undo, redo", async 
     // Work chronology is timestamp ordered, as in the existing host door fixture.
     await new Promise((resolve) => setTimeout(resolve, 3));
   };
-  await edit(ducts, ["criteria", "velocitySupplyFpm"], 925, "Ducts supply velocity 925");
+  await edit(ducts, ["velocitySupplyFpm"], 925, "Ducts supply velocity 925");
   await edit(fans, ["equipmentFlows", fan], 1234, "Fans airflow 1234");
   // A newer edit in a Work /fans never reads must not compete with either step.
   const schedules = { ...fans, route: "schedules" };

@@ -127,7 +127,10 @@ export const DUCTS_CRITERIA_CELLS = {
   splitPolicy: criterion(["splitPolicy"], {
     kind: "enum",
     shape: splitPolicy,
-    choices: ["even", "proportional"].map((value) => ({ value, label: value })),
+    choices: [
+      { value: "even", label: "even" },
+      { value: "proportional", label: "proportional" },
+    ],
   }),
   allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], {
     kind: "number",
@@ -187,11 +190,11 @@ export function criteriaMeta(
     // An unreadable stored criterion keeps its marker, so the resolver holds it invalid instead of falling to the firm value (P-040).
     const invalid = cells[cell]?.invalid;
     if (invalid) {
-      meta[cell] = { invalid, ref: `work:${work}/criteria/${cell}` };
+      meta[cell] = { invalid, ref: `work:${work}/${cell}` };
       continue;
     }
     const edit = cells[cell]?.edit;
-    if (edit?.by) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/criteria/${cell}` };
+    if (edit?.by) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/${cell}` };
   }
   return meta;
 }

@@ -150,7 +150,7 @@ export function commandRegistry(
               deps,
               // A route-free catalog owner has no tool; its Work spec is the catalog entry's.
               catalogWorkSpecs[boundary.route as keyof typeof catalogWorkSpecs],
-              ownExecutors.has(key) && boundary.phase === "preview",
+              ownExecutors.has(key) && boundary.phase === "preview" && !entry.sealOnly,
             )
           : entry;
     if (modelWrite && wrapped.boundary !== "work")

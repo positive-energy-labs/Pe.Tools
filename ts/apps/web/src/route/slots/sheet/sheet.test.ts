@@ -102,7 +102,7 @@ test("slice 7: a draft slot draws each Work cell's staged value with its author,
         home: { at: "store", store: "_PE_DuctLosses" },
         domain: {
           kind: "object",
-          fields: { role: { kind: "enum", shape: z.string(), choices: [] } },
+          fields: { role: { kind: "text", shape: z.string() } },
         },
         per: "subject",
         model: (_read: unknown, row: string | undefined) =>

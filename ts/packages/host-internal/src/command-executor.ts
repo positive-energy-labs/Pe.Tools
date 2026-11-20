@@ -163,6 +163,8 @@ export type StepRecovery = (
 
 /** One stable executor per command. Only bind creates invocation-local closures. */
 export interface CommandExecutor {
+  /** A preview binds and seals the request without running its executor. */
+  readonly sealOnly?: true;
   definition: Command | ((context: CommandContext) => Command | Promise<Command>);
   prepared: z.ZodType;
   /** Producer-owned semantic projection; acquisition envelopes never enter a write seal. */

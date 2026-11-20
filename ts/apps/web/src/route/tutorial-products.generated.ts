@@ -3,5 +3,4 @@ import type { ProductDeclaration } from "@pe/agent-contracts/product";
 import { product as product0 } from "@pe/duct-systems-contract/product";
 import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
-const products = [product0, product1, product2] as const;
-export const tutorialProducts: readonly ProductDeclaration[] = products.flatMap<ProductDeclaration>(product => "homes" in product ? [product] : []);
+export const tutorialProducts: readonly ProductDeclaration[] = [product0, product1, product2];

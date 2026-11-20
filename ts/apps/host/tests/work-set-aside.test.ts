@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { bindWork, workKey } from "@pe/agent-contracts";
-import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { fansRouteState } from "@pe/fans-contract/fans";
 import { RouteWorkspace } from "@pe/runtime";
 import { sha256Hex } from "@pe/host-contracts/kinds";
@@ -28,7 +28,7 @@ const blobOf = (bytes: Uint8Array, path: string) =>
 const posted = (path: string) => storedNotices(stateMachine(path)).filter((n) => n.path === path);
 
 for (const [spec, staged] of [
-  [ductsRouteState, { labelParameter: { edit: { value: "Mark" } } }],
+  [ductSystems.work, { criteria: { velocitySupplyFpm: { edit: { value: 850, by: "human" } } } }],
   [fansRouteState, { writeIntent: { edit: { value: { walk: { unitId: 42, portIndex: 0 } } } } }],
 ] as const) {
   test(`${spec.route} Work at the previous schemaVersion is set aside: the blob holds its exact bytes, one notice names the Place, and the route opens empty`, async () => {
@@ -88,7 +88,7 @@ test.each(["record", "envelope"])(
   async (kind) => {
     const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-blob-"));
     const store = fileRouteDocumentStore(stateFixture(dir));
-    const spec = ductsRouteState,
+    const spec = ductSystems.work,
       key = bindWork(spec.route, null),
       targetKey = workKey(key);
     try {
@@ -116,7 +116,7 @@ test.each(["record", "envelope"])(
 test("a person's clear goes through the one set-aside door: bytes kept, one notice", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-clear-"));
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const spec = ductsRouteState,
+  const spec = ductSystems.work,
     targetKey = workKey(bindWork(spec.route, null));
   try {
     await store.setState({ targetKey, route: spec.route, value: { mine: "work" } });
@@ -141,7 +141,7 @@ test("a person's clear goes through the one set-aside door: bytes kept, one noti
 test("Work that cannot be read is kept: it still exists, one notice posted, and the route opens empty", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-kept-"));
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const spec = ductsRouteState,
+  const spec = ductSystems.work,
     key = bindWork(spec.route, null),
     targetKey = workKey(key);
   try {

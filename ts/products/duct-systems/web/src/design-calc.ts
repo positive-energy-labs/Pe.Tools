@@ -42,12 +42,11 @@ export const designCalc = {
       Object.keys(DUCTS_CRITERIA_CELLS)
         .filter(isCriteriaCell)
         .flatMap((cell) => {
-          const name = `criteria.${cell}`;
-          const binding = criteria[name];
+          const binding = criteria[cell];
           if (!binding || (binding.home.at !== "local" && binding.home.at !== "store")) return [];
           return [
             [
-              name,
+              cell,
               {
                 ...binding,
                 home: binding.home,

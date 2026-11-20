@@ -28,10 +28,14 @@ export type NumberDomain = {
 export type EnumChoice = { value: unknown; label: string; description?: string; disabled?: string };
 export type Domain =
   | NumberDomain
+  | { kind: "text"; shape: z.ZodType<string | null> }
+  | { kind: "value"; shape: z.ZodType }
   | {
       kind: "enum";
       shape: z.ZodType;
-      choices: readonly EnumChoice[] | ((read: any, row?: string) => readonly EnumChoice[]);
+      choices:
+        | readonly [EnumChoice, ...EnumChoice[]]
+        | ((read: any, row?: string) => readonly EnumChoice[]);
     }
   | OptionsDomain
   | { kind: "object"; fields: Readonly<Record<string, Domain>>; metadata?: z.ZodRawShape };
@@ -40,7 +44,7 @@ export type Placement = z.output<typeof placementSchema>;
 
 export type DomainValue<D extends Domain> = D extends NumberDomain
   ? number
-  : D extends { kind: "enum"; shape: z.ZodType<infer V> }
+  : D extends { shape: z.ZodType<infer V> }
     ? V
     : D extends { kind: "options" }
       ? string
@@ -62,6 +66,8 @@ export function schemaOf(domain: Domain): z.ZodType {
       if (domain.max !== undefined) schema = schema.max(domain.max);
       return schema;
     }
+    case "text":
+    case "value":
     case "enum":
       return domain.shape;
     case "options":
@@ -190,10 +196,10 @@ export interface StateCell<V = unknown> extends CellAddress {
  */
 export const SHEET_COMMANDS = { plan: "sheet.plan", apply: "sheet.apply" } as const;
 
-/** Enum schemas travel as JSON Schema; callbacks and read bodies stay local. */
+/** Schema-backed domains travel as JSON Schema; callbacks and read bodies stay local. */
 export type DomainData =
   | NumberDomain
-  | { kind: "enum"; shape: Record<string, unknown> }
+  | { kind: "enum" | "text" | "value"; shape: Record<string, unknown> }
   | {
       kind: "options";
       handle: "revit.catalog.field-options";
@@ -213,6 +219,8 @@ export const domainDataSchema: z.ZodType<DomainData> = z.lazy(() =>
       digits: z.number().int().nonnegative().optional(),
     }),
     z.strictObject({ kind: z.literal("enum"), shape: z.record(z.string(), z.unknown()) }),
+    z.strictObject({ kind: z.literal("text"), shape: z.record(z.string(), z.unknown()) }),
+    z.strictObject({ kind: z.literal("value"), shape: z.record(z.string(), z.unknown()) }),
     z.strictObject({
       kind: z.literal("options"),
       handle: z.literal("revit.catalog.field-options"),
@@ -260,6 +268,8 @@ export const sheetSlotDataSchema = z.strictObject({
 export type SheetSlotData = z.output<typeof sheetSlotDataSchema>;
 const domainData = (domain: Domain): DomainData => {
   switch (domain.kind) {
+    case "text":
+    case "value":
     case "enum":
       return {
         kind: domain.kind,
@@ -289,7 +299,7 @@ const domainData = (domain: Domain): DomainData => {
   }
 };
 export function schemaOfData(domain: z.output<typeof domainDataSchema>): z.ZodType {
-  if (domain.kind === "enum") return z.fromJSONSchema(domain.shape);
+  if ("shape" in domain) return z.fromJSONSchema(domain.shape);
   if (domain.kind === "object")
     return z.strictObject(
       Object.fromEntries(

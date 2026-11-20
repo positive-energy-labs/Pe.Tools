@@ -136,7 +136,7 @@ it("criteriaMeta keeps who staged each criterion, and a cell with no `by` has no
     } as never),
   ).toEqual({
     terminalDropInWg: { by: "pea", ref: "work:duct-systems/criteria/x" },
-    allowanceSupplyInWg: { by: "human", ref: "work:duct-systems/criteria/allowanceSupplyInWg" },
+    allowanceSupplyInWg: { by: "human", ref: "work:duct-systems/allowanceSupplyInWg" },
   });
 });
 

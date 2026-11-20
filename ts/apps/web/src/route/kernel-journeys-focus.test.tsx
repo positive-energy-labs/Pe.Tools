@@ -562,15 +562,15 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
   expect.soft(friction.closest("[data-sheet-cell]")?.textContent).toContain("at least 0");
   await user.click(screen.getByRole("textbox", { name: "Velocity limit supply" }));
   await user.keyboard("{Control>}a{/Control}0.123456789{Enter}");
-  await waitFor(() => expect(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit).toBeDefined());
-  expect.soft(ducts.owner()?.doc.criteria?.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
+  await waitFor(() => expect(ducts.owner()?.doc.velocitySupplyFpm?.edit).toBeDefined());
+  expect.soft(ducts.owner()?.doc.velocitySupplyFpm?.edit?.value).toBe(0.123456789);
   expect
     .soft(
       (
         f.saved.get("duct-systems") as {
-          doc: { criteria?: { velocitySupplyFpm?: { edit?: { value: number } } } };
+          doc: { velocitySupplyFpm?: { edit?: { value: number } } };
         }
-      ).doc.criteria?.velocitySupplyFpm?.edit?.value,
+      ).doc.velocitySupplyFpm?.edit?.value,
     )
     .toBe(0.123456789);
   const occupants = within(screen.getByRole("region", { name: "Takeoff occupants" }));
