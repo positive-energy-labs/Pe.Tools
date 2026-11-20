@@ -38,7 +38,7 @@ import { product, takeoffsWork } from "@pe/rooms-contract/product";
 const { commands } = product;
 export type Deps = Parameters<CommandBody>[1];
 /** Admission context is no native field. */
-export const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
+const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
   Object.fromEntries(
     Object.entries(input).filter(([key]) => !Object.hasOwn(workAdmissionSchema.shape, key)),
   );
@@ -58,7 +58,8 @@ export const sealCarrier = ({ process, replacement }: z.infer<typeof preparedCar
   request: { process, replacement },
   evidence: replacement,
 });
-export const replacing = (p: z.infer<typeof preparedCarrierSchema>) => p.replacement?.regions ?? undefined;
+export const replacing = (p: z.infer<typeof preparedCarrierSchema>) =>
+  p.replacement?.regions ?? undefined;
 const modelTarget = (ctx: CommandContext) => {
   if (ctx.admission.target.kind !== "document") throw refused("Exact document target required");
   return ctx.admission.target.ref;
@@ -199,8 +200,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
     }),
     "takeoffs.partition": command(commands["takeoffs.partition"], preparedCarrierSchema, {
       seal: sealCarrier,
-      bind: (ctx) =>
-        bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
+      bind: (ctx) => bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
       run: (ctx, execution) =>
         runModel(ctx, execution, deps, bridge, null, (native) => {
           return value(ctx, native, "takeoffs.partition", {

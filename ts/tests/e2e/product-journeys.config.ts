@@ -10,10 +10,9 @@ export default defineConfig(async (env) => {
     test: {
       ...config.test,
       include: [
-        fileURLToPath(new URL("../../products/*/web/journeys/*.journey.test.tsx", import.meta.url)).replaceAll(
-          "\\",
-          "/",
-        ),
+        fileURLToPath(
+          new URL("../../products/*/web/journeys/*.journey.test.tsx", import.meta.url),
+        ).replaceAll("\\", "/"),
       ],
       testTimeout: 60000,
     },

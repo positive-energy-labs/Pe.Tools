@@ -9,7 +9,7 @@ import { writeArtifact } from "./page-artifacts.ts";
 import { scheduleReadingSchema, type ScheduleReading } from "@pe/agent-contracts";
 
 /** The one sentence a surface shows for a retained reading that cannot arm a push. */
-export class StaleScheduleReading extends Error {
+class StaleScheduleReading extends Error {
   constructor(readonly id: string) {
     super(
       `Schedule reading ${id.slice(0, 12)} lacks the per-target evidence a push needs; re-read the schedule.`,

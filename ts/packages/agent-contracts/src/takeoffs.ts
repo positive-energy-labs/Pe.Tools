@@ -45,7 +45,6 @@ const modelViewSchema = z.object({
   replayPath: z.string().nullable(),
 });
 
-
 const roomDataSchema = z.object({
   people: z.number(),
   lightingW: z.number(),
@@ -367,7 +366,8 @@ const tupleOf = (key: string) => {
 export const takeoffEditKey = (roomId: string, field: RoomEditField) => tupleKey([roomId, field]);
 export const takeoffEditAddress = (key: string) => {
   const [roomId, field] = tupleOf(key);
-  if (!Object.hasOwn(roomEditSchema.shape, field)) throw Error(`Unknown Takeoffs room field ${field}`);
+  if (!Object.hasOwn(roomEditSchema.shape, field))
+    throw Error(`Unknown Takeoffs room field ${field}`);
   return { roomId, field: field as RoomEditField };
 };
 /** A person's verdict on a solver flag: `[roomGuid, flag]`. */

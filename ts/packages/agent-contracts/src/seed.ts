@@ -9,11 +9,7 @@ import { workKeySchema } from "./route-state.ts";
 import { familiesRouteState } from "./families.ts";
 import { parameterLinkProfileSchema, parameterLinksRouteState } from "./parameter-links.ts";
 import { settingsRouteState, podMemberSchema } from "./settings.ts";
-import {
-  takeoffSnapshotSchema,
-  candidateRegionSchema,
-  partitionRunSchema,
-} from "./takeoffs.ts";
+import { takeoffSnapshotSchema, candidateRegionSchema, partitionRunSchema } from "./takeoffs.ts";
 import { familyCaptureSchema } from "./family-actions.ts";
 
 /** One moment of a route: section 3 of the route-primitive spec. */
@@ -56,117 +52,118 @@ const common = {
   originalEvidence: z.unknown(),
 };
 const file = z.object({ member: podMemberSchema, rawContent: z.string() });
-const demoSeedSchema = <S extends z.ZodType>(takeoffs: S) => z.discriminatedUnion("route", [
-  z.object({
-    ...common,
-    route: z.literal("takeoffs"),
-    work: z.object({
-      key: workKeySchema,
-      revision: z.number().int().nonnegative(),
-      candidate: takeoffs,
+const demoSeedSchema = <S extends z.ZodType>(takeoffs: S) =>
+  z.discriminatedUnion("route", [
+    z.object({
+      ...common,
+      route: z.literal("takeoffs"),
+      work: z.object({
+        key: workKeySchema,
+        revision: z.number().int().nonnegative(),
+        candidate: takeoffs,
+      }),
+      readings: z.object({
+        snapshot: takeoffSnapshotSchema,
+        afterAdopt: takeoffSnapshotSchema.optional(),
+        partition: partitionRunSchema.optional(),
+        afterPartition: takeoffSnapshotSchema.optional(),
+        /** Versioned supplied facts, never a real file, checksum, writer or imported destination. */
+        rhvac: z
+          .object({
+            sample: z.literal("rectangular-room-v1"),
+            state: z.enum(["before", "after", "missing-system"]),
+            simulated: z.literal(true),
+          })
+          .optional(),
+        candidates: z.array(candidateRegionSchema),
+      }),
+      page: z.looseObject({
+        actionInput: z.string().optional(),
+        views: z.array(z.string()),
+        zones: z.array(z.string()),
+        dir: z.string(),
+        r10: z.string(),
+        stage: z.enum(["adopt", "audit", "sync"]),
+      }),
+      files: z.array(file),
     }),
-    readings: z.object({
-      snapshot: takeoffSnapshotSchema,
-      afterAdopt: takeoffSnapshotSchema.optional(),
-      partition: partitionRunSchema.optional(),
-      afterPartition: takeoffSnapshotSchema.optional(),
-      /** Versioned supplied facts, never a real file, checksum, writer or imported destination. */
-      rhvac: z
-        .object({
-          sample: z.literal("rectangular-room-v1"),
-          state: z.enum(["before", "after", "missing-system"]),
-          simulated: z.literal(true),
-        })
-        .optional(),
-      candidates: z.array(candidateRegionSchema),
+    z.object({
+      ...common,
+      route: z.literal("family"),
+      work: z.object({
+        key: workKeySchema,
+        revision: z.number().int().nonnegative(),
+        candidate: settingsRouteState.schema,
+      }),
+      readings: z.object({
+        captures: z.array(familyCaptureSchema),
+        files: z.array(file).min(1),
+        preparePlan: z.boolean().optional(),
+      }),
+      page: z.looseObject({
+        actionInput: z.string().optional(),
+        inputBuffer: z.unknown().nullable(),
+        armed: z.boolean(),
+      }),
+      scenario: z.enum([
+        "success",
+        "token-conflict",
+        "publication-refusal",
+        "native-unknown",
+        "plan-refusal",
+        "stale-plan",
+      ]),
     }),
-    page: z.looseObject({
-      actionInput: z.string().optional(),
-      views: z.array(z.string()),
-      zones: z.array(z.string()),
-      dir: z.string(),
-      r10: z.string(),
-      stage: z.enum(["adopt", "audit", "sync"]),
+    z.object({
+      ...common,
+      route: z.literal("families"),
+      work: z.object({
+        key: workKeySchema,
+        revision: z.number().int().nonnegative(),
+        candidate: familiesRouteState.schema,
+      }),
+      /** File-free: the profile the demo plans against is supplied as parsed JSON, never a path. */
+      readings: z.object({
+        profile: z.record(z.string(), z.unknown()),
+        /** Where the profile lands in the demo pod: the page's member. */
+        member: podMemberSchema,
+        families: z.array(z.string()).min(1),
+      }),
+      page: z.looseObject({ actionInput: z.string().optional(), armed: z.boolean() }),
+      scenario: z.enum(["success", "plan-refusal", "native-unknown"]).default("success"),
     }),
-    files: z.array(file),
-  }),
-  z.object({
-    ...common,
-    route: z.literal("family"),
-    work: z.object({
-      key: workKeySchema,
-      revision: z.number().int().nonnegative(),
-      candidate: settingsRouteState.schema,
+    z.object({
+      ...common,
+      route: z.literal("parameter-links"),
+      work: z.object({
+        key: workKeySchema,
+        revision: z.number().int().nonnegative(),
+        candidate: parameterLinksRouteState.schema,
+      }),
+      readings: z.object({
+        stored: parameterLinkProfileSchema.nullish(),
+        changedWriteCount: z.number().int().nonnegative().default(2),
+        blockingIssue: z.boolean().default(false),
+        prepareEvaluation: z.boolean().optional(),
+      }),
+      page: z.looseObject({ actionInput: z.string().optional(), armed: z.boolean() }),
+      scenario: z.enum(["success", "stale-basis", "native-unknown"]).default("success"),
     }),
-    readings: z.object({
-      captures: z.array(familyCaptureSchema),
-      files: z.array(file).min(1),
-      preparePlan: z.boolean().optional(),
+    z.object({
+      ...common,
+      route: z.literal("chat"),
+      work: z.object({
+        key: workKeySchema,
+        revision: z.number().int().nonnegative(),
+        candidate: z.unknown(),
+      }),
+      readings: z.looseObject({
+        messages: z.array(z.unknown()),
+        display: z.record(z.string(), z.unknown()),
+      }),
+      page: z.object({}),
     }),
-    page: z.looseObject({
-      actionInput: z.string().optional(),
-      inputBuffer: z.unknown().nullable(),
-      armed: z.boolean(),
-    }),
-    scenario: z.enum([
-      "success",
-      "token-conflict",
-      "publication-refusal",
-      "native-unknown",
-      "plan-refusal",
-      "stale-plan",
-    ]),
-  }),
-  z.object({
-    ...common,
-    route: z.literal("families"),
-    work: z.object({
-      key: workKeySchema,
-      revision: z.number().int().nonnegative(),
-      candidate: familiesRouteState.schema,
-    }),
-    /** File-free: the profile the demo plans against is supplied as parsed JSON, never a path. */
-    readings: z.object({
-      profile: z.record(z.string(), z.unknown()),
-      /** Where the profile lands in the demo pod: the page's member. */
-      member: podMemberSchema,
-      families: z.array(z.string()).min(1),
-    }),
-    page: z.looseObject({ actionInput: z.string().optional(), armed: z.boolean() }),
-    scenario: z.enum(["success", "plan-refusal", "native-unknown"]).default("success"),
-  }),
-  z.object({
-    ...common,
-    route: z.literal("parameter-links"),
-    work: z.object({
-      key: workKeySchema,
-      revision: z.number().int().nonnegative(),
-      candidate: parameterLinksRouteState.schema,
-    }),
-    readings: z.object({
-      stored: parameterLinkProfileSchema.nullish(),
-      changedWriteCount: z.number().int().nonnegative().default(2),
-      blockingIssue: z.boolean().default(false),
-      prepareEvaluation: z.boolean().optional(),
-    }),
-    page: z.looseObject({ actionInput: z.string().optional(), armed: z.boolean() }),
-    scenario: z.enum(["success", "stale-basis", "native-unknown"]).default("success"),
-  }),
-  z.object({
-    ...common,
-    route: z.literal("chat"),
-    work: z.object({
-      key: workKeySchema,
-      revision: z.number().int().nonnegative(),
-      candidate: z.unknown(),
-    }),
-    readings: z.looseObject({
-      messages: z.array(z.unknown()),
-      display: z.record(z.string(), z.unknown()),
-    }),
-    page: z.object({}),
-  }),
-]);
+  ]);
 
 /** Tag every container, so an original object cannot masquerade as a codec tag. */
 function encode(value: unknown): unknown {

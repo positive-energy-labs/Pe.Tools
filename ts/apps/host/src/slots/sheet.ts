@@ -207,8 +207,7 @@ export function sheetExecutors(
       const inner = (value: unknown) => {
         const prepared = preparedBy.parse(value);
         const executor = prepared.route === null ? parameters : sheets.get(prepared.route)?.[key];
-        if (!executor)
-          throw missingExecutor(prepared.route!);
+        if (!executor) throw missingExecutor(prepared.route!);
         return { executor, value: executor.prepared.parse(prepared.value) };
       };
       const executor: CommandExecutor = {
@@ -223,8 +222,7 @@ export function sheetExecutors(
           const { work, doc } = sheetInput.parse(ctx.admission.input);
           const { route } = work.key;
           const sheet = deps.workspace?.sheet(route);
-          if (!sheet)
-            throw refused(`Route ${route} declares no sheet slot`, "sheet.undeclared");
+          if (!sheet) throw refused(`Route ${route} declares no sheet slot`, "sheet.undeclared");
           const owner = sheets.get(route);
           if (!owner) {
             // Only an explicitly parameter-backed sheet can use the platform executor.

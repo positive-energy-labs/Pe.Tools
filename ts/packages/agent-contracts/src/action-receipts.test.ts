@@ -51,9 +51,7 @@ test("rooms partition progress carries known counts through the action status", 
   });
   expect(row.progress).toEqual(progress);
   expect(nativeProgressSchema.safeParse({ ...progress, zonesDone: 3 }).success).toBe(false);
-  expect(
-    nativeProgressSchema.parse({ phase: "Prepare", zonesDone: 0 }).zonesTotal,
-  ).toBeNull();
+  expect(nativeProgressSchema.parse({ phase: "Prepare", zonesDone: 0 }).zonesTotal).toBeNull();
 });
 
 test.each([
