@@ -116,6 +116,9 @@ const systemRow = z.object({
 });
 export const ductsRosterArgs = z.object({ target: documentRefSchema });
 export const DUCTS_SYSTEM_MAX = 512;
+/** Detailed pricing publishes the whole selected network and its fan calculations. */
+export const DUCTS_DETAIL_LIMIT = 16;
+export const ductDetailLimitMessage = `Open up to ${DUCTS_DETAIL_LIMIT} systems at a time from the Systems list.`;
 export const ductsNetworkArgs = ductsRosterArgs.extend({
   system: z.union([z.literal("all"), z.array(z.string()).max(DUCTS_SYSTEM_MAX)]),
 });

@@ -16,6 +16,7 @@ import { subjectCode, type RouteStatePatch } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { neutralFansWork } from "@pe/fans-contract/fans";
 import { stagedValues } from "@pe/duct-systems-contract/ducts";
+import { DUCTS_DETAIL_LIMIT, ductDetailLimitMessage } from "@pe/duct-systems-contract/ducts-read";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
 import { StateCell } from "@pe/kit/lang/cell";
@@ -369,6 +370,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
             </div>
           }
           systems={systemRows}
+          allRefusal={(roster?.systems.length ?? 0) > DUCTS_DETAIL_LIMIT ? ductDetailLimitMessage : null}
           value={ctx.value}
           fansOf={fansOf}
           nameOf={nameOf}
@@ -765,6 +767,7 @@ const SYSTEM_SORTS = {
 const SystemsList = memo(function SystemsList({
   header,
   systems,
+  allRefusal,
   value,
   fansOf,
   nameOf,
@@ -776,6 +779,7 @@ const SystemsList = memo(function SystemsList({
 }: {
   header: ReactNode;
   systems: ReturnType<typeof systemList>;
+  allRefusal: string | null;
   value: ValueHandle<unknown>;
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
@@ -882,12 +886,17 @@ const SystemsList = memo(function SystemsList({
         <>
           {header}
           <div className="flex gap-1 px-1">
-            <Button label="All systems" onPress={() => door?.all()}>
+            <Button
+              label="All systems"
+              refusal={allRefusal}
+              onPress={() => door?.all()}
+            >
               All
             </Button>
             <Button label="Clear systems" onPress={() => door?.clear()}>
               Clear
             </Button>
+            {allRefusal && <span className="t-small text-ink-2">{allRefusal}</span>}
           </div>
         </>
       }

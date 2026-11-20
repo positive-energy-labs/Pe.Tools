@@ -3,7 +3,8 @@ import * as contracts from "@pe/duct-systems-contract/contract";
 import { body } from "@pe/host-internal/read-graph";
 import { z } from "zod";
 import {
-  DUCTS_SYSTEM_MAX,
+  DUCTS_DETAIL_LIMIT,
+  ductDetailLimitMessage,
   ductsRosterArgs,
   ductsNetworkData,
   ductsPricingData,
@@ -80,8 +81,6 @@ export const ductsNetwork = body(contracts.network, async function (ctx, args) {
     : args.system === "all"
       ? roster.systems.map((system) => system.name)
       : [...new Set(args.system)];
-  if (names.length > DUCTS_SYSTEM_MAX)
-    throw Error(`Read at most ${DUCTS_SYSTEM_MAX} systems at once`);
   const unknown = names.filter((name) => !roster.systems.some((system) => system.name === name));
   if (unknown.length) throw Error(`System is not in this document: ${unknown.join(", ")}`);
   const wanted = [
@@ -89,6 +88,7 @@ export const ductsNetwork = body(contracts.network, async function (ctx, args) {
       roster.systems.filter((system) => names.includes(system.name)).map((system) => system.id),
     ),
   ];
+  if (wanted.length > DUCTS_DETAIL_LIMIT) throw Error(ductDetailLimitMessage);
   const parts = await ctx.collect(wanted, {
     read: systems,
     batch: SYSTEMS_PER_READ,
