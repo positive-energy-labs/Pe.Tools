@@ -170,7 +170,7 @@ test("a machine-local original missing from a residue is neither held nor void",
   });
 });
 
-test("a carrier blob's old resolutions suppress no flag: decisions come from Work only", () => {
+test("a region blob's old resolutions suppress no flag: decisions come from Work only", () => {
   const blob = JSON.stringify({
     runId: "run-1",
     sourceRoomId: "R01",

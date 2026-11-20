@@ -128,7 +128,7 @@ public class RoomsRunTracesTests
             using (var pending = new RoomsRunTraces.Pending(root, doc, view, runId))
             {
                 pending.Write(zone, new JObject { ["label"] = "Z1" });
-                record.Regions[zone] = new(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default);
+                record.Regions[zone] = new(TakeoffRecords.RoleZoningRegion, new(), RegionProvenance.Default);
                 record.Runs[view] = pending.Reference;
                 destination = Path.Combine(folder, pending.Reference.Attempt);
                 File.WriteAllText(destination, "obstruct promotion");

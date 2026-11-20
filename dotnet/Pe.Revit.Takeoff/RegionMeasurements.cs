@@ -26,12 +26,12 @@ internal static class RegionMeasurements
 
     internal static string ScopeKey(Document doc, View view, RoomsRegionRecord record, string? zoneId)
     {
-        var zone = zoneId != null && record[zoneId]?.Role == TakeoffCarriers.RoleZoningRegion
+        var zone = zoneId != null && record[zoneId]?.Role == TakeoffRecords.RoleZoningRegion
             ? doc.GetElement(zoneId) as FilledRegion : null;
         if (zone != null && zone.OwnerViewId != view.Id)
             throw new InvalidOperationException("Zoning Region and Room Region views disagree");
-        var regions = ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleRoomRegion)
-            .Concat(ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleHeldResidue));
+        var regions = ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffRecords.RoleRoomRegion)
+            .Concat(ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffRecords.RoleHeldResidue));
         return ScopeKey(view.GenLevel?.ProjectElevation
             ?? throw new InvalidOperationException("Takeoff view has no level"),
             zone == null ? null : TakeoffAtlas.Boundaries(zone), regions.Select(r => r.Loops));
@@ -51,8 +51,8 @@ internal static class RegionMeasurements
 
     internal static void Measure(Document doc, View view, RoomsRegionRecord record, string zoneId, string runId, World? world = null)
     {
-        var regions = ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleRoomRegion)
-            .Concat(ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffCarriers.RoleHeldResidue)).ToList();
+        var regions = ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffRecords.RoleRoomRegion)
+            .Concat(ZoneMaterializer.ReadExisting(doc, view, record, zoneId, TakeoffRecords.RoleHeldResidue)).ToList();
         var key = ScopeKey(doc, view, record, zoneId);
         var levelZ = view.GenLevel.ProjectElevation;
         if (regions.Count == 0) return;

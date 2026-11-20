@@ -110,7 +110,7 @@ public sealed class OwnerBlobTests {
         var read = OwnerBlob.Decode(Owner, raw);
         var evidence = OwnerBlob.Decode(Owner with { Owner = "another-owner" }, raw).Replacement! with { Owner = Owner.Owner };
 
-        Assert.That(read.Status, Is.EqualTo(OwnerBlobStatus.NewerVersion));
+        Assert.That((read.Status, read.Newer), Is.EqualTo((OwnerBlobStatus.UnknownVersion, true)));
         Assert.That(read.Raw, Is.EqualTo(raw));
         Assert.That(read.Replacement, Is.Null);
         foreach (var replacing in new[] { null, evidence })

@@ -50,10 +50,10 @@ public class RegionMeasurementsTests
         });
     }
 
-    // Legacy carrier keys are old human dismissals: no migrator, no silent discard. Both rewrite shapes the native paths use
+    // Legacy provenance keys are old human dismissals: no migrator, no silent discard. Both rewrite shapes the native paths use
     // (remeasure's `with` and materialization-failure's Flags.Add) must hand them back untouched.
     [Test]
-    public void RewriteKeepsLegacyAndUnknownCarrierKeysUntouched()
+    public void RewriteKeepsLegacyAndUnknownProvenanceKeysUntouched()
     {
         var resolutions = JToken.Parse("""[{"subject":"R01","flag":"orphaned-region","verb":"dismiss","at":"2026-08-01T00:00:00Z","runId":"run-1"}]""");
         var unknown = JToken.Parse("""{"Kept":{"MixedCase":[1,2.5,null]}}""");

@@ -116,7 +116,7 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(snapshot.Unreadable!.Single().Reason, Does.Contain(newerEnvelope ? "version" : "regions map"));
             Assert.That(Raw(document, owner), Is.EqualTo(planted));
             using var isolated = new OwnerBlobRecoveryFixture();
-            var replacement = TakeoffCarriers.Replacements(document).Regions;
+            var replacement = TakeoffRecords.Replacements(document).Regions;
             var reported = snapshot.Unreadable.Single().Reason;
             var draw = new RoomsDrawRequest(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Recovered");
             if (newerEnvelope) {
@@ -158,7 +158,7 @@ public sealed class OwnerBlobRoundTripTests {
             }
 
             recoveryNotices.Publish();
-            Assert.That(TakeoffCarriers.Replacements(document).Regions, Is.Null);
+            Assert.That(TakeoffRecords.Replacements(document).Regions, Is.Null);
             Assert.That(Rooms.Snapshot(document, viewId).Regions.Single().Name, Is.EqualTo("Recovered"));
             var backup = Path.Combine(isolated.Root, "model-recovery", "owner-rooms-regions", evidence.RawUtf8Sha256 + ".txt");
             Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(planted)));
@@ -189,7 +189,7 @@ public sealed class OwnerBlobRoundTripTests {
             }
 
             Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Invalid));
-            var evidence = TakeoffCarriers.Replacements(document).Registry!;
+            var evidence = TakeoffRecords.Replacements(document).Registry!;
             Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
             var recoveryNotices = new OwnerBlobNotices();
             using (var tx = new Transaction(document, "Apply adoption with registry replacement")) {
@@ -202,7 +202,7 @@ public sealed class OwnerBlobRoundTripTests {
             }
 
             recoveryNotices.Publish();
-            Assert.That(TakeoffCarriers.ReadRegistry(document).Systems.Single().Tag, Is.EqualTo("FC-8"));
+            Assert.That(TakeoffRecords.ReadRegistry(document).Systems.Single().Tag, Is.EqualTo("FC-8"));
             var backup = Path.Combine(isolated.Root, "model-recovery", "owner-takeoff-systems", evidence.RawUtf8Sha256 + ".txt");
             Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
             var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
@@ -218,7 +218,7 @@ public sealed class OwnerBlobRoundTripTests {
         var view = CreateRoomsView(document);
         var zone = Rooms.Draw(document, new(view.UniqueId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
         _ = TakeoffAtlas.AdoptZones(document, new(view.UniqueId, [new(zone.ElementId, zone.UniqueId, "North", "FC-8")]));
-        return TakeoffCarriers.ReadRegistry(document).Systems.Single().Guid;
+        return TakeoffRecords.ReadRegistry(document).Systems.Single().Guid;
     }
 
     private static ViewPlan CreateRoomsView(Document document) {
@@ -261,7 +261,7 @@ public sealed class OwnerBlobRoundTripTests {
                     var profile = storage.Read(doc);
                     Assert.That(profile.Error, Is.Null);
                     Assert.That(profile.Profile!.FormatVersion, Is.EqualTo(ParameterLinkProfile.CurrentFormatVersion));
-                    Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Guid, Is.EqualTo(system));
+                    Assert.That(TakeoffRecords.ReadRegistry(doc).Systems.Single().Guid, Is.EqualTo(system));
                     Assert.That(EnclosureDeclaration.Read(doc).Source, Does.StartWith("declared"));
                     Assert.That(ProjectHomePointer.FromData(OwnerBlobStore.Read(doc, ProjectHomePointer.Owner).Data!).Pointer!.Path, Is.EqualTo(pointer.Path));
                     Assert.That(AutoTagService.Instance.HasSettingsInDocument(doc), Is.True);
@@ -282,7 +282,7 @@ public sealed class OwnerBlobRoundTripTests {
 
     [Test]
     public void A_newer_version_blob_refuses_replacement_and_keeps_the_bytes(UIApplication uiApplication) =>
-        RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.NewerVersion,
+        RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.UnknownVersion, newer: true, plant:
             owner => $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 998}}},"data":{"fromTheFuture":true}}""");
 
     [Test]
@@ -316,7 +316,7 @@ public sealed class OwnerBlobRoundTripTests {
                     Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(OwnerBlobStatus.Absent), owner.Name);
                 Assert.That(DuctApplier.ReadStore(document), Is.EqualTo(((DuctLossStore?)null, (string?)null)));
                 Assert.That(storage.Read(document), Is.EqualTo(new ProfileReadResult(null, false, null)));
-                Assert.That(TakeoffCarriers.ReadRegistry(document).Systems, Is.Empty);
+                Assert.That(TakeoffRecords.ReadRegistry(document).Systems, Is.Empty);
                 Assert.That(TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable, Is.Empty, "an old shape is not listed as unreadable");
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:"));
                 Assert.That(AutoTagService.Instance.HasSettingsInDocument(document), Is.False);
@@ -485,7 +485,7 @@ public sealed class OwnerBlobRoundTripTests {
         }
     }
 
-    private static void RefusesAndKeeps(Application application, OwnerBlobStatus expected, Func<OwnerDescriptor, string> plant) {
+    private static void RefusesAndKeeps(Application application, OwnerBlobStatus expected, Func<OwnerDescriptor, string> plant, bool newer = false) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         string? path = null;
         try {
@@ -506,19 +506,19 @@ public sealed class OwnerBlobRoundTripTests {
 
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)
-                    Assert.That(OwnerBlobStore.Read(document, owner).Status, Is.EqualTo(expected), owner.Name);
+                    Assert.That(OwnerBlobStore.Read(document, owner), Has.Property("Status").EqualTo(expected).And.Property("Newer").EqualTo(newer), owner.Name);
                 Assert.That(DuctApplier.ReadStore(document).Error, Is.Not.Null);
                 Assert.That(storage.Read(document).Error, Is.Not.Null);
-                Assert.That(() => TakeoffCarriers.ReadRegistry(document), Throws.InvalidOperationException);
+                Assert.That(() => TakeoffRecords.ReadRegistry(document), Throws.InvalidOperationException);
                 Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("unreadable"));
                 // The keep policy for reads (ADR 0039): the refusal is a value, so a listing goes on.
-                Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("unreadable"));
+                Assert.That(TakeoffRecords.TryReadRegistry(document).Refusal, Does.Contain("unreadable"));
                 Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Does.Contain("unreadable"));
                 Assert.That(() => TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable!.Select(blob => blob.ElementId),
                     Is.EqualTo(new long?[] { null }), "the roster read reports the registry and does not throw");
             });
 
-            if (expected == OwnerBlobStatus.NewerVersion) {
+            if (newer) {
                 using var isolated = new OwnerBlobRecoveryFixture();
                 var request = new DuctApplyRequest(null, [], [], [], [], [], [], new DuctLossStore());
                 foreach (var preview in new[] { true, false }) {
