@@ -1,3 +1,4 @@
+import { result } from "./duct-loss-read.ts";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { z } from "zod";
 import { documentRefSchema } from "@pe/agent-contracts/target";
@@ -93,6 +94,11 @@ export const lossWrites = {
   terminalFlow: familyParameter("terminalFlow"),
   terminalDrop: familyParameter("terminalDrop"),
 };
+const snapshotOps = ["ducts.snapshot.walk", "ducts.snapshot.roster", "ducts.tables"] as const;
+export const lossSheetNative = {
+  plan: [...snapshotOps, "ducts.apply.plan"],
+  apply: [...snapshotOps, "ducts.apply"],
+} as const;
 export const product = define({
   id: "ducts",
   publishTool: false,
@@ -101,6 +107,7 @@ export const product = define({
   cells: settingsCells,
   routes: {},
   readings: {
+    ductLoss: { handle: result, sources: [] },
     snapshot: {
       handle: snapshotReading,
       sources: ["losses", "settings"],

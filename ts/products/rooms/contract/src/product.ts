@@ -1,9 +1,6 @@
-/**
- * Rooms and Takeoffs: one product with two routes (ruling 6 of docs/features/routes/MAP.md).
- * Clean-room: written from the Rooms spec and the native operation contracts. The host binds this
- * value with `implement()` (`@pe/rooms-host/product`); each route's screen is under `web/routes/`.
- */
+/** Rooms and Takeoffs share one product declaration. */
 import { z } from "zod";
+import { route } from "@pe/host-contracts/pe-api";
 import { takeoffCaptureSchema, takeoffCaptureSummarySchema } from "./takeoffs.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
@@ -188,6 +185,28 @@ const captures = contract("takeoffs.captures", {
   }),
   uses: [],
 });
+const previous = { target, previousId: z.string().optional() };
+const observations = contract("takeoffs.observations", {
+  input: z.object({
+    target: target.optional(),
+    capture: z.string().optional(),
+    text: z.boolean().optional(),
+    saved: z.boolean().optional(),
+    document: z.string().optional(),
+  }),
+  data: z.union([
+    takeoffCaptureSchema.nullable(),
+    z.object({ path: z.string(), text: z.string() }),
+    z.array(takeoffCaptureSummarySchema),
+    z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("empty"), target }),
+      z.object({ kind: z.literal("reading"), ...previous }),
+      z.object({ kind: z.literal("ready"), target, captureId: z.string() }),
+      z.object({ kind: z.literal("failed"), ...previous, error: z.string() }),
+    ]),
+  ]),
+  uses: [],
+});
 
 const room = subjectSchema(Number.MAX_SAFE_INTEGER);
 const onPlan = (page: { view: string }) => ({ view: page.view });
@@ -359,6 +378,27 @@ export const product = define({
       says: "takeoffs.adoption reads the designer regions of chosen plans with their staged adoption choices.",
     },
     captures: { handle: captures, sources: [] },
+    observations: {
+      handle: observations,
+      sources: [],
+      load: {
+        calls: { "takeoffs.saved": { saved: true }, "takeoffs.snapshot": { snapshot: true } },
+      },
+    },
+  },
+  http: {
+    [observations.key]: {
+      ...route(
+        "GET",
+        "/takeoffs/observations",
+        z.undefined(),
+        observations.data,
+        "read",
+        "gateway",
+        "read",
+      ),
+      axes: observations.axes,
+    },
   },
   commands: {
     ...workWriteCommands("rooms", "rooms.partition", {
@@ -440,7 +480,14 @@ export const product = define({
   },
   // The staged room fields reach the region record through the platform's sheet pair
   // (`sheet.plan`, `sheet.apply`); the host body answers for each cell (ruling 7).
-  sheetWrites: { route: "rooms", writes: { regions: ROOM_FIELDS } },
+  sheetWrites: {
+    route: "rooms",
+    writes: { regions: ROOM_FIELDS },
+    native: {
+      plan: ["rooms.roster", "takeoffs.record-replacements"],
+      apply: ["rooms.roster", "takeoffs.record-replacements", "rooms.write"],
+    },
+  },
   routes: {
     rooms: {
       name: "Rooms",

@@ -94,7 +94,7 @@ export function ReadCell({
 }
 
 /** The verdict swatch. Tone is the NARROW meaning-role union — never a raw CSS colour
- * (takeoffs #11, ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
+ * (ruled 2026-08-16 R5; `stateColumn`, which took any string, died with it). */
 export function StateDot({ tone, dim, bar }: { tone?: Tone; dim?: boolean; bar?: boolean }) {
   return (
     <span

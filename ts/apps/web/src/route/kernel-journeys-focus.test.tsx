@@ -608,8 +608,8 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
 });
 
 test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and recover by keyboard", async () => {
-  const { module: ductLoss } = await import("../duct-loss/route");
-  const { InputsBody } = await import("../duct-loss/route.tsx");
+  const { module: ductLoss } = await import("@pe/ducts-web/duct-loss/route");
+  const { InputsBody } = await import("@pe/ducts-web/duct-loss/panes");
   const { solve } = await import("@pe/ducts-domain/duct-loss-math");
   let search = new URLSearchParams({ cfm: "0", length: "100" });
   const mount = mounts.mountTypedRoute(
@@ -1131,7 +1131,7 @@ import rawMuas from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 // The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
 const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
-import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
+import { createWitness } from "../../../../tests/journey-fixtures/fans-witness.test-support.ts";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "@pe/agent-contracts/route";
@@ -1766,76 +1766,72 @@ vi.mock("../workbench/provider", () => ({ useWorkbench: () => conversation.value
 vi.mock("../chat/chat-shell", () => ({ ChatShell: () => null }));
 
 // Start is the kernel's: one route proves it. Takeoffs starts in its own journeys.
-test(
-  "JZ kernel Start on families after read release settles while Reading or after it",
-  async () => {
-    const route = "families";
-    for (const phase of ["settled", "reading"] as const) {
-      const catalogue = phase === "reading" ? Promise.withResolvers<void>() : undefined;
-      const j = await familiesJourney({ hold: catalogue?.promise, start: false });
-      function Journey() {
-        useSyncExternalStore(j.mount.subscribe, j.mount.revision, j.mount.revision);
-        return (
-          <KeyScopeHost id={`start-${route}`}>
-            <TypedChrome mount={j.mount} document={<span>Project document</span>} />
-          </KeyScopeHost>
-        );
-      }
-      const root = createRootRoute({ component: Journey });
-      const router = createRouter({
-        routeTree: root,
-        history: createMemoryHistory({ initialEntries: [`/${route}`] }),
-      });
-      render(<RouterProvider router={router} />);
-      try {
-        const start = await screen.findByRole("button", { name: "Start" });
-        const retainedStart = j.mount.startAction()!;
-        if (!catalogue)
-          await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), {
-            timeout: 20000,
-          });
-        else
-          expect(j.mount.value()).toMatchObject({
-            state: expect.stringMatching(/^(reading|refreshing)$/),
-          });
-        // Resource release alone leaves the selected Place's Start authority intact.
-        await act(async () => {
-          j.mount.release();
-        });
-        expect(j.mount.available()).toBe(true);
-        fireEvent.click(start);
-        catalogue?.resolve();
-        await waitFor(() => expect(j.mount.owner()?.ready).toBe(true));
-        await act(async () => {
-          const stop = j.mount.subscribe(() => {});
-          stop();
-        });
-        await j.ready();
-        const receipts = (await j.host.journal.list()).filter((row) => row.key === "work.start");
-        expect(receipts).toHaveLength(1);
-        expect(receipts[0]!.state).toBe("succeeded");
-        expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
-        const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
-        expect(category.getAttribute("aria-disabled")).toBeNull();
-        fireEvent.click(category);
-        await j.ready();
-        await waitFor(() =>
-          expect(j.mount.owner()?.doc.scope.edit?.value.categoryNames).toEqual(["Air Terminal Tags"]),
-        );
-        j.mount.dispose();
-        await expect(retainedStart.run()).rejects.toThrow("Place is not writable");
-        expect(retainedStart.failure).toBe("Place is not writable");
-        expect(
-          (await j.host.journal.list()).filter((row) => row.key === "work.start"),
-        ).toHaveLength(1);
-      } finally {
-        catalogue?.resolve();
-        await j.close();
-      }
+test("JZ kernel Start on families after read release settles while Reading or after it", async () => {
+  const route = "families";
+  for (const phase of ["settled", "reading"] as const) {
+    const catalogue = phase === "reading" ? Promise.withResolvers<void>() : undefined;
+    const j = await familiesJourney({ hold: catalogue?.promise, start: false });
+    function Journey() {
+      useSyncExternalStore(j.mount.subscribe, j.mount.revision, j.mount.revision);
+      return (
+        <KeyScopeHost id={`start-${route}`}>
+          <TypedChrome mount={j.mount} document={<span>Project document</span>} />
+        </KeyScopeHost>
+      );
     }
-  },
-  60000,
-);
+    const root = createRootRoute({ component: Journey });
+    const router = createRouter({
+      routeTree: root,
+      history: createMemoryHistory({ initialEntries: [`/${route}`] }),
+    });
+    render(<RouterProvider router={router} />);
+    try {
+      const start = await screen.findByRole("button", { name: "Start" });
+      const retainedStart = j.mount.startAction()!;
+      if (!catalogue)
+        await waitFor(() => expect(j.mount.value().state === "ready").toBe(true), {
+          timeout: 20000,
+        });
+      else
+        expect(j.mount.value()).toMatchObject({
+          state: expect.stringMatching(/^(reading|refreshing)$/),
+        });
+      // Resource release alone leaves the selected Place's Start authority intact.
+      await act(async () => {
+        j.mount.release();
+      });
+      expect(j.mount.available()).toBe(true);
+      fireEvent.click(start);
+      catalogue?.resolve();
+      await waitFor(() => expect(j.mount.owner()?.ready).toBe(true));
+      await act(async () => {
+        const stop = j.mount.subscribe(() => {});
+        stop();
+      });
+      await j.ready();
+      const receipts = (await j.host.journal.list()).filter((row) => row.key === "work.start");
+      expect(receipts).toHaveLength(1);
+      expect(receipts[0]!.state).toBe("succeeded");
+      expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+      const category = await screen.findByRole("option", { name: "Air Terminal Tags" });
+      expect(category.getAttribute("aria-disabled")).toBeNull();
+      fireEvent.click(category);
+      await j.ready();
+      await waitFor(() =>
+        expect(j.mount.owner()?.doc.scope.edit?.value.categoryNames).toEqual(["Air Terminal Tags"]),
+      );
+      j.mount.dispose();
+      await expect(retainedStart.run()).rejects.toThrow("Place is not writable");
+      expect(retainedStart.failure).toBe("Place is not writable");
+      expect((await j.host.journal.list()).filter((row) => row.key === "work.start")).toHaveLength(
+        1,
+      );
+    } finally {
+      catalogue?.resolve();
+      await j.close();
+    }
+  }
+}, 60000);
 
 test("JZ E8-12 close Home clears a capacity refusal and permits another Place", async () => {
   const [

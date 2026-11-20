@@ -3,7 +3,7 @@
  * drawing can be seen on any fixture route without a surface supplying them. Joins elements whose
  * ends meet, roots the walk at a leaf, and runs one strand to each of the three farthest leaves
  * (the farthest heavy), so they share a trunk; the heavy strand's middle element is `over`.
- * Unjoined lines (the colours demo's loose ducts) get overlapping windows of three instead.
+ * Unjoined lines (loose segments) get overlapping windows of three instead.
  */
 import { elementKey, type SubjectKey } from "@pe/kit/lang/attention";
 import { boundsOfInstances } from "@pe/web-kernel/scene/orbit";

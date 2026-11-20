@@ -20,7 +20,7 @@ import { RevitBridge, type BridgeSessionView } from "@pe/host-internal/bridge";
 import { RevitBridgeDetached } from "../src/bridge.ts";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
-import { CaptureStore, type TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { CaptureStore, type TakeoffCaptures } from "../src/observation-store.ts";
 import {
   MachineOwner,
   machineOwnerPromise,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../tests/integration/products/fans/cutover.test-support.ts";
 
 test("old Fans Page fields and stage are refused with a visible reason, without aliases", async () => {
   const closes: (() => void)[] = [];

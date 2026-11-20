@@ -228,7 +228,7 @@ export function Scene3D(props: Scene3DProps): ReactNode {
 
   // React describes the requested view. The controller alone executes its replacement.
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
-  // X-ray sees through context, not through ducts: held, the glass pane drops to its lines.
+  // X-ray sees through context, not through the system: held, the glass pane drops to its lines.
   const xray = useHeldKey("x");
   const contextMode = xray && props.contextMode === "glass" ? "lines" : props.contextMode;
   const shownLook = useMemo(() => presetLook(look, props.preset ?? "all"), [look, props.preset]);

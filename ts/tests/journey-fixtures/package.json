@@ -10,10 +10,22 @@
   },
   "devDependencies": {
     "@effect/atom-react": "4.0.2",
+    "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
+    "@pe/duct-systems-domain": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/fans-domain": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "@pe/fans-web": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
+    "@pe/host-internal": "workspace:*",
+    "@pe/web-kernel": "workspace:*",
+    "@tanstack/react-router": "1.170.31",
+    "@testing-library/react": "^16.3.0",
+    "effect": "4.0.2",
     "react-dom": "^19.2.0",
     "vite-plus": "catalog:"
   }

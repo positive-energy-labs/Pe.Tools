@@ -113,13 +113,16 @@ test.each([
 
 test("Rooms dispatches by Work route even when the product id differs", async () => {
   const bind = vi.fn(async () => ({ prepare: async () => "product" }));
-  const { sheets } = bindProducts([
-    {
-      ...rooms,
-      product: { ...rooms.product, id: "renamed-rooms" },
-      executors: () => ({ "sheet.plan": { bind } as never, "sheet.apply": { bind } as never }),
-    },
-  ]).productExecutors({} as never);
+  const { sheets } = bindProducts(
+    [
+      {
+        ...rooms,
+        product: { ...rooms.product, id: "renamed-rooms" },
+        executors: () => ({ "sheet.plan": { bind } as never, "sheet.apply": { bind } as never }),
+      },
+    ],
+    {},
+  ).productExecutors({} as never);
   const executors = sheetExecutors(
     {} as never,
     {
@@ -152,7 +155,9 @@ test("Rooms dispatches by Work route even when the product id differs", async ()
     refusal: { code: "sheet.executor-unknown" },
   });
   const generic = await executors["sheet.plan"]!.bind(context("pod.other"));
-  await expect(generic.prepare!()).rejects.toThrow("Nothing to write: stage a parameter cell first");
+  await expect(generic.prepare!()).rejects.toThrow(
+    "Nothing to write: stage a parameter cell first",
+  );
   expect(bind).toHaveBeenCalledTimes(1);
 });
 

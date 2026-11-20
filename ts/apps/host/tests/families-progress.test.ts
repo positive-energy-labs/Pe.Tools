@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, test, vi } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { TakeoffCaptures } from "../src/observation-store.ts";
 
 test("progress survives reconstruction, shares family blobs, and never replaces a completed plan baseline", async () => {
   const dir = await mkdtemp(join(tmpdir(), "families-progress-"));

@@ -14,13 +14,11 @@ import { CatalogCommand, catalogCommandContext } from "@pe/host-internal/catalog
 import type { CommandExecutor, CommandRegistry } from "@pe/host-internal/command-executor";
 import type { GatewayLocal } from "./gateway-actions.ts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import type { TakeoffCaptures } from "./takeoff-captures.ts";
+import type { TakeoffCaptures } from "./observation-store.ts";
 import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
-import { applyStaged, buildRhvacInsert, rhvacOpen, rhvacSync } from "@pe/rooms-host/rhvac";
-import { io } from "@pe/host-internal/command-executor";
 import { lifetime } from "./document-lifetime.ts";
-import { productExecutors } from "./product-executors.generated.ts";
+import { productExecutors, productGateway } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
@@ -37,6 +35,7 @@ import { commands } from "@pe/mcps/product-actions";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies &
+  Parameters<typeof productGateway.commandFiles>[1] &
   InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
@@ -62,20 +61,10 @@ export function commandRegistry(
     ),
   };
   // Product-owned sheet writes answer through the generic sheet dispatcher.
-  const { openFile, syncFile } = deps;
   const products = productExecutors(bridge, {
     ...deps,
     captures,
-    // The RHVAC file lane, with the test seams a recorded journey supplies.
-    rhvac: {
-      open: (path) => (openFile ? io(() => openFile(path)) : rhvacOpen(hostOwnership, { path })),
-      sync: (request, expectedVersion) =>
-        syncFile
-          ? io(() => syncFile(request, expectedVersion))
-          : rhvacSync(hostOwnership, request, expectedVersion),
-      applyStaged,
-      buildInsert: buildRhvacInsert,
-    },
+    rhvac: productGateway.commandFiles(hostOwnership, deps),
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
@@ -188,6 +177,7 @@ export function bindCommandRuntime(
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
   deps: FamilyActionDependencies &
+    Parameters<typeof productGateway.commandFiles>[1] &
     InstancesActionDependencies & {
       nativeRead?: HostNativeRead["Service"];
       nativeReads?: NativeReadTerminals;

@@ -1,6 +1,6 @@
 // Generated from web route graphs by codegen:routes.
 import type { RouteDirectory } from "../route-graph.ts";
-export const routeDirectory: readonly {key: string; directory: RouteDirectory}[] = [
+export const routeDirectory: readonly {key: string; product?: string; directory: RouteDirectory}[] = [
   {
     "key": "bind",
     "directory": {
@@ -102,6 +102,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   },
   {
     "key": "duct-loss",
+    "product": "ducts",
     "directory": {
       "label": "Duct friction",
       "icon": "Wind",
@@ -128,6 +129,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   },
   {
     "key": "duct-systems",
+    "product": "duct-systems",
     "directory": {
       "label": "Pressure drop",
       "icon": "Wind",
@@ -180,6 +182,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   },
   {
     "key": "fans",
+    "product": "fans",
     "directory": {
       "label": "Fan ESP",
       "icon": "Wind",
@@ -301,6 +304,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   },
   {
     "key": "rooms",
+    "product": "rooms",
     "directory": {
       "label": "Rooms",
       "icon": "LayoutGrid",
@@ -383,6 +387,7 @@ export const routeDirectory: readonly {key: string; directory: RouteDirectory}[]
   },
   {
     "key": "takeoffs",
+    "product": "rooms",
     "directory": {
       "label": "Manual J",
       "icon": "Map",

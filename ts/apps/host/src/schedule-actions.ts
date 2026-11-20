@@ -25,7 +25,7 @@ import {
   type NativeProcess,
   type SdkReceiptReader,
 } from "./native-receipts.ts";
-import { type TakeoffCaptures } from "./takeoff-captures.ts";
+import { type TakeoffCaptures } from "./observation-store.ts";
 
 const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
   `schedule:${createHash("sha256")

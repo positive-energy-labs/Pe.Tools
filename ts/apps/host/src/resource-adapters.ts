@@ -25,12 +25,12 @@ import {
 import type { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
-import type { TakeoffCaptures } from "./takeoff-captures.ts";
+import type { TakeoffCaptures } from "./observation-store.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef, MarkFrame } from "./document-marks.ts";
 import type { MachineOwnerPromise } from "./machine.ts";
-import { ductsReadings } from "@pe/ducts-host/ducts-readings";
+import { productGateway } from "./product-executors.generated.ts";
 
 /**
  * The host's own HTTP surface, read by the host on the host's clock. A one-shot Reading gets one
@@ -61,11 +61,7 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
       }),
     },
   ],
-  "takeoff-saved": (r: { id?: string; text?: boolean; document?: string }) => [
-    r.id
-      ? `/takeoffs/observations?capture=${encodeURIComponent(r.id)}${r.text ? "&text=1" : ""}`
-      : "/takeoffs/observations?saved",
-  ],
+  ...productGateway.observationResources,
   "rhvac-file-version": (r: { path: string }) => [`/actions?file=${encodeURIComponent(r.path)}`],
 };
 
@@ -301,49 +297,45 @@ export function hostResourceObserver(
     return observe();
 
     function observe(): () => void {
-      switch (request.kind) {
-        case "ducts-snapshot":
-        case "ducts-tables": {
-          if (!bridge) {
-            accept({ error: "No Revit bridge" });
-            return () => {};
-          }
-          let live = true;
-          let release = () => {};
-          // effect-edge: island, phase 5
-          void Effect.runPromise(
-            SdkSession.resolve(bridge, {
-              id: request.kind === "ducts-snapshot" ? request.target.session : request.session,
-            }).pipe(
-              Effect.flatMap((session) =>
-                resolveSession(bridge, {
-                  bridgeSessionId: session.sessionId,
-                  openDocumentId:
-                    request.kind === "ducts-snapshot" ? request.target.openId : undefined,
-                }),
-              ),
-            ),
-          ).then(
-            (resolved) => {
-              if (!live) return;
-              const canonical =
-                request.kind === "ducts-snapshot"
-                  ? {
-                      ...request,
-                      target: { session: resolved.sessionId, openId: request.target.openId },
-                    }
-                  : { ...request, session: resolved.sessionId };
-              release = ductsReadings(bridge).observe(canonical, (value) => accept({ value }));
-            },
-            (error: unknown) => {
-              if (live) accept({ error: String(error) });
-            },
-          );
-          return () => {
-            live = false;
-            release();
-          };
+      const retained = productGateway.retainedResource.safeParse(request);
+      if (retained.success) {
+        const target = productGateway.retainedTarget(retained.data);
+        if (!bridge) {
+          accept({ error: "No Revit bridge" });
+          return () => {};
         }
+        let live = true;
+        let release = () => {};
+        // effect-edge: island, phase 5
+        void Effect.runPromise(
+          SdkSession.resolve(bridge, {
+            id: target.session,
+          }).pipe(
+            Effect.flatMap((session) =>
+              resolveSession(bridge, {
+                bridgeSessionId: session.sessionId,
+                openDocumentId: target.openId,
+              }),
+            ),
+          ),
+        ).then(
+          (resolved) => {
+            if (!live) return;
+            const canonical = productGateway.canonicalRetained(retained.data, resolved.sessionId);
+            release = productGateway
+              .retainedReadings(bridge)
+              .observe(canonical, (value) => accept({ value }));
+          },
+          (error: unknown) => {
+            if (live) accept({ error: String(error) });
+          },
+        );
+        return () => {
+          live = false;
+          release();
+        };
+      }
+      switch (request.kind) {
         case "machine":
           if (!machine) {
             accept({ error: "Machine owner is unavailable" });

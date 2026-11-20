@@ -43,7 +43,7 @@ import { graphRoute } from "../../src/reads/routes.ts";
 import { calcPort } from "../ducts/ducts-read.fixture.ts";
 import { fileRouteDocumentStore } from "../../src/route-document-store.ts";
 import { createPeRoutes } from "../../src/pe-routes.ts";
-import { CaptureStore } from "../../src/takeoff-captures.ts";
+import { CaptureStore } from "../../src/observation-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { readSessionScope, SdkSession, SdkDriver } from "../../src/sdk-session.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";

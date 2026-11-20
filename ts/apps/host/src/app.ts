@@ -67,7 +67,7 @@ import {
   type ShareOwner,
 } from "./share.ts";
 import { staticSpaLayer } from "./static-spa.ts";
-import { CaptureStore } from "./takeoff-captures.ts";
+import { CaptureStore } from "./observation-store.ts";
 import { threadPointerPort } from "./thread-pointers.ts";
 import { UpdateReader, type UpdateFact } from "./update-reader.ts";
 import { makeInstalledUpdateReader, updateRoutes } from "./update-route.ts";

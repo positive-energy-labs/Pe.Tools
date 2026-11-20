@@ -5,7 +5,7 @@ import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
 import { routeAddress } from "@pe/agent-contracts";
-import { phaseLabel } from "@pe/rooms-contract/progress";
+import { phaseLabel } from "../route/tutorial-products.generated";
 import type { TimelineOwner } from "./situation-band";
 import { activityTime, timelineRowKey } from "./timeline";
 

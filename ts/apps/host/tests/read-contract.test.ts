@@ -2,7 +2,7 @@ import { expect, expectTypeOf, test } from "vite-plus/test";
 import { z } from "zod";
 import { ductLossData } from "@pe/ducts-contract/duct-loss-read";
 import { contract, native, type ReadHandle } from "@pe/agent-contracts/handle";
-import { result as ductLoss } from "../../web/src/duct-loss/contract.ts";
+import { result as ductLoss } from "@pe/ducts-contract/duct-loss-read";
 import {
   body,
   bodyOf,

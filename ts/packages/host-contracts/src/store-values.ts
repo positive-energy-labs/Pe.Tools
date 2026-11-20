@@ -14,7 +14,7 @@ export type HomeWrite =
 /** Durable file findings and outward sends; the host's notice feed draws them. */
 export const storedNoticeSchema = z.strictObject({
   class: z.enum(["keep", "discard", "sent"]),
-  /** The Place, in words a person knows: "Work for /ducts", "Scheduled tasks". */
+  /** The Place, in words a person knows: "Scheduled tasks". */
   place: z.string(),
   documentKey: z.string().optional(),
   path: z.string(),

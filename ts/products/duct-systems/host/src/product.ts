@@ -1,10 +1,14 @@
 import { product } from "@pe/duct-systems-contract/product";
-import { ductsRefresh, ductsRulings } from "@pe/ducts-host/action-runtime";
+import {
+  ductsRefresh,
+  ductsRulings,
+  type DuctActionDependencies,
+} from "@pe/ducts-host/action-runtime";
 import { implement } from "@pe/host-internal/product";
 import { assignFan, heal } from "./actions.ts";
 import { reads } from "./host.ts";
 
-export const host = implement(product, {
+export const host = implement<typeof product, DuctActionDependencies>(product, {
   readings: reads,
   commands: {
     "ducts.refresh": ductsRefresh,

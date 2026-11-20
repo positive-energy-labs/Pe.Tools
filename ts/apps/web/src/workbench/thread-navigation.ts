@@ -1,3 +1,4 @@
+import { tutorialProducts } from "../route/tutorial-products.generated.ts";
 import {
   emptyThreadLifecycle,
   resolveCallTarget,
@@ -307,12 +308,11 @@ export function demoThreads(body: HarnessThreadBody): HarnessThreadSummary[] {
       activity: { ...base.activity, state: "waiting", pending: 1 },
       // Two connected tools, each on its own demo seed, so the tools bar has tabs to press.
       tabs: [
-        {
-          id: "demo-tab-ducts",
-          route: "duct-systems",
-          link: "/duct-systems?fixture=scene&system=Office%20retained%20page",
-          at: at(1),
-        },
+        ...tutorialProducts.flatMap(({ routes }) =>
+          Object.values(routes).flatMap(({ key, demoPlace }) =>
+            demoPlace ? [{ ...demoPlace, route: key, at: at(1) }] : [],
+          ),
+        ),
         { id: "demo-tab-families", route: "families", link: "/families?fixture=apply", at: at(2) },
       ],
     },

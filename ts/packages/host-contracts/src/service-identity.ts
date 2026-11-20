@@ -150,8 +150,6 @@ export function stateTree(root: string): StateRoot & {
     apsTokens: state("aps-auth", "tokens.json"),
     /** One directory per harness thread (`harness/threads.ts`): `meta.json` + `events.jsonl`. */
     harnessThreads: state("harness-threads"),
-    /** Immutable headless Ducts calculations, including their complete effective inputs. */
-    ductsAnalyses: state("ducts", "analyses"),
     /** The copies Pea opens, so a person's own file is never her scratch. Model copies must not upload. */
     peaWork: state("pea-work"),
     /** User-added endpoint providers (`harness/providers.ts`). Holds keys: state, not Documents. */

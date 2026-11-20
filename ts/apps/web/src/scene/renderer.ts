@@ -604,7 +604,7 @@ export function createRenderer(mount: HTMLElement, initialMeshes: SceneMeshes, w
     // same viewport) records the nearest context surface; the fill discards anything behind it, so
     // crossing sheets never stack whatever their draw order. The fill still depth-tests the main
     // buffer, so context behind a subject is hidden and context in front tints it. The main buffer
-    // never takes context depth (walls would hide ducts), so there is no sort. The sort-by-centre
+    // never takes context depth (walls would hide the system), so there is no sort. The sort-by-centre
     // attempt (2026-10-26) double-stacked crossing roof and chimney on Chadds.
     // EXCEPTION to the one-sorted-translucent-pass rule: context behind an equipment envelope
     // draws over it; equipment owns no depth and that ordering is unruled.

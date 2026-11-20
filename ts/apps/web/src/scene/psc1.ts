@@ -1,7 +1,6 @@
 /**
  * PSC1, the scene artifact `revit.detail.space-scene` writes: "PSC1", a u32 metadata length, the
  * metadata JSON, padding to 4 bytes, then float32 xyz positions, nine per triangle, unindexed.
- * Space and ducts fetch the same artifact; both decode it here.
  */
 import { SceneMeshes, type SceneInstance } from "@pe/web-kernel/scene/types";
 

@@ -3,8 +3,7 @@ import { CONTEXT_OPACITY_LIMIT, DEFAULT_CONTEXT_INK } from "@pe/web-kernel/scene
 import { VEIL_REACH_FT, type VeilField } from "./veil-field";
 export { bakeVeil, falloff, veilDistance, VEIL_REACH_FT, type VeilField } from "./veil-field";
 
-/** The reach when no page supplies a Nearby radius; matches the Ducts contract's default
- * (`routes/ducts.ts` contextRadiusFt). One number: the veil's far edge and the stub fade. */
+/** The reach when no page supplies a Nearby radius; shared by the veil's far edge and the stub fade. */
 const VEIL_DEFAULT_REACH_FT = 10;
 
 export type VeilLook = { nearFt: number; curve: number; fill: number };

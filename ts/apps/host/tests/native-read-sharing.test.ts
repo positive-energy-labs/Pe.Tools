@@ -15,14 +15,14 @@ import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
 import type { DoorFailure, NativeAnswer, NativeOutcome } from "@pe/host-internal/request-contracts";
 import { HttpRouter } from "effect/http";
-import { retainedDuctsRead } from "../src/call-route.ts";
+import { retainedNativeRead } from "../src/call-route.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { readSchemas } from "../src/request-services.ts";
 import { httpProblems } from "../src/http-problems.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
-import type { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import type { TakeoffCaptures } from "../src/observation-store.ts";
 import { completeBridgeRequest, makeDispatcher } from "@pe/host-internal/dispatch";
 import type { BridgeFrame } from "@pe/host-contracts/contracts";
 import { Publications } from "../src/reads/publications.ts";
@@ -970,7 +970,7 @@ test.each([false, true])(
     const owner = new DuctsReadings();
     const server = await serveRoutes(
       HttpRouter.add("POST", "/call", () =>
-        retainedDuctsRead(
+        retainedNativeRead(
           owner,
           {
             key: "ducts.snapshot.roster",

@@ -1,7 +1,7 @@
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
 export type ContextRepresentation = RevitDetailSpaceScene.Req.SceneContextRepresentation;
 /** `revit.detail.space-scene`'s request: capture the named host elements (and, unless `focusOnly`,
- * what is around them) into a PSC1 artifact on the host. Space and ducts both ask with this. The
+ * what is around them) into a PSC1 artifact on the host. Routes share this request. The
  * representation is explicit; route picture declarations admit only overview. */
 export const sceneRequest = <R extends ContextRepresentation>(
   elementIds: readonly number[],

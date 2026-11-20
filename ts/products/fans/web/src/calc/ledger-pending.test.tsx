@@ -5,7 +5,7 @@ import type { LedgerProps } from "./types.ts";
 import { Ledger } from "./view.tsx";
 import { openFanCalcSchema as openSheetSchema } from "@pe/fans-contract/fans-read";
 import fixture from "@pe/ducts-web/fixtures/fan-sheet.json";
-import { FANS_LEDGER_ESP } from "../../../../../tests/e2e/cdp.ts";
+import { FANS_LEDGER_ESP } from "../../../../../tests/journey-fixtures/fan-selectors.ts";
 
 afterEach(cleanup);
 

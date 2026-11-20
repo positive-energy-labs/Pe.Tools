@@ -354,7 +354,7 @@ export const podModule = {
 } satisfies RouteModule<typeof podData, typeof schemas, typeof podEntries, string>;
 
 // Only cardinality differs; shipped routes carry the large authoring graphs.
-export const ductsData = {
+export const multiSubjectData = {
   ...builtinData,
   fields: {
     ...builtinData.fields,

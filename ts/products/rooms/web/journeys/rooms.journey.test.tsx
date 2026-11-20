@@ -1,66 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { expect, test, vi } from "vite-plus/test";
+import { expect, test } from "vite-plus/test";
 import { BridgeError } from "@pe/host-internal/bridge";
 import { address } from "@pe/agent-contracts";
-import { module as fans } from "../../../fans/web/route.ts";
-import { DocumentPicker } from "../../../../apps/web/src/shell/document-picker";
+import { otherRef, switchDocument } from "../../../../tests/e2e/document-switch.test-support.tsx";
 import { module as rooms } from "../routes/rooms/route.ts";
 import { RosterBody } from "../src/rooms.tsx";
 import { CEILING, FLOOR, GONE, code, levels, region, zone, journey } from "./fixtures.ts";
-import {
-  mounted,
-  ref,
-  Pane,
-  Sheet,
-  planned,
-  type Native,
-} from "../../../../tests/e2e/mounted.test-support.tsx";
-
-const otherRef = { ...ref, openId: "other" };
-vi.mock("../../../../apps/web/src/host/resource-state", async (original) => ({
-  ...(await original<typeof import("../../../../apps/web/src/host/resource-state")>()),
-  useInventory: () => ({
-    state: "ready",
-    observation: {
-      sessions: [
-        {
-          sessionId: ref.session,
-          connected: true,
-          processId: 1,
-          openDocuments: [
-            { openId: ref.openId, title: "Chadds", isFamilyDocument: false },
-            { openId: otherRef.openId, title: "Snowdon", isFamilyDocument: false },
-          ],
-        },
-      ],
-    },
-  }),
-}));
-
-async function switchDocument(
-  page: typeof rooms.spec | typeof fans.spec,
-  read: () => URLSearchParams,
-) {
-  const write = vi.fn<(search: URLSearchParams, history: "push" | "replace") => void>();
-  const picker = render(
-    <DocumentPicker
-      place={{ address: { read, write, subscribe: () => () => {} } }}
-      target={{ kind: "document", ref }}
-      needs="project"
-      enabled
-      page={page}
-    />,
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Document: Chadds; change" }));
-  fireEvent.click(await screen.findByText("Snowdon", { exact: true }));
-  expect(write).toHaveBeenCalledTimes(1);
-  const [search, history] = write.mock.calls[0]!;
-  expect(history).toBe("push");
-  expect(JSON.parse(search.get("target")!)).toEqual({ kind: "open", ref: otherRef });
-  picker.unmount();
-  return search;
-}
+import { Pane, Sheet, planned, type Native } from "../../../../tests/e2e/mounted.test-support.tsx";
 
 test("Rooms: changing document clears the chosen room and lets the next document pick its own plan", async () => {
   const { native } = model();
@@ -93,7 +40,9 @@ test("Rooms: changing document clears the chosen room and lets the next document
     render(<Screen mount={b.mount} />);
     expect(plan()).toHaveProperty("value", "");
     expect(
-      await within(plan()).findByRole("option", { name: "Snowdon level \u00b7 L2 \u00b7 CeilingPlan" }),
+      await within(plan()).findByRole("option", {
+        name: "Snowdon level \u00b7 L2 \u00b7 CeilingPlan",
+      }),
     ).toBeTruthy();
     expect(within(plan()).queryByRole("option", { name: /FloorPlan/ })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Name of Office" })).toBeNull();
@@ -104,18 +53,6 @@ test("Rooms: changing document clears the chosen room and lets the next document
     expect(await screen.findByRole("textbox", { name: "Name of Plenum" })).toBeTruthy();
   } finally {
     await b.close();
-  }
-});
-
-test("Fans: changing document clears an addressed fan", async () => {
-  const fan = JSON.stringify({ kind: "ids", ids: ["UniqueId:fan-from-chadds"] });
-  const a = await mounted(fans, [], () => null, { search: new URLSearchParams({ fan }) });
-  try {
-    expect(a.search().get("fan")).toBe(fan);
-    const search = await switchDocument(fans.spec, a.search);
-    expect(search.get("fan")).toBe(JSON.stringify({ kind: "ids", ids: [] }));
-  } finally {
-    await a.close();
   }
 });
 

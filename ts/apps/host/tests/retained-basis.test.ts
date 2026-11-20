@@ -31,7 +31,7 @@ import {
 } from "@pe/host-internal/input-recording";
 import { createDuctsBodyBasis, ductBodySubject } from "@pe/ducts-host/ducts-body-basis";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
-import { retainedDuctsRead } from "../src/call-route.ts";
+import { retainedNativeRead } from "../src/call-route.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
@@ -113,7 +113,7 @@ function router(
     HttpRouter.add("POST", "/call", (req) =>
       Effect.gen(function* () {
         const documents = yield* HostSessionInventory;
-        const read = retainedDuctsRead(
+        const read = retainedNativeRead(
           owner,
           input,
           {
@@ -336,7 +336,7 @@ effectTest(
       const web = HttpRouter.toWebHandler(
         HttpRouter.add("POST", "/call", (req) => {
           const consumer = children.find((child) => child.id === req.headers["x-test-reader"])!;
-          return retainedDuctsRead(
+          return retainedNativeRead(
             owner,
             input,
             {},

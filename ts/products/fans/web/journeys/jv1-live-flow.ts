@@ -1,4 +1,4 @@
-import { plan } from "../../../../tests/e2e/fans-plan.ts";
+import { plan } from "../../../../tests/journey-fixtures/fans-plan.ts";
 // Real-Revit target (operator-assisted, never launches Revit):
 // node --import jiti/register products/fans/web/journeys/jv1-live-flow.ts
 // E2E_WEB, CDP_PORT, CDP_TARGET, E2E_TARGET, E2E_SESSION, E2E_FAN, E2E_PORT,
@@ -13,8 +13,8 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import { journey, revit, requireRevit } from "../../../../tests/e2e/cdp.ts";
 import { assertPageBinding, documentTarget } from "../../../../tests/e2e/page-binding.ts";
-import { fanRosterRow } from "../../../../tests/e2e/fan-roster.ts";
-import { pickFansWriteScope } from "../../../../tests/e2e/fans-write-scope.ts";
+import { fanRosterRow } from "../../../../tests/journey-fixtures/fan-roster.ts";
+import { pickFansWriteScope } from "../../../../tests/journey-fixtures/fans-write-scope.ts";
 import { marks, settled } from "../../../../tests/e2e/marks.ts";
 
 const terminal = process.env.E2E_TERMINAL;
