@@ -91,7 +91,7 @@ import {
   threadHead,
 } from "./control.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
-import { runPods } from "@pe/host-internal/pod-runner";
+import { runPods } from "./family-actions.ts";
 import { familySpecAsset } from "./family-spec.ts";
 import { ActionJournalService, HostLogService } from "./receipt-services.ts";
 import { peaMcpServer } from "./harness/adapter.ts";

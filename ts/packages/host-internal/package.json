@@ -33,7 +33,6 @@
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "effect": "4.0.2",
-    "@effect/platform-node": "4.0.2",
     "@pe/runtime": "workspace:*",
     "zod": "catalog:"
   },

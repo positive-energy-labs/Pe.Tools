@@ -12,7 +12,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { detachedBridge, sessionView } from "./effect-test.ts";
 import { readFamily } from "../src/family-actions.ts";
-import { runPods } from "@pe/host-internal/pod-runner";
+import { runPods } from "../src/family-actions.ts";
 import type { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";

@@ -24,7 +24,7 @@ import type { RevitBridge } from "@pe/host-internal/bridge";
 import { command, nativeStep, refused, type CommandContext } from "@pe/host-internal/command-executor";
 import type { ActionExecution } from "@pe/host-internal/action-execution";
 import { ductsReadings } from "./ducts-readings.ts";
-import { runPods, type PodRunner } from "@pe/host-internal/pod-runner";
+import type { RunPods } from "@pe/host-internal/pod-runner";
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
 import type { DuctFiles } from "./ducts-files.ts";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
@@ -40,7 +40,8 @@ import { rulingsRequest } from "@pe/ducts-domain/rulings";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 
-export type DuctActionDependencies = PodRunner & {
+export type DuctActionDependencies = {
+  runPods?: RunPods;
   files?: DuctFiles["Service"];
   nativeRead?: HostNativeRead["Service"];
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
@@ -55,7 +56,7 @@ export interface DuctActionPreparation {
   doc: import("@pe/ducts-contract/system-work").DuctsRouteDocument;
   fans: import("@pe/fans-contract/fans").FansRouteDocument;
   firm: import("@pe/ducts-contract/duct-inputs").DuctsFirm; pointer: string | null | undefined;
-  deps: DuctActionDependencies; bridge: RevitBridge["Service"]; appliedAt: string | undefined;
+  deps: DuctActionDependencies; runPods: RunPods; bridge: RevitBridge["Service"]; appliedAt: string | undefined;
 }
 const ductCommands = { ...ductSystemsTool.commands, ...sheetCommands };
 
@@ -129,6 +130,8 @@ export function ductActionExecutors(
     const raw = primary.key.route === ductsRoute ? primary : siblings?.[ductsRoute] ?? ductsView?.handle;
     if (!raw) throw refused("Ducts Work is unavailable", "work.unavailable");
     if (!deps.projectLifetime) throw refused("Ducts preparation requires a project lifetime", "document.unavailable");
+    const runPods = deps.runPods;
+    if (!runPods) throw refused("Ducts preparation requires the host Pods runtime", "read.unavailable");
     const process = await deps.projectLifetime(target);
     const doc = await ctx.selectWork(ductSystemsTool.work, raw, (_doc, cells) => ({
       edits: ductSystemsTool.work.editable,
@@ -183,11 +186,11 @@ export function ductActionExecutors(
         };
         // 2b's refusal-aware layer over the owner-keyed firm file (the Pod firm door reads the same file).
         // The plan prices under the same tiers the sheet labels: the target model's project home, then the firm file.
-        const pointer = (await runPods(deps, bridge.list))
+        const pointer = (await runPods(bridge.list))
           .flatMap((session) => session.state?.openDocuments ?? [])
           .find((open) => open.openId === target.openId)?.projectHome;
         const settings = readSettingTiers("ducts", pointer);
-        const firm = firmLayer(resolveFirm(await runPods(deps, deps.files!.firm("ducts")), ductsFirmSchema, {}), settings);
+        const firm = firmLayer(resolveFirm(await runPods(deps.files!.firm("ducts")), ductsFirmSchema, {}), settings);
         const criteria = resolveCriteria(workLayer(design), firm);
         const nativeRead = deps.nativeRead;
         if (!nativeRead) throw refused("Ducts preparation requires the root native Read capability", "read.unavailable",
@@ -195,7 +198,7 @@ export function ductActionExecutors(
         const readNative = <K extends "ducts.snapshot.roster" | "ducts.snapshot.walk" | "ducts.tables",
         >(key: K, input: unknown,
         ) =>
-          runPods(deps, admittedCommandReadIdentity(ctx).pipe(
+          runPods(admittedCommandReadIdentity(ctx).pipe(
             Effect.flatMap((identity) => nativeRead.read({ key, input, scope: identity.scope }).pipe(
               Effect.provideService(RequestIdentity, identity)),
             ),
@@ -215,7 +218,7 @@ export function ductActionExecutors(
             });
         const snapshot = await selected.snapshot(intent, read);
         const derived = await selected.derive({ flow, intent, read, readNative, snapshot, design, doc, fans,
-          firm, pointer, deps, bridge, appliedAt });
+          firm, pointer, deps, runPods, bridge, appliedAt });
         return { process, ...derived };
       },
     };

@@ -3,7 +3,9 @@ import { targetHomes } from "@pe/host-internal/target-homes";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
 import { resolve, win32 } from "node:path";
-import { Effect } from "effect";
+import { NodeFileSystem } from "@effect/platform-node";
+import { Effect, type FileSystem } from "effect";
+import type { RunPods } from "@pe/host-internal/pod-runner";
 import {
   sameCaller,
   familyActions,
@@ -114,13 +116,11 @@ export const sourceRunDirectory = async (pod: string | null | undefined, deps: P
 };
 
 
-/** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
-import { runPods, type PodRunner } from "@pe/host-internal/pod-runner";
-
 export type PodDependencies = {
   parsePdf?: (request: import("@pe/mcps/family-pdf").FamilyPdfRequest) => Promise<unknown>;
   podsRoot?: string;
-} & PodRunner;
+  runPods?: RunPods;
+};
 export type FamilyActionDependencies = TakeoffActionDependencies &
   PodDependencies & {
     marks?: DocumentMarks;
@@ -134,6 +134,17 @@ export type FamilyActionDependencies = TakeoffActionDependencies &
       file: string,
     ) => Promise<{ modelDirectory: string }>;
   };
+
+/** Pod I/O runs against the product Pods root unless an owner (the demo lane) supplies its own. */
+export const runPods = <A, E>(
+  deps: PodDependencies,
+  effect: Effect.Effect<A, E, FileSystem.FileSystem>,
+  options?: { signal?: AbortSignal },
+) =>
+  deps.runPods
+    ? deps.runPods(effect, options)
+    : // effect-edge: island, phase 5
+      Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)), options);
 
 /** A conditional member write that refused wrote nothing: a clean refusal, never an unknown effect. */
 export const writeMemberOnce = (

@@ -1,5 +1,4 @@
 import { expect, test, vi } from "vite-plus/test";
-vi.mock("@pe/host-internal/pod-runner", () => ({ runPods: vi.fn() }));
 import { fanWriteRequest } from "../actions.ts";
 import { closedFan, CLOSED_AT } from "./closed-fan.fixture.ts";
 import { buildCalc } from "@pe/fans-domain/calc/build";

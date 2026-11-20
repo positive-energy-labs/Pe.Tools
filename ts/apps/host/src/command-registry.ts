@@ -10,7 +10,7 @@ import type { CommandExecutor, CommandRegistry } from "@pe/host-internal/command
 import type { GatewayLocal } from "./gateway-actions.ts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import { familyExecutors, type FamilyActionDependencies } from "./family-actions.ts";
+import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
@@ -59,6 +59,7 @@ export function commandRegistry(
   // Product-owned sheet writes answer through the generic sheet dispatcher.
   const products = productExecutors(bridge, {
     ...deps,
+    runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
   const productsWithoutSheet = Object.fromEntries(

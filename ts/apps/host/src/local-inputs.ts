@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { tsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";
 import { listPods, resolvePodIdentity, listRuns, readMember, composeMember } from "./settings.ts";
-import { runPods } from "@pe/host-internal/pod-runner";
+import { runPods } from "./family-actions.ts";
 
 // This closed table owns bridge-free reads, not public operation dispatch. In particular,
 // composeMember receives no bridge callback here, so its public SessionWrite cannot enter.

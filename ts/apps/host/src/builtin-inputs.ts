@@ -72,7 +72,7 @@ import { HostDocumentMarks } from "./document-marks.ts";
 import { createDuctsBodyBasis } from "@pe/ducts-host/ducts-body-basis";
 import { catalogsFor, DuctFiles } from "@pe/ducts-host/ducts-files";
 import { DuctsReadings, ductsReadings } from "@pe/ducts-host/ducts-readings";
-import { runPods } from "@pe/host-internal/pod-runner";
+import { runPods } from "./family-actions.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
 import { InvalidRead } from "@pe/host-internal/read-errors";
 import { hostNativeReadFor } from "./native-recording.ts";

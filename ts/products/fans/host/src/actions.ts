@@ -22,7 +22,6 @@ import { refused } from "@pe/host-internal/command-executor";
 
 
 
-import { runPods } from "@pe/host-internal/pod-runner";
 import { buildCalc, encounterRulings, mintWriteRequest, resolveInputs, type BuildCalcInput, type DomainClaim, type FanWriteContext, type CalcSnapshot } from "@pe/fans-domain/calc/index";
 import { followAcceptedJoins } from "@pe/ducts-domain/calc/joins";
 import { pendingRulings, storeRulings, withStoredRulings } from "@pe/ducts-domain/rulings";
@@ -119,13 +118,13 @@ export function fanRulings(design: DuctActionPreparation["design"], snapshot: Pi
 }
 
 async function prepareLosses(p: DuctActionPreparation) {
-  let { intent, read, readNative, snapshot, design, doc, fans, firm, pointer, deps, appliedAt, flow } = p;
+  let { intent, read, readNative, snapshot, design, doc, fans, firm, pointer, deps, runPods, appliedAt, flow } = p;
 
             const walk = intent.walk;
             if (!walk) throw refused("Preview needs writeIntent.walk from the fan roster; stage a scope before previewing losses");
             const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
             const grids = toGrids(tables);
-            const catalogs = await runPods(deps, catalogsFor(deps.files!, pointer));
+            const catalogs = await runPods(catalogsFor(deps.files!, pointer));
             const work = workLayer(design);
             // One fan port's calc inputs, as its worksheet reads them: its walk, the far side of accepted joins, and the ruled roster.
             const inputOf = async (fan: { unitId: number; portIndex: number }, near: DuctSnapshot) => {
