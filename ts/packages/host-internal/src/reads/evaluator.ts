@@ -9,6 +9,8 @@ import {
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import type { ReadHandle } from "@pe/agent-contracts/handle";
+import type { DocumentRef } from "@pe/agent-contracts/target";
+import type { ReadingDemand } from "../native-read.ts";
 import {
   bodyOf,
   firm as firmFile,
@@ -121,10 +123,19 @@ export interface InputPort {
     args: unknown,
     context?: ReadContext,
     signal?: AbortSignal,
+    demand?: ReadingDemand,
+    label?: string,
   ) => Promise<unknown>;
   /** Synchronous event revision: also fences a change while final validation is awaiting I/O. */
   readonly revision: (name: string, args: unknown) => number;
+  readonly reuse?: {
+    readonly target: DocumentRef;
+    readonly scope: string;
+    readonly ready: () => Promise<boolean>;
+    readonly current: () => boolean;
+  };
 }
+export type InputRevision = Readonly<{ name: string; args: unknown; revision: number }>;
 export class RefreshNeeded extends Error {
   constructor(
     message: string,
@@ -178,6 +189,7 @@ export async function evaluate<I, O>(
   definition: Read<I, O>,
   input: I,
   port: InputPort,
+  onInput?: (input: InputRevision) => void,
 ): Promise<Value<O>> {
   const memo = new Map<string, Promise<unknown>>();
   let closed = false;
@@ -234,6 +246,7 @@ export async function evaluate<I, O>(
           if ("leaf" in definition) {
             if (port.revision(definition.name, args) !== revision)
               throw new RefreshNeeded(moved(definition.name, args), definition.name);
+            onInput?.({ name: definition.name, args, revision });
             if (definition.validate) checks.set(recipe, { definition, args, hash, revision });
           }
           return data;

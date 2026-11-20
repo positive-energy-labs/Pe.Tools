@@ -22,6 +22,49 @@ vi.mock("./resource-stream", () => ({
   },
 }));
 
+test("S6 holder status has its own order and never reacquires the Value", async () => {
+  const generation = 3;
+  const frames: unknown[] = [];
+  const read = vi.fn(async () => ({
+    generation,
+    version: 1,
+    state: "current",
+    value: { evaluation: "roster", coverage: { refused: [], unknown: [] } },
+  }));
+  const stop = publicationSource({ read }).open(
+    {
+      signal: new AbortController().signal,
+      publication: { subscription: "plans", generation },
+    } as ReadingContext,
+    (frame) => frames.push(frame),
+  );
+  const send = (value: object) =>
+    stream.listener!({
+      kind: "snapshot",
+      key: "plans",
+      value: { version: 0, state: "absent", ...value },
+    });
+  const a = { requestId: "A", operationKey: "export", label: "Exporting plan image" };
+  const b = { ...a, requestId: "B" };
+  try {
+    send({ generation, state: "absent" });
+    await expect.poll(() => frames).toHaveLength(1);
+    send({ generation, holder: a, statusVersion: 1 });
+    send({ generation, holder: b, statusVersion: 3 });
+    send({ generation, holder: null, statusVersion: 2 });
+    send({ generation: generation - 1, holder: a, statusVersion: 4 });
+    send({ generation, holder: null, statusVersion: 4 });
+    expect(frames.slice(1)).toEqual([
+      { kind: "queue-holder", holder: a },
+      { kind: "queue-holder", holder: b },
+      { kind: "queue-holder", holder: null },
+    ]);
+    expect(read).toHaveBeenCalledTimes(1);
+  } finally {
+    if (typeof stop === "function") stop();
+  }
+});
+
 test("the Open route subscribes without specifying what the host watches", () => {
   const route = "open";
   const target = { kind: "host" } as const;

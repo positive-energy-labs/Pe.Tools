@@ -32,8 +32,9 @@ import { HostInputReadSets } from "./input-occurrence.ts";
 import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
 import type { TakingObserver } from "@pe/host-internal/input-recording";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { fingerprint } from "@pe/host-internal/reads/evaluator";
-import { Publications } from "./reads/publications.ts";
+import { fingerprint, RefreshNeeded } from "@pe/host-internal/reads/evaluator";
+import { Publications, type Publication } from "./reads/publications.ts";
+import type { QueueHolder } from "@pe/agent-contracts/value";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
 import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contracts";
@@ -131,6 +132,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   } = {},
 ) {
   const runtime = yield* Effect.context<never>();
+  const bridge = Option.getOrUndefined(Context.getOption(runtime, RevitBridge));
   const lane = inputs.lane;
   if (lane.kind === "fixture") return yield* Effect.die(Error("A fixture has no host input graph"));
   const basis = createDuctsBodyBasis(lane, options.observed);
@@ -422,9 +424,17 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         )
       : null;
     const graphRequest = graph?.publication;
-    const historyDocument = documentRefSchema.safeParse(
-      (graph?.args as { target?: unknown } | undefined)?.target,
-    );
+    const rawTarget = (graph?.args as { target?: unknown } | undefined)?.target;
+    const historyDocument = documentRefSchema.safeParse(rawTarget);
+    const target = executionTargetSchema.safeParse(rawTarget);
+    const document = historyDocument.success
+      ? historyDocument.data
+      : target.data?.kind === "document"
+        ? target.data.ref
+        : undefined;
+    const session =
+      document?.session ??
+      (target.data?.kind === "session" ? target.data.session : identity.scope.bridgeSessionId);
     const at = web.headers.get("x-pe-history-point");
     if (at && web.headers.get("x-pe-history-compare") !== "now" && graph) {
       return {
@@ -478,6 +488,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       ? publications.admission(
           canonicalJson([identity.caller, graphRequest.subscription]),
           graphRequest.generation,
+          !recorded && bridge && session
+            ? (notify) => bridge.observeHolder(session, notify)
+            : undefined,
         )
       : undefined;
     if (admission) {
@@ -682,7 +695,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                     });
                   },
                 ),
-          call: async (key, input, target, version, role, signal) => {
+          call: async (key, input, target, version, role, signal, demand, label) => {
             // Interrupt only this native read join. NativeReads retains restoration and terminal custody.
             const take = async <A, E>(
               effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>,
@@ -708,7 +721,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   ? { bridgeSessionId: chosen.session }
                   : {};
               const answer = await take(
-                native.read({ key, input, scope, waitForRetirement: true }),
+                native.read({ key, input, scope, waitForRetirement: true, demand, label }),
               );
               return new Response(JSON.stringify(answer.value), {
                 // Admission generations fence native flights; sealed read versions describe content.
@@ -1028,30 +1041,43 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         if (reading.kind === "publication") {
           const key = readingKey(reading);
           const { generation } = reading;
-          let answered = false;
+          const subscription = canonicalJson([identity.caller, reading.subscription]);
+          let state = { version: 0, state: "absent" } as Pick<
+            Publication<unknown>,
+            "version" | "refreshCause"
+          > & { state: string; retry?: number };
+          let holder: QueueHolder = null,
+            statusVersion = 0;
+          const send = () =>
+            publish({
+              kind: "snapshot",
+              key,
+              value: { generation, ...state, ...(statusVersion && { holder, statusVersion }) },
+            });
           const stop = invalidations.observePublication(
-            canonicalJson([identity.caller, reading.subscription]),
+            subscription,
             generation,
-            (publication, retry) => {
-              answered = true;
-              publish({
-                kind: "snapshot",
-                key,
-                value: {
-                  generation,
-                  version: publication.version,
-                  state: publication.state,
-                  refreshCause: publication.refreshCause,
-                  retry,
-                },
-              });
+            ({ version, state: lifecycle, refreshCause }, retry) => {
+              state = { version, state: lifecycle, refreshCause, retry };
+              send();
             },
             { recipe: "open.documents", observe: fallback },
           );
+          const stopHolder = publications.observeHolder(
+            subscription,
+            (current, nextHolder, version) => {
+              if (current !== generation) return;
+              holder = nextHolder;
+              statusVersion = version;
+              send();
+            },
+          );
           // Every key is answered once, so a stream that carries only this key is never silent.
-          if (!answered)
-            publish({ kind: "snapshot", key, value: { generation, version: 0, state: "absent" } });
-          return stop;
+          if (state.state === "absent" && !statusVersion) send();
+          return () => {
+            stopHolder();
+            stop();
+          };
         }
         if (!recorded) return observeFrame(reading, publish, after);
         let released = false,
@@ -1112,7 +1138,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         ...(graph && source
           ? {
               readGraph: async () => {
-                const port = inputPort({
+                const evaluatorPort = inputPort({
                   leaves: registeredReads.leaves,
                   timeline,
                   source,
@@ -1123,6 +1149,35 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   origin: () => inputs.source,
                   revision: invalidations.revision,
                 });
+                const reuseAddress = document && bridge?.documentAddress(document);
+                let settledMarks: Promise<void> | undefined;
+                const port =
+                  !recorded &&
+                  !graph.readSet &&
+                  bridge &&
+                  document &&
+                  reuseAddress !== undefined &&
+                  (!writer ||
+                    (historyDocument.success && reuseAddress && !writer.capture.truncated()))
+                    ? Object.assign(evaluatorPort, {
+                        reuse: {
+                          target: document,
+                          scope: canonicalJson([identity.caller, recipe.scope, reuseAddress]),
+                          ready: async () => {
+                            const admitted = await invoke(
+                              Effect.result(admitNativeCaller("rooms.roster")),
+                            );
+                            settledMarks = marks.settled?.();
+                            await settledMarks;
+                            return admitted._tag === "Success";
+                          },
+                          current: () =>
+                            !writer?.capture.truncated() &&
+                            (!settledMarks || settledMarks === marks.settled?.()) &&
+                            bridge.documentAddress(document) === reuseAddress,
+                        },
+                      })
+                    : evaluatorPort;
                 return graph.publication
                   ? graph.publish(
                       publications,
@@ -1138,7 +1193,14 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                                 .pipe(Effect.provideService(RequestIdentity, identity)),
                             );
                             const address = addressSchema.parse(row.address);
-                            await complete(consumption!);
+                            if (publication.value?.inputs === consumption!.id)
+                              await complete(consumption!);
+                            // A hit keeps its original sealed inputs. History verifies those references.
+                            else if (row.address !== reuseAddress)
+                              throw new RefreshNeeded(
+                                "The document address changed",
+                                "document-mark",
+                              );
                             const raw = web.headers.get("x-pe-history-page");
                             const pose = raw
                               ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw)))

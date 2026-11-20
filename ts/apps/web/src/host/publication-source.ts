@@ -1,6 +1,17 @@
 import { z } from "zod";
 import { peReadings } from "./resource-stream";
 import type { ReadingContext, UseSource } from "@pe/web-kernel/shell/source-contract";
+import { queueHolderSchema } from "@pe/agent-contracts/value";
+
+const streamFrame = z.object({
+  generation: z.number(),
+  version: z.number().optional(),
+  state: z.string().optional(),
+  refreshCause: z.literal("document-changed").optional(),
+  retry: z.number().optional(),
+  holder: queueHolderSchema.optional(),
+  statusVersion: z.number().optional(),
+});
 
 export function publicationSource<
   T extends {
@@ -34,6 +45,14 @@ export function publicationSource<
         invalidated = false,
         held = false,
         observed = false;
+      let lastPublication: string | undefined;
+      let statusVersion = -1;
+      let holding = false;
+      const clearHolder = () => {
+        if (!holding) return;
+        holding = false;
+        deliver({ kind: "queue-holder", holder: null });
+      };
       let unfollow: (() => void) | undefined;
       let retry: ReturnType<typeof setTimeout> | undefined;
       let delay = 250;
@@ -103,30 +122,44 @@ export function publicationSource<
             generation: publication.generation,
           },
           (frame) => {
-            if (closed) return;
+            if (closed || ctx.signal.aborted) return;
             if (frame.kind === "stale") {
               observed = false;
+              lastPublication = undefined;
+              statusVersion = -1;
+              clearHolder();
               return;
             }
-            if (frame.kind === "failure") return deliver({ kind: "stale" });
-            const state = z
-              .object({
-                generation: z.number(),
-                state: z.string(),
-                refreshCause: z.literal("document-changed").optional(),
-              })
-              .safeParse(frame.kind === "snapshot" && !frame.stale ? frame.value : null);
-            if (!state.success || state.data.generation !== publication.generation) return;
+            if (frame.kind === "failure") {
+              clearHolder();
+              return deliver({ kind: "stale" });
+            }
+            const decoded = streamFrame.safeParse(
+              frame.kind === "snapshot" && !frame.stale ? frame.value : null,
+            );
+            if (!decoded.success || decoded.data.generation !== publication.generation) return;
+            const {
+              version,
+              state,
+              refreshCause,
+              retry,
+              holder,
+              statusVersion: next,
+            } = decoded.data;
+            if (holder !== undefined && next !== undefined && next > statusVersion) {
+              statusVersion = next;
+              if (holding || holder) deliver({ kind: "queue-holder", holder });
+              holding = holder !== null;
+            }
+            if (state === undefined) return;
+            const delivery = JSON.stringify([version, state, refreshCause, retry]);
+            if (next !== undefined && lastPublication === delivery) return;
+            lastPublication = delivery;
             // The stream must own the slot before HTTP acquires it. Reconnect reacquires the same ID.
             const first = !observed;
             observed = true;
-            if (
-              first ||
-              state.data.state === "refresh-needed" ||
-              (state.data.state === "absent" && held)
-            ) {
-              if (state.data.refreshCause === "document-changed")
-                deliver({ kind: "document-changed" });
+            if (first || state === "refresh-needed" || (state === "absent" && held)) {
+              if (refreshCause === "document-changed") deliver({ kind: "document-changed" });
               else if (!first) deliver({ kind: "stale" });
               void refresh();
             }

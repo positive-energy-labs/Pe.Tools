@@ -1,4 +1,5 @@
 import type { Effect, ExecutionTarget, WorkKey } from "@pe/agent-contracts";
+import type { QueueHolder } from "@pe/agent-contracts/value";
 
 export interface ReadingScope<P = unknown, W = unknown> {
   target: ExecutionTarget;
@@ -51,6 +52,7 @@ export type ReadingPublication<T = unknown> =
       reason?: string;
     }
   | { kind: "pending" | "stale" | "document-changed" }
+  | { kind: "queue-holder"; holder: QueueHolder }
   | { kind: "failure"; error: unknown }
   | { kind: "log"; value: unknown; id?: string };
 

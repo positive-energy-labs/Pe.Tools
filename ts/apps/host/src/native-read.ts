@@ -71,7 +71,14 @@ export const HostNativeReadLive = Layer.effect(
         admit(request).pipe(
           Effect.flatMap(({ prepared, session }) =>
             Effect.flatMap(RequestIdentity, (identity) =>
-              reads.join(prepared, session, identity, request.waitForRetirement),
+              reads.join(
+                prepared,
+                session,
+                identity,
+                request.waitForRetirement,
+                request.demand,
+                request.label,
+              ),
             ),
           ),
         ),

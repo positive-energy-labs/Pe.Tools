@@ -2,7 +2,9 @@ import { Context, type Effect, type PubSub, Schema } from "effect";
 import type { HttpServerRequest, HttpServerResponse } from "effect/http";
 import type { BridgeStateSnapshot, Lane, ValidationIssue } from "@pe/host-contracts/contracts";
 import type { DocumentRef } from "@pe/agent-contracts";
+import type { QueueHolder } from "@pe/agent-contracts/value";
 import type { NativeDispatchHandle } from "./dispatch.ts";
+import type { ReadingDemand } from "./native-read.ts";
 import type { DoorFailure } from "./request-contracts.d.ts";
 
 export type BridgeEvidence = {
@@ -128,7 +130,11 @@ export class RevitBridge extends Context.Service<
       bridgeSessionId?: string,
       openDocumentId?: string | null,
       requestId?: string,
+      demand?: ReadingDemand,
+      label?: string,
     ) => Effect.Effect<NativeDispatchHandle, DoorFailure>;
+    readonly observeHolder: (session: string, notify: (holder: QueueHolder) => void) => () => void;
+    readonly documentAddress: (ref: DocumentRef) => string | null | undefined;
     /** Retire only a host-queued request; never send op.cancel to Revit. */
     readonly cancelQueued: (requestIds: Promise<readonly string[]>) => Promise<void>;
     readonly snapshot: (bridgeSessionId?: string) => Effect.Effect<BridgeSessionView>;

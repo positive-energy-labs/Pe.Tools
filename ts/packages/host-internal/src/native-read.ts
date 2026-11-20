@@ -14,7 +14,11 @@ export interface NativeReadInput {
   readonly scope: HostSessionScope;
   /** A publication can keep its last Value while an earlier native read settles. */
   readonly waitForRetirement?: boolean;
+  readonly demand?: ReadingDemand;
+  readonly label?: string;
 }
+
+export type ReadingDemand = Readonly<{ current(): boolean }>;
 
 /** The one native Read admission (ADR 0029 rule 16): every call is admitted for its own caller,
  * then joins the shared native flight. Routes never mint a prepared read or supply a codec. */
