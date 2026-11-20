@@ -14,9 +14,12 @@ const folders = (root: string) =>
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
 const products = folders("products");
+// A stem is a product word the folder and route names only carry in the plural: `TakeoffThing`.
+const stems = ["takeoff"];
 const ids = new Set([
   ...products,
   ...routeDirectory.flatMap(({ key, product }) => (product ? [key] : [])),
+  ...stems,
 ]);
 const packages = new Set(
   products.flatMap((id) =>
@@ -76,6 +79,11 @@ const exceptions = [
   // The runner that finds each product's own journeys.
   "tests/e2e/product-journeys.config.ts",
 ];
+// One literal a file keeps, with its reason; the rest of the file is still read.
+const keptLiterals: Record<string, string> = {
+  // The directory of kept readings on every machine: a rename silently drops them.
+  "apps/host/src/observation-store.ts": '"takeoff-captures"',
+};
 const excepted = (file: string) =>
   registration.has(file) ||
   exceptions.some((entry) => (entry.endsWith("/") ? file.startsWith(entry) : file === entry));
@@ -116,7 +124,7 @@ test("generic code leaves product names and imports to product homes", () => {
       );
     if (excepted(file)) continue;
     const matches = new Set([
-      ...(`${file}\n${source}`.match(names) ?? []),
+      ...(`${file}\n${source.replace(keptLiterals[file] ?? /$^/, "")}`.match(names) ?? []),
       ...workspaceReferences(file, source).filter(
         (specifier) =>
           importsWorkspace(file, specifier, "products", packages) ||

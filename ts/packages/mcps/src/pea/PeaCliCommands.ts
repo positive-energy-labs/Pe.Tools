@@ -11,7 +11,7 @@ import {
   findCapabilities,
   mentionOf,
 } from "@pe/agent-contracts";
-import { ActionResultError } from "../shared/takeoff-action-client.ts";
+import { ActionResultError } from "../shared/action-client.ts";
 import { HostRpcCaller } from "../shared/host-rpc-caller.js";
 import type { PodList } from "@pe/host-contracts/operation-types";
 import { readCatalog } from "./capability-tools.ts";

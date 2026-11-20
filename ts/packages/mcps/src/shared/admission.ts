@@ -35,7 +35,7 @@ import {
   submitAction,
   controlAction,
   recoverAction,
-} from "./takeoff-action-client.ts";
+} from "./action-client.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
 

@@ -9,7 +9,7 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import { runSemanticAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { runSemanticAction } from "../../../../packages/mcps/src/shared/action-client";
 import { PatchBay } from "../machine/bay";
 import { SessionsBody } from "../sessions/mount";
 import { installOpenControls } from "../machine/context";
@@ -26,7 +26,7 @@ import {
   RECENTS,
 } from "../machine/open-examples";
 
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (importOriginal) => {
+vi.mock("../../../../packages/mcps/src/shared/action-client", async (importOriginal) => {
   const run = vi.fn(async (key, input, _target?: unknown, _basis?: unknown) =>
     actionReceiptSchema.parse({
       id: "action-1",
@@ -46,7 +46,7 @@ vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (imp
   );
   return {
     ...(await importOriginal<
-      typeof import("../../../../packages/mcps/src/shared/takeoff-action-client")
+      typeof import("../../../../packages/mcps/src/shared/action-client")
     >()),
     readActionStatuses: vi.fn(),
     runSemanticAction: run,

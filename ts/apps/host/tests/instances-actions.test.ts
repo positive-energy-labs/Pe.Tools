@@ -21,7 +21,7 @@ import { unreadLeg } from "../src/update-reader.ts";
 import { crossingOf, contextHeaders } from "./callers.ts";
 import { serveRoutes } from "./real-server.ts";
 import { acquisitionSessionId, foldAcquisitions } from "../src/acquisition.ts";
-import { runSemanticAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
+import { runSemanticAction } from "../../../packages/mcps/src/shared/action-client.ts";
 // Instances owns its SDK transport. These HTTP witnesses expose no bridge attachment or dispatch.
 const sdkOnlyBridge = detachedBridge();
 vi.mock("../src/acquisition.ts", async (original) => {

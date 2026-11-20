@@ -432,7 +432,7 @@ export const product = define({
       input: z.object({
         views: z.array(z.object({ view, items: z.array(adoptItem).min(1) })).min(1),
       }),
-      dirties: ["snapshot", "takeoff-views", "candidates"],
+      dirties: ["snapshot", "views", "candidates"],
       native: ["takeoffs.record-replacements", "takeoffs.adopt"],
       writes: { regions: [], registry: [], enclosure: [] },
     }),
@@ -446,7 +446,7 @@ export const product = define({
         zoneUniqueId: z.string(),
         runId: z.string().optional(),
       }),
-      dirties: ["snapshot", "takeoff-views"],
+      dirties: ["snapshot", "views"],
       native: ["takeoffs.record-replacements", "takeoffs.partition"],
       writes: { regions: [] },
     }),

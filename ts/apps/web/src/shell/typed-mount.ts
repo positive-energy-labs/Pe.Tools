@@ -73,7 +73,7 @@ import type { Command } from "../../../../packages/agent-contracts/src/command.t
 import { reasonOf, refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import type { ReadingState } from "@pe/agent-contracts";
 import { absentLine, failureLine, retainedLine } from "./reading-line";
-import { cancelAction } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { cancelAction } from "../../../../packages/mcps/src/shared/action-client";
 import { observeSubject, subjectScopeKey, type SubjectState } from "@pe/web-kernel/shell/subject";
 
 export type RouteReadiness = { kind: "ready" } | { kind: "pending" | "blocked"; reason: string };

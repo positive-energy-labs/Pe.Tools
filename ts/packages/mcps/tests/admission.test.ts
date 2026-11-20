@@ -3,7 +3,7 @@ import { withInvocationContext } from "@pe/runtime/context";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { peDo, peRead } from "../src/pea/capability-tools.ts";
 import { buildCapabilities } from "../src/pea/capabilities.ts";
-import { readAction } from "../src/shared/takeoff-action-client.ts";
+import { readAction } from "../src/shared/action-client.ts";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { bodyText } from "./body-text.ts";
 

@@ -32,7 +32,7 @@
     "ts/packages/host-internal/src/reads/evaluator.ts",
     "ts/packages/host-internal/src/reads/local.ts",
     "ts/packages/host-internal/src/reads/work.ts",
-    "ts/packages/mcps/src/shared/takeoff-action-client.ts",
+    "ts/packages/mcps/src/shared/action-client.ts",
     "ts/packages/runtime/src/analytics.ts",
     "ts/packages/runtime/src/capabilities.ts",
     "ts/packages/runtime/src/index.ts",

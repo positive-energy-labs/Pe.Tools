@@ -2,7 +2,7 @@
 import type * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { inspectAtomRegistry } from "./atom-inspect";
 import { appAtomRegistry } from "#/shell/owner";
-import { inspectRetainedActions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { inspectRetainedActions } from "../../../../packages/mcps/src/shared/action-client";
 import { Code, stringify } from "@pe/kit/lang/code";
 
 /** Presentation only. Its subscription observes inspector notifications, never producer atoms. */

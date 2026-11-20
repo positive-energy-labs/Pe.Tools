@@ -21,7 +21,7 @@ import {
   type ReadingRequest,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
-import { bindActionObserver } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { bindActionObserver } from "../../../../packages/mcps/src/shared/action-client";
 import { useEffect, useRef } from "react";
 import { reportFault } from "#/host/diagnostics";
 import { resolveWorkbenchConfig } from "#/workbench/config.ts";
@@ -639,7 +639,7 @@ export function followBeat(
 export const dirty = (request: ReadingRequest, source: Readings = peReadings) =>
   source.dirty(request);
 
-/* -- TakeoffModel events: the one push channel that is not a subject ----------------------------- */
+/* -- Host events: the one push channel that is not a subject ----------------------------- */
 
 function subscribeHostEvents<T>(listener: (event: T) => void): () => void {
   return peReadings.subscribe({ kind: "world" }, (frame) => {

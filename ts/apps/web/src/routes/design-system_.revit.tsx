@@ -58,11 +58,11 @@ const familyTypes: Dialog = {
         { band: "Graphics", open: true },
         { cells: ["Use Annotation Scale (default)", { checked: false }, "=", ""] },
         { band: "Dimensions", open: true },
-        { cells: ["Takeoff Length Projection (default)", `12"`, "=", ""] },
-        { cells: ["Takeoff Length (default)", `4"`, "=", ""] },
+        { cells: ["Tap Length Projection (default)", `12"`, "=", ""] },
+        { cells: ["Tap Length (default)", `4"`, "=", ""] },
         {
           cells: [
-            "Takeoff Fixed Length (default)",
+            "Tap Fixed Length (default)",
             `1"`,
             `=if(Duct Diameter > 16", Duct Diameter * 0.25, 1")`,
             "",
@@ -503,7 +503,7 @@ const sharedParameters: Dialog = {
 const routing: readonly [string, readonly string[], number?][] = [
   ["Elbow", ["Round Elbow: 1 D"]],
   ["Preferred Junction Type", ["Tap"]],
-  ["Junction", ["Round Takeoff: Standard", "Round Tee: Standard"], 1],
+  ["Junction", ["Round Tap: Standard", "Round Tee: Standard"], 1],
   ["Cross", ["Round Cross: Standard"]],
   ["Transition", ["Round Transition - Angle: 45 Degree"]],
   [

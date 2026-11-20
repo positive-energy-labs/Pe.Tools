@@ -7,7 +7,7 @@ import { useEffect, useInsertionEffect, useMemo, useRef, useSyncExternalStore } 
 import { Layer } from "effect";
 import { inspectAtomRegistry, type OwnerReferences } from "#/state/atom-inspect";
 import { causeRefusal, refuse, type Refusal } from "../route/refusal";
-import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/takeoff-action-client";
+import { cancelRunningAdmissions } from "../../../../packages/mcps/src/shared/action-client";
 import { useRouteActivity } from "@pe/web-kernel/route/activity";
 
 /**
