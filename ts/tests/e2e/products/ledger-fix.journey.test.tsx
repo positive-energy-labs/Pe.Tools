@@ -108,7 +108,7 @@ test("the 369-system handoff names the fan port and resolves only its systems", 
     unitId: sheetFixture.overview.fan!.unitId,
     portIndex: sheetFixture.overview.fan!.portIndex,
   });
-  expect(href.searchParams.has("system")).toBe(false);
+  expect(JSON.parse(href.searchParams.get("system")!)).toEqual({ kind: "ids", ids: [] });
   const walk = {
     segments: [
       { systemName: snapshot.systems[7]!.name, reason: "walked" },
@@ -122,8 +122,8 @@ test("the 369-system handoff names the fan port and resolves only its systems", 
   ).toEqual([snapshot.systems[0]!.name]);
 });
 
-test("without an open fan the handoff retains the default scope", () => {
+test("without an open fan the handoff explicitly clears the address scope", () => {
   const href = new URL(ductsLink(null, {}), "http://pe.local");
-  expect(href.searchParams.has("fan")).toBe(false);
-  expect(href.searchParams.has("system")).toBe(false);
+  expect(href.searchParams.get("fan")).toBe("null");
+  expect(JSON.parse(href.searchParams.get("system")!)).toEqual({ kind: "ids", ids: [] });
 });

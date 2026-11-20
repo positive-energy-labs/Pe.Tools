@@ -110,6 +110,8 @@ function useNetworkData(ctx: NetworkContext) {
   const page = ctx.page.read();
   const roster = useValue(ctx.read(rosterRead));
   const system = namesOf(page.system);
+  const fanScope = system !== "all" && !system.length ? page.fan : null;
+  const hasScope = system === "all" || system.length > 0 || fanScope !== null;
   const systems = useMemo(
     () => (system === "all" ? (roster?.systems ?? []).map((row) => row.name) : system),
     [page.system, roster],
@@ -205,6 +207,8 @@ function useNetworkData(ctx: NetworkContext) {
   };
   return {
     page,
+    hasScope,
+    fanScope,
     systems,
     active,
     selected,
@@ -338,11 +342,6 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const systemRows = analysis?.systems ?? roster?.rows ?? NO_SYSTEMS;
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
-  useEffect(() => {
-    // Once a system has been opened, clearing it should leave the sheet empty.
-    if (page.fan && (page.system.kind === "all" || page.system.ids.length))
-      ctx.page.query({ fan: null });
-  }, [ctx.page, page.fan, page.system]);
   const system = systems;
   const version = captureSource?.version ?? "";
   const systemKeys = { version, system, active, systemSearch, systemSort };
@@ -358,7 +357,8 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
           header={
             <div className="flex flex-wrap items-center justify-between gap-2 p-1">
               <span className="t-small">
-                {systemRows.length} systems / {systems.length} open
+                {systemRows.length} systems /{" "}
+                {data.fanScope ? "fan repair scope open" : `${systems.length} open`}
               </span>
               <Popover>
                 <PopoverTrigger render={<Button icon={Settings} label="Duct settings" />} />
@@ -476,6 +476,13 @@ export function TreePane({ ctx }: { ctx: DuctsDrawContext }) {
 }
 export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
   const data = useNetworkData(ctx);
+  return data.hasScope ? (
+    <ScopedInbox ctx={ctx} data={data} />
+  ) : (
+    <p className="p-3 text-ink-2">Choose a system to see its rulings.</p>
+  );
+}
+function ScopedInbox({ ctx, data }: { ctx: DuctsDrawContext; data: NetworkData }) {
   const {
     snapshot,
     priced,
@@ -533,6 +540,17 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
 /** The /ducts picture slot's overlay: the opened systems' network as parts for the kernel's picture pane. */
 export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawContext>) {
   const data = useNetworkData(ctx);
+  return data.hasScope ? (
+    <ScopedNetworkPicture ctx={ctx} picture={picture} data={data} />
+  ) : (
+    <p className="p-3 text-ink-2">Choose a system to see its picture.</p>
+  );
+}
+function ScopedNetworkPicture({
+  ctx,
+  picture,
+  data,
+}: Pick<PictureOverlayProps<DuctsDrawContext>, "ctx" | "picture"> & { data: NetworkData }) {
   const { snapshot, priced, page, systems, active, work, edit, analysis, coverage } = data;
   const projection = useTreeProjection(snapshot, priced, work.doc, systems);
   const { drawn, scope, groups, trees, nameOf } = projection;
@@ -609,7 +627,7 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
         <div className="relative min-h-0 flex-1">
           <DuctsPicture
             ctx={ctx}
-            snapshot={"value" in data.snapshotRead ? snapshot : null}
+            snapshot={data.snapshotRead.state === "ready" ? snapshot : null}
             priced={priced}
             analysis={analysis}
             source={{
