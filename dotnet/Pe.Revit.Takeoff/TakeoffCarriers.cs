@@ -91,7 +91,7 @@ public sealed class RoomsRegionRecord
 
     internal string? Refusal { get; private set; }
     internal string? Recovery => RecoveryFor(this.Refusal);
-    internal static string? RecoveryFor(string? refusal) => refusal is { } reason
+    private static string? RecoveryFor(string? refusal) => refusal is { } reason
         ? $"{reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it." : null;
     internal Dictionary<string, RoomsTraceRun> Runs { get; private init; } = new(StringComparer.Ordinal);
 
@@ -103,6 +103,13 @@ public sealed class RoomsRegionRecord
 
     internal static OwnerValue<RoomsRegionRecord> Read(Document document) =>
         Decode(OwnerBlobStore.Read(document, Owner));
+
+    internal static OwnerValue<RoomsRegionRecord> ReadWithRecovery(Document document)
+    {
+        var stored = OwnerBlobStore.Read(document, Owner);
+        var read = Decode(stored);
+        return stored.Status == OwnerBlobStatus.NewerVersion ? read : read with { Refusal = RecoveryFor(read.Refusal) };
+    }
 
     internal static OwnerValue<RoomsRegionRecord> Decode(OwnerBlobRead stored) => stored.Parse(data =>
     {

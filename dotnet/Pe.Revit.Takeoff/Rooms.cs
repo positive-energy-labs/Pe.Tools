@@ -216,9 +216,9 @@ public static class Rooms
     {
         var viewScope = LevelView(doc, viewId);
         var levels = Levels(doc);
-        var read = RoomsRegionRecord.Read(doc);
+        var read = RoomsRegionRecord.ReadWithRecovery(doc);
         if (read.Value is not { } record)
-            return new(levels, [], RoomsRegionRecord.RecoveryFor(read.Refusal) is { } reason ? [new(null, RoomsRegionRecord.Owner.Name, reason)] : []);
+            return new(levels, [], read.Refusal is { } reason ? [new(null, RoomsRegionRecord.Owner.Name, reason)] : []);
         var regions = new List<RoomsRegion>();
         foreach (var fr in record.Regions.Keys.Select(id => doc.GetElement(id)).OfType<FilledRegion>()
                      .Where(fr => fr.OwnerViewId == viewScope.Id).OrderBy(fr => fr.Id.Value()))
@@ -607,10 +607,7 @@ public static class Rooms
     public static RoomsTraceData Trace(Document doc, RoomsTraceRequest request)
     {
         var view = LevelView(doc, request.View);
-        var read = RoomsRegionRecord.Read(doc);
-        if (RoomsRegionRecord.RecoveryFor(read.Refusal) is { } recovery)
-            throw new InvalidOperationException(recovery);
-        var record = read.Value;
+        var record = RoomsRegionRecord.ReadWithRecovery(doc).OrThrow();
         var reference = record?.Runs.GetValueOrDefault(view.UniqueId);
         if (reference == null)
             throw new RoomsTraceUnavailableException($"View '{view.Name}' has no committed rooms.partition run.", unpartitioned: true);
