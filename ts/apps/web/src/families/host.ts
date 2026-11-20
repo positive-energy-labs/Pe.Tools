@@ -11,14 +11,16 @@ import {
   type FamiliesObservation,
 } from "@pe/agent-contracts";
 import { familiesViewData } from "../../../../packages/agent-contracts/src/families-read.ts";
-import { workScope, documentMark } from "@pe/host-internal/read-graph";
+import { documentMark } from "@pe/host-internal/read-graph";
+import { workBinding } from "@pe/host-internal/reads/work";
 import { applyOutcome, applyTally } from "./families-outcome.ts";
 import { matrixModel, buildPivot, splitRows } from "./families-matrix.ts";
 
 /** Immutable native evidence, Work and matrix calculation meet only on the host. */
 const familiesView = body(contracts.view, async function (ctx, args) {
   await ctx.read(documentMark, args.target);
-  const scope = { ...(await ctx.read(workScope, args.target)), route: "families" };
+  const scope = await ctx.read(workBinding, { route: "families", target: args.target });
+  if (!scope) throw Error("This document has no Work binding");
   const view = await ctx.read(workRead("families", familiesRouteState.schema), scope);
   const work = familiesRouteState.schema.parse(view?.doc ?? {});
   const { body: catalog } = await ctx.read(native("revit.catalog.loaded-families"), {

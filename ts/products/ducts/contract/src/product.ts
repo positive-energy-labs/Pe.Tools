@@ -9,6 +9,7 @@ import {
   entity,
   familyParameter,
   homeFile,
+  productRead,
   ownerBlob,
   product as define,
   revitEntity,
@@ -103,7 +104,7 @@ export const product = define({
   id: "ducts",
   publishTool: false,
   says: "Shared duct model inputs, settings, catalogs and loss records.",
-  homes: { settings: settingsHome, ...lossWrites, catalogs: homeFile("Catalogs") },
+  homes: { settings: settingsHome, ...lossWrites, catalogs: productRead(homeFile("Catalogs")) },
   cells: settingsCells,
   routes: {},
   readings: {
@@ -113,6 +114,8 @@ export const product = define({
       sources: ["losses", "settings"],
       load: {
         resource: true,
+        scope: "document",
+        fixes: { "ducts.snapshot.roster": { selector: { kind: "roster" } } },
         basisHeaders: { refresh: DUCTS_REFRESH_HEADER },
         calls: {
           "ducts.snapshot.roster": { canonicalSession: true, reading: "roster" },
@@ -125,6 +128,7 @@ export const product = define({
       sources: [],
       load: {
         resource: true,
+        scope: "session",
         calls: {
           "ducts.tables": { canonicalSession: true, reading: "tables" },
         },

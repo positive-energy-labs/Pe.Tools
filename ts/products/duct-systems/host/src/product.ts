@@ -7,8 +7,10 @@ import {
 import { implement } from "@pe/host-internal/product";
 import { assignFan, heal } from "./actions.ts";
 import { reads } from "./host.ts";
+import { catalogsHome } from "@pe/ducts-host/duct-catalogs";
 
 export const host = implement<typeof product, DuctActionDependencies>(product, {
+  homes: { catalogs: catalogsHome },
   readings: reads,
   commands: {
     "ducts.refresh": ductsRefresh,

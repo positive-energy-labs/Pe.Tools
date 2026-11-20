@@ -29,7 +29,7 @@ import type { HostBridgeEvent, BridgeSessionView } from "@pe/host-internal/bridg
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { admitCrossing, bindControl } from "../src/control.ts";
 import { HostDocumentMarks } from "../src/document-marks.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { Spawner } from "../src/harness/spawner.ts";
 import { MachineOwner } from "../src/machine.ts";
@@ -386,7 +386,7 @@ test("host HTTP preserves addressless Work through close and replacement bridge 
             telemetry,
           ).pipe(
             Effect.provide(HostDocumentMarks.none),
-            Effect.provide(DuctFiles.layer(hostState().home)),
+            Effect.provide(HomeFiles.layer(hostState().home)),
             Effect.provide(PictureCaptureStore.layer()),
           );
           yield* Layer.build(MachineOwner.layer(machineSpec.sources, machineSpec.options));

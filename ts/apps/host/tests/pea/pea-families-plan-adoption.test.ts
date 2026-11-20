@@ -8,7 +8,7 @@ import { bindWork } from "@pe/agent-contracts";
 import { RouteWorkspace } from "@pe/runtime";
 import { markDispatched } from "../../src/action-dispatch.ts";
 import { admittedBuiltinsLayer } from "../../src/admitted-builtins.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { PictureCaptureStore } from "../../src/captures-route.ts";
 import { hostOwnership, hostState } from "../../src/host-ownership.ts";
 import { fileRouteDocumentStore } from "../../src/route-document-store.ts";
@@ -141,7 +141,7 @@ async function fixture() {
       workspace,
       podsRoot: dir,
     }).pipe(
-      Layer.provide(DuctFiles.layer(hostState().home)),
+      Layer.provide(HomeFiles.layer(hostState().home)),
       Layer.provide(PictureCaptureStore.layer()),
       Layer.provide(Layer.succeed(HostDocumentMarks, hostMarks(testDocumentMarks(bridge)))),
     ),

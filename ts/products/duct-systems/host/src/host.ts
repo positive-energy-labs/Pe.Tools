@@ -17,7 +17,7 @@ import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { ductsInputs } from "@pe/ducts-host/ducts-input-acquisition";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
-import { catalogs } from "@pe/ducts-host/ducts-files";
+import { catalogs } from "@pe/ducts-host/duct-catalogs";
 import { read } from "@pe/host-internal/read-graph";
 import { systemList } from "@pe/duct-systems-domain/system-list";
 import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";

@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { readProjectCatalogs } from "../project-home-fixture.ts";
 import { readDuctCatalogs } from "@pe/ducts-host/duct-catalogs";
 import { nativeFixture } from "./fans-work-fixture.ts";
@@ -95,8 +95,8 @@ test("a losses plan on an incomplete fan calc is refused with the claim's reason
   const scope = Scope.makeUnsafe();
   closes.push(() => settle(Scope.close(scope, Exit.void)));
   const files = Context.get(
-    await settle(Layer.buildWithScope(DuctFiles.layer(hostState().home), scope)),
-    DuctFiles,
+    await settle(Layer.buildWithScope(HomeFiles.layer(hostState().home), scope)),
+    HomeFiles,
   );
   const captured = structuredClone(snapshot),
     terminal = captured.nodes.find((n) => n.id === 4)!;

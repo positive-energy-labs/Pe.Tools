@@ -12,6 +12,7 @@ import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
 import type { CellKey, Home } from "./product-homes.ts";
+import type { DocumentRef } from "./target.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
@@ -177,6 +178,10 @@ export type ReadingLoad = Readonly<{
   slow?: string;
   calls?: Readonly<Partial<Record<AnyOperationKey, CallPolicy>>>;
   resource?: true;
+  /** With `resource`: what a retained body belongs to. Its input names `target`, or only `session`. */
+  scope?: "document" | "session";
+  /** With `resource`: the request fields each call fixes, so one declaration maps request to call and back. */
+  fixes?: Readonly<Partial<Record<AnyOperationKey, Readonly<Record<string, unknown>>>>>;
   basisHeaders?: Readonly<Record<string, string>>;
 }>;
 export type Reading<Source extends PropertyKey = string> = {
@@ -229,6 +234,13 @@ function resourceInputs(readings: Readings) {
     load?.resource ? [handle.input] : [],
   );
 }
+
+/** A retained reading declares its scope, and its input carries what that scope names. */
+type Retained<R> = R extends { load: { scope: "document" } }
+  ? { readonly handle: { readonly input: z.ZodType<{ kind: string; target: DocumentRef }> } }
+  : R extends { load: { scope: "session" } }
+    ? { readonly handle: { readonly input: z.ZodType<{ kind: string; session: string }> } }
+    : { readonly load: { readonly scope: "document" | "session" } };
 
 /** A declared reading by name, alone or with the function that makes its arguments from the Page. */
 type Named<R extends string = string> = R | readonly [R, (page: never) => unknown];
@@ -464,9 +476,7 @@ export function product<
   /** Only for a product of several routes: each Work by its route, with the cells it holds. */
   readonly works?: Works;
   readonly readings: R & {
-    readonly [K in keyof R]: R[K] extends { load: { resource: true } }
-      ? { readonly handle: { readonly input: z.ZodType<{ kind: string }> } }
-      : unknown;
+    readonly [K in keyof R]: R[K] extends { load: { resource: true } } ? Retained<R[K]> : unknown;
   };
   /** Keyed by the catalog command key. */
   readonly commands: M & {

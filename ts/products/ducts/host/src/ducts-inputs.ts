@@ -55,7 +55,7 @@ export function terminalFlowSlot(settings: readonly SettingTierRead[], snapshot:
 import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
 export { FIRM_SEED, workLayer } from "@pe/ducts-domain/input-layers";
 
-/** The ducts firm file as read through `ctx.files.firm("ducts", …)` / `DuctFiles.firm("ducts")`, or refused without a firm home. */
+/** The ducts firm file as read through `ctx.files.firm("ducts", …)` / `HomeFiles.firm("ducts")`, or refused without a firm home. */
 export type FirmReading = FirmValue<DuctsFirmFile>;
 
 /**

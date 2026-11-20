@@ -401,7 +401,7 @@ export async function nativeFixture(
               const pointer =
                 ref &&
                 options.state?.openDocuments?.find((doc) => doc.openId === ref.openId)?.projectHome;
-              return settle(files.catalogsFor(pointer));
+              return settle(files.home("catalogs", pointer));
             },
             call: readDucts,
             workKey: async (ref) => bindWork("duct-systems", address, undefined, ref),

@@ -11,6 +11,8 @@ import type {
 import type { AttemptHost } from "./action-execution.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
+import { declareHome, type HomeReader } from "./home-files.ts";
+import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
 import type { RequestIdentity } from "./request-contracts.d.ts";
 import { body, type Read, type ReadContext } from "./reads/door.ts";
@@ -55,11 +57,15 @@ export type CallBody<D> = (
   HostNativeRead | RequestIdentity
 >;
 
-/** The host half of a product: one body per declared reading, command, `http` route and local operation, or `tsc` fails. */
+/**
+ * The host half of a product: one body per declared reading, command, `http` route and local
+ * operation, and one reader per home only the product can read, or `tsc` fails. Its retained
+ * readings are the kernel's from here.
+ */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  bodies: HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>> &
-    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>>>,
+  bodies: HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader> &
+    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader>>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
@@ -72,8 +78,17 @@ export function implement<P extends ProductDeclaration, D = Dependencies>(
 };
 export function implement<D>(
   product: ProductDeclaration,
-  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>>,
+  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader>,
 ) {
+  const readers: Readonly<Record<string, HomeReader | undefined>> = bodies.homes ?? {};
+  for (const [key, home] of Object.entries(product.homes)) {
+    if (home.read !== "product") continue;
+    const reader = readers[key];
+    if (!reader) throw Error(`No host reader for home ${key}`);
+    const place = home.place(key);
+    declareHome(key, { ...reader, directory: place.at === "setting" ? place.owner : key });
+  }
+  declareRetained(product);
   const reads = Object.fromEntries(
     Object.entries(product.readings).map(([key, { handle }]) => {
       const run = bodies.readings[key];

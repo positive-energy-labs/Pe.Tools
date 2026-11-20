@@ -1,5 +1,4 @@
 import { resourceReadingSchema } from "@pe/mcps/product-contracts";
-import type { z } from "zod";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
@@ -9,7 +8,18 @@ import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, type RecordedInput } from "@pe/host-internal/input-recording";
 import { nativeInputIdentity } from "@pe/host-internal/input-recording";
 import { CaptureStore } from "./observation-store.ts";
-import { productFiles, productGateway } from "./product-executors.generated.ts";
+import { HomeFiles, isProductHome } from "@pe/host-internal/home-files";
+import { createRetainedBasis } from "@pe/host-internal/retained-basis";
+import {
+  RETAINED_FRAME,
+  RetainedReadings,
+  retainedReadingOf,
+  retainedNative,
+  retainedReadings,
+  retainedRequest,
+} from "@pe/host-internal/retained-readings";
+import { bindWork, type RetainedReadingEnvelope } from "@pe/agent-contracts";
+import { productFiles } from "./product-executors.generated.ts";
 import { readLocal } from "./local-inputs.ts";
 import { PictureCaptureStore } from "./captures-route.ts";
 import { createHash } from "node:crypto";
@@ -106,9 +116,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   inputs: HostInputContext["Service"],
   options: {
     readonly live?: {
-      owner: InstanceType<typeof productGateway.retainedOwner>;
+      owner: RetainedReadings;
       native: Layer.Layer<HostNativeRead>;
-      files: Layer.Layer<Context.Service.Identifier<typeof productGateway.files>>;
+      files: Layer.Layer<HomeFiles>;
       marks: Layer.Layer<HostDocumentMarks>;
       inventory: Layer.Layer<HostSessionInventory>;
     };
@@ -129,7 +139,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   const bridge = Option.getOrUndefined(Context.getOption(runtime, RevitBridge));
   const lane = inputs.lane;
   if (lane.kind === "fixture") return yield* Effect.die(Error("A fixture has no host input graph"));
-  const basis = productGateway.retainedBasis(lane, options.observed);
+  const basis = createRetainedBasis(lane, options.observed);
   const recorded = lane.kind === "recording";
   const live = recorded ? undefined : options.live;
   if (!recorded && (!live || !options.store))
@@ -160,11 +170,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         Layer.provide(Layer.succeed(HostInputContext, inputs)),
       ),
       recorded
-        ? productGateway.files.recorded(lane.recordingStore)
+        ? HomeFiles.recorded(lane.recordingStore)
         : writer
-          ? productGateway.files
-              .capturing(writer, options.observed)
-              .pipe(Layer.provide(live!.files))
+          ? HomeFiles.capturing(writer, options.observed).pipe(Layer.provide(live!.files))
           : live!.files,
       recorded
         ? HostDocumentMarks.recorded(lane.recordingStore)
@@ -200,8 +208,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
   yield* Effect.promise(() => workspace.ready);
   yield* Layer.build(admittedBuiltinsLayer(workspace, undefined, registrations));
   if (!recorded && options.initialize) yield* Effect.promise(() => options.initialize!(workspace));
-  const owner = recorded ? new productGateway.retainedOwner() : live!.owner;
-  const files = Context.get(services, productGateway.files),
+  const owner = recorded ? new RetainedReadings() : live!.owner;
+  const files = Context.get(services, HomeFiles),
     marks = Context.get(services, HostDocumentMarks);
   const readSets = Context.get(services, HostInputReadSets);
   const publications = new Publications();
@@ -353,7 +361,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
       const nested = yield* Effect.try({
         try: () =>
           child(current, {
-            key: productGateway.retainedFrame,
+            key: RETAINED_FRAME,
             input: json({
               key: input.key,
               request: input.input,
@@ -597,17 +605,17 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           file: (name, args) =>
             name === "firm"
               ? invoke(files.firm(String(args)))
-              : name === "catalogs"
+              : isProductHome(name)
                 ? (async () => {
                     const ref = args ? documentRefSchema.parse(args) : null;
                     const pointer = ref ? (await document(ref)).projectHome : null;
-                    return invoke(productGateway.catalogsFor(files, pointer));
+                    return invoke(files.home(name, pointer));
                   })()
                 : name === "capture"
                   ? scoped(current)(asset(String(args), true)).then(() => String(args))
                   : takeFile(name, args, current),
-          workKey: async (ref) =>
-            productGateway.bindNetworkWork((await document(ref)).address, ref),
+          workKey: async (ref, route) =>
+            bindWork(route, (await document(ref)).address, undefined, ref),
           inputs: {
             consumption: current,
             run: scoped(current),
@@ -664,7 +672,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             if (!safety || (safety.effect !== "Read" && safety.effect !== "TransactRead"))
               throw Error(`Native leaf is not a catalog Read: ${key}`);
             const ref = chosen.kind === "document" ? chosen.ref : null;
-            if (!productGateway.retainedPolicy(key)) {
+            const retainedBy = retainedReadingOf(key);
+            if (!retainedBy) {
               const native = Context.get(services, HostNativeRead);
               const scope = ref
                 ? { bridgeSessionId: ref.session, openDocumentId: ref.openId }
@@ -683,9 +692,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             if (!ref) throw Error("Retained document read requires a document target");
             const scope = {
               bridgeSessionId: ref.session,
-              ...(productGateway.retainedPolicy(key) === "tables"
-                ? {}
-                : { openDocumentId: ref.openId }),
+              ...(retainedBy.scope === "session" ? {} : { openDocumentId: ref.openId }),
             };
             return HttpServerResponse.toWeb(
               await take(retained(current, { key, input, scope }, { version }, role, documentRead)),
@@ -702,13 +709,13 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         if (
           !recorded &&
           !["work", "work-acks", "inventory"].includes(reading.kind) &&
-          !productGateway.retainedResource.safeParse(reading).success
+          !retainedRequest(reading)
         )
           return fallback(reading, publish, after);
         class FrameCarriage extends WorkCarriage {
           constructor(
             readonly subscription?: ReadSetId,
-            readonly envelope?: z.output<typeof productGateway.retainedEnvelope>,
+            readonly envelope?: RetainedReadingEnvelope,
           ) {
             super();
           }
@@ -805,8 +812,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             // ADR0029 shared native dispatch does not share metadata consumers: each keeps its own context.
             return new OwnerReads().observe(key, read, inventory.subscribe, accept);
           }
-          const registered = productGateway.retainedResource.safeParse(reading);
-          if (!registered.success) {
+          const registered = retainedRequest(reading);
+          if (!registered) {
             publish({
               kind: "failure",
               key,
@@ -819,7 +826,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             });
             return () => {};
           }
-          const input = productGateway.retainedNative(registered.data);
+          const input = retainedNative(registered);
           const current = frame();
           void invoke(retained(current, input, {}, "acquire", inventory.document))
             .then(async (response) => {
@@ -831,7 +838,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               readyFrames.add(current);
               let first = true;
               if (!closed)
-                release = owner.observe(registered.data, (value) => {
+                release = owner.observe(registered, (value) => {
                   try {
                     // A notification observes an envelope, not another taking of the acquired native body.
                     const carriage = new FrameCarriage(first ? undefined : current.id, value);
@@ -1260,7 +1267,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             scope: {
               ...scope,
               bridgeSessionId: session.sessionId,
-              ...(productGateway.retainedPolicy(raw.key) === "tables" ? {} : { openDocumentId }),
+              ...(retainedReadingOf(raw.key)?.scope === "session" ? {} : { openDocumentId }),
             },
           },
           readOptions,
@@ -1271,7 +1278,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           writer &&
           !writer.capture.truncated() &&
           openDocumentId &&
-          productGateway.retainedPolicy(raw.key) !== "tables"
+          retainedReadingOf(raw.key)?.scope !== "session"
         )
           yield* inventory.document({ session: session.sessionId, openId: openDocumentId }).pipe(
             Effect.catch(() => {
@@ -1452,12 +1459,12 @@ export const builtinFileLayer = () =>
   Layer.unwrap(
     Effect.promise(async () => {
       await contentRootsReady();
-      return productGateway.files.layer(hostState().home, {
+      return HomeFiles.layer(hostState().home, {
         firm: () => {
           const root = contentFirmHome().root;
           return root && join(root, productPathNames.homeSettingsDirectoryName);
         },
-        catalogs: contentHomes(),
+        homes: contentHomes(),
       });
     }),
   );
@@ -1470,7 +1477,7 @@ export const defaultReadOwner = (
   Effect.gen(function* () {
     const live = options.live ?? {
       native: Layer.succeed(HostNativeRead, yield* HostNativeRead),
-      files: Layer.succeed(productGateway.files, yield* productGateway.files),
+      files: Layer.succeed(HomeFiles, yield* HomeFiles),
       marks: Layer.succeed(HostDocumentMarks, yield* HostDocumentMarks),
       inventory: Layer.succeed(
         HostSessionInventory,
@@ -1480,6 +1487,6 @@ export const defaultReadOwner = (
     return yield* makeReadOwner(inputs, {
       ...options,
       store: options.store ?? fileRouteDocumentStore(stateScope(hostState(), hostState().work)),
-      live: { ...live, owner: productGateway.retainedReadings(yield* RevitBridge) },
+      live: { ...live, owner: retainedReadings(yield* RevitBridge) },
     });
   });

@@ -41,7 +41,10 @@ export type HostBodies<
   Deps = never,
   Run = never,
   Call = never,
+  Reader = never,
 > = {
+  /** One reader per home declared with `productRead`: what only the product can read. */
+  readonly homes?: ProductRead<P, Reader>;
   readonly readings: {
     readonly [K in keyof P["readings"]]:
       | ReadingBody<P, K, Context>
@@ -76,6 +79,9 @@ export type HostBodies<
     readonly [K in keyof P["local"]]: (input: LocalInput<P["local"][K]>, deps: Deps) => Run;
   };
 };
+type ProductRead<P extends ProductDeclaration, Reader = unknown> = {
+  readonly [K in keyof P["homes"] as P["homes"][K] extends { read: "product" } ? K : never]: Reader;
+};
 /** The slot's name when the product declares a key in it, so a product with none owes no table. */
 type Declares<Table, Slot extends string> = [keyof Table] extends [never] ? never : Slot;
 /**
@@ -84,7 +90,12 @@ type Declares<Table, Slot extends string> = [keyof Table] extends [never] ? neve
  * body fails `tsc`.
  */
 export type OwedBodies<P extends ProductDeclaration, Bodies> = Required<
-  Pick<Bodies, (Declares<P["http"], "http"> | Declares<P["local"], "local">) & keyof Bodies>
+  Pick<Bodies, (
+      | Declares<P["http"], "http">
+      | Declares<P["local"], "local">
+      | Declares<ProductRead<P>, "homes">
+    ) &
+      keyof Bodies>
 >;
 export type FileBody<Deps> = (
   args: unknown,

@@ -320,7 +320,7 @@ import walkCapture from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json"
 import { hostOwnership } from "../../../host/src/host-ownership";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { HostSessionInventory } from "../../../host/src/session-inventory";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { RevitBridge } from "@pe/host-internal/bridge";
 import { RevitBridgeLive } from "../../../host/src/bridge";
 import { SdkSession } from "../../../host/src/sdk-session";
@@ -494,7 +494,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
         inventory: HostSessionInventory.layer.pipe(
           Layer.provide(Layer.mergeAll(ambient(RevitBridge), ambient(SdkSession))),
         ),
-        files: DuctFiles.layer(hostState().home),
+        files: HomeFiles.layer(hostState().home),
         native,
       },
     },

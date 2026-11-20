@@ -4,18 +4,20 @@ import {
   attemptFor,
   CurrentInputAttempt,
   CurrentInputConsumption,
-} from "@pe/host-internal/input-occurrence";
+} from "./input-occurrence.ts";
 import { z } from "zod";
-import { readingKey } from "@pe/agent-contracts";
+import { canonicalRouteInput as readingKey } from "@pe/agent-contracts";
+import { canonicalJson, HostNativeRead, type NativeReadInput } from "./native-read.ts";
+import type { DoorFailure } from "./request-contracts.d.ts";
+import { InvalidRead } from "./read-errors.ts";
 import {
-  ductsSnapshotReadingSchema,
-  ductsTablesReadingSchema,
-  type DuctsReadingRequest,
-} from "@pe/ducts-contract/reading";
-import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
-import type { DoorFailure } from "@pe/host-internal/request-contracts";
-import { InvalidRead } from "@pe/host-internal/read-errors";
-import { ductsSubject, type DuctsBody } from "./ducts-readings.ts";
+  retainedReadingOf,
+  retainedCallSubject,
+  retainedRequest,
+  retainedScope,
+  type RetainedBody,
+  type RetainedRequest,
+} from "./retained-readings.ts";
 import {
   captureInput,
   replayInput,
@@ -24,7 +26,7 @@ import {
   type HostInputLane,
   type Taking,
   type TakingObserver,
-} from "@pe/host-internal/input-recording";
+} from "./input-recording.ts";
 
 type Answer = Effect.Success<ReturnType<HostNativeRead["Service"]["read"]>>;
 const target = z.strictObject({
@@ -33,14 +35,14 @@ const target = z.strictObject({
   documentRef: z.strictObject({ session: z.string(), openId: z.string() }).optional(),
 });
 const basisSchema = z.strictObject({
-  subject: z.union([ductsSnapshotReadingSchema, ductsTablesReadingSchema]),
+  subject: z.custom<RetainedRequest>((value) => retainedRequest(value) !== undefined),
   version: z.string().min(1),
   nativeRequestId: z.string().min(1),
   target,
   nativeTakingId: z.string().min(1),
   native: z.strictObject({ key: z.string(), args: z.string(), scope: z.string() }),
 });
-export type DuctsBodyBasis = z.infer<typeof basisSchema>;
+export type RetainedBodyBasis = z.infer<typeof basisSchema>;
 const refused = (message: string, problem = "recording.mismatch") =>
   new InvalidRead({ message, status: 409, problem });
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -49,48 +51,28 @@ const sameTarget = (a: unknown, b: unknown) =>
     ? a === b
     : canonicalJson(JSON.parse(JSON.stringify(a))) === canonicalJson(JSON.parse(JSON.stringify(b)));
 
-/** Same subject normalization as the retained owner, independent of live SDK/bridge construction. */
-export function ductBodySubject(input: NativeReadInput): DuctsReadingRequest {
-  const session = input.scope.bridgeSessionId;
-  if (!session)
-    throw refused("Retained Ducts read needs an exact canonical session", "read.target");
-  const args = input.input && typeof input.input === "object" ? input.input : {};
-  if (input.key === "ducts.tables")
-    return ductsSubject(ductsTablesReadingSchema.parse({ ...args, kind: "ducts-tables", session }));
-  if (input.key !== "ducts.snapshot.roster" && input.key !== "ducts.snapshot.walk")
-    throw refused("Operation has no retained Ducts subject", "read.contract");
-  return ductsSubject(
-    ductsSnapshotReadingSchema.parse({
-      ...args,
-      kind: "ducts-snapshot",
-      ...(input.key === "ducts.snapshot.roster" ? { selector: { kind: "roster" } } : {}),
-      target: { session, openId: input.scope.openDocumentId },
-    }),
-  );
-}
-
-export interface DuctsBasisRead {
-  readonly recorded?: DuctsBodyBasis;
+export interface RetainedBasisRead {
+  readonly recorded?: RetainedBodyBasis;
   readonly refuse: (error: DoorFailure) => Effect.Effect<never, DoorFailure>;
   readonly link: (answer: Answer) => Effect.Effect<string | undefined, DoorFailure>;
   readonly consume: (
-    body: DuctsBody,
+    body: RetainedBody,
     admittedTarget: Answer["actualTarget"],
   ) => Effect.Effect<void, DoorFailure>;
 }
-export interface DuctsBodyBasisSource {
+export interface RetainedBodyBasisSource {
   readonly replaying: boolean;
   readonly observed: TakingObserver;
   readonly prepare: (
     input: NativeReadInput,
-    subject: DuctsReadingRequest,
-  ) => Effect.Effect<DuctsBasisRead, DoorFailure>;
+    subject: RetainedRequest,
+  ) => Effect.Effect<RetainedBasisRead, DoorFailure>;
 }
 
-export function createDuctsBodyBasis(
+export function createRetainedBasis(
   lane: HostInputLane,
   observed: TakingObserver = () => Effect.void,
-): DuctsBodyBasisSource | undefined {
+): RetainedBodyBasisSource | undefined {
   if (lane.kind === "live" && !lane.captureStore) return undefined;
   // Provenance index only: exact observer outputs, bounded by the underlying taking store.
   // Multiple matching occurrences refuse; this index never chooses first/latest or stores bodies.
@@ -117,7 +99,7 @@ export function createDuctsBodyBasis(
     prepare: (input, subject) =>
       Effect.gen(function* () {
         if (lane.kind === "fixture")
-          return yield* refused("Fixture has no recorded Ducts basis", "recording.fixture");
+          return yield* refused("Fixture has no recorded retained basis", "recording.fixture");
         const store = lane.kind === "live" ? lane.captureStore! : lane.recordingStore;
         const stopCapture = (error: DoorFailure) => {
           if (lane.kind !== "live") return Effect.fail(error);
@@ -135,7 +117,12 @@ export function createDuctsBodyBasis(
               );
         };
         const scope = canonicalJson(JSON.parse(JSON.stringify(input.scope)));
-        const selector = canonicalJson(["ducts-body-basis", JSON.parse(JSON.stringify(subject))]);
+        // The selector is part of every recording, so it keeps the declaring product's id in front.
+        const selector = canonicalJson([
+          `${retainedReadingOf(input.key)?.product}-body-basis`,
+          JSON.parse(JSON.stringify(subject)),
+        ]);
+        const scoped = retainedScope(subject);
         const basisInput = { kind: "document", scope: selector } as const;
         const matches = (taking: Taking) => {
           if (
@@ -147,7 +134,7 @@ export function createDuctsBodyBasis(
           try {
             return (
               readingKey(
-                ductBodySubject({
+                retainedCallSubject({
                   key: taking.input.key,
                   input: JSON.parse(taking.input.args),
                   scope: input.scope,
@@ -158,7 +145,7 @@ export function createDuctsBodyBasis(
             return false;
           }
         };
-        const validate = (value: unknown): value is DuctsBodyBasis => {
+        const validate = (value: unknown): value is RetainedBodyBasis => {
           const parsed = basisSchema.safeParse(value);
           if (!parsed.success) return false;
           const basis = parsed.data;
@@ -175,12 +162,11 @@ export function createDuctsBodyBasis(
               scope: taking.scope,
             }) &&
             basis.nativeRequestId === taking.outcome.nativeRequestId &&
-            basis.target.session ===
-              (subject.kind === "ducts-snapshot" ? subject.target.session : subject.session) &&
-            (subject.kind === "ducts-snapshot"
-              ? sameTarget(basis.target.documentRef, subject.target) &&
+            basis.target.session === scoped.session &&
+            (scoped.target
+              ? sameTarget(basis.target.documentRef, scoped.target) &&
                 "openId" in taking.outcome.actualTarget.openDocumentLifetime &&
-                taking.outcome.actualTarget.openDocumentLifetime.openId === subject.target.openId
+                taking.outcome.actualTarget.openDocumentLifetime.openId === scoped.target.openId
               : !basis.target.documentRef &&
                 "kind" in taking.outcome.actualTarget.openDocumentLifetime)
           );
@@ -273,7 +259,7 @@ export function createDuctsBodyBasis(
                 return yield* refused("Native value disagrees with its exact taking");
               return taking.id;
             }).pipe(Effect.catch((error) => stopCapture(error).pipe(Effect.as(undefined)))),
-          consume: (body: DuctsBody, admittedTarget: Answer["actualTarget"]) =>
+          consume: (body: RetainedBody, admittedTarget: Answer["actualTarget"]) =>
             Effect.gen(function* () {
               if (lane.kind === "live" && lane.captureStore!.capture.truncated()) return;
               const taking = checked(body.nativeTakingId);
@@ -281,10 +267,10 @@ export function createDuctsBodyBasis(
                 return yield* refused("Retained body has no exact native taking", "recording.miss");
               if (!sameTarget(taking.outcome.actualTarget, admittedTarget))
                 return yield* refused(
-                  "Retained Ducts acquisition no longer matches the admitted target",
+                  "Retained acquisition no longer matches the admitted target",
                   "read.target",
                 );
-              const basis: DuctsBodyBasis = {
+              const basis: RetainedBodyBasis = {
                 subject: JSON.parse(JSON.stringify(subject)),
                 version: body.version,
                 nativeRequestId: body.nativeRequestId,
@@ -310,7 +296,7 @@ export function createDuctsBodyBasis(
               if (consumption._tag === "Some" && !lane.captureStore!.capture.truncated())
                 yield* consumption.value.linkTaking("native", taking.id);
             }).pipe(Effect.catch(stopCapture)),
-        } satisfies DuctsBasisRead;
+        } satisfies RetainedBasisRead;
       }),
   };
 }

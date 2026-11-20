@@ -64,7 +64,7 @@ test("ctx.work with a document ref reads that document's Work for the owner", as
   const value = await evaluate(probe, {}, port);
   expect(value.data).toEqual({ doc: { chosen: {} }, revision: 3 });
   const expected = [
-    ["work-scope", { session: "s", openId: "o" }],
+    ["work-scope", { route: "pod.hydronic.sizing", target: { session: "s", openId: "o" } }],
     [
       "work",
       {

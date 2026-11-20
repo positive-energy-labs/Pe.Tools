@@ -33,7 +33,7 @@ import { fixture, ref, path, who, gate } from "../../../host/tests/host-read-gra
 import { builtinEnrollments } from "../../../host/src/builtin-enrollment";
 import { nativeReadRoot } from "../../../host/src/app";
 import { RevitBridgeLive } from "../../../host/src/bridge";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks } from "../../../host/src/document-marks";
 import { PictureCaptureStore } from "../../../host/src/captures-route";
 import { createPeRoutes } from "../../../host/src/pe-routes";
@@ -103,7 +103,7 @@ async function journey(module: TypedRoute = fans) {
   const web = HttpRouter.toWebHandler(
     callRouteOver(journal, undefined, { workspace: host.workspace }).pipe(
       nativeReadRoot(),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
+      Layer.provide(Layer.mergeAll(HomeFiles.layer(hostState().home), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(host.dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(RevitBridgeLive),

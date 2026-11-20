@@ -3,7 +3,7 @@ import { HostInputContext } from "../src/input-context.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { journalFixture } from "./storage.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import type { ReceiptStamp } from "@pe/agent-contracts";
@@ -338,10 +338,10 @@ export const journalAt = (
 export const pictureCaptures = (root: string) =>
   Context.get(testScoped(PictureCaptureStore.layer(stateFixture(root))), PictureCaptureStore);
 export const testDuctFiles = () =>
-  Context.get(testScoped(DuctFiles.layer(hostState().home)), DuctFiles);
+  Context.get(testScoped(HomeFiles.layer(hostState().home)), HomeFiles);
 
 export const testHostInputs = Layer.mergeAll(
-  DuctFiles.layer(hostState().home),
+  HomeFiles.layer(hostState().home),
   PictureCaptureStore.layer(),
   HostDocumentMarks.layer,
 );

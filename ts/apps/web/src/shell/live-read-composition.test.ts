@@ -13,7 +13,7 @@ import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-r
 import { hostOwnership, hostState } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { Publications } from "../../../host/src/reads/publications.ts";
 import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
@@ -28,7 +28,7 @@ import { HostInputContext } from "../../../host/src/input-context.ts";
 import { openRecordingWriter } from "../../../host/src/native-recording.ts";
 import { dirname, join } from "node:path";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
-import { firmRootPath } from "@pe/ducts-host/ducts-files";
+import { firmRootPath } from "@pe/host-internal/home-files";
 
 // Forward the services already owned by makeHttpLive; optional lookup keeps these test layers closed.
 const ambient = <S, I>(tag: Context.Key<S, I>) =>
@@ -67,7 +67,7 @@ async function liveHost(
         inventory: HostSessionInventory.layer.pipe(
           Layer.provide(Layer.mergeAll(ambient(RevitBridge), ambient(SdkSession))),
         ),
-        files: DuctFiles.layer(hostState().home),
+        files: HomeFiles.layer(hostState().home),
         native: Layer.effect(
           HostNativeRead,
           Effect.gen(function* () {

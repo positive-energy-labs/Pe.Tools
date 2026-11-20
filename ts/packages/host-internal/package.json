@@ -33,7 +33,10 @@
     "./observation-files": "./src/observation-files.ts",
     "./write-artifact": "./src/write-artifact.ts",
     "./local-error": "./src/local-error.ts",
-    "./host-child": "./src/host-child.ts"
+    "./host-child": "./src/host-child.ts",
+    "./home-files": "./src/home-files.ts",
+    "./retained-readings": "./src/retained-readings.ts",
+    "./retained-basis": "./src/retained-basis.ts"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",

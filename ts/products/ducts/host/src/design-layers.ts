@@ -1,11 +1,20 @@
-import { workRead } from "@pe/host-internal/reads/work";
+import { workBinding, workRead } from "@pe/host-internal/reads/work";
 import { z } from "zod";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { documentRefSchema, settingTiersSchema } from "@pe/agent-contracts";
-import { firmReading } from "./ducts-files.ts";
-import { read, workScope } from "@pe/host-internal/read-graph";
+import { read } from "@pe/host-internal/read-graph";
+// The decoded firm layer: the firm file against this product's schema, or the refusal.
+const firmReading = z.union([
+  z.strictObject({
+    firm: ductsFirmSchema,
+    path: z.string(),
+    present: z.boolean(),
+    error: z.string().optional(),
+  }),
+  z.strictObject({ refused: z.literal("no-shared-root") }),
+]);
 export const designLayers = read("ducts.design-layers", {
   input: documentRefSchema,
   output: z.object({
@@ -18,7 +27,9 @@ export const designLayers = read("ducts.design-layers", {
     settings: settingTiersSchema,
   }),
   async run(ctx, target) {
-    const scope = await ctx.read(workScope, target);
+    // The duct network's Work is another product's; this reading names the route it reads.
+    const scope = await ctx.read(workBinding, { route: "duct-systems", target });
+    if (!scope) throw Error("This document has no Work binding");
     const ducts = await ctx.read(workRead("duct-systems", ductsDocumentSchema), scope);
     const fans = await ctx.read(workRead("fans", fansDocumentSchema), { ...scope, route: "fans" });
     return {

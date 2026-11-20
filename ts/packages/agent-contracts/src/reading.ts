@@ -237,6 +237,16 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     id: z.string().min(1).optional(),
   }),
 ]);
+/** What a retained reading's stream carries: the state of the one shared body, never the body. */
+export const retainedReadingEnvelopeSchema = z.strictObject({
+  revision: z.string(),
+  state: z.enum(["idle", "loading", "ready", "stale", "failed", "closed"]),
+  version: z.string().nullable(),
+  target: documentRefSchema.nullable(),
+  session: z.string(),
+  error: z.string().optional(),
+});
+export type RetainedReadingEnvelope = z.infer<typeof retainedReadingEnvelopeSchema>;
 export interface ProductReadings {}
 export type ReadingRequest =
   | z.infer<typeof readingRequestSchema>

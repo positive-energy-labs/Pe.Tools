@@ -189,7 +189,7 @@ export async function nativeFixture(
       const port = calcPort(
         {
           firm: (owner) => settle(testDuctFiles().firm(owner)),
-          catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+          catalogs: () => settle(testDuctFiles().home("catalogs", undefined)),
           call: readDucts,
           workKey: async (ref) => bindWork("duct-systems", address, undefined, ref),
         },

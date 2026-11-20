@@ -14,7 +14,7 @@ import { bindControl } from "../src/control.ts";
 import { testRegistry, journalAt, callRouteOver } from "./effect-test.ts";
 import { pictureCaptures } from "./effect-test.ts";
 import { detachedBridge } from "./effect-test.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
@@ -88,7 +88,7 @@ test.skipIf(
         ),
       ).pipe(
         nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-        Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
+        Layer.provide(Layer.mergeAll(HomeFiles.layer(hostState().home), HostDocumentMarks.layer)),
         Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "store")), 0)),
         HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
         Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
@@ -159,7 +159,7 @@ test.each([
   const web = HttpRouter.toWebHandler(
     callRouteOver(journal, undefined, { workspace, sdk: sdkSessions }).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-      Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
+      Layer.provide(Layer.mergeAll(HomeFiles.layer(hostState().home), HostDocumentMarks.layer)),
       Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "pictures")))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
       Layer.provideMerge(Layer.succeed(RevitBridge, detachedBridge())),

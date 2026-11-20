@@ -39,7 +39,8 @@ const snapshotInput = z.strictObject({
   slots: z
     .partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string().nullable())
     .nullish()
-    .transform((value) => value ?? undefined)
+    // No slot named is no slot request: both spellings are one retained subject.
+    .transform((value) => (value && Object.keys(value).length ? value : undefined))
     .optional(),
   labelParameter: z
     .string()
@@ -70,15 +71,6 @@ export const tablesReading = contract("ducts.table-grids", {
 export const ductsTablesReadingSchema = tablesReading.input;
 export type DuctsTablesReading = z.infer<typeof ductsTablesReadingSchema>;
 export type DuctsReadingRequest = DuctsSnapshotReading | DuctsTablesReading;
-export const ductsReadingEnvelopeSchema = z.strictObject({
-  revision: z.string(),
-  state: z.enum(["idle", "loading", "ready", "stale", "failed", "closed"]),
-  version: z.string().nullable(),
-  target: documentRefSchema.nullable(),
-  session: z.string(),
-  error: z.string().optional(),
-});
-export type DuctsReadingEnvelope = z.infer<typeof ductsReadingEnvelopeSchema>;
 export const DUCTS_REFRESH_HEADER = "x-pe-ducts-refresh";
 
 declare module "@pe/agent-contracts" {

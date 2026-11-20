@@ -24,10 +24,10 @@ import {
   type CommandContext,
 } from "@pe/host-internal/command-executor";
 import type { ActionExecution } from "@pe/host-internal/action-execution";
-import { ductsReadings } from "./ducts-readings.ts";
+import { retainedReadings } from "@pe/host-internal/retained-readings";
 import type { RunPods } from "@pe/host-internal/pod-runner";
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
-import type { DuctFiles } from "./ducts-files.ts";
+import type { HomeFiles } from "@pe/host-internal/home-files";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 
 import { firmLayer, workLayer, terminalFlowSlot, acquireSnapshotInputs } from "./ducts-inputs.ts";
@@ -40,7 +40,7 @@ import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 export type DuctActionDependencies = {
   runPods?: RunPods;
-  files?: DuctFiles["Service"];
+  files?: HomeFiles["Service"];
   nativeRead?: HostNativeRead["Service"];
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
 };
@@ -421,7 +421,7 @@ export const ductsRefresh: CommandBody = (bridge) =>
     run: (ctx) =>
       Effect.sync(() => {
         const target = targetOf(ctx);
-        ductsReadings(bridge).refresh(target);
+        retainedReadings(bridge).refresh(target);
         return { target, refreshed: true };
       }),
   });

@@ -1,8 +1,12 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import { join, resolve, relative, isAbsolute } from "node:path";
 import { catalogSchema, type CatalogTable } from "@pe/ducts-domain/catalog";
-import { type ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
+import { ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
 import type { z } from "zod";
+import { Effect } from "effect";
+import { documentRefSchema } from "@pe/agent-contracts";
+import type { HomeFiles } from "@pe/host-internal/home-files";
+import { leaf } from "@pe/host-internal/read-graph";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { type Home } from "@pe/host-contracts/product-paths";
 import { read as readStoredFile, homeKind, type HomeRoot } from "@pe/host-contracts/kinds";
@@ -13,9 +17,26 @@ const catalogKind = homeKind({
 });
 
 export type CatalogReading = z.infer<typeof ductCatalogReadingSchema>;
+/** The catalogs' own contract: a recorded input decodes only if it is still that input. */
+export const catalogReading = ductCatalogReadingSchema.strict();
+/** The `catalogs` home as a read input: every tier's catalogs for the target's project home. */
+export const catalogs = leaf("file:catalogs", documentRefSchema.nullable(), catalogReading);
+/**
+ * The home's reader for the kernel: every product that declares the `catalogs` home hands this to
+ * `implement()`. The recorded name predates the home's, and recordings pin it.
+ */
+export const catalogsHome = {
+  name: "duct-catalogs",
+  schema: catalogReading,
+  read: (homes: readonly Home[], bindHome: (home: Home) => HomeRoot) =>
+    readDuctCatalogs(homes, bindHome),
+};
+/** The same input for a command, which holds the files service and the project pointer. */
+export const catalogsFor = (files: HomeFiles["Service"], pointer?: string | null) =>
+  Effect.map(files.home("catalogs", pointer), (value) => catalogReading.parse(value));
 
 /**
- * The `DuctFiles` layer body. Read-only portable units, no registration and no product-home
+ * The `catalogs` home's reader body. Read-only portable units, no registration and no product-home
  * creation on a missing root. A table id is unique across every catalog in every home: an id
  * claimed twice admits no table, with a finding. Nothing shadows. Each table carries its home's tier as the home list (`list`: user, project, firm) gave it, the only source of a tier (D8), and its file.
  */

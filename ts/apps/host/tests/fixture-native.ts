@@ -14,7 +14,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 import { settle, callRouteOver } from "./effect-test.ts";
 import type { makeCallRoute } from "../src/call-route.ts";
 import { gatewayNativeLeaves } from "../src/gateway-actions.ts";
-import { DuctFiles } from "@pe/ducts-host/ducts-files";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { HostDocumentMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
@@ -236,7 +236,7 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
       const web = serveRoutes(
         Layer.mergeAll(routes, callRouteOver(journal, captures, dependencies, composition)).pipe(
           Layer.provide(peApiErrorsLayer),
-          Layer.provide(Layer.mergeAll(DuctFiles.layer(hostState().home), HostDocumentMarks.layer)),
+          Layer.provide(Layer.mergeAll(HomeFiles.layer(hostState().home), HostDocumentMarks.layer)),
           Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(directory, "pictures")))),
         ),
         bridge,
