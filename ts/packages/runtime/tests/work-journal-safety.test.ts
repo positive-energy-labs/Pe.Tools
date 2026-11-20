@@ -110,7 +110,7 @@ test.each([{ path: ["settings"] }, { path: ["settings", "width", "child"] }, { p
     f.journal.record({
       kind: "receipt",
       at: 1,
-      verb: "rooms.apply",
+      verb: "zones.apply",
       receiptId: "revit-receipt-1",
       paths: [path],
     });

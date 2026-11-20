@@ -120,7 +120,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
         elements: [
           {
             id: 17,
-            category: "Ducts",
+            category: "Pipes",
             name: "Supply",
             changedSinceSync: null,
             requesters: ["Alice", "Bob"],
@@ -178,7 +178,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
       targets: () =>
         ["exact-bridge", "foreign-bridge"].map((session) => ({
           thread: "thread-1",
-          title: "Review ducts",
+          title: "Review pipes",
           lifetime: { session, openId: "exact-open" },
         })),
     },
@@ -229,7 +229,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(custodyOf(map.machine.revit.sessions![5]!.row)).toBe("controlled");
   expect(pidOf(map.machine.revit.sessions![5]!.row)).toBe(47);
   expect(within(document.querySelector('[data-key="card-5"]')!).getByText("failed")).toBeTruthy();
-  expect(screen.queryByText("Review ducts")).toBeNull();
+  expect(screen.queryByText("Review pipes")).toBeNull();
   expect(map.machine.revit.sessions![0]!.attachment!.documents![0]!.access).toEqual({
     kind: "read",
   });

@@ -49,7 +49,7 @@ test("a recording lane refuses recording metadata writes", async () => {
 
 test("live keeps its admission; a sourceless host fixture refuses and never builds live", async () => {
   expect((await context({ kind: "live" })).check({ kind: "work", verb: "edit" })).toBeNull();
-  const fixture: HostInputLane = { kind: "fixture", name: "fans-demo" };
+  const fixture: HostInputLane = { kind: "fixture", name: "pumps-demo" };
   const live = Layer.effect(HostNativeRead, Effect.die("live input acquired"));
   const exit = await settleExit(
     Effect.gen(function* () {

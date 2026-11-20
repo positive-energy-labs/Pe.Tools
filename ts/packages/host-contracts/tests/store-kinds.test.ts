@@ -154,8 +154,8 @@ test("stored I/O rejects structural and spread forgeries at runtime", () => {
 test("a kind mints its own path under its root, and refuses a segment that would leave it", () => {
   expect(taskKind.in(machine, "a").path).toBe(join(root, "machine", "state", "tasks", "a.json"));
   const home = machine.home({ tier: "project", root: join(root, "Project", "Pe.Tools") });
-  expect(settingsKind.in(home, "ducts").path).toBe(
-    join(root, "Project", "Pe.Tools", "Settings", "ducts.json"),
+  expect(settingsKind.in(home, "pipes").path).toBe(
+    join(root, "Project", "Pe.Tools", "Settings", "pipes.json"),
   );
   expect(taskKind.in(machine, "a").place).toBe("Task a");
   for (const id of ["..", "../../escape", "a\\b", ""])
@@ -196,7 +196,7 @@ test("a kept-state kind and a home kind are never set aside", () => {
   expect(readFileSync(trust.path, "utf8")).toBe("{ torn");
 
   const home = machine.home({ tier: "firm", root: join(root, "Firm") });
-  const settings = settingsKind.in(home, "ducts");
+  const settings = settingsKind.in(home, "pipes");
   expect(writeHome(settings, "{ torn", null)).toMatchObject({ ok: true, priorSha256: null });
   expect(read(settings)).toMatchObject({ kind: "kept" });
   expect(readFileSync(settings.path, "utf8")).toBe("{ torn");
@@ -288,7 +288,7 @@ test("a caller without a keep check cannot overwrite a decision without preservi
 export function witness(bare: string): readonly unknown[] {
   const home = machine.home({ tier: "user", root: bare });
   const state = taskKind.in(machine, "a");
-  const authored = settingsKind.in(home, "ducts");
+  const authored = settingsKind.in(home, "pipes");
   const generated = generatedKind(["good.json"]).in(bare);
   // @ts-expect-error a home is not a generated file
   writeGenerated(home, "{}");
@@ -332,11 +332,11 @@ export function witness(bare: string): readonly unknown[] {
   // @ts-expect-error a bare string is not a state root
   taskKind.in(bare, "a");
   // @ts-expect-error a bare `Home` is not bound to a machine
-  settingsKind.in({ tier: "user", root: bare }, "ducts");
+  settingsKind.in({ tier: "user", root: bare }, "pipes");
   // @ts-expect-error a state kind takes the state root, never a home
   taskKind.in(home, "a");
   // @ts-expect-error a home kind takes a home, never the state root
-  settingsKind.in(machine, "ducts");
+  settingsKind.in(machine, "pipes");
   // @ts-expect-error a home file never reaches the state writer
   writeState(authored, "{}");
   // @ts-expect-error a state file never reaches the home write door

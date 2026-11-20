@@ -28,7 +28,7 @@ vi.mock("../host/diagnostics", async (original) => ({
   reportFault: io.fault,
 }));
 
-const ref = { pod: "share-ducts", path: "settings/checks.json" };
+const ref = { pod: "share-pipes", path: "settings/checks.json" };
 const basis = { member: ref, rawContent: "{}", sha256: "f".repeat(64) };
 const address = addressSchema.parse("C:/model.rvt");
 const port = subjectCode({

@@ -23,7 +23,7 @@ const pod = {
     });
     if (args.writes)
       // @ts-expect-error a Pod read never writes: a ModelWrite leaf is not a catalog Read
-      await ctx.native("ducts.apply", { request: {}, target });
+      await ctx.native("pipes.apply", { request: {}, target });
     const firm = await ctx.files.firm("hydronic.sizing", limits, {});
     // Slice 2b: no shared root refuses the firm file; the read runs on its named default.
     const stated = "refused" in firm ? undefined : firm.firm.maxFriction;
@@ -118,7 +118,7 @@ test("a hand-built native leaf cannot reach a ModelWrite either: the port refuse
       ctx.read(
         { name: "native", input: z.unknown(), output: z.unknown(), leaf: true, validate: false },
         {
-          key: "ducts.apply",
+          key: "pipes.apply",
           request: {},
           target: { kind: "session", session: "s1" },
           role: "none",
@@ -128,7 +128,7 @@ test("a hand-built native leaf cannot reach a ModelWrite either: the port refuse
   await expect(evaluate(forged, null, port({ path: "f" }, calls))).rejects.toThrow(
     /not a catalog Read/,
   );
-  expect(calls.filter((call) => call === "native:ducts.apply")).toEqual([]);
+  expect(calls.filter((call) => call === "native:pipes.apply")).toEqual([]);
 });
 
 test("ctx.read takes a handle and runs the body registered under its key; a handle with no body refuses", async () => {

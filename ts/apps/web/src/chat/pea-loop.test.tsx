@@ -87,7 +87,7 @@ test("the real chat breakdown and cache snapshot settle after a Codex usage even
     seq: 2,
     turnId: "turn-2",
     at: usage.at,
-    text: "Read the Fans Work",
+    text: "Read the Pumps Work",
   });
   const nextUsage = harnessEventSchema.parse({
     ...usage,

@@ -22,7 +22,7 @@ const handle = (elementId: number, linkInstanceId: number | null = null) =>
     uniqueId: `u-${elementId}`,
     linkInstanceId,
     linkInstanceUniqueId: linkInstanceId === null ? null : `link-${linkInstanceId}`,
-    category: elementId === 1 ? "Ducts" : "Walls",
+    category: elementId === 1 ? "Pipes" : "Walls",
     // The decoder reads these fields only; the op's full Handle carries more.
   }) as Psc1Metadata["elements"][number]["handle"];
 // The decoder reads these fields only; the op's full metadata carries more.
@@ -95,7 +95,7 @@ describe("PSC1 decode", () => {
         linkInstanceId: null,
         uniqueId: "u-1",
         categoryId: -2008000,
-        category: "Ducts",
+        category: "Pipes",
         focus: true,
         firstVertex: 0,
         vertexCount: 3,

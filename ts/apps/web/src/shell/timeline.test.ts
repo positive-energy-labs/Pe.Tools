@@ -5,7 +5,7 @@ import { activityTime, timelineRowKey } from "./timeline";
 test("equal revisions on different Works have distinct row identities", () => {
   const row: TimelineRow = {
     kind: "edit",
-    work: bindWork("fans", null, "a"),
+    work: bindWork("pumps", null, "a"),
     revision: 1,
     by: "human",
     label: "Edit",
@@ -13,7 +13,7 @@ test("equal revisions on different Works have distinct row identities", () => {
     at: 1,
   };
   expect(timelineRowKey(row)).not.toBe(
-    timelineRowKey({ ...row, work: bindWork("duct-systems", null, "a") }),
+    timelineRowKey({ ...row, work: bindWork("pipe-systems", null, "a") }),
   );
 });
 

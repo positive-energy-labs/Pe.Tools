@@ -24,7 +24,7 @@ import type { UseSource } from "@pe/agent-contracts/route";
 
 afterEach(cleanup);
 
-const ref = { pod: "share-ducts", path: "settings/checks.json" };
+const ref = { pod: "share-pipes", path: "settings/checks.json" };
 const saved = '{"maxSystems":25,"names":["Elbow","Tee"],"limits":{"depth":3,"old":1}}';
 const basis = { member: ref, rawContent: saved, sha256: "f".repeat(64) };
 /** `fields` is the member's staged Work: a top-level key the sheet shows, and keys it has no cell for. */

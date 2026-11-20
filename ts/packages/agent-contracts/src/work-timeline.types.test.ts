@@ -6,7 +6,7 @@ import {
   type WorkTimeline,
 } from "./work-timeline.ts";
 
-const work = { binding: "host", route: "ducts", target: null } as const;
+const work = { binding: "host", route: "pipes", target: null } as const;
 
 /** Never executed. tsc fails this file if either refusal starts to compile. */
 export function timelineTypeRefusals(): void {
@@ -24,7 +24,7 @@ export function timelineTypeRefusals(): void {
   const ok: WorkTimeline = {
     rows: [{ kind: "edit", work, revision: 1, by: "pea", label: "x", state: "applied", at: 0 }],
     undo: { work, revision: 1, label: "x" },
-    redo: { home: "C:/home/Settings/ducts.json", sha256: "ab", label: "y" },
+    redo: { home: "C:/home/Settings/pipes.json", sha256: "ab", label: "y" },
     refusal: { undo: null, redo: null },
   };
   void [row, request, ok];

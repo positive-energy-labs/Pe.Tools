@@ -26,7 +26,7 @@
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
-    "test": "vp test"
+    "test": "vp test && vp test --config vite.test.config.ts"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",

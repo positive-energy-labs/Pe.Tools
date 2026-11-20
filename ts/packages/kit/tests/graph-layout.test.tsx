@@ -40,19 +40,19 @@ test("wire verbs teach their band and gated pane without claiming runtime availa
     panes: { ...panes, inbox: { ...panes.inbox, verbs: ["apply"] } },
     band: ["read"],
     verbs: {
-      read: { entry: "test.read", label: "Read rooms", effect: "Read", review: "none" },
-      apply: { entry: "test.apply", label: "Apply rooms", effect: "ModelWrite", review: "shown" },
+      read: { entry: "test.read", label: "Read zones", effect: "Read", review: "none" },
+      apply: { entry: "test.apply", label: "Apply zones", effect: "ModelWrite", review: "shown" },
     },
   });
   expect(facts.find((f) => f.id === "inbox")).toMatchObject({ label: "Review inbox" });
   expect(facts.filter((f) => f.kind === "views")).toMatchObject([
     {
       region: "situation",
-      options: [{ key: "read", label: "Read rooms", says: "Read; review none" }],
+      options: [{ key: "read", label: "Read zones", says: "Read; review none" }],
     },
     {
       region: "inbox",
-      options: [{ key: "apply", label: "Apply rooms", says: "ModelWrite; review shown" }],
+      options: [{ key: "apply", label: "Apply zones", says: "ModelWrite; review shown" }],
     },
   ]);
   expect(JSON.stringify(facts)).not.toMatch(/"active"|"disabled"|"refusal"|"available"/);
@@ -91,7 +91,7 @@ afterEach(() => {
 
 test("the reduced three-pane tree teaches declared labels and purpose through the real renderer", () => {
   const view = render(
-    <TeachPage value="/rooms">
+    <TeachPage value="/zones">
       <GraphLayoutView layout={layout} panes={panes} active={() => false} bodies={bodies} />
     </TeachPage>,
   );
@@ -107,13 +107,13 @@ test("the reduced three-pane tree teaches declared labels and purpose through th
         node: "plan",
         label: panes.plan.label,
         purpose: panes.plan.purpose,
-        page: "/rooms",
+        page: "/zones",
       }),
       expect.objectContaining({
         node: "regions",
         label: panes.regions.label,
         purpose: panes.regions.purpose,
-        page: "/rooms",
+        page: "/zones",
       }),
     ]),
   );

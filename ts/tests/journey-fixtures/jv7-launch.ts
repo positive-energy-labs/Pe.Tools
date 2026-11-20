@@ -104,7 +104,7 @@ try {
   await tab.release();
   const child = spawn(
     process.execPath,
-    ["--import", "jiti/register", "tests/journey-fixtures/jv7-fans.ts"],
+    ["--import", "jiti/register", "products/fans/web/journeys/jv7-fans.ts"],
     {
       cwd: join(root, "ts"),
       windowsHide: true,

@@ -44,7 +44,7 @@ vi.mock("node:fs", async (original) => {
 const schema = z.strictObject({ name: z.string() });
 const valueKind = stateKind({
   schema,
-  place: (_name: string) => "Work for /ducts",
+  place: (_name: string) => "Work for /pipes",
   segments: (name: string) => [name],
 });
 const textKind = stateKind({

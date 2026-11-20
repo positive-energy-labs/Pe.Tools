@@ -16,7 +16,7 @@ const instances = [true, false].map((focus, index) => ({
   uniqueId: String(index),
   documentKey: "test",
   linkInstanceId: null,
-  category: "Ducts",
+  category: "Pipes",
   categoryId: null,
   focus,
   firstVertex: index * 3,

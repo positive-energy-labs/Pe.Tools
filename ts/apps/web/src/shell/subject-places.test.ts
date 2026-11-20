@@ -9,19 +9,19 @@ const TWO = "00000000-0000-4000-8000-000000000002";
 const AT = "2026-11-02T00:00:00.000Z";
 test("an empty host list restores nothing", async () => {
   await seedPlaces([]);
-  expect(tabPageSearch("/fans")).toBeUndefined();
+  expect(tabPageSearch("/pumps")).toBeUndefined();
 });
 test("bare route restores the focused Place and explicit fields override memory independently", async () => {
   await seedPlaces([
-    { id: ONE, route: "fans", link: "/fans?fan=uid-a%25400&fixture=layout", at: AT },
-    { id: TWO, route: "fans", link: "/fans?fan=uid-b%25400", at: AT },
+    { id: ONE, route: "pumps", link: "/pumps?fan=uid-a%25400&fixture=layout", at: AT },
+    { id: TWO, route: "pumps", link: "/pumps?fan=uid-b%25400", at: AT },
   ]);
   sessionStorage.setItem("pe.place.focus", ONE);
-  expect(restorePageSearch(tabPageSearch("/fans"), {})).toEqual({
+  expect(restorePageSearch(tabPageSearch("/pumps"), {})).toEqual({
     fan: "uid-a%400",
     fixture: "layout",
   });
-  expect(restorePageSearch(tabPageSearch("/fans"), { fan: "" })).toEqual({
+  expect(restorePageSearch(tabPageSearch("/pumps"), { fan: "" })).toEqual({
     fan: "",
     fixture: "layout",
   });

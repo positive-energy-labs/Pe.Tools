@@ -2,7 +2,7 @@ import { expect, test } from "vite-plus/test";
 import { actionReceiptSchema, type WorkWriteAck } from "@pe/agent-contracts";
 import { createWorkJournal } from "@pe/runtime/work-journal";
 
-const key = { binding: "host", route: "duct-systems", target: null } as const;
+const key = { binding: "host", route: "pipe-systems", target: null } as const;
 const edit = (revision: number, value: number): WorkWriteAck => ({
   key,
   kind: "apply",

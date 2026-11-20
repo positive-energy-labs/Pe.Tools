@@ -46,8 +46,8 @@ const finished: NoticeRow = {
   key: "thread:t2",
   group: "unread",
   verb: "done",
-  what: "ducts",
-  says: "Resized **41 of 43** ducts.",
+  what: "pipes",
+  says: "Resized **41 of 43** pipes.",
   act: { kind: "reply", threadId: "t1" },
 };
 const revit: NoticeRow = {
@@ -64,7 +64,7 @@ const level: NoticeRow = {
   ...base,
   key: "thread:t4",
   verb: "asks",
-  what: "ducts",
+  what: "pipes",
   says: "Which level?",
   act: {
     kind: "question",

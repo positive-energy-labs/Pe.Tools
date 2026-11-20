@@ -9,7 +9,7 @@ test("document mutations fail closed on rendered binding, independently of URL",
     ref: { session: "s", openId: "copy" },
   });
   process.env.E2E_SESSION = "s";
-  process.env.E2E_WEB = "http://fixture/fans";
+  process.env.E2E_WEB = "http://fixture/pumps";
   delete process.env.E2E_LINKAGE_MODE;
   const visible = { getClientRects: () => [1] };
   const page = (ids: (string | null)[], chooser = false, session: string | null = "s") =>
@@ -53,9 +53,9 @@ test("document mutations fail closed on rendered binding, independently of URL",
     );
     delete process.env.E2E_TARGET;
     delete process.env.E2E_SESSION;
-    process.env.E2E_WEB = "http://fixture/fans?target=real";
+    process.env.E2E_WEB = "http://fixture/pumps?target=real";
     await assert.rejects(assertPageBinding(page([]), "fixture-linkage"), /real target/);
-    process.env.E2E_WEB = "http://fixture/fans";
+    process.env.E2E_WEB = "http://fixture/pumps";
     await assertPageBinding(
       {
         evaluate: async () => {

@@ -112,7 +112,7 @@ test("the no-owner document head reads and steps the same host document scope", 
     target: null,
     open: { session: "proof", openId: "document" },
   } as const;
-  const expected = { work: { ...document, route: "fans" }, revision: 1, label: "Fans" };
+  const expected = { work: { ...document, route: "pumps" }, revision: 1, label: "Pumps" };
   const response = vi.fn(async (name: string, _input: unknown) =>
     Response.json(
       name === "reads.value"
