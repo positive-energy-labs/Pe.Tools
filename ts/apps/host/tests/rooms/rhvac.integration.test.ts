@@ -9,6 +9,7 @@ import {
   stagedTakeoffEdits,
   takeoffEditKey,
   takeoffObservationSchema,
+  takeoffCaptureSchema,
 } from "@pe/rooms-contract/takeoffs";
 import { product, takeoffsWork } from "@pe/rooms-contract/product";
 import { RouteWorkspace } from "@pe/runtime";
@@ -71,7 +72,16 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
       snapshot.world.zones = [zone];
       const capture = await settle(
-        captures.refresh(ref, Effect.succeed({ result: null, snapshot }), Effect.succeed(true)),
+        Effect.promise(() =>
+          captures.kept
+          .of("takeoff", takeoffCaptureSchema)
+          .keep({
+            provenance: { kind: "live", target: ref },
+            capturedAt: snapshot.reading.observedAt,
+            snapshot,
+          })
+          .then((capture) => ({ capture })),
+        ),
       );
 
       const staged = await workspace.publish(

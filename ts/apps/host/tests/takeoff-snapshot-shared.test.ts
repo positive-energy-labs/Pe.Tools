@@ -246,10 +246,11 @@ test("two requesters that both finish publish the one content-addressed capture"
     for (const job of h.dispatches) await h.answer(job);
     const [one, two] = await Promise.all([a.response, b.response]);
     expect([one?.status, two?.status]).toEqual([200, 200]);
-    expect(one?.headers.get("x-pe-takeoff-capture-id")).toMatch(/^[a-f0-9]{64}$/);
-    expect(two?.headers.get("x-pe-takeoff-capture-id")).toBe(
-      one?.headers.get("x-pe-takeoff-capture-id"),
+    expect(one?.headers.get("x-pe-capture-id")).toMatch(/^[a-f0-9]{64}$/);
+    expect(two?.headers.get("x-pe-capture-id")).toBe(
+      one?.headers.get("x-pe-capture-id"),
     );
+    expect(one?.headers.has("x-pe-takeoff-capture-id")).toBe(false);
     expect(h.dispatches).toHaveLength(2);
     expect(h.cancels).toEqual([]);
   } finally {

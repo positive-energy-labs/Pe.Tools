@@ -1,3 +1,4 @@
+import { ObservationFiles } from "@pe/host-internal/observation-files";
 import { hostState } from "../src/host-ownership.ts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
 import { stateMachine, stateFixture } from "../../../tests/isolated-home/storage.ts";
@@ -26,7 +27,6 @@ import { stateTree } from "@pe/host-contracts/service-identity";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { createScheduledTasks } from "../src/scheduled-tasks.ts";
 import { shareIntentFile, shareKind } from "../src/share.ts";
-import { TakeoffCaptures } from "../src/observation-store.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { createUpdateReader } from "../src/update-reader.ts";
 import { settle, journalAt } from "./effect-test.ts";
@@ -111,7 +111,7 @@ const updates = (path: string) =>
     pid: 1,
   });
 const captures = () =>
-  new TakeoffCaptures(
+  new ObservationFiles(
     stateFixture(join(root, "captures")),
     join(root, "aps.json"),
     () => "2026-11-11T00:00:00Z",

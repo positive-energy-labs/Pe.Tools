@@ -48,14 +48,10 @@ export function bindProducts<Deps>(
       "host file",
       hosts.map(({ files }) => files),
     ),
-    /** A `snapshot` call policy with no body is refused here, at registration. G3's `emits` replaces it. */
-    productCalls: merged(
-      "call",
-      hosts.map(({ product, calls }) => {
-        for (const [key, policy] of Object.entries(product.callPolicies))
-          if (policy.snapshot && !calls[key]) throw Error(`No host body for the call ${key}`);
-        return calls;
-      }),
+    /** Every `snapshot` call of a reading that declares `emits`, with the kind the kernel keeps. */
+    productEmitters: merged(
+      "emitting call",
+      hosts.map(({ emitters }) => emitters),
     ),
     productExecutors(bridge: RevitBridge["Service"], deps: Deps = defaults) {
       const executors: Record<string, CommandExecutor> = Object.create(null);

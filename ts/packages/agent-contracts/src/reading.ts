@@ -179,7 +179,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    * `attended`, and while one follows, every feed says `tray: true`.
    */
   z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
-  z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
   z.strictObject({ kind: z.literal("families-reading"), work: workKeySchema }),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only
@@ -191,8 +190,6 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
     target: documentRefSchema,
     filter: appliedScopeSchema,
   }),
-  /** The current disk identity of one RHVAC project file. */
-  z.strictObject({ kind: z.literal("rhvac-file-version"), path: z.string().min(1) }),
   z.strictObject({
     kind: z.literal("family-readings"),
     work: workKeySchema,
@@ -323,4 +320,3 @@ export type ActionReadingKey =
   | "sdk"
   | "machine";
 
-export const rhvacFileVersionSchema = z.object({ path: z.string(), fileVersion: z.string() });

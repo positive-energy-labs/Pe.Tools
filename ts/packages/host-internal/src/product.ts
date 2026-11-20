@@ -1,4 +1,5 @@
 import type { Effect } from "effect";
+import type { z } from "zod";
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type {
@@ -30,10 +31,10 @@ export type CommandBody<D = Dependencies> = (
 /** What a local operation's body answers with: the host's own services, and any failure. */
 export type LocalRun = Effect.Effect<unknown, unknown, AttemptHost>;
 /**
- * A native call the product answers itself through `/call` (a `snapshot` call policy names it).
- * `selected` reads the open document again, so the body can tell that the target moved.
+ * What the kernel hands and takes from an `emits` body: the `snapshot` call it answers through
+ * `/call`, and the answer beside the value the kernel keeps. `selected` reads the open document.
  */
-export type CallBody<D> = (
+export type EmitCall = {
   call: {
     readonly target: DocumentRef;
     readonly key: string;
@@ -44,18 +45,23 @@ export type CallBody<D> = (
       unknown,
       RequestIdentity
     >;
-  },
-  deps: D,
-) => Effect.Effect<
-  {
-    readonly captureId?: string;
+  };
+  answer: {
     readonly value: unknown;
     readonly nativeRequestId?: string;
     readonly target: { session: string; document: string | null; documentRef?: DocumentRef };
-  },
-  unknown,
-  HostNativeRead | RequestIdentity
->;
+  };
+  needs: HostNativeRead | RequestIdentity;
+};
+/** One emitting call as the call route runs it: the declared kind, its schema and the body. */
+export type Emitter<D> = {
+  readonly kind: string;
+  readonly schema: z.ZodType<{ readonly id: string }>;
+  readonly run: (
+    call: EmitCall["call"],
+    deps: D,
+  ) => Effect.Effect<EmitCall["answer"] & { readonly capture: object }, unknown, EmitCall["needs"]>;
+};
 
 /**
  * The host half of a product: one body per declared reading, command, `http` route and local
@@ -64,8 +70,8 @@ export type CallBody<D> = (
  */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  bodies: HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader> &
-    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader>>,
+  bodies: HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, EmitCall, HomeReader> &
+    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, EmitCall, HomeReader>>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
@@ -74,12 +80,16 @@ export function implement<P extends ProductDeclaration, D = Dependencies>(
   http: Record<string, (request: HttpRequest, deps: Partial<D>) => Promise<unknown>>;
   local: Record<string, (input: unknown, deps: Partial<D>) => LocalRun>;
   files: Record<string, FileBody<Partial<D>>>;
-  calls: Record<string, CallBody<Partial<D>>>;
+  /** By the call key each emitting reading declares with a `snapshot` policy. */
+  emitters: Record<string, Emitter<Partial<D>>>;
 };
 export function implement<D>(
   product: ProductDeclaration,
-  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, Partial<D>, LocalRun, CallBody<Partial<D>>, HomeReader>,
+  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, Partial<D>, LocalRun, EmitCall, HomeReader>,
 ) {
+  // With its names erased a declaration emits nothing, so the table is read by reading name.
+  const emitting: Readonly<Record<string, Emitter<Partial<D>>["run"] | undefined>> =
+    bodies.emits ?? {};
   const readers: Readonly<Record<string, HomeReader | undefined>> = bodies.homes ?? {};
   for (const [key, home] of Object.entries(product.homes)) {
     if (home.read !== "product") continue;
@@ -110,6 +120,16 @@ export function implement<D>(
     http: { ...bodies.http },
     local: { ...bodies.local },
     files: { ...bodies.files },
-    calls: { ...bodies.calls },
+    emitters: Object.fromEntries(
+      Object.entries(product.readings).flatMap(([name, { emits, load }]) => {
+        if (emits === undefined) return [];
+        const run = emitting[name];
+        const schema = product.captures[emits];
+        if (!run || !schema) return [];
+        return Object.entries(load?.calls ?? {})
+          .filter(([, policy]) => policy?.snapshot)
+          .map(([key]) => [key, { kind: emits, schema, run }]);
+      }),
+    ),
   };
 }

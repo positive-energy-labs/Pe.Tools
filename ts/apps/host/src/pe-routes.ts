@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { resourceReadingSchema } from "@pe/mcps/product-contracts";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import {
@@ -184,7 +185,7 @@ import { RunRegistry } from "./run-registry.ts";
 import { createScheduledTasks, scheduledTasksKind } from "./scheduled-tasks.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import type { DocumentRow } from "./session-inventory.ts";
-import { CaptureStore, type TakeoffCaptures } from "./observation-store.ts";
+import { CaptureStore } from "./observation-store.ts";
 import { eligibleThreads, threadHistory } from "./thread-history.ts";
 import { UpdateReader } from "./update-reader.ts";
 import { makeInstalledUpdateReader } from "./update-route.ts";
@@ -1298,7 +1299,7 @@ function* hostPeRoutes(
   update: UpdateReader["Service"] = makeInstalledUpdateReader(),
   share?: MachineShareAdapter,
   hostWork?: HostWork,
-  captures?: TakeoffCaptures,
+  captures?: ObservationFiles,
   telemetry: ReceiptExporter = missingTelemetry(),
 ) {
   const runtime = yield* Effect.context<never>();

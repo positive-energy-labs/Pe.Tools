@@ -184,8 +184,15 @@ export type ReadingLoad = Readonly<{
   fixes?: Readonly<Partial<Record<AnyOperationKey, Readonly<Record<string, unknown>>>>>;
   basisHeaders?: Readonly<Record<string, string>>;
 }>;
-export type Reading<Source extends PropertyKey = string> = {
+/** What a product keeps, by kind: the kernel store mints `id` from the content of each kept value. */
+export type Captures = Readonly<Record<string, z.ZodType<{ readonly id: string }>>>;
+export type Reading<Source extends PropertyKey = string, Kind extends PropertyKey = string> = {
   readonly handle: ReadHandle;
+  /**
+   * The declared capture this reading's `snapshot` call produces. The product owes one `emits` body;
+   * the kernel keeps what it returns, stamps `x-pe-capture-id`, and the body never sees the store.
+   */
+  readonly emits?: Kind;
   /** The product's homes this reading reads, by name. */
   readonly sources: readonly Source[];
   readonly load?: ReadingLoad;
@@ -266,7 +273,7 @@ export type ProductRoute<R extends string = string> = {
   readonly captureSubject?: string;
   readonly demoPlace?: { readonly id: string; readonly link: string };
 };
-type Readings = Readonly<Record<string, Reading<PropertyKey>>>;
+type Readings = Readonly<Record<string, Reading<PropertyKey, PropertyKey>>>;
 type DataOf<R extends Readings, N> = z.output<
   R[(N extends readonly [infer K, unknown] ? K : N) & keyof R]["handle"]["data"]
 >;
@@ -332,6 +339,7 @@ export type ProductDeclaration = {
   readonly says: string;
   readonly homes: Homes;
   readonly cells: Cells;
+  readonly captures: Captures;
   readonly readings: Readonly<Record<string, Reading>>;
   readonly commands: Readonly<Record<string, ProductCommand>>;
   readonly sheetWrites?: SheetNative & {
@@ -451,7 +459,7 @@ export function product<
   const Id extends string,
   const H extends Homes,
   const C extends Cells,
-  const R extends Readonly<Record<string, Reading<keyof H>>>,
+  const R extends Readonly<Record<string, Reading<keyof H, keyof Caps>>>,
   const M extends Readonly<Record<string, ProductCommand<H, C>>>,
   const Routes extends Readonly<Record<string, ProductRoute<keyof R & string>>>,
   const Publish extends boolean = true,
@@ -460,6 +468,7 @@ export function product<
   const Works extends RouteWorks<C> = Record<never, never>,
   const Http extends HttpRoutes = Record<never, never>,
   const Local extends LocalOperations = Record<never, never>,
+  const Caps extends Captures = Record<never, never>,
 >(declaration: {
   /** The product folder, Work route and default name of its Pea tool. */
   readonly id: Id;
@@ -467,6 +476,8 @@ export function product<
   /** Only the product's own. A platform home follows from the nouns a product uses. */
   readonly homes: H;
   readonly cells: C;
+  /** Each kind of value the kernel keeps for this product, with its schema. */
+  readonly captures?: Caps;
   readonly work?: Pick<
     RouteStateSpec<z.ZodObject>,
     "title" | "settingsOwners" | "schemaVersion" | "retired" | "finds"
@@ -528,13 +539,14 @@ export function product<
     work,
     commands: declaration.commands,
   };
-  const readings = Object.values<Reading<keyof H>>(declaration.readings);
+  const readings = Object.values<Reading<keyof H, keyof Caps>>(declaration.readings);
   const callPolicies: Readonly<Record<string, CallPolicy>> = Object.assign(
     {},
     ...readings.flatMap(({ load }) => load?.calls ?? []),
   );
   return {
     ...declaration,
+    captures: Object.assign({}, declaration.captures),
     http: Object.assign({}, declaration.http),
     local: Object.assign({}, declaration.local),
     routes: bind<R, Routes>(declaration.readings, declaration.routes),

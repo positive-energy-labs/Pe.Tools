@@ -351,6 +351,7 @@ export const product = define({
     rooms: [...ROOM_FIELDS, "marks"],
     takeoffs: ["edits", "adopt", "decisions", "reviewFlags"],
   },
+  captures: { takeoff: takeoffCaptureSchema },
   readings: {
     plans: {
       handle: plans,
@@ -377,6 +378,7 @@ export const product = define({
     observations: {
       handle: observations,
       sources: [],
+      emits: "takeoff",
       load: {
         calls: { "takeoffs.saved": { saved: true }, "takeoffs.snapshot": { snapshot: true } },
       },

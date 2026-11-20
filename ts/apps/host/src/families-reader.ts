@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { SdkSession } from "./sdk-session.ts";
 import { Clock, Context, Effect, Layer, Semaphore } from "effect";
 import { randomUUID } from "node:crypto";
@@ -29,7 +30,7 @@ import { assertFresh, HostDocumentMarks, type DocumentMarks } from "./document-m
 import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
-import { type FamiliesObservation, type TakeoffCaptures } from "./observation-store.ts";
+import { type FamiliesObservation } from "./observation-store.ts";
 
 type Matrix = RevitMatrixLoadedFamilies.Res.Response;
 type Family = Matrix["families"][number];
@@ -77,7 +78,7 @@ async function readFamiliesProgressively(
   reader: Reader,
   options: {
     bridge: RevitBridge["Service"];
-    captures: TakeoffCaptures;
+    captures: ObservationFiles;
     readId: string;
     work: WorkKey;
     document: DocumentRef;

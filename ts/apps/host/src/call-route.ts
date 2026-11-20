@@ -1,6 +1,6 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import {
-  productCalls,
-  productGateway,
+  productEmitters,
   productHttp,
   productLocal,
   type ProductDependencies,
@@ -110,7 +110,7 @@ import {
 } from "./settings.ts";
 import { readSettingTiers } from "@pe/host-internal/settings-files";
 import { writeSettingTier } from "./tiered-settings.ts";
-import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./observation-store.ts";
+import { CaptureStore } from "./observation-store.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
 
 /** A door refusal: 403, named, and never dispatched. */
@@ -150,7 +150,7 @@ export const makeCallRoute = Effect.fn("makeCallRoute")(function* (
 
 function callRoutes(
   operations: ActionJournal,
-  captures?: TakeoffCaptures,
+  captures?: ObservationFiles,
   actionDeps: FamilyActionDependencies &
     Partial<ProductDependencies> &
     InstancesActionDependencies & {
@@ -193,7 +193,7 @@ function callRoutes(
     (composition?.dispatch ?? dispatchTsOnlyOperation)(...args);
   // The injected store, else the `CaptureStore` of the layer that builds these routes (set below,
   // before any handler can run).
-  const observations = (): TakeoffCaptures => {
+  const observations = (): ObservationFiles => {
     if (!captures) throw Error("Takeoff captures are read before the call route layer is built.");
     return captures;
   };
@@ -457,16 +457,26 @@ function callRoutes(
               const selected = Effect.map(sessions.resolve(readScope), (session) =>
                 session.state?.openDocuments.find((doc) => doc.openId === target.openId),
               );
-              const answer = productCalls[key];
-              if (!answer)
+              const emitter = productEmitters[key];
+              if (!emitter)
                 return yield* new BridgeError(`${key} has no host body`, 409, {
                   notDispatched: true,
                 });
-              const { captureId: publishedId, ...result } = yield* answer(
-                { target, key, request, scope: readScope, selected },
-                { captures: observations() },
-              );
-              captureId = publishedId;
+              // The kernel keeps what the body returns: the body holds no store. A target that
+              // moved, or a model change, withdraws the answer before it is published.
+              const before = (yield* selected)?.address;
+              const published = yield* observations()
+                .kept.of(emitter.kind, emitter.schema)
+                .refresh(
+                  target,
+                  emitter.run(
+                    { target, key, request, scope: readScope, selected },
+                    { captures: observations() },
+                  ),
+                  Effect.map(selected, (now) => !!now?.address && now.address === before),
+                );
+              captureId = published.capture.id;
+              const { capture: _, ...result } = published.result;
               return result;
             }).pipe(
               Effect.mapError((error) =>
@@ -565,7 +575,8 @@ function callRoutes(
       // A TS-only op touched no Revit, so it stamps nothing rather than the latest session.
       const headers = result.target ? resolvedTargetHeaders(result.target) : {};
       if (!op.tsOnly && !entry.cancel) headers["x-pe-native-request-id"] = nativeRequestId;
-      if (captureId) headers[productGateway.captureHeader] = captureId;
+      // One header for both stores: a kept reading's id, or the picture taken by this call.
+      if (captureId) headers["x-pe-capture-id"] = captureId;
       if (kept)
         Object.assign(headers, { "x-pe-capture-id": kept.id, "x-pe-capture-url": kept.url });
       return Response.jsonUnsafe(result.value ?? null, { headers });
@@ -907,8 +918,8 @@ function callRoutes(
           // The host provides one store for the whole app; a composition with none owns its own,
           // closed with this layer's scope.
           captures ??=
-            Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
-            Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
+            Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore)) ??
+            Context.get(yield* Layer.build(CaptureStore.layer()), CaptureStore);
           actionDeps = {
             ...actionDeps,
             marks: yield* HostDocumentMarks,
@@ -1076,7 +1087,7 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   via: { caller: Caller; pointers?: ThreadPointers; action?: GatewayLocalContext },
 ) {
   // pod.export, pod.import and pod.promote have no local entry: the gateway runs their prepared
@@ -1095,7 +1106,7 @@ type LocalCall = {
   request: unknown;
   scope: HostSessionScope | undefined;
   bridge: RevitBridge["Service"];
-  captures: TakeoffCaptures;
+  captures: ObservationFiles;
   caller: Caller;
   pointers?: ThreadPointers;
   action?: GatewayLocalContext;
@@ -1290,7 +1301,7 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
 const productLocalCall = Effect.fnUntraced(function* (
   key: string,
   request: unknown,
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
 ) {
   const declared = productLocal[key];
   if (!declared)
@@ -1398,7 +1409,7 @@ function executeGatewayLocal(
   key: string,
   input: unknown,
   bridge: RevitBridge["Service"],
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   pictures: PictureCaptureStore["Service"],
   launch?: (path: string) => Promise<void>,
   scope?: HostSessionScope,

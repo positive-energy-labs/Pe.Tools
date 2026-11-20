@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { authorSchema } from "@pe/agent-contracts";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
@@ -89,7 +90,6 @@ import {
   writeRun,
   type PodContext,
 } from "./settings.ts";
-import type { TakeoffCaptures } from "./observation-store.ts";
 import { LocalOpError } from "@pe/host-internal/local-error";
 import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
@@ -467,7 +467,7 @@ const appliedSomething = (result: unknown) => {
 
 /** Stable entries share domain transforms; only bind owns invocation-local facts. */
 export function familyExecutors(
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies = {},
 ) {
@@ -1317,7 +1317,7 @@ export function familyExecutors(
 
 export async function readFamily(
   raw: { key: string; input?: unknown; target?: unknown; scope: unknown },
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies = {},
 ) {

@@ -1,6 +1,6 @@
 import { implement, type CommandBody } from "@pe/host-internal/product";
 import { product } from "@pe/rooms-contract/product";
-import { calls, files, http, local } from "./bodies.ts";
+import { emits, files, http, local } from "./bodies.ts";
 import { readings } from "./readings.ts";
 import { roomsExecutors, roomsSheet } from "./rooms.ts";
 import { takeoffExecutors, type Deps } from "./takeoffs.ts";
@@ -28,7 +28,7 @@ export const host = implement<typeof product, Deps>(product, {
   http,
   local,
   files,
-  calls,
+  emits,
 });
 /** What each route's host module serves. */
 export const reads = host.reads;

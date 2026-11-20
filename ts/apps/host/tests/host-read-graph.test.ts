@@ -837,9 +837,9 @@ test("HTTP retaining one capture twice with an open reader never rewrites it and
     expect(raced[1].state, JSON.stringify(raced[1])).toBe("current");
     expect(raced[1].value.data).toEqual(first.value.data);
     expect(first.state, JSON.stringify(first)).toBe("current");
-    const files = await readdir(join(f.dir, "captures"));
+    const files = await readdir(join(f.dir, "captures", "takeoff"));
     expect(files).toHaveLength(1);
-    const file = join(f.dir, "captures", files[0]!);
+    const file = join(f.dir, "captures", "takeoff", files[0]!);
     const bytes = await readFile(file);
     // Detect replacement even when Node's reader shares delete access on Windows.
     await utimes(file, new Date(1000), new Date(1000));
