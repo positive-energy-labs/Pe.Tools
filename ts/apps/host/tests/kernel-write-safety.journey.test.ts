@@ -591,6 +591,8 @@ test("E9 a queued Page command loses authority before its first effect", async (
     ).toMatchObject({ ok: true });
     const firstPlan = await f.page("parameter-links.apply.plan");
     expect(await f.native.journal.wait(firstPlan.id)).toMatchObject({ state: "succeeded" });
+    const secondPlan = await f.page("rooms.write.preview", rooms);
+    expect(await f.native.journal.wait(secondPlan.id)).toMatchObject({ state: "succeeded" });
     let held = false;
     f.native.onRequest(async (key) => {
       if (key === "revit.apply.parameter-links") {
@@ -600,8 +602,6 @@ test("E9 a queued Page command loses authority before its first effect", async (
     });
     const first = await f.page("parameter-links.apply");
     await vi.waitFor(() => expect(held).toBe(true));
-    const secondPlan = await f.page("rooms.write.preview", rooms);
-    expect(await f.native.journal.wait(secondPlan.id)).toMatchObject({ state: "succeeded" });
     const second = await f.page("rooms.write", rooms);
     // The journal reports running while waitForTurn holds it before preparation/effects.
     await vi.waitFor(async () =>

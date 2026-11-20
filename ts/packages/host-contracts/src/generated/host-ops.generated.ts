@@ -11070,11 +11070,20 @@ export namespace RevitResolveUnitValue {
 /** Draw one room or zone region from loops on a plan view by numeric Revit view id; a person's designation, so a room is locked. */
 export namespace RoomsDraw {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       view: number;
       loops: number[][][];
       name?: null | string;
       role?: null | string;
+      replacing?: null | OwnerBlobReplacement;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -11088,10 +11097,19 @@ export namespace RoomsDraw {
 /** Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
 export namespace RoomsMerge {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       view: number;
       uniqueIds: string[];
       name?: null | string;
+      replacing?: null | OwnerBlobReplacement;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -11107,10 +11125,19 @@ export namespace RoomsMerge {
 /** Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Stores region rows in the project Rooms record. */
 export namespace RoomsPartition {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       view: number;
       runId?: null | string;
       rejected?: number[][][] | null;
+      replacing?: null | OwnerBlobReplacement;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -11325,8 +11352,11 @@ export namespace RoomsTrace {
 /** Write submitted Rooms fields by FilledRegion UniqueId and return cells confirmed by committed readback. */
 export namespace RoomsWrite {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       regions: RoomsWriteRegion[];
+      replacing?: null | OwnerBlobReplacement;
     }
     export interface RoomsWriteRegion {
       uniqueId: string;
@@ -11339,6 +11369,12 @@ export namespace RoomsWrite {
       equipLatent?: null | number;
       ventilationCfm?: null | number;
       role?: null | string;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -11871,14 +11907,24 @@ export namespace SettingsValidate {
 /** Adopt Filled Regions as Zoning Regions and register their System tags in one transaction. */
 export namespace TakeoffsAdopt {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       view: string;
       items: TakeoffAdoptItem[];
+      replacing?: null | OwnerBlobReplacement;
+      replacingRegistry?: null | OwnerBlobReplacement;
     }
     export interface TakeoffAdoptItem {
       elementId: number;
       name: string;
       systemTag: string;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -11951,12 +11997,21 @@ export namespace TakeoffsInitializeCarrier {
 /** Partition one Zoning Region on the resident Space soup and materialize Room Regions in one transaction. */
 export namespace TakeoffsPartition {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       zoneRegion: number;
       view: string;
       zoneName: string;
       zoneUniqueId: string;
       runId: string;
+      replacing?: null | OwnerBlobReplacement;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -12049,11 +12104,35 @@ export namespace TakeoffsPartition {
   }
 }
 
+/** Read replacement evidence for unreadable Rooms and Takeoff registry records. */
+export namespace TakeoffsRecordReplacements {
+  export namespace Req {
+    export interface Request {}
+  }
+  export namespace Res {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
+    export interface Response {
+      regions?: null | OwnerBlobReplacement;
+      registry?: null | OwnerBlobReplacement;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
+    }
+  }
+}
+
 /** Write RHVAC file and room links to Room Region provenance in one transaction. */
 export namespace TakeoffsRhvacLinks {
   export namespace Req {
+    export type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+
     export interface Request {
       writes: TakeoffRhvacLinkWrite[];
+      replacing?: null | OwnerBlobReplacement;
     }
     export interface TakeoffRhvacLinkWrite {
       elementId: number;
@@ -12064,6 +12143,12 @@ export namespace TakeoffsRhvacLinks {
       fileIdentity: string;
       syncedAt: string;
       lastSyncedSqft: number;
+    }
+    export interface OwnerBlobReplacement {
+      owner: string;
+      status: OwnerBlobStatus;
+      reason: string;
+      rawUtf8Sha256: string;
     }
   }
   export namespace Res {
@@ -12340,6 +12425,7 @@ export interface HostOps {
   "takeoffs.candidates": { request: TakeoffsCandidates.Req.Request; response: TakeoffsCandidates.Res.Response };
   "takeoffs.initialize-carrier": { request: TakeoffsInitializeCarrier.Req.Request; response: TakeoffsInitializeCarrier.Res.Response };
   "takeoffs.partition": { request: TakeoffsPartition.Req.Request; response: TakeoffsPartition.Res.Response };
+  "takeoffs.record-replacements": { request: TakeoffsRecordReplacements.Req.Request; response: TakeoffsRecordReplacements.Res.Response };
   "takeoffs.rhvac-links": { request: TakeoffsRhvacLinks.Req.Request; response: TakeoffsRhvacLinks.Res.Response };
   "takeoffs.snapshot": { request: TakeoffsSnapshot.Req.Request; response: TakeoffsSnapshot.Res.Response };
 }
@@ -12445,6 +12531,7 @@ export const hostOpKeys = [
   "takeoffs.candidates",
   "takeoffs.initialize-carrier",
   "takeoffs.partition",
+  "takeoffs.record-replacements",
   "takeoffs.rhvac-links",
   "takeoffs.snapshot",
 ] as const satisfies readonly (keyof HostOps)[];
@@ -12550,6 +12637,7 @@ export const hostOpSafety = {
   "takeoffs.candidates": {"costTier":"Bounded","subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
   "takeoffs.initialize-carrier": {"costTier":"Mutation","subject":"Document","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true},
   "takeoffs.partition": {"costTier":"Mutation","subject":"Region","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
+  "takeoffs.record-replacements": {"costTier":"Bounded","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":true},
   "takeoffs.rhvac-links": {"costTier":"Mutation","subject":"Elements","touches":"Metadata","effect":"ModelWrite","cardinality":"One","internal":true},
   "takeoffs.snapshot": {"costTier":"Bounded","subject":"Region","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
 } as const satisfies Record<keyof HostOps, { costTier: string; subject: string; touches: string; effect: string; cardinality: string; internal: boolean }>;

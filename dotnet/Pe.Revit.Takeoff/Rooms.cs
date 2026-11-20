@@ -299,7 +299,7 @@ public static class Rooms
         var level = view.GenLevel;
         var runId = string.IsNullOrWhiteSpace(request.RunId) ? Guid.NewGuid().ToString("N") : request.RunId!;
         if (runId == RunDrawn) throw new InvalidOperationException($"runId '{RunDrawn}' is reserved");
-        var record = RoomsRegionRecord.Stage(doc);
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var onView = new FilteredElementCollector(doc, view.Id).OfClass(typeof(FilledRegion)).Cast<FilledRegion>()
             .OrderBy(fr => fr.Id.Value())
             .Select(fr => (Fr: fr, Loops: TakeoffAtlas.Boundaries(fr), Row: record[fr.UniqueId]))
@@ -547,7 +547,7 @@ public static class Rooms
             if (row.Provenance.TraceRun?.View == view.UniqueId || id == traceAnchor)
                 record.Regions[id] = row with { Provenance = row.Provenance with
                     { TraceRun = id == traceAnchor ? traces.Reference : null } };
-        record.Save(doc);
+        record.Save(doc, replacing: request.Replacing);
 
         var result = new RoomsPartitionResult(level.Name, runId, zones.Count, createdRooms,
             solved.Sum(s => s.Plan.Keep.Count), solved.Sum(s => s.Plan.Locked.Count),
@@ -605,7 +605,7 @@ public static class Rooms
     public static RoomsDrawResult Draw(Document doc, RoomsDrawRequest request)
     {
         var view = LevelView(doc, request.View);
-        var record = RoomsRegionRecord.Stage(doc);
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var role = RoleOf(request.Role ?? "room");
         if (request.Loops is not { Count: > 0 } || request.Loops.Any(loop => loop is not { Count: >= 3 }))
             throw new InvalidOperationException("draw needs one or more loops of three or more points");
@@ -618,7 +618,7 @@ public static class Rooms
         record.Regions.Add(fr.UniqueId, new(role, new RoomFields(Name: request.Name),
             new RegionProvenance(null, RunDrawn, "", Sqft(fr, loops))
                 { GeometryHash = GeometryHash(loops), Flags = [FlagPerson] }));
-        record.Save(doc);
+        record.Save(doc, replacing: request.Replacing);
         return new RoomsDrawResult(fr.Id.Value(), fr.UniqueId);
     }
 
@@ -631,13 +631,13 @@ public static class Rooms
         return CommitWrite(request, () =>
         {
             using var transaction = DocumentSandbox.BeginCommit(doc, "Pe Write Room Fields");
-            var record = RoomsRegionRecord.Stage(doc);
+            var record = RoomsRegionRecord.Stage(doc, request.Replacing);
             foreach (var patch in request.Regions)
             {
                 var (fr, row) = Resolve(doc, record, patch.UniqueId);
                 record.Regions[fr.UniqueId] = Patch(row, patch);
             }
-            record.Save(doc);
+            record.Save(doc, replacing: request.Replacing);
             transaction.Complete();
         }, () => RoomsRegionRecord.Read(doc).OrThrow() ?? throw new InvalidOperationException("Committed Rooms record is missing"));
     }
@@ -693,7 +693,7 @@ public static class Rooms
     public static RoomsMergeResult Merge(Document doc, RoomsMergeRequest request)
     {
         var view = LevelView(doc, request.View);
-        var record = RoomsRegionRecord.Stage(doc);
+        var record = RoomsRegionRecord.Stage(doc, request.Replacing);
         var ids = request.UniqueIds ?? [];
         var sources = ids.Select(id => Resolve(doc, record, id)).ToList();
         var members = sources.Select(source =>
@@ -717,14 +717,14 @@ public static class Rooms
         var sqft = Sqft(merged, stored);
         record.Regions.Add(merged.UniqueId, new(TakeoffCarriers.RoleRoomRegion, fields with { Name = request.Name ?? fields.Name },
             RoomsMerge.Provenance(plan, ids, sqft, GeometryHash(stored)) with { TraceRun = trace }));
-        record.Save(doc);
+        record.Save(doc, replacing: request.Replacing);
         return new RoomsMergeResult(merged.Id.Value(), merged.UniqueId, ids, sqft);
     }
 
     internal static (FilledRegion Region, RegionRow Row) Resolve(Document doc, RoomsRegionRecord record, string uniqueId) =>
         !string.IsNullOrEmpty(uniqueId) && record[uniqueId] is { } row && doc.GetElement(uniqueId) is FilledRegion fr
             ? (fr, row)
-            : throw new InvalidOperationException($"no tracked FilledRegion with UniqueId '{uniqueId}'");
+            : throw new InvalidOperationException(record.Refusal ?? $"no tracked FilledRegion with UniqueId '{uniqueId}'");
 
     private static bool IsZone(Document doc, RoomsRegionRecord record, ElementId view, string uniqueId) =>
         record[uniqueId]?.Role == TakeoffCarriers.RoleZoningRegion

@@ -38,14 +38,32 @@ public static class TakeoffCarriers
 
     public static SystemRegistry ReadRegistry(Document document) => TryReadRegistry(document).OrThrow() ?? new SystemRegistry();
 
-    internal static SystemRegistry StageRegistry(Document document)
+    public static TakeoffRecordReplacements Replacements(Document document) => new(
+        OwnerBlobStore.Read(document, RoomsRegionRecord.Owner).Replacement,
+        OwnerBlobStore.Read(document, SystemRegistry.Owner).Replacement);
+
+    internal static SystemRegistry StageRegistry(Document document, OwnerBlobReplacement? replacing)
     {
         var stored = OwnerBlobStore.Read(document, SystemRegistry.Owner);
-        return (stored.MayOverwrite ? SystemRegistry.Read(stored).OrThrow() : null) ?? new SystemRegistry();
+        var registry = SystemRegistry.Read(stored).Value ?? new SystemRegistry();
+        CheckReplacement(stored, registry.ToData(), replacing);
+        return registry;
+    }
+
+    internal static void CheckReplacement(OwnerBlobRead stored, JObject data, OwnerBlobReplacement? replacing)
+    {
+        if (stored.Replacement != null || replacing != null)
+            _ = OwnerBlob.Replace(stored, data, (_, _) => { }, replacing);
+    }
+
+    internal static void Save(Document document, OwnerDescriptor owner, JObject data, OwnerBlobReplacement? replacing)
+    {
+        if (replacing is null) _ = OwnerBlobStore.Write(document, owner, data);
+        else _ = OwnerBlobStore.Write(document, owner, data, replacing);
     }
 
     public static void WriteRegistry(Document document, SystemRegistry registry) =>
-        _ = OwnerBlobStore.Write(document, SystemRegistry.Owner, registry.ToData());
+        _ = OwnerBlobStore.WriteWithoutPreview(document, SystemRegistry.Owner, registry.ToData());
 
 }
 
@@ -69,7 +87,9 @@ public sealed class RoomsRegionRecord
 {
     public static readonly OwnerDescriptor Owner = new("rooms-regions", 1,
         new Guid("b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020"), "_PE_RoomsRegions",
-        "Pe Rooms roles, fields and provenance keyed by FilledRegion UniqueId.");
+        "Pe Rooms roles, fields and provenance keyed by FilledRegion UniqueId.") { ValidateData = read => Decode(read).Refusal };
+
+    internal string? Refusal { get; private set; }
 
     internal string TraceId { get; private init; } = Guid.NewGuid().ToString("N");
 
@@ -99,11 +119,19 @@ public sealed class RoomsRegionRecord
         return result;
     });
 
-    internal static RoomsRegionRecord Stage(Document document)
+    internal static RoomsRegionRecord Stage(Document document, OwnerBlobReplacement? replacing = null)
     {
-        var stored = OwnerBlobStore.Read(document, Owner);
-        var record = (stored.MayOverwrite ? Decode(stored).OrThrow() : null) ?? new RoomsRegionRecord();
+        var record = Stage(OwnerBlobStore.Read(document, Owner), replacing);
         record.Prune(id => document.GetElement(id) is FilledRegion);
+        return record;
+    }
+
+    internal static RoomsRegionRecord Stage(OwnerBlobRead stored, OwnerBlobReplacement? replacing)
+    {
+        var read = Decode(stored);
+        var record = read.Value ?? new RoomsRegionRecord { Refusal = read.Refusal };
+        if (read.Refusal != null || replacing != null)
+            TakeoffCarriers.CheckReplacement(stored, record.ToData(), replacing);
         return record;
     }
 
@@ -115,11 +143,7 @@ public sealed class RoomsRegionRecord
 
     internal JObject ToData() => TakeoffJson.Object(new { this.TraceId, this.Regions });
 
-    private static void Validate(JObject data)
-    {
-        var encoded = OwnerBlob.Encode(Owner, data);
-        _ = Decode(OwnerBlob.Decode(Owner, encoded)).OrThrow();
-    }
+    private static void Validate(JObject data) => _ = OwnerBlob.Encode(Owner, data);
 
     internal T BeforeMutation<T>(Func<T> begin)
     {
@@ -127,7 +151,7 @@ public sealed class RoomsRegionRecord
         return begin();
     }
 
-    internal void Save(Document document, string? traceRoot = null)
+    internal void Save(Document document, string? traceRoot = null, OwnerBlobReplacement? replacing = null)
     {
         this.Prune(id => document.GetElement(id) is FilledRegion);
         var originals = new List<string>();
@@ -146,7 +170,7 @@ public sealed class RoomsRegionRecord
         Validate(data);
         foreach (var json in originals)
             RoomsRunTraces.KeepOriginal(traceRoot ?? RoomsRunTraces.Root, this.TraceId, json);
-        _ = OwnerBlobStore.Write(document, Owner, data);
+        TakeoffCarriers.Save(document, Owner, data, replacing);
     }
 
     internal RegionProvenance ProjectOriginal(RegionProvenance provenance, string? traceRoot = null) =>

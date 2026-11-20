@@ -84,20 +84,20 @@ public sealed class OwnerBlobRoundTripTests {
     }
 
     [Test]
-    public void Rooms_reports_a_future_envelope_and_preserves_its_bytes(UIApplication ui) =>
-        RoomsReportsUnreadable(ui, newerEnvelope: true);
+    public void Rooms_applies_replacement_of_a_future_envelope_and_keeps_its_bytes(UIApplication ui) =>
+        RoomsAppliesReplacement(ui, newerEnvelope: true);
 
     [Test]
-    public void Rooms_reports_malformed_owner_data_and_preserves_its_bytes(UIApplication ui) =>
-        RoomsReportsUnreadable(ui, newerEnvelope: false);
+    public void Rooms_applies_replacement_of_malformed_owner_data_and_keeps_its_bytes(UIApplication ui) =>
+        RoomsAppliesReplacement(ui, newerEnvelope: false);
 
-    private static void RoomsReportsUnreadable(UIApplication ui, bool newerEnvelope) {
+    private static void RoomsAppliesReplacement(UIApplication ui, bool newerEnvelope) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
         string? path = null;
         var owner = RoomsRegionRecord.Owner;
         var planted = newerEnvelope
             ? $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 1}}},"data":{}}"""
-            : OwnerBlob.Encode(owner, new JObject { ["traceId"] = Guid.NewGuid().ToString("N"), ["regions"] = new JArray() });
+            : $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":{"regions":[]}}""";
         try {
             long viewId;
             using (var tx = new Transaction(document, "Plant unreadable Rooms record")) {
@@ -115,9 +115,73 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(snapshot.Regions, Is.Empty);
             Assert.That(snapshot.Unreadable!.Single().Reason, Does.Contain(newerEnvelope ? "version" : "regions map"));
             Assert.That(Raw(document, owner), Is.EqualTo(planted));
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var evidence = TakeoffCarriers.Replacements(document).Regions!;
+            Assert.That(evidence.Reason, Is.EqualTo(snapshot.Unreadable.Single().Reason));
+            Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+            var draw = new RoomsDrawRequest(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Recovered");
+            Assert.That(() => Rooms.Partition(document, new(viewId)),
+                Throws.InvalidOperationException.With.Message.Contains(evidence.Reason));
+            Assert.That(() => Rooms.Write(document, new([new("unavailable", Name: "Office")], evidence)),
+                Throws.InvalidOperationException.With.Message.Contains(evidence.Reason));
+
+            using (var tx = new Transaction(document, "Apply the Rooms replacement preview")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                Assert.That(() => Rooms.Draw(document, draw),
+                    Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+                Assert.That(Raw(document, owner), Is.EqualTo(planted));
+                _ = Rooms.Draw(document, draw with { Replacing = evidence });
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            Assert.That(TakeoffCarriers.Replacements(document).Regions, Is.Null);
+            Assert.That(Rooms.Snapshot(document, viewId).Regions.Single().Name, Is.EqualTo("Recovered"));
+            var backup = Path.Combine(isolated.Root, "model-recovery", "owner-rooms-regions", evidence.RawUtf8Sha256 + ".txt");
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(planted)));
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.ReadLines(notices).Single(), Does.Contain(evidence.RawUtf8Sha256));
         } finally {
             RevitFamilyFixtureHarness.CloseDocument(document);
             if (path != null) File.Delete(path);
+        }
+    }
+
+    [Test]
+    public void Takeoff_adopt_replaces_an_unreadable_registry_with_its_preview(UIApplication ui) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(ui.Application);
+        try {
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var owner = SystemRegistry.Owner;
+            const string raw = """{"owner":"takeoff-systems","version":1,"data":{"systems":{}}}""";
+            TakeoffAdoptRequest request;
+            using (var tx = new Transaction(document, "Create a zone and plant an unreadable registry")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                var view = CreateRoomsView(document);
+                var zone = Rooms.Draw(document, new(view.Id.Value(), [[[0, 0], [10, 0], [10, 10], [0, 10]]], Role: "zone"));
+                _ = TakeoffCarriers.InitializeNext(document, TakeoffCarrierStage.Adoption);
+                Assert.That(document.ProjectInformation.get_Parameter(owner.Guid).Set(raw), Is.True);
+                request = new(view.Name, [new(zone.ElementId, "North", "FC-8")]);
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            var evidence = TakeoffCarriers.Replacements(document).Registry!;
+            Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+            using (var tx = new Transaction(document, "Apply adoption with registry replacement")) {
+                Assert.That(tx.Start(), Is.EqualTo(TransactionStatus.Started));
+                Assert.That(() => TakeoffAtlas.AdoptZones(document, request),
+                    Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+                Assert.That(Raw(document, owner), Is.EqualTo(raw));
+                Assert.That(TakeoffAtlas.AdoptZones(document, request with { ReplacingRegistry = evidence }).Adopted, Has.Count.EqualTo(1));
+                Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+
+            Assert.That(TakeoffCarriers.ReadRegistry(document).Systems.Single().Tag, Is.EqualTo("FC-8"));
+            var backup = Path.Combine(isolated.Root, "model-recovery", "owner-takeoff-systems", evidence.RawUtf8Sha256 + ".txt");
+            Assert.That(File.ReadAllText(backup), Is.EqualTo(raw));
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.ReadLines(notices).Single(), Does.Contain(evidence.RawUtf8Sha256));
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
         }
     }
 

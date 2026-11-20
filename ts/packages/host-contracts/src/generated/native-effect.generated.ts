@@ -5805,14 +5805,16 @@ export type Value = typeof decoder.Type;
 export namespace Op81request {
 namespace Decoded {
 
-
-const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsDrawRequest" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "loops": Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "RoomsDrawRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
-
-export type Root = { readonly "view": number, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "name"?: null | string, readonly "role"?: null | string };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "view": number, readonly "loops": ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>>, readonly "name"?: null | string, readonly "role"?: null | string, readonly "replacing"?: null | OwnerBlobReplacement };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -5841,14 +5843,16 @@ export type Value = typeof decoder.Type;
 export namespace Op82request {
 namespace Decoded {
 
-
-const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueIds": Schema.Array(Schema.String), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "title": "RoomsMergeRequest" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueIds": Schema.Array(Schema.String), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "RoomsMergeRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
-
-export type Root = { readonly "view": number, readonly "uniqueIds": ReadonlyArray<string>, readonly "name"?: null | string };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "view": number, readonly "uniqueIds": ReadonlyArray<string>, readonly "name"?: null | string, readonly "replacing"?: null | OwnerBlobReplacement };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -5877,14 +5881,16 @@ export type Value = typeof decoder.Type;
 export namespace Op83request {
 namespace Decoded {
 
-
-const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rejected": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), Schema.Null])) }).annotate({ "title": "RoomsPartitionRequest" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "view": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "runId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "rejected": Schema.optionalKey(Schema.Union([Schema.Array(Schema.Array(Schema.Array(Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" }))))), Schema.Null])), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "RoomsPartitionRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
-
-export type Root = { readonly "view": number, readonly "runId"?: null | string, readonly "rejected"?: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> | null };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "view": number, readonly "runId"?: null | string, readonly "rejected"?: ReadonlyArray<ReadonlyArray<ReadonlyArray<number>>> | null, readonly "replacing"?: null | OwnerBlobReplacement };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -6064,13 +6070,17 @@ export namespace Op87request {
 namespace Decoded {
 
 const RoomsWriteRegion = Schema.Struct({ "uniqueId": Schema.String.check(Schema.isPattern(new RegExp("^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}-[0-9a-fA-F]{8}$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}-[0-9a-fA-F]{8}$" })), "name": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "type": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "ceilingFt": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "people": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "lightingW": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipSensible": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "equipLatent": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "ventilationCfm": Schema.optionalKey(Schema.Union([Schema.Null, Schema.Number.check(Schema.isFinite().annotate({ "expected": "a finite number" }))]).annotate({ "format": "double" })), "role": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])) }).annotate({ "identifier": "RoomsWriteRegion" });
-const codec = Schema.Struct({ "regions": Schema.Array(RoomsWriteRegion) }).annotate({ "title": "RoomsWriteRequest" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "regions": Schema.Array(RoomsWriteRegion), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "RoomsWriteRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 type RoomsWriteRegion = { readonly "uniqueId": string, readonly "name"?: null | string, readonly "type"?: null | string, readonly "ceilingFt"?: null | number, readonly "people"?: null | number, readonly "lightingW"?: null | number, readonly "equipSensible"?: null | number, readonly "equipLatent"?: null | number, readonly "ventilationCfm"?: null | number, readonly "role"?: null | string };
-export type Root = { readonly "regions": ReadonlyArray<RoomsWriteRegion> };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "regions": ReadonlyArray<RoomsWriteRegion>, readonly "replacing"?: null | OwnerBlobReplacement };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -6434,13 +6444,17 @@ export namespace Op95request {
 namespace Decoded {
 
 const TakeoffAdoptItem = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "name": Schema.String, "systemTag": Schema.String }).annotate({ "identifier": "TakeoffAdoptItem" });
-const codec = Schema.Struct({ "view": Schema.String, "items": Schema.Array(TakeoffAdoptItem) }).annotate({ "title": "TakeoffAdoptRequest" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "view": Schema.String, "items": Schema.Array(TakeoffAdoptItem), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })), "replacingRegistry": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffAdoptRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
 type TakeoffAdoptItem = { readonly "elementId": number, readonly "name": string, readonly "systemTag": string };
-export type Root = { readonly "view": string, readonly "items": ReadonlyArray<TakeoffAdoptItem> };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "view": string, readonly "items": ReadonlyArray<TakeoffAdoptItem>, readonly "replacing"?: null | OwnerBlobReplacement, readonly "replacingRegistry"?: null | OwnerBlobReplacement };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -6547,14 +6561,16 @@ export type Value = typeof decoder.Type;
 export namespace Op98request {
 namespace Decoded {
 
-
-const codec = Schema.Struct({ "zoneRegion": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "view": Schema.String, "zoneName": Schema.String, "zoneUniqueId": Schema.String, "runId": Schema.String }).annotate({ "title": "TakeoffPartitionRequest" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "zoneRegion": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "view": Schema.String, "zoneName": Schema.String, "zoneUniqueId": Schema.String, "runId": Schema.String, "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffPartitionRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
-
-export type Root = { readonly "zoneRegion": number, readonly "view": string, readonly "zoneName": string, readonly "zoneUniqueId": string, readonly "runId": string };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "zoneRegion": number, readonly "view": string, readonly "zoneName": string, readonly "zoneUniqueId": string, readonly "runId": string, readonly "replacing"?: null | OwnerBlobReplacement };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
@@ -6607,22 +6623,65 @@ export type Value = typeof decoder.Type;
 export namespace Op99request {
 namespace Decoded {
 
-const TakeoffRhvacLink = Schema.Struct({ "identifier": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "fileIdentity": Schema.String, "syncedAt": Schema.String, "lastSyncedSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "TakeoffRhvacLink" });
-const TakeoffRhvacLinkWrite = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "link": TakeoffRhvacLink }).annotate({ "identifier": "TakeoffRhvacLinkWrite" });
-const codec = Schema.Struct({ "writes": Schema.Array(TakeoffRhvacLinkWrite) }).annotate({ "title": "TakeoffRhvacLinksRequest" });
+
+const codec = Schema.Record(Schema.String, Schema.Never).annotate({ "title": "NoRequest" });
 export const decoder = strictDecoder(codec);
 }
 export const decoder = Decoded.decoder;
 namespace WireTypes {
-type TakeoffRhvacLink = { readonly "identifier": number, readonly "fileIdentity": string, readonly "syncedAt": string, readonly "lastSyncedSqft": number };
-type TakeoffRhvacLinkWrite = { readonly "elementId": number, readonly "link": TakeoffRhvacLink };
-export type Root = { readonly "writes": ReadonlyArray<TakeoffRhvacLinkWrite> };
+
+export type Root = { readonly [x: string]: never };
 }
 export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
 export namespace Op99response {
+namespace Decoded {
+
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "regions": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })), "registry": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffRecordReplacements" });
+export const decoder = strictDecoder(codec);
+export const definitions = {
+  ["OwnerBlobReplacement"]: strictDecoder(OwnerBlobReplacement),
+  ["OwnerBlobStatus"]: strictDecoder(OwnerBlobStatus),
+} as const;
+}
+export const decoder = Decoded.decoder;
+export const definitions = Decoded.definitions;
+namespace WireTypes {
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "regions"?: null | OwnerBlobReplacement, readonly "registry"?: null | OwnerBlobReplacement };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
+
+export namespace Op100request {
+namespace Decoded {
+
+const TakeoffRhvacLink = Schema.Struct({ "identifier": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "fileIdentity": Schema.String, "syncedAt": Schema.String, "lastSyncedSqft": Schema.Number.annotate({ "format": "double" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "identifier": "TakeoffRhvacLink" });
+const OwnerBlobStatus = Schema.Literals(["Absent", "Ok", "Invalid", "UnknownVersion"]).annotate({ "description": "", "identifier": "OwnerBlobStatus" });
+const TakeoffRhvacLinkWrite = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "link": TakeoffRhvacLink }).annotate({ "identifier": "TakeoffRhvacLinkWrite" });
+const OwnerBlobReplacement = Schema.Struct({ "owner": Schema.String, "status": OwnerBlobStatus, "reason": Schema.String, "rawUtf8Sha256": Schema.String }).annotate({ "identifier": "OwnerBlobReplacement" });
+const codec = Schema.Struct({ "writes": Schema.Array(TakeoffRhvacLinkWrite), "replacing": Schema.optionalKey(Schema.Union([Schema.Null, OwnerBlobReplacement], { mode: "oneOf" })) }).annotate({ "title": "TakeoffRhvacLinksRequest" });
+export const decoder = strictDecoder(codec);
+}
+export const decoder = Decoded.decoder;
+namespace WireTypes {
+type TakeoffRhvacLink = { readonly "identifier": number, readonly "fileIdentity": string, readonly "syncedAt": string, readonly "lastSyncedSqft": number };
+type OwnerBlobStatus = "Absent" | "Ok" | "Invalid" | "UnknownVersion";
+type TakeoffRhvacLinkWrite = { readonly "elementId": number, readonly "link": TakeoffRhvacLink };
+type OwnerBlobReplacement = { readonly "owner": string, readonly "status": OwnerBlobStatus, readonly "reason": string, readonly "rawUtf8Sha256": string };
+export type Root = { readonly "writes": ReadonlyArray<TakeoffRhvacLinkWrite>, readonly "replacing"?: null | OwnerBlobReplacement };
+}
+export type Wire = WireTypes.Root;
+export type Value = typeof decoder.Type;
+}
+
+export namespace Op100response {
 namespace Decoded {
 
 const TakeoffWriteResult = Schema.Struct({ "elementId": Schema.Number.annotate({ "format": "int64" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "uniqueId": Schema.String, "zoneUniqueId": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "bytes": Schema.Number.annotate({ "format": "int32" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(-2147483648).annotate({ "expected": "a value greater than or equal to -2147483648" })).check(Schema.isLessThanOrEqualTo(2147483647).annotate({ "expected": "a value less than or equal to 2147483647" })), "blob": Schema.String }).annotate({ "identifier": "TakeoffWriteResult" });
@@ -6642,7 +6701,7 @@ export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
-export namespace Op100request {
+export namespace Op101request {
 namespace Decoded {
 
 
@@ -6658,7 +6717,7 @@ export type Wire = WireTypes.Root;
 export type Value = typeof decoder.Type;
 }
 
-export namespace Op100response {
+export namespace Op101response {
 namespace Decoded {
 
 const Reading = Schema.Struct({ "at": Schema.String, "version": Schema.optionalKey(Schema.Union([Schema.Null, Schema.String])), "observedAt": Schema.String }).annotate({ "identifier": "Reading" });
@@ -6808,8 +6867,9 @@ export const nativeEffectSchemas = {
 "takeoffs.candidates": { request: Op96request.decoder, response: Op96response.decoder },
 "takeoffs.initialize-carrier": { request: Op97request.decoder, response: Op97response.decoder },
 "takeoffs.partition": { request: Op98request.decoder, response: Op98response.decoder },
-"takeoffs.rhvac-links": { request: Op99request.decoder, response: Op99response.decoder },
-"takeoffs.snapshot": { request: Op100request.decoder, response: Op100response.decoder }
+"takeoffs.record-replacements": { request: Op99request.decoder, response: Op99response.decoder },
+"takeoffs.rhvac-links": { request: Op100request.decoder, response: Op100response.decoder },
+"takeoffs.snapshot": { request: Op101request.decoder, response: Op101response.decoder }
 } as const;
 
 export const nativeEffectResponseDefinitions = {
@@ -6912,8 +6972,9 @@ export const nativeEffectResponseDefinitions = {
   ["takeoffs.candidates"]: Op96response.definitions,
   ["takeoffs.initialize-carrier"]: Op97response.definitions,
   ["takeoffs.partition"]: Op98response.definitions,
-  ["takeoffs.rhvac-links"]: Op99response.definitions,
-  ["takeoffs.snapshot"]: Op100response.definitions,
+  ["takeoffs.record-replacements"]: Op99response.definitions,
+  ["takeoffs.rhvac-links"]: Op100response.definitions,
+  ["takeoffs.snapshot"]: Op101response.definitions,
 } as const;
 
 export interface NativeEffectValues {
@@ -7016,8 +7077,9 @@ export interface NativeEffectValues {
 "takeoffs.candidates": { request: { wire: Op96request.Wire; value: Op96request.Value }; response: { wire: Op96response.Wire; value: Op96response.Value } };
 "takeoffs.initialize-carrier": { request: { wire: Op97request.Wire; value: Op97request.Value }; response: { wire: Op97response.Wire; value: Op97response.Value } };
 "takeoffs.partition": { request: { wire: Op98request.Wire; value: Op98request.Value }; response: { wire: Op98response.Wire; value: Op98response.Value } };
-"takeoffs.rhvac-links": { request: { wire: Op99request.Wire; value: Op99request.Value }; response: { wire: Op99response.Wire; value: Op99response.Value } };
-"takeoffs.snapshot": { request: { wire: Op100request.Wire; value: Op100request.Value }; response: { wire: Op100response.Wire; value: Op100response.Value } };
+"takeoffs.record-replacements": { request: { wire: Op99request.Wire; value: Op99request.Value }; response: { wire: Op99response.Wire; value: Op99response.Value } };
+"takeoffs.rhvac-links": { request: { wire: Op100request.Wire; value: Op100request.Value }; response: { wire: Op100response.Wire; value: Op100response.Value } };
+"takeoffs.snapshot": { request: { wire: Op101request.Wire; value: Op101request.Value }; response: { wire: Op101response.Wire; value: Op101response.Value } };
 }
 export type NativeKey = keyof NativeEffectValues;
 export type NativeRequestWire<K extends NativeKey> = NativeEffectValues[K]["request"]["wire"];

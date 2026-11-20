@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Newtonsoft.Json;
+using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Shared.RevitData.Takeoffs;
 
@@ -65,7 +66,9 @@ public sealed record TakeoffCandidatesRequest(string View);
 public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Regions);
 
 public sealed record TakeoffAdoptItem(long ElementId, string Name, string SystemTag);
-public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Items);
+public sealed record TakeoffRecordReplacements(OwnerBlobReplacement? Regions, OwnerBlobReplacement? Registry);
+public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Items,
+    OwnerBlobReplacement? Replacing = null, OwnerBlobReplacement? ReplacingRegistry = null);
 // OwnerCrop: where the adopted region lies against the view's model crop (null: no active crop). Adoption never refuses on it.
 public sealed record TakeoffAdopted(long ElementId, string UniqueId, RevitCropCoverage? OwnerCrop);
 public sealed record TakeoffAdoptResult(IReadOnlyList<TakeoffAdopted> Adopted);
@@ -78,7 +81,8 @@ public sealed record TakeoffPartitionRequest(
     string View,
     string ZoneName,
     string ZoneUniqueId,
-    string RunId);
+    string RunId,
+    OwnerBlobReplacement? Replacing = null);
 public sealed record TakeoffDetectedRoom(
     string Id,
     double RawSqft,
@@ -132,7 +136,7 @@ public sealed record TakeoffRhvacLink(
     string SyncedAt,
     double LastSyncedSqft);
 public sealed record TakeoffRhvacLinkWrite(long ElementId, TakeoffRhvacLink Link);
-public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes);
+public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes, OwnerBlobReplacement? Replacing = null);
 public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Writes);
 
 // /rooms (docs/features/rooms/LEDGER.md). A zone, room, or held region on a level-scoped plan view; record shared
@@ -172,7 +176,8 @@ public sealed record RoomsSnapshotData(IReadOnlyList<RoomsLevel> Levels, IReadOn
 
 // Rejected: a person's standing "not a room" marks, each an outer ring of x y points in model feet on the view. A face
 // overlapping one at IoU 0.6 or more is held as rejected instead of becoming a room.
-public sealed record RoomsPartitionRequest(long View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null);
+public sealed record RoomsPartitionRequest(long View, string? RunId = null, IReadOnlyList<double[][]>? Rejected = null,
+    OwnerBlobReplacement? Replacing = null);
 public sealed record RoomsPartitionResult(
     string Level,
     string RunId,
@@ -187,7 +192,8 @@ public sealed record RoomsPartitionResult(
     double Ms);
 
 // Role is "room" (default) or "zone".
-public sealed record RoomsDrawRequest(long View, List<List<double[]>> Loops, string? Name = null, string? Role = null);
+public sealed record RoomsDrawRequest(long View, List<List<double[]>> Loops, string? Name = null, string? Role = null,
+    OwnerBlobReplacement? Replacing = null);
 public sealed record RoomsDrawResult(long ElementId, string UniqueId);
 
 public sealed record RoomsWriteRegion(
@@ -201,14 +207,15 @@ public sealed record RoomsWriteRegion(
     double? EquipLatent = null,
     double? VentilationCfm = null,
     string? Role = null);
-public sealed record RoomsWriteRequest(List<RoomsWriteRegion> Regions);
+public sealed record RoomsWriteRequest(List<RoomsWriteRegion> Regions, OwnerBlobReplacement? Replacing = null);
 public enum RoomField { name, type, ceilingFt, people, lightingW, equipSensible, equipLatent, ventilationCfm, role }
 public sealed record RoomsWriteCell(string UniqueId, RoomField Field,
     [property: JsonProperty(Required = Required.AllowNull, NullValueHandling = NullValueHandling.Include)] object? Value);
 public sealed record RoomsWriteReceipt(IReadOnlyList<RoomsWriteCell> Cells);
 
 // Combine two or more rooms or held regions of one zone on one view into one locked Room Region; the sources are deleted.
-public sealed record RoomsMergeRequest(long View, List<string> UniqueIds, string? Name = null);
+public sealed record RoomsMergeRequest(long View, List<string> UniqueIds, string? Name = null,
+    OwnerBlobReplacement? Replacing = null);
 public sealed record RoomsMergeResult(long ElementId, string UniqueId, IReadOnlyList<string> MergedFrom, double Sqft);
 
 // The solver's layer 1 per zone, as rooms.partition persisted it (<state>/rooms/<runId>/<zoneUniqueId>.json). The wire

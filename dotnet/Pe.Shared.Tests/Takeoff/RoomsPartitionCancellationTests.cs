@@ -38,6 +38,33 @@ public sealed class RoomsPartitionCancellationTests
         Assert.That(read["merged"]!.Provenance.MergedFrom, Is.EqualTo(new[] { "deleted" }));
     }
 
+    [TestCase(1, OwnerBlobStatus.Invalid, "regions map")]
+    [TestCase(99, OwnerBlobStatus.UnknownVersion, "version")]
+    public void An_unreadable_record_requires_its_current_preview_before_partition_can_stage(
+        int version, OwnerBlobStatus status, string reason)
+    {
+        var owner = RoomsRegionRecord.Owner;
+        var raw = $$$"""{"owner":"{{{owner.Owner}}}","version":{{{version}}},"data":{}}""";
+        var stored = OwnerBlob.Decode(owner, raw);
+        Assert.That(stored.Status, Is.EqualTo(status));
+        var evidence = stored.Replacement!;
+        Assert.That(evidence.Reason, Does.Contain(reason));
+
+        Assert.That(() => RoomsRegionRecord.Stage(stored, null),
+            Throws.InvalidOperationException.With.Message.Contains("Preview before").And.Message.Contains(reason));
+        var changed = OwnerBlob.Decode(owner, raw + " ");
+        Assert.That(() => RoomsRegionRecord.Stage(changed, evidence),
+            Throws.InvalidOperationException.With.Message.Contains("changed since replacement was planned"));
+
+        var record = RoomsRegionRecord.Stage(stored, evidence);
+        Assert.That(record.Regions, Is.Empty);
+        Assert.That(record.Refusal, Is.EqualTo(evidence.Reason));
+        var kept = new List<string>();
+        var updated = OwnerBlob.Replace(stored, record.ToData(), (_, bytes) => kept.Add(bytes), evidence);
+        Assert.That(kept, Is.EqualTo(new[] { raw }));
+        Assert.That(OwnerBlob.Decode(owner, updated).Replacement, Is.Null);
+    }
+
     [TestCase(1)]
     [TestCase(2)]
     public void AStopDuringSolveLeavesTheRemainingWorkUnstarted(int stopAt)

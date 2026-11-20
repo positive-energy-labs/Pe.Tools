@@ -39,6 +39,25 @@ public sealed class SystemRegistryTests
         Assert.That(read.Refusal, Does.Contain("unreadable"));
     }
 
+    [Test]
+    public void Preview_seals_invalid_registry_data_and_apply_keeps_its_bytes()
+    {
+        const string raw = """{"owner":"takeoff-systems","version":1,"data":{"systems":{}}}""";
+        var stored = OwnerBlob.Decode(SystemRegistry.Owner, raw);
+        var preview = stored.Replacement!;
+        var registry = Registry("FC-8");
+        var kept = new List<string>();
+        void Keep(OwnerBlobReplacement _, string bytes) => kept.Add(bytes);
+
+        Assert.That(preview.Reason, Does.Contain("systems"));
+        Assert.That(() => OwnerBlob.Replace(stored, registry.ToData(), Keep),
+            Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+        Assert.That(kept, Is.Empty);
+        var updated = OwnerBlob.Replace(stored, registry.ToData(), Keep, preview);
+        Assert.That(kept, Is.EqualTo(new[] { raw }));
+        Assert.That(Read(updated).OrThrow()!.Systems.Single().Guid, Is.EqualTo(registry.Systems.Single().Guid));
+    }
+
     [TestCase(null)]
     [TestCase("null")]
     [TestCase("{\"Version\":1,\"Systems\":[]}")]
