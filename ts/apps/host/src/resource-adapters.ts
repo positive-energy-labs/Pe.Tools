@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { observeWorkReceipts } from "./work-receipt-feed.ts";
 import { invocationContext, hostFetch as fetch } from "@pe/runtime/context";
 import {
@@ -25,7 +26,6 @@ import {
 import type { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
-import type { TakeoffCaptures } from "./observation-store.ts";
 import { observeSdkReading } from "./session-route.ts";
 import { sdkSession, SdkSession } from "./sdk-session.ts";
 import type { DocumentMarks, DocumentRef, MarkFrame } from "./document-marks.ts";
@@ -66,16 +66,13 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
       }),
     },
   ],
-  "rhvac-file-version": (r: { path: string }) => [`/actions?file=${encodeURIComponent(r.path)}`],
 };
 
 const POLL_MS: Record<string, number> = { "host-status": 5_000 };
 
 /** The document a Reading is bound to, or null when it is not one document's Reading. */
 const documentOf = (request: { kind: string } & Record<string, unknown>): DocumentRef | null =>
-  request.kind === "schedule-reading" ||
-  request.kind === "takeoff-reading" ||
-  request.kind === "families-matrix"
+  request.kind === "schedule-reading" || request.kind === "families-matrix"
     ? ((request.target as DocumentRef | undefined) ?? null)
     : request.kind === "family-readings"
       ? (((request.work as { open?: DocumentRef }).open ?? null) as DocumentRef | null)
@@ -230,8 +227,8 @@ export const markReadings =
 export function hostResourceObserver(
   bridge?: RevitBridge["Service"],
   journal?: () => ActionJournal,
-  captures: () => TakeoffCaptures = () => {
-    throw Error("Takeoff captures are unavailable: pass the host's CaptureStore.");
+  captures: () => ObservationFiles = () => {
+    throw Error("Captures are unavailable: pass the host's CaptureStore.");
   },
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
@@ -358,7 +355,6 @@ export function hostResourceObserver(
         case "capabilities":
         case "ops-catalog":
         case "schedule-reading":
-        case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
           if (!journal) throw Error("Receipt readings require ActionJournalService.");
@@ -375,8 +371,6 @@ export function hostResourceObserver(
                 : { value: actionStatusSchema.array().parse(rows) },
             );
           });
-        case "takeoff-reading":
-          return captures().observe(request.target, accept);
         case "families-reading":
           return captures().observeFamilies(request.work, accept);
         case "families-matrix":

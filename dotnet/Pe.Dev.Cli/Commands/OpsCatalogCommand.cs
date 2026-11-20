@@ -44,13 +44,13 @@ internal static class OpsCatalogCommand {
 
         // [FieldOptions] request properties emit their registered value-domain descriptor.
         Pe.Revit.SettingsRuntime.Json.ValueDomains.SettingsValueDomainBootstrap.RegisterDefaults();
-        var (definitions, nativeHomes) = ReadCatalog();
+        var (definitions, nativeHomes, commands) = ReadCatalog();
         var operations = definitions
             .Select(HostOpsCatalogEntry.FromDefinition)
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
             .ToArray();
         var json = JsonConvert.SerializeObject(
-            new { operations, constants = HostOpsCatalogData.ReadConstants(), nativeHomes },
+            new { operations, constants = HostOpsCatalogData.ReadConstants(), nativeHomes, commands },
             Formatting.Indented,
             JsonSettings
         );
@@ -67,7 +67,7 @@ internal static class OpsCatalogCommand {
         return 0;
     }
 
-    private static (IReadOnlyList<HostOperationDefinition>, Dictionary<string, Dictionary<string, string>>) ReadCatalog() {
+    private static (IReadOnlyList<HostOperationDefinition>, Dictionary<string, Dictionary<string, string>>, string[]) ReadCatalog() {
         var baseDirectory = AppContext.BaseDirectory;
         var resolverPaths = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -97,8 +97,17 @@ internal static class OpsCatalogCommand {
             }
         }
 
-        return (definitions.Values.ToArray(), ReadNativeHomes(context, baseDirectory));
+        return (definitions.Values.ToArray(), ReadNativeHomes(context, baseDirectory), ReadCommands(context, baseDirectory));
     }
+
+    /// <summary>Every compiled Pe.App command class: the codes a usage event may carry.</summary>
+    private static string[] ReadCommands(MetadataLoadContext context, string directory) =>
+        context.LoadFromAssemblyPath(Path.Combine(directory, "Pe.App.dll")).GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false }
+                           && type.GetInterfaces().Any(contract => contract.FullName == "Autodesk.Revit.UI.IExternalCommand"))
+            .Select(type => type.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
 
     private static Dictionary<string, Dictionary<string, string>> ReadNativeHomes(MetadataLoadContext context, string directory) =>
         Directory.EnumerateFiles(directory, "Pe.*.dll")

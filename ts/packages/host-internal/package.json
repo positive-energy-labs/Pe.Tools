@@ -31,6 +31,7 @@
     "./product": "./src/product.ts",
     "./local-files": "./src/local-files.ts",
     "./observation-files": "./src/observation-files.ts",
+    "./kept-captures": "./src/kept-captures.ts",
     "./write-artifact": "./src/write-artifact.ts",
     "./local-error": "./src/local-error.ts",
     "./host-child": "./src/host-child.ts",

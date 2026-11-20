@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { hostOwnership } from "./host-ownership.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
@@ -14,7 +15,6 @@ import { CatalogCommand, catalogCommandContext } from "@pe/host-internal/catalog
 import type { CommandExecutor, CommandRegistry } from "@pe/host-internal/command-executor";
 import type { GatewayLocal } from "./gateway-actions.ts";
 import type { RevitBridge } from "@pe/host-internal/bridge";
-import type { TakeoffCaptures } from "./observation-store.ts";
 import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { lifetime } from "./document-lifetime.ts";
@@ -40,7 +40,7 @@ type CommandDependencies = FamilyActionDependencies &
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   deps: CommandDependencies,
   local: GatewayLocal,
   origin?: () => string,
@@ -175,7 +175,7 @@ export function commandRegistry(
 export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   deps: FamilyActionDependencies &
     Partial<ProductDependencies> &
     InstancesActionDependencies & {

@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     "./product": "./src/product.ts",
-    "./gateway": "./src/gateway.ts",
     "./rhvac": "./src/rhvac-ops.ts",
     "./takeoff-projection": "./src/takeoff-ops.ts",
     "./tests/demo-seed": "./src/tests/demo-seed.ts",

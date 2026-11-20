@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { hostState } from "../src/host-ownership.ts";
 import { HostInputContext } from "../src/input-context.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
@@ -20,7 +21,7 @@ import { RevitBridge, type BridgeSessionView } from "@pe/host-internal/bridge";
 import { RevitBridgeDetached } from "../src/bridge.ts";
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 import { HarnessThreads, type HarnessThreadsOptions } from "../src/harness/threads.ts";
-import { CaptureStore, type TakeoffCaptures } from "../src/observation-store.ts";
+import { CaptureStore } from "../src/observation-store.ts";
 import {
   MachineOwner,
   machineOwnerPromise,
@@ -282,7 +283,7 @@ export const testSpawner = (): Spawner["Service"] => {
  * {@link CaptureStore} for Promise tests: the live layer over `directory`, built in a scope the
  * running test closes. Two calls over one directory are two layers over the same files.
  */
-export const captureStore = (directory: string, apsCachePath?: string): TakeoffCaptures => {
+export const captureStore = (directory: string, apsCachePath?: string): ObservationFiles => {
   return Context.get(
     testScoped(CaptureStore.layer(stateFixture(directory), apsCachePath)),
     CaptureStore,

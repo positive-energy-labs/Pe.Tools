@@ -1,3 +1,4 @@
+import { ObservationFiles } from "@pe/host-internal/observation-files";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { detachedBridge, captureStore, journalAt } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
@@ -9,7 +10,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
-import { TakeoffCaptures } from "../src/observation-store.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import {
   composeMember,

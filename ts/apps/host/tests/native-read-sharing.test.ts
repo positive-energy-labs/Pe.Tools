@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import type { Caller } from "@pe/agent-contracts";
 import type { HostBridgeEvent } from "@pe/host-internal/bridge";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
@@ -22,7 +23,6 @@ import { httpProblems } from "../src/http-problems.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
 import type { ActionJournal } from "../src/action-journal.ts";
-import type { TakeoffCaptures } from "../src/observation-store.ts";
 import { completeBridgeRequest, makeDispatcher } from "@pe/host-internal/dispatch";
 import type { BridgeFrame } from "@pe/host-contracts/contracts";
 import { Publications } from "../src/reads/publications.ts";
@@ -537,7 +537,7 @@ effectTest(
       };
       const web = HttpRouter.toWebHandler(
         Layer.mergeAll(
-          callRouteOver(journal, {} as TakeoffCaptures, {}).pipe(Layer.provide(testHostInputs)),
+          callRouteOver(journal, {} as ObservationFiles, {}).pipe(Layer.provide(testHostInputs)),
           settingsSchemaRoute,
           opsCatalogRoute(() => Effect.die("not navigation")),
           Layer.effectDiscard(

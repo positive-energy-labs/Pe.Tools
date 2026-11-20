@@ -6,6 +6,7 @@ import {
   type StoredFile,
 } from "@pe/host-contracts/kinds";
 import { writeArtifact } from "./write-artifact.ts";
+import { CaptureKinds } from "./kept-captures.ts";
 import { scheduleReadingSchema, type ScheduleReading } from "@pe/agent-contracts";
 
 /** Enough of a retained reading to choose the latest one per subject without trusting the rest. */
@@ -133,7 +134,7 @@ const progressManifestSchema = z.object({
  * Captures are derived files (ADR 0039 rule 1): one that does not decode is discarded with one
  * notice, and from then on reads as missing, like a capture this host never held.
  */
-export const captureKind = <T>(schema: z.ZodType<T>) =>
+const captureKind = <T>(schema: z.ZodType<T>) =>
   stateKind({
     schema,
     place: (_parts: readonly string[]) => "Captures",
@@ -145,11 +146,11 @@ const pointerKind = stateKind({
   place: (_parts: readonly string[]) => "Captures",
   segments: (parts: readonly string[]) => parts,
 });
-export function storedCapture<T>(file: StoredFile<T, "state">): T | null {
+function storedCapture<T>(file: StoredFile<T, "state">): T | null {
   const read = readStoredFile(file);
   return read.kind === "ok" ? read.value : null;
 }
-export const missingCapture = (path: string) =>
+const missingCapture = (path: string) =>
   Object.assign(Error(`ENOENT: no readable capture at '${path}'`), { code: "ENOENT" });
 /** A progress revision in the completed-reading envelope; `families` may be empty for a parts reply. */
 const progressReading = (manifest: ProgressManifest, families: unknown[]) => ({
@@ -174,7 +175,9 @@ export class CaptureStoreClosed extends Error {
 }
 
 export class ObservationFiles {
-  protected readonly reads = new OwnerReads();
+  /** The captures products declare, by kind. The readings below are the platform's own. */
+  readonly kept: CaptureKinds;
+  private readonly reads = new OwnerReads();
   private readonly familiesSaves = new Map<string, Promise<unknown>>();
   /** Progressive reads this process is running; a stored "reading" revision outside it was interrupted. */
   private readonly liveReads = new Set<string>();
@@ -184,7 +187,9 @@ export class ObservationFiles {
     private readonly apsCachePath: string,
     /** The wall stamp on a completed reading; the store's layer supplies `Clock`'s. */
     private readonly now: () => string,
-  ) {}
+  ) {
+    this.kept = new CaptureKinds(storage);
+  }
   get directory(): StateDirectory["path"] {
     return this.storage.path;
   }
@@ -204,15 +209,16 @@ export class ObservationFiles {
   async close() {
     this.closing = true;
     while (this.writes.size) await Promise.allSettled([...this.writes]);
+    this.kept.clear();
     this.familiesSaves.clear();
     this.liveReads.clear();
     this.listeners.clear();
   }
 
-  protected notify(key: string) {
+  private notify(key: string) {
     for (const listener of this.listeners) listener(key);
   }
-  protected subscribe(key: string, notify: () => void) {
+  private subscribe(key: string, notify: () => void) {
     const accept = (changed: string) => {
       if (changed === key) notify();
     };
@@ -447,7 +453,7 @@ export class ObservationFiles {
     };
     const pending = (this.familiesSaves.get(key) ?? Promise.resolve())
       .catch((error) => {
-        console.error("takeoff-captures: asynchronous operation failed", error);
+        console.error("captures: asynchronous operation failed", error);
         return undefined;
       })
       .then(save);

@@ -52,7 +52,7 @@ const registration = new Set([
   "apps/web/src/route/registry.ts",
   ...Object.values(productAssemblyPaths).map((file) => file.slice("ts/".length)),
   "packages/host-contracts/src/product-paths.ts",
-  ...["host-catalog", "host-ops", "native-effect", "native-homes"].map(
+  ...["host-catalog", "host-ops", "native-commands", "native-effect", "native-homes"].map(
     (file) => `packages/host-contracts/src/generated/${file}.generated.ts`,
   ),
   "packages/agent-contracts/src/routes/table.generated.ts",

@@ -33,17 +33,21 @@ import {
 } from "@pe/host-internal/command-executor";
 import type { RhvacOverrides, RhvacRoots } from "./rhvac-ops.ts";
 import { commandFiles } from "./bodies.ts";
-import type { TakeoffCaptures } from "./takeoff-captures.ts";
+import { captured, type CaptureKinds } from "@pe/host-internal/kept-captures";
 import type { CommandBody } from "@pe/host-internal/product";
 import { product, takeoffsWork } from "@pe/rooms-contract/product";
 
 const { commands } = product;
 export type Deps = Parameters<CommandBody>[1] &
   RhvacOverrides & {
-    captures?: TakeoffCaptures;
+    /** The kernel store; this product reads its one declared kind through `takeoffs`. */
+    captures?: { readonly kept: CaptureKinds };
     /** Where the host keeps its checkout and state: the RHVAC file lane runs its scripts from there. */
     roots?: RhvacRoots;
   };
+
+export const takeoffs = (deps: Pick<Deps, "captures">) =>
+  deps.captures && captured(deps.captures, product, "takeoff");
 
 /** Admission context is no native field. */
 const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
@@ -106,9 +110,9 @@ export const runModel = (
   const target = modelTarget(ctx);
   const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
   return Effect.gen(function* () {
-    deps.captures?.invalidate(target);
+    takeoffs(deps)?.invalidate(target);
     return yield* perform(native);
-  }).pipe(Effect.ensuring(Effect.sync(() => deps.captures?.invalidate(target))));
+  }).pipe(Effect.ensuring(Effect.sync(() => takeoffs(deps)?.invalidate(target))));
 };
 
 /** What the plan saw of the records an apply may replace; the apply sends exactly that. */
@@ -213,7 +217,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       bind: async (ctx) => {
         const { target, process } = await bindModel(ctx, deps);
         const { input } = ctx.admission;
-        const { captures } = deps;
+        const captures = takeoffs(deps);
         if (!captures) throw refused("This host has no RHVAC file lane");
         const capture = await captures.saved(input.captureId);
         if (
@@ -284,7 +288,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         const native = nativeFor(ctx, execution, bridge, process);
         const rhvac = commandFiles(deps);
         return Effect.gen(function* () {
-          deps.captures?.invalidate(target);
+          takeoffs(deps)?.invalidate(target);
           const selected = new Set(input.zones);
           const zones = capture!.snapshot.world.zones.filter(
             (zone) => !selected.size || selected.has(zone.zone.guid),
@@ -466,7 +470,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
             file: result,
             retirement,
           };
-        }).pipe(Effect.ensuring(Effect.sync(() => deps.captures?.invalidate(target))));
+        }).pipe(Effect.ensuring(Effect.sync(() => takeoffs(deps)?.invalidate(target))));
       },
     }),
   };

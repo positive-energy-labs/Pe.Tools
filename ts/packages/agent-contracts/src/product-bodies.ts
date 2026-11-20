@@ -1,6 +1,6 @@
 /** The host half of the declaration grammar: the bodies a product owes for what it declares. */
 import type { z } from "zod";
-import type { Schema } from "effect";
+import type { Effect, Schema } from "effect";
 import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
 import type { AnyReadHandle } from "./handle.ts";
 import type { ProductDeclaration } from "./product.ts";
@@ -40,7 +40,7 @@ export type HostBodies<
   Executor,
   Deps = never,
   Run = never,
-  Call = never,
+  Emit extends { call: unknown; answer: unknown; needs: unknown } = never,
   Reader = never,
 > = {
   /** One reader per home declared with `productRead`: what only the product can read. */
@@ -67,8 +67,16 @@ export type HostBodies<
    * body may read host state a `ReadContext` cannot. `document` resolves an open document's address.
    */
   readonly files?: Readonly<Record<string, FileBody<Deps>>>;
-  /** A native call the product answers itself, by operation key; its `snapshot` call policy names it. */
-  readonly calls?: Readonly<Record<string, Call>>;
+  /**
+   * One body per reading that declares `emits`: it answers the reading's `snapshot` call and returns
+   * the value to keep, of the declared kind. The kernel stores it; the body holds no store.
+   */
+  readonly emits?: {
+    readonly [K in Emitting<P>]: (
+      call: Emit["call"],
+      deps: Deps,
+    ) => Effect.Effect<Emit["answer"] & { readonly capture: Kept<P, K> }, unknown, Emit["needs"]>;
+  };
   readonly http?: {
     readonly [K in keyof P["http"]]: (
       request: HttpRequest<z.output<P["http"][K]["input"]>["body"]>,
@@ -79,8 +87,20 @@ export type HostBodies<
     readonly [K in keyof P["local"]]: (input: LocalInput<P["local"][K]>, deps: Deps) => Run;
   };
 };
+/** The readings that declare `emits`, and the value each one's body returns: the kind's, less the id. */
+type Emitting<P extends ProductDeclaration> = {
+  [K in keyof P["readings"]]: P["readings"][K] extends { readonly emits: PropertyKey } ? K : never;
+}[keyof P["readings"]];
+type Kept<P extends ProductDeclaration, K extends keyof P["readings"]> = Omit<
+  z.output<P["captures"][P["readings"][K]["emits"] & keyof P["captures"]]>,
+  "id"
+>;
 type ProductRead<P extends ProductDeclaration, Reader = unknown> = {
   readonly [K in keyof P["homes"] as P["homes"][K] extends { read: "product" } ? K : never]: Reader;
+};
+/** A reading that declares no `emits` can have no emitting body, so an undeclared capture fails `tsc`. */
+type Undeclared<P extends ProductDeclaration> = {
+  readonly emits?: { readonly [K in Exclude<keyof P["readings"], Emitting<P>>]?: never };
 };
 /** The slot's name when the product declares a key in it, so a product with none owes no table. */
 type Declares<Table, Slot extends string> = [keyof Table] extends [never] ? never : Slot;
@@ -89,10 +109,11 @@ type Declares<Table, Slot extends string> = [keyof Table] extends [never] ? neve
  * object: `implement()` intersects this in, and a declared `http` route or local operation with no
  * body fails `tsc`.
  */
-export type OwedBodies<P extends ProductDeclaration, Bodies> = Required<
+export type OwedBodies<P extends ProductDeclaration, Bodies> = Undeclared<P> & Required<
   Pick<Bodies, (
       | Declares<P["http"], "http">
       | Declares<P["local"], "local">
+      | ([Emitting<P>] extends [never] ? never : "emits")
       | Declares<ProductRead<P>, "homes">
     ) &
       keyof Bodies>

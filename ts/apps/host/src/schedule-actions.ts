@@ -1,3 +1,4 @@
+import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { resolveSdkSession, SdkSession } from "./sdk-session.ts";
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
@@ -25,7 +26,6 @@ import {
   type NativeProcess,
   type SdkReceiptReader,
 } from "./native-receipts.ts";
-import { type TakeoffCaptures } from "./observation-store.ts";
 
 const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
   `schedule:${createHash("sha256")
@@ -56,7 +56,7 @@ async function current(
 }
 export async function readSchedule(
   raw: { key: string; input?: unknown; target?: unknown },
-  captures: TakeoffCaptures,
+  captures: ObservationFiles,
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader } = {},
 ) {

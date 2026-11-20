@@ -13,6 +13,7 @@ import {
   stagedTakeoffEdits,
   takeoffEditKey,
   takeoffObservationSchema,
+  takeoffCaptureSchema,
 } from "@pe/rooms-contract/takeoffs";
 import { demoSeedCodec } from "@pe/rooms-host/tests/demo-seed";
 import { landings } from "@pe/agent-contracts/product";
@@ -251,7 +252,16 @@ test.each([
         room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
         snapshot.world.zones = [zone];
         const retained = await settle(
-          captures.refresh(ref, Effect.succeed({ result: null, snapshot }), Effect.succeed(true)),
+          Effect.promise(() =>
+          captures.kept
+          .of("takeoff", takeoffCaptureSchema)
+          .keep({
+            provenance: { kind: "live", target: ref },
+            capturedAt: snapshot.reading.observedAt,
+            snapshot,
+          })
+          .then((capture) => ({ capture })),
+        ),
         );
         const file = join(dir, "recorded.r10");
         await writeFile(file, "recorded RHVAC transport input", "utf8");

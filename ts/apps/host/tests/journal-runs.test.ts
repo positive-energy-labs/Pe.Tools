@@ -1,3 +1,4 @@
+import { ObservationFiles } from "@pe/host-internal/observation-files";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { detachedBridge, settle, testRegistry, journalAt } from "./effect-test.ts";
@@ -15,7 +16,6 @@ import { createHash } from "node:crypto";
 import { Effect, Schema } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { bindCommandRuntime } from "../src/command-registry.ts";
-import { TakeoffCaptures } from "../src/observation-store.ts";
 import { saveMember } from "../src/settings.ts";
 import { podMemberSaveRequestSchema } from "@pe/host-contracts/operation-types";
 
@@ -31,7 +31,7 @@ async function files() {
   runs.open(run);
   bindControl({ runs, acquired: () => null });
   const bridge = detachedBridge();
-  const captures = new TakeoffCaptures(
+  const captures = new ObservationFiles(
     stateFixture(join(dir, "captures")),
     join(dir, "aps.json"),
     () => new Date().toISOString(),
