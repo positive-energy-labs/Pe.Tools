@@ -74,7 +74,8 @@ function products(checkout: string) {
       domain: layer(id, "domain"),
       host: layer(id, "host"),
       web: layer(id, "web"),
-      route: existsSync(join(root, id, "web/route.ts")),
+      route:
+        existsSync(join(root, id, "web/route.ts")) || existsSync(join(root, id, "web/routes")),
     }))
     .map((row) => ({
       ...row,
@@ -216,8 +217,8 @@ export function renderProductAssembly(checkout: string) {
     ...list(tools).map((tool) => tool + ".commands"),
     ...of(declared, "commands"),
   ];
-  // A literal `id` types the computed key, so Pea's tool table keeps one named member per product.
-  const declaredTools = declared.map((row) => `[${row.alias}.id]: ${row.alias}.tool`);
+  // A declared product gives one tool per Work, and one of its own name for its unstaged commands.
+  const declaredTools = declared.map((row) => `...${row.alias}.tools`);
   const readTables = [...list(reads), ...of(declared, "reads")];
   // Command-table generation loads the action registry before it can load the linked catalog.
   const catalogChecks = [
@@ -242,16 +243,14 @@ export function renderProductAssembly(checkout: string) {
       ...catalogChecks,
       "const productTools = { " + entries("tool", tools) + " };",
       'assertUniqueProductKeys("tool", [' +
-        ["builtinTools", "productTools", ...declaredTools.map((tool) => "{ " + tool + " }")].join(
-          ", ",
-        ) +
+        ["builtinTools", "productTools", ...of(declared, "tools")].join(", ") +
         "]);",
       'assertUniqueProductKeys("command", [' + commandTables.join(", ") + "]);",
       "export const tools: typeof builtinTools & { " +
         tools.map((row) => JSON.stringify(row.key) + ": typeof " + row.alias).join("; ") +
         " }" +
         declared
-          .map((row) => ` & { [K in typeof ${row.alias}.id]: typeof ${row.alias}.tool }`)
+          .map((row) => ` & typeof ${row.alias}.tools`)
           .join("") +
         " = { " +
         [spreads(["builtinTools", "productTools"]), ...declaredTools].join(", ") +

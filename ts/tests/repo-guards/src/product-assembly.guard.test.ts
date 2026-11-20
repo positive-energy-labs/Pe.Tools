@@ -61,6 +61,7 @@ const fixtureFiles = {
     '  says: "Fixture tool",',
     "  homes: {},",
     "  cells: {},",
+    "  works: {},",
     '  readings: { echo: { handle: { key: "proof.echo", input: z.object({ text: z.string() }) }, sources: [], says: "A proof reading." } },',
     `  commands: { "${freshCommand}": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", catalogEffect: "Read", dirties: [], native: [], writes: {} } },`,
     "  routes: {},",
@@ -243,6 +244,9 @@ test("an authored product folder feeds Host, web and Pea without editing their s
     expect(contracts.settingOwners).toHaveProperty("proof");
     mkdirSync(join(root, "ts/apps/web/src"), { recursive: true });
     expect(routeFolderCandidates(root)).toContain(join(root, product, "web"));
+    // A product with several routes holds each in `web/routes/<name>` (ruling 6).
+    mkdirSync(join(root, product, "web/routes/second"), { recursive: true });
+    expect(routeFolderCandidates(root)).toContain(join(root, product, "web/routes/second"));
     const web = await load<{ module: { data: { address: string } } }>(product + "web/route.ts");
     expect(web.module.data.address).toBe("/proof");
     expect(assembly.dependencies).toEqual({

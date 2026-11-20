@@ -116,12 +116,15 @@ const folders = (path: string) =>
     .map((d) => join(path, d.name));
 
 /** Every directory a route may live in, absolute: each folder of `ts/apps/web/src`, then each
- * product's `web` (ADR 0046). The producer, the host build and this receipt discover from this one list. */
+ * product's `web` (ADR 0046), then each `web/routes/<name>` of a product with several routes (ruling 6
+ * of docs/features/routes/MAP.md). The producer, the host build and this receipt discover from this one list. */
 export const routeFolderCandidates = (root: string) => {
   const products = resolve(root, "ts/products");
+  const webs = existsSync(products) ? folders(products).map((product) => join(product, "web")) : [];
   return [
     ...folders(resolve(root, "ts/apps/web/src")),
-    ...(existsSync(products) ? folders(products).map((product) => join(product, "web")) : []),
+    ...webs,
+    ...webs.map((web) => join(web, "routes")).filter(existsSync).flatMap(folders),
   ];
 };
 

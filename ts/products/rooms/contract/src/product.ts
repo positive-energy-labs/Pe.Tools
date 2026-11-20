@@ -1,9 +1,10 @@
 /**
  * Rooms and Takeoffs: one product with two routes (ruling 6 of docs/features/routes/MAP.md).
- * Clean-room: written from the Rooms spec and the native operation contracts. S9 builds the host
- * bodies and the screen against this value; S10 writes the Takeoffs route.
+ * Clean-room: written from the Rooms spec and the native operation contracts. The host binds this
+ * value with `implement()` (`@pe/rooms-host/product`); each route's screen is under `web/routes/`.
  */
 import { z } from "zod";
+import { takeoffCaptureSchema, takeoffCaptureSummarySchema, takeoffsRouteState } from "@pe/agent-contracts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
   cell,
@@ -13,12 +14,18 @@ import {
   product as define,
 } from "@pe/agent-contracts/product";
 import { field, subjectSchema } from "@pe/agent-contracts/route";
-import { subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
+import {
+  subjectCode,
+  subjectOf,
+  subjectRefCodeSchema,
+  uniqueIdSchema,
+  type SubjectRefCode,
+} from "@pe/agent-contracts/subject-ref";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 
 const target = documentRefSchema;
-/** A plan view's `UniqueId`. The host resolves Revit's numeric view id at the native boundary. */
-const view = z.string().min(1);
+/** A plan view's `UniqueId`. The native boundary resolves it; a name is display only. */
+const view = z.string().min(1, "Choose a plan view.");
 /** A Filled Region's `UniqueId` SubjectRef: the key of the region record (ruling 14). */
 const region = subjectRefCodeSchema;
 /** Model XY in feet, on the view's generating level. */
@@ -26,6 +33,11 @@ const xy = z.tuple([z.number(), z.number()]);
 const ring = z.array(xy).min(3);
 const amount = z.number().nonnegative();
 const segmentKind = z.enum(["Wall", "Zone", "Closed", "Door", "Headed", "Cased"]);
+const unreadable = z.array(z.object({ parameter: z.string(), reason: z.string() }));
+
+export const regionCode = (uniqueId: string) =>
+  subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(uniqueId) });
+export const regionId = (code: string) => String(subjectOf(code as SubjectRefCode).key);
 
 const plans = contract("rooms.plans", {
   input: z.object({ target }),
@@ -34,7 +46,8 @@ const plans = contract("rooms.plans", {
       z.object({
         name: z.string(),
         elevationFt: z.number(),
-        views: z.array(z.object({ view, name: z.string() })),
+        // Two plans of one level may share a name: `type` tells a floor plan from a ceiling plan.
+        views: z.array(z.object({ view, name: z.string(), type: z.string() })),
       }),
     ),
   }),
@@ -68,12 +81,13 @@ const regions = contract("rooms.regions", {
       }),
     ),
     /** Record entries this build cannot read. The read lists them and goes on. */
-    unreadable: z.array(z.object({ subject: region.nullable(), reason: z.string() })),
+    unreadable,
   }),
   uses: ["rooms.snapshot"],
   keyedBy: { regions: { kind: "UniqueId" } },
 });
-const trace = contract("rooms.trace", {
+// Not `rooms.trace`: that key is the native operation this reading uses.
+const evidence = contract("rooms.evidence", {
   input: z.object({ target, view, runId: z.string().optional() }),
   data: z.object({
     runId: z.string(),
@@ -124,6 +138,43 @@ const planImage = contract("rooms.plan-image", {
   }),
   uses: ["revit.context.view-image"],
 });
+const adoption = contract("takeoffs.adoption", {
+  input: z.object({ target, views: z.array(view) }),
+  data: z.object({
+    /** One row per designer region on the chosen plans, with the staged choice over its default. */
+    rows: z.array(
+      z.object({
+        /** The Work key of this row's choice: `<view UniqueId>:<elementId>`. */
+        key: z.string(),
+        view,
+        viewName: z.string(),
+        elementId: z.number(),
+        typeName: z.string(),
+        sqft: z.number(),
+        adopted: z.boolean(),
+        checked: z.boolean(),
+        name: z.string(),
+        systemTag: z.string(),
+        unreadable: z.string().nullable(),
+      }),
+    ),
+    carriers: z.object({
+      stage: z.string(),
+      status: z.string(),
+      missing: z.array(z.string()),
+    }),
+    unreadable,
+  }),
+  uses: ["takeoffs.candidates", "takeoffs.snapshot"],
+});
+const captures = contract("takeoffs.captures", {
+  input: z.object({ target, capture: z.string() }),
+  data: z.object({
+    captures: z.array(takeoffCaptureSummarySchema),
+    saved: takeoffCaptureSchema.nullable(),
+  }),
+  uses: [],
+});
 
 const room = subjectSchema(Number.MAX_SAFE_INTEGER);
 const onPlan = (page: { view: string }) => ({ view: page.view });
@@ -131,6 +182,51 @@ const onPlan = (page: { view: string }) => ({ view: page.view });
 const text = { kind: "enum", shape: z.string(), choices: [] } as const;
 const count = { kind: "number", min: 0 } as const;
 const edit = { needs: "project-document", effect: "command", dirties: ["snapshot"] } as const;
+const directory = {
+  exposure: "Main",
+  group: "Calculate loads & airflow",
+  listed: true,
+  resume: "document",
+  satellites: [],
+  surfaces: { pwa: "full", tray: false, web: "full" },
+} as const;
+
+export const ROOM_FIELDS = [
+  "name",
+  "type",
+  "ceilingFt",
+  "people",
+  "lightingW",
+  "equipSensible",
+  "equipLatent",
+  "ventilationCfm",
+  "role",
+] as const;
+const writeRegion = z.object({
+  uniqueId: z.string().min(1),
+  name: z.string().optional(),
+  type: z.string().optional(),
+  ceilingFt: amount.optional(),
+  people: amount.optional(),
+  lightingW: amount.optional(),
+  equipSensible: amount.optional(),
+  equipLatent: amount.optional(),
+  ventilationCfm: amount.optional(),
+  role: z.enum(["room", "zone"]).optional(),
+});
+/** Every staged field cell, one native row per region. */
+function stagedRegions(work: unknown) {
+  const doc = work as Record<string, Record<string, { edit?: { value?: unknown } | null }>>;
+  const rows = new Map<string, Record<string, unknown>>();
+  for (const name of ROOM_FIELDS)
+    for (const [code, staged] of Object.entries(doc[name] ?? {})) {
+      if (staged.edit?.value === undefined) continue;
+      const uniqueId = regionId(code);
+      rows.set(uniqueId, { ...rows.get(uniqueId), uniqueId, [name]: staged.edit.value });
+    }
+  return { regions: [...rows.values()] };
+}
+const adoptItem = z.object({ elementId: z.number().int(), name: z.string(), systemTag: z.string() });
 
 export const product = define({
   id: "rooms",
@@ -180,6 +276,18 @@ export const product = define({
       "name",
     ),
   },
+  works: {
+    rooms: [...ROOM_FIELDS, "marks"],
+    takeoffs: {
+      ...takeoffsRouteState,
+      editable: [
+        ["writeIntent", "*"],
+        ["edits", "*"],
+        ["adopt", "*"],
+        ["decisions", "*"],
+      ],
+    },
+  },
   readings: {
     plans: { handle: plans, sources: [], says: "rooms.plans lists each level's plan views." },
     regions: {
@@ -187,19 +295,26 @@ export const product = define({
       sources: ["regions"],
       says: "rooms.regions reads one plan's zones, rooms and held regions with their fields.",
     },
-    trace: { handle: trace, sources: ["traces"], load: { alone: true } },
+    evidence: { handle: evidence, sources: ["traces"], load: { alone: true } },
     planImage: {
       handle: planImage,
       sources: [],
       load: { alone: true, slow: "Exporting plan image", freshBy: ["document-mark"] },
     },
+    adoption: {
+      handle: adoption,
+      sources: ["regions"],
+      says: "takeoffs.adoption reads the designer regions of chosen plans with their staged adoption choices.",
+    },
+    captures: { handle: captures, sources: [] },
   },
   commands: {
     "rooms.partition": {
       ...edit,
       says: "Partition every zone on a plan into rooms, keeping locked and matched rooms.",
       input: z.object({ view, rejected: z.array(ring).optional() }),
-      native: ["rooms.partition"],
+      native: ["takeoffs.record-replacements", "rooms.partition"],
+      staged: "rooms",
       writes: { regions: [], traces: [] },
     },
     "rooms.draw": {
@@ -211,33 +326,75 @@ export const product = define({
         name: z.string().optional(),
         role: z.enum(["room", "zone"]).optional(),
       }),
-      native: ["rooms.draw"],
+      native: ["takeoffs.record-replacements", "rooms.draw"],
+      staged: "rooms",
       writes: { regions: [] },
     },
     "rooms.write": {
       ...edit,
       says: "Write the staged room fields and designations, and answer for each cell (ruling 7).",
-      input: z.object({}),
-      native: ["rooms.write"],
-      writes: {
-        regions: [
-          "name",
-          "type",
-          "ceilingFt",
-          "people",
-          "lightingW",
-          "equipSensible",
-          "equipLatent",
-          "ventilationCfm",
-          "role",
-        ],
-      },
+      input: z.object({ regions: z.array(writeRegion) }),
+      native: ["takeoffs.record-replacements", "rooms.write"],
+      staged: "rooms",
+      derive: stagedRegions,
+      writes: { regions: ROOM_FIELDS },
     },
     "rooms.merge": {
       ...edit,
       says: "Combine two or more touching rooms of one zone into one locked room.",
       input: z.object({ view, regions: z.array(region).min(2), name: z.string().optional() }),
-      native: ["rooms.merge"],
+      native: ["takeoffs.record-replacements", "rooms.merge"],
+      staged: "rooms",
+      writes: { regions: [] },
+    },
+    // The shared parameters and the system registry have no generated home handle yet, so these
+    // name only the region record they also touch.
+    "takeoffs.initialize": {
+      ...edit,
+      says: "Write the shared parameters this document is missing before any takeoff runs.",
+      input: z.object({ stage: z.string().min(1) }),
+      native: ["takeoffs.initialize-carrier"],
+      staged: "takeoffs",
+      writes: {},
+    },
+    "takeoffs.adopt": {
+      ...edit,
+      says: "Adopt selected regions using the submitted names and system tags.",
+      input: z.object({
+        views: z.array(z.object({ view, items: z.array(adoptItem).min(1) })).min(1),
+      }),
+      dirties: ["snapshot", "takeoff-views", "candidates"],
+      native: ["takeoffs.record-replacements", "takeoffs.initialize-carrier", "takeoffs.adopt"],
+      staged: "takeoffs",
+      writes: { regions: [] },
+    },
+    "takeoffs.partition": {
+      ...edit,
+      says: "Partition the selected adopted zone.",
+      input: z.object({
+        zoneRegion: z.number().int(),
+        view,
+        zoneName: z.string(),
+        zoneUniqueId: z.string(),
+        runId: z.string().optional(),
+      }),
+      dirties: ["snapshot", "takeoff-views"],
+      native: ["takeoffs.record-replacements", "takeoffs.partition"],
+      staged: "takeoffs",
+      writes: { regions: [] },
+    },
+    "takeoffs.sync": {
+      ...edit,
+      says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
+      input: z.object({
+        path: z.string().min(1),
+        zones: z.array(z.string()).default([]),
+        captureId: z.string().min(1),
+        fileVersion: z.string().min(1),
+      }),
+      dirties: ["snapshot", "rhvac-open"],
+      native: ["takeoffs.record-replacements", "takeoffs.rhvac-links"],
+      staged: "takeoffs",
       writes: { regions: [] },
     },
   },
@@ -245,17 +402,12 @@ export const product = define({
     rooms: {
       name: "Rooms",
       directory: {
+        ...directory,
         aliases: ["room", "zone", "space", "partition"],
-        exposure: "Main",
-        group: "Calculate loads & airflow",
         icon: "LayoutGrid",
         label: "Rooms",
-        listed: true,
-        resume: "document",
         runtimeNeed: "Revit for model reads and writes",
-        satellites: [],
         summary: "Partition a plan into rooms and state each room's fields",
-        surfaces: { pwa: "full", tray: false, web: "full" },
       },
       fields: {
         view: field(z.string(), "", "query", "push"),
@@ -267,11 +419,32 @@ export const product = define({
         pane: "roster",
         read: ["regions", onPlan],
         options: (data: z.output<typeof regions.data>) =>
-          data.regions.map((row) => ({ id: row.subject, label: row.name })),
+          data.regions.map((row) => ({ id: row.subject as SubjectRefCode, label: row.name })),
       },
       core: ["regions", onPlan],
-      reads: { plans: "plans", trace: ["trace", onPlan], planImage: ["planImage", onPlan] },
+      reads: { plans: "plans", evidence: ["evidence", onPlan], planImage: ["planImage", onPlan] },
       panes: ["roster", "plan", "fields"],
+    },
+    takeoffs: {
+      name: "View adoption",
+      directory: {
+        ...directory,
+        aliases: ["manual", "j", "loads", "rhvac", "zones"],
+        icon: "Map",
+        label: "Manual J",
+        runtimeNeed: "Revit for model actions; browsing saved data is separate",
+        summary: "Adopt zoning regions from chosen views.",
+      },
+      fields: {
+        views: field(z.array(z.string()), [], "query", "push"),
+        capture: field(z.string(), "", "query", "push"),
+      },
+      core: ["adoption", (page: { views: readonly string[] }) => ({ views: [...page.views] })],
+      reads: {
+        plans: "plans",
+        captures: ["captures", (page: { capture: string }) => ({ capture: page.capture })],
+      },
+      panes: ["adoption"],
     },
   },
 });

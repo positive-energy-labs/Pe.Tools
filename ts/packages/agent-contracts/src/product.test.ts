@@ -38,9 +38,10 @@ const tiny = product({
     "criteria.velocity": cell(number, "route"),
     note: cell(number, "name"),
   },
+  works: { tiny: ["cfm", "criteria.velocity", "note"] },
   readings: { rows: { handle: rows, sources: [] } },
   commands: {
-    "tiny.write": { ...command, writes: { flow: ["cfm"] } },
+    "tiny.write": { ...command, effect: "command", staged: "tiny", writes: { flow: ["cfm"] } },
     "tiny.save": { ...command, writes: { standards: ["criteria.velocity"] } },
   },
   routes: {
@@ -72,6 +73,19 @@ test("a cell's sheet placement follows from the home a command lands it in", () 
   });
   // No command lands it, so it stays in Work.
   expect(cells.note?.home).toEqual({ at: "local" });
+});
+
+test("a staged command is sealed: its plan sits beside it, in the tool of its Work", () => {
+  expect(tiny.commands["tiny.write"].writeBoundary.phase).toBe("apply");
+  expect(tiny.commands["tiny.write.preview"].writeBoundary.phase).toBe("preview");
+  expect("writeBoundary" in tiny.commands["tiny.save"]).toBe(false);
+  expect(Object.keys(tiny.tools.tiny!.commands)).toEqual([
+    "tiny.write",
+    "tiny.write.preview",
+    "tiny.save",
+  ]);
+  expect(tiny.works.tiny.schema.parse({}).writeIntent).toEqual({});
+  expect(tiny.works.tiny.editable).toContainEqual(["writeIntent", "*"]);
 });
 
 test("a route's readings are built from the declared readings, and its key from the record key", () => {

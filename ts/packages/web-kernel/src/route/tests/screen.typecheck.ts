@@ -45,6 +45,7 @@ const declared = product({
   says: "Tiny",
   homes: {},
   cells: {},
+  works: {},
   readings: { roster: { handle: roster, sources: [] } },
   commands: {},
   routes: {
