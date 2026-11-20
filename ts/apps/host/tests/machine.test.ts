@@ -2,6 +2,7 @@ import { testJournal } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import type { ActionReceipt, Machine } from "@pe/agent-contracts";
 import type {
+  ControlledPending,
   DocListResult,
   ObservedActive,
   SessionObservation,
@@ -200,6 +201,31 @@ test("a stalled observed-document leg publishes unknown at the Machine deadline"
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("only an answering Revit in the SDK execution boundary is asked for holdings", async () => {
+  const fault = vi.fn();
+  const f = fixture({ fault });
+  const foreign: ObservedActive = {
+    ...row, process: { ...row.process, pid: 43 },
+    execution: { allowed: false, code: "session.no-match", detail: "Outside this command's execution boundary" },
+  };
+  const starting: ControlledPending = {
+    case: "controlled-pending", id: "starting", detail: "Bridge has not registered",
+    execution: row.execution, year: row.year, observedAtUtc: row.observedAtUtc,
+    shape: row.shape, origin: "cli", project: null, worktree: "C:/checkout",
+    receipt: { payload: "installed", generationRoot: "C:/revit", receiptPath: "C:/revit/session.json" },
+    attempt: { attempt: "launched", process: { ...row.process, pid: 44 }, bridge: { bridge: "missing-endpoint" } },
+  };
+  vi.mocked(f.sources.sessions).mockResolvedValue([foreign, starting, row]);
+  vi.mocked(f.sources.holdings).mockRejectedValue(Error("holdings decoder failed"));
+  const result = await f.machine.refresh();
+  expect(f.sources.holdings).toHaveBeenCalledExactlyOnceWith(row.process);
+  expect(f.sources.documents).toHaveBeenCalledExactlyOnceWith(row.process);
+  expect(result.revit.sessions?.map((entry) => entry.holdingsLeg.error)).toEqual([
+    null, null, expect.stringContaining("holdings decoder failed"),
+  ]);
+  expect(fault).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ leg: "holdings", kind: "error" }));
 });
 
 /** A Pea acquisition receipt as instances-actions records it: intent first, then its steps. */

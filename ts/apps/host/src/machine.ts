@@ -509,12 +509,21 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
             const process = processOf(row);
             if (!process) return;
             const key = processKey(process);
-            yield* read(
-              "holdings",
-              sources.holdings(process),
-              (value) => holdings.set(key, value),
-              `holdings:${key}`,
-            );
+            if (row.execution?.allowed === true && bridgeAnswering(row)) {
+              yield* read(
+                "holdings",
+                sources.holdings(process),
+                (value) => holdings.set(key, value),
+                `holdings:${key}`,
+              );
+            } else {
+              holdings.delete(key);
+              delete legs[`holdings:${key}`];
+            }
+            if (row.execution?.allowed !== true || row.case === "controlled-pending") {
+              documents.delete(key);
+              return;
+            }
             const attemptedAtUtc = yield* nowIso;
             const previous = documents.get(key) ?? { value: null, leg: unreadLeg() };
             if (row.case === "controlled-active") {
@@ -530,7 +539,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                       leg: { ...previous.leg, attemptedAtUtc, error: "SDK bridge is not answering." },
                     },
               );
-            } else if (row.case === "observed-active") {
+            } else if (row.case === "observed-active" && bridgeAnswering(row)) {
               yield* deadline(sources.documents(process), `documents:${key}`).pipe(
                 Effect.flatMap((result) =>
                   nowIso.pipe(
@@ -551,7 +560,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                   ),
                 ),
               );
-            }
+            } else documents.delete(key);
           }),
         { concurrency: "unbounded", discard: true },
       );
@@ -608,11 +617,9 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
       }),
     );
     for (const key of documents.keys()) if (!currentKeys.has(key)) documents.delete(key);
-    for (const key of holdings.keys())
-      if (!currentKeys.has(key)) {
-        holdings.delete(key);
-        delete legs[`holdings:${key}`];
-      }
+    for (const key of holdings.keys()) if (!currentKeys.has(key)) holdings.delete(key);
+    for (const key of Object.keys(legs))
+      if (key.startsWith("holdings:") && !currentKeys.has(key.slice("holdings:".length))) delete legs[key];
     latest = {
       observedAtUtc: yield* nowIso,
       host: host ? { ...host, peers } : null,
@@ -898,6 +905,9 @@ function processOf(row: SessionObservation): ProcessIdentity | null {
       : null;
 }
 const processKey = (process: ProcessIdentity) => `${process.pid}:${process.processStartUtc}`;
+const bridgeAnswering = (row: SessionObservation) =>
+  (row.case === "controlled-active" && row.bridge.bridge === "ready" && !row.bridge.unresponsive) ||
+  (row.case === "observed-active" && row.bridge.bridge === "answering");
 const matches = (
   attachment: AttachmentRead,
   process: Pick<ProcessIdentity, "pid" | "processStartUtc">,

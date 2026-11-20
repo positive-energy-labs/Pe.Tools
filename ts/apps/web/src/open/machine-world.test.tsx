@@ -202,7 +202,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(map.machine.revit.sessions![0]!.attachment!.documents![0]!.access).toEqual({
     kind: "read",
   });
-  expect(screen.getAllByText(/documents unread: Error: documents:.*leg exceeded/)).toHaveLength(3);
+  expect(screen.getAllByText(/documents unread: Error: documents:.*leg exceeded/)).toHaveLength(2);
   expect(screen.queryByText("no document open")).toBeNull();
   expect(screen.getAllByText("observed")).toHaveLength(3);
   expect(map.machine.revit.sessions![1]!.whose).toBe("you");
@@ -213,7 +213,7 @@ test("F8: web rows and pe_find preserve the same Machine identities, access and 
   expect(machineInventory(map.machine)).toMatchObject({
     sessions: { "foreign-bridge": { kind: "failed", message: "Foreign runtime" } },
   });
-  expect(screen.getAllByText("Foreign runtime")).toHaveLength(2);
+  expect(screen.getAllByText("outside this host’s scope")).toHaveLength(2);
   expect(map.machine.revit.sessions![2]!.attachment).toBeNull();
   expect(map.machine.revit.sessions![3]!.documents![0]!.persistence).toBeNull();
   expect(screen.getByText("persistence unknown")).toBeTruthy();

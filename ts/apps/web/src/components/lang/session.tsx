@@ -12,6 +12,7 @@ import { Row } from "@pe/kit/lang/row";
 
 import "@pe/kit/lang/lang.css";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
+import { sessionReadStatus } from "../../machine/session";
 
 type Phase = "ready" | "booting" | "no add-in" | "unresponsive" | "gone" | "failed";
 
@@ -78,10 +79,13 @@ function shapeWords(session: MachineSession) {
   ].filter(Boolean) as string[];
 }
 
-function PhaseWord({ facts }: { facts: SessionFacts }) {
+function PhaseWord({ facts, session }: { facts: SessionFacts; session: MachineSession }) {
+  const status = sessionReadStatus(session);
+  const detail = session.row.execution?.detail ?? session.holdingsLeg.error;
+  const word = <span data-tone={status === facts.phase ? facts.phaseTone : "caution"}>{status}</span>;
   return (
     <>
-      <span data-tone={facts.phaseTone}>{facts.phase}</span>
+      {detail ? <TooltipHint content={detail}>{word}</TooltipHint> : word}
       {facts.dialog ? <span data-tone="caution">dialog open</span> : null}
     </>
   );
@@ -115,12 +119,7 @@ export function SessionRow({ session, facts, anchor, verbs, strip }: SessionView
         meta={
           <>
             {facts.pid ? <PidChip pid={facts.pid} /> : null}
-            <PhaseWord facts={facts} />
-            {session.row.execution?.allowed !== true ? (
-              <span data-tone="caution">
-                {session.row.execution?.detail ?? "Runtime ownership not verified"}
-              </span>
-            ) : null}
+            <PhaseWord facts={facts} session={session} />
           </>
         }
         sub={
@@ -240,16 +239,7 @@ export function SessionCard({
           <span className="t-small t-upper" data-tone={facts.whose}>
             {titleOf(facts)}
           </span>
-          <PhaseWord facts={facts} />
-          {session.row.execution?.allowed !== true ? (
-            <TooltipHint
-              content={session.row.execution?.detail ?? "Runtime ownership not verified"}
-            >
-              <span data-tone="caution" className="min-w-0 truncate">
-                {session.row.execution?.detail ?? "Runtime ownership not verified"}
-              </span>
-            </TooltipHint>
-          ) : null}
+          <PhaseWord facts={facts} session={session} />
         </>
       }
       headTrail={verbs}

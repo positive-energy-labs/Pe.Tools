@@ -6,7 +6,7 @@ import { useList } from "@pe/kit/lang/collection";
 import { Button } from "@pe/kit/lang/button";
 import { OpenOwnerContext, useOpenOwner } from "../machine/context";
 import { ButtonGroup } from "@pe/kit/lang/button-group";
-import { keyOf, phaseOf } from "#/machine/session";
+import { keyOf, sessionReadStatus } from "#/machine/session";
 import { lifecycleRequest } from "../machine/lifecycle";
 import { readingList } from "#/host/resource-list";
 import type { ReadingState } from "#/shell/source-contract";
@@ -78,7 +78,7 @@ function Sessions({
         // I1: a row is named by its Revit and state; the session key is a mono fact, never the name.
         row={(row) => ({
           label: `${row.whose === "pea" ? "Pea's " : ""}Revit ${row.row.year}`,
-          sub: phaseOf(row.row),
+          sub: sessionReadStatus(row),
           meta: <span className="face-mono">{keyOf(row)}</span>,
           active: keyOf(row) === session,
         })}

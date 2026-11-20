@@ -297,6 +297,15 @@ test("the new Revit year picker uses the last confirmed years while Pe checks ag
   expect(card.getByRole("button", { name: "2025" }).getAttribute("aria-disabled")).toBeNull();
 });
 
+test("Open distinguishes a starting Revit from a real document-details failure", () => {
+  render(<Bay machine={withSessions([
+    BACKGROUND_BOOTING,
+    { ...OBSERVED_ICON, holdingsLeg: { ...OBSERVED_ICON.holdingsLeg, error: "SDK read failed" } },
+  ])} />);
+  expect(screen.getByText("starting")).toBeTruthy();
+  expect(screen.getByText("document details unavailable")).toBeTruthy();
+});
+
 test("patching Clinic into your Revit 2025 by click names the upgrade and sends the consent", async () => {
   render(<Bay />);
   fireEvent.click(await screen.findByText("Clinic-Fitout.rvt"));
