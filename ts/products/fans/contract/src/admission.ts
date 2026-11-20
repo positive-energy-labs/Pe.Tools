@@ -1,4 +1,4 @@
-import { fansDocumentSchema, fansRouteState, fanWriteScopeMessage } from "./fans.ts";
+import { fansDocumentSchema, fansRouteState } from "./fans.ts";
 import { DUCT_SYSTEMS_ROUTE } from "@pe/ducts-contract/system-work";
 import { z } from "zod";
 import { workHandleSchema, workKey, type WorkHandle } from "@pe/agent-contracts";
@@ -38,6 +38,10 @@ export const admissionPreflight = {
       asked.key.route === fansRoute &&
       !fansDocumentSchema.parse(fans.doc).writeIntent.edit?.value?.walk
     )
-      throw Error(fanWriteScopeMessage);
+      throw Error(
+        'Read route:reads.value with read "fans.roster" for the same document. ' +
+          'Use the intended row\'s unitId and portIndex to stage writeIntent.edit in route:fans Work as {"value":{"walk":{"unitId":<id>,"portIndex":<n>}}}. ' +
+          "Retry sheet.plan with the accepted Work handle and revision. No preview was submitted.",
+      );
   },
 };
