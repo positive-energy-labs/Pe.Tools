@@ -263,7 +263,7 @@ internal sealed class RevitDataRequestService {
     private static RoomsTraceData GetRoomsTraceCore(RoomsTraceRequest request, ProjectDocument activeDocument) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Trace(document, request));
 
-    [Op("rooms.partition", OpSubject.View, OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
+    [Op("rooms.partition", OpSubject.View, OpTouches.Metadata | OpTouches.Geometry, Internal = true,Does = "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction.", Title = "Partition Rooms", Finds = ["rooms", "partition", "level", "room-regions", "materialize"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static RoomsPartitionResult PartitionRoomsCore(RoomsPartitionRequest request, ProjectDocument activeDocument,
         ModelWrite scope, CancellationToken cancellationToken) =>
         RunTakeoff(activeDocument.Value, document => Rooms.Partition(document, request, cancellationToken,

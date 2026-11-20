@@ -2700,7 +2700,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "costTier": "Mutation",
     "visibility": "EscalationVisible",
     "needs": "project-document",
-    "description": "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction.",
+    "description": "Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction.",
     "searchTerms": [
       "rooms",
       "partition",
@@ -2715,7 +2715,7 @@ export const hostOpCatalog: readonly CatalogEntry[] = [
     "responseSchemaJson": "{\r\n  \"$schema\": \"http://json-schema.org/draft-04/schema#\",\r\n  \"title\": \"RoomsPartitionResult\",\r\n  \"type\": \"object\",\r\n  \"additionalProperties\": false,\r\n  \"required\": [\r\n    \"level\",\r\n    \"runId\",\r\n    \"zones\",\r\n    \"created\",\r\n    \"kept\",\r\n    \"locked\",\r\n    \"deleted\",\r\n    \"held\",\r\n    \"failures\",\r\n    \"ms\"\r\n  ],\r\n  \"properties\": {\r\n    \"level\": {\r\n      \"type\": \"string\"\r\n    },\r\n    \"runId\": {\r\n      \"type\": \"string\"\r\n    },\r\n    \"zones\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"created\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"kept\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"locked\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"deleted\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"held\": {\r\n      \"type\": \"integer\",\r\n      \"format\": \"int32\"\r\n    },\r\n    \"failures\": {\r\n      \"type\": \"array\",\r\n      \"items\": {\r\n        \"type\": \"string\"\r\n      }\r\n    },\r\n    \"hold\": {\r\n      \"type\": [\r\n        \"null\",\r\n        \"string\"\r\n      ]\r\n    },\r\n    \"ms\": {\r\n      \"type\": \"number\",\r\n      \"format\": \"double\"\r\n    }\r\n  }\r\n}",
     "actor": "any",
     "subject": "View",
-    "touches": "Geometry",
+    "touches": "Metadata, Geometry",
     "effect": "ModelWrite",
     "cardinality": "One",
     "internal": true
