@@ -183,6 +183,26 @@ export function SessionCard({
   children?: ReactNode;
 }) {
   const documents = session.documents;
+  const outsideScope = session.row.execution?.allowed !== true &&
+    facts.phase !== "gone" && facts.phase !== "failed";
+  const targets = targetsOf(session);
+  const empty = outsideScope
+    ? {
+        message: "This host cannot read its documents",
+        exit: facts.name
+          ? `Read them from the host for session ${facts.name}`
+          : "Use the host that owns this Revit",
+      }
+    : documents === null
+      ? {
+          message: session.documentsLeg.error
+            ? `documents unread: ${session.documentsLeg.error}`
+            : "documents unknown",
+          exit: facts.phase === "booting"
+            ? "its documents are read once its bridge answers"
+            : "check the session’s status",
+        }
+      : { message: "no document open", exit: "open a document into it from the table" };
   type Item =
     | { kind: "document"; document: SessionDocument }
     | { kind: "target"; target: TargetedDocument };
@@ -190,7 +210,7 @@ export function SessionCard({
   const list = useList<Item>({
     items: [
       ...(documents ?? []).map((document): Item => ({ kind: "document", document })),
-      ...targetsOf(session).map((target): Item => ({ kind: "target", target })),
+      ...targets.map((target): Item => ({ kind: "target", target })),
     ],
     keyOf: (item) =>
       item.kind === "document"
@@ -245,28 +265,13 @@ export function SessionCard({
       headTrail={verbs}
     >
       <div className="flex flex-col py-1" aria-label="documents">
-        {documents === null && targetsOf(session).length > 0 ? (
-          <p role="status">
-            {session.documentsLeg.error
-              ? `documents unread: ${session.documentsLeg.error}`
-              : "documents unknown"}
-          </p>
+        {documents === null && targets.length > 0 ? (
+          <p role="status">{empty.message}</p>
         ) : null}
         <ListView
           list={list}
           aria-label="documents"
-          empty={{
-            message:
-              documents === null
-                ? session.documentsLeg.error
-                  ? `documents unread: ${session.documentsLeg.error}`
-                  : "documents unknown"
-                : "no document open",
-            exit:
-              documents === null
-                ? "its documents are read once its bridge answers"
-                : "open a document into it from the table",
-          }}
+          empty={empty}
           row={(item) =>
             item.kind === "document"
               ? (documentParts?.(item.document) ?? heldRowParts(item.document))

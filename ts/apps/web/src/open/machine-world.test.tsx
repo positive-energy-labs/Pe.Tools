@@ -9,7 +9,8 @@ import { sdkSchema } from "@pe/host-contracts/decoders";
 import { peFind } from "../../../../packages/mcps/src/pea/capability-tools.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { machineOwner, type PromiseMachineSources } from "../../../host/tests/effect-test.ts";
-import { BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "../machine/open-examples";
+import { BACKGROUND_BOOTING, BAY_YOURS_25, CHECKOUT_HOT, MACHINE_SEEDS } from "../machine/open-examples";
+import { factsOf } from "../machine/lifecycle";
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -34,6 +35,26 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+});
+
+test("only this host's starting Revit asks the person to wait for documents", () => {
+  const foreign = {
+    ...CHECKOUT_HOT,
+    documents: null,
+    row: {
+      ...CHECKOUT_HOT.row,
+      execution: { allowed: false, code: "runtime.foreign", detail: "Foreign runtime" },
+    },
+  };
+  for (const [anchor, session] of [["foreign", foreign], ["starting", BACKGROUND_BOOTING]] as const) {
+    render(<SessionCard session={session} anchor={anchor} facts={factsOf(session)} />);
+  }
+  const foreignCard = within(document.querySelector('[data-key="foreign"]')!);
+  expect(foreignCard.getByText("This host cannot read its documents")).toBeTruthy();
+  expect(foreignCard.getByText(`Read them from the host for session ${foreign.row.id}`)).toBeTruthy();
+  expect(foreignCard.queryByText(/documents unknown|once its bridge answers/i)).toBeNull();
+  const startingCard = within(document.querySelector('[data-key="starting"]')!);
+  expect(startingCard.getByText("its documents are read once its bridge answers")).toBeTruthy();
 });
 
 test("F8: web rows and pe_find preserve the same Machine identities, access and unknown evidence", async () => {
