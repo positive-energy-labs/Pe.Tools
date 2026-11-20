@@ -60,7 +60,7 @@ Still live-unproven — probe each in a scratch document before building on it. 
 
 - **FR boundary read-back under user editing** — arcs, splines, self-touching rings drawn by hand must hit STRAIGHT-ONLY enforcement at read time.
 - **Capture cache** — per-zone runs are only cheap if the level-wide raster capture is shared and keyed by document/level/capture-options hash.
-- **FR carrier survival across save/sync/reopen** — standard Revit project-param behavior, but spot-check it on the first model that syncs.
+- **Region record survival across a workshared sync** — save, close and reopen is proven by `OwnerBlobRoundTripTests`; spot-check a sync on the first model that syncs.
 
 ## Inheritance
 

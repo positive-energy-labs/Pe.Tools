@@ -67,7 +67,7 @@ public sealed class TakeoffNativeFixtureRecorder {
                 new TakeoffAdoptRequest(view.UniqueId, [new TakeoffAdoptItem(zone.Id.Value(), zone.UniqueId, "Fixture zone", "FIXTURE-1")]));
             Assert.That(adopted, Is.Not.Null, "Adopt native path must answer; see retained error");
 
-            Assert.That(TakeoffCarriers.ReadRegistry(doc).Systems.Single().Tag, Is.EqualTo("FIXTURE-1"));
+            Assert.That(TakeoffRecords.ReadRegistry(doc).Systems.Single().Tag, Is.EqualTo("FIXTURE-1"));
             Assert.That(Pe.Revit.Partition.EnclosureDeclaration.Read(doc).Source, Does.StartWith("declared:"));
             Assert.That(RoomsRegionRecord.Read(doc).OrThrow()!.Regions[zone.UniqueId].Fields.Name, Is.EqualTo("Fixture zone"));
 
@@ -102,7 +102,7 @@ public sealed class TakeoffNativeFixtureRecorder {
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }
             var members = RoomsRegionRecord.Read(doc).OrThrow()!.Regions
-                .Where(entry => entry.Value.Role == TakeoffCarriers.RoleRoomRegion && entry.Value.Provenance.Zone == zoneUniqueId)
+                .Where(entry => entry.Value.Role == TakeoffRecords.RoleRoomRegion && entry.Value.Provenance.Zone == zoneUniqueId)
                 .Select(entry => entry.Key).ToList();
             Assert.That(members, Has.Count.EqualTo(2));
             var merged = Capture<RoomsMergeResult>("rooms.merge", "MergeRoomsCore",

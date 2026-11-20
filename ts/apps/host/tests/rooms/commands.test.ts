@@ -142,7 +142,7 @@ test.each([
   ["rooms.merge", mergeIntent],
   ["takeoffs.sync", {}],
 ] as const)(
-  "JZ carrier commands run real declarations and guarded native dispatch: %s",
+  "JZ record commands run real declarations and guarded native dispatch: %s",
   async (commandKey, intent) => {
     const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
     const route = commandKey.startsWith("takeoffs.") ? "takeoffs" : "rooms";
@@ -290,12 +290,12 @@ test.each([
         expect(await invoke("sheet.plan", { work })).toMatchObject({
           result: { previewOnly: true },
         });
-        expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
+        expect(calls, "A plan never dispatches a record mutation").toEqual([]);
       } else if ("writeBoundary" in commands[commandKey]) {
         const definition = commands[commandKey];
         const plan = await invoke(definition.writeBoundary.previewKey, { work });
         expect(plan).toMatchObject({ result: { previewOnly: true } });
-        expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
+        expect(calls, "A plan never dispatches a record mutation").toEqual([]);
       }
       await invoke(commandKey, { work });
       if (commandKey === "takeoffs.sync") {

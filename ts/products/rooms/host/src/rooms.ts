@@ -1,4 +1,4 @@
-/** The Rooms model writes. Each is one native leaf behind the carrier pattern of `takeoffs.ts`. */
+/** The Rooms model writes. Each is one native leaf behind the replacement evidence of `takeoffs.ts`. */
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import {
   command,
@@ -19,11 +19,11 @@ import {
   stagedRegions,
 } from "@pe/rooms-contract/product";
 import {
-  carrier,
-  preparedCarrierSchema,
+  replacementEvidence,
+  preparedReplacementSchema,
   replacing,
   runModel,
-  sealCarrier,
+  sealReplacement,
   type Deps,
 } from "./takeoffs.ts";
 
@@ -66,7 +66,7 @@ async function requireRoomsSelection(
 
 // A one-shot write consumes its staged intent: a repeat needs a fresh one (no second native write).
 export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
-  const { bind } = carrier(bridge, deps);
+  const { bind } = replacementEvidence(bridge, deps);
   const bindRooms = async (
     ctx: CommandContext,
     leaf: "rooms.partition" | "rooms.draw" | "rooms.merge",
@@ -82,8 +82,8 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
     };
   };
   return {
-    "rooms.partition": command(commands["rooms.partition"], preparedCarrierSchema, {
-      seal: sealCarrier,
+    "rooms.partition": command(commands["rooms.partition"], preparedReplacementSchema, {
+      seal: sealReplacement,
       retires: () => [["writeIntent", "rooms.partition"]],
       bind: (ctx) => {
         const { view, rejected } = ctx.admission.input;
@@ -101,8 +101,8 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
           });
         }),
     }),
-    "rooms.draw": command(commands["rooms.draw"], preparedCarrierSchema, {
-      seal: sealCarrier,
+    "rooms.draw": command(commands["rooms.draw"], preparedReplacementSchema, {
+      seal: sealReplacement,
       retires: () => [["writeIntent", "rooms.draw"]],
       bind: (ctx) => {
         const { view, loops, name, role } = ctx.admission.input;
@@ -120,8 +120,8 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
           });
         }),
     }),
-    "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
-      seal: sealCarrier,
+    "rooms.merge": command(commands["rooms.merge"], preparedReplacementSchema, {
+      seal: sealReplacement,
       retires: () => [["writeIntent", "rooms.merge"]],
       bind: (ctx) => {
         const { view, regions, name } = ctx.admission.input;
@@ -147,7 +147,7 @@ const sheetInput = builtinCommands["sheet.plan"].input
     doc: roomsWork.schema,
   })
   .loose();
-const preparedSheet = preparedCarrierSchema.extend({
+const preparedSheet = preparedReplacementSchema.extend({
   request: nativeRequestSchema("rooms.write"),
 });
 /**
@@ -157,11 +157,11 @@ const preparedSheet = preparedCarrierSchema.extend({
 export const roomsSheet =
   (key: "sheet.plan" | "sheet.apply"): CommandBody =>
   (bridge, deps) => {
-    const { bind } = carrier(bridge, deps);
+    const { bind } = replacementEvidence(bridge, deps);
     return command(builtinCommands[key], preparedSheet, {
-      seal: ({ request, ...carrier }) => ({
-        request: { ...sealCarrier(carrier).request, ...request },
-        evidence: carrier.replacement,
+      seal: ({ request, ...prepared }) => ({
+        request: { ...sealReplacement(prepared).request, ...request },
+        evidence: prepared.replacement,
       }),
       bind: async (ctx) => {
         const { doc } = sheetInput.parse(ctx.admission.input);

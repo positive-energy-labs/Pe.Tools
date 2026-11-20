@@ -32,7 +32,7 @@ public sealed class TakeoffNativeRefreshProofTests
                 zone = FilledRegion.Create(doc, type, view.Id, Kernel.ToLoops(Square(0, 0, 30), [], 0));
                 zoneUniqueId = zone.UniqueId;
                 var record = RoomsRegionRecord.Stage(doc);
-                record.Regions.Add(zoneUniqueId, new(TakeoffCarriers.RoleZoningRegion, new(), RegionProvenance.Default));
+                record.Regions.Add(zoneUniqueId, new(TakeoffRecords.RoleZoningRegion, new(), RegionProvenance.Default));
                 ZoneMaterializer.Materialize(doc, view, record, 0, zoneUniqueId, "original",
                     [new RoomResult { Id = "R01", RawSqft = 100, LabelX = 10, LabelY = 10,
                         Polygon = Square(5, 5, 10) }], [], _ => { });

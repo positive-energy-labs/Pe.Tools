@@ -10,7 +10,7 @@ public sealed class RoomsPartitionCancellationTests
     public void A_refused_record_stops_before_the_mutation_boundary(bool overCap)
     {
         var record = new RoomsRegionRecord();
-        record.Regions["room"] = new(TakeoffCarriers.RoleRoomRegion,
+        record.Regions["room"] = new(TakeoffRecords.RoleRoomRegion,
             new RoomFields(Name: overCap ? new string('x', OwnerBlob.MaxBytes) : "Office"),
             RegionProvenance.Default with { RunId = overCap ? "drawn" : "" });
         bool mutated = false;
@@ -25,7 +25,7 @@ public sealed class RoomsPartitionCancellationTests
     public void Pending_creation_counts_toward_the_same_limit_as_live_rows()
     {
         var record = new RoomsRegionRecord();
-        var row = new RegionRow(TakeoffCarriers.RoleRoomRegion, new RoomFields(Name: new string('x', 140_000)),
+        var row = new RegionRow(TakeoffRecords.RoleRoomRegion, new RoomFields(Name: new string('x', 140_000)),
             RegionProvenance.Default);
         record.Regions["live-room"] = row;
         Assert.That(record.BeforeMutation(() => true), Is.True);
@@ -46,9 +46,9 @@ public sealed class RoomsPartitionCancellationTests
     public void Pruning_releases_deleted_region_rows_and_retains_their_merge_ancestry()
     {
         var record = new RoomsRegionRecord();
-        record.Regions["deleted"] = new(TakeoffCarriers.RoleRoomRegion,
+        record.Regions["deleted"] = new(TakeoffRecords.RoleRoomRegion,
             new RoomFields(Name: new string('x', OwnerBlob.MaxBytes)), RegionProvenance.Default);
-        record.Regions["merged"] = new(TakeoffCarriers.RoleRoomRegion, new(),
+        record.Regions["merged"] = new(TakeoffRecords.RoleRoomRegion, new(),
             RegionProvenance.Default with { MergedFrom = ["deleted"] });
 
         record.Prune(id => id == "merged");
