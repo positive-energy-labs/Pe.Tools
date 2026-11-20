@@ -61,7 +61,6 @@ const ONE_SHOT: Record<string, (r: never) => readonly [string, RequestInit?]> = 
       }),
     },
   ],
-  ...productGateway.observationResources,
   "rhvac-file-version": (r: { path: string }) => [`/actions?file=${encodeURIComponent(r.path)}`],
 };
 
@@ -356,7 +355,6 @@ export function hostResourceObserver(
         case "capabilities":
         case "ops-catalog":
         case "schedule-reading":
-        case "takeoff-saved":
         case "rhvac-file-version":
           return oneShot([ONE_SHOT[request.kind]!(request as never)], POLL_MS[request.kind]);
         case "receipts":
