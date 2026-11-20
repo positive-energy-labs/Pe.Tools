@@ -25,7 +25,9 @@
     "@pe/web-kernel": "workspace:*",
     "@tanstack/react-router": "1.170.31",
     "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.7",
     "effect": "4.0.2",
+    "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "vite-plus": "catalog:"
   }
