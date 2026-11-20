@@ -592,7 +592,7 @@ export function mountTypedRoute(
     };
     syncWork();
     const allReads = (() => {
-      type HostRead = import("@pe/web-kernel/host-read").HostRead;
+      type HostRead = import("@pe/agent-contracts/route").HostRead;
       type QueueHolder = import("@pe/agent-contracts/value").QueueHolder;
       const attempts = new WeakMap<
         HostRead,

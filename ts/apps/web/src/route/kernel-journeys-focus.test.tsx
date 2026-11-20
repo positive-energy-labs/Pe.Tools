@@ -59,7 +59,7 @@ import { ref, path } from "../../../host/tests/host-read-graph.test-support";
 import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
 import { routeRegistry } from "./registry";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { hostRead } from "@pe/agent-contracts/route";
 import { contract } from "@pe/agent-contracts/handle";
 import { z } from "zod";
 
@@ -77,7 +77,7 @@ test("S6 the route publishes its roster while a separately demanded image is hel
   const module = route({
     key: "s6-plans",
     name: "Test plans",
-    directory: family.spec.directory,
+    directory: families.spec.directory,
     fields: {},
     core: roster,
     reads: { image },
