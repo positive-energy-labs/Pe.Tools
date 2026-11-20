@@ -1,5 +1,13 @@
+import type { Effect } from "effect";
 import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
-import type { HostBodies, ProductDeclaration } from "@pe/agent-contracts/product";
+import type {
+  FileBody,
+  HostBodies,
+  HttpRequest,
+  OwedBodies,
+  ProductDeclaration,
+} from "@pe/agent-contracts/product";
+import type { AttemptHost } from "./action-execution.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
 import type { HostNativeRead } from "./native-read.ts";
@@ -15,19 +23,25 @@ export type CommandBody<D = Dependencies> = (
   bridge: RevitBridge["Service"],
   deps: D,
 ) => CommandExecutor;
+/** What a local operation's body answers with: the host's own services, and any failure. */
+export type LocalRun = Effect.Effect<unknown, unknown, AttemptHost>;
 
-/** The host half of a product: one body per declared reading and command, or `tsc` fails. */
+/** The host half of a product: one body per declared reading, command, `http` route and local operation, or `tsc` fails. */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  bodies: HostBodies<P, ReadContext, CommandBody<D>>,
+  bodies: HostBodies<P, ReadContext, CommandBody<D>, D, LocalRun> &
+    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, D, LocalRun>>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
   executors: (...args: Parameters<CommandBody<D>>) => Record<string, CommandExecutor>;
+  http: Record<string, (request: HttpRequest, deps: D) => Promise<unknown>>;
+  local: Record<string, (input: never, deps: D) => LocalRun>;
+  files: Record<string, FileBody<D>>;
 };
 export function implement<D>(
   product: ProductDeclaration,
-  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>>,
+  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, D, LocalRun>,
 ) {
   const reads = Object.fromEntries(
     Object.entries(product.readings).map(([key, { handle }]) => {
@@ -46,5 +60,9 @@ export function implement<D>(
       Object.fromEntries(
         Object.entries(bodies.commands).map(([key, make]) => [key, make(...args)]),
       ),
+    // A product that declares none passes none: `HostBodies` asks for a table only when a key exists.
+    http: { ...bodies.http },
+    local: { ...bodies.local },
+    files: { ...bodies.files },
   };
 }

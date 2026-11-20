@@ -6,8 +6,10 @@
  * missing or extra body is a compile error. Runtime-neutral: nothing here imports a host or web package.
  */
 import { z } from "zod";
+import type { Schema } from "effect";
 import type { HttpRead } from "./pe-api.ts";
-import type { AnyOperationKey } from "@pe/host-contracts/operation-types";
+import type { AnyOperationKey, BridgeSessionsListData } from "@pe/host-contracts/operation-types";
+import type { Address, DocumentRef } from "./target.ts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
 import type { CallPolicy } from "./call-policy.ts";
@@ -328,7 +330,12 @@ export type ProductDeclaration = {
     Record<string, { readonly key: string } & Pick<ProductRoute, "captureSubject" | "demoPlace">>
   >;
   readonly guide?: Guide;
+  readonly http: Readonly<Record<string, HttpRead>>;
+  readonly local: LocalOperations;
 };
+/** One local operation: a host body that needs no Revit, called by key through `/call`. */
+type LocalOperation = { readonly request?: Schema.Top; readonly response: Schema.Top };
+type LocalOperations = Readonly<Record<string, LocalOperation>>;
 type SheetNative = {
   readonly native?: Readonly<Partial<Record<"plan" | "apply", readonly HostOperationKey[]>>>;
 };
@@ -440,6 +447,7 @@ export function product<
   const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
   const Http extends Readonly<Record<string, HttpRead>> = Record<never, never>,
+  const Local extends LocalOperations = Record<never, never>,
 >(declaration: {
   /** The product folder, Work route and default name of its Pea tool. */
   readonly id: Id;
@@ -483,6 +491,8 @@ export function product<
   };
   readonly guide?: Guide;
   readonly http?: Http;
+  /** The product's local operations by catalog key; the host half owes one body each. */
+  readonly local?: Local;
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
 }) {
@@ -516,6 +526,7 @@ export function product<
   return {
     ...declaration,
     http: Object.assign({}, declaration.http),
+    local: Object.assign({}, declaration.local),
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,
     actions: declaration.commands,
@@ -558,7 +569,21 @@ type ReadingBody<P extends ProductDeclaration, K extends keyof P["readings"], Co
   ctx: Context,
   args: z.output<Handle<P, K>["input"]>,
 ) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
-export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
+/** What the kernel's route mount hands an HTTP body: the declared input, the query and the bridge target headers. */
+export type HttpRequest<I = unknown> = {
+  readonly input: I;
+  readonly query: URLSearchParams;
+  readonly session?: string;
+  readonly openId?: string;
+};
+type LocalInput<O> = O extends { readonly request: infer S extends Schema.Top }
+  ? Schema.Schema.Type<S>
+  : unknown;
+/**
+ * `Deps` is what the host hands every body of the product, and `Run` what a local body answers with
+ * (the runtime names its own effect).
+ */
+export type HostBodies<P extends ProductDeclaration, Context, Executor, Deps = never, Run = never> = {
   readonly readings: {
     readonly [K in keyof P["readings"]]:
       | ReadingBody<P, K, Context>
@@ -576,4 +601,36 @@ export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
   } & (NonNullable<P["sheetWrites"]>["writes"] extends undefined
     ? unknown
     : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
+  /**
+   * Host files a reading takes as `file:<name>`: the kernel records the answer as one taking, so the
+   * body may read host state a `ReadContext` cannot. `document` resolves an open document's address.
+   */
+  readonly files?: Readonly<Record<string, FileBody<Deps>>>;
+  readonly http?: {
+    readonly [K in keyof P["http"]]: (
+      request: HttpRequest<z.output<P["http"][K]["input"]>["body"]>,
+      deps: Deps,
+    ) => Promise<z.output<P["http"][K]["output"]>>;
+  };
+  readonly local?: {
+    readonly [K in keyof P["local"]]: (input: LocalInput<P["local"][K]>, deps: Deps) => Run;
+  };
 };
+/** The slot's name when the product declares a key in it, so a product with none owes no table. */
+type Declares<Table, Slot extends string> = [keyof Table] extends [never] ? never : Slot;
+/**
+ * The tables a product owes for what it declares. Kept off `HostBodies` so that type stays one plain
+ * object: `implement()` intersects this in, and a declared `http` route or local operation with no
+ * body fails `tsc`.
+ */
+export type OwedBodies<P extends ProductDeclaration, Bodies> = Required<
+  Pick<Bodies, (Declares<P["http"], "http"> | Declares<P["local"], "local">) & keyof Bodies>
+>;
+export type FileBody<Deps> = (
+  args: unknown,
+  host: {
+    readonly deps: Deps;
+    readonly document: (target: DocumentRef) => Promise<{ readonly address: Address | null }>;
+    readonly sessions: () => Promise<BridgeSessionsListData>;
+  },
+) => Promise<unknown>;
