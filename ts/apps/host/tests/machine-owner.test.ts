@@ -76,7 +76,7 @@ effectTest("an observed owner polls once per period and closing its scope stops 
     yield* TestClock.adjust("60 seconds");
     yield* settleFibers;
     expect(reads.sessions).toBe(4);
-    const refused = yield* Effect.flip(owner.fresh);
+    const refused = yield* Effect.flip(owner.sessionCensus({ pid: 42, processStartUtc: "2026-11-19T00:00:00Z" }));
     expect(refused).toBeInstanceOf(MachineRetired);
   }),
 );

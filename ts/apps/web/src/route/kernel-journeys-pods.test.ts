@@ -274,7 +274,6 @@ test("JZ Open machine census: sampling drift lists documents; content conflict n
   })) } };
   const machineObserver = hostResourceObserver(undefined, undefined, undefined, undefined, undefined, {
     current: () => machine,
-    refresh: async () => machine, fresh: async () => machine, acquisitions: () => [],
     observe(accept) {
       const value = { ...structuredClone(machine), observedAtUtc: new Date(++samples * 1000).toISOString(),
         revit: { ...machine.revit, sessions: conflict && samples % 2 === 0 ? [] : machine.revit.sessions } };

@@ -19,7 +19,7 @@ import { readSdk } from "./sdk-session.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 
 export type { NativeProcess } from "@pe/agent-contracts";
-export type SdkReceiptReader = (args: readonly string[]) => Promise<string>;
+export type SdkReceiptReader = (args: readonly string[], signal?: AbortSignal) => Promise<string>;
 async function sdkResult<A>(args: readonly string[], read: SdkReceiptReader) {
   return parsePeRevitEnvelope<A>(await read(args), args, peRevitLauncher());
 }

@@ -60,6 +60,16 @@ export function phaseOf(row: SessionObservation): Phase {
   }
 }
 
+export function sessionReadStatus(session: MachineSession): string {
+  const { row } = session;
+  const phase = phaseOf(row);
+  if (phase === "gone" || phase === "failed") return phase;
+  if (row.execution?.allowed !== true) return "outside this host’s scope";
+  if (phase === "booting") return "starting";
+  if (session.holdingsLeg.error) return "document details unavailable";
+  return phase;
+}
+
 /** The SDK selection a verb sends: an icon-started Revit has no name, so its pid. */
 export const selectionOf = (row: SessionObservation): { pid: number } | { id: string } =>
   row.case === "observed-active" ? { pid: row.process.pid } : { id: row.id };
