@@ -1,3 +1,4 @@
+import type { SettingTierRead } from "@pe/agent-contracts/tiered-setting";
 import { z } from "zod";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import { contract } from "@pe/agent-contracts/handle";
@@ -12,7 +13,7 @@ import {
   revitEntity,
   sheetCells,
 } from "@pe/agent-contracts/product";
-import { setting, type Domain } from "@pe/agent-contracts/slots/sheet";
+import { settingLayer, type Domain } from "@pe/agent-contracts/slots/sheet";
 import { defineSettingOwner } from "@pe/agent-contracts/setting-owners";
 import { ductCatalogReadingSchema } from "./duct-catalog.ts";
 import { peaGuide } from "./pea-guide.ts";
@@ -29,8 +30,6 @@ import { criterionLabel } from "./criterion-words.neutral.ts";
 
 export const ENGINE_DEFAULT_NO_SHARED_ROOT =
   "Engine default: no firm home, so the /ducts firm file (Settings/ducts.json) is not read";
-export const criterionDomain = (cell: DuctsCriteriaCell): Domain =>
-  DUCTS_CRITERIA_CELLS[cell].domain;
 const layerLabel = ([key, side]: (typeof DUCTS_CRITERIA_CELLS)[DuctsCriteriaCell]["layer"]) => {
   return side ? `${criterionLabel(key)} ${side}` : criterionLabel(key);
 };
@@ -153,12 +152,24 @@ const declaration = define({
 });
 const { "settings.tiers.write": _settingsWrite, ...actions } = declaration.commands;
 
+type SettingsRead = { settings?: Record<string, readonly SettingTierRead[]> } | null;
 export const ductsSettings = Object.fromEntries(
-  Object.entries(sheetCells(declaration)).flatMap(([name, { home, ...draw }]) =>
-    home.at === "setting"
-      ? [[name, setting(home.owner, home.path, draw.domain, home.tiers, draw)]]
-      : [],
-  ),
+  Object.entries(sheetCells(declaration)).flatMap(([name, binding]) => {
+    const { home } = binding;
+    return home.at === "setting"
+      ? [
+          [
+            name,
+            {
+              ...binding,
+              home,
+              per: "route" as const,
+              model: (read: SettingsRead) => settingLayer(binding, read?.settings?.[home.owner]),
+            },
+          ],
+        ]
+      : [];
+  }),
 );
 export const product = {
   ...declaration,

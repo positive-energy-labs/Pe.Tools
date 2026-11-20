@@ -14,7 +14,7 @@ import { systemCode } from "@pe/ducts-web/identity";
 import { fansCalcData, FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
 import {
   ductsPricingData,
-  ductsRosterData,
+  ductsOverviewData,
   DUCTS_DETAIL_LIMIT,
   ductDetailLimitMessage,
 } from "@pe/duct-systems-contract/ducts-read";
@@ -52,11 +52,10 @@ const products = [
     message: ductDetailLimitMessage,
     coreArgs: { system: [] },
     roster(data: unknown, size: number) {
-      const base = ductsRosterData.parse(data);
+      const base = ductsOverviewData.parse(data);
       const names = Array.from({ length: size }, (_, i) => `System ${i}`);
-      const systems = names.map((name, id) => ({ ...base.systems[0]!, name, id }));
       const rows = names.map((name) => ({ ...base.rows[0]!, name, key: name }));
-      return { data: { ...base, rows, systems }, ids: names.map(systemCode) };
+      return { data: { ...base, rows }, ids: names.map(systemCode) };
     },
   },
 ];
@@ -104,7 +103,7 @@ async function arrive(product: (typeof products)[number], size: number, choice?:
   const coreData = pricing
     ? {
         ...pricing,
-        analysis: { ...pricing.analysis, systems: ductsRosterData.parse(batch.data).rows },
+        analysis: { ...pricing.analysis, systems: ductsOverviewData.parse(batch.data).rows },
       }
     : { ...fansCalcData.parse(corePacket.value!.data), rows: fansCalcData.parse(batch.data).rows };
   const acquire = vi.spyOn(core.source, "provide").mockResolvedValue({
@@ -177,7 +176,6 @@ test.each(products)(
       expect(extra().getAttribute("aria-disabled"), extra().outerHTML).toBe("true"),
     );
     expect(extra().getAttribute("aria-description")).toBe(product.message);
-    if (product.field === "system") expect(screen.getByText(product.message)).toBeTruthy();
     expect(screen.getByText(new RegExp(`/ ${product.limit} open`))).toBeTruthy();
     const over = address.read();
     over.set(product.field, JSON.stringify({ kind: "ids", ids }));
@@ -194,7 +192,7 @@ test.each(products)(
 test.each(
   products.flatMap((product) =>
     (["ids", "all"] as const)
-      .filter((choice) => choice === "ids" || product.field === "system")
+      .filter((choice) => choice === "ids")
       .map((choice) => ({ product, choice, list: product.list })),
   ),
 )(
@@ -226,7 +224,7 @@ test.each(
   },
 );
 
-test.each(products.filter(({ field }) => field === "system"))(
+test.each(products.filter((p) => p.field === "fan"))(
   "$list All opens a roster at its limit",
   async (product) => {
     const { mount, acquire } = await arrive(product, product.limit);
@@ -256,4 +254,26 @@ test("Fans All keeps a large overview and opens a single worksheet on row select
   await waitFor(() => expect(mount.value().state).toBe("ready"));
   expect(mount.page.read().fan).toEqual({ kind: "ids", ids: [ids[0]] });
   expect(acquire).toHaveBeenLastCalledWith("layout", expect.objectContaining({ fan: [ids[0]] }));
+});
+
+test("All admits a roster beyond the detail limit and opens detail only for the system picked", async () => {
+  const product = products[1];
+  if (!product) throw Error("No Duct Systems fixture");
+  const { mount, acquire, walk } = await arrive(product, DUCTS_DETAIL_LIMIT + 1, "all");
+  expect(mount.page.read().system).toEqual({ kind: "all" });
+  expect(acquire).toHaveBeenLastCalledWith("layout", { system: [], fan: null });
+  expect(
+    walk?.mock.calls.every(([, args]) => JSON.stringify(args) === '{"system":[],"fan":null}'),
+  ).toBe(true);
+  const list = screen.getByRole("listbox", { name: "systems" });
+  const row = list.querySelector<HTMLElement>("[data-key]");
+  const name = row?.dataset.key;
+  if (!row || !name) throw Error("The All overview shows no selectable row");
+  fireEvent.click(row);
+  await waitFor(() =>
+    expect(mount.page.read().system).toEqual({ kind: "ids", ids: [systemCode(name)] }),
+  );
+  await waitFor(() =>
+    expect(acquire).toHaveBeenLastCalledWith("layout", { system: [name], fan: null }),
+  );
 });

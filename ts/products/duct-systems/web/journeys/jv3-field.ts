@@ -36,12 +36,18 @@ const rows = (page: Page) =>
             e.dataset.sheetCell === label &&
             [...e.querySelectorAll("*")].some((child) => child.getClientRects().length > 0),
         )
-        .map((e) => ({
-          address: e.dataset.sheetAddress ?? null,
-          source: e.dataset.source ?? null,
-          text: e.textContent?.trim() ?? null,
-          value: e.querySelector<HTMLInputElement>("input")?.value ?? null,
-        })),
+        .map((e) => {
+          const control = e.querySelector("[data-cell-owner]");
+          const displayed = Array.from(control?.childNodes ?? []).find(
+            (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+          );
+          return {
+            address: e.dataset.sheetAddress ?? null,
+            source: e.dataset.source ?? null,
+            text: e.textContent?.trim() ?? null,
+            value: control?.querySelector("input")?.value ?? displayed?.textContent?.trim() ?? null,
+          };
+        }),
     label,
   );
 const actions: Action[] = [

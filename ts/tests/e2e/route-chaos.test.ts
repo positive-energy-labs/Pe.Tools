@@ -570,17 +570,17 @@ test("seeded real-user route journey", async () => {
         !["demo", "host"].includes(lane ?? "")
       )
         throw new Error(
-          "PRECONDITION: E2E_WEB (full /ducts URL), CDP_PORT, CDP_TARGET, CHAOS_LANE=demo|host and explicit CHAOS_REQUIRE are required",
+          "PRECONDITION: E2E_WEB (full /duct-systems URL), CDP_PORT, CDP_TARGET, CHAOS_LANE=demo|host and explicit CHAOS_REQUIRE are required",
         );
       const url = new URL(process.env.E2E_WEB);
       if (
-        url.pathname !== "/ducts" ||
+        url.pathname !== "/duct-systems" ||
         (lane === "demo"
-          ? !["scene", "navigation"].includes(url.searchParams.get("demo") ?? "")
-          : url.searchParams.has("demo"))
+          ? !["scene", "navigation"].includes(url.searchParams.get("fixture") ?? "")
+          : url.searchParams.has("fixture"))
       )
         throw new Error(
-          "PRECONDITION: demo lane needs /ducts?demo=navigation (or scene with two systems); host lane needs /ducts with no demo query",
+          "PRECONDITION: demo lane needs /duct-systems?fixture=navigation (or scene with two systems); host lane needs /duct-systems with no fixture query",
         );
       page = await connect();
       page.onEvent((event) => {
@@ -594,7 +594,7 @@ test("seeded real-user route journey", async () => {
               receipt.observedWebBuilds.push(String(value));
           let leaseThread: string | undefined;
           let leaseInput: unknown;
-          if (new URL(request.url).pathname === "/pe/route-view/ducts" && request.postData) {
+          if (new URL(request.url).pathname === "/pe/route-view/duct-systems" && request.postData) {
             try {
               leaseInput = JSON.parse(request.postData);
               leaseThread = (leaseInput as { thread?: string }).thread;
@@ -937,7 +937,7 @@ test("seeded real-user route journey", async () => {
             .find(
               (event) =>
                 event.url &&
-                new URL(event.url).pathname === "/pe/route-view/ducts" &&
+                new URL(event.url).pathname === "/pe/route-view/duct-systems" &&
                 event.leaseThread === thread &&
                 event.loaderId === loaderId &&
                 event.status === 200 &&
@@ -975,14 +975,14 @@ test("seeded real-user route journey", async () => {
             e.method === "Network.requestWillBeSent" &&
             e.loaderId === loaderId &&
             e.url &&
-            new URL(e.url).pathname === "/pe/route-view/ducts",
+            new URL(e.url).pathname === "/pe/route-view/duct-systems",
         ).length,
         routePublications: receipt.network.filter(
           (e) =>
             e.method === "Network.responseReceived" &&
             e.loaderId === loaderId &&
             e.url &&
-            new URL(e.url).pathname === "/pe/route-view/ducts" &&
+            new URL(e.url).pathname === "/pe/route-view/duct-systems" &&
             e.status === 200 &&
             e.requestMethod === "PUT",
         ).length,
@@ -1006,7 +1006,7 @@ test("seeded real-user route journey", async () => {
                   e.method === "Network.requestWillBeSent" &&
                   e.loaderId === loaderId &&
                   e.url &&
-                  new URL(e.url).pathname === "/pe/route-view/ducts",
+                  new URL(e.url).pathname === "/pe/route-view/duct-systems",
               )
               .every((e) => !!e.requestId && finishedRequests.has(e.requestId))
           );
@@ -1025,7 +1025,7 @@ test("seeded real-user route journey", async () => {
             e.requestId &&
             finishedRequests.has(e.requestId) &&
             e.url &&
-            new URL(e.url).pathname === "/pe/route-view/ducts",
+            new URL(e.url).pathname === "/pe/route-view/duct-systems",
         )!;
       const baselineRequest = receipt.network.find(
         (e) => e.method === "Network.requestWillBeSent" && e.requestId === latestLease.requestId,
@@ -1068,7 +1068,7 @@ test("seeded real-user route journey", async () => {
             e.method === "Network.requestWillBeSent" &&
             e.loaderId === loaderId &&
             e.url &&
-            new URL(e.url).pathname.startsWith("/pe/route-view/ducts"),
+            new URL(e.url).pathname.startsWith("/pe/route-view/duct-systems"),
         );
         for (const request of puts) {
           expect(
@@ -1078,7 +1078,7 @@ test("seeded real-user route journey", async () => {
           expect(
             new URL(request.url!).pathname,
             "quiet lease identity: same publication endpoint",
-          ).toBe("/pe/route-view/ducts");
+          ).toBe("/pe/route-view/duct-systems");
           expect(
             request.leaseInput,
             "quiet lease identity: same instance and identical complete view input",
@@ -1569,7 +1569,7 @@ test("seeded real-user route journey", async () => {
       expect(await p.url()).toBe(pea);
       expect(await fieldValue(p, composer)).toBe(marker);
       await fill(p, composer, "");
-      for (let back = 0; back < 6 && new URL(await p.url()).pathname !== "/ducts"; back++) {
+      for (let back = 0; back < 6 && new URL(await p.url()).pathname !== "/duct-systems"; back++) {
         await history(p, "Back");
         await sleep(150);
       }

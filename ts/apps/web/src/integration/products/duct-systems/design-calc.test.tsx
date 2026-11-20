@@ -64,6 +64,7 @@ test("/ducts with no shared root: a firm criterion is the engine default, and th
     value: 850,
     source: "work",
     label: "Velocity limit supply",
+    home: { at: "local" },
   });
   expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({
     value: 0.08,

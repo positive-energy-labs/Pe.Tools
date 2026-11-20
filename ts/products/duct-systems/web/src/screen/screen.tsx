@@ -16,7 +16,6 @@ import { subjectCode, type RouteStatePatch } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { neutralFansWork } from "@pe/fans-contract/fans";
 import { stagedValues } from "@pe/duct-systems-contract/ducts";
-import { DUCTS_DETAIL_LIMIT, ductDetailLimitMessage } from "@pe/duct-systems-contract/ducts-read";
 import { catalogLinkKey } from "@pe/ducts-domain/catalog";
 import { suggestKind } from "@pe/ducts-domain/roster";
 import { StateCell } from "@pe/kit/lang/cell";
@@ -55,11 +54,7 @@ import {
 } from "react";
 import { z } from "zod";
 import type { DuctsDrawContext, DuctsReads, DuctsSystemsContext } from "../../route.ts";
-import {
-  roster as rosterRead,
-  network as networkSource,
-  pricing as pricingSource,
-} from "../../route.ts";
+import { network as networkSource, pricing as pricingSource } from "../../route.ts";
 import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { airflowOptions } from "@pe/ducts-web/airflow";
 import {
@@ -108,18 +103,11 @@ function useNetworkData(ctx: NetworkContext) {
   const workDoc = held?.design ?? null;
   const target = ctx.target;
   const page = ctx.page.read();
-  const roster = useValue(ctx.read(rosterRead));
   const system = namesOf(page.system);
   const fanScope = system !== "all" && !system.length ? page.fan : null;
-  const hasScope = system === "all" || system.length > 0 || fanScope !== null;
-  const systems = useMemo(
-    () => (system === "all" ? (roster?.systems ?? []).map((row) => row.name) : system),
-    [page.system, roster],
-  );
-  const active = activeName(
-    page.system,
-    (roster?.systems ?? []).map((row) => row.name),
-  );
+  const hasScope = system !== "all" && (system.length > 0 || fanScope !== null);
+  const systems = useMemo(() => (system === "all" ? [] : system), [page.system]);
+  const active = activeName(page.system, []);
   const selected = page.selected.map((item) => item.id).join(",");
   const doc = target?.kind === "document" ? target.ref : null;
   const networkRead = ctx.read(networkSource);
@@ -156,12 +144,7 @@ function useNetworkData(ctx: NetworkContext) {
     .find((ids) => ids != null);
   const version = snapshot?.sourceVersion;
   // Domain readonly sweep reached 28 files; coverage still accepts the mutable snapshot alias.
-  const coverage = roster
-    ? systemReadCoverage(
-        snapshot,
-        roster as unknown as import("@pe/ducts-domain/types").DuctSnapshot,
-      )
-    : null;
+  const coverage = snapshot ? systemReadCoverage(snapshot, snapshot) : null;
   const stageScope = async (row: {
     kind?: string;
     group?: string;
@@ -338,12 +321,13 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const data = useNetworkData(ctx);
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
-  const roster = useValue(ctx.value);
-  const systemRows = analysis?.systems ?? roster?.rows ?? NO_SYSTEMS;
-  const notes = analysis?.notes ?? NO_NOTES;
+  const overview = useValue(ctx.value);
+  const systemRows =
+    (data.hasScope ? analysis?.systems : undefined) ?? overview?.rows ?? NO_SYSTEMS;
+  const notes = (data.hasScope ? analysis?.notes : undefined) ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
   const system = systems;
-  const version = captureSource?.version ?? "";
+  const version = overview?.sourceVersion ?? captureSource?.version ?? "";
   const systemKeys = { version, system, active, systemSearch, systemSort };
   const fansOf = useCallback(
     (system: ReturnType<typeof systemList>[number]) =>
@@ -370,10 +354,8 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
             </div>
           }
           systems={systemRows}
-          allRefusal={
-            (roster?.systems.length ?? 0) > DUCTS_DETAIL_LIMIT ? ductDetailLimitMessage : null
-          }
           value={ctx.value}
+          all={page.system.kind === "all"}
           fansOf={fansOf}
           nameOf={nameOf}
           notes={notes}
@@ -787,7 +769,7 @@ const SYSTEM_SORTS = {
 const SystemsList = memo(function SystemsList({
   header,
   systems,
-  allRefusal,
+  all,
   value,
   fansOf,
   nameOf,
@@ -799,7 +781,7 @@ const SystemsList = memo(function SystemsList({
 }: {
   header: ReactNode;
   systems: ReturnType<typeof systemList>;
-  allRefusal: string | null;
+  all: boolean;
   value: ValueHandle<unknown>;
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
@@ -872,6 +854,8 @@ const SystemsList = memo(function SystemsList({
     }),
     [systems, notes],
   );
+  const openSystem = (name: string) =>
+    all ? door?.select([systemId(name)]) : door?.toggle(systemId(name));
   const systemListView = useList({
     scope: page.version,
     value,
@@ -890,7 +874,7 @@ const SystemsList = memo(function SystemsList({
       if (next.search !== page.systemSearch || next.sort !== page.systemSort)
         onQuery(next.search, next.sort);
     },
-    onPick: (system) => door?.toggle(systemId(system.key)),
+    onPick: (system) => openSystem(system.key),
     refusalOf: (system) => door?.toggleRefusal(systemId(system.key)),
   });
   const active = page.active;
@@ -907,13 +891,12 @@ const SystemsList = memo(function SystemsList({
         <>
           {header}
           <div className="flex gap-1 px-1">
-            <Button label="All systems" refusal={allRefusal} onPress={() => door?.all()}>
+            <Button label="All systems" onPress={() => door?.all()}>
               All
             </Button>
             <Button label="Clear systems" onPress={() => door?.clear()}>
               Clear
             </Button>
-            {allRefusal && <span className="t-small text-ink-2">{allRefusal}</span>}
           </div>
         </>
       }
@@ -922,7 +905,7 @@ const SystemsList = memo(function SystemsList({
         const fans = fansOf(system);
         return systemRowParts(
           system,
-          () => door?.toggle(systemId(system.key)),
+          () => openSystem(system.key),
           notes[system.key],
           fans.map((f) => `${nameOf(f.unit)} ${f.role}: ${f.says}`),
           () => <FanFacts facts={fans} nameOf={nameOf} />,

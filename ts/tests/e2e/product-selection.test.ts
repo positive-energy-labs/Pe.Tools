@@ -74,34 +74,39 @@ async function openSystem(page: TypedPage, name: string) {
 }
 
 function state(page: TypedPage) {
-  return page.evaluate(() => {
+  return page.evaluate((selector) => {
     const url = new URL(location.href);
     const encoded = url.searchParams.get("system");
-    const system = (encoded ? JSON.parse(encoded) : { kind: "ids", ids: [] }) as {
-      ids: string[];
-      active?: string;
-    };
-    const rows = [
-      ...document.querySelectorAll<HTMLElement>(
-        '[data-list-view][aria-label="systems"] [role="option"][data-key]',
-      ),
-    ];
-    const picture = document.querySelector('[data-pane-id="e-picture"] [data-model-picture]');
+    const subject: unknown = encoded ? JSON.parse(encoded) : null;
+    const system =
+      subject && typeof subject === "object" && "ids" in subject && Array.isArray(subject.ids)
+        ? subject.ids.filter((id): id is string => typeof id === "string")
+        : [];
+    const rows = [...document.querySelectorAll<HTMLElement>(selector)].filter(
+      (row) => row.getClientRects().length > 0,
+    );
+    const selected = rows
+      .filter((row) => row.getAttribute("aria-selected") === "true")
+      .flatMap((row) => (row.dataset.key ? [row.dataset.key] : []))
+      .sort();
+    const pane = document.querySelector('[data-pane-id="e-picture"]');
+    const picture = pane?.querySelector("[data-model-picture]");
     return {
       url: url.href,
-      system: { ids: system.ids, active: system.active ?? system.ids[0] ?? null },
-      selected: rows
-        .filter((row) => row.getAttribute("aria-selected") === "true")
-        .map((row) => row.dataset.key ?? "")
-        .sort((a, b) => a.localeCompare(b)),
-      ready: document.readyState === "complete" && rows.some((row) => row.getClientRects().length),
-      picture:
-        !!picture?.getClientRects().length && picture.getAttribute("data-reading") !== "pending",
+      system,
+      selected,
+      rosterVisible: rows.length > 0,
+      ready:
+        document.readyState === "complete" &&
+        (system.length
+          ? !!picture?.getClientRects().length && !picture.matches('[data-reading="pending"]')
+          : rows.length > 0 &&
+            !!pane?.textContent?.includes("Choose a system to see its picture.")),
       alerts: [...document.querySelectorAll<HTMLElement>('[role="alert"]')]
         .filter((element) => element.getClientRects().length > 0)
         .map((element) => element.innerText),
     };
-  });
+  }, SYSTEMS);
 }
 
 test("opening a second duct system retains the first through reload and browser history", async () => {
@@ -122,10 +127,7 @@ test("opening a second duct system retains the first through reload and browser 
           expect(current.alerts).toEqual([]);
           return {
             ready: current.ready,
-            system: current.system.ids,
-            active: current.system.active,
-            selected: current.selected,
-            picture: current.picture,
+            system: current.system,
           };
         },
         { timeout: 20_000, message: label },
@@ -133,10 +135,15 @@ test("opening a second duct system retains the first through reload and browser 
       .toEqual({
         ready: true,
         system: systems.map(systemCode),
-        active: systems.length ? systemCode(systems[0]!) : null,
-        selected: [...systems].sort((a, b) => a.localeCompare(b)),
-        picture: systems.length > 0,
       });
+    if (systems.length && !(await state(page)).rosterVisible)
+      await click(page, 'button[aria-label^="Expand systems" i]');
+    await expect
+      .poll(async () => (await state(page)).selected, {
+        timeout: 20_000,
+        message: `${label}: selected rows`,
+      })
+      .toEqual([...systems].sort());
     checkpoints.push({ label, state: await state(page) });
   };
   try {

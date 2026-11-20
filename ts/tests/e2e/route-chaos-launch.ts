@@ -275,7 +275,7 @@ try {
           ? `/fans${values.revit ? "" : "?demo=navigation"}`
           : values.suite === "selection"
             ? "/"
-            : `/ducts?demo=navigation&thread=${leaseThread}`,
+            : `/duct-systems?fixture=navigation&thread=${leaseThread}`,
       web,
     ).href;
     receipt.web = web;

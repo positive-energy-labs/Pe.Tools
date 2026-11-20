@@ -1,6 +1,1 @@
-export {
-  criterionCellLabel,
-  criterionDomain,
-  ENGINE_DEFAULT_NO_SHARED_ROOT,
-  ductsSettings,
-} from "./product.ts";
+export { criterionCellLabel, ENGINE_DEFAULT_NO_SHARED_ROOT, ductsSettings } from "./product.ts";
