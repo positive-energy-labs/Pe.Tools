@@ -1,4 +1,4 @@
-import { resourceReadingSchema } from "@pe/mcps/product-readings";
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { acquireContentRoots, contentRootsReady, contentHomes, contentHomesFound, contentRootsUnavailable, observeContentRoots, ContentHomeUnavailable, homesStatus, writeHomesConfig } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
@@ -38,7 +38,7 @@ import {
 import { receiptQuerySchema } from "@pe/agent-contracts";
 
 import { httpRoutes as peRoutes, peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { servePeRoute, matchPeRoute } from "@pe/mcps/product-catalog";
+import { servePeRoute, matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { normalizePeError } from "@pe/host-contracts/pe-api";

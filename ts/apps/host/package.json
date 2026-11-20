@@ -63,5 +63,14 @@
       "where": "where.exe",
       "attrib": "attrib.exe"
     }
+  },
+  "pe": {
+    "generatedProductDependencies": [
+      "@pe/duct-systems-contract",
+      "@pe/duct-systems-host",
+      "@pe/ducts-host",
+      "@pe/fans-contract",
+      "@pe/fans-host"
+    ]
   }
 }

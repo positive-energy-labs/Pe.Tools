@@ -28,10 +28,7 @@ import { nativeOutputSchema } from "@pe/agent-contracts";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { HostNativeRead, canonicalJson, type NativeReadInput } from "@pe/host-internal/native-read";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import {
-  truncationSchema,
-  type InputKind,
-} from "@pe/agent-contracts";
+import { truncationSchema } from "@pe/agent-contracts";
 import type { InvalidRead } from "@pe/host-internal/read-errors";
 import { readSchemas } from "./request-services.ts";
 import {

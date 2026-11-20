@@ -8,7 +8,7 @@ import type { HarnessEvent, HostEvent } from "@pe/agent-contracts";
 import { HostLog } from "../src/host-log.ts";
 import { createPeRoutes } from "../src/pe-routes.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { servePeRoute } from "@pe/mcps/product-catalog";
+import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

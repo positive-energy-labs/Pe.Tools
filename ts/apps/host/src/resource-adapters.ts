@@ -15,7 +15,7 @@ import {
   receiptsForWork,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { commandTool } from "@pe/mcps/product-actions";
+import { commandTool } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
 import type { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";

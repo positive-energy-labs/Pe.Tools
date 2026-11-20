@@ -6,9 +6,10 @@ import {
   takeoffCaptureSummarySchema,
   candidateRegionSchema,
   takeoffUnreadableBlobSchema,
-  commands,
   workHandleSchema,
 } from "@pe/agent-contracts";
+import { builtinTools } from "./semantic-actions.ts";
+const commands = builtinTools.takeoffs.commands;
 export const adoptionArgs = z.object({
   views: z.union([z.array(z.string()), z.literal("all")]),
   zones: z.union([z.array(z.string()), z.literal("all")]),

@@ -21,7 +21,7 @@ import {
   type MachineShare,
   type ReceiptFact,
 } from "@pe/agent-contracts";
-import { matchPeRoute } from "@pe/mcps/product-catalog";
+import { matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { admitRequest, callerOf, browserContextHeaders, mintBrowserContext, REFUSAL_HEADER, type RoutePermission } from "./control.ts";
 import { Refused } from "@pe/host-internal/refused";
 import { recordHostFact, type ReceiptExporter } from "./receipt-export.ts";

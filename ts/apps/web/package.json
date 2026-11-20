@@ -88,5 +88,11 @@
   },
   "exports": {
     "./vite.config": "./vite.config.ts"
+  },
+  "pe": {
+    "generatedProductDependencies": [
+      "@pe/duct-systems-web",
+      "@pe/fans-web"
+    ]
   }
 }

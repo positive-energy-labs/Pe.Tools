@@ -16,7 +16,7 @@ import {
   type ExecutionTarget,
   type ActionNeed,
 } from "@pe/agent-contracts";
-import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.ts";
+import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.generated.ts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import { HostRpcCaller } from "./host-rpc-caller.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";

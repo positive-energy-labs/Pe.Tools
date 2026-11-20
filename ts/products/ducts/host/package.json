@@ -50,6 +50,10 @@
       "arguments": [
         "bridge"
       ]
+    },
+    "httpLayer": {
+      "module": "./ducts-files",
+      "export": "ductCatalogsRoute"
     }
   }
 }

@@ -1,5 +1,5 @@
 import { hostOwnership, hostState } from "../host-ownership.ts";
-import { matchPeRoute } from "@pe/mcps/product-catalog";
+import { matchPeRoute } from "../../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";

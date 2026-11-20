@@ -12,10 +12,10 @@ import {
   workKey,
   type ThreadHead,
 } from "@pe/agent-contracts";
-import { tools } from "@pe/mcps/product-actions";
+import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import type { Caller } from "@pe/agent-contracts";
 
-import { peRoutes } from "@pe/mcps/product-catalog";
+import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { Effect, Layer, PubSub } from "effect";
 import { rm } from "node:fs/promises";

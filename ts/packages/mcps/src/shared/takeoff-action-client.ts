@@ -27,7 +27,7 @@ import {
   type DetachedAction,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.ts";
+import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.generated.ts";
 
 /**
  * A refused admission. A door's typed refusal rides on the error (`refusal`) and its sentence is

@@ -17,7 +17,7 @@ import { hostRead } from "@pe/web-kernel/host-read";
 import * as fanContracts from "@pe/fans-contract/contract";
 import * as systemContracts from "@pe/duct-systems-contract/contract";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
-import { peRoutes } from "@pe/mcps/product-catalog";
+import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { workspace as roomsWorkspace } from "../../web/src/rooms/contract.ts";
 
 const contracts = [

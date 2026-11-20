@@ -1,5 +1,4 @@
-import { renderProductExecutors } from "./product-executors.ts";
-import { renderProductGuides } from "./product-guides.ts";
+import { productDependencyChanges, renderProductAssembly } from "./product-assembly.ts";
 import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import { icons } from "lucide-react";
@@ -23,38 +22,18 @@ registerHooks({
 /** Graph declarations own the directory and Pea projections; browser bodies never ship to MCP. */
 import { createJiti } from "jiti";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, relative } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
 import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "../../../scripts/route-startup.ts";
+import { regenerateCommandTable } from "../../../scripts/refresh-command-table.ts";
 import { buildBuiltinClosures, writeBuiltinClosurePin } from "../route-source-hash.ts";
-const jiti = createJiti(import.meta.url, {
-  fsCache: false,
-  jsx: { runtime: "automatic" },
-  alias: {
-    "#/family/authored-families": fileURLToPath(
-      new URL("./route-projection-fixtures.ts", import.meta.url),
-    ),
-    "./generated/route-directory.ts": fileURLToPath(
-      new URL("./route-projection-runtime.ts", import.meta.url),
-    ),
-    "./builtin-routes": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
-    "#/route/builtin-routes": fileURLToPath(
-      new URL("./route-projection-runtime.ts", import.meta.url),
-    ),
-    "./build-stamp": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
-    "@pe/web-kernel/host/runtime": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
-    "#/": fileURLToPath(new URL("../src/", import.meta.url)),
-  },
-});
-const { canonicalRouteJson, projectKernelDirectory } =
-  await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
-const { textCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/route-field.ts")>("../../../packages/agent-contracts/src/route-field.ts");
-const { listSearchCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/list-search.ts")>("../../../packages/agent-contracts/src/list-search.ts");
 const check = process.argv.includes("--check");
 // Write every builtin closure (untracked build output) without rewriting tracked projections.
 const closureOnly = process.argv.includes("--builtin-closure-only");
 const runtime = process.argv.includes("--runtime");
+const productsOnly = process.argv.includes("--products-only");
+if (productsOnly && (check || runtime || closureOnly)) throw Error("--products-only writes the product assembly and workspace links");
 if (check && runtime) throw Error("--check is read-only and cannot use runtime projection flags");
 // JSON Schema is the runtime codec projection; retain its field type in generated addresses too.
 const schemaType = (schema: any): string => {
@@ -123,6 +102,44 @@ async function emit(destination: URL, text: string) {
     else await writeFile(destination, text);
   }
 }
+// A product can author a route with its own handles. Its command rows must exist before loading that route.
+if (!closureOnly) {
+  const assembly = renderProductAssembly(checkout);
+  for (const [file, text] of Object.entries(assembly.outputs))
+    await emit(pathToFileURL(join(checkout, file)), text);
+  if (!runtime) {
+    for (const { file, text } of productDependencyChanges(checkout, assembly.dependencies)) {
+      const destination = join(checkout, file);
+      if (check) stale.push(destination);
+      else await writeFile(destination, text);
+    }
+  }
+}
+if (productsOnly) process.exit(0);
+if (!closureOnly && !runtime && stale.length === 0) regenerateCommandTable(check);
+const jiti = createJiti(import.meta.url, {
+  fsCache: false,
+  jsx: { runtime: "automatic" },
+  alias: {
+    "#/family/authored-families": fileURLToPath(
+      new URL("./route-projection-fixtures.ts", import.meta.url),
+    ),
+    "./generated/route-directory.ts": fileURLToPath(
+      new URL("./route-projection-runtime.ts", import.meta.url),
+    ),
+    "./builtin-routes": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
+    "#/route/builtin-routes": fileURLToPath(
+      new URL("./route-projection-runtime.ts", import.meta.url),
+    ),
+    "./build-stamp": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
+    "@pe/web-kernel/host/runtime": fileURLToPath(new URL("./route-projection-runtime.ts", import.meta.url)),
+    "#/": fileURLToPath(new URL("../src/", import.meta.url)),
+  },
+});
+const { canonicalRouteJson, projectKernelDirectory } =
+  await jiti.import<typeof import("@pe/agent-contracts")>("@pe/agent-contracts");
+const { textCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/route-field.ts")>("../../../packages/agent-contracts/src/route-field.ts");
+const { listSearchCodec } = await jiti.import<typeof import("../../../packages/agent-contracts/src/list-search.ts")>("../../../packages/agent-contracts/src/list-search.ts");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const builtinOptions = [];
 // `folder` is the route directory relative to `apps/web/src/`: one segment for a web route, and
@@ -247,8 +264,6 @@ await emit(
   renderAddressTable([...addressRows.values()]),
 );
 await emit(registryFile, renderRouteRegistry(registryRows));
-await emit(new URL("../../host/src/product-executors.generated.ts", import.meta.url), renderProductExecutors(checkout));
-await emit(new URL("../../../packages/mcps/src/pea/guides.generated.ts", import.meta.url), renderProductGuides(checkout));
 const closures = await buildBuiltinClosures(builtinOptions);
 const directory = [];
 for (const [key, closure] of closures) {

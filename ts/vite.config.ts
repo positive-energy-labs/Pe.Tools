@@ -12,10 +12,20 @@ export default defineConfig({
       // host-typegen owns these checked-in artifacts; codegen:check compares exact bytes
       "**/host-ops.generated.ts",
       "**/host-catalog.generated.ts",
+      "packages/host-contracts/src/generated/native-effect.generated.ts",
       // Canonical closure pins and SDK shape projections are compared byte-for-byte by their producers.
       "**/source-closure.generated.json",
-      // route-graphs.ts --check owns exact projection bytes, including compact route-directory.ts.
+      // Route and product codegen compare these projections byte for byte.
       "packages/agent-contracts/src/generated/route-directory.ts",
+      "packages/agent-contracts/src/generated/command-axes.generated.ts",
+      "packages/agent-contracts/src/routes/table.generated.ts",
+      "apps/host/src/routes.generated.ts",
+      "apps/host/src/product-executors.generated.ts",
+      "apps/host/src/product-http.generated.ts",
+      "packages/mcps/src/pea/guides.generated.ts",
+      "packages/mcps/src/pea/product-actions.generated.ts",
+      "packages/mcps/src/pea/product-catalog.generated.ts",
+      "packages/mcps/src/pea/product-contracts.generated.ts",
       "**/pe-revit-wire.ts",
       // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
       "**/product.g.ts",

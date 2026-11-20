@@ -48,8 +48,8 @@ vi.mock("../../apps/host/src/installed-pods.ts",async actual=>({
  ...await actual<typeof import("../../apps/host/src/installed-pods.ts")>(),importShippedPods:async()=>({shippedRoot:null,outcomes:[]}),
 }));
 // Command steps reach Revit through `nativeStep`; hold Plan after its native answer settles.
-vi.mock("../../apps/host/src/command-executor.ts",async actual=>{
- const real=await actual<typeof import("../../apps/host/src/command-executor.ts")>();
+vi.mock("@pe/host-internal/command-executor",async actual=>{
+ const real=await actual<typeof import("@pe/host-internal/command-executor")>();
  const {Effect}=await import("effect");
  return {...real,nativeStep:(...args:Parameters<typeof real.nativeStep>)=>real.nativeStep(...args).pipe(
    Effect.tap(()=>args[2]==="ducts.apply.plan"?Effect.promise(()=>trace.holdPlan()):Effect.void))};

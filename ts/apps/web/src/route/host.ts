@@ -7,7 +7,7 @@ import {
   type WorkWriteAck,
   type WorkWrite,
 } from "@pe/agent-contracts";
-import { peRoutes } from "@pe/mcps/product-catalog";
+import { peRoutes } from "../../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import type { WorkAdmission } from "./route-discovery";
 export function routeInput(route: string, key: WorkKey) {
   const query: Record<string, string> = {};

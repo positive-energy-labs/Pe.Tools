@@ -1,4 +1,4 @@
-import { resourceReadingSchema } from "@pe/mcps/product-readings";
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
 import { currentFixture } from "@pe/web-kernel/shell/fixture-name";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { hostFetch, runtimeStreamUrl } from "@pe/web-kernel/host/runtime";

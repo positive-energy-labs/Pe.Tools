@@ -26,7 +26,7 @@ import {
   type StagedRoomEdit,
   type ModelRoom,
 } from "@pe/agent-contracts";
-import { commands, tools } from "@pe/mcps/product-actions";
+import { commands, tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import type {
   RhvacInsertRoomData,

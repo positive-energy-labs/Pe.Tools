@@ -17,7 +17,35 @@
     "./fan-scope.neutral": "./src/fan-scope.neutral.ts"
   },
   "pe": {
-    "guide": "./pea-guide"
+    "guide": "./pea-guide",
+    "commands": {
+      "module": "./semantic-actions",
+      "export": "sheetCommands"
+    },
+    "http": {
+      "module": "./duct-catalog",
+      "routes": "ductCatalogRoutes",
+      "axes": "ductCatalogRouteAxes"
+    },
+    "reading": {
+      "module": "./reading",
+      "export": "ductsReadingSchema"
+    },
+    "callPolicies": {
+      "module": "./reading",
+      "export": "ductsReadingCallPolicies"
+    },
+    "settings": {
+      "key": "ducts",
+      "module": "./settings",
+      "export": "ductsSettingOwner"
+    },
+    "basisHeaders": {
+      "refresh": {
+        "module": "./reading",
+        "export": "DUCTS_REFRESH_HEADER"
+      }
+    }
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",

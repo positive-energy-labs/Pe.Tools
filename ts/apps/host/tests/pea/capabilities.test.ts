@@ -20,7 +20,7 @@ import { peDo, peRead, peFind } from "../../../../packages/mcps/src/pea/capabili
 import { nativeFixture as workFixture } from "../fans/fans-work-fixture.ts";
 import { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { commands } from "../../../../packages/mcps/src/pea/product-actions.ts";
+import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fixture.ts";
 import { createServer } from "node:http";
 import { once } from "node:events";

@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { emptyThreadHead, emptyThreadLifecycle, type HarnessEvent } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { servePeRoute } from "@pe/mcps/product-catalog";
+import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import type { HarnessThreads } from "../src/harness/threads.ts";
 import { exportThread, threadSegment } from "../src/thread-export.ts";
 import { HostLog } from "../src/host-log.ts";

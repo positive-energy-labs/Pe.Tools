@@ -8,7 +8,7 @@ import { hostRead } from "@pe/web-kernel/host-read";
 import { draw } from "@pe/web-kernel/route/draw";
 import { split } from "@pe/web-kernel/route/typed-route";
 import { setting, type SheetSlot } from "../../../../packages/agent-contracts/src/slots/sheet.ts";
-import { settingOwners } from "../route/setting-owners.ts";
+import { settingOwners } from "@pe/mcps/product-contracts";
 
 
 export const loaded = read(hostRead(contracts.machine));

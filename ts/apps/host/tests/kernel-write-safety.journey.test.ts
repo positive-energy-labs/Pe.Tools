@@ -15,7 +15,7 @@ import {
   type Touched,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { tools } from "@pe/mcps/product-actions";
+import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings, nativeRecordingRequest } from "./native-recordings.ts";
 import { testRegistry } from "./effect-test.ts";

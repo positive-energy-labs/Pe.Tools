@@ -10,7 +10,7 @@ import { publishPage } from "../src/page-publication.ts";
 import { PictureCaptures } from "../src/captures-route.ts";
 import { createPagesHandler, pageLibrary } from "../src/pages-route.ts";
 import { pagePublicationExecutor } from "../src/page-publication.ts";
-import { servePeRoute } from "@pe/mcps/product-catalog";
+import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { asCaller, human } from "./callers.ts";
 
 function pixel(png: Buffer, x: number, y: number) {

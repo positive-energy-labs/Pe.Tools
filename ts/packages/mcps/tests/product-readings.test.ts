@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { resourceReadingSchema } from "../src/pea/product-readings.ts";
+import { resourceReadingSchema } from "../src/pea/product-contracts.generated.ts";
 
 test("the resource parser admits built-in and product requests through the same boundary", () => {
   const requests = [

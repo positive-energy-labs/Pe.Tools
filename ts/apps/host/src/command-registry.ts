@@ -28,7 +28,7 @@ import { Effect } from "effect";
 import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { catalogWorkSpecs, type WriteBoundaryBinding } from "@pe/agent-contracts";
-import { commands } from "@pe/mcps/product-actions";
+import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 

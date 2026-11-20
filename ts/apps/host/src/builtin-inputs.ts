@@ -1,10 +1,9 @@
-import { resourceReadingSchema } from "@pe/mcps/product-readings";
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { join } from "node:path";
-import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
 import { captureInput, replayInput, type RecordedInput } from "@pe/host-internal/input-recording";
@@ -50,8 +49,8 @@ import {
 } from "./work-inputs.ts";
 
 import { bindWork, readingKey } from "@pe/agent-contracts";
-import type { DuctsReadingEnvelope } from "./product-contracts.ts";
-import { matchPeRoute } from "@pe/mcps/product-catalog";
+import type { DuctsReadingEnvelope } from "@pe/ducts-contract/reading";
+import { matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import { createRouteRegistrations } from "@pe/mcps";
@@ -71,7 +70,7 @@ import { RevitBridge } from "@pe/host-internal/bridge";
 import { nativeCallRouteFor, nativeReadResolveRoute, retainedDuctsRead } from "./call-route.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { createDuctsBodyBasis } from "@pe/ducts-host/ducts-body-basis";
-import { ductCatalogsRoute, DuctFiles } from "@pe/ducts-host/ducts-files";
+import { catalogsFor, DuctFiles } from "@pe/ducts-host/ducts-files";
 import { DuctsReadings, ductsReadings } from "@pe/ducts-host/ducts-readings";
 import { runPods } from "@pe/host-internal/pod-runner";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
@@ -1351,7 +1350,6 @@ export const builtinFileLayer = () => Layer.unwrap(Effect.promise(async () => {
     catalogs: contentHomes(),
   });
 }));
-export const builtinFileRoutes = ductCatalogsRoute;
 export const defaultReadOwner = (
   inputs: HostInputContext["Service"],
   options: Omit<ReadOwnerOptions, "live"> & {

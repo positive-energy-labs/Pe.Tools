@@ -1,7 +1,7 @@
 import { callCatalogRoute } from "@pe/agent-contracts/pe-api";
-import { linkedCatalog } from "./product-catalog.ts";
+import { linkedCatalog } from "./product-catalog.generated.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { peRoutes } from "./product-catalog.ts";
+import { peRoutes } from "./product-catalog.generated.ts";
 import { pagePublicationSchema, pagePublicationResultSchema } from "@pe/host-contracts/pe-api";
 import { scriptSourceBundleRevision } from "@pe/host-contracts/script-revision";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";

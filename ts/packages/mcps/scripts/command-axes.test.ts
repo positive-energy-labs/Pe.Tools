@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { generateCommandTable, commandTableSource } from "./command-axes.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
-import { hostActions, commandTarget } from "../src/pea/product-actions.ts";
+import { hostActions, commandTarget } from "../src/pea/product-actions.generated.ts";
 import { isWritePreviewKey } from "@pe/agent-contracts/semantic-actions";
 import { commandTable } from "../../agent-contracts/src/command-axes.ts";
 

@@ -20,7 +20,7 @@ import {
   type WorkIntentBinding,
   type WriteBoundaryBinding,
 } from "@pe/agent-contracts";
-import { tools } from "@pe/mcps/product-actions";
+import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { refused, type CommandContext, type CommandExecutor } from "@pe/host-internal/command-executor";
 
 const hash = (value: unknown) =>

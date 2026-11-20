@@ -653,12 +653,12 @@ it("refuses workSubject fields without a codec that decodes a local Work key", a
 });
 
 it("admits journal previews with truthful Geometry/rollback axes but still refuses native geometry", async () => {
-  const { commands } = await import("./semantic-actions.ts");
+  const { builtinCommands } = await import("./semantic-actions.ts");
   const { commandCatalogAxes } = await import("./command-axes.ts");
   const key = "families.apply.preview";
   const preview = {
-    input: commands[key].input,
-    output: commands[key].result,
+    input: builtinCommands[key].input,
+    output: builtinCommands[key].result,
     axes: commandCatalogAxes[key],
   };
   const data = {

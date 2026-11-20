@@ -6,7 +6,7 @@ import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
 import { hostMarks } from "../src/document-marks.ts";
 import { createPeClient, httpRoutes } from "@pe/agent-contracts/pe-api";
-import { servePeRoute } from "@pe/mcps/product-catalog";
+import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Effect, Fiber, Queue } from "effect";
 import { HttpEffect, HttpRouter } from "effect/http";

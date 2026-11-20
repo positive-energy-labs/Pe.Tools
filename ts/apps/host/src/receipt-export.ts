@@ -1,4 +1,4 @@
-import { peRoutes } from "@pe/mcps/product-catalog";
+import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
 import { isSea } from "node:sea";

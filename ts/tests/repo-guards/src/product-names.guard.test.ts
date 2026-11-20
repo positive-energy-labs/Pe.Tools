@@ -2,10 +2,11 @@
  * ADR 0046: generic code names no product outside declared composition sites.
  * FANS-P4-NAMES-25 freezes existing mentions; counts must fall to zero and never rise.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { productionFiles, ROOT } from "./import-census.ts";
+import { productAssemblyPaths } from "../../../apps/web/scripts/product-assembly.ts";
 
 const frozen: Record<string, number> = JSON.parse(
   readFileSync(new URL("./product-names.baseline.json", import.meta.url), "utf8"),
@@ -23,19 +24,21 @@ const GENERIC = [
 /** Registration sites: the only generic files that may name a product. */
 const ALLOWED = new Set([
   "apps/host/src/command-registry.ts",
-  "apps/host/src/product-contracts.ts",
-  "apps/web/src/route/setting-owners.ts",
   "apps/host/src/routes.generated.ts",
-  "apps/host/src/product-executors.generated.ts",
-  "packages/mcps/src/pea/guides.generated.ts",
-  "packages/mcps/src/pea/product-actions.ts",
-  "packages/mcps/src/pea/product-catalog.ts",
+  ...Object.values(productAssemblyPaths).map(file => file.slice("ts/".length)),
   "packages/host-contracts/src/product-paths.ts",
   "packages/agent-contracts/src/routes/table.generated.ts",
   "packages/agent-contracts/src/generated/route-directory.ts",
+  "packages/agent-contracts/src/generated/command-axes.generated.ts",
 ]);
-// Product words and camelCase parts, not physical types such as FanRow or DuctInput.
-const PRODUCT = /(?<![a-z])duct-systems|(?<![a-z])ducts|Ducts|DUCTS|(?<![a-z])fans(?![a-z])|Fans(?![a-z])|FANS(?![A-Z])/g;
+// Names of installed product folders, in path, type and constant spelling.
+const ids = readdirSync(resolve(ROOT, "products"), { withFileTypes: true })
+  .filter(entry => entry.isDirectory()).map(entry => entry.name).sort((a, b) => b.length - a.length);
+const PRODUCT = new RegExp(ids.flatMap(id => [
+  "(?<![a-z])" + RegExp.escape(id) + "(?![a-z])",
+  RegExp.escape(id.replace(/(^|-)([a-z])/g, (_, _dash, letter: string) => letter.toUpperCase())) + "(?![a-z])",
+  RegExp.escape(id.replaceAll("-", "_").toUpperCase()) + "(?![A-Z])",
+]).join("|"), "g");
 const allowed = (path: string) => ALLOWED.has(path)
   || /^tests\/e2e\/(?:fans?[^/]*|j6-fans-write[^/]*|f1-fans[^/]*)$/.test(path)
   || path === "packages/host-contracts/src/fixtures/k2-four-fan-walk.json"
@@ -94,7 +97,7 @@ test("the guard counts a planted product name and passes generic text and the al
     "apps/host/src/b.ts": `const fanout = infant + defang; const product = conduct;`,
     "apps/host/src/command-registry.ts": `import { ductsExecutors } from "./ducts-actions.ts";`,
   })).toEqual({ "apps/host/src/ducts-actions.ts": 1, "apps/host/src/a.ts": 3 });
-  for (const name of ["fans", "ducts", "duct-systems"]) {
+  for (const name of ids) {
     expect(productNames({ "apps/host/src/planted.ts": `const name = '${name}';` }))
       .toEqual({ "apps/host/src/planted.ts": 1 });
   }

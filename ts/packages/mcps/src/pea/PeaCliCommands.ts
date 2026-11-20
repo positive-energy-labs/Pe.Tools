@@ -1,5 +1,5 @@
 import { contextFetch } from "@pe/runtime/context";
-import { isPeRouteId, createPeClient } from "./product-catalog.ts";
+import { isPeRouteId, createPeClient } from "./product-catalog.generated.ts";
 import { readCapabilityIntent, runCapability, type AdmissionContext } from "../shared/admission.ts";
 import { define } from "gunshi";
 import { readFileSync } from "node:fs";

@@ -2,7 +2,7 @@ import { valueOf } from "@pe/web-kernel/route/typed-route";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
-import { commands } from "@pe/mcps/product-actions";
+import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { adoptionData } from "@pe/agent-contracts/takeoff-read";
 import { gate, ref } from "../../../host/tests/host-read-graph.test-support";
 import { planned } from "../shell/typed-mount";

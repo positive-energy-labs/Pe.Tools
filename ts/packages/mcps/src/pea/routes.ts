@@ -3,7 +3,7 @@
  * The host composition root decides which owner registers each key; nothing here filters routes out.
  */
 import type { HostWorkRegistration } from "@pe/agent-contracts";
-import { tools } from "./product-actions.ts";
+import { tools } from "./product-actions.generated.ts";
 
 import {
   familiesAdmission,

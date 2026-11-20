@@ -1,5 +1,5 @@
 import { readSettingTiers, readTier } from "@pe/host-internal/settings-files";
-import { settingOwners } from "./product-contracts.ts";
+import { settingOwners } from "@pe/mcps/product-contracts";
 /**
  * Tiered settings (ADR 0037 rule 8; homes MAP slice 6b): `Settings/<owner>.json` in the user home,
  * the target model's project home and the firm home. A read returns every tier's file as it stands

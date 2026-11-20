@@ -84,7 +84,7 @@ import {
   type ReceiptReader,
   type ReceiptStamp,
 } from "@pe/agent-contracts";
-import { commands } from "@pe/mcps/product-actions";
+import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { live, originOf, assertRunAdmission, commandCheckpoint, subscribeRunChanges, validateFootprintCaller, retainActionCaller } from "./control.ts";
 import { Refused } from "@pe/host-internal/refused";
 

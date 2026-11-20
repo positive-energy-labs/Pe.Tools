@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpEffect, HttpRouter } from "effect/http";
-import { servePeRoute } from "@pe/mcps/product-catalog";
-import { peRoutes } from "@pe/mcps/product-catalog";
+import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 import { invocationContext } from "@pe/runtime/context";
 import { DEVICE_COOKIE, type Devices } from "./remote-device.ts";
 import { threadHead, refusalHeaders } from "./control.ts";

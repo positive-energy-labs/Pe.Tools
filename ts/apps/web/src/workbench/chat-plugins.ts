@@ -20,7 +20,7 @@ import {
   type ActionReceipt,
   type DocumentRequest,
 } from "@pe/agent-contracts";
-import { commands } from "@pe/mcps/product-actions";
+import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
 
 import { publicRoutes } from "#/route/route-discovery";
 import { isRecord, podMemberCode } from "@pe/agent-contracts";

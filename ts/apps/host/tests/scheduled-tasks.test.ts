@@ -10,7 +10,7 @@ import { emptyThreadHead, emptyThreadLifecycle } from "@pe/agent-contracts";
 import { createScheduledTasks, type ScheduledLaunch } from "../src/scheduled-tasks.ts";
 import { threadHistory } from "../src/thread-history.ts";
 import { asCaller, human, pea } from "./callers.ts";
-import { peRoutes } from "@pe/mcps/product-catalog";
+import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
 
 const dirs: string[] = [];
 afterEach(() => {

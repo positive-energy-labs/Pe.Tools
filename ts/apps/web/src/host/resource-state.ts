@@ -1,4 +1,4 @@
-import { resourceReadingSchema } from "@pe/mcps/product-readings";
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
 import { canonicalRouteInput } from "../../../../packages/agent-contracts/src/route-doc";
 /**
  * Host-owned resource snapshots, with a bounded wait and retained evidence. Hooks project the wire

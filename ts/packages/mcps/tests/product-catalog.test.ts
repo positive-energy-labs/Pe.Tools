@@ -1,9 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { readingRequestSchema } from "@pe/agent-contracts";
-import { ductsReadingSchema } from "@pe/ducts-contract/reading";
+import { resourceReadingSchema } from "../src/pea/product-contracts.generated.ts";
 import { decodeResourceSubscriptionUpdate } from "@pe/runtime/resource-stream";
-import { linkedCatalog, matchPeRoute, peRoutes, servePeRoute } from "../src/pea/product-catalog.ts";
+import { linkedCatalog, matchPeRoute, peRoutes, servePeRoute } from "../src/pea/product-catalog.generated.ts";
 
 const catalogEntries = [...linkedCatalog().entries.values()];
 
@@ -30,14 +29,13 @@ test("product reading requests enter through the assembled stream schema", () =>
     selector: { kind: "roster" },
   };
   const request = JSON.stringify({ add: [reading], remove: [] });
-  const assembled = readingRequestSchema.or(ductsReadingSchema);
-  expect(decodeResourceSubscriptionUpdate(request)).toEqual({ error: "Invalid resource keys" });
-  expect(decodeResourceSubscriptionUpdate(request, assembled)).toEqual({
+   expect(decodeResourceSubscriptionUpdate(request)).toEqual({ error: "Invalid resource keys" });
+  expect(decodeResourceSubscriptionUpdate(request, resourceReadingSchema)).toEqual({
     add: [reading],
     remove: [],
   });
   const bad = JSON.stringify({ add: [{ ...reading, slots: { unsupported: "slot" } }], remove: [] });
-  expect(decodeResourceSubscriptionUpdate(bad, assembled)).toEqual({
+  expect(decodeResourceSubscriptionUpdate(bad, resourceReadingSchema)).toEqual({
     error: "Invalid resource keys",
   });
 });

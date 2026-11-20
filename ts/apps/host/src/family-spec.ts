@@ -8,7 +8,7 @@ import { basename, dirname, extname, isAbsolute, join, posix, relative, resolve 
 import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { parsedDocViewSchema, type ActionStep } from "@pe/agent-contracts";
-import { commands, tools } from "@pe/mcps/product-actions";
+import { commands, tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
 import { z } from "zod";
 import { command, io, refused, type CommandExecutor } from "@pe/host-internal/command-executor";
 import { runPods } from "@pe/host-internal/pod-runner";
