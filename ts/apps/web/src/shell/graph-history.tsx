@@ -4,9 +4,18 @@ import { ListView } from "@pe/kit/lang/list-view";
 import { Button } from "@pe/kit/lang/button";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { Popover, PopoverTrigger, SubjectPopoverContent } from "@pe/kit/lang/popover";
-import { routeAddress } from "@pe/agent-contracts";
+import { routeAddress, type RoomsPartitionProgress } from "@pe/agent-contracts";
 import type { TimelineOwner } from "./situation-band";
 import { activityTime, timelineRowKey } from "./timeline";
+
+const phaseLabel: Record<RoomsPartitionProgress["phase"], string> = {
+  Prepare: "Reading model geometry",
+  Capture: "Finding walls and openings",
+  Designation: "Identifying zones",
+  Solve: "Finding rooms",
+  Materialization: "Drawing room outlines",
+  Commit: "Applying changes",
+};
 
 /** Draw host order directly, including the findings Work. No browser reconstruction. */
 export function GraphHistory({ owner }: { owner: TimelineOwner }) {
@@ -41,13 +50,15 @@ export function GraphHistory({ owner }: { owner: TimelineOwner }) {
         row.kind === "edit" || row.kind === "restore"
           ? `${row.work.route} / ${row.by === "pea" ? "Pea" : "you"} / ${row.state}${row.notWritten ? ` / not written${row.notWritten.rejected ? " / rejected" : ""}` : ""} / r${row.revision}`
           : row.kind === "receipt"
-            ? `${row.by === "pea" ? "Pea" : "you"} / ${row.state}`
+            ? `${row.by === "pea" ? "Pea" : "you"} / ${row.state === "stopping" ? "Stopping…" : row.state}`
             : row.kind,
         activityTime(row.at),
-        row.kind === "receipt" && row.state === "running" && row.progress
+        row.kind === "receipt" &&
+        (row.state === "running" || row.state === "stopping") &&
+        row.progress
           ? row.progress.zonesTotal === null
-            ? row.progress.phase
-            : `${row.progress.phase} · ${row.progress.zonesDone}/${row.progress.zonesTotal} zones done`
+            ? phaseLabel[row.progress.phase]
+            : `${phaseLabel[row.progress.phase]} · ${row.progress.zonesDone}/${row.progress.zonesTotal} zones done`
           : null,
         "blockedBy" in row
           ? row.blockedBy && "receipt" in row.blockedBy

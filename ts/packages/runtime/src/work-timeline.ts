@@ -147,7 +147,8 @@ export function projectWorks(
       work: work.key,
       label: receipt.key,
       by: receipt.caller.kind === "pea" ? "pea" : "human",
-      state: receipt.state,
+      state:
+        receipt.state === "running" && receipt.cancellationRequested ? "stopping" : receipt.state,
       ...(receipt.progress ? { progress: receipt.progress } : {}),
       at: Date.parse(receipt.startedAt) || 0,
     });

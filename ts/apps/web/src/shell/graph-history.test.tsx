@@ -63,17 +63,29 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
     redo: null,
     refusal: { undo: null, redo: null },
   });
+  const listeners = new Set<() => void>();
+  let revision = 0;
   const owner: TimelineOwner = {
-    subscribe: () => () => {},
-    revision: () => 0,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    revision: () => revision,
     timeline: () => timeline,
     timelineRefusal: () => null,
     reviewProblem: () => null,
     stepTimeline: async () => null,
     pendingEdits: () => [],
     discardIntent: () => {},
-    stopCommand: async () => {
-      throw Error("No running command");
+    stopCommand: (id) => {
+      timeline.rows = timeline.rows.map((row) =>
+        row.kind === "receipt" && row.id === id ? { ...row, state: "stopping" } : row,
+      );
+      revision++;
+      for (const listener of listeners) listener();
+      return new Promise<never>(() => {});
     },
   };
   try {
@@ -100,8 +112,11 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open the Timeline" }));
     const [activity] = screen.getAllByRole("region", { name: "Timeline activity" });
     if (!activity) throw Error("Timeline activity is absent");
-    expect(within(activity).getByText(/Solve · 1\/2 zones done/)).toBeTruthy();
-    expect(within(activity).getByRole("button", { name: "Stop command" })).toBeTruthy();
+    expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
+    fireEvent.click(within(activity).getByRole("button", { name: "Stop command" }));
+    expect(within(activity).getByText(/Stopping…/)).toBeTruthy();
+    expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
+    expect(within(activity).queryByRole("button", { name: "Stop command" })).toBeNull();
     const list = activity.querySelector("[data-list-view]");
     expect(list).not.toBeNull();
     expect(list?.closest("[data-scroll]")).not.toBeNull();
