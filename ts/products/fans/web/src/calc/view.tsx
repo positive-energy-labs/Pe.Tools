@@ -58,7 +58,7 @@ export function Roster({ props }: { props: RosterProps }) {
     },
     onState: (next) => setListState({ ...next, selected: [] }),
     onPick: (row) => props.open(row),
-    refusalOf: () => wait,
+    refusalOf: (row) => subject?.toggleRefusal(stableFanKey(row)) ?? wait,
   });
   // A blank firm tag falls back to the unit's Mark or family; a name shared by two units (Chadds
   const nameOf = props.nameOf;

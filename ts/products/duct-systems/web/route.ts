@@ -9,7 +9,11 @@ import { ductsRouteState } from "@pe/duct-systems-contract/ducts";
 import { z } from "zod";
 import { listSearchSchema } from "@pe/agent-contracts";
 import { ductsCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
-import { DUCTS_SYSTEM_MAX } from "@pe/duct-systems-contract/ducts-read";
+import {
+  DUCTS_DETAIL_LIMIT,
+  DUCTS_SYSTEM_MAX,
+  ductDetailLimitMessage,
+} from "@pe/duct-systems-contract/ducts-read";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import {
   route,
@@ -103,6 +107,7 @@ export const module = route({
   },
   subject: {
     field: "system",
+    limit: { max: DUCTS_DETAIL_LIMIT, message: ductDetailLimitMessage },
     resetQuery: ["fan"],
     noun: "system",
     pane: "e-systems",

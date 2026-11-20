@@ -27,6 +27,7 @@ test.each([0, 112])(
       all: vi.fn(),
       clear: vi.fn(),
       toggle: vi.fn(),
+      toggleRefusal: () => null,
       add: vi.fn(),
       remove: vi.fn(),
       select: vi.fn(),

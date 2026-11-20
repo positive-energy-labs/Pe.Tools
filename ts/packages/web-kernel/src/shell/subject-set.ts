@@ -4,6 +4,31 @@
 export type OpenSet<T> =
   | { readonly kind: "ids"; readonly ids: readonly T[]; readonly active?: T }
   | { readonly kind: "all" };
+
+export function isOpenSet(value: unknown): value is OpenSet<unknown> {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "kind" in value &&
+    (value.kind === "all" || (value.kind === "ids" && "ids" in value && Array.isArray(value.ids)))
+  );
+}
+
+/** Addresses keep the leading members. A dropped active member falls back to the first. */
+export function boundedOpenSet<T>(
+  value: OpenSet<T>,
+  max: number,
+  roster?: readonly T[],
+): OpenSet<T> {
+  const members = value.kind === "ids" ? value.ids : roster;
+  if (!members || members.length <= max) return value;
+  const ids = [...new Set(members)].slice(0, max);
+  const active = value.kind === "ids" ? value.active : undefined;
+  return active !== undefined && ids.includes(active)
+    ? { kind: "ids", ids, active }
+    : { kind: "ids", ids };
+}
+
 /** The set's moves over a roster, by identity key. Adding never moves the active member, except
  * that the first subject into an empty set is active; removing the active one hands it to its
  * next neighbour, else the previous. */

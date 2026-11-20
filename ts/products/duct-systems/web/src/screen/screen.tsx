@@ -889,6 +889,7 @@ const SystemsList = memo(function SystemsList({
         onQuery(next.search, next.sort);
     },
     onPick: (system) => door?.toggle(systemId(system.key)),
+    refusalOf: (system) => door?.toggleRefusal(systemId(system.key)),
   });
   const active = page.active;
   useEffect(() => {

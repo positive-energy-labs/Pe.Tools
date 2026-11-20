@@ -147,6 +147,7 @@ export interface AdmittedSubject {
   all(): void;
   clear(): void;
   toggle(id: unknown): void;
+  toggleRefusal(id: unknown): string | null;
   add(ids: readonly unknown[]): void;
   remove(id: unknown): void;
   /** Replace the open set with exactly these ids. */

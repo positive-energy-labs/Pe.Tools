@@ -9,6 +9,7 @@ import { z } from "zod";
 import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
 import { type Immutable } from "@pe/agent-contracts";
 import * as reads from "@pe/fans-contract/contract";
+import { FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
 import { field, picturePose, route, subjectSchema, split } from "@pe/web-kernel/route";
 import { hostRead } from "@pe/web-kernel/host-read";
@@ -75,6 +76,7 @@ export const module = route({
   },
   subject: {
     field: "fan",
+    limit: { max: FAN_DETAIL_LIMIT, message: fanDetailLimitMessage },
     read: roster,
     noun: "fan",
     pane: fansPanes.roster,

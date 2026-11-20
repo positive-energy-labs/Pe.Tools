@@ -486,6 +486,7 @@ function BandAlerts({ mount }: { mount: TypedMount }) {
   const readiness = mount.readiness(),
     failure = mount.failure(),
     problem = failure ? null : mount.problem(),
+    subjectNotice = mount.subjectNotice(),
     retained = retainedLine(mount.value());
   return (
     <>
@@ -498,6 +499,11 @@ function BandAlerts({ mount }: { mount: TypedMount }) {
           : null}
       </span>
       {retained ? <span role="status">{retained}</span> : null}
+      {subjectNotice ? (
+        <span role="status" aria-label="Subject limit">
+          {subjectNotice}
+        </span>
+      ) : null}
       {problem ? <span role="alert">{problem}</span> : null}
       {mount.absentOwners().map((owner) => {
         const route = routeOf(owner);
