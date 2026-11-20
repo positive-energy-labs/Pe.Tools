@@ -61,12 +61,12 @@ const fixtureFiles = {
   "contract/package.json": JSON.stringify(contractManifest),
   "contract/src/product.ts": [
     'import { z } from "zod";',
-    'import { product as declare } from "@pe/agent-contracts/product";',
+    'import { homeFile, product as declare } from "@pe/agent-contracts/product";',
     'import { contract } from "@pe/agent-contracts/handle";',
     "export const product = declare({",
     '  id: "proof",',
     '  says: "Fixture tool",',
-    "  homes: {},",
+    '  homes: { standards: homeFile("proof") },',
     "  cells: {},",
     '  readings: { echo: { handle: contract("proof.echo", { input: z.strictObject({ kind: z.literal("proof-reading"), text: z.string() }), data: z.string(), uses: [] }), sources: [], says: "A proof reading.", load: { resource: true, calls: { "document.temporary.status": { canonicalSession: true } } } } },',
     `  commands: { "${freshCommand}": { says: "Read fixture status", input: z.object({}), needs: "nothing", effect: "query", catalogEffect: "Read", dirties: [], native: [], writes: {} } },`,
@@ -191,6 +191,12 @@ test("an authored product folder feeds Host, web and Pea without editing their s
     const guides = await load<{ productGuides: readonly { instructions: string }[] }>(
       productAssemblyPaths.guides,
     );
+    const tutorial = await load<
+      typeof import("../../../apps/web/src/route/tutorial-products.generated.ts")
+    >(productAssemblyPaths.tutorial);
+    expect(tutorial.tutorialProducts).toMatchObject([
+      { id: "proof", homes: { standards: { key: "home-file:proof", rung: 3 } } },
+    ]);
     const hostExecutors = await load<
       typeof import("../../../apps/host/src/product-executors.generated.ts")
     >(productAssemblyPaths.executors);
@@ -229,7 +235,7 @@ test("an authored product folder feeds Host, web and Pea without editing their s
     expect(assembly.dependencies).toEqual({
       "ts/packages/mcps/package.json": ["@pe/proof-contract"],
       "ts/apps/host/package.json": ["@pe/proof-contract", "@pe/proof-host"],
-      "ts/apps/web/package.json": ["@pe/proof-web"],
+      "ts/apps/web/package.json": ["@pe/proof-contract", "@pe/proof-web"],
     });
 
     write(

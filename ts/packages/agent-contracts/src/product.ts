@@ -38,6 +38,7 @@ export type HomeCost = {
 export type Home<Takes extends CellKey = CellKey> = {
   readonly [made]: "home";
   readonly kind: string;
+  readonly rung: 3 | 4 | 5 | 6 | null;
   /** The identity the write door matches exactly (S11). */
   readonly key: string;
   readonly cost: HomeCost;
@@ -76,6 +77,7 @@ export const homeFile = (
 ): Home<"route"> => ({
   [made]: "home",
   kind: "home-file",
+  rung: 3,
   key: `home-file:${owner}`,
   takes: ["route"],
   place: (cell) => ({ at: "setting", owner, path: [...path(cell)], tiers }),
@@ -92,6 +94,7 @@ export const homeFile = (
 export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => ({
   [made]: "home",
   kind: "revit-entity",
+  rung: 4,
   key: declared.key,
   takes: ["subject"],
   place: () => ({ at: "store", store: declared.key }),
@@ -108,6 +111,7 @@ export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => 
 export const familyParameter = (slot: string): Home<"subject"> => ({
   [made]: "home",
   kind: "family-parameter",
+  rung: 5,
   key: `parameter:${slot}`,
   takes: ["subject"],
   place: () => ({ at: "parameter", parameter: slot }),
@@ -124,6 +128,7 @@ export const familyParameter = (slot: string): Home<"subject"> => ({
 export const documentRecord = (declared: NativeHome<"owner-blob">): Home => ({
   [made]: "home",
   kind: "document-record",
+  rung: 6,
   key: declared.key,
   takes: ["route", "name", "subject"],
   place: () => ({ at: "store", store: declared.key }),
@@ -144,6 +149,7 @@ export const documentRecord = (declared: NativeHome<"owner-blob">): Home => ({
 export const machineFile = (declared: NativeHome<"machine-file">): Home<never> => ({
   [made]: "home",
   kind: "machine-file",
+  rung: null,
   key: declared.key,
   takes: [],
   place: () => ({ at: "local" }),

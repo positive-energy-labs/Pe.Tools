@@ -10,6 +10,7 @@ export const productAssemblyPaths = {
   guides: "ts/packages/mcps/src/pea/guides.generated.ts",
   executors: "ts/apps/host/src/product-executors.generated.ts",
   nativeHomes: "ts/packages/agent-contracts/src/generated/native-homes.generated.ts",
+  tutorial: "ts/apps/web/src/route/tutorial-products.generated.ts",
 };
 
 const manifest = z.object({
@@ -79,6 +80,12 @@ export function renderProductAssembly(checkout: string) {
   return {
     outputs: {
       ...nativeHomes,
+      [productAssemblyPaths.tutorial]: source(
+        'import type { ProductDeclaration } from "@pe/agent-contracts/product";',
+        ...contractImports,
+        `const products = [${products.join(", ")}] as const;`,
+        'export const tutorialProducts: readonly ProductDeclaration[] = products.flatMap<ProductDeclaration>(product => "homes" in product ? [product] : []);',
+      ),
       [productAssemblyPaths.actions]: source(
         'import { builtinCommands, builtinTools, targetForCommand, withHostActions } from "@pe/agent-contracts/semantic-actions";',
         'import { assertProductCatalogKeys } from "@pe/agent-contracts/pe-api";',
@@ -166,9 +173,10 @@ export function renderProductAssembly(checkout: string) {
         ...declared.map((row) => row.host),
         ...rows.filter((row) => row.route).flatMap((row) => [row.host?.name, row.contract?.name]),
       ]),
-      "ts/apps/web/package.json": names(
-        rows.filter((row) => row.route).map((row) => row.web?.name),
-      ),
+      "ts/apps/web/package.json": names([
+        ...declared.map((row) => row.contract),
+        ...rows.filter((row) => row.route).map((row) => row.web?.name),
+      ]),
     },
   };
 }

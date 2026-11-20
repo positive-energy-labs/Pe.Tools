@@ -18,6 +18,8 @@ import { GestureKey } from "@pe/kit/lang/gesture-glyph";
 import { HotkeyCommand } from "#/components/lang/hotkey-command";
 import { startFeedback } from "#/components/feedback-picker";
 import { SettingsHelpTrigger } from "#/machine/navigation";
+import { tutorialProduct } from "./teaching";
+import { TutorialHomes } from "./tutorial-homes";
 type HelpProps = { docs?: ReactNode; name: string; utilities?: boolean };
 const HELP_CHORD = { hotkey: "Alt+/", label: "How this tool works" } as const;
 const keyIdentity = (item: TeachKey, source?: "reference") =>
@@ -275,6 +277,22 @@ export function HelpWorld({ facts }: { facts: readonly Teaching[] }) {
     </div>
   );
 }
+export function TutorialWorld({
+  facts,
+  pathname,
+}: {
+  facts: readonly Teaching[];
+  pathname?: string;
+}) {
+  const product = pathname && tutorialProduct(pathname);
+  return (
+    <>
+      <HelpWorld facts={facts} />
+      {product && <TutorialHomes product={product} />}
+    </>
+  );
+}
+
 function HelpBody({
   docs,
   name,
@@ -283,13 +301,14 @@ function HelpBody({
   close,
 }: HelpProps & { chord: boolean; close: () => void }) {
   const facts = useTeaching();
+  const page = useContext(TeachPage);
   return (
     <div className="absolute inset-0 flex flex-col gap-3 overflow-y-auto">
       <div className="flex items-baseline gap-3 px-8 pt-6">
         <span className="t-title text-ink">{name}</span>
         {chord ? <KeyHint>{HELP_CHORD.hotkey}</KeyHint> : null}
       </div>
-      <HelpWorld facts={facts} />
+      <TutorialWorld facts={facts} pathname={page} />
       {docs ? (
         <div
           className="px-8 pt-3 pb-8 t-prose"
