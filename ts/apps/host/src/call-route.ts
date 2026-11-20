@@ -16,17 +16,9 @@ import { addressSchema, documentRefSchema, actionStatusSchema } from "@pe/agent-
 import { peRoutes, linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
-import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
-import {
-  HOST_RPC_BRIDGE_SESSION_HEADER,
-  HOST_RPC_DOCUMENT_HEADER,
-  HOST_RPC_ORIGIN_HEADER,
-  isTsOnlyOperationKey,
-  tsOnlyOperationSchemas,
-  type TsOnlyOperationKey,
-  type TsOnlyRequest,
-  type HostSessionScope,
-} from "@pe/host-contracts/operation-types";
+import { isAnyOperationKey } from "@pe/mcps/product-operations";
+import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER, HOST_RPC_ORIGIN_HEADER, type TsOnlyOperationKey, type TsOnlyRequest, type HostSessionScope } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey, tsOnlyOperationSchemas } from "@pe/mcps/product-operations";
 
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "./native-reads.ts";

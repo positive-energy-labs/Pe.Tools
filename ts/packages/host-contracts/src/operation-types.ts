@@ -1,4 +1,3 @@
-import { productOperationSchemas } from "./generated/product-operations.generated.ts";
 import {
   bridgeDocumentSnapshotSchema,
   hostRuntimeAssemblyDataSchema,
@@ -666,7 +665,7 @@ export const settingsTiersWrittenSchema = Schema.Struct({
   at: Schema.String,
 });
 
-export const tsOnlyOperationSchemas = {
+export const builtinLocalSchemas = {
   "settings.tiers.read": {
     request: settingsTiersReadRequestSchema,
     response: settingsTiersDataSchema,
@@ -675,7 +674,6 @@ export const tsOnlyOperationSchemas = {
     request: settingsTiersWriteRequestSchema,
     response: settingsTiersWrittenSchema,
   },
-  ...productOperationSchemas,
   "aps.auth.login": {
     request: apsTokenRequestSchema,
     response: apsPersistedTokenStatusSchema,
@@ -756,9 +754,16 @@ export const tsOnlyOperationSchemas = {
   },
 } as const;
 
-export type TsOnlyOperationKey = keyof typeof tsOnlyOperationSchemas;
+/**
+ * The schema tables of product local operations. A product merges its own table in from its
+ * contract package (`declare module`), so this package names no product; the values are assembled
+ * by import at the generated registration site, which this type checks for completeness.
+ */
+// oxlint-disable-next-line typescript/no-empty-object-type -- the merge point is empty here by design
+export interface ProductLocalSchemas {}
+export type TsOnlyOperationSchemas = typeof builtinLocalSchemas & ProductLocalSchemas;
+export type TsOnlyOperationKey = keyof TsOnlyOperationSchemas;
 export type AnyOperationKey = HostOperationKey | TsOnlyOperationKey;
-type TsOnlyOperationSchemas = typeof tsOnlyOperationSchemas;
 export type TsOnlyRequest<K extends TsOnlyOperationKey> = TsOnlyOperationSchemas[K] extends {
   readonly request: infer RequestSchema extends Schema.Schema<any>;
 }
@@ -768,16 +773,8 @@ type TsOnlyResponse<K extends TsOnlyOperationKey> = SchemaType<
   TsOnlyOperationSchemas[K]["response"]
 >;
 
-export function isAnyOperationKey(key: string): key is AnyOperationKey {
-  return hostOperationKeySet.has(key) || Object.hasOwn(tsOnlyOperationSchemas, key);
-}
-
 export function isHostOperationKey(key: string): key is HostOperationKey {
   return hostOperationKeySet.has(key);
-}
-
-export function isTsOnlyOperationKey(key: string): key is TsOnlyOperationKey {
-  return Object.hasOwn(tsOnlyOperationSchemas, key);
 }
 
 export type HostLocalCatalogEntry<K extends string = TsOnlyOperationKey> = Omit<
@@ -795,11 +792,11 @@ export type HostLocalCatalogEntry<K extends string = TsOnlyOperationKey> = Omit<
  * that one catalog. These ops dispatch locally (call-route.ts) and don't need a Revit session.
  *
  * `origin:"host-local"` marks them so host-typegen SKIPS them: their request/response types are the
- * hand-authored schemas above (tsOnlyOperationSchemas), not generated from the live catalog, and the
- * entries carry no request/response schema JSON. Keep exactly one entry per tsOnlyOperationSchemas
+ * hand-authored schemas above (builtinLocalSchemas), not generated from the live catalog, and the
+ * entries carry no request/response schema JSON. Keep exactly one entry per builtinLocalSchemas
  * key — the index test asserts full coverage.
  */
-export { tsOnlyOperationCatalog } from "./pe-api.ts";
+export { builtinLocalCatalog } from "./pe-api.ts";
 
 /**
  * Strict key space for the typed client surface: only keys the checked-in

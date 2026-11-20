@@ -584,7 +584,7 @@ test("an unregistered sheet route submits through the generic path without produ
   expect(seen).toEqual(["/actions"]);
 });
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { tsOnlyOperationCatalog } from "../src/pea/product-operations.generated.ts";
 // Mutant: make opWrites read `intent` for a native op and the first two lines go red.
 test("native and host-local ops select the write door by effect, regardless of intent", () => {
   const native = { key: "revit.context.view-image.focus", intent: "Read" } as const;

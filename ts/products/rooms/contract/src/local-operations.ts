@@ -3,19 +3,19 @@ import type { HostLocalCatalogEntry } from "@pe/host-contracts/operation-types";
 
 // The extract schemas mirror dotnet/Pe.Revit.Takeoff/Rhvac/extract-rhvac.ps1.
 
-export const rhvacPathRequestSchema = Schema.Struct({
+const rhvacPathRequestSchema = Schema.Struct({
   /** Absolute host-visible path to the .r10 project file. */
   path: Schema.String,
 });
 export type RhvacPathRequest = Schema.Schema.Type<typeof rhvacPathRequestSchema>;
 
-export const rhvacAssemblyOptionSchema = Schema.Struct({
+const rhvacAssemblyOptionSchema = Schema.Struct({
   name: Schema.String,
   uValue: Schema.Number,
   shgc: Schema.optional(Schema.Number),
 });
 
-export const rhvacAssemblyCatalogSchema = Schema.Struct({
+const rhvacAssemblyCatalogSchema = Schema.Struct({
   sourceFile: Schema.optional(Schema.String),
   floors: Schema.Array(rhvacAssemblyOptionSchema),
   roofs: Schema.Array(rhvacAssemblyOptionSchema),
@@ -93,26 +93,24 @@ const rhvacRoomFields = {
 } as const;
 
 /** A room being inserted: no `identifier` yet — Jet's COUNTER assigns it. */
-export const rhvacInsertRoomSchema = Schema.Struct(rhvacRoomFields);
+const rhvacInsertRoomSchema = Schema.Struct(rhvacRoomFields);
 export type RhvacInsertRoomData = Schema.Schema.Type<typeof rhvacInsertRoomSchema>;
 
-export const rhvacRoomSchema = Schema.Struct({
+const rhvacRoomSchema = Schema.Struct({
   /** Room autonumber PK — the edit lane's row target; distinct from `number`. */
   identifier: Schema.Number,
   ...rhvacRoomFields,
 });
-export type RhvacRoomData = Schema.Schema.Type<typeof rhvacRoomSchema>;
 
 /** Weak .r10 identity: file name plus a stamp over project/client titles. */
-export const rhvacFileIdentitySchema = Schema.Struct({
+const rhvacFileIdentitySchema = Schema.Struct({
   fileName: Schema.String,
   projectTitle: Schema.String,
   clientName: Schema.String,
   stamp: Schema.String,
 });
-export type RhvacFileIdentity = Schema.Schema.Type<typeof rhvacFileIdentitySchema>;
 
-export const rhvacExtractSchema = Schema.Struct({
+const rhvacExtractSchema = Schema.Struct({
   sourceFile: Schema.String,
   fileIdentity: rhvacFileIdentitySchema,
   building: Schema.Record(Schema.String, Schema.Number),
@@ -121,7 +119,7 @@ export const rhvacExtractSchema = Schema.Struct({
 });
 export type RhvacExtractData = Schema.Schema.Type<typeof rhvacExtractSchema>;
 
-export const rhvacSyncRequestSchema = Schema.Struct({
+const rhvacSyncRequestSchema = Schema.Struct({
   /** The .r10 to sync IN PLACE — behind a lock check, a working copy, and a timestamped backup. */
   targetPath: Schema.String,
   /** New rooms. Their assigned `identifier`s come back in the result. */
@@ -150,7 +148,7 @@ export type RhvacSyncRequest = Schema.Schema.Type<typeof rhvacSyncRequestSchema>
  * All four parts are reported so a caller pairing {fileIdentity, roomIdentifier} into Revit
  * provenance can detect drift rather than silently trust a match.
  */
-export const rhvacSyncResultSchema = Schema.Struct({
+const rhvacSyncResultSchema = Schema.Struct({
   targetPath: Schema.String,
   /** Null when nothing was swapped (whatIf). */
   backupPath: Schema.NullOr(Schema.String),
@@ -194,7 +192,7 @@ export const rhvacSyncResultSchema = Schema.Struct({
 });
 export type RhvacSyncResult = Schema.Schema.Type<typeof rhvacSyncResultSchema>;
 
-export const rhvacLaunchResultSchema = Schema.Struct({
+const rhvacLaunchResultSchema = Schema.Struct({
   path: Schema.String,
   /** True once the shell accepted the open; RHVAC's own startup is not awaited. */
   launched: Schema.Boolean,
@@ -202,12 +200,12 @@ export const rhvacLaunchResultSchema = Schema.Struct({
 export type RhvacLaunchResult = Schema.Schema.Type<typeof rhvacLaunchResultSchema>;
 
 /** The legal-options source for the `.r10` binding: every .r10 in one folder. */
-export const rhvacListRequestSchema = Schema.Struct({
+const rhvacListRequestSchema = Schema.Struct({
   /** Absolute host-visible folder. */
   dir: Schema.String,
 });
 export type RhvacListRequest = Schema.Schema.Type<typeof rhvacListRequestSchema>;
-export const rhvacListDataSchema = Schema.Struct({
+const rhvacListDataSchema = Schema.Struct({
   dir: Schema.String,
   /** False when the folder does not exist or is unreadable — an empty list then means "no folder", not "no files". */
   exists: Schema.Boolean,
@@ -217,13 +215,13 @@ export const rhvacListDataSchema = Schema.Struct({
 });
 export type RhvacListData = Schema.Schema.Type<typeof rhvacListDataSchema>;
 
-export const rhvacRoomMapSchema = Schema.Struct({
+const rhvacRoomMapSchema = Schema.Struct({
   matches: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, candidate: Schema.String })),
   skip: Schema.Array(Schema.Struct({ oracleNumber: Schema.Number, reason: Schema.String })),
 });
 
 /** Raw takeoff snapshots next to the .r10 — the client parses the TSV texts itself. */
-export const rhvacTakeoffDataSchema = Schema.Struct({
+const rhvacTakeoffDataSchema = Schema.Struct({
   tsvs: Schema.Array(
     Schema.Struct({ name: Schema.String, text: Schema.String, sha256: Schema.String }),
   ),
@@ -266,7 +264,13 @@ export const localOperationSchemas = {
   },
 } as const;
 
-type CatalogEntry = HostLocalCatalogEntry<keyof typeof localOperationSchemas>;
+type LocalSchemas = typeof localOperationSchemas;
+declare module "@pe/host-contracts/operation-types" {
+  // The one declaration of these keys: `TsOnlyRequest<K>` and the assembled table both read it.
+  interface ProductLocalSchemas extends LocalSchemas {}
+}
+
+type CatalogEntry = HostLocalCatalogEntry<keyof LocalSchemas>;
 const catalogRow = (
   row: Pick<
     CatalogEntry,

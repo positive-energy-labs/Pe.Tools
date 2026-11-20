@@ -1,7 +1,7 @@
 import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src/native-read-endpoint.ts";
 import { createHash } from "node:crypto";
 import { ResourceConnectionOwner } from "./request-services.ts";
-import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
+import { isTsOnlyOperationKey } from "@pe/mcps/product-operations";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { readSessionScope } from "./sdk-session.ts";
 import { Deferred, Effect, Option } from "effect";

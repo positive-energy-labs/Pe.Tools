@@ -8,7 +8,7 @@ import { z } from "zod";
 import { executionTargetSchema } from "./target.ts";
 import { workKeySchema } from "./route-state.ts";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
+import { builtinLocalCatalog, type HostLocalCatalogEntry } from "@pe/host-contracts/operation-types";
 import { isReadEffect } from "@pe/host-contracts/contracts";
 
 import type { Command } from "./command.ts";
@@ -148,10 +148,12 @@ export const actionControls = {
 export type ActionControlKey = keyof typeof actionControls;
 
 /** Discovery projects the same portable command contracts used by invocation. */
-const hostActionHead = {
+/** The local catalog a registration site assembled: the built-in rows plus each product's. */
+export type LocalCatalog = readonly HostLocalCatalogEntry<string>[];
+const hostActionHead = (local: LocalCatalog) => ({
   "ops.read": {
     via: { route: "operation.call" },
-    native: [...hostOpCatalog, ...tsOnlyOperationCatalog]
+    native: [...hostOpCatalog, ...local]
       .filter((op) => isReadEffect(op.effect))
       .map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
@@ -177,7 +179,7 @@ const hostActionHead = {
     dirties: [],
     input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
   } as const,
-} satisfies Record<string, Command>;
+}) satisfies Record<string, Command>;
 const hostActionTail = {
   ...actionControls,
   // These direct reads consume an owning Work just like journaled commands. The send door
@@ -187,12 +189,15 @@ const hostActionTail = {
   ...scheduleReads,
   "instances.read": instancesReading,
 } satisfies Record<string, Command>;
-export const withHostActions = <const C extends Record<string, Command>>(registered: C) => ({
-  ...hostActionHead,
+export const withHostActions = <const C extends Record<string, Command>>(
+  registered: C,
+  local: LocalCatalog,
+) => ({
+  ...hostActionHead(local),
   ...registered,
   ...hostActionTail,
 });
-export const builtinHostActions = withHostActions(builtinCommands);
+export const builtinHostActions = withHostActions(builtinCommands, builtinLocalCatalog);
 type PlannedRow = Extract<(typeof commandTable)[keyof typeof commandTable], { plan: string }>;
 export type SemanticPreviewKey = PlannedRow["plan"];
 const previews = new Set<string>(
