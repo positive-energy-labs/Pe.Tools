@@ -17,6 +17,7 @@ import { RoomsSketch, type Drop } from "./sketch";
 import { snapPlan } from "./snap";
 import { RoomsPlan } from "./plan";
 import { RoomsTable } from "./table";
+import "./layout.css";
 
 // The picture frame is the picture slot's render (scene/picture), not the kernel's layout (slice 8).
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
@@ -269,7 +270,7 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
       ) : null,
   } satisfies Body;
   const frame: TeachingPaneRender = (content) => (
-    <div className="flex min-h-0 flex-1 flex-col">{content}</div>
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">{content}</div>
   );
   const stage = async (key: string, input: unknown) =>
     ctx.cells.patch([{ path: ["writeIntent", key], value: { edit: { value: input } } }], {
@@ -347,12 +348,10 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           </Button>
         </ButtonGroup>
       </div>
-      {/* The split follows the route's own width, not the viewport: docked at 1600px the route is
-          ~690px and two columns left the regions table 330px, wrapping its chips (L3). */}
       <div className="@container flex min-h-0 flex-1 flex-col">
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-(--gutter) @min-[1100px]:grid-cols-2">
+        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-2 gap-(--gutter) @min-[1100px]:grid-cols-2 @min-[1100px]:grid-rows-1">
           <PlanBody {...body} renderPane={frame} />
-          <div className="flex min-h-0 flex-col">
+          <div data-rooms-regions="" className="flex min-h-0 min-w-0 flex-col">
             <RegionsBody {...body} />
           </div>
         </div>
