@@ -1,3 +1,4 @@
+import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
@@ -104,6 +105,7 @@ export function ductSystemsExecutors(
       },
       bridge,
       deps,
+      ductSystemsTool,
     ),
     ...ductActionExecutors(
       {
@@ -125,6 +127,7 @@ export function ductSystemsExecutors(
       },
       bridge,
       deps,
+      ductSystemsTool,
     ),
   };
 }

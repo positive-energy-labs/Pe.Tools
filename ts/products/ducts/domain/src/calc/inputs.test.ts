@@ -286,10 +286,10 @@ it("P25: a written terminal next to a homeless table prices the parameter and do
     connectors: [{ kind: "end", shape: "round", diameterIn: 8 }],
   };
   const { home: _home, ...homeless } = table("firm");
-  // @ts-expect-error a homeless table is no Catalogs entry
   const priced = resolveInputs({
     snapshot: snapshotOf(node, undefined, store),
     firm: TEST_FIRM,
+    // @ts-expect-error a homeless table is no Catalogs entry
     catalogs: { t: homeless },
   });
   expect(priced.terminals["1"]!.drop).toMatchObject({ value: 0.5, source: "model" });

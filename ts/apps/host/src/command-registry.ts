@@ -33,7 +33,6 @@ import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { catalogWorkSpecs, type WriteBoundaryBinding } from "@pe/agent-contracts";
 import { commands } from "@pe/mcps/product-actions";
-import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies &
@@ -67,18 +66,13 @@ export function commandRegistry(
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
-  const productsWithoutSheet = Object.fromEntries(
-    Object.entries(products.executors).filter(
-      ([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key),
-    ),
-  );
   for (const group of [
     familyExecutors(captures, bridge, deps),
     scheduleExecutors(captures, bridge, deps),
     instancesExecutors(deps),
     takeoffExecutors(captures, bridge, deps),
-    productsWithoutSheet,
-    sheetExecutors(bridge, deps, products.executors, products.sheetRoutes),
+    products.executors,
+    sheetExecutors(bridge, deps, products.sheets),
     catalogWorkExecutors(bridge, deps),
     findingsExecutors(deps.workspace, bridge),
   ]) {

@@ -1,4 +1,3 @@
-import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { expect, test } from "vite-plus/test";
 import { Layer } from "effect";
@@ -10,21 +9,18 @@ import {
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/contracts";
 import { pagesRoute } from "../src/pages-route.ts";
-import { DuctFiles, ductCatalogsRoute } from "@pe/ducts-host/ducts-files";
+import { readProjectCatalogs } from "./project-home-fixture.ts";
 import { projectFixture } from "./project-home-fixture.ts";
 import { createContributionContent } from "../src/pe-routes.ts";
 
-test("Pages and Catalogs HTTP listings read the target document's project home", async () => {
+test("Pages and the Catalogs reading read the target document's project home", async () => {
   const f = await projectFixture(false, () =>
-    Layer.mergeAll(
-      pagesRoute().pipe(
-        Layer.provide(
-          Layer.succeed(HttpServer.HttpServer, {
-            address: { _tag: "TcpAddress", hostname: "127.0.0.1", port: 0 },
-          } as never),
-        ),
+    pagesRoute().pipe(
+      Layer.provide(
+        Layer.succeed(HttpServer.HttpServer, {
+          address: { _tag: "TcpAddress", hostname: "127.0.0.1", port: 0 },
+        } as never),
       ),
-      ductCatalogsRoute.pipe(Layer.provide(DuctFiles.layer(hostState().home))),
     ),
   );
   await mkdir(join(f.project, "Pages", "project-page"), { recursive: true });
@@ -83,17 +79,15 @@ test("Pages and Catalogs HTTP listings read the target document's project home",
   expect
     .soft(await pages.json())
     .toMatchObject({ pages: [expect.objectContaining({ slug: "project-page" })] });
-  const catalogs = await f.request(new Request("http://fixture/pe/ducts/catalogs", { headers }));
-  expect(catalogs.status).toBe(200);
-  expect
-    .soft(await catalogs.json())
-    .toMatchObject({ tables: { "project-table": { title: "Project table" } }, findings: [] });
+  expect(await readProjectCatalogs(f, f.target.ref)).toMatchObject({
+    tables: { "project-table": { title: "Project table" } },
+    findings: [],
+  });
   const freePages = await f.request(
     new Request("http://fixture/pages", { headers: { accept: "application/json" } }),
   );
   expect(await freePages.json()).toMatchObject({ pages: [] });
-  const freeCatalogs = await f.request(new Request("http://fixture/pe/ducts/catalogs"));
-  expect(await freeCatalogs.json()).toMatchObject({ tables: {} });
+  expect(await readProjectCatalogs(f, null)).toMatchObject({ tables: {} });
   const content = createContributionContent({
     worldRoot: stateFixture(join(f.dir, "agent")),
     homeRoot: join(f.dir, "user"),

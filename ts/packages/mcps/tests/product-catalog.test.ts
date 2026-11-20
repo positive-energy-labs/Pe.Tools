@@ -2,25 +2,15 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { resourceReadingSchema } from "../src/pea/product-contracts.generated.ts";
 import { decodeResourceSubscriptionUpdate } from "@pe/runtime/resource-stream";
-import {
-  linkedCatalog,
-  matchPeRoute,
-  peRoutes,
-  servePeRoute,
-} from "../src/pea/product-catalog.generated.ts";
+import { linkedCatalog, matchPeRoute, peRoutes } from "../src/pea/product-catalog.generated.ts";
 
 const catalogEntries = [...linkedCatalog().entries.values()];
 
-test("the product's catalog endpoint keeps its typed gateway contract", async () => {
-  const request = new Request("http://host/pe/ducts/catalogs");
-  expect(matchPeRoute(request.method, new URL(request.url).pathname)).toMatchObject({
-    id: "ducts.catalogs",
-    route: { permission: "read", owner: "gateway" },
-  });
-  expect(
-    (await servePeRoute(request, async () => Response.json({ tables: {}, findings: [] }))).status,
-  ).toBe(200);
-  expect((await servePeRoute(request, async () => Response.json({}))).status).toBe(500);
+test("the former catalogs endpoint is discovered through the Value door", () => {
+  expect(matchPeRoute("GET", "/pe/ducts/catalogs")).toBeUndefined();
+  expect(JSON.stringify(peRoutes["reads.value"].catalog.discovery?.input)).toContain(
+    '"ducts.catalogs"',
+  );
 });
 
 test("product reading requests enter through the assembled stream schema", () => {

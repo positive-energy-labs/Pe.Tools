@@ -14,7 +14,8 @@
     "./duct-catalog": "./src/duct-catalog.ts",
     "./duct-inputs": "./src/duct-inputs.ts",
     "./duct-loss-read": "./src/duct-loss-read.ts",
-    "./fan-scope.neutral": "./src/fan-scope.neutral.ts"
+    "./fan-scope.neutral": "./src/fan-scope.neutral.ts",
+    "./product": "./src/product.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
@@ -29,36 +30,5 @@
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
-  },
-  "pe": {
-    "guide": "./pea-guide",
-    "commands": {
-      "module": "./semantic-actions",
-      "export": "sheetCommands"
-    },
-    "http": {
-      "module": "./duct-catalog",
-      "routes": "ductCatalogRoutes",
-      "axes": "ductCatalogRouteAxes"
-    },
-    "reading": {
-      "module": "./reading",
-      "export": "ductsReadingSchema"
-    },
-    "callPolicies": {
-      "module": "./reading",
-      "export": "ductsReadingCallPolicies"
-    },
-    "settings": {
-      "key": "ducts",
-      "module": "./settings",
-      "export": "ductsSettingOwner"
-    },
-    "basisHeaders": {
-      "refresh": {
-        "module": "./reading",
-        "export": "DUCTS_REFRESH_HEADER"
-      }
-    }
   }
 }

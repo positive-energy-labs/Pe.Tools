@@ -1,4 +1,3 @@
-import { productHttpRoutes } from "./product-http.generated.ts";
 import {
   builtinFileLayer,
   defaultReadOwner,
@@ -395,7 +394,6 @@ function liveHttpLive(options: HttpLiveOptions) {
         mcpRoute(() => `http://127.0.0.1:${port()}`),
         capturesRoute(spa),
         pagesRoute(),
-        productHttpRoutes,
         historyRoutes(reads.history),
         adminShutdownRoute,
         adminWindowRoute,

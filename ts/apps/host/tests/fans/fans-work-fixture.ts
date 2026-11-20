@@ -382,6 +382,7 @@ export async function nativeFixture(
       );
     };
     const publications = new Publications();
+    const files = options.deps?.files ?? testDuctFiles();
     const api = createPeRoutes({
       journal,
       workspace: saved,
@@ -396,7 +397,12 @@ export async function nativeFixture(
         const port = calcPort(
           {
             firm: (owner) => settle(testDuctFiles().firm(owner)),
-            catalogs: () => settle(testDuctFiles().catalogsFor(undefined)),
+            catalogs: (ref) => {
+              const pointer =
+                ref &&
+                options.state?.openDocuments?.find((doc) => doc.openId === ref.openId)?.projectHome;
+              return settle(files.catalogsFor(pointer));
+            },
             call: readDucts,
             workKey: async (ref) => bindWork("duct-systems", address, undefined, ref),
           },

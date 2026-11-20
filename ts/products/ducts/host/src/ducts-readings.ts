@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
 import { readingKey } from "@pe/agent-contracts";
 import {
-  ductsReadingSchema,
+  ductsSnapshotReadingSchema,
+  ductsTablesReadingSchema,
   type DuctsReadingRequest,
   type DuctsReadingEnvelope,
 } from "@pe/ducts-contract/reading";
@@ -46,7 +47,9 @@ const identity = (request: DuctsReadingRequest) =>
     : { target: null, session: request.session };
 
 export const ductsSubject = (raw: DuctsReadingRequest): DuctsReadingRequest => {
-  const parsed = ductsReadingSchema.parse(raw);
+  const parsed = (
+    raw.kind === "ducts-snapshot" ? ductsSnapshotReadingSchema : ductsTablesReadingSchema
+  ).parse(raw);
   return parsed.kind === "ducts-snapshot" && parsed.slots && !Object.keys(parsed.slots).length
     ? { ...parsed, slots: undefined }
     : parsed;

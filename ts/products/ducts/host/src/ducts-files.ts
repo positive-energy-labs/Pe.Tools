@@ -1,8 +1,5 @@
 import { leaf } from "@pe/host-internal/read-graph";
 import { documentRefSchema } from "@pe/agent-contracts";
-import { targetHomes } from "@pe/host-internal/target-homes";
-import { RevitBridge } from "@pe/host-internal/bridge";
-import { RequestIdentity } from "@pe/host-internal/request-identity";
 /**
  * The host's file inputs (ADR 0031 rule 1): the firm files and the duct catalogs. A body reads them
  * through this service so a test or a recording can answer instead of the disk. A firm file is
@@ -10,12 +7,11 @@ import { RequestIdentity } from "@pe/host-internal/request-identity";
  * and seed, so the recording holds the input, never a derived fallback.
  */
 import { Context, Effect, Layer, Schema } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
 import { z } from "zod";
 import { existsSync, watch } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { ductCatalogReadingSchema, ductCatalogRoutes } from "@pe/ducts-contract/duct-catalog";
+import { ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { firmSettingsDir, homes, type Home } from "@pe/host-contracts/product-paths";
@@ -236,23 +232,6 @@ export class DuctFiles extends Context.Service<
         ),
     });
 }
-
-/** Under /pe so the dev proxy carries it; a bare /ducts/* belongs to the web route (404 in Vite). */
-export const ductCatalogsRoute = HttpRouter.use((router) =>
-  Effect.gen(function* () {
-    const files = yield* DuctFiles;
-    const bridge = yield* RevitBridge;
-    yield* router.add(
-      "GET",
-      ductCatalogRoutes["ducts.catalogs"].path,
-      Effect.gen(function* () {
-        const identity = yield* RequestIdentity;
-        const { pointer } = yield* targetHomes(bridge, identity.scope);
-        return HttpServerResponse.jsonUnsafe(yield* catalogsFor(files, pointer));
-      }),
-    );
-  }),
-);
 
 export const catalogsFor = (files: DuctFiles["Service"], pointer?: string | null) =>
   files.catalogsFor(pointer);

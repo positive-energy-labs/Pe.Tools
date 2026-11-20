@@ -145,7 +145,7 @@ const written = (
   return { at, wrote, unit, live };
 };
 const writtenFlow = (at: string, read: number | null, receipt: FlowReceipt | undefined) =>
-  written(at, read, receipt?.parameter === at ? receipt.cfm : undefined, "cfm");
+  written(at, read, receipt && receipt.parameter === at ? receipt.cfm : undefined, "cfm");
 const WRITTEN = {
   // keyed by the Work segment that stages each value
   flows: (n: Node, slots: Slots, store: StoreLayer) =>

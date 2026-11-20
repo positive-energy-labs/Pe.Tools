@@ -1,3 +1,4 @@
+import { fansTool } from "@pe/fans-contract/semantic-actions";
 import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
@@ -343,5 +344,6 @@ export function fansExecutors(bridge: RevitBridge["Service"], deps: DuctActionDe
     },
     bridge,
     deps,
+    fansTool,
   );
 }

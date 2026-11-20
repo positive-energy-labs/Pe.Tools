@@ -24,7 +24,7 @@ export default defineConfig({
       "packages/agent-contracts/src/routes/table.generated.ts",
       "apps/host/src/routes.generated.ts",
       "apps/host/src/product-executors.generated.ts",
-      "apps/host/src/product-http.generated.ts",
+      "packages/agent-contracts/src/generated/native-homes.generated.ts",
       "packages/mcps/src/pea/guides.generated.ts",
       "packages/mcps/src/pea/product-actions.generated.ts",
       "packages/mcps/src/pea/product-catalog.generated.ts",

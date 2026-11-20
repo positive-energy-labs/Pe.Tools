@@ -45,7 +45,6 @@ const routeCatalog: Record<
 import {
   definePeApi,
   definePeRouteApi,
-  type route,
   type PeApi,
   type PeApiSchemas,
   type PeRouteTable,
@@ -90,27 +89,20 @@ export function assertProductCatalogKeys(
   }
 }
 
-export type PeCatalog<T extends Record<string, ReturnType<typeof route>>> = PeApi<T> & {
-  peRoutes: { [K in keyof T]: T[K] & { catalog: CatalogRow } };
+type PeCatalog = PeApi<Routes> & {
+  peRoutes: { [K in keyof Routes]: Routes[K] & { catalog: CatalogRow } };
   linkedCatalog(): LinkedCatalog<CatalogRow>;
 };
 
-export function createPeCatalog<
-  const Extras extends Record<string, ReturnType<typeof route>> = Record<never, never>,
->(
+export function createPeCatalog(
   actions: Readonly<Record<string, Command>>,
   reads?: { inputs: Readonly<Record<string, z.ZodType>>; help: string },
-  extensions?: {
-    routes: Extras;
-    axes: { [K in keyof Extras]: Declaration };
-    resourceReads: readonly string[];
-    callPolicies?: Readonly<Record<string, CallPolicy>>;
-  },
-): PeCatalog<Routes & Extras> {
-  const routes = { ...httpRoutes, ...extensions?.routes } as Routes & Extras;
+  productPolicies: Readonly<Record<string, CallPolicy>> = {},
+): PeCatalog {
+  const routes = httpRoutes;
   const transport = definePeRouteApi(routes);
   const opEntry = (op: HostOperationDefinition) =>
-    nativeEntry(op, extensions?.callPolicies?.[op.key] ?? callPolicies[op.key]);
+    nativeEntry(op, productPolicies[op.key] ?? callPolicies[op.key]);
   const named = Object.entries(reads?.inputs ?? {});
   const valueReadInput = named.length
     ? z.union([
@@ -136,7 +128,7 @@ export function createPeCatalog<
       ...tsOnlyOperationCatalog.map(opEntry),
       ...Object.entries(actions).map(([key, action]) => commandAxes(key, action)),
     ],
-    extensions?.resourceReads ?? [],
+    Object.keys(productPolicies),
   );
   const peRoutes: { [K in keyof typeof routes]: (typeof routes)[K] & { catalog: CatalogRow } } = {
     ...(Object.fromEntries(
@@ -146,7 +138,6 @@ export function createPeCatalog<
           ...row,
           catalog: {
             ...routeAxes[key as keyof Routes],
-            ...extensions?.axes[key],
             key: `route:${key}`,
             ...(routeCatalog[key]
               ? {
@@ -166,6 +157,7 @@ export function createPeCatalog<
                         : key === "reads.value"
                           ? valueReadInput
                           : row.body,
+                      { io: "input" },
                     ),
                   },
                 }

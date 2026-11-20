@@ -115,11 +115,6 @@ type Phase = "plan" | "rehearse" | "apply";
 const ductsRoute = ductSystemsTool.work.route,
   fansRoute = fansTool.work.route;
 
-/**
- * The /duct-systems door (D9, P19): the sheet pair asked from /duct-systems stores that route's staged rule
- * tables and verdicts, removes the verdicts Work takes back, and writes no element. It lives in the shared
- * runtime because the sheet dispatch holds one product executor for the pair, whichever route asks.
- */
 const rulingsDoor: Pick<DuctAction, "snapshot" | "derive" | "entry"> = {
   snapshot: (_intent, read) => read({ kind: "roster" }),
   derive: async ({ design, snapshot, appliedAt }) => ({
@@ -147,10 +142,6 @@ const rulingsDoor: Pick<DuctAction, "snapshot" | "derive" | "entry"> = {
     },
   },
 };
-const actionsByRoute = new Map<string, Partial<Record<Kind, typeof rulingsDoor>>>([
-  [ductsRoute, { losses: rulingsDoor }],
-  [fansRoute, {}],
-]);
 /** Each kind's sealed plan entry: the losses plan is the sheet pair's (slice 7). */
 const PLAN_OF = {
   losses: "sheet.plan",
@@ -161,19 +152,18 @@ const PLAN_OF = {
 export function ductActionExecutors(
   action: DuctAction,
   bridge: RevitBridge["Service"],
-  deps: DuctActionDependencies = {},
+  deps: DuctActionDependencies,
+  owner: typeof fansTool | typeof ductSystemsTool,
 ) {
-  const actionOf = (kind: Kind, route: string) => {
-    const overrides = actionsByRoute.get(route);
-    if (!overrides)
-      throw refused(`Duct actions are unavailable on route "${route}"`, "ducts.unknown-route");
-    return overrides[kind] ?? action;
+  const needOwner = (route: string) => {
+    if (route !== owner.work.route)
+      throw refused(`Expected ${owner.work.route} Work`, "work.target");
   };
   const bind = async (ctx: CommandContext, kind: Kind, phase: Phase) => {
     const target = targetOf(ctx);
     // The sheet pair takes the asking route's own handle (/ducts or /fans); the sibling comes from readWorks or the same document.
     const primary = ctx.admission.input.work as import("@pe/agent-contracts").WorkHandle;
-    const selected = actionOf(kind, primary.key.route);
+    needOwner(primary.key.route);
     const siblings = z
       .strictObject({
         [ductsRoute]: workHandleSchema.optional(),
@@ -299,8 +289,8 @@ export function ductActionExecutors(
                 : selector,
             slots: flow.slots,
           });
-        const snapshot = await selected.snapshot(intent, read);
-        const derived = await selected.derive({
+        const snapshot = await action.snapshot(intent, read);
+        const derived = await action.derive({
           flow,
           intent,
           read,
@@ -320,14 +310,15 @@ export function ductActionExecutors(
       },
     };
   };
-  const run = (ctx: CommandContext, execution: ActionExecution, kind: Kind, phase: Phase) =>
+  const run = (ctx: CommandContext, execution: ActionExecution, phase: Phase) =>
     Effect.gen(function* () {
       const p = prepared.parse(execution.prepared),
         target = targetOf(ctx);
       const { key: asked } = ctx.admission.input.work as {
         key: import("@pe/agent-contracts").WorkKey;
       };
-      const entry = actionOf(kind, asked.route).entry;
+      needOwner(asked.route);
+      const { entry } = action;
       // Default slot initialization is bookkeeping, never an authored model change.
       if (p.nothingToWrite) {
         if (phase === "apply")
@@ -370,7 +361,7 @@ export function ductActionExecutors(
           };
       }
       // D9: an apply retires only the cells its own route owns, under the route that executed it.
-      const owned = (asked.route === fansRoute ? fansTool : ductSystemsTool).work.editable;
+      const owned = owner.work.editable;
       const paths = (
         phase === "apply" ? entry.retires(p.input, value, p.subjects, p.cells) : []
       ).filter((path) => owned.some((pattern) => pattern[0] === path[0]));
@@ -396,7 +387,7 @@ export function ductActionExecutors(
           command(ductCommands[key], prepared, {
             seal: (p) => ({ request: p.input, evidence: p.dependencies }),
             bind: (ctx) => bind(ctx, kind, phase),
-            run: (ctx, execution) => run(ctx, execution, kind, phase),
+            run: (ctx, execution) => run(ctx, execution, phase),
           }),
         ];
       }),
@@ -419,4 +410,22 @@ export function ductsRefreshExecutors(bridge: RevitBridge["Service"]) {
         }),
     }),
   };
+}
+
+export function ductsRulingsExecutors(
+  bridge: RevitBridge["Service"],
+  deps: DuctActionDependencies,
+) {
+  return ductActionExecutors(
+    {
+      ...rulingsDoor,
+      bindings: [
+        ["sheet.plan", "losses", "plan"],
+        ["sheet.apply", "losses", "apply"],
+      ],
+    },
+    bridge,
+    deps,
+    ductSystemsTool,
+  );
 }
