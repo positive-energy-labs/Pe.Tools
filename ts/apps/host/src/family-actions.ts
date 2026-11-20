@@ -1,5 +1,4 @@
 import { authorSchema } from "@pe/agent-contracts";
-import { targetHomes } from "@pe/host-internal/target-homes";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
 import { NodeFileSystem } from "@effect/platform-node";
@@ -64,7 +63,7 @@ import type {
   RevitCatalogLoadedFamilies,
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import { invokeBridge as invoke } from "./bridge.ts";
+import { documentHomes, invokeBridge as invoke } from "./bridge.ts";
 import { type RevitBridge } from "@pe/host-internal/bridge";
 import { assertFresh, type DocumentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "@pe/host-internal/action-execution";
@@ -194,9 +193,10 @@ export const podContext = async (
   bridge: RevitBridge["Service"],
   target?: DocumentRef,
 ): Promise<PodContext> => ({
-  ...(await Effect.runPromise(
-    targetHomes(bridge, { bridgeSessionId: target?.session, openDocumentId: target?.openId }),
-  )),
+  ...(await documentHomes(bridge, {
+    bridgeSessionId: target?.session,
+    openDocumentId: target?.openId,
+  })),
   podsRoot: deps.podsRoot,
   ...(target
     ? {

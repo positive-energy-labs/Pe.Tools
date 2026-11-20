@@ -8,6 +8,12 @@ const steps: [string, string, string[]][] = [
   ["format", root, ["vp", "fmt", "--check"]],
   // Compiler diagnostics run below through each package's actual tsconfig, separately from lint.
   ["lint", root, ["vp", "lint", "--type-aware"]],
+  // The host compiler imports the ignored closure files on a fresh checkout.
+  [
+    "source closures",
+    resolve(root, "apps/web"),
+    [process.execPath, "scripts/route-graphs.ts", "--builtin-closure-only"],
+  ],
 ];
 for (const folder of ["apps", "packages", "tests"])
   for (const name of readdirSync(resolve(root, folder)).sort()) {

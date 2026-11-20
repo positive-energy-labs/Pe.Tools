@@ -1,3 +1,4 @@
+import { settle } from "../../../host/tests/effect-test.ts";
 import { hostState } from "../../../host/src/host-ownership.ts";
 // These witnesses test capture and camera ownership; resolve the lazy module before their timed gestures.
 import "./slots/picture/pane.tsx";
@@ -472,7 +473,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
   ).pipe(Layer.provide(ambient(HostNativeRead)), Layer.provide(ambient(RevitBridge)));
   const dir = await mkdtemp(join(tmpdir(), "pe-f05-bisect-"));
   const stamp = admittedReceiptStamps().host!;
-  const captureStore = await Effect.runPromise(
+  const captureStore = await settle(
     openRecordingWriter(
       stateFixture(dir),
       {
@@ -482,7 +483,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
       { maxBytes: 256 * 1024 * 1024, maxTakings: 10000 },
     ),
   );
-  const inputs = await Effect.runPromise(
+  const inputs = await settle(
     HostInputContext.pipe(Effect.provide(HostInputContext.layer({ kind: "live", captureStore }))),
   );
   const host = await bootHost({

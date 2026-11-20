@@ -8,7 +8,13 @@ import { capturePackage, listPackages, productPodsRoots } from "../src/packages.
 import { stopPackageDiscovery } from "../src/pod-capture.ts";
 import { runPodScript } from "../src/operation-script.ts";
 import { createPagesHandler } from "../src/pages-route.ts";
-import { callRouteOver, detachedBridge, journalAt, testHostInputs } from "./effect-test.ts";
+import {
+  settleExit,
+  callRouteOver,
+  detachedBridge,
+  journalAt,
+  testHostInputs,
+} from "./effect-test.ts";
 import { serveRoutes } from "./real-server.ts";
 import { actAs, contextHeaders, human, serviceHeaders } from "./callers.ts";
 
@@ -96,7 +102,7 @@ test("B15: an earlier sealed scripting.execute bundle is refused before bridge d
   const invoke = vi.fn(() =>
     Effect.succeed({ value: { status: "Succeeded" }, target: { session: "s", document: null } }),
   );
-  const exit = await Effect.runPromiseExit(
+  const exit = await settleExit(
     runPodScript(
       detachedBridge({ invoke }),
       { session: "s", openId: "d" },

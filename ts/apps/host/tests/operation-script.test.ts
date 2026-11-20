@@ -9,7 +9,7 @@ import { Cause, Effect } from "effect";
 import { z } from "zod";
 import { NodeServices } from "@effect/platform-node";
 import { FetchHttpClient } from "effect/http";
-import { detachedBridge, pictureCaptures, testJournal } from "./effect-test.ts";
+import { settle, settleExit, detachedBridge, pictureCaptures, testJournal } from "./effect-test.ts";
 import { approvedPea } from "./callers.ts";
 import { productPodsRoots, isPackageMember } from "../src/packages.ts";
 import { contentRootsReady } from "../src/content-roots.ts";
@@ -111,7 +111,7 @@ it("refuses a script with no exact lifetime before native dispatch", async () =>
   const invoke = (): never => {
     throw Error("dispatched without a lifetime");
   };
-  const result = await Effect.runPromiseExit(
+  const result = await settleExit(
     runPodScript(
       detachedBridge({ invoke }),
       { session: "s" },
@@ -197,7 +197,7 @@ it("C3 refuses a Pod script before execution on any missing or mismatched probe,
       clock: { now: unused },
       ids: { mint: unused },
     };
-    return Effect.runPromiseExit(
+    return settleExit(
       executor
         .run(ctx, execution)
         .pipe(
@@ -264,7 +264,7 @@ it("stamps the trusted script caller over supplied caller bytes", async () => {
           input: { scriptContent: "WriteLine(1);", ...(supplied ? { caller: supplied } : {}) },
         },
       } as unknown as CommandContext;
-      await Effect.runPromise(executor.run(ctx, execution) as Effect.Effect<unknown, unknown>);
+      await settle(executor.run(ctx, execution) as Effect.Effect<unknown, unknown>);
       expect(sent).toMatchObject({ caller: caller.kind === "human" ? "Person" : "Agent" });
     }
   }
@@ -388,9 +388,7 @@ it("answers the typed 503 at both script doors when Pod discovery outlasts its w
   };
 
   const exit = await outlast(
-    Effect.runPromiseExit(
-      runPodScript(detachedBridge(), { session: "s", openId: "o" }, input, "pending"),
-    ),
+    settleExit(runPodScript(detachedBridge(), { session: "s", openId: "o" }, input, "pending")),
   );
   expect(exit._tag === "Failure" && Cause.squash(exit.cause)).toMatchObject(pending);
 

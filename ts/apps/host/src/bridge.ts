@@ -37,6 +37,7 @@ import { ActionJournalService } from "./receipt-services.ts";
 import { receiptProducerSchema, type ReceiptProducer } from "@pe/agent-contracts";
 import { runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 import { hostOwnership } from "./host-ownership.ts";
+import { targetHomes } from "@pe/host-internal/target-homes";
 /** Decode native inventory once: detached PathName values are labels, not file addresses. */
 export const decodeInventoryState = (state: BridgeStateSnapshot): BridgeStateSnapshot => ({
   ...state,
@@ -59,6 +60,10 @@ const runCompatibility = <A, E>(effect: Effect.Effect<A, E>): Promise<A> => {
   // effect-edge: island, phase 5
   return Effect.runPromise(effect);
 };
+
+/** Document homes for legacy Promise-based host adapters. */
+export const documentHomes = (...args: Parameters<typeof targetHomes>) =>
+  runCompatibility(targetHomes(...args));
 /** Provenance grants only the Internal leaves the command declares in the catalog. */
 export function commandLeafRefusal(
   operationKey: string,

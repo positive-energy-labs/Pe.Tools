@@ -96,7 +96,9 @@ test.each([
       <PreviewAction handle={handle} label="Write to Revit" />
     </TooltipProvider>,
   );
-  await act(async () => fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" })));
+  await act(async () =>
+    fireEvent.click(screen.getByRole("button", { name: "plan Write to Revit" })),
+  );
   expect(await screen.findByText(result.summary)).toBeTruthy();
   expect(screen.getByRole("button", { name: result.toolbar })).toBeTruthy();
   const apply = screen.queryByRole("button", { name: "Write to Revit" });

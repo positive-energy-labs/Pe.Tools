@@ -1,3 +1,4 @@
+import { settle } from "./effect-test.ts";
 import { Effect, Fiber, Queue } from "effect";
 import { expect, test } from "vite-plus/test";
 import { RevitBridgeLive } from "../src/bridge.ts";
@@ -7,7 +8,7 @@ import { connectTestBridge } from "./bridge-fixture.ts";
 // D28: the native LoadFamily trace ended with a snapshot containing its temporary family.
 // The native producer must supply a final census after the API call, including in headless Revit.
 test("the final family-load census removes the family from every inventory reader", () =>
-  Effect.runPromise(
+  settle(
     Effect.scoped(
       Effect.gen(function* () {
         const { bridge, incoming, outgoing, target } = yield* connectTestBridge();

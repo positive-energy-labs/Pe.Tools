@@ -2,7 +2,7 @@ import { resolve, basename, dirname, join } from "node:path";
 import { hostState } from "./host-ownership.ts";
 import { createHash } from "node:crypto";
 import { readSettingTiers } from "@pe/host-internal/settings-files";
-import { targetHomes } from "@pe/host-internal/target-homes";
+import { documentHomes } from "./bridge.ts";
 import { captureDirectory } from "./packages.ts";
 import { directorySnapshot } from "./command-reads.ts";
 import {
@@ -245,9 +245,7 @@ export function gatewayExecutor(
         switch (key) {
           case "settings.tiers.write": {
             // Host-owned settings use the document pointer, without dispatching a native operation.
-            const { pointer } = await Effect.runPromise(
-              targetHomes(bridge, { openDocumentId: target?.openId }),
-            );
+            const { pointer } = await documentHomes(bridge, { openDocumentId: target?.openId });
             const tier = readSettingTiers(String(authored.owner), pointer).find(
               (tier) => tier.tier === authored.tier,
             );

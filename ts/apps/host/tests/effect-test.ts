@@ -220,6 +220,11 @@ export const settle = <A, E>(effect: Effect.Effect<A, E>): Promise<A> =>
   // effect-edge: test-runner
   Effect.runPromise(effect);
 
+export const settleExit = <A, E>(effect: Effect.Effect<A, E>) => settle(Effect.exit(effect));
+export const settleSync = <A, E>(effect: Effect.Effect<A, E>): A =>
+  // effect-edge: test-runner
+  Effect.runSync(effect);
+
 type Lifted<F> = F extends (...args: infer Args) => Effect.Effect<infer A, unknown, unknown>
   ? (...args: Args) => Promise<A>
   : F;

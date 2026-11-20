@@ -1,3 +1,4 @@
+import { settle } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem, Schema } from "effect";
 import { bridgeDocumentSnapshotSchema } from "@pe/host-contracts/contracts";
@@ -27,7 +28,7 @@ let drive: string;
 let project: string;
 const pointer = "Projects/2026-014 Chadds Ford";
 const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+  settle(effect.pipe(Effect.provide(NodeServices.layer)));
 const home = (root: string, tier: string) => {
   mkdirSync(root, { recursive: true });
   writeFileSync(join(root, "pe-home.json"), JSON.stringify({ tier }));
@@ -118,8 +119,7 @@ test("the pointer a call reads is its target document's, from the bridge's open-
       { state: null },
     ]),
   } as never;
-  const of = (openDocumentId?: string) =>
-    Effect.runPromise(targetHomes(bridge, { openDocumentId }));
+  const of = (openDocumentId?: string) => settle(targetHomes(bridge, { openDocumentId }));
   expect(await of("one")).toEqual({ pointer });
   expect(await of("two")).toEqual({ pointer: null });
   const decode = Schema.decodeUnknownSync(bridgeDocumentSnapshotSchema);

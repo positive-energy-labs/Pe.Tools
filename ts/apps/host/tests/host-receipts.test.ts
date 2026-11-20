@@ -1,3 +1,4 @@
+import { settle, settleExit } from "./effect-test.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
@@ -29,7 +30,7 @@ const runtime = <A>(
   admitted: ReceiptStamp | null,
   program: Effect.Effect<A, never, ActionJournalService | HostLogService>,
 ) =>
-  Effect.runPromise(
+  settle(
     Effect.scoped(program).pipe(
       Effect.provide(ActionJournalService.live(admitted, stateFixture(dir))),
     ),
@@ -81,7 +82,7 @@ test("each runtime scope owns its journal; the log mirrors commits in order and 
 test("a non-host stamp fails runtime construction; no later stamp mutation exists", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-host-receipts-"));
   dirs.push(dir);
-  const exit = await Effect.runPromiseExit(
+  const exit = await settleExit(
     Effect.scoped(
       Effect.gen(function* () {
         return yield* ActionJournalService;
@@ -96,7 +97,7 @@ test("journal facts and their mirrored log entries take the runtime Clock; advan
   dirs.push(dir);
   const first = "2030-01-01T00:00:00.000Z";
   const later = "2030-01-01T01:00:00.000Z";
-  const { facts, mirrored } = await Effect.runPromise(
+  const { facts, mirrored } = await settle(
     Effect.scoped(
       Effect.gen(function* () {
         const journal = yield* ActionJournalService;

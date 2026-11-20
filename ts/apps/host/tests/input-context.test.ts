@@ -1,3 +1,4 @@
+import { settle, settleExit } from "./effect-test.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
@@ -23,7 +24,7 @@ afterEach(async () => {
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
 const context = (lane: HostInputLane) =>
-  Effect.runPromise(
+  settle(
     Effect.gen(function* () {
       return yield* HostInputContext;
     }).pipe(Effect.provide(HostInputContext.layer(lane))),
@@ -32,7 +33,7 @@ const context = (lane: HostInputLane) =>
 const recording = async (): Promise<HostInputLane> => {
   const dir = await mkdtemp(join(tmpdir(), "pe-input-lane-"));
   dirs.push(dir);
-  const reader = await Effect.runPromise(
+  const reader = await settle(
     openRecordingWriter(stateFixture(dir), identity, bounds).pipe(
       Effect.andThen(openRecordingReader(dir, identity, bounds)),
     ),
@@ -50,7 +51,7 @@ test("live keeps its admission; a sourceless host fixture refuses and never buil
   expect((await context({ kind: "live" })).check({ kind: "work", verb: "edit" })).toBeNull();
   const fixture: HostInputLane = { kind: "fixture", name: "fans-demo" };
   const live = Layer.effect(HostNativeRead, Effect.die("live input acquired"));
-  const exit = await Effect.runPromiseExit(
+  const exit = await settleExit(
     Effect.gen(function* () {
       return yield* (yield* HostNativeRead).read({ key: "host.ops.catalog", input: {}, scope: {} });
     }).pipe(

@@ -14,6 +14,7 @@ import { hostOwnership, hostState } from "../../src/host-ownership.ts";
 import { fileRouteDocumentStore } from "../../src/route-document-store.ts";
 import { HostDocumentMarks, hostMarks } from "../../src/document-marks.ts";
 import {
+  settle,
   captureStore,
   detachedBridge,
   sessionView,
@@ -32,7 +33,7 @@ async function fixture() {
     registrations: [],
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });
-  await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(workspace), scope));
+  await settle(Layer.buildWithScope(admittedBuiltinsLayer(workspace), scope));
   const ref = { session: "B", openId: "open-B" };
   const key = bindWork("families", null, undefined, ref);
   await workspace.view(key, "families");
@@ -150,7 +151,7 @@ async function fixture() {
   onTestFinished(async () => {
     await journal.close();
     await server.close();
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await settle(Scope.close(scope, Exit.void));
     await rm(dir, { recursive: true, force: true });
   });
   const source = {

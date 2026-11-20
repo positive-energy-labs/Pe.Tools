@@ -1,4 +1,5 @@
-import { Effect, Exit, Layer, Scope } from "effect";
+import { settle } from "../effect-test.ts";
+import { Exit, Layer, Scope } from "effect";
 import { admittedBuiltinsLayer } from "../../src/admitted-builtins.ts";
 import { builtinEnrollments } from "../../src/builtin-enrollment.ts";
 import { afterEach, expect, test } from "vite-plus/test";
@@ -37,9 +38,9 @@ async function admittedWorkspace(
       },
     },
   });
-  const scope = await Effect.runPromise(Scope.make());
-  cleanup.push(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  await Effect.runPromise(
+  const scope = await settle(Scope.make());
+  cleanup.push(() => settle(Scope.close(scope, Exit.void)));
+  await settle(
     Layer.buildWithScope(
       admittedBuiltinsLayer(
         work,

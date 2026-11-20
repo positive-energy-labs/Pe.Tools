@@ -1,3 +1,4 @@
+import { settle } from "../../../host/tests/effect-test.ts";
 /**
  * Slice 6b falsifier (homes MAP row 6b, JOURNEYS FS, end-gate target 8): on every FS step that needs
  * no Revit (1 firm write, 2 project override, 6 a second writer, 7 firm home unmounted), the tier
@@ -79,11 +80,11 @@ const servedBy = (cell: DuctsCriteriaCell, mounted: boolean) => {
 /** What the host serves and what the sheet draws from it: the setting cells, the criteria and a terminal's row. */
 const sheet = async () => {
   const tiers = readSettingTiers("ducts", pointer);
-  const files = await Effect.runPromise(
+  const files = await settle(
     Effect.service(DuctFiles).pipe(Effect.provide(DuctFiles.layer(hostState().home))),
   );
   const base = firmLayer(
-    resolveFirm(await Effect.runPromise(files.firm("ducts")), ductsFirmSchema, {}),
+    resolveFirm(await settle(files.firm("ducts")), ductsFirmSchema, {}),
     tiers,
   );
   const cells = sheetCells(settingsSheet, {
