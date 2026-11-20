@@ -2,17 +2,20 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pe.Shared.HostContracts.Operations;
+using Pe.Shared.Product;
+using Pe.Shared.RevitData.Serialization;
 using System.Reflection;
 
 namespace Pe.Dev.Cli;
 
 /// <summary>
 ///     Offline projection of the bridge op catalog — the same entries a live session's
-///     host.ops.catalog serves, produced from the contracts assembly alone. Powers host-contracts
+///     host.ops.catalog serves, plus the native home table. Powers host-contracts
 ///     typegen without a running host; live sessions verify the projection (codegen:verify-live)
 ///     rather than generate it.
 /// </summary>
 internal static class OpsCatalogCommand {
+    private const BindingFlags HomeFields = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.DeclaredOnly;
     // Mirror of the bridge response serializer (BridgeAgent) so offline catalog JSON matches
     // what a live /ops round-trip yields: camelCase, string enums, nulls omitted.
     private static readonly JsonSerializerSettings JsonSettings = new() {
@@ -41,12 +44,13 @@ internal static class OpsCatalogCommand {
 
         // [FieldOptions] request properties emit their registered value-domain descriptor.
         Pe.Revit.SettingsRuntime.Json.ValueDomains.SettingsValueDomainBootstrap.RegisterDefaults();
-        var operations = ReadDefinitions()
+        var (definitions, nativeHomes) = ReadCatalog();
+        var operations = definitions
             .Select(HostOpsCatalogEntry.FromDefinition)
             .OrderBy(entry => entry.Key, StringComparer.Ordinal)
             .ToArray();
         var json = JsonConvert.SerializeObject(
-            new HostOpsCatalogData(operations, HostOpsCatalogData.ReadConstants()),
+            new { operations, constants = HostOpsCatalogData.ReadConstants(), nativeHomes },
             Formatting.Indented,
             JsonSettings
         );
@@ -63,7 +67,7 @@ internal static class OpsCatalogCommand {
         return 0;
     }
 
-    private static IReadOnlyList<HostOperationDefinition> ReadDefinitions() {
+    private static (IReadOnlyList<HostOperationDefinition>, Dictionary<string, Dictionary<string, string>>) ReadCatalog() {
         var baseDirectory = AppContext.BaseDirectory;
         var resolverPaths = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -93,7 +97,32 @@ internal static class OpsCatalogCommand {
             }
         }
 
-        return definitions.Values.ToArray();
+        return (definitions.Values.ToArray(), ReadNativeHomes(context, baseDirectory));
+    }
+
+    private static Dictionary<string, Dictionary<string, string>> ReadNativeHomes(MetadataLoadContext context, string directory) =>
+        Directory.EnumerateFiles(directory, "Pe.*.dll")
+            .Select(context.LoadFromAssemblyPath)
+            .SelectMany(assembly => assembly.GetTypes())
+            .SelectMany(type => type.GetFields(HomeFields))
+            .SelectMany(field => field.GetCustomAttributesData()
+                .Where(attribute => attribute.AttributeType.FullName == typeof(NativeHomeAttribute).FullName)
+                .Select(attribute => (Field: field, Name: (string)attribute.ConstructorArguments[0].Value!,
+                    Kind: (string)attribute.ConstructorArguments[1].Value!)))
+            .OrderBy(home => home.Kind, StringComparer.Ordinal).ThenBy(home => home.Name, StringComparer.Ordinal)
+            .GroupBy(home => home.Kind)
+            .ToDictionary(group => group.Key, group => group.ToDictionary(home => home.Name, home => HomeKey(home.Kind, home.Field)));
+
+    private static string HomeKey(string kind, FieldInfo field) {
+        var value = field.IsLiteral ? field.GetRawConstantValue()
+            : ResolveRuntimeType(field.DeclaringType!).GetField(field.Name, HomeFields)!.GetValue(null);
+        var id = (kind, value) switch {
+            ("owner-blob" or "entity", OwnerDescriptor owner) => owner.Guid.ToString("D"),
+            ("entity", Guid guid) => guid.ToString("D"),
+            ("machine-file", string path) => path,
+            _ => throw new InvalidOperationException($"Invalid native home '{kind}' on {field.DeclaringType}.{field.Name}.")
+        };
+        return $"{kind}:{id}";
     }
 
     private static Type ResolveRuntimeType(Type metadataType) {

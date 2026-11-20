@@ -21,8 +21,8 @@ public static class DuctSnapshots {
     private static readonly IReadOnlyDictionary<Guid, DuctLossMethod> LossServers = new Dictionary<Guid, DuctLossMethod> {
         [new Guid("76eff5da-2e71-45f7-b940-cc5716328ba0")] = DuctLossMethod.NotDefined,
         [new Guid("8baf7d75-8b9b-46d0-b8ce-3ad1c19e6b19")] = DuctLossMethod.AshraeTable,
-        [new Guid("5a598293-1504-46cc-a9c0-de55c82848b9")] = DuctLossMethod.SpecificCoefficient,
-        [new Guid("46245996-eebb-4536-ac17-9c1cd917d8cf")] = DuctLossMethod.SpecificLoss,
+        [DuctLossEntities.SpecificCoefficient] = DuctLossMethod.SpecificCoefficient,
+        [DuctLossEntities.SpecificLoss] = DuctLossMethod.SpecificLoss,
         [PeLossServer.Id] = DuctLossMethod.PeServer
     };
 

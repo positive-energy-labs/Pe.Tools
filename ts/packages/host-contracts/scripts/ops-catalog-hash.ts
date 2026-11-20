@@ -1,10 +1,10 @@
 /**
  * The ops-catalog drift hash. The generated contracts and catalog project the dotnet graph, so a
  * dotnet edit that forgets to regenerate is drift. Rebuilding dotnet to notice took 200 to 330 s per
- * guard run; hashing every C# source takes milliseconds and reddens on the same edits.
+ * guard run; hashing the C# sources and native home artifact takes milliseconds.
  *
- *   --write   record the digest of every existing tracked or untracked dotnet/**\/*.cs outside *.Tests beside the artifact
- *   (none)    exit 1 when the recorded digest differs from the sources; the fix is `pnpm codegen`
+ *   --write   record the digest of the generated native homes and nonignored dotnet C# sources outside tests
+ *   (none)    exit 1 on drift; the fix is `pnpm codegen`
  *
  * Git-listed and nonignored, hashed as git blobs: build output stays outside the digest.
  * `git hash-object` applies the same eol normalization in every checkout. New C# files and
@@ -59,7 +59,8 @@ function digest(sources: readonly string[]): string {
     .toString("utf8")
     .trim()
     .split("\n");
-  const hash = createHash("sha256");
+  const homes = new URL("../src/generated/native-homes.generated.json", import.meta.url);
+  const hash = createHash("sha256").update(readFileSync(homes, "utf8").replaceAll("\r\n", "\n"));
   sources.forEach((f, i) => {
     hash.update(f);
     hash.update(blobs[i]!);
@@ -73,7 +74,7 @@ if (import.meta.main) {
     writeFileSync(SHA, `${now}\n`);
   } else if (readFileSync(SHA, "utf8").trim() !== now) {
     console.error(
-      `ops-catalog: dotnet sources changed since the contracts and catalog were generated. Run \`pnpm codegen\` in ts/packages/host-contracts and commit the generated artifacts and hash.`,
+      `ops-catalog: dotnet sources or generated native homes changed. Run \`pnpm codegen\` in ts/packages/host-contracts and commit the generated artifacts and hash.`,
     );
     process.exit(1);
   }

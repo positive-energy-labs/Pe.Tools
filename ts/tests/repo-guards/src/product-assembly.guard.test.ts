@@ -20,6 +20,12 @@ import { ROOT } from "./import-census.ts";
 
 const checkout = resolve(ROOT, "..");
 
+test("the native home table is fresh against C#", () => {
+  execFileSync(process.execPath, [
+    join(ROOT, "packages/host-contracts/scripts/ops-catalog-hash.ts"),
+  ]);
+});
+
 test("every product declaration is in the checked-in assembly and workspace links", () => {
   const { outputs, dependencies } = renderProductAssembly(checkout);
   const stale = Object.entries(outputs).flatMap(([file, expected]) => {
