@@ -62,15 +62,24 @@ class AdmissionTests(unittest.TestCase):
         with ExitStack() as stack:
             sleep = stack.enter_context(patch.object(a.time, "sleep"))
             reading = stack.enter_context(patch.object(a, "admission_refusal", side_effect=["HOLD 1", "HOLD 2", None]))
-            a.require_setup_admission(5)
+            a.require_setup_admission("revit-drive", 5)
             self.assertEqual(reading.call_count, 3)
             self.assertEqual(sleep.call_count, 2)
             reading.side_effect = None
             reading.return_value = "HOLD late"
             stack.enter_context(patch.object(a.time, "time", side_effect=[0, 0, 400]))
             with self.assertRaises(SystemExit) as stop:
-                a.require_setup_admission(5)
+                a.require_setup_admission("revit-drive", 5)
             self.assertEqual(stop.exception.code, "HOLD late")
+
+    def test_host_only_reads_the_browser_floor(self):
+        with ExitStack() as stack:
+            barriers(stack)
+            command = stack.enter_context(patch.object(a.subprocess, "run", return_value=machine_result(
+                0, '{"verdict":"ADMIT","kind":"revit-drive"}')))
+            with self.assertRaises(SystemExit):  # an ADMIT for another kind is a refusal
+                a.setup("guard", ["--host-only"])
+            self.assertEqual(command.call_args.args[0][-2], "browser")
 
     def test_admit_zero_reaches_setup(self):
         for args in ([], ["--web"], ["--installed"]):

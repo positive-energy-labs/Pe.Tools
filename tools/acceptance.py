@@ -301,11 +301,11 @@ def http(state: dict, who: str, method: str, path: str, body: bytes | None = Non
         return {"status": status, "body": text}
 
 
-def require_setup_admission(wait_minutes: float = 0) -> None:
+def require_setup_admission(kind: str, wait_minutes: float = 0) -> None:
     # Point-in-time check only, not a reservation or memory cap over persistent SDK services.
     deadline = time.time() + wait_minutes * 60
     while True:
-        refused = admission_refusal()
+        refused = admission_refusal(kind)
         if not refused:
             return
         if time.time() >= deadline:
@@ -313,18 +313,18 @@ def require_setup_admission(wait_minutes: float = 0) -> None:
         time.sleep(30)
 
 
-def admission_refusal() -> str | None:
+def admission_refusal(kind: str) -> str | None:
     try:
         reading = subprocess.run(
             [sys.executable, str(CHECKOUT / ".agents/skills/slot.execute/machine.py"),
-             "admit", "revit-drive", "--json"],
+             "admit", kind, "--json"],
             capture_output=True, text=True, timeout=8,
         )
         verdict = json.loads(reading.stdout)
     except (OSError, subprocess.SubprocessError, ValueError) as error:
         return f"HOLD setup: machine admission failed: {error}"
     if (reading.returncode != 0 or not isinstance(verdict, dict)
-            or verdict.get("verdict") != "ADMIT" or verdict.get("kind") != "revit-drive"
+            or verdict.get("verdict") != "ADMIT" or verdict.get("kind") != kind
             or "error" in verdict):
         return f"HOLD setup: machine admission refused: {reading.stdout.strip()}"
     return None
@@ -332,7 +332,9 @@ def admission_refusal() -> str | None:
 
 def setup(run: str, args: list[str]) -> None:
     wait = value_list(args, "--wait-admission")
-    require_setup_admission(float(wait[0]) if wait else 0)  # Includes the host-timeout resume path, before discovery or acquisition.
+    # A host-only drive starts no Revit, so it takes the host+web+Chrome floor (owner, 2026-11-20: "more like 8, maybe 6"), not the cold-drive floor.
+    kind = "browser" if "--host-only" in args else "revit-drive"
+    require_setup_admission(kind, float(wait[0]) if wait else 0)  # Includes the host-timeout resume path, before discovery or acquisition.
     installed = "--installed" in args
     host_only = "--host-only" in args
     if host_only and (installed or "--model" in args):

@@ -2,7 +2,7 @@
 
 ## purpose
 
-The driver uses the real product through its surface, as a person would, at an exact SHA, and reports what it saw with evidence. It trails the integration branch and drives journeys as feedback, so no merge or move of main waits on it. The map declares the rows, and `delegate` defines their two kinds: a test row, which the integrator's suite stamps, and a journey row, which the driver drives. The run ends when every journey row holds a PROVEN stamp from one full pass on the final candidate, every test row holds the final candidate's suite result, and every row left is ruled Owed, as the root charter says who rules.
+The driver uses the real product through its surface, as a person would, at an exact SHA, and reports what it saw with evidence. It trails the integration branch and drives journeys as feedback, so no merge or move of main waits on it. The map declares the rows, and `delegate` defines their two kinds: a test row, which the integrator's suite stamps, and a journey row, which the driver drives. The run ends when every journey row holds a PROVEN stamp that carries to the final candidate (owner ruling 2026-11-19: no full pass at the final commit unless the plan names a release; a drive of the installed product belongs to a release only), every test row holds the final candidate's suite result, and every row left is ruled Owed, as the root charter says who rules.
 
 It is the one home of driven proof, so that the owner reads one table. Every drive axis the map declares (journeys, chaos, a visual panel, witness acceptance, sensor receipts) reports through its row table, and no other thread commissions an observer or stamps a journey row. It judges the product and so never builds it: a production fault goes into the backlog with evidence.
 
@@ -19,10 +19,10 @@ It is the one home of driven proof, so that the owner reads one table. Every dri
 - It never edits production source, never weakens an assertion, and never merges to main.
 - It never drives a moving tree: one bounded drive per exact frozen SHA, and a row driven on the integrator's merged tip records that SHA.
 - It never runs a test row. The integrator's suite on the tip stamps it, because a second run of the same test on the same tip proves nothing new.
-- It never drives again a journey row that a new tip did not void. A journey is voided only by a change in its own route's folders, which the row names; a change to tests, fixtures, docs or generated files voids nothing, and neither does a change elsewhere in the code the route imports, because the test rows cover that code on every tip and the final candidate pass drives every journey. Rows that named their whole import chain were voided by nearly every tip: in fans one 21-file diff voided 30 of 32 rows, and the count could not climb.
+- It never drives again a journey row that a new tip did not void. A journey is voided only by a change in its own route's folders, which the row names; a change to tests, fixtures, docs or generated files voids nothing, and neither does a change elsewhere in the code the route imports, because the test rows cover that code on every tip, and a release's full pass drives every journey. Rows that named their whole import chain were voided by nearly every tip: in fans one 21-file diff voided 30 of 32 rows, and the count could not climb.
 - It never stamps a drive that did not complete. An incomplete drive is run again once, and a second one stamps the row UNPROVEN with what stopped it, which goes into the backlog. A FALSIFIED row gets one repeat on the same SHA to tell a flake from a fault, and a row that failed and then passed there is UNPROVEN until the cause of the failure is named.
 - It never pays setup per tip: the tip's diff decides what restarts (nothing, the web client, the host, or the native session), and between tips it keeps its session, tooling and journeys warm. Revit restarts only on a diff that changes native code, because a fresh start and model open costs about five minutes and the model copy under a second.
-- It never builds a tip and never waits for an installer. It drives each tip from source in its own worktree, and the installer is packed once, for the final candidate's installed drive, because no drive during fans ran a package.
+- It never builds a tip and never waits for an installer. It drives each tip from source in its own worktree, and an installer is packed only for a release, because no drive during fans ran a package.
 - It never retries a refused machine admission on a schedule. It runs `python tools/acceptance.py setup <run> --wait-admission <minutes>`, which starts the drive when memory frees.
 - It never writes a receipt a tool writes: no hand-written hash checks of a build it does not run, no custody file beside `run.json`, and no release receipt beside `ev/teardown.json`. Its evidence links them.
 - It never waits for the purger or for the integrator's suite: it drives a tip as soon as the integrator says it is ready.
@@ -41,7 +41,7 @@ It delegates every drive, because rows on separate lanes can be driven at once a
 
 ## wakes on
 
-A tip the integrator names as ready. A candidate the root names for its full pass. A message from the integrator, the root or the owner. Its own background command finishing. One line from the root's wake.
+A tip the integrator names as ready. A release candidate the root names for its full pass. A message from the integrator, the root or the owner. Its own background command finishing. One line from the root's wake.
 
 ## handoff
 
