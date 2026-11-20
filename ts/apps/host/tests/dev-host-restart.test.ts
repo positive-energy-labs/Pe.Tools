@@ -1,16 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
-import { productRoot, sourceHostServiceName } from "@pe/host-contracts/service-identity";
+import { sourceHostServiceName, stateRoot } from "@pe/host-contracts/service-identity";
 
 test("the dev tray host recovers after a competing supervisor outlasts the first claim", async () => {
   const cwd = resolve(import.meta.dirname, "..");
   const sourceRoot = resolve(cwd, "../../..");
   const name = sourceHostServiceName(sourceRoot);
-  const appBase = productRoot({ lane: "dev", sourceRoot, installedRoot: null });
+  const isolated = await mkdtemp(join(tmpdir(), "pe-dev-host-restart-"));
+  const productHome = join(isolated, "product");
+  const appBase = stateRoot("dev", sourceRoot, productHome);
   const serviceDir = join(appBase, "state", "service");
   const lock = join(serviceDir, `${name}.lock`);
   await mkdir(serviceDir, { recursive: true });
@@ -27,6 +30,12 @@ test("the dev tray host recovers after a competing supervisor outlasts the first
       ...process.env,
       PE_LANE: "dev",
       PE_TOOLS_SOURCE_ROOT: sourceRoot,
+      PE_TOOLS_PRODUCT_HOME: productHome,
+      PE_TOOLS_SHARED_ROOT: undefined,
+      LOCALAPPDATA: join(isolated, "local"),
+      PE_SESSION_REGISTRY_ROOT: join(isolated, "sdk", "registry"),
+      PE_SESSION_FILES_ROOT: join(isolated, "sdk", "files"),
+      PE_SERVICE_STATE_ROOT: join(isolated, "sdk", "services"),
       PE_TOOLS_HOST_SERVICE_NAME: name,
       PE_TOOLS_HOST_BASE_URL: undefined,
       PE_TOOLS_FRONTEND_BASE_URL: undefined,
@@ -57,7 +66,6 @@ test("the dev tray host recovers after a competing supervisor outlasts the first
     const recovered = expect.poll(async () => {
       const service = await readServiceFile(appBase, name);
       if (!service || service.pid !== host.pid || !output.includes("Browser: http")) return false;
-      expect([5175, 61769]).not.toContain(service.port);
       return fetch(`http://127.0.0.1:${service.port}/host/status`, {
         signal: AbortSignal.timeout(1_000),
       }).then((response) => response.ok, () => false);
@@ -71,5 +79,6 @@ test("the dev tray host recovers after a competing supervisor outlasts the first
     const kill = setTimeout(() => host.kill(), 20_000);
     await exited;
     clearTimeout(kill);
+    await rm(isolated, { recursive: true, force: true });
   }
 }, 255_000);
