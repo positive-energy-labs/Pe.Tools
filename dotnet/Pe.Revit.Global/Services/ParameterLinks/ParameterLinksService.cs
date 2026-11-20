@@ -3,6 +3,7 @@ using Pe.Revit.DocumentData.ParameterLinks;
 using Pe.Revit.Global.Services.Document;
 using Pe.Revit.Loader.Documents;
 using Pe.Revit.Tasks;
+using Pe.Revit.Parameters;
 using Pe.Shared.RevitData;
 using Serilog;
 using Autodesk.Revit.DB.Electrical;
@@ -88,10 +89,11 @@ public sealed class ParameterLinksService {
         var profileChanged = false;
         var applied = 0;
         ParameterLinkEvaluation evaluation = evaluated;
+        var notices = new OwnerBlobNotices();
         var committed = false;
         using (var sandbox = DocumentSandbox.BeginCommit(document, "Pe Apply Parameter Links")) {
             if (request.Profile != null)
-                profileChanged = this._storage.Write(document, profile, request.Replacement);
+                profileChanged = this._storage.Write(document, profile, request.Replacement, notices);
             if (request.Reconcile)
                 (evaluation, applied) = ParameterLinksEngine.Reconcile(document, profile);
             if ((profileChanged || applied > 0) &&
@@ -100,6 +102,8 @@ public sealed class ParameterLinksService {
                 committed = true;
             }
         }
+
+        if (committed) notices.Publish();
 
         if ((profileChanged || applied > 0) && !committed) {
             profileChanged = false;

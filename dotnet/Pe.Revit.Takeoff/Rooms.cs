@@ -1,3 +1,4 @@
+using Pe.Revit.Parameters;
 using Pe.Shared.Product;
 using System.Security.Cryptography;
 using Pe.Revit.Space;
@@ -557,7 +558,8 @@ public static class Rooms
                 { GeometryHash = GeometryHash(loops), WallHash = WallHash(knee, loops), Flags = flags } });
         }
 
-        record.Save(doc, replacing: request.Replacing);
+        var notices = new OwnerBlobNotices();
+        record.Save(doc, replacing: request.Replacing, notices: notices);
 
         var result = new RoomsPartitionResult(level.Name, runId, zones.Count, createdRooms,
             solved.Sum(s => s.Plan.Keep.Count), solved.Sum(s => s.Plan.Locked.Count),
@@ -566,6 +568,7 @@ public static class Rooms
         BeginPhase("Commit");
         transaction.Complete();
         traces.MarkCommitted();
+        notices.Publish();
         EndPhase();
         // The committed model determines which solve the plan can show. A trace I/O failure here
         // cannot undo a Revit transaction or turn its committed result into a failed partition.
@@ -622,7 +625,7 @@ public static class Rooms
             .ToList(), originals.Count == 0 ? null : RoomsRunTraces.OriginalUnavailable, originals);
     }
 
-    public static RoomsDrawResult Draw(Document doc, RoomsDrawRequest request)
+    public static RoomsDrawResult Draw(Document doc, RoomsDrawRequest request, OwnerBlobNotices? notices = null)
     {
         var view = LevelView(doc, request.View);
         var record = RoomsRegionRecord.Stage(doc, request.Replacing);
@@ -639,7 +642,7 @@ public static class Rooms
         var loops = TakeoffAtlas.Boundaries(fr);
         record.Regions.Add(fr.UniqueId, row with { Provenance = row.Provenance with
             { SourceSqft = Sqft(fr, loops), GeometryHash = GeometryHash(loops) } });
-        record.Save(doc, replacing: request.Replacing);
+        record.Save(doc, replacing: request.Replacing, notices: notices);
         return new RoomsDrawResult(fr.Id.Value(), fr.UniqueId);
     }
 
@@ -658,8 +661,10 @@ public static class Rooms
                 var (fr, row) = Resolve(doc, record, patch.UniqueId);
                 record.Regions[fr.UniqueId] = Patch(row, patch);
             }
-            record.Save(doc, replacing: request.Replacing);
+            var notices = new OwnerBlobNotices();
+            record.Save(doc, replacing: request.Replacing, notices: notices);
             transaction.Complete();
+            notices.Publish();
         }, () => RoomsRegionRecord.Read(doc).OrThrow() ?? throw new InvalidOperationException("Committed Rooms record is missing"));
     }
 
@@ -711,7 +716,7 @@ public static class Rooms
         return new(role, fields, provenance);
     }
 
-    public static RoomsMergeResult Merge(Document doc, RoomsMergeRequest request)
+    public static RoomsMergeResult Merge(Document doc, RoomsMergeRequest request, OwnerBlobNotices? notices = null)
     {
         var view = LevelView(doc, request.View);
         var record = RoomsRegionRecord.Stage(doc, request.Replacing);
@@ -740,7 +745,7 @@ public static class Rooms
         var sqft = Sqft(merged, stored);
         record.Regions.Add(merged.UniqueId, row with { Provenance = row.Provenance with
             { SourceSqft = sqft, GeometryHash = GeometryHash(stored) } });
-        record.Save(doc, replacing: request.Replacing);
+        record.Save(doc, replacing: request.Replacing, notices: notices);
         return new RoomsMergeResult(merged.Id.Value(), merged.UniqueId, ids, sqft);
     }
 

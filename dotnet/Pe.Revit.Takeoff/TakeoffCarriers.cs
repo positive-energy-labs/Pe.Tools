@@ -56,10 +56,10 @@ public static class TakeoffCarriers
             _ = OwnerBlob.Replace(stored, data, (_, _) => { }, replacing);
     }
 
-    internal static void Save(Document document, OwnerDescriptor owner, JObject data, OwnerBlobReplacement? replacing)
+    internal static void Save(Document document, OwnerDescriptor owner, JObject data, OwnerBlobReplacement? replacing, OwnerBlobNotices? notices)
     {
         if (replacing is null) _ = OwnerBlobStore.Write(document, owner, data);
-        else _ = OwnerBlobStore.Write(document, owner, data, replacing);
+        else _ = OwnerBlobStore.Write(document, owner, data, replacing, notices ?? throw new ArgumentNullException(nameof(notices)));
     }
 
 }
@@ -191,7 +191,7 @@ public sealed class RoomsRegionRecord
             GeometryHash = row.Provenance.GeometryHash ?? geometryHash ?? PendingHash,
         } };
 
-    internal void Save(Document document, string? traceRoot = null, OwnerBlobReplacement? replacing = null)
+    internal void Save(Document document, string? traceRoot = null, OwnerBlobReplacement? replacing = null, OwnerBlobNotices? notices = null)
     {
         this.Prune(document);
         var originals = new List<string>();
@@ -205,7 +205,7 @@ public sealed class RoomsRegionRecord
         this.BeforeMutation(() => true);
         foreach (var json in originals)
             RoomsRunTraces.KeepOriginal(traceRoot ?? RoomsRunTraces.Root, this.TraceId, json);
-        TakeoffCarriers.Save(document, Owner, this.ToData(), replacing);
+        TakeoffCarriers.Save(document, Owner, this.ToData(), replacing, notices);
     }
 
     internal RegionProvenance ProjectOriginal(RegionProvenance provenance, string? traceRoot = null) =>

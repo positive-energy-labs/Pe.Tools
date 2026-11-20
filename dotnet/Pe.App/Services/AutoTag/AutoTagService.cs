@@ -37,8 +37,11 @@ public class AutoTagService {
     public void SaveSettingsForDocument(Document doc, AutoTagSettings settings) {
         using (var transaction = new Transaction(doc, "Save AutoTag Settings")) {
             _ = transaction.Start();
-            _ = OwnerBlobStore.WriteWithoutPreview(doc, AutoTagSettings.Owner, settings.ToData());
-            _ = transaction.Commit();
+            var notices = new OwnerBlobNotices();
+            _ = OwnerBlobStore.WriteWithoutPreview(doc, AutoTagSettings.Owner, settings.ToData(), notices);
+            if (transaction.Commit() != TransactionStatus.Committed)
+                throw new InvalidOperationException("Revit did not commit AutoTag settings.");
+            notices.Publish();
         }
         var tracked = this._documents?.Find(doc);
         if (tracked != null)
