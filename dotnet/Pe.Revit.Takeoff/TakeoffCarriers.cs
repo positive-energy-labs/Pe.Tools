@@ -87,7 +87,8 @@ public sealed class RoomsRegionRecord
         "Pe Rooms roles, fields and provenance keyed by FilledRegion UniqueId.") { ValidateData = read => Decode(read).Refusal };
 
     internal string? Refusal { get; private set; }
-    internal string? Recovery => this.Refusal is { } reason
+    internal string? Recovery => RecoveryFor(this.Refusal);
+    internal static string? RecoveryFor(string? refusal) => refusal is { } reason
         ? $"{reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it." : null;
     internal Dictionary<string, RoomsTraceRun> Runs { get; private init; } = new(StringComparer.Ordinal);
 
@@ -126,9 +127,7 @@ public sealed class RoomsRegionRecord
     internal static RoomsRegionRecord Stage(Document document, OwnerBlobReplacement? replacing = null)
     {
         var record = Stage(OwnerBlobStore.Read(document, Owner), replacing);
-        record.Prune(id => document.GetElement(id) is FilledRegion);
-        foreach (var view in record.Runs.Keys.Where(id => document.GetElement(id) is not ViewPlan).ToList())
-            record.Runs.Remove(view);
+        record.Prune(document);
         return record;
     }
 
@@ -141,6 +140,22 @@ public sealed class RoomsRegionRecord
         if (replacing != null)
             TakeoffCarriers.CheckReplacement(stored, record.ToData(), replacing);
         return record;
+    }
+
+    internal bool RecordSolvedRun(RoomsTraceRun run)
+    {
+        if (run.Zones == 0) return false;
+        this.Runs[run.View] = run;
+        return true;
+    }
+
+    private void Prune(Document document)
+    {
+        this.Prune(id => document.GetElement(id) is FilledRegion);
+        foreach (var id in this.Runs.Keys.Where(id => document.GetElement(id) is not ViewPlan view
+            || new FilteredElementCollector(document).OfClass(typeof(FilledRegion))
+                .WherePasses(new ElementOwnerViewFilter(view.Id)).FirstElementId() == ElementId.InvalidElementId).ToList())
+            this.Runs.Remove(id);
     }
 
     internal void Prune(Func<string, bool> isFilledRegion)
@@ -176,7 +191,7 @@ public sealed class RoomsRegionRecord
 
     internal void Save(Document document, string? traceRoot = null, OwnerBlobReplacement? replacing = null)
     {
-        this.Prune(id => document.GetElement(id) is FilledRegion);
+        this.Prune(document);
         var originals = new List<string>();
         foreach (var (id, row) in this.Regions.Where(pair => pair.Value.Provenance.Partition != null).ToList())
         {

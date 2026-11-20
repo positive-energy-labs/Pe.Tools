@@ -117,7 +117,9 @@ public sealed class OwnerBlobRoundTripTests {
             Assert.That(Raw(document, owner), Is.EqualTo(planted));
             using var isolated = new OwnerBlobRecoveryFixture();
             var evidence = TakeoffCarriers.Replacements(document).Regions!;
-            Assert.That(evidence.Reason, Is.EqualTo(snapshot.Unreadable.Single().Reason));
+            var reported = snapshot.Unreadable.Single().Reason;
+            Assert.That(reported, Does.StartWith(evidence.Reason).And.Contain("rooms.draw"));
+            Assert.That(() => Rooms.Trace(document, new(viewId)), Throws.InvalidOperationException.With.Message.EqualTo(reported));
             Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
             var draw = new RoomsDrawRequest(viewId, [[[0, 0], [10, 0], [10, 10], [0, 10]]], "Recovered");
             Assert.That(() => Rooms.Partition(document, new(viewId)),

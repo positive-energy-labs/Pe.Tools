@@ -40,6 +40,32 @@ public class RoomsRunTracesTests
     }
 
     [Test]
+    public void An_original_with_a_lone_surrogate_refuses_without_writing()
+    {
+        var root = Directory.CreateTempSubdirectory("pe-rooms-original-encoding-");
+        try
+        {
+            var text = "{\"reason\":\"" + (char)0xd800 + "\"}";
+            Assert.Throws<System.Text.EncoderFallbackException>(() => RoomsRunTraces.KeepOriginal(root.FullName, "doc", text));
+            Assert.That(root.EnumerateFileSystemInfos(), Is.Empty);
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Test]
+    public void A_zero_zone_attempt_does_not_replace_the_view_run()
+    {
+        var record = new RoomsRegionRecord();
+        var completed = new RoomsTraceRun("view", "committed", Guid.NewGuid().ToString("N"), 1);
+        var failed = completed with { RunId = "failed", Zones = 0 };
+        Assert.That(record.RecordSolvedRun(failed), Is.False);
+        Assert.That(record.Runs, Is.Empty);
+        Assert.That(record.RecordSolvedRun(completed), Is.True);
+        Assert.That(record.RecordSolvedRun(failed), Is.False);
+        Assert.That(record.Runs[completed.View], Is.EqualTo(completed));
+    }
+
+    [Test]
     public void An_original_is_exact_create_only_and_namespaced_by_document()
     {
         var root = Directory.CreateTempSubdirectory("pe-rooms-originals-").FullName;

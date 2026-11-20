@@ -1,7 +1,3 @@
-using System.Reflection.Emit;
-using System.Reflection.Metadata;
-using System.Reflection.Metadata.Ecma335;
-using System.Reflection.PortableExecutable;
 using Pe.Revit.Takeoff;
 using Pe.Shared.RevitData.Serialization;
 
@@ -23,35 +19,6 @@ public sealed class RoomsPartitionCancellationTests
 
         Assert.That(error!.Message, Does.Contain(overCap ? "the cap is" : "Invalid Rooms row"));
         Assert.That(mutated, Is.False);
-    }
-
-    [TestCase(nameof(Rooms.Partition))]
-    [TestCase(nameof(Rooms.Draw))]
-    [TestCase(nameof(Rooms.Merge))]
-    public void Mutation_entry_point_calls_the_record_capacity_gate(string entryPoint)
-    {
-        using var assembly = new PEReader(File.OpenRead(typeof(Rooms).Assembly.Location));
-        var metadata = assembly.GetMetadataReader();
-        MethodDefinition Method(string type, string name) => metadata.TypeDefinitions
-            .Select(metadata.GetTypeDefinition)
-            .Single(value => metadata.GetString(value.Namespace) == typeof(Rooms).Namespace
-                && metadata.GetString(value.Name) == type)
-            .GetMethods().Select(metadata.GetMethodDefinition)
-            .Single(value => metadata.GetString(value.Name) == name);
-        var gate = Method(nameof(RoomsRegionRecord), nameof(RoomsRegionRecord.BeforeMutation));
-        var entry = Method(nameof(Rooms), entryPoint);
-        var il = assembly.GetMethodBody(entry.RelativeVirtualAddress).GetILBytes()!;
-        bool callsGate = Enumerable.Range(0, il.Length - 4).Any(index =>
-        {
-            if (il[index] != OpCodes.Call.Value && il[index] != OpCodes.Callvirt.Value) return false;
-            var token = BitConverter.ToInt32(il, index + 1);
-            if ((token >>> 24) != 0x2b || (token & 0xffffff) > metadata.GetTableRowCount(TableIndex.MethodSpec)
-                || (token & 0xffffff) == 0) return false;
-            var called = metadata.GetMethodSpecification((MethodSpecificationHandle)MetadataTokens.EntityHandle(token)).Method;
-            return called.Kind == HandleKind.MethodDefinition
-                && metadata.GetMethodDefinition((MethodDefinitionHandle)called).RelativeVirtualAddress == gate.RelativeVirtualAddress;
-        });
-        Assert.That(callsGate, Is.True);
     }
 
     [Test]

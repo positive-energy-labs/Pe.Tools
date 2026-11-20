@@ -211,7 +211,7 @@ public static class Rooms
         var levels = Levels(doc);
         var read = RoomsRegionRecord.Read(doc);
         if (read.Value is not { } record)
-            return new(levels, [], read.Refusal is { } reason ? [new(null, RoomsRegionRecord.Owner.Name, reason)] : []);
+            return new(levels, [], RoomsRegionRecord.RecoveryFor(read.Refusal) is { } reason ? [new(null, RoomsRegionRecord.Owner.Name, reason)] : []);
         var regions = new List<RoomsRegion>();
         foreach (var fr in record.Regions.Keys.Select(id => doc.GetElement(id)).OfType<FilledRegion>()
                      .Where(fr => fr.OwnerViewId == viewScope.Id).OrderBy(fr => fr.Id.Value()))
@@ -424,6 +424,12 @@ public static class Rooms
         }, cancellationToken);
 
         zoneId = null;
+        if (!record.RecordSolvedRun(traces.Reference))
+        {
+            EndPhase();
+            return new(level.Name, runId, zones.Count, 0, 0, 0, 0, 0, failures,
+                "No zone solved.", Math.Round(sw.Elapsed.TotalMilliseconds, 3));
+        }
         // The last checkpoint is before this phase. From here the one transaction owns the outcome,
         // including first-run parameter bindings. A late Stop lets it commit or fail normally.
         BeginPhase("Materialization");
@@ -492,7 +498,6 @@ public static class Rooms
                 GeometryHash = RoomsRegionRecord.PendingHash, WallHash = RoomsRegionRecord.PendingHash,
                 Flags = row.Role == TakeoffCarriers.RoleRoomRegion ? [.. row.Provenance.Flags, failureFlag] : row.Provenance.Flags,
             } });
-        record.Runs[view.UniqueId] = traces.Reference;
         using var transaction = record.BeforeMutation(() => DocumentSandbox.BeginCommit(doc, "Pe Partition Rooms"), pending);
         double elevation = level.ProjectElevation;
         var frType = RegionType(doc);
@@ -593,13 +598,18 @@ public static class Rooms
     public static RoomsTraceData Trace(Document doc, RoomsTraceRequest request)
     {
         var view = LevelView(doc, request.View);
-        var record = RoomsRegionRecord.Read(doc).OrThrow();
+        var read = RoomsRegionRecord.Read(doc);
+        if (RoomsRegionRecord.RecoveryFor(read.Refusal) is { } recovery)
+            throw new InvalidOperationException(recovery);
+        var record = read.Value;
         var reference = record?.Runs.GetValueOrDefault(view.UniqueId);
         if (reference == null)
             throw new RoomsTraceUnavailableException($"View '{view.Name}' has no committed rooms.partition run.", unpartitioned: true);
         var runId = request.RunId ?? reference.RunId;
         if (runId != reference.RunId)
             throw new RoomsTraceUnavailableException($"Run '{runId}' is not the committed run for '{view.Name}'.", unpartitioned: false);
+        if (reference.Zones == 0)
+            throw new RoomsTraceUnavailableException($"No zone solved in run '{runId}' for '{view.Name}'.", unpartitioned: false);
         var files = RoomsRunTraces.Find(RoomsRunTraces.Root, record!.TraceId, view.UniqueId, runId, reference);
         if (files.Count == 0)
             throw new RoomsTraceUnavailableException($"Trace for run '{runId}' for '{view.Name}' is not on this machine.", unpartitioned: false);

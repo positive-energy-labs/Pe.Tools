@@ -19,19 +19,19 @@ internal static class RoomsRunTraces
     // Create-only evidence. Its digest in a committed region row is the authority to read it.
     internal static string KeepOriginal(string root, string document, string json)
     {
+        var bytes = new UTF8Encoding(false, true).GetBytes(json);
         var digest = Hash(json);
         var path = OriginalPath(root, document, digest);
-        while (true)
+        if (File.Exists(path))
         {
-            if (File.Exists(path))
-            {
-                if (File.ReadAllText(path) == json) break;
-                try { File.Move(path, path + ".damaged-" + Guid.NewGuid().ToString("N")); }
-                catch (FileNotFoundException) { }
-            }
-            try { StoredFile.WriteAtomic(path, Encoding.UTF8.GetBytes(json)); }
-            catch (IOException) when (File.Exists(path)) { }
+            if (File.ReadAllText(path) == json) return digest;
+            try { File.Move(path, path + ".damaged-" + Guid.NewGuid().ToString("N")); }
+            catch (FileNotFoundException) { }
         }
+        try { StoredFile.WriteAtomic(path, bytes); }
+        catch (IOException) when (File.Exists(path)) { }
+        if (File.ReadAllText(path) != json)
+            throw new IOException("The saved Rooms solver original does not match its digest.");
         return digest;
     }
 
