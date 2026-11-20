@@ -378,7 +378,8 @@ internal sealed class RevitDataRequestService {
                 commitStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 sandbox.Complete();
             }
-            commitTiming?.Invoke(System.Diagnostics.Stopwatch.GetElapsedTime(commitStart).TotalMilliseconds);
+            commitTiming?.Invoke((System.Diagnostics.Stopwatch.GetTimestamp() - commitStart)
+                * (1000.0 / System.Diagnostics.Stopwatch.Frequency));
             return result;
         } catch (BridgeOperationException) {
             throw;

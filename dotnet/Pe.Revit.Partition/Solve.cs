@@ -1,4 +1,5 @@
 using NetTopologySuite.Geometries;
+using NetTopologySuite.Geometries.Prepared;
 using Pe.Revit.Space;
 
 namespace Pe.Revit.Partition;
@@ -29,13 +30,42 @@ public static class Solve {
 
     private static readonly GeometryFactory Gf = new NetTopologySuite.NtsGeometryServices(GeometryOverlay.NG).CreateGeometryFactory();
 
+    /// <summary>Wall ink shared by zones from one capture. A zone still contributes its own proposal boundaries.</summary>
+    public sealed class BufferedBands {
+        private readonly PartitionInput _capture;
+        private readonly Lazy<Geometry> _knee;
+        private readonly Lazy<IPreparedGeometry?> _kneeReach;
+        private readonly Lazy<IPreparedGeometry?> _headerReach;
+
+        public BufferedBands(PartitionInput capture) {
+            this._capture = capture;
+            var knobs = capture.Knobs;
+            this._knee = new(() => Buffered(capture.Knee, knobs.InkHalfWidthFt));
+            this._kneeReach = new(() => Reach(this._knee.Value, knobs));
+            this._headerReach = new(() => Reach(Buffered(capture.Header, knobs.InkHalfWidthFt), knobs));
+        }
+
+        internal Backing For(PartitionInput input, Geometry taken) {
+            if (!ReferenceEquals(input.Knee, this._capture.Knee) || !ReferenceEquals(input.Header, this._capture.Header)
+                || input.Knobs != this._capture.Knobs)
+                throw new ArgumentException("Buffered bands require the slices and knobs of their original capture.", nameof(input));
+
+            var knobs = input.Knobs;
+            // Union proposals into raw ink before buffering. Unioning prepared reach instead changes the edge geometry.
+            var knee = taken.IsEmpty ? this._kneeReach.Value
+                : Reach(UnionOf([this._knee.Value, taken.Boundary.Buffer(knobs.InkHalfWidthFt, BufferQuadSegs)]), knobs);
+            return new Backing(knee, this._headerReach.Value);
+        }
+    }
+
     /// <summary>
     ///     Rooms from the rail network; the partition verb's solver. Layer 1 (<see cref="Faces" />) partitions by
     ///     geometry, layer 2 (<see cref="Judge.Dispose" />) disposes each face; accounting closes or the solve throws.
     /// </summary>
-    public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe) {
+    public static PartitionAnswer RunRails(PartitionInput input, Func<double, double, ProbeAnswer> probe,
+        BufferedBands? bands = null) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var layer1 = Faces(input, probe);
+        var layer1 = Faces(input, probe, bands);
         var rejected = (input.Rejected ?? []).Select(r => GeometryOf([r])).ToList();
         var rooms = layer1.Facts.Select((f, i) => {
             var (d, reason) = Judge.Dispose(f, input.LevelZ, input.Knobs, rejected);
@@ -70,7 +100,7 @@ public static class Solve {
     ///     built come back beside the facts for the answer's <see cref="Trace" />.
     /// </summary>
     public static (IReadOnlyList<FaceFacts> Facts, IReadOnlyList<Rail> Rails, RailNetwork Network) Faces(
-        PartitionInput input, Func<double, double, ProbeAnswer> probe) {
+        PartitionInput input, Func<double, double, ProbeAnswer> probe, BufferedBands? bufferedBands = null) {
         var zone = GeometryOf(input.ZoneLoops);
         var proposed = input.Proposals
             .Select(p => (Proposal: p, Geom: IntersectArea(GeometryOf(p.Loops), zone)))
@@ -124,9 +154,7 @@ public static class Solve {
         AssertCoverage(shapes, zone, "rails partition", true);
         // A proposed room's edge is a wall, as the zone edge is: it backs its neighbours and never floats.
         var knobs = input.Knobs;
-        var knee = Buffered(input.Knee, knobs.InkHalfWidthFt);
-        if (!taken.IsEmpty) knee = UnionOf([knee, taken.Boundary.Buffer(knobs.InkHalfWidthFt, BufferQuadSegs)]);
-        var backing = Reach(knee, Buffered(input.Header, knobs.InkHalfWidthFt), knobs);
+        var backing = (bufferedBands ?? new BufferedBands(input)).For(input, taken);
         var floating = Rails.Floating(net, taken.IsEmpty ? null : taken.Boundary);
         var zoneEdge = zone.Boundary.Buffer(ZoneEdgeExemptFt, CloseQuadSegs);
         var facts = new List<FaceFacts>(layout.Count);
@@ -181,20 +209,13 @@ public static class Solve {
     ///     ink backs it only along runs of <see cref="HeaderOnlyRunFt" /> or less, which is the
     ///     doorway width the evidence line measured — a longer header-only run is a soffit.
     /// </summary>
-    private sealed class Backing {
-        public NetTopologySuite.Geometries.Prepared.IPreparedGeometry? Knee;
-        public NetTopologySuite.Geometries.Prepared.IPreparedGeometry? Header;
-    }
+    internal sealed record Backing(IPreparedGeometry? Knee, IPreparedGeometry? Header);
 
-    /// <summary>The two reach buffers, built once. FOOTGUN: building them per Support call cost
+    /// <summary>Prepare reach once for every geometry. FOOTGUN: building it per Support call cost
     /// 5.2 minutes on Main Level#09 against 5.2 seconds for the Python reference.</summary>
-    private static Backing Reach(Geometry kneeRaw, Geometry headerRaw, Knobs knobs) {
+    private static IPreparedGeometry? Reach(Geometry raw, Knobs knobs) {
         var r = knobs.InkHalfWidthFt + knobs.CloseFt;
-        var pf = NetTopologySuite.Geometries.Prepared.PreparedGeometryFactory.Prepare;
-        return new Backing {
-            Knee = kneeRaw.IsEmpty ? null : pf(kneeRaw.Buffer(r, CloseQuadSegs)),
-            Header = headerRaw.IsEmpty ? null : pf(headerRaw.Buffer(r, CloseQuadSegs)),
-        };
+        return raw.IsEmpty ? null : PreparedGeometryFactory.Prepare(raw.Buffer(r, CloseQuadSegs));
     }
 
     private static double Support(Geometry line, Backing back, Knobs knobs) {

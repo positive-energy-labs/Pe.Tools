@@ -359,6 +359,7 @@ public static class Rooms
         var solved = new List<(FilledRegion Zone, Guid Guid, string Label, RoomsPlan Plan)>();
         var holds = new List<string>();
         var failures = new List<string>();
+        var bufferedBands = new Pe.Revit.Partition.Solve.BufferedBands(captured);
         zonesTotal = zones.Count;
         BeginPhase("Solve");
         foreach (var zone in zones.OrderBy(z => z.Fr.Id.Value()))
@@ -384,7 +385,7 @@ public static class Rooms
                 ],
             };
             Pe.Revit.Partition.PartitionAnswer answer;
-            try { answer = PartitionVerbs.Run(doc, input, world, elapsed => probeMs += elapsed); }
+            try { answer = PartitionVerbs.Run(doc, input, world, elapsed => probeMs += elapsed, bufferedBands); }
             catch (Exception ex) when (ex is not Pe.Revit.Partition.PartitionException)
             {
                 // One zone's topology failure names itself and leaves the other zones solved.

@@ -44,6 +44,25 @@ public sealed class Bench {
     private static bool KeepProposals => Environment.GetEnvironmentVariable("PE_BENCH_PROPOSALS") == "1";
 
     [Test]
+    public void SharedWallInkPreservesCapturedAnswers() {
+        var checkedZones = 0;
+        foreach (var (name, inputs, probeDir) in Fixtures()) {
+            var shared = new Solve.BufferedBands(inputs[0].Input);
+            var freshProbes = RecordedProbes.For(probeDir);
+            var sharedProbes = RecordedProbes.For(probeDir);
+            foreach (var (zoneName, input) in inputs) {
+                var freshAnswer = Solve.RunRails(input, freshProbes.For(input));
+                var sharedAnswer = Solve.RunRails(input, sharedProbes.For(input), shared);
+                Assert.That(JsonConvert.SerializeObject(sharedAnswer with { Ms = 0 }),
+                    Is.EqualTo(JsonConvert.SerializeObject(freshAnswer with { Ms = 0 })), zoneName);
+                checkedZones++;
+            }
+            TestContext.Out.WriteLine($"{name}: {inputs.Length} identical zone answers");
+        }
+        Assert.That(checkedZones, Is.GreaterThan(0));
+    }
+
+    [Test]
     public void RailsSolve() {
         var run = Path.Combine(RepoRoot, ".artifacts", "runs", "bench", DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + (FramingOn ? "-rails" : "-rails-noframing") + (KeepProposals ? "-proposals" : ""));
         Directory.CreateDirectory(run);

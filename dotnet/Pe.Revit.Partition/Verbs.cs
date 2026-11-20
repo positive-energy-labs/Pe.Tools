@@ -39,7 +39,8 @@ public static class Verbs {
     }
 
     /// <summary>Solve an already captured input; callers that need the captured slices capture first.</summary>
-    public static PartitionAnswer Run(Document document, PartitionInput input, World world, Action<double>? heightProbeTiming = null) {
+    public static PartitionAnswer Run(Document document, PartitionInput input, World world, Action<double>? heightProbeTiming = null,
+        Solve.BufferedBands? bufferedBands = null) {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         ProbeAnswer Probe(double x, double y) {
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -48,11 +49,12 @@ public static class Verbs {
                 RequireStamp(answer.Evidence, input.Knee.Evidence, document.GetDocumentKey(), "probe");
                 return answer;
             } finally {
-                heightProbeTiming?.Invoke(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                heightProbeTiming?.Invoke((System.Diagnostics.Stopwatch.GetTimestamp() - started)
+                    * (1000.0 / System.Diagnostics.Stopwatch.Frequency));
             }
         }
 
-        var result = Solve.RunRails(input, Probe);
+        var result = Solve.RunRails(input, Probe, bufferedBands);
         RequireCurrent(document, input.Knee.Evidence);
         sw.Stop();
         return result with { Ms = Math.Round(sw.Elapsed.TotalMilliseconds, 3) };
