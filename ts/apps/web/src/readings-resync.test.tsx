@@ -13,7 +13,7 @@ import {
   readingFrameSchema,
   readingKey,
 } from "@pe/agent-contracts";
-import { submitAction } from "../../../packages/mcps/src/shared/takeoff-action-client";
+import { submitAction } from "../../../packages/mcps/src/shared/action-client";
 import { emptyChatState } from "@pe/agent-contracts/chat-state";
 import { RegistryContext } from "@effect/atom-react";
 

@@ -25,7 +25,7 @@
       "import": "./src/index.ts"
     },
     "./server": "./src/server.ts",
-    "./actions": "./src/shared/takeoff-action-client.ts",
+    "./actions": "./src/shared/action-client.ts",
     "./build": "./scripts/stage-liteparse.ts",
     "./llama-parse": "./src/shared/llama-parse.ts",
     "./llama-key": "./src/shared/llama-key.ts",

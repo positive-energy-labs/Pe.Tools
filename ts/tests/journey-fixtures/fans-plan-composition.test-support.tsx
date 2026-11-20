@@ -97,7 +97,7 @@ vi.mock("../../apps/host/src/session-route.ts", async (actual) => {
   const { sdkSessions } = await import("../../apps/host/tests/native-receipt-fixture.ts");
   return { ...real, runPeRevitCli: (args: any) => Effect.promise(() => sdkSessions(args)) };
 });
-vi.mock("../../packages/mcps/src/shared/takeoff-action-client.ts", async (actual) => {
+vi.mock("../../packages/mcps/src/shared/action-client.ts", async (actual) => {
   const real = await actual<any>();
   trace.submit.mockImplementation(async (...args: any[]) => {
     const row = await real.submitAction(...args);

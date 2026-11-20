@@ -54,7 +54,7 @@ const INFRASTRUCTURE = new Set(
 );
 const HOST_CLIENT = modulePath(WEB + "index.ts", "#/host/client");
 const HOST_RUNTIME = modulePath(WEB_KERNEL + "index.ts", "./host/runtime");
-const ACTION_CLIENT = resolve(ROOT, "packages/mcps/src/shared/takeoff-action-client").replaceAll(
+const ACTION_CLIENT = resolve(ROOT, "packages/mcps/src/shared/action-client").replaceAll(
   "\\",
   "/",
 );
@@ -139,7 +139,7 @@ it("exempts only named infrastructure, never neighboring UI or a directory", () 
 it("does not mistake inert evidence or a detached receipt type for an effect", () => {
   expect(
     hostImport(WEB + "state/owner-inspector.tsx", {
-      module: "../../../../packages/mcps/src/shared/takeoff-action-client",
+      module: "../../../../packages/mcps/src/shared/action-client",
       names: ["inspectRetainedActions", "DetachedAction"],
     }),
   ).toBe(false);
@@ -149,8 +149,8 @@ it("recognizes aliases, relative clients and multiline imports without counting 
   const file = WEB + "open/example.tsx";
   const source = `
     // import { hostFetch } from '#/host/runtime';
-    import { actionResult as result } from '../../../../packages/mcps/src/shared/takeoff-action-client';
-    import { actionResult, submitAction as submit } from '../../../../packages/mcps/src/shared/takeoff-action-client.ts';
+    import { actionResult as result } from '../../../../packages/mcps/src/shared/action-client';
+    import { actionResult, submitAction as submit } from '../../../../packages/mcps/src/shared/action-client.ts';
     import {\n callHostRpc as call\n } from '../host/client.ts';
     import { hostFetch as fetch } from '#/host/runtime';
     export { hostUrl } from '#/host/client';

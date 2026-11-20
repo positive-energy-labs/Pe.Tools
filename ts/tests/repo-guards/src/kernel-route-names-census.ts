@@ -55,7 +55,7 @@ const required = [
   `${host}/action-journal.ts`,
   `${host}/document-lifetime.ts`,
   `${host}/journal-snapshot.ts`,
-  "ts/packages/mcps/src/shared/takeoff-action-client.ts",
+  "ts/packages/mcps/src/shared/action-client.ts",
   "ts/packages/agent-contracts/src/write-intent.ts",
 ];
 const production = (file: string) =>

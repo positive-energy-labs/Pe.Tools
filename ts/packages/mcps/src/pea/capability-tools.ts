@@ -28,7 +28,7 @@ import {
   type DetachedAction,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
-import { receiptForModel, recoverAction, submitAction } from "../shared/takeoff-action-client.ts";
+import { receiptForModel, recoverAction, submitAction } from "../shared/action-client.ts";
 import { runCapability, readCapabilityIntent, type CapabilityIntent } from "../shared/admission.ts";
 /**
  * The three doors plus the one Scope door.

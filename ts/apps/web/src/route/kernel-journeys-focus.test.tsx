@@ -1136,7 +1136,7 @@ import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "@pe/agent-contracts/route";
 const native = vi.hoisted(() => ({ submit: vi.fn(), retained: [] as unknown[] }));
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", async (actual) => ({
+vi.mock("../../../../packages/mcps/src/shared/action-client", async (actual) => ({
   ...(await actual<object>()),
   submitAction: native.submit,
 }));

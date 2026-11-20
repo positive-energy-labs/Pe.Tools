@@ -19,7 +19,7 @@ test("the final family-load census removes the family from every inventory reade
         const request = (yield* Queue.take(outgoing)).request!;
         const family = {
           openId: "temporary-family",
-          title: "Round Takeoff - Tight 1in",
+          title: "Round Elbow - Tight 1in",
           address: "C:/families/tight.rfa",
           isFamilyDocument: true,
           isActive: false,

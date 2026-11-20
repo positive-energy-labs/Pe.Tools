@@ -24,13 +24,13 @@ function planCanvasTransform(
 }
 
 /** A level's plan image and where Revit says its pixels sit in the model. */
-export interface TakeoffPlanImage {
+export interface PlanImage {
   href: string;
   registration: PlanRegistration;
 }
 
 /** Model feet at the registered image's four corners, including a rotated crop. */
-export const planCorners = (plan: TakeoffPlanImage): Point2[] => {
+export const planCorners = (plan: PlanImage): Point2[] => {
   const { topLeft: a, topRight: b, bottomLeft: c } = plan.registration;
   return [a, b, c, [b[0] + c[0] - a[0], b[1] + c[1] - a[1]]];
 };
@@ -50,7 +50,7 @@ export function PlanImageLayer({
   plan,
   frame,
 }: {
-  plan: TakeoffPlanImage;
+  plan: PlanImage;
   frame: Pick<AffineFrame, "scale" | "toViewport">;
 }) {
   const { registration } = plan;

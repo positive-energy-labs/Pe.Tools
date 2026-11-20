@@ -7,7 +7,7 @@ import { peDo, buildCapabilities } from "@pe/mcps";
 import { tsOnlyOperationCatalog } from "@pe/mcps/product-operations";
 import { withInvocationContext } from "@pe/runtime/context";
 import { machineFixture } from "../../../packages/agent-contracts/tests/machine-fixture.ts";
-import { readAction } from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
+import { readAction } from "../../../packages/mcps/src/shared/action-client.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { approvedPea } from "./callers.ts";
 import { localRead } from "@pe/host-internal/reads/local";
