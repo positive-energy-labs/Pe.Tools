@@ -265,6 +265,7 @@ function TypedPlace({
     <DocumentPicker
       place={place}
       target={resolved}
+      page={module.spec}
       needs={module.spec.optionalTarget ?? needs}
       enabled={
         fixture === null &&

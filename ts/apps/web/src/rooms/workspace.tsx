@@ -35,8 +35,13 @@ function useWorkspace(ctx: RoomsContext) {
       ...(selected !== undefined || view !== undefined ? { card: "" } : {}),
     });
   };
-  const view = page.view;
   const snapshot = data?.snapshot ?? null;
+  const viewMissing =
+    value.state === "ready" &&
+    !!page.view &&
+    !!snapshot &&
+    !snapshot.levels.some((level) => level.views.includes(page.view));
+  const view = viewMissing ? "" : page.view;
   const error = value.state === "stale" ? (value.reason ?? "Read failed") : null;
   const pending = value.state === "refreshing";
   const document = ctx.target?.kind === "document" ? ctx.target.ref : null;
@@ -82,6 +87,7 @@ function useWorkspace(ctx: RoomsContext) {
     page,
     setPage,
     view,
+    viewMissing,
     snapshot,
     error,
     pending,

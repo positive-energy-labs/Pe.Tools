@@ -11,6 +11,9 @@ import { roomsArgs, roomsData } from "@pe/agent-contracts";
 import { planOf } from "./rooms-plan.ts";
 import { roomsGoal, traceRefusal } from "./goal.ts";
 const workspaceArgs = roomsArgs.extend({ target: executionTargetSchema });
+const missingView = z.object({
+  evidence: z.object({ issues: z.array(z.object({ code: z.string() })) }),
+});
 export const reads: {
   workspace: Read<z.output<typeof workspaceArgs>, z.output<typeof roomsData>>;
 } = {
@@ -19,17 +22,28 @@ export const reads: {
     await ctx.read(documentMark, target.ref);
     const key = { ...(await ctx.read(workScope, target.ref)), route: "rooms" };
     const work = await ctx.read(workRead("rooms", roomsRouteState.schema), key);
-    const snapshot = (
-      await ctx.read(native(view ? "rooms.snapshot" : "rooms.roster"), {
-        request: view ? { view } : {},
-        target,
-      })
-    ).body;
+    const roster = async () =>
+      (await ctx.read(native("rooms.roster"), { request: {}, target })).body;
+    const snapshot = view
+      ? await ctx.read(native("rooms.snapshot"), { request: { view }, target }).then(
+          ({ body }) => body,
+          (error: unknown) => {
+            if (
+              !missingView
+                .safeParse(error)
+                .data?.evidence.issues.some((issue) => issue.code === "RoomsViewMissing")
+            )
+              throw error;
+            return roster();
+          },
+        )
+      : await roster();
+    const selected = snapshot.levels.some((level) => level.views.includes(view)) ? view : "";
     let trace = null,
       traceError = null,
       plan = null,
       planError = null;
-    if (view) {
+    if (selected) {
       try {
         trace = (
           await ctx.read(native("rooms.trace"), {
@@ -56,7 +70,7 @@ export const reads: {
     }
     const roomsWork = roomsRouteState.schema.parse(work?.doc ?? {});
     return {
-      ...roomsGoal(roomsWork, snapshot, view),
+      ...roomsGoal(roomsWork, snapshot, selected),
       roomsWork,
       handle: work ? { key, revision: work.revision } : null,
       snapshot,

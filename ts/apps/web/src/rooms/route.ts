@@ -43,6 +43,7 @@ export const module = route({
   key: "rooms",
   name: "Rooms",
   needs: "project",
+  documentFields: ["view", "room", "viewport", "card"],
   host: "./host.ts",
   directory: {
     label: "Manual J",

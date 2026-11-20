@@ -238,6 +238,12 @@ test("pending Values retain Rooms navigation while edits refuse, then reject lat
     emit(0, "Fixture level");
     await vi.waitFor(() => expect(ctx().cells.state.state).toBe("ready"));
     render(<Chooser />);
+    await act(async () => ctx().page.query({ view: "Missing view" }));
+    await act(async () => emit(frames.length - 1, "Fixture level"));
+    expect(screen.getByText("That view is not in this document.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Clear plan view" }));
+    expect(mount.page.read().view).toBe("");
+    await act(async () => emit(frames.length - 1, "Fixture level"));
     fireEvent.click(screen.getByRole("button", { name: "Choose level" }));
     fireEvent.click(await screen.findByRole("option", { name: /Fixture level/ }));
     expect(mount.page.read().view).toBe("First view");

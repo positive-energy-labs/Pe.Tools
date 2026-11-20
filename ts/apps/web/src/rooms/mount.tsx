@@ -28,7 +28,7 @@ type Body = {
 };
 
 export function ScopeBody({ page }: Body) {
-  const { snapshot, pending, error, document, view, setPage } = useRoomsWorkspace();
+  const { snapshot, pending, error, document, view, viewMissing, setPage } = useRoomsWorkspace();
   const levels = snapshot?.levels ?? [];
   const level = levels.find((item) => item.views.includes(view));
   const note = !document
@@ -82,6 +82,17 @@ export function ScopeBody({ page }: Body) {
           },
         ]}
       />
+      {viewMissing ? (
+        <ButtonGroup label="Plan view unavailable">
+          <OutcomeLine kind="refused" label="plan view" says="That view is not in this document." />
+          <Button
+            label="Clear plan view"
+            onClick={() => setPage({ view: "", selected: [], viewport: null })}
+          >
+            Clear plan view
+          </Button>
+        </ButtonGroup>
+      ) : null}
     </>
   );
 }
@@ -263,15 +274,15 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           />
           <Button
             label="Stage partition view"
-            refusal={!page.view ? "Choose a level and plan view" : refusalOf(ctx.cells.state)}
+            refusal={!view ? "Choose a level and plan view" : refusalOf(ctx.cells.state)}
             onClick={() => {
               const rejected = Object.values(ctx.cells.doc?.marks ?? {}).flatMap((cell) =>
-                cell.edit?.value?.kind === "reject" && cell.edit.value.anchor.view === page.view
+                cell.edit?.value?.kind === "reject" && cell.edit.value.anchor.view === view
                   ? [cell.edit.value.anchor.polygon]
                   : [],
               );
               void stage("rooms.partition", {
-                view: page.view,
+                view,
                 ...(rejected.length ? { rejected } : {}),
               });
             }}
@@ -280,8 +291,14 @@ function RoomsWorkspace({ ctx }: { ctx: RoomsContext }) {
           </Button>
           <Button
             label="Stage selected room merge"
-            refusal={selected.length < 2 ? "Select two or more rooms" : refusalOf(ctx.cells.state)}
-            onClick={() => void stage("rooms.merge", { view: page.view, guids: selected })}
+            refusal={
+              !view
+                ? "Choose a level and plan view"
+                : selected.length < 2
+                  ? "Select two or more rooms"
+                  : refusalOf(ctx.cells.state)
+            }
+            onClick={() => void stage("rooms.merge", { view, guids: selected })}
           >
             Stage room merge
           </Button>
