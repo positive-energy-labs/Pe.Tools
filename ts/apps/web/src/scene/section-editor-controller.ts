@@ -1,6 +1,6 @@
 import { sceneSectionSchema, type SceneSection } from "@pe/agent-contracts";
-import { axisBounds, CUT_AXES, cutPolygon, type Cut } from "./cuts";
-import type { Bounds } from "./types";
+import { axisBounds, CUT_AXES, cutPolygon, type Cut } from "@pe/web-kernel/scene/cuts";
+import type { Bounds } from "@pe/web-kernel/scene/types";
 
 type Source = { document: string | null; section: SceneSection | null };
 type Draft = { section: SceneSection; refusal: string | null };

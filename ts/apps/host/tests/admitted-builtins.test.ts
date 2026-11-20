@@ -29,7 +29,10 @@ function workspace() {
   const root = mkdtempSync(join(tmpdir(), "pe-builtins-"));
   roots.push(root);
   return {
-    workspace: new RouteWorkspace({ registrations: [], store: fileRouteDocumentStore(stateFixture(root)) }),
+    workspace: new RouteWorkspace({
+      registrations: [],
+      store: fileRouteDocumentStore(stateFixture(root)),
+    }),
   };
 }
 
@@ -85,17 +88,19 @@ test("Ducts and Fans own independent canonical host Work registrations", async (
         press: "criteria",
         label: "Return allowance",
         expectedRevision: 0,
-        patches: [
-          { path: ["criteria", "allowanceReturnInWg"], value: { edit: { value: 0.35 } } },
-        ],
+        patches: [{ path: ["criteria", "allowanceReturnInWg"], value: { edit: { value: 0.35 } } }],
       }),
     ).toMatchObject({ ok: true });
-    expect((await f.workspace.view(bindWork("duct-systems", null), "duct-systems"))!.doc).toMatchObject({
+    expect(
+      (await f.workspace.view(bindWork("duct-systems", null), "duct-systems"))!.doc,
+    ).toMatchObject({
       criteria: { allowanceReturnInWg: { edit: { value: 0.35 } } },
     });
     expect(presenter.resolvedWork!.spec.route).toBe("fans");
     expect(owner.resolvedWork!.spec.route).toBe("duct-systems");
-    expect(createRouteRegistrations().filter((row) => row.spec.route === "duct-systems")).toHaveLength(1);
+    expect(
+      createRouteRegistrations().filter((row) => row.spec.route === "duct-systems"),
+    ).toHaveLength(1);
   } finally {
     await close(run.scope);
   }
@@ -141,7 +146,10 @@ test("partial startup failure unwinds prior Work registration with a typed failu
 test("Pea's catalog lists admitted Work; the constructor guard keeps one registry owner per key", async () => {
   const registrations = createRouteRegistrations();
   for (const key of ["fans", "duct-systems", "families"])
-    expect(registrations.filter((r) => r.spec.route === key), key).toHaveLength(1);
+    expect(
+      registrations.filter((r) => r.spec.route === key),
+      key,
+    ).toHaveLength(1);
   const root = mkdtempSync(join(tmpdir(), "pe-builtins-"));
   roots.push(root);
   const ws = new RouteWorkspace({
@@ -152,7 +160,11 @@ test("Pea's catalog lists admitted Work; the constructor guard keeps one registr
   try {
     if (!run.service) throw Error(JSON.stringify(run.result));
     const listed = ws.list().map((r) => r.route);
-    for (const key of ["fans", "duct-systems"]) expect(listed.filter((r) => r === key), key).toHaveLength(1);
+    for (const key of ["fans", "duct-systems"])
+      expect(
+        listed.filter((r) => r === key),
+        key,
+      ).toHaveLength(1);
     // The same owner answers the browser pane and Pea's work.* doors: a write lands one revision both read.
     const key = bindWork("fans", null);
     expect(
@@ -160,7 +172,12 @@ test("Pea's catalog lists admitted Work; the constructor guard keeps one registr
         kind: "apply",
         press: null,
         expectedRevision: 0,
-        patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } } }],
+        patches: [
+          {
+            path: ["writeIntent"],
+            value: { edit: { value: { walk: { unitId: 1, portIndex: 0 } } } },
+          },
+        ],
       }),
     ).toMatchObject({ ok: true });
     expect((await ws.view(key, "fans"))!.revision).toBe(1);
@@ -168,12 +185,15 @@ test("Pea's catalog lists admitted Work; the constructor guard keeps one registr
     await close(run.scope);
   }
   // Falsifier: without the guard the admitted owner collides with the constructor seat.
-  const unguarded = new RouteWorkspace({ registrations, store: fileRouteDocumentStore(stateFixture(root)) });
+  const unguarded = new RouteWorkspace({
+    registrations,
+    store: fileRouteDocumentStore(stateFixture(root)),
+  });
   const collided = await open(unguarded);
   expect(collided.service).toBeUndefined();
-  expect(String(collided.result._tag === "Failure" ? Cause.pretty(collided.result.cause) : "")).toMatch(
-    /duplicate route/,
-  );
+  expect(
+    String(collided.result._tag === "Failure" ? Cause.pretty(collided.result.cause) : ""),
+  ).toMatch(/duplicate route/);
 });
 
 test("shutdown fences a neutral load that resolves after its acquisition scope closes", async () => {

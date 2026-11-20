@@ -8,18 +8,30 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { createServer } from "node:http";
 import * as dns from "node:dns/promises";
-vi.mock("node:dns/promises", async (original) => ({ ...await original<typeof dns>(), lookup: vi.fn() }));
+vi.mock("node:dns/promises", async (original) => ({
+  ...(await original<typeof dns>()),
+  lookup: vi.fn(),
+}));
 import { put } from "../src/action-blobs.ts";
 import { SPEC_SOURCE_MAX_BYTES } from "../src/family-spec.ts";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { appendFile, copyFile, mkdir, mkdtemp, readFile, rm, truncate, writeFile } from "node:fs/promises";
+import {
+  appendFile,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { address, bindWork, familyDraftRouteState, type Caller } from "@pe/agent-contracts";
 import * as actionClient from "../../../packages/mcps/src/shared/takeoff-action-client.ts";
-import { nativeFixture } from "@pe/fans-host/tests/fans-work-fixture";
+import { nativeFixture } from "./fans/fans-work-fixture.ts";
 import { actAs } from "./callers.ts";
 import { familySpecAsset } from "../src/family-spec.ts";
 import { hostState } from "../src/host-ownership.ts";
@@ -38,7 +50,13 @@ const modelJson = JSON.stringify({
   ...aBox,
   unmodeled: [{ kind: "PlaneNotNamed", bulk: "x".repeat(300_000) }],
 });
-const block = { id: "p4-b2", page: 4, kind: "table", md: "| Nominal Airflow | 1200 CFM |", bboxes: [] };
+const block = {
+  id: "p4-b2",
+  page: 4,
+  kind: "table",
+  md: "| Nominal Airflow | 1200 CFM |",
+  bboxes: [],
+};
 const familyAddress = address("C:/PE Box.rfa");
 const host = { kind: "host" } as const;
 const pdfSize = readFileSync(pdf).length;
@@ -51,28 +69,61 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-test.each(["http://127.0.0.1/a.pdf", "http://10.0.0.1/a.pdf", "http://172.16.0.1/a.pdf", "http://192.168.1.1/a.pdf", "http://169.254.169.254/a.pdf", "http://[::1]/a.pdf", "http://[64:ff9b::7f00:1]/a.pdf", "http://0.0.0.0/a.pdf", "http://100.64.0.1/a.pdf", "http://[::ffff:127.0.0.1]/a.pdf", "http://[fc00::1]/a.pdf", "http://[fe80::1]/a.pdf", "https://missing.example/a.pdf"])("attach refuses non-public source %s before fetch", async (url) => {
-  const { save, act, handle } = await lab();
-  const { member: saved } = (await save("human")).result;
-  const member = { pod: saved.pod, path: saved.path };
-  vi.mocked(dns.lookup).mockRejectedValue(Error("DNS unavailable"));
-  const fetcher = vi.fn().mockRejectedValue(Error("fetch must not run"));
-  vi.stubGlobal("fetch", fetcher);
-  const receipt = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
-  expect(fetcher).not.toHaveBeenCalled();
-  expect(receipt.error).toMatch(/public address/);
-}, 60_000);
+test.each([
+  "http://127.0.0.1/a.pdf",
+  "http://10.0.0.1/a.pdf",
+  "http://172.16.0.1/a.pdf",
+  "http://192.168.1.1/a.pdf",
+  "http://169.254.169.254/a.pdf",
+  "http://[::1]/a.pdf",
+  "http://[64:ff9b::7f00:1]/a.pdf",
+  "http://0.0.0.0/a.pdf",
+  "http://100.64.0.1/a.pdf",
+  "http://[::ffff:127.0.0.1]/a.pdf",
+  "http://[fc00::1]/a.pdf",
+  "http://[fe80::1]/a.pdf",
+  "https://missing.example/a.pdf",
+])(
+  "attach refuses non-public source %s before fetch",
+  async (url) => {
+    const { save, act, handle } = await lab();
+    const { member: saved } = (await save("human")).result;
+    const member = { pod: saved.pod, path: saved.path };
+    vi.mocked(dns.lookup).mockRejectedValue(Error("DNS unavailable"));
+    const fetcher = vi.fn().mockRejectedValue(Error("fetch must not run"));
+    vi.stubGlobal("fetch", fetcher);
+    const receipt = await act("family.attach-spec", host, {
+      member,
+      source: { url },
+      work: await handle(),
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(receipt.error).toMatch(/public address/);
+  },
+  60_000,
+);
 
 test("attach refuses a name that resolves to a private address among public ones, and a URL with a password", async () => {
   const { save, act, handle } = await lab();
   const { member: saved } = (await save("human")).result;
   const member = { pod: saved.pod, path: saved.path };
-  vi.mocked(dns.lookup).mockResolvedValue([{ address: "8.8.8.8", family: 4 }, { address: "10.0.0.5", family: 4 }] as never);
+  vi.mocked(dns.lookup).mockResolvedValue([
+    { address: "8.8.8.8", family: 4 },
+    { address: "10.0.0.5", family: 4 },
+  ] as never);
   const fetcher = vi.fn().mockRejectedValue(Error("fetch must not run"));
   vi.stubGlobal("fetch", fetcher);
-  const mixed = await act("family.attach-spec", host, { member, source: { url: "https://vendor.example/a.pdf" }, work: await handle() });
+  const mixed = await act("family.attach-spec", host, {
+    member,
+    source: { url: "https://vendor.example/a.pdf" },
+    work: await handle(),
+  });
   expect(mixed.error).toMatch(/public address/);
-  const withPassword = await act("family.attach-spec", host, { member, source: { url: "https://user:hunter2@8.8.8.8/a.pdf" }, work: await handle() });
+  const withPassword = await act("family.attach-spec", host, {
+    member,
+    source: { url: "https://user:hunter2@8.8.8.8/a.pdf" },
+    work: await handle(),
+  });
   expect(withPassword.error).toMatch(/user name or password/);
   expect(withPassword.error).not.toContain("hunter2");
   expect(fetcher).not.toHaveBeenCalled();
@@ -83,13 +134,25 @@ test("attach keeps the sheet's origin without its signed query or fragment", asy
   const { member: saved } = (await save("human")).result;
   const member = { pod: saved.pod, path: saved.path };
   const original = fetch;
-  vi.stubGlobal("fetch", vi.fn((input, init) => String(input).startsWith("https://8.8.8.8/")
-    ? Promise.resolve(new Response(readFileSync(pdf))) : original(input, init)));
-  const receipt = await act("family.attach-spec", host, { member, source: { url: "https://8.8.8.8/a.pdf?token=secret#secret" }, work: await handle() });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      String(input).startsWith("https://8.8.8.8/")
+        ? Promise.resolve(new Response(readFileSync(pdf)))
+        : original(input, init),
+    ),
+  );
+  const receipt = await act("family.attach-spec", host, {
+    member,
+    source: { url: "https://8.8.8.8/a.pdf?token=secret#secret" },
+    work: await handle(),
+  });
   expect(receipt.state).toBe("succeeded");
   // The journaled input holds the link as sent (family ledger, Owed 2026-11-18); what attach records does not.
   expect(JSON.stringify((receipt as { consumes?: unknown }).consumes)).not.toContain("secret");
-  expect(JSON.stringify((receipt as { consumes?: unknown }).consumes)).toContain('"url":"https://8.8.8.8/a.pdf"');
+  expect(JSON.stringify((receipt as { consumes?: unknown }).consumes)).toContain(
+    '"url":"https://8.8.8.8/a.pdf"',
+  );
 }, 60_000);
 
 test("attach refuses an oversized browser upload", async () => {
@@ -113,7 +176,10 @@ async function lab(beforeParse?: (file: File) => Promise<void>, realParser = fal
   await writeFile(join(pods, "lab", "pod.json"), JSON.stringify({ id: "lab" }));
   // The Pods folder is its own project home here, so each fixture has its own derived store.
   await writeFile(join(pods, "pe-home.json"), JSON.stringify({ tier: "project" }));
-  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSacAAAAASUVORK5CYII=", "base64");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aSacAAAAASUVORK5CYII=",
+    "base64",
+  );
   let renderFetches = 0;
   const renders = createServer((_request, response) => {
     renderFetches++;
@@ -121,7 +187,13 @@ async function lab(beforeParse?: (file: File) => Promise<void>, realParser = fal
     response.end(png);
   });
   await new Promise<void>((resolve) => renders.listen(0, "127.0.0.1", resolve));
-  closes.push(() => new Promise((resolve) => { renders.closeAllConnections(); renders.close(resolve); }));
+  closes.push(
+    () =>
+      new Promise((resolve) => {
+        renders.closeAllConnections();
+        renders.close(resolve);
+      }),
+  );
   const screenshotUrl = `http://127.0.0.1:${(renders.address() as { port: number }).port}/page.png`;
   const parsed: { name: string; bytes: number }[] = [];
   const f = await nativeFixture("real", undefined, null, {
@@ -141,14 +213,25 @@ async function lab(beforeParse?: (file: File) => Promise<void>, realParser = fal
     },
     deps: {
       podsRoot: pods,
-      ...(realParser ? {} : { parsePdf: async ({ file, apiKey }: FamilyPdfRequest) => {
-        expect(apiKey).toBe("fixture-key");
-        await beforeParse?.(file);
-        const bytes = Buffer.from(await file.arrayBuffer());
-        if (bytes.subarray(0, 5).toString() !== "%PDF-") throw Error("The parser was not handed a PDF");
-        parsed.push({ name: file.name, bytes: bytes.length });
-        return { jobId: "acme", fileName: file.name, pages: [{ page: 1, width: 1, height: 1, screenshotUrl, markdown: "sheet" }], blocks: [block], images: [] };
-      } }),
+      ...(realParser
+        ? {}
+        : {
+            parsePdf: async ({ file, apiKey }: FamilyPdfRequest) => {
+              expect(apiKey).toBe("fixture-key");
+              await beforeParse?.(file);
+              const bytes = Buffer.from(await file.arrayBuffer());
+              if (bytes.subarray(0, 5).toString() !== "%PDF-")
+                throw Error("The parser was not handed a PDF");
+              parsed.push({ name: file.name, bytes: bytes.length });
+              return {
+                jobId: "acme",
+                fileName: file.name,
+                pages: [{ page: 1, width: 1, height: 1, screenshotUrl, markdown: "sheet" }],
+                blocks: [block],
+                images: [],
+              };
+            },
+          }),
     },
     native: (key) =>
       key === "family.capture"
@@ -169,7 +252,13 @@ async function lab(beforeParse?: (file: File) => Promise<void>, realParser = fal
   if (!started.ok) throw Error(JSON.stringify(started));
   const run = { thread: "doc-lab", turn: "one" };
   f.runs.open(run);
-  const pea: Caller = { kind: "pea", context: "fixture-minted", thread: run.thread, run, root: run };
+  const pea: Caller = {
+    kind: "pea",
+    context: "fixture-minted",
+    thread: run.thread,
+    run,
+    root: run,
+  };
   const handle = async () => ({ key, revision: (await f.saved.view(key, "family"))!.revision });
   const doc = async () =>
     familyDraftRouteState.schema.parse((await f.saved.view(key, "family"))!.doc);
@@ -187,7 +276,13 @@ async function lab(beforeParse?: (file: File) => Promise<void>, realParser = fal
     return f.journal.wait(id);
   };
   const stage = async (by: "human" | "pea", path: (string | number)[], value: unknown) => {
-    const written = await f.saved.apply(key, "family", by, [{ path, value }], (await handle()).revision);
+    const written = await f.saved.apply(
+      key,
+      "family",
+      by,
+      [{ path, value }],
+      (await handle()).revision,
+    );
     if (!written.ok) throw Error(JSON.stringify(written));
   };
   /** Save the open family into the lab Pod, as the page's "Save family to pod" and Pea both do. */
@@ -204,7 +299,20 @@ async function lab(beforeParse?: (file: File) => Promise<void>, realParser = fal
       result: { member: { pod: string; path: string; sha256: string } };
     };
   };
-  return { f, pods, pea, parsed, png, screenshotUrl, renderFetches: () => renderFetches, handle, doc, act, stage, save };
+  return {
+    f,
+    pods,
+    pea,
+    parsed,
+    png,
+    screenshotUrl,
+    renderFetches: () => renderFetches,
+    handle,
+    doc,
+    act,
+    stage,
+    save,
+  };
 }
 
 test("blocker 3: a capture refused for its keys tells Pea where the input goes", async () => {
@@ -231,9 +339,9 @@ test("blocker 3: a saved capture answers a member handle Pea can relay", async (
   expect(JSON.stringify(receipt.result).length).toBeLessThan(4_000);
   // The journal keeps the native bytes; Pea is handed the result and the receipt's facts.
   expect(JSON.stringify(receipt).length).toBeGreaterThan(300_000);
-  const relayed = (actionClient as { receiptForModel?: (row: unknown) => unknown }).receiptForModel?.(
-    receipt,
-  );
+  const relayed = (
+    actionClient as { receiptForModel?: (row: unknown) => unknown }
+  ).receiptForModel?.(receipt);
   expect(relayed, "the Pea relay bounds a receipt").toBeDefined();
   expect(JSON.stringify(relayed).length).toBeLessThan(16_000);
   expect(relayed).toMatchObject({
@@ -277,9 +385,14 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   let fetched = 0;
   const original = fetch;
   const url = "https://8.8.8.8/sheets/acme-by-url.pdf";
-  vi.stubGlobal("fetch", vi.fn((input, init) => String(input) === url
-    ? (fetched++, Promise.resolve(new Response(readFileSync(pdf))))
-    : original(input, init)));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input, init) =>
+      String(input) === url
+        ? (fetched++, Promise.resolve(new Response(readFileSync(pdf))))
+        : original(input, init),
+    ),
+  );
   const byUrl = await act("family.attach-spec", host, {
     member,
     source: { url },
@@ -290,14 +403,22 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   // again, and a second attach of the URL fetches no vendor file again (JOURNEYS target 13).
   // Mutant: in family-spec.ts replace `keptFamilyParse(store, pdf) ??` with nothing.
   expect(parsed).toHaveLength(1);
-  const again = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
+  const again = await act("family.attach-spec", host, {
+    member,
+    source: { url },
+    work: await handle(),
+  });
   expect(again.state, JSON.stringify(again).slice(0, 2000)).toBe("succeeded");
   expect([parsed.length, fetched]).toEqual([1, 1]);
   const derived = readdirSync(join(pods, "Derived"));
   expect(derived).toHaveLength(3);
   expect(renderFetches()).toBe(1);
   for (const name of derived)
-    expect(name.split(".")[1]).toBe(createHash("sha256").update(readFileSync(join(pods, "Derived", name))).digest("hex"));
+    expect(name.split(".")[1]).toBe(
+      createHash("sha256")
+        .update(readFileSync(join(pods, "Derived", name)))
+        .digest("hex"),
+    );
   expect((await doc()).spec).toMatchObject({ member, doc: { blocks: [block] } });
   // The original PDF is a portable member asset beside the family.
   const sidecar = JSON.parse(
@@ -309,7 +430,11 @@ test("blocker 1: attach takes a path and a URL as well as an upload", async () =
   // M12: a view without its render must be reparsed, never accepted as a complete hit.
   const render = derived.find((name) => readFileSync(join(pods, "Derived", name)).equals(png))!;
   await rm(join(pods, "Derived", render));
-  const recovered = await act("family.attach-spec", host, { member, source: { url }, work: await handle() });
+  const recovered = await act("family.attach-spec", host, {
+    member,
+    source: { url },
+    work: await handle(),
+  });
   expect(recovered.state, JSON.stringify(recovered)).toBe("succeeded");
   expect(parsed).toHaveLength(2);
   expect(renderFetches()).toBe(2);
@@ -398,7 +523,8 @@ async function boxed(beforeParse?: (file: File) => Promise<void>, realParser = f
     const original = fetch;
     const publicOrigin = `http://8.8.8.8:${port}`;
     vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-      original(String(input).replace(publicOrigin, `http://127.0.0.1:${port}`), init));
+      original(String(input).replace(publicOrigin, `http://127.0.0.1:${port}`), init),
+    );
     return publicOrigin;
   };
   return { ...l, member, attach, serve };
@@ -407,7 +533,9 @@ async function boxed(beforeParse?: (file: File) => Promise<void>, realParser = f
 test("narrow 1: a path source is an absolute local regular PDF under the cap", async () => {
   const { pods, attach, parsed } = await boxed();
   // The refusal's own sentence: the unreadable-file refusal also says "absolute path", and passed for it.
-  expect(await attach({ path: "sheets/acme.pdf" })).toMatch(/'sheets\/acme\.pdf' is not an absolute path/);
+  expect(await attach({ path: "sheets/acme.pdf" })).toMatch(
+    /'sheets\/acme\.pdf' is not an absolute path/,
+  );
   // A relative path that does resolve, against the host's working directory, is refused the same.
   expect(await attach({ path: "package.json" })).toMatch(/'package\.json' is not an absolute path/);
   expect(await attach({ path: "\\\\server\\share\\acme.pdf" })).toMatch(/network or device path/);
@@ -425,9 +553,12 @@ test("narrow 1: a path source is an absolute local regular PDF under the cap", a
 
 test("narrow 2: a URL source is http(s), unredirected, timed and capped", async () => {
   const { attach, serve, parsed } = await boxed();
-  expect(await attach({ url: "file:///C:/Windows/win.ini" })).toMatch(/Only http and https.*give \{ path \}/);
+  expect(await attach({ url: "file:///C:/Windows/win.ini" })).toMatch(
+    /Only http and https.*give \{ path \}/,
+  );
   const origin = await serve((request, response) => {
-    if (request.url === "/hop") return void response.writeHead(302, { location: "/sheet.pdf" }).end();
+    if (request.url === "/hop")
+      return void response.writeHead(302, { location: "/sheet.pdf" }).end();
     if (request.url === "/slow") return;
     response.writeHead(200, { "content-type": "application/pdf" });
     if (request.url === "/huge") {
@@ -467,11 +598,25 @@ test("an attach that sends the sheet leaves one notice naming the file and the s
     const url = new URL(input instanceof Request ? input.url : String(input));
     if (!url.host.endsWith("llamaindex.ai")) return real(input, init);
     if (url.pathname.endsWith("/parse/upload")) uploads.push(url.pathname);
-    return Response.json({ id: "job-attach-notice", status: "COMPLETED",
+    return Response.json({
+      id: "job-attach-notice",
+      status: "COMPLETED",
       job: { id: "job-attach-notice", status: "COMPLETED" },
-      items: { pages: [{ success: true, page_number: 1, page_width: 1, page_height: 1, items: [{ type: "text", md: "sheet", bbox: [] }] }] },
+      items: {
+        pages: [
+          {
+            success: true,
+            page_number: 1,
+            page_width: 1,
+            page_height: 1,
+            items: [{ type: "text", md: "sheet", bbox: [] }],
+          },
+        ],
+      },
       markdown: { pages: [{ success: true, page_number: 1, markdown: "sheet" }] },
-      images_content_metadata: { images: [{ category: "screenshot", filename: "page_1.jpg", presigned_url: screenshotUrl }] },
+      images_content_metadata: {
+        images: [{ category: "screenshot", filename: "page_1.jpg", presigned_url: screenshotUrl }],
+      },
     });
   });
   closes.push(async () => vi.unstubAllGlobals());
@@ -480,11 +625,17 @@ test("an attach that sends the sheet leaves one notice naming the file and the s
     response.end(readFileSync(pdf));
   });
   // The query string stands in for a signed URL's signature: it never becomes the notice's file name.
-  expect(await attach({ url: `${origin}/sheets/signed-sheet.pdf?X-Amz-Signature=secret-signature` })).toMatch(/"state":"succeeded"/);
+  expect(
+    await attach({ url: `${origin}/sheets/signed-sheet.pdf?X-Amz-Signature=secret-signature` }),
+  ).toMatch(/"state":"succeeded"/);
   expect(uploads).toHaveLength(1);
   // Read from the root the host reads (`hostState`), which is where attach writes it.
-  const sent = notices(hostState()).filter((row) => row.class === "sent" && row.path === "signed-sheet.pdf");
-  expect(sent).toMatchObject([{ place: "LlamaCloud", reason: "Sent signed-sheet.pdf to LlamaCloud (all pages)." }]);
+  const sent = notices(hostState()).filter(
+    (row) => row.class === "sent" && row.path === "signed-sheet.pdf",
+  );
+  expect(sent).toMatchObject([
+    { place: "LlamaCloud", reason: "Sent signed-sheet.pdf to LlamaCloud (all pages)." },
+  ]);
   expect(JSON.stringify(notices(hostState()))).not.toMatch(/fixture-key|secret-signature|X-Amz/);
 }, 60_000);
 
@@ -517,9 +668,13 @@ test("narrow 6: the spec asset door serves only what normalizes under the family
 }, 60_000);
 
 test("an injected parser failure fails the attach without any network request", async () => {
-  const { save, act, handle } = await lab(async () => { throw Error("Parser failed"); });
+  const { save, act, handle } = await lab(async () => {
+    throw Error("Parser failed");
+  });
   const { member } = (await save("human")).result;
-  const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(Error("Unexpected network request"));
+  const network = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(Error("Unexpected network request"));
   try {
     const attached = await act("family.attach-spec", host, {
       member: { pod: member.pod, path: member.path },

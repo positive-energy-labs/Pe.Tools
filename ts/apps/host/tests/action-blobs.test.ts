@@ -12,7 +12,9 @@ test("action blobs use the machine's verified blob store", async () => {
   expect(ref.digest).toBe(file.sha256);
   expect(readFileSync(file.blob)).toEqual(bytes);
   expect(await get(ref)).toEqual(bytes);
-  await expect(get({ ...ref, size: bytes.length + 1 })).rejects.toMatchObject({ refusal: { code: "blob.corrupt" } });
+  await expect(get({ ...ref, size: bytes.length + 1 })).rejects.toMatchObject({
+    refusal: { code: "blob.corrupt" },
+  });
   writeFileSync(file.blob, "tampered");
   await expect(get(ref)).rejects.toMatchObject({ refusal: { code: "blob.corrupt" } });
   await put(bytes, "witness.txt");

@@ -45,7 +45,14 @@ it("trilinear: on a node, between slices, and refusing a ragged slice outside it
 
 it("each axis refuses outside its edge", () => {
   // A 4x4 collar on the 32x11 trunk, Ab/Ac 0.045, at Qb/Qc 0.005: every axis past its edge.
-  for (const [x, y, z] of [[0.005, 0.5, 1], [1.1, 0.5, 1], [0.5, 0.045, 1], [0.5, 1.1, 1], [0.5, 0.5, 0.4], [0.5, 0.5, 1.2]])
+  for (const [x, y, z] of [
+    [0.005, 0.5, 1],
+    [1.1, 0.5, 1],
+    [0.5, 0.045, 1],
+    [0.5, 1.1, 1],
+    [0.5, 0.5, 0.4],
+    [0.5, 0.5, 1.2],
+  ])
     expect(() => lookupGrid(er51, x!, y!, z!)).toThrow(/outside/);
 });
 

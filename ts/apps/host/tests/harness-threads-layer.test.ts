@@ -20,12 +20,13 @@ const nodeTest = <A, E>(
   body: () => Effect.Effect<A, E, Scope.Scope | FileSystem.FileSystem>,
 ) => effectTest(name, () => body().pipe(Effect.provide(NodeServices.layer)));
 
-const scopedState = (fs: FileSystem.FileSystem) => Effect.gen(function* () {
-  const home = yield* fs.makeTempDirectoryScoped();
-  const directory = stateTree(home).directory("fixture");
-  yield* fs.makeDirectory(directory.path, { recursive: true });
-  return directory.path;
-});
+const scopedState = (fs: FileSystem.FileSystem) =>
+  Effect.gen(function* () {
+    const home = yield* fs.makeTempDirectoryScoped();
+    const directory = stateTree(home).directory("fixture");
+    yield* fs.makeDirectory(directory.path, { recursive: true });
+    return directory.path;
+  });
 
 const meta = (id: string) => ({
   id,
@@ -241,24 +242,38 @@ nodeTest("a replay gap keeps every new target part linked to its prompt sequence
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* scopedState(fs);
-    yield* seed(root, "thread", JSON.stringify(meta("thread")), [
-      JSON.stringify(prompt), '{"seq":2,"kind":"torn',
-      JSON.stringify({ ...turnEnd, seq: 3 }), "",
-    ].join("\n"));
+    yield* seed(
+      root,
+      "thread",
+      JSON.stringify(meta("thread")),
+      [
+        JSON.stringify(prompt),
+        '{"seq":2,"kind":"torn',
+        JSON.stringify({ ...turnEnd, seq: 3 }),
+        "",
+      ].join("\n"),
+    );
     const threads = yield* store(root);
-    const response = yield* Effect.promise(() => actAs(human, () =>
-      threads.fetch(new Request("http://host/pe/threads/thread/prompt", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: randomUUID(), text: "after damage" }),
-      })),
-    ));
+    const response = yield* Effect.promise(() =>
+      actAs(human, () =>
+        threads.fetch(
+          new Request("http://host/pe/threads/thread/prompt", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ id: randomUUID(), text: "after damage" }),
+          }),
+        ),
+      ),
+    );
     expect(yield* Effect.promise(() => response.json())).toMatchObject({});
     expect(response.status).toBe(200);
     const events = threads.historySnapshot()[0]?.events ?? [];
     const delivered = events.find((event) => event.kind === "prompt" && event.seq > 3);
     // The prompt is the first event after the damaged log: opening its run writes no event (ADR 0038).
     expect(delivered).toMatchObject({ kind: "prompt", seq: 4 });
-    const parts = events.filter((event) => event.kind === "turn_element_targets").filter((event) => event.seq > 3);
+    const parts = events
+      .filter((event) => event.kind === "turn_element_targets")
+      .filter((event) => event.seq > 3);
     expect(parts.length).toBeGreaterThan(0);
     for (const part of parts) expect(part.promptSeq).toBe(delivered?.seq);
   }),

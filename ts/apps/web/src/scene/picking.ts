@@ -1,7 +1,7 @@
 /** Picking uses the same packed vertices and visibility as the picture. */
 import * as THREE from "three";
 import type { SceneRenderer } from "./renderer";
-import type { Pick, SceneInstance } from "./types";
+import type { Pick, SceneInstance } from "@pe/web-kernel/scene/types";
 import { falloff } from "./veil-field";
 import type { FaceBatches } from "./face-batches";
 

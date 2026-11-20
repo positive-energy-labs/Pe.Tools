@@ -8,7 +8,7 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { cellFromDraft } from "@pe/kit/lang/cell";
 import { Section } from "@pe/kit/lang/section";
-import { reviewAddresses } from "#/components/work/band";
+import { reviewAddresses } from "@pe/web-kernel/components/work/band";
 import { WorkLines, type WorkTab } from "#/components/work/lines";
 import { StaleResolve } from "#/route/schedules/stale-resolve";
 
@@ -57,7 +57,10 @@ function StaleSpecimen({ say }: { say: (text: string) => void }) {
       for (const { path, value } of patches) {
         const key = String(path[1]);
         const { edit: _, ...rest } = cells[key] ?? {};
-        cells[key] = value == null ? rest : { ...rest, edit: { ...(value as { value: string }), by: "human" } };
+        cells[key] =
+          value == null
+            ? rest
+            : { ...rest, edit: { ...(value as { value: string }), by: "human" } };
       }
       const stale = (current.basis?.stale ?? []).filter((c) => !keys.includes(c.key));
       return {

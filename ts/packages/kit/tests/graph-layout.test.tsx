@@ -71,9 +71,14 @@ beforeEach(() => {
   );
 });
 test("a wire split change reaches both reference rectangles and the rendered seam", () => {
-  const changed = split("changed", { axis: "h", sized: "start", size: 512 }, pane("plan"), pane("regions"));
+  const changed = split(
+    "changed",
+    { axis: "h", sized: "start", size: 512 },
+    pane("plan"),
+    pane("regions"),
+  );
   const facts = graphTeaching({ layout: changed, panes, verbs: {}, band: [] });
-  expect(facts.find(f => f.id === "plan")).toMatchObject({ rect: { width: 512 } });
+  expect(facts.find((f) => f.id === "plan")).toMatchObject({ rect: { width: 512 } });
   render(<GraphLayoutView layout={changed} panes={panes} active={() => true} bodies={bodies} />);
   expect(screen.getByRole("separator").getAttribute("aria-valuenow")).toBe("512");
 });

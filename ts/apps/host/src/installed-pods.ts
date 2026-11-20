@@ -29,7 +29,13 @@ import {
   TransferRefused,
   type TransferOptions,
 } from "./pod-transfer.ts";
-import { captureDirectory, isPackageMember, listPackages, productPodsRoots, type AdmittedPackage } from "./packages.ts";
+import {
+  captureDirectory,
+  isPackageMember,
+  listPackages,
+  productPodsRoots,
+  type AdmittedPackage,
+} from "./packages.ts";
 import { shippedPodUpdateRefusals } from "./shipped-pod-status.ts";
 import { activateImportedPackage, reconcilePackageChanges } from "./package-lifecycle.ts";
 import { productPodsRootPath } from "./product-paths.ts";
@@ -50,27 +56,47 @@ const originalArchiveKind = stateKind({
   segments: (sha: string) => [`${sha}.zip`],
 });
 const shippedArchiveKind = stateKind({
-  schema: z.unknown(), place: (_fingerprint: string, _id: string) => "Shipped Pod archive",
-  segments: (fingerprint: string, id: string) => [...stateSegments("shippedPods"), fingerprint, `${id}.zip`],
+  schema: z.unknown(),
+  place: (_fingerprint: string, _id: string) => "Shipped Pod archive",
+  segments: (fingerprint: string, id: string) => [
+    ...stateSegments("shippedPods"),
+    fingerprint,
+    `${id}.zip`,
+  ],
 });
 
 const ledgerSchema = z.object({
-  offered: z.record(z.string(), z.object({ archive: z.string(), at: z.string(), outcome: z.string() })),
+  offered: z.record(
+    z.string(),
+    z.object({ archive: z.string(), at: z.string(), outcome: z.string() }),
+  ),
 });
 
 /** Dev offers the checkout's examples through the same archive importer; trust stays explicit. */
-async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<typeof ledgerKind.in> }): Promise<string> {
+async function shippedPodsRoot(
+  options: TransferOptions & { ledger?: ReturnType<typeof ledgerKind.in> },
+): Promise<string> {
   if (hostOwnership.lane === "installed") return join(dirname(process.execPath), "pods");
   const examples = join(hostOwnership.sourceRoot!, "examples", "pods");
   await readdir(examples);
   const listing = await listPackages({ podsRoots: examples });
   options.signal?.throwIfAborted();
   if (listing.unreadable.length)
-    throw Error(`Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`);
+    throw Error(
+      `Unreadable shipped Pods: ${listing.unreadable.map((pod) => pod.message).join("; ")}`,
+    );
   // The complete admitted input snapshot includes vendored dependencies. Content-addressed
   // archives are shared safely across hosts, and unchanged examples need no export or rewrite.
-  const fingerprint = createHash("sha256").update(JSON.stringify(listing.packages.map(pod =>
-    [pod.id, pod.members.map(member => [member.path, member.sha256])]))).digest("hex");
+  const fingerprint = createHash("sha256")
+    .update(
+      JSON.stringify(
+        listing.packages.map((pod) => [
+          pod.id,
+          pod.members.map((member) => [member.path, member.sha256]),
+        ]),
+      ),
+    )
+    .digest("hex");
   const machine = options.machine ?? options.ledger?.machine ?? hostState();
   const shipped = dirname(shippedArchiveKind.in(machine, fingerprint, "archive").path);
   for (const pod of listing.packages) {
@@ -78,7 +104,8 @@ async function shippedPodsRoot(options: TransferOptions & { ledger?: ReturnType<
     const archivePath = file.path;
     const prepared = await preparePodExport(
       { pod: pod.id, archivePath },
-      { podsRoot: examples, captures: options.captures }, listing,
+      { podsRoot: examples, captures: options.captures },
+      listing,
     );
     options.signal?.throwIfAborted();
     await writePodExport(prepared, file);
@@ -125,7 +152,10 @@ export const shippedPodsSettled = (): Promise<void> => settledWithin(firstRun, 6
  * Resolves with per-archive outcomes; it rejects only if the ledger itself cannot be written.
  */
 export const importShippedPods = (
-  options: TransferOptions & { shippedRoot?: string | null; ledger?: ReturnType<typeof ledgerKind.in> } = {},
+  options: TransferOptions & {
+    shippedRoot?: string | null;
+    ledger?: ReturnType<typeof ledgerKind.in>;
+  } = {},
 ): Promise<ShippedPodsReport> => {
   const owned = { ...options, machine: options.machine ?? options.ledger?.machine ?? hostState() };
   if (options.shippedRoot !== undefined || options.ledger !== undefined) return run(owned);
@@ -142,8 +172,7 @@ async function ensureDefaultPod(podsRoot: string | undefined, signal?: AbortSign
   // Another home may already hold the default pod; a second one would refuse both.
   const listing = await listPackages({ podsRoots: podsRoot ?? productPodsRoots() });
   signal?.throwIfAborted();
-  if (listing.packages.some((pod) => pod.id === key))
-    return;
+  if (listing.packages.some((pod) => pod.id === key)) return;
   podsRoot ??= productPodsRootPath();
   const wrote = writeHome(
     podMemberKind.in(hostState().home({ root: dirname(podsRoot), tier: "user" }), [
@@ -161,7 +190,10 @@ async function ensureDefaultPod(podsRoot: string | undefined, signal?: AbortSign
 }
 
 async function run(
-  options: TransferOptions & { shippedRoot?: string | null; ledger?: ReturnType<typeof ledgerKind.in> },
+  options: TransferOptions & {
+    shippedRoot?: string | null;
+    ledger?: ReturnType<typeof ledgerKind.in>;
+  },
 ): Promise<ShippedPodsReport> {
   options.signal?.throwIfAborted();
   await ensureDefaultPod(options.podsRoot, options.signal);
@@ -174,9 +206,13 @@ async function run(
   } catch (error) {
     options.signal?.throwIfAborted();
     note(options.machine ?? hostState(), {
-      class: "keep", place: "Shipped examples",
-      path: shippedRoot ?? join(hostOwnership.sourceRoot ?? dirname(process.execPath), "examples", "pods"),
-      sha256: null, reason: `Examples unavailable: ${String(error)}`,
+      class: "keep",
+      place: "Shipped examples",
+      path:
+        shippedRoot ??
+        join(hostOwnership.sourceRoot ?? dirname(process.execPath), "examples", "pods"),
+      sha256: null,
+      reason: `Examples unavailable: ${String(error)}`,
     });
     return { shippedRoot, outcomes: [] };
   }
@@ -197,20 +233,41 @@ async function run(
     const path = join(shippedRoot, archive);
     const bytes = await readFile(path);
     const sha256 = createHash("sha256").update(bytes).digest("hex");
-    const installed = (await listPackages({ podsRoots: everyRoot })).packages.find(pod => pod.id === archiveId(readZip(bytes)));
+    const installed = (await listPackages({ podsRoots: everyRoot })).packages.find(
+      (pod) => pod.id === archiveId(readZip(bytes)),
+    );
     // A manifest-free folder may be a prior torn import, even if an old host called it present.
-    const partial = !installed && await lstat(join(options.podsRoot ?? productPodsRootPath(), archiveId(readZip(bytes))))
-      .catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; return null; });
+    const partial =
+      !installed &&
+      (await lstat(
+        join(options.podsRoot ?? productPodsRootPath(), archiveId(readZip(bytes))),
+      ).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+        return null;
+      }));
     if (ledger.offered[sha256] && !installed && !partial) {
       outcomes.push({ archive, sha256, outcome: "offered-before" });
       continue;
     }
-    const outcome = await offer(archive, path, bytes, sha256, {
-      ...options, machine: options.machine ?? ledgerFile.machine,
-      originalsRoot: stateDirectory(ledgerFile.machine, "shipped-pod-originals"),
-    }, installed);
-    outcomes.push(ledger.offered[sha256] && outcome.outcome === "present" && (!installed || !shippedPodUpdateRefusals.has(installed.id))
-      ? { archive, sha256, outcome: "offered-before" } : outcome);
+    const outcome = await offer(
+      archive,
+      path,
+      bytes,
+      sha256,
+      {
+        ...options,
+        machine: options.machine ?? ledgerFile.machine,
+        originalsRoot: stateDirectory(ledgerFile.machine, "shipped-pod-originals"),
+      },
+      installed,
+    );
+    outcomes.push(
+      ledger.offered[sha256] &&
+        outcome.outcome === "present" &&
+        (!installed || !shippedPodUpdateRefusals.has(installed.id))
+        ? { archive, sha256, outcome: "offered-before" }
+        : outcome,
+    );
     ledger.offered[sha256] = {
       archive,
       at: new Date().toISOString(),
@@ -235,16 +292,34 @@ async function offer(
     const id = archiveId(readZip(bytes));
     // Installed archives may be replaced on upgrade. Retain every offered version in writable state.
     await mkdir(options.originalsRoot.path, { recursive: true });
-    await writeArtifact(options.originalsRoot.path, originalArchiveKind.in(options.originalsRoot, sha256), bytes);
+    await writeArtifact(
+      options.originalsRoot.path,
+      originalArchiveKind.in(options.originalsRoot, sha256),
+      bytes,
+    );
     if (installed) {
       // A pod another home holds is that home's to change: the offer never replaces or moves it.
-      if (resolve(dirname(installed.directory)) !== resolve(options.podsRoot ?? productPodsRootPath()))
-        return { archive, sha256, outcome: "present", id, reason: `installed at '${installed.directory}'` };
+      if (
+        resolve(dirname(installed.directory)) !== resolve(options.podsRoot ?? productPodsRootPath())
+      )
+        return {
+          archive,
+          sha256,
+          outcome: "present",
+          id,
+          reason: `installed at '${installed.directory}'`,
+        };
       shippedPodUpdateRefusals.delete(id);
       const matches = (entries: ReadonlyMap<string, Buffer>, pod: AdmittedPackage) => {
         const authored = [...entries].filter(([path]) => isPackageMember(path));
-        return authored.length === pod.members.length && authored.every(([path, bytes]) =>
-          pod.members.some(member => member.path === path && Buffer.from(member.bytes).equals(bytes)));
+        return (
+          authored.length === pod.members.length &&
+          authored.every(([path, bytes]) =>
+            pod.members.some(
+              (member) => member.path === path && Buffer.from(member.bytes).equals(bytes),
+            ),
+          )
+        );
       };
       if (!matches(readZip(bytes), installed)) {
         const writes: HomeMemberUndo[] = [];
@@ -255,36 +330,53 @@ async function offer(
           if (record.kind !== "ok") throw Error("its original import record is incomplete");
           const provenance = record.value;
           // The record holds no machine path: the original is found by its hash in this machine's store.
-          const original = await readFile(join(options.originalsRoot.path, `${provenance.archiveSha256}.zip`))
-            .catch(() => { throw Error("its original archive is unavailable"); });
+          const original = await readFile(
+            join(options.originalsRoot.path, `${provenance.archiveSha256}.zip`),
+          ).catch(() => {
+            throw Error("its original archive is unavailable");
+          });
           if (createHash("sha256").update(original).digest("hex") !== provenance.archiveSha256)
             throw Error("its original archive no longer matches the import record");
           if (archiveId(readZip(original)) !== id || !matches(readZip(original), installed))
             throw Error("its authored members differ from the original archive");
           const retained = join(options.originalsRoot.path, `${provenance.archiveSha256}.zip`);
           await mkdir(dirname(retained), { recursive: true });
-          await writeArtifact(options.originalsRoot.path, originalArchiveKind.in(options.originalsRoot, provenance.archiveSha256), original);
+          await writeArtifact(
+            options.originalsRoot.path,
+            originalArchiveKind.in(options.originalsRoot, provenance.archiveSha256),
+            original,
+          );
           const fresh = await captureDirectory(installed.directory);
-          if (fresh.diagnostics.length || !matches(readZip(original), { ...installed, members: fresh.members }))
+          if (
+            fresh.diagnostics.length ||
+            !matches(readZip(original), { ...installed, members: fresh.members })
+          )
             throw Error("its members changed during the update check");
           const next = readZip(bytes);
           for (const [member, content] of next) {
-            if (/^pages\/[^/]+\/index\.html$/.test(member)) validatePageHtml(content.toString("utf8"), true);
+            if (/^pages\/[^/]+\/index\.html$/.test(member))
+              validatePageHtml(content.toString("utf8"), true);
             const capture = /^captures\/([0-9a-f]{64})\.png$/.exec(member);
             if (capture && sha256Hex(content) !== capture[1])
               throw Error(`Capture '${member}' does not hash to its name.`);
           }
           // The write door has no delete verb. Keep an example that needs member removal,
           // rather than bypassing CAS or moving its home folder across volumes.
-          if (fresh.members.some(member => !next.has(member.path))) {
+          if (fresh.members.some((member) => !next.has(member.path))) {
             note(options.machine ?? hostState(), {
-              class: "keep", place: `Shipped example ${installed.name}`, path: installed.directory,
-              sha256, reason: "Its update removes members; the example was kept. Import the current example into a separate workspace.",
+              class: "keep",
+              place: `Shipped example ${installed.name}`,
+              path: installed.directory,
+              sha256,
+              reason:
+                "Its update removes members; the example was kept. Import the current example into a separate workspace.",
             });
             throw Error("its update removes members; import the example into a separate workspace");
           }
           try {
-            for (const [member, content] of [...next].sort(([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"))) {
+            for (const [member, content] of [...next].sort(
+              ([a], [b]) => Number(a === "pod.json") - Number(b === "pod.json"),
+            )) {
               options.signal?.throwIfAborted();
               const prior = fresh.members.find((m) => m.path === member);
               const target = join(installed.directory, member);
@@ -300,28 +392,37 @@ async function offer(
                 ],
               );
               const wrote = writeHome(file, content, prior?.sha256 ?? null);
-              if (!wrote.ok)
-                throw Error(`its member changed during the update write: ${target}`);
+              if (!wrote.ok) throw Error(`its member changed during the update write: ${target}`);
               writes.push({ file, sha256: wrote.sha256, prior: prior?.bytes ?? null });
             }
             for (const [member, content] of next)
-              if (/^captures\/[0-9a-f]{64}\.png$/.test(member)) await options.captures!.adopt(content);
+              if (/^captures\/[0-9a-f]{64}\.png$/.test(member))
+                await options.captures!.adopt(content);
             await activateImportedPackage(id, options.podsRoot ?? productPodsRootPath());
             options.signal?.throwIfAborted();
-            writeState(importRecordFile(id, options), `${JSON.stringify({ archiveSha256: sha256, archive, date: new Date().toISOString() })}\n`);
+            writeState(
+              importRecordFile(id, options),
+              `${JSON.stringify({ archiveSha256: sha256, archive, date: new Date().toISOString() })}\n`,
+            );
             return { archive, sha256, outcome: "updated", id, folder: installed.folder };
           } catch (error) {
             // Shutdown keeps already-published bytes; rollback must not restore a released home.
             options.signal?.throwIfAborted();
             const kept = rollbackHomeMembers(writes);
             if (writes.length) await reconcilePackageChanges();
-            if (kept.length) throw Error(`its update failed: ${String(error)}; rollback kept: ${kept.join("; ")}`, { cause: error });
+            if (kept.length)
+              throw Error(
+                `its update failed: ${String(error)}; rollback kept: ${kept.join("; ")}`,
+                { cause: error },
+              );
             throw error;
           }
         } catch (error) {
           options.signal?.throwIfAborted();
-          const reason = error instanceof Error && /^(its |the replacement )/.test(error.message)
-            ? error.message : "its provenance could not be verified";
+          const reason =
+            error instanceof Error && /^(its |the replacement )/.test(error.message)
+              ? error.message
+              : "its provenance could not be verified";
           shippedPodUpdateRefusals.set(
             id,
             `${installed.name} was kept with your changes. Only the example update was skipped because ${reason}. To take the update, import the current example into a separate workspace beside this Pod, or undo your local edits and the next start takes the update.`,
@@ -350,15 +451,20 @@ async function offer(
     ) {
       const id = archiveId(readZip(bytes));
       note(options.machine ?? hostState(), {
-        class: "keep", place: `Shipped example ${id}`,
+        class: "keep",
+        place: `Shipped example ${id}`,
         path: join(options.podsRoot ?? productPodsRootPath(), id),
-        sha256, reason,
+        sha256,
+        reason,
       });
       return { archive, sha256, outcome: "present", id, reason };
     }
     note(options.machine ?? hostState(), {
-      class: "keep", place: `Shipped example ${archiveId(readZip(bytes))}`, path,
-      sha256, reason: `Shipped example import failed. Import '${path}' from Pods to try again. Reason: ${reason}`,
+      class: "keep",
+      place: `Shipped example ${archiveId(readZip(bytes))}`,
+      path,
+      sha256,
+      reason: `Shipped example import failed. Import '${path}' from Pods to try again. Reason: ${reason}`,
     });
     return { archive, sha256, outcome: "refused", reason };
   }

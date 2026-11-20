@@ -1,5 +1,5 @@
 import { sceneMemory, type SceneMemoryLease } from "./scene-memory";
-import type { PaintOf, SceneMeshes } from "./types";
+import type { PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { SceneRenderer } from "./renderer";
 import { prepareScene } from "./preparation";
 import { samePlan, type ScenePlan } from "./scene-plan";

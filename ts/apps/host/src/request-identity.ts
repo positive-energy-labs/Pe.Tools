@@ -2,7 +2,7 @@ import { nativeReadResolveEndpoint } from "../../../packages/agent-contracts/src
 import { createHash } from "node:crypto";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import { isTsOnlyOperationKey } from "@pe/host-contracts/operation-types";
-import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { readSessionScope } from "./sdk-session.ts";
 import { Deferred, Effect, Option } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -27,10 +27,10 @@ import {
   callerOf,
   browserContextHeaders,
   mintBrowserContext,
-  Refused,
   REFUSAL_HEADER,
   type RoutePermission,
 } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { recordHostFact, type ReceiptExporter } from "./receipt-export.ts";
 import { HostLifecycle } from "./host-lifecycle.ts";
 import { authorizeShutdownFor } from "@pe/host-contracts/pe-service-host";
@@ -443,10 +443,19 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
             !isTsOnlyOperationKey(call.key));
         const services = yield* Effect.context<never>();
         const run = Effect.provideService(handler, RequestIdentity, admitted).pipe(
-          Effect.provideService(ResourceConnectionOwner,
-            identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER]
-              ? createHash("sha256").update(JSON.stringify([identity.principal, identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER]])).digest("hex")
-              : null),
+          Effect.provideService(
+            ResourceConnectionOwner,
+            (identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER])
+              ? createHash("sha256")
+                  .update(
+                    JSON.stringify([
+                      identity.principal,
+                      identity.headers.cookie ?? identity.headers[HOST_CONTEXT_HEADER],
+                    ]),
+                  )
+                  .digest("hex")
+              : null,
+          ),
         );
         const exit = native
           ? yield* Effect.exit(run)
@@ -471,7 +480,11 @@ export const requestIdentityLayer = (options: IdentityLayerOptions) =>
         // No other site frames a host page; a response that names its own policy keeps it.
         const framed = response.headers["content-security-policy"]
           ? response
-          : HttpServerResponse.setHeader(response, "content-security-policy", "frame-ancestors 'self'");
+          : HttpServerResponse.setHeader(
+              response,
+              "content-security-policy",
+              "frame-ancestors 'self'",
+            );
         return identity.setCookie
           ? HttpServerResponse.setHeader(framed, "set-cookie", identity.setCookie)
           : framed;

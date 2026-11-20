@@ -35,8 +35,7 @@ export function fileRouteDocumentStore(root: StateDirectory): RouteDocumentStore
   mkdirSync(dir, { recursive: true });
   const work = (targetKey: string, route: string) =>
     stateKind({
-      schema:
-        recordSchema.refine((r) => r.targetKey === targetKey && r.route === route, MISPLACED),
+      schema: recordSchema.refine((r) => r.targetKey === targetKey && r.route === route, MISPLACED),
       place: () => `Work for ${route} (${targetKey})`,
       segments: () => [filename(targetKey, route)],
     }).in(root);
@@ -51,10 +50,15 @@ export function fileRouteDocumentStore(root: StateDirectory): RouteDocumentStore
           const path = join(dir, file);
           if ((await stat(path)).size > 16 * 1024 * 1024) continue;
           record = recordSchema.parse(JSON.parse(await readFile(path, "utf8")));
-          if (!routes.has(record.route) || filename(record.targetKey, record.route) !== file) continue;
-        } catch { continue; }
-        const result = setAside(work(record.targetKey, record.route),
-          `Work route ${record.route} is retired. Start new Work; no cells were migrated.`);
+          if (!routes.has(record.route) || filename(record.targetKey, record.route) !== file)
+            continue;
+        } catch {
+          continue;
+        }
+        const result = setAside(
+          work(record.targetKey, record.route),
+          `Work route ${record.route} is retired. Start new Work; no cells were migrated.`,
+        );
         if (result.kind === "kept") throw Object.assign(new Error(result.reason), result);
       }
     },
@@ -72,7 +76,8 @@ export function fileRouteDocumentStore(root: StateDirectory): RouteDocumentStore
         return;
       }
       writeState(
-        file, JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
+        file,
+        JSON.stringify({ format: "route-state-record-v2", targetKey, route, value }),
       );
     },
     // The listing is read-only, and ADR 0039's discard does not apply here. Ruling: commit 556652bc

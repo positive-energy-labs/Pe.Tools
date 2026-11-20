@@ -21,13 +21,15 @@ const port = (index: number, x: number, facing: number[], to: [number, number] |
   }) as Connector;
 
 function fixture(gapIn: number) {
-  const root = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(100).toString(16).padStart(8, "0")}`,
+  const root = {
+    uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(100).toString(16).padStart(8, "0")}`,
     id: 100,
     kind: "equipment",
     facts: [],
     connectors: [port(0, 0, [1, 0, 0], [1, 0])],
   };
-  const terminal = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(200).toString(16).padStart(8, "0")}`,
+  const terminal = {
+    uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(200).toString(16).padStart(8, "0")}`,
     id: 200,
     kind: "terminal",
     facts: [],
@@ -76,7 +78,9 @@ it("auto-joins exactly 3 inches, records sheet input and leg provenance, and obe
   const chain = buildChain(input);
   expect(chain.path!.blockerIds).toEqual([]);
   expect(
-    chain.notes.some((i) => i.text.startsWith("auto-joined") && i.text.endsWith("across 3.000 in, default ≤3 in")),
+    chain.notes.some(
+      (i) => i.text.startsWith("auto-joined") && i.text.endsWith("across 3.000 in, default ≤3 in"),
+    ),
   ).toBe(true);
   expect(chain.legs["2:0>1"]!.lossSource.ref).toContain("auto-joined");
   // The auto-join gap is a read tolerance (C#): the graph is measured under 2 in.
@@ -111,7 +115,9 @@ it("beyond 3 inches and sideways ports remain inferred-join blockers; occupied t
       expect([...walk.blockers.values()].some((b) => b.kind === "inferred-join")).toBe(true);
     else
       expect(
-        [...walk.blockers.values()].some((b) => /nearest candidate (is )?(.+ )?duct at .*occupied/.test(b.detail)),
+        [...walk.blockers.values()].some((b) =>
+          /nearest candidate (is )?(.+ )?duct at .*occupied/.test(b.detail),
+        ),
       ).toBe(true);
   }
 });

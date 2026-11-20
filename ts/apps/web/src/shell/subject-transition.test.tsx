@@ -34,7 +34,12 @@ test.each([
         key,
         "fans",
         "human",
-        [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 9, portIndex: 0 } } } } }],
+        [
+          {
+            path: ["writeIntent"],
+            value: { edit: { value: { walk: { unitId: 9, portIndex: 0 } } } },
+          },
+        ],
         0,
       ),
     ).toMatchObject({ ok: true });
@@ -61,7 +66,12 @@ test.each([
     });
     await waitFor(() => expect(f.fans.workBasis()).not.toBeNull());
     f.fans.invoke("edit", {
-      patches: [{ path: ["writeIntent"], value: { edit: { value: { walk: { unitId: 10, portIndex: 0 } } } } }],
+      patches: [
+        {
+          path: ["writeIntent"],
+          value: { edit: { value: { walk: { unitId: 10, portIndex: 0 } } } },
+        },
+      ],
     });
     await waitFor(() =>
       expect(f.fans.work()).toMatchObject({

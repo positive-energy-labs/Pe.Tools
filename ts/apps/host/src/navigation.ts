@@ -1,5 +1,5 @@
-import {subjectCode} from "@pe/agent-contracts";
-const scheduleIdentity=(key:string)=>subjectCode({keyKind:"workspace",key});
+import { subjectCode } from "@pe/agent-contracts";
+const scheduleIdentity = (key: string) => subjectCode({ keyKind: "workspace", key });
 import { z } from "zod";
 import {
   routeAddress,
@@ -165,7 +165,10 @@ async function resumeDestination(
       key: work.scope,
       url:
         unique.length === 1 && work.state === "ready"
-          ? routeAddress("schedules").link({ workspaceId: {kind:"ids",ids:[scheduleIdentity(work.scope.work)]} }, { target: unique[0]! })
+          ? routeAddress("schedules").link(
+              { workspaceId: { kind: "ids", ids: [scheduleIdentity(work.scope.work)] } },
+              { target: unique[0]! },
+            )
           : null,
       reason:
         unique.length === 1 && work.state === "ready"
@@ -180,9 +183,7 @@ async function resumeDestination(
       url: null,
       reason: "This tool requires a document; its host-only Work has no document binding.",
     };
-  if (
-    work.scope.binding === "workspace"
-  )
+  if (work.scope.binding === "workspace")
     return {
       id,
       key: work.scope,
@@ -266,24 +267,23 @@ export async function resumeWork(
 }
 
 const documentRoutes: Readonly<Record<string, string | undefined>> = Object.fromEntries(
-  ROUTE_DIRECTORY.filter((route) => route.resume === "document").map((route) => [route.key, route.path]),
+  ROUTE_DIRECTORY.filter((route) => route.resume === "document").map((route) => [
+    route.key,
+    route.path,
+  ]),
 );
 
-function destination(
-  scope: WorkKey,
-  documents: readonly NavigationDocument[],
-  available: boolean,
-) {
+function destination(scope: WorkKey, documents: readonly NavigationDocument[], available: boolean) {
   if (scope.binding === "workspace")
     return { url: null, reason: "This tool has no URL that resumes this named Work workspace." };
   const path = documentRoutes[scope.route];
   if (!path)
     return { url: null, reason: "This Work has no document route that accepts its identity." };
   if (scope.binding === "host")
-      return {
-        url: null,
-        reason: "This route requires a document; its host-only Work has no document binding.",
-      };
+    return {
+      url: null,
+      reason: "This route requires a document; its host-only Work has no document binding.",
+    };
   if (!available) return { url: null, reason: "Current document bindings are unavailable." };
   const matching = documents.filter((document) =>
     scope.binding === "open"

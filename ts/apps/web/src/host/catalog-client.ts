@@ -3,9 +3,16 @@ import { z } from "zod";
 import { createPeClient, type PeRouteId } from "@pe/agent-contracts/pe-api";
 import type { ExecutionTarget } from "@pe/agent-contracts";
 import { readPeError } from "@pe/host-contracts/pe-api";
-import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER, HOST_RPC_ORIGIN_HEADER,
-  HostCallError, type OpKey, type OpRequestOf, type OpResponseOf } from "@pe/host-contracts/operation-types";
-import { hostFetch } from "./runtime";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+  HOST_RPC_ORIGIN_HEADER,
+  HostCallError,
+  type OpKey,
+  type OpRequestOf,
+  type OpResponseOf,
+} from "@pe/host-contracts/operation-types";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 
 /** A reading's host request; `headers` carry the exact document a route-scoped read needs. */
 interface JsonRequest {
@@ -110,6 +117,9 @@ export const callCompose = async <K extends PeRouteId>(
   input: ComposeInput<K>,
   headers?: Readonly<Record<string, string>>,
 ): Promise<ComposeOutput<K>> => {
-  const value = await pe.call(key, input, { signal: context.signal, headers: { ...context.headers, ...headers } });
+  const value = await pe.call(key, input, {
+    signal: context.signal,
+    headers: { ...context.headers, ...headers },
+  });
   return value as ComposeOutput<K>;
 };

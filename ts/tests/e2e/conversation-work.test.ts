@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
 import { connect, type Page } from "./cdp.ts";
 import {
@@ -18,6 +19,7 @@ import {
 } from "../../packages/agent-contracts/src/index.ts";
 
 const visible = `(e) => e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'`;
+const hostRuntimeUrl = `/@fs/${fileURLToPath(import.meta.resolve("@pe/web-kernel/host/runtime")).replaceAll("\\", "/")}`;
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const git = (...args: string[]) =>
   execFileSync("git", args, {
@@ -1170,7 +1172,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
   const request = (target: string, operation = "", body?: unknown) =>
     // Keep the browser import in source text: Vite rewrites imports inside serialized callbacks.
     page.read<{ status: number; body: ReturnType<typeof JSON.parse> }>(`(async () => {
-      const { hostFetch } = await import('/src/host/runtime.ts');
+      const { hostFetch } = await import(${JSON.stringify(hostRuntimeUrl)});
       const response = await hostFetch(${JSON.stringify(route(target, operation))}, ${body === undefined ? "undefined" : JSON.stringify({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })});
       return {status: response.status, body: await response.json()};
     })()`);
@@ -1285,15 +1287,21 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     // The Timeline's step door (ADR 0042): read the step the host offers this person, send it back.
     const works = [(await request(target)).body.handle.key];
     const timeline = await page.read<{ value?: { data?: { undo?: unknown } } }>(`(async () => {
-      const { hostFetch } = await import('/src/host/runtime.ts');
+      const { hostFetch } = await import(${JSON.stringify(hostRuntimeUrl)});
       const read = ${JSON.stringify({ read: "work.timeline", args: { works }, subscription: "http-journey-undo", generation: 0 })};
       const post = (body) => hostFetch('/pe/reads/value', { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const shown = await (await post(read)).json();
       await post({ ...read, release: true });
       return shown;
     })()`);
-    expect(timeline.value?.data?.undo, "the Timeline offers the person's edit").toMatchObject({ revision: 3 });
-    const undone = await request(target, "history", { direction: "undo", works, expected: timeline.value!.data!.undo });
+    expect(timeline.value?.data?.undo, "the Timeline offers the person's edit").toMatchObject({
+      revision: 3,
+    });
+    const undone = await request(target, "history", {
+      direction: "undo",
+      works,
+      expected: timeline.value!.data!.undo,
+    });
     expect(undone.body).toMatchObject({
       ok: true,
       write: { by: "human", kind: "restore", base: 3, revision: 4 },

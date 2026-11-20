@@ -27,7 +27,8 @@ import { fanRosterRow } from "./fan-roster.ts";
 
 const FAN = process.env.E2E_FAN ?? "MUAS-1";
 const PORT = Number(process.env.E2E_PORT ?? "2");
-if (!Number.isInteger(PORT) || PORT < 0) throw new Error("PRECONDITION: E2E_PORT must be a nonnegative integer");
+if (!Number.isInteger(PORT) || PORT < 0)
+  throw new Error("PRECONDITION: E2E_PORT must be a nonnegative integer");
 const ESP = process.env.E2E_VALUE || "1.25";
 const CHAOS = new Set((process.env.E2E_CHAOS ?? "").split(",").filter(Boolean));
 const ROSTER = `[data-pane-id="${fansPanes.roster}"]`;
@@ -43,10 +44,15 @@ await journey("J6-fans", async (page, step) => {
   await page.open(revit.url("/fans"));
   await requireRevit(page, 600_000);
   await page.until(() => page.has(fanRow, ROSTER), `${FAN} on the fans roster`, 600_000);
-  const unitId = await page.evaluate(({ scope, pattern }: { scope: string; pattern: string }) => {
-    const rows = [...document.querySelectorAll<HTMLElement>(`${scope} [role="option"]`)].filter(e => new RegExp(pattern).test(e.innerText));
-    return rows.length === 1 ? rows[0]?.getAttribute("data-revit-ids") ?? null : null;
-  }, { scope: ROSTER, pattern: fanRow.source });
+  const unitId = await page.evaluate(
+    ({ scope, pattern }: { scope: string; pattern: string }) => {
+      const rows = [...document.querySelectorAll<HTMLElement>(`${scope} [role="option"]`)].filter(
+        (e) => new RegExp(pattern).test(e.innerText),
+      );
+      return rows.length === 1 ? (rows[0]?.getAttribute("data-revit-ids") ?? null) : null;
+    },
+    { scope: ROSTER, pattern: fanRow.source },
+  );
   step(`pick ${FAN} port ${PORT} from the roster`);
   const selected = await page.read<boolean>(
     `[...document.querySelectorAll(${JSON.stringify(`${ROSTER} [aria-selected="true"]`)})].some((e) => ${fanRow}.test(e.innerText.trim()))`,

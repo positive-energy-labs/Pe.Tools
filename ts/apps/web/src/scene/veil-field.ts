@@ -14,8 +14,8 @@
  * (surface samples + trilinear interpolation); the shader treats one cell as touching.
  */
 import * as THREE from "three";
-import type { SceneMeshes } from "./types";
-import { instancePositions } from "./primitives";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
+import { instancePositions } from "@pe/web-kernel/scene/primitives";
 
 /** Distances saturate here (ft); a knob's far edge must stay inside it. */
 export const VEIL_REACH_FT = 64;

@@ -184,11 +184,7 @@ export function ArmingStrip({
           </Button>
           {armed ? alternatives : null}
           {armed ? (
-            <Button
-              label={cancelLabel}
-              onClick={onCancel}
-              reason="Disarms — nothing is written"
-            >
+            <Button label={cancelLabel} onClick={onCancel} reason="Disarms — nothing is written">
               {cancelLabel}
             </Button>
           ) : null}

@@ -13,7 +13,11 @@ vi.mock("../src/native-receipts.ts", async (original) => ({
 const { commandResources } = await import("../src/command-reads.ts");
 
 const start = Date.parse("2026-11-10T08:00:00.000Z");
-const process = { pid: 10, processStartUtc: new Date(start).toISOString(), executable: "Revit.exe" };
+const process = {
+  pid: 10,
+  processStartUtc: new Date(start).toISOString(),
+  executable: "Revit.exe",
+};
 const attachment = (pid: number) => ({
   sessionId: "session-1",
   sdkSessionId: "pe.app-25",

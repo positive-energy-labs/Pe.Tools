@@ -6,6 +6,10 @@
   "imports": {
     "#/*": "./src/*"
   },
+  "exports": {
+    "./vite.config": "./vite.config.ts",
+    "./route-startup": "./route-startup.ts"
+  },
   "scripts": {
     "dev": "vp dev",
     "codegen:routes": "node scripts/route-graphs.ts",
@@ -21,18 +25,30 @@
     "@base-ui/react": "catalog:",
     "@effect/atom-react": "4.0.2",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/browser": "workspace:*",
+    "@pe/duct-systems-domain": "workspace:*",
+    "@pe/duct-systems-host": "workspace:*",
+    "@pe/duct-systems-web": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
+    "@pe/ducts-web": "workspace:*",
+    "@pe/fans-domain": "workspace:*",
+    "@pe/fans-host": "workspace:*",
+    "@pe/fans-web": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "@pe/host-internal": "workspace:*",
     "@pe/kit": "workspace:*",
     "@pe/mcps": "workspace:*",
     "@pe/runtime": "workspace:*",
     "@pe/schema-core": "workspace:*",
+    "@pe/web-kernel": "workspace:*",
     "@tanstack/react-devtools": "0.10.11",
     "@tanstack/react-router": "1.170.31",
     "@tanstack/react-router-devtools": "1.167.1",
     "@tanstack/react-start": "1.168.48",
     "@tanstack/react-table": "9.1.2",
     "effect": "4.0.2",
+    "jiti": "^2.7.0",
     "lucide-react": "1.21.0",
     "mermaid": "catalog:",
     "modern-screenshot": "catalog:",
@@ -45,23 +61,11 @@
     "tailwindcss": "^4.1.18",
     "three": "catalog:",
     "tw-animate-css": "^1.3.6",
-    "zod": "4.3.6",
-    "@pe/duct-systems-domain": "workspace:*",
-    "@pe/duct-systems-host": "workspace:*",
-    "@pe/duct-systems-web": "workspace:*",
-    "@pe/ducts-host": "workspace:*",
-    "@pe/ducts-web": "workspace:*",
-    "@pe/fans-domain": "workspace:*",
-    "@pe/fans-host": "workspace:*",
-    "@pe/fans-web": "workspace:*",
-    "jiti": "^2.7.0",
-    "@pe/browser": "workspace:*",
-    "@pe/host": "workspace:*",
-    "@pe/host-internal": "workspace:*"
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "@pe/ducts-contract": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.18",
@@ -86,37 +90,10 @@
       "lightningcss"
     ]
   },
-  "exports": {
-    "./route": "./src/route/defaults.ts",
-    "./host-read": "./src/route/host-read.ts",
-    "./route/draw": "./src/route/draw.tsx",
-    "./route/body": "./src/route/body.ts",
-    "./route/slots/picture/overlay": "./src/route/slots/picture/overlay.tsx",
-    "./scene/types": "./src/scene/types.ts",
-    "./element-index": "./src/element-index.ts",
-    "./revit/observation": "./src/revit/observation.tsx",
-    "./route/activity": "./src/route/activity.tsx",
-    "./revit/element-menu": "./src/revit/element-menu.tsx",
-    "./revit/element-target": "./src/revit/element-target.ts",
-    "./scene/damage": "./src/scene/damage.ts",
-    "./scene/picture/picture": "./src/scene/picture/picture.tsx",
-    "./shell/subject": "./src/shell/subject.ts",
-    "./attention": "./src/attention.tsx",
-    "./knobs/knobs": "./src/knobs/knobs.ts",
-    "./route/typed-route": "./src/route/typed-route.ts",
-    "./vite.config": "./vite.config.ts",
-    "./scene/projection": "./src/scene/projection.ts",
-    "./scene/footnotes": "./src/scene/footnotes.tsx",
-    "./scene/ink": "./src/scene/ink.ts",
-    "./scene/marks": "./src/scene/marks.ts",
-    "./shell/open-set.neutral": "./src/shell/open-set.neutral.ts",
-    "./scene/grounds": "./src/scene/grounds.ts",
-    "./scene/ports": "./src/scene/ports.ts",
-    "./scene/framing": "./src/scene/framing.ts",
-    "./scene/continuations": "./src/scene/continuations.tsx",
-    "./scene/renderer": "./src/scene/renderer.ts",
-    "./scene/surfaces": "./src/scene/surfaces.ts",
-    "./scene/pan-zoom": "./src/scene/pan-zoom.tsx",
-    "./components/work/band": "./src/components/work/band.tsx"
+  "pe": {
+    "generatedProductDependencies": [
+      "@pe/duct-systems-web",
+      "@pe/fans-web"
+    ]
   }
 }

@@ -510,13 +510,21 @@ export const appendLine = <T>(log: StoredLog<T>, value: T): void =>
 const removeFile = (path: string) => rmSync(path, { force: true });
 
 /** Callers serialize batches. Replace the bounded diagnostic tail atomically. */
-export async function appendLinesBounded<T>(log: StoredLog<T>, values: readonly T[], maxLines: number): Promise<void> {
-  if (!Number.isSafeInteger(maxLines) || maxLines < 1) throw Error("Log line limit must be positive");
-  const prior = await readFile(log.path, "utf8").catch(error => {
+export async function appendLinesBounded<T>(
+  log: StoredLog<T>,
+  values: readonly T[],
+  maxLines: number,
+): Promise<void> {
+  if (!Number.isSafeInteger(maxLines) || maxLines < 1)
+    throw Error("Log line limit must be positive");
+  const prior = await readFile(log.path, "utf8").catch((error) => {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
     return "";
   });
-  const lines = [...prior.split("\n").filter(Boolean), ...values.map(value => JSON.stringify(value))];
+  const lines = [
+    ...prior.split("\n").filter(Boolean),
+    ...values.map((value) => JSON.stringify(value)),
+  ];
   await mkdir(dirname(log.path), { recursive: true });
   const temporary = `${log.path}.${randomUUID()}.tmp`;
   try {

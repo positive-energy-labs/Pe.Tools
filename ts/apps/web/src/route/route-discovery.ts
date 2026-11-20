@@ -1,10 +1,6 @@
 import { z } from "zod";
-import {
-  type CellsDecl,
-  type RouteGraph,
-  type RouteFingerprint,
-} from "@pe/agent-contracts";
-import type { TypedRoute } from "./typed-route";
+import { type CellsDecl, type RouteGraph, type RouteFingerprint } from "@pe/agent-contracts";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 export type WorkAdmission = { routeKey: string; fingerprint: RouteFingerprint };
 /** The typed Work declaration is also the chat head's cell contract. */
 export interface DiscoveredWork<W = any> {
@@ -29,7 +25,7 @@ export interface RegisteredRoute {
 export type DiscoveredRoute = RegisteredRoute;
 /** Typed Work describes its cell containers once; the chat head consumes the same schema. */
 export function typedWorkCells(
-  module: import("./typed-route").TypedRoute,
+  module: import("@pe/web-kernel/route/typed-route").TypedRoute,
 ): readonly CellsDecl<any>[] {
   const work = module.spec.edits?.work;
   if (!work) return [];
@@ -43,9 +39,13 @@ export function typedWorkCells(
   return Object.entries(work.schema.shape).flatMap(([key, schema]): CellsDecl<any>[] => {
     const value = unwrap(schema as z.ZodType);
     // A family is a record of cells, or a fixed-key object of them (one cell per criterion and side).
-    const fixed = value instanceof z.ZodObject && !cell(value) && Object.keys(value.shape).length > 0 &&
+    const fixed =
+      value instanceof z.ZodObject &&
+      !cell(value) &&
+      Object.keys(value.shape).length > 0 &&
       Object.values(value.shape).every((s) => cell(s as z.ZodType));
-    const segment = (value instanceof z.ZodRecord && cell(value.valueType as z.ZodType)) || fixed ? key : null;
+    const segment =
+      (value instanceof z.ZodRecord && cell(value.valueType as z.ZodType)) || fixed ? key : null;
     if (segment === null && !cell(value)) return [];
     return [
       {

@@ -1,21 +1,16 @@
 import { VOCABULARY } from "./calc/scoped-snapshot.ts";
 /** Test support: the six-element slice and the saved synthetic snapshot, both typed with no cast. */
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import {
-  connOf,
-  ductOf,
-  factOf,
-  groupOf,
-  nodeOf,
-  snapshotOf,
-  systemOf,
-} from "./test-snapshot.ts";
+import { connOf, ductOf, factOf, groupOf, nodeOf, snapshotOf, systemOf } from "./test-snapshot.ts";
 import type { DuctSnapshot } from "./types.ts";
 import saved from "@pe/ducts-contract/fixtures/synthetic-snapshot.json" with { type: "json" };
 
 /** A fresh copy of the saved synthetic snapshot, decoded by the wire schema the page itself uses. */
 export const syntheticSnapshot = (): DuctSnapshot =>
-  nativeResponseSchema("ducts.snapshot.walk").parse({ ...structuredClone(saved), vocabulary: VOCABULARY });
+  nativeResponseSchema("ducts.snapshot.walk").parse({
+    ...structuredClone(saved),
+    vocabulary: VOCABULARY,
+  });
 
 const links = [
   [100, 1],

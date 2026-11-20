@@ -23,11 +23,13 @@ import {
   nativeCatalogIdentity,
   openRecordingReader,
   openRecordingWriter,
-  type Taking,
 } from "../src/native-recording.ts";
-import { InvalidRead } from "../src/native-reads.ts";
-import type { HostInputLane } from "../src/native-recording.ts";
-import { HostInputReadSets, type ConsumerRecipe, type ReadSetId } from "../src/input-occurrence.ts";
+import { type Taking } from "@pe/host-internal/input-recording";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import type { HostInputLane } from "@pe/host-internal/input-recording";
+import { HostInputReadSets } from "../src/input-occurrence.ts";
+import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
+import { type ReadSetId } from "@pe/host-internal/input-occurrence";
 import {
   capturedWorkReads,
   recordedWorkSource,
@@ -47,7 +49,10 @@ const decodes = async (codec: Schema.Codec<unknown, Schema.Json>, value: unknown
 const bundle = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-inputs-"));
   dirs.push(dir);
-  return { dir, writer: await Effect.runPromise(openRecordingWriter(stateFixture(dir), identity, bounds)) };
+  return {
+    dir,
+    writer: await Effect.runPromise(openRecordingWriter(stateFixture(dir), identity, bounds)),
+  };
 };
 const reader = (dir: string) => Effect.runPromise(openRecordingReader(dir, identity, bounds));
 
@@ -62,7 +67,9 @@ const admission = {
   routeKey: "fans",
   fingerprint: workFingerprintSchema.parse(`builtin-closure:${fans.closure.fingerprint}`),
 };
-const terminalSubject = elementSubject({ uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000004" });
+const terminalSubject = elementSubject({
+  uniqueId: "6d52156a-3876-4d76-b641-341454252f26-00000004",
+});
 const key = bindWork("fans", address("C:\\Models\\A.rvt"));
 const other = bindWork("fans", address("C:\\Models\\B.rvt"));
 const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
@@ -446,7 +453,13 @@ test("Work that cannot be recorded truncates capture; the live Work still answer
     return begun.ok ? begun.carriage : undefined;
   };
   await capture.read(key, "raw", undefined, carriage("raw")); // an undefined root is not a recorded null
-  expect(writer.truncation).toEqual({ at: 2, stoppedAt: expect.any(Number), site: "work", op: "work.raw", reason: "encoding" });
+  expect(writer.truncation).toEqual({
+    at: 2,
+    stoppedAt: expect.any(Number),
+    site: "work",
+    op: "work.raw",
+    reason: "encoding",
+  });
   await capture.read(key, "view", missingTitle, carriage("view"));
   // Capture stopped at the first loss; later live reads answer and keep no taking.
   expect(await live.view(key, "fans", request.context)).toMatchObject({ revision: 0 });
@@ -675,18 +688,19 @@ test("command Work reads carry context through binding and revalidation", async 
         await ctx.selectWork(tools.ducts.work, { key: commandWorkKey, revision: 0 });
         return { prepare: async () => null, effects: [] };
       },
-      run: () => Effect.succeed({
-        previewOnly: true,
-        derivedRequest: {},
-        seal: {
-          caller: { kind: "human", via: "local" },
-          requestHash: "fixture",
-          work: { handle: { key: commandWorkKey, revision: 0 } },
-          documentMark: { session: "s", openId: "open", observedSince: null, changedAt: null },
-          incarnation: {},
-          dependencies: "fixture",
-        },
-      }),
+      run: () =>
+        Effect.succeed({
+          previewOnly: true,
+          derivedRequest: {},
+          seal: {
+            caller: { kind: "human", via: "local" },
+            requestHash: "fixture",
+            work: { handle: { key: commandWorkKey, revision: 0 } },
+            documentMark: { session: "s", openId: "open", observedSince: null, changedAt: null },
+            incarnation: {},
+            dependencies: "fixture",
+          },
+        }),
     }),
   });
   const id = crypto.randomUUID();

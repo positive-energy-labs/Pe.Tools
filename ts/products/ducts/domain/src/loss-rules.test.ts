@@ -39,10 +39,7 @@ it("prices rectangular radius elbows with CR3-1 Cp and its angle factor, and rou
     family: "Rectangular Elbow - Radius",
     partType: "Elbow",
     connectors: [inlet, outlet],
-    facts: [
-      factOf("centerRadius", 10),
-      factOf("angle", 45),
-    ],
+    facts: [factOf("centerRadius", 10), factOf("angle", 45)],
   });
   const facts = fittingFacts({
     fitting: node,
@@ -313,7 +310,9 @@ it("without ER5-1 served, off-geometry ER5-2 is refused; an assigned table is ne
   const p = priceLeg(input, only);
   expect(p.source).toBeNull();
   expect(p.lossInWg).toBeNull();
-  expect(p.unpriced).toBe("ER5-2 Cb not read: ER5-2 is stated for Ab/Ac 0.5, As/Ac 1 (As = Ac); actual Ab/Ac 0.273, As/Ac 1");
+  expect(p.unpriced).toBe(
+    "ER5-2 Cb not read: ER5-2 is stated for Ab/Ac 0.5, As/Ac 1 (As = Ac); actual Ab/Ac 0.273, As/Ac 1",
+  );
   const assigned = priceLeg(input, only, { "tap-converging-rect": "ER5-3" });
   expect(assigned.lossInWg).toBeNull();
   expect(assigned.unpriced).toContain("ER5-3 Cb not read");
@@ -330,9 +329,13 @@ it.each(["ER5-2", "ER5-3"])(
     const tap = rectTap(22, 8),
       facts = await tapFacts(tap, trunk);
     for (const leg of ["Cb", "Cs"] as const) {
-      const input = { kind: "fitting" as const, fitting: tap, facts,
+      const input = {
+        kind: "fitting" as const,
+        fitting: tap,
+        facts,
         flows: { through: 400, branch: 400, upstreamMain: 1000, downstreamMain: 600 },
-        leg };
+        leg,
+      };
       const price = (abOverAc: number) =>
         priceLeg({ ...input, facts: { ...facts, abOverAc } }, CONVERGING, {
           "tap-converging-rect": table,
@@ -455,8 +458,11 @@ it("a bullhead (entered from its branch, the main bringing air both ways) prices
   // Was ER5-5 Cb1 at clamped Ab1/Ac 1; ruling (c), P-102: 352/96 exceeds 1.
   expect(rect.lossInWg).toBeNull();
   expect(rect.unpriced).toContain("outside table");
-  expect(LOSS_RULES.filter((rule) => rule.when(facts, { q: 400, qb: 300, qc: 400, qs: 100 })).map((rule) => rule.key))
-    .toEqual(["bullhead-converging-rect"]);
+  expect(
+    LOSS_RULES.filter((rule) => rule.when(facts, { q: 400, qb: 300, qc: 400, qs: 100 })).map(
+      (rule) => rule.key,
+    ),
+  ).toEqual(["bullhead-converging-rect"]);
 
   // The round bullhead: a 6 in collar on an 8 in main, ED5-4 at Ab1/Ac = Ab2/Ac 1.78, outside 1.
   const round = nodeOf(9, "fitting", {
@@ -516,17 +522,15 @@ it("a round elbow read with centerRadius but no rOverD still finds its rule (liv
     diameterIn: 10,
     point: [0, 0, 0],
   });
-  const elbow = { uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(14606857).toString(16).padStart(8, "0")}`,
+  const elbow = {
+    uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${(14606857).toString(16).padStart(8, "0")}`,
     id: 14606857,
     kind: "fitting",
     family: "Round Elbow",
     type: "0.75 D",
     partType: "Elbow",
     connectors: [port(0), port(1)],
-    facts: [
-      factOf("angle", 90),
-      factOf("centerRadius", 7.5),
-    ],
+    facts: [factOf("angle", 90), factOf("centerRadius", 7.5)],
   } as never;
   const facts = fittingFacts({
     fitting: elbow,

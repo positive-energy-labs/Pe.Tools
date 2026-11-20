@@ -3,7 +3,11 @@ import { POLL_PERIOD_MS, machineForRead } from "../src/machine.ts";
 
 const at = (ms: number) => new Date(ms).toISOString();
 const machine = (observedAtUtc: string | null) =>
-  ({ legs: observedAtUtc ? { sessions: { observedAtUtc, attemptedAtUtc: observedAtUtc, error: null } } : {} }) as never;
+  ({
+    legs: observedAtUtc
+      ? { sessions: { observedAtUtc, attemptedAtUtc: observedAtUtc, error: null } }
+      : {},
+  }) as never;
 const now = Date.parse("2026-11-10T08:00:00.000Z");
 
 test("a catalog read reuses a census younger than one poll period and starts no pass", async () => {

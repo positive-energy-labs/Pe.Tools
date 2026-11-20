@@ -1,13 +1,15 @@
 import * as contracts from "./contract.ts";
 import { z } from "zod";
-import { route, field, read, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
+import { route, field, read, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import type { ReadingState } from "@pe/agent-contracts";
-import { hostRead } from "../route/host-read";
-import { draw } from "../route/draw";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 import { handle } from "@pe/agent-contracts/handle";
-import { takeoffsRouteState,
+import {
+  takeoffsRouteState,
   routeStatePatchSchema,
-  canonicalRouteInput, } from "@pe/agent-contracts";
+  canonicalRouteInput,
+} from "@pe/agent-contracts";
 
 import {
   threadListFields,
@@ -34,15 +36,20 @@ export const loaded = read(
     work: page.work,
   }),
 );
-export const viewCatalogue = read(
-  hostRead(contracts.views),
-  (page: { work: string }) => ({ work: page.work }),
-);
+export const viewCatalogue = read(hostRead(contracts.views), (page: { work: string }) => ({
+  work: page.work,
+}));
 export const patches = z.array(routeStatePatchSchema);
 /** The adoption pane draws the view catalogue it chooses from: the core refuses until views and zones
  * are chosen ("choose explicit zones"), and the chooser is the control that clears that refusal. */
 export type AdoptionContext = Omit<
-  ContextOf<typeof fields, typeof viewCatalogue, typeof takeoffsRouteState, typeof patches, Verbs<never, "initialize" | "adopt">>,
+  ContextOf<
+    typeof fields,
+    typeof viewCatalogue,
+    typeof takeoffsRouteState,
+    typeof patches,
+    Verbs<never, "initialize" | "adopt">
+  >,
   "read"
 > & {
   // Named, not generic: wrapping the adoption data in the generic `read`'s `ReadingState` exceeds tsc's

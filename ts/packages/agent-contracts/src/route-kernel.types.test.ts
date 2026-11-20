@@ -343,7 +343,10 @@ export function criticRefusals(
   // @ts-expect-error typed cells reject undeclared keys
   podBodies.cellGroup.run("anything");
   // @ts-expect-error a subject is a SubjectRef code, never a tagged object
-  const wrongSubject: PageOf<typeof podData, typeof schemas>["system"] = { kind: "manual", id: "x" };
+  const wrongSubject: PageOf<typeof podData, typeof schemas>["system"] = {
+    kind: "manual",
+    id: "x",
+  };
   void wrongSubject;
   const omittedGeometry = {
     ...podData,

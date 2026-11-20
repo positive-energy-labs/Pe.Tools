@@ -14,9 +14,9 @@ import {
 } from "@pe/host-contracts/pe-revit-contract";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { runPeRevitCli } from "./session-route.ts";
-import { io, refused, StepFailure } from "./command-executor.ts";
+import { io, refused, StepFailure } from "@pe/host-internal/command-executor";
 import { markDispatched, validateDispatch } from "./action-dispatch.ts";
-import type { ActionExecution, StepOptions } from "./action-journal.ts";
+import type { ActionExecution, StepOptions } from "@pe/host-internal/action-execution";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 
 /** SDK supervisor requests and Revit requests share one UUID, but have different refusal evidence. */
@@ -55,15 +55,13 @@ const NOT_DISPATCHED = new Set([
 export async function namedSdkSession(id: string, read: SdkReceiptReader) {
   const args = sessionListArgv({ all: true });
   const envelope = await sdkEnvelope(args, read);
-  if (envelope.diagnostics.length)
-    throw refused(`The SDK does not name one session '${id}'`);
+  if (envelope.diagnostics.length) throw refused(`The SDK does not name one session '${id}'`);
   const result = decodePeRevitPayload("SessionListResult", envelope.result);
   const rows = result.sessions.filter(
     (row): row is Exclude<SessionObservation, { case: "observed-active" }> =>
       "id" in row && row.id === id,
   );
-  if (rows.length > 1)
-    throw refused(`The SDK does not name one session '${id}'`);
+  if (rows.length > 1) throw refused(`The SDK does not name one session '${id}'`);
   return rows[0] ?? null;
 }
 
@@ -91,7 +89,8 @@ export async function dispatchSdk(
   // K1c: no claim holds a live Revit's year, so a start that expected no session row and met one is
   // the SDK's refusal; its detail names the session. An adoption or a recorded-session expectation is not.
   const said =
-    input.expectSession === "absent" && envelope.diagnostics.some((d) => d.code === "op.stale-expectation")
+    input.expectSession === "absent" &&
+    envelope.diagnostics.some((d) => d.code === "op.stale-expectation")
       ? `Revit${args.includes("--year") ? ` ${args[args.indexOf("--year") + 1]}` : ""} already has a session, so nothing was started. Use that session or stop it first. (${sdkSaid})`
       : sdkSaid;
   if (args[0] === "bootstrap") {

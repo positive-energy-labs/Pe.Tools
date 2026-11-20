@@ -1,5 +1,5 @@
 import type { Caller } from "@pe/agent-contracts";
-import type { HostBridgeEvent } from "../src/bridge.ts";
+import type { HostBridgeEvent } from "@pe/host-internal/bridge";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot, settingsSchemaRoute } from "../src/app.ts";
@@ -10,12 +10,14 @@ import { expect, test, vi } from "vite-plus/test";
 import { detachedBridge, sessionView, effectTest, settle, captureLogs } from "./effect-test.ts";
 import { NativeReads, NativeReadLimits } from "../src/native-reads.ts";
 import { commandReadOwnership } from "../src/command-reads.ts";
-import { RevitBridge, CANCEL_OPERATION_KEY } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
 import type { DoorFailure, NativeAnswer, NativeOutcome } from "@pe/host-internal/request-contracts";
 import { HttpRouter } from "effect/http";
 import { retainedDuctsRead } from "../src/call-route.ts";
-import { RequestIdentity, admittedRequestIdentity, readSchemas } from "../src/request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
+import { readSchemas } from "../src/request-services.ts";
 import { httpProblems } from "../src/http-problems.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
@@ -100,84 +102,116 @@ const makeHarness = (holdCancel = false) =>
   });
 const harness = makeHarness();
 
-effectTest("native response decode names the first Ajv path and keyword in the 502 and host log", () => {
-  const logs = captureLogs();
-  return Effect.gen(function* () {
-    const { reads, jobs, answer } = yield* harness;
-    const schemas = yield* readSchemas("mep.system.members");
-    const read = yield* prepareRead({ ...descriptor, operationKey: "mep.system.members" }, {}, schemas.request, schemas.response);
-    const pending = yield* reads.join(read, "session").pipe(Effect.result, Effect.forkScoped);
-    yield* until(() => jobs.length === 1);
-    yield* answer(0, { systems: "invalid", elements: [] });
-    yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
-    const result = yield* Fiber.join(pending);
-    expect(result._tag).toBe("Failure");
-    if (result._tag !== "Failure") return;
-    const web = HttpRouter.toWebHandler(HttpRouter.add("GET", "/decode", () => Effect.fail(result.failure))
-      .pipe(Layer.provide(httpProblems)), { disableLogger: true });
-    yield* Effect.addFinalizer(() => Effect.promise(web.dispose));
-    const response = yield* Effect.promise(() => web.handler(new Request("http://host/decode")));
-    expect(response.status).toBe(502);
-    const problem = yield* Effect.promise(() => response.json());
-    expect(problem).toMatchObject({ problem: "read.response", message: expect.stringContaining("/systems (type)") });
-    const logged = logs.lines.find((line) => JSON.stringify(line.message).includes("Native read decode failed"));
-    expect(JSON.stringify(logged?.message)).toContain("op=mep.system.members");
-    expect(JSON.stringify(logged?.message)).toContain("/systems (type)");
-  }).pipe(Effect.provide(logs.layer));
-});
-
-effectTest("command reads wait for native cleanup after the answer; Stop detaches only their lease", () =>
-  Effect.gen(function* () {
-    const { reads, jobs, answer, cancels } = yield* harness;
-    const prepared = yield* prepare();
-    const identity = admittedRequestIdentity({ kind: "human", via: "local" }, {});
-    const owned = commandReadOwnership({
-      resolve: () => Effect.die("unused"),
-      read: () => Effect.flatMap(RequestIdentity, (owner) => reads.join(prepared, "session", owner)),
-    }, reads);
-    const owner = owned.readOwnership.open(identity);
-    const flight = yield* owned.nativeRead!.read({ key: "revit.detail.space-scene", input: {}, scope: {} })
-      .pipe(Effect.provideService(RequestIdentity, identity), Effect.forkScoped);
-    yield* until(() => jobs.length === 1);
-    yield* answer(0);
-    yield* Fiber.join(flight);
-    expect(owner.state().kind).toBe("unsettled");
-    const settled = yield* Effect.forkScoped(Effect.promise(() => owner.settle()));
-    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
-    expect(settled.pollUnsafe()).toBeUndefined();
-    yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
-    expect((yield* Fiber.join(settled)).kind).toBe("settled");
-    expect(cancels).toEqual([]);
-  }),
+effectTest(
+  "native response decode names the first Ajv path and keyword in the 502 and host log",
+  () => {
+    const logs = captureLogs();
+    return Effect.gen(function* () {
+      const { reads, jobs, answer } = yield* harness;
+      const schemas = yield* readSchemas("mep.system.members");
+      const read = yield* prepareRead(
+        { ...descriptor, operationKey: "mep.system.members" },
+        {},
+        schemas.request,
+        schemas.response,
+      );
+      const pending = yield* reads.join(read, "session").pipe(Effect.result, Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      yield* answer(0, { systems: "invalid", elements: [] });
+      yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+      const result = yield* Fiber.join(pending);
+      expect(result._tag).toBe("Failure");
+      if (result._tag !== "Failure") return;
+      const web = HttpRouter.toWebHandler(
+        HttpRouter.add("GET", "/decode", () => Effect.fail(result.failure)).pipe(
+          Layer.provide(httpProblems),
+        ),
+        { disableLogger: true },
+      );
+      yield* Effect.addFinalizer(() => Effect.promise(web.dispose));
+      const response = yield* Effect.promise(() => web.handler(new Request("http://host/decode")));
+      expect(response.status).toBe(502);
+      const problem = yield* Effect.promise(() => response.json());
+      expect(problem).toMatchObject({
+        problem: "read.response",
+        message: expect.stringContaining("/systems (type)"),
+      });
+      const logged = logs.lines.find((line) =>
+        JSON.stringify(line.message).includes("Native read decode failed"),
+      );
+      expect(JSON.stringify(logged?.message)).toContain("op=mep.system.members");
+      expect(JSON.stringify(logged?.message)).toContain("/systems (type)");
+    }).pipe(Effect.provide(logs.layer));
+  },
 );
 
-effectTest("command Stop cannot settle unknown native work or cancel another owner's read lease", () =>
-  Effect.gen(function* () {
-    const { reads, jobs, answer, cancels } = yield* harness;
-    const prepared = yield* prepare();
-    const identity = admittedRequestIdentity({ kind: "human", via: "local" }, {});
-    const peer = admittedRequestIdentity({ kind: "human", via: "local" }, {});
-    const owned = commandReadOwnership({ resolve: () => Effect.die("unused"),
-      read: () => Effect.flatMap(RequestIdentity, (owner) => reads.join(prepared, "session", owner)),
-    }, reads);
-    const owner = owned.readOwnership.open(identity);
-    const read = yield* owned.nativeRead!.read({ key: "revit.detail.space-scene", input: {}, scope: {} })
-      .pipe(Effect.provideService(RequestIdentity, identity), Effect.forkScoped);
-    yield* until(() => jobs.length === 1);
-    const other = yield* reads.join(prepared, "session", peer).pipe(Effect.forkScoped);
-    yield* Effect.yieldNow;
-    expect((yield* reads.retained).joiners).toBe(2);
-    yield* Effect.promise(() => owner.requestStop());
-    yield* Fiber.await(read);
-    expect(cancels).toEqual([]);
-    const settled = yield* Effect.forkScoped(Effect.promise(() => owner.settle()));
-    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
-    expect(settled.pollUnsafe()).toBeUndefined();
-    yield* answer(0);
-    yield* Fiber.join(other);
-    yield* Deferred.succeed(jobs[0]!.terminal, "unknown-until-reconciled");
-    expect((yield* Fiber.join(settled)).kind).toBe("unsettled");
-  }),
+effectTest(
+  "command reads wait for native cleanup after the answer; Stop detaches only their lease",
+  () =>
+    Effect.gen(function* () {
+      const { reads, jobs, answer, cancels } = yield* harness;
+      const prepared = yield* prepare();
+      const identity = admittedRequestIdentity({ kind: "human", via: "local" }, {});
+      const owned = commandReadOwnership(
+        {
+          resolve: () => Effect.die("unused"),
+          read: () =>
+            Effect.flatMap(RequestIdentity, (owner) => reads.join(prepared, "session", owner)),
+        },
+        reads,
+      );
+      const owner = owned.readOwnership.open(identity);
+      const flight = yield* owned
+        .nativeRead!.read({ key: "revit.detail.space-scene", input: {}, scope: {} })
+        .pipe(Effect.provideService(RequestIdentity, identity), Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      yield* answer(0);
+      yield* Fiber.join(flight);
+      expect(owner.state().kind).toBe("unsettled");
+      const settled = yield* Effect.forkScoped(Effect.promise(() => owner.settle()));
+      yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      expect(settled.pollUnsafe()).toBeUndefined();
+      yield* Deferred.succeed(jobs[0]!.terminal, "native-acknowledged");
+      expect((yield* Fiber.join(settled)).kind).toBe("settled");
+      expect(cancels).toEqual([]);
+    }),
+);
+
+effectTest(
+  "command Stop cannot settle unknown native work or cancel another owner's read lease",
+  () =>
+    Effect.gen(function* () {
+      const { reads, jobs, answer, cancels } = yield* harness;
+      const prepared = yield* prepare();
+      const identity = admittedRequestIdentity({ kind: "human", via: "local" }, {});
+      const peer = admittedRequestIdentity({ kind: "human", via: "local" }, {});
+      const owned = commandReadOwnership(
+        {
+          resolve: () => Effect.die("unused"),
+          read: () =>
+            Effect.flatMap(RequestIdentity, (owner) => reads.join(prepared, "session", owner)),
+        },
+        reads,
+      );
+      const owner = owned.readOwnership.open(identity);
+      const read = yield* owned
+        .nativeRead!.read({ key: "revit.detail.space-scene", input: {}, scope: {} })
+        .pipe(Effect.provideService(RequestIdentity, identity), Effect.forkScoped);
+      yield* until(() => jobs.length === 1);
+      const other = yield* reads.join(prepared, "session", peer).pipe(Effect.forkScoped);
+      yield* Effect.yieldNow;
+      expect((yield* reads.retained).joiners).toBe(2);
+      yield* Effect.promise(() => owner.requestStop());
+      yield* Fiber.await(read);
+      expect(cancels).toEqual([]);
+      const settled = yield* Effect.forkScoped(Effect.promise(() => owner.settle()));
+      yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+      expect(settled.pollUnsafe()).toBeUndefined();
+      yield* answer(0);
+      yield* Fiber.join(other);
+      yield* Deferred.succeed(jobs[0]!.terminal, "unknown-until-reconciled");
+      expect((yield* Fiber.join(settled)).kind).toBe("unsettled");
+    }),
 );
 
 effectTest(
@@ -308,35 +342,51 @@ effectTest(
       let connected = true;
       let sdkCalls = 0;
       let sharedReads: NativeReads["Service"] | undefined;
-      const jobs: { id: string; openId: string; start: number; answer: Deferred.Deferred<NativeAnswer<unknown, "unavailable">, DoorFailure>; terminal: Deferred.Deferred<NativeOutcome> }[] = [];
+      const jobs: {
+        id: string;
+        openId: string;
+        start: number;
+        answer: Deferred.Deferred<NativeAnswer<unknown, "unavailable">, DoorFailure>;
+        terminal: Deferred.Deferred<NativeOutcome>;
+      }[] = [];
       const bridge = detachedBridge({
-        invokeHandle: (_key, _input, _session, openId, id) => Effect.gen(function* () {
-          const job = { id: id!, openId: openId!, start: processStart,
-            answer: yield* Deferred.make<NativeAnswer<unknown, "unavailable">, DoorFailure>(),
-            terminal: yield* Deferred.make<NativeOutcome>() };
-          jobs.push(job);
-          return { answer: Deferred.await(job.answer), terminal: Deferred.await(job.terminal) };
-        }),
-        list: Effect.sync(() => connected ? [
-          sessionView({
-            ...hostOwnership,
-            connected: true,
-            sessionId: "session",
-            processId: process.pid,
-            processStartUtcUnixMs: processStart,
-            state: {
-              openDocuments: [
-                {
-                  openId: activeOpen,
-                  isActive: true,
-                  isFamilyDocument: false, projectHome: null,
-                  title: "Model",
-                  address: "C:/model.rvt",
-                },
-              ],
-            },
+        invokeHandle: (_key, _input, _session, openId, id) =>
+          Effect.gen(function* () {
+            const job = {
+              id: id!,
+              openId: openId!,
+              start: processStart,
+              answer: yield* Deferred.make<NativeAnswer<unknown, "unavailable">, DoorFailure>(),
+              terminal: yield* Deferred.make<NativeOutcome>(),
+            };
+            jobs.push(job);
+            return { answer: Deferred.await(job.answer), terminal: Deferred.await(job.terminal) };
           }),
-        ] : []),
+        list: Effect.sync(() =>
+          connected
+            ? [
+                sessionView({
+                  ...hostOwnership,
+                  connected: true,
+                  sessionId: "session",
+                  processId: process.pid,
+                  processStartUtcUnixMs: processStart,
+                  state: {
+                    openDocuments: [
+                      {
+                        openId: activeOpen,
+                        isActive: true,
+                        isFamilyDocument: false,
+                        projectHome: null,
+                        title: "Model",
+                        address: "C:/model.rvt",
+                      },
+                    ],
+                  },
+                }),
+              ]
+            : [],
+        ),
       });
       const sdkDriver = () => {
         sdkCalls++;
@@ -363,11 +413,19 @@ effectTest(
           callRouteOver(journal, {} as TakeoffCaptures, {}).pipe(Layer.provide(testHostInputs)),
           settingsSchemaRoute,
           opsCatalogRoute(() => Effect.die("not navigation")),
-          Layer.effectDiscard(Effect.gen(function* () { sharedReads = yield* NativeReads; })),
-        ).pipe(nativeReadRoot(Layer.succeed(SdkDriver, sdkDriver))).pipe(
-          HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
-          Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-        ),
+          Layer.effectDiscard(
+            Effect.gen(function* () {
+              sharedReads = yield* NativeReads;
+            }),
+          ),
+        )
+          .pipe(nativeReadRoot(Layer.succeed(SdkDriver, sdkDriver)))
+          .pipe(
+            HttpRouter.provideRequest(
+              Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici),
+            ),
+            Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+          ),
       );
       yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
       const resolve = (input: object, operationKey = "revit.detail.space-scene") =>
@@ -378,7 +436,13 @@ effectTest(
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ operationKey, input }),
             }),
-            Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, { bridgeSessionId: "session" })),
+            Context.make(
+              RequestIdentity,
+              admittedRequestIdentity(
+                { kind: "human", via: "local" },
+                { bridgeSessionId: "session" },
+              ),
+            ),
           );
           return { status: response.status, body: await response.json() };
         });
@@ -397,10 +461,28 @@ effectTest(
       expect((yield* resolve({}, "missing.operation")).status).toBe(409);
       // The GET route reads by library path, the stored `$schema` form, so it shares a /call that passes it.
       const schemaUrl = "http://host/schemas/settings/ff/Family.json";
-      const request = (call = false, anonymous = false) => Effect.promise(() => web.handler(
-        call ? new Request("http://host/call", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "settings.schema", request: { schemaUrl: new URL(schemaUrl).pathname } }) }) : new Request(schemaUrl, { headers: { host: "host" } }),
-        Context.make(RequestIdentity, admittedRequestIdentity(anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" }, { bridgeSessionId: "session" })),
-      ));
+      const request = (call = false, anonymous = false) =>
+        Effect.promise(() =>
+          web.handler(
+            call
+              ? new Request("http://host/call", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({
+                    key: "settings.schema",
+                    request: { schemaUrl: new URL(schemaUrl).pathname },
+                  }),
+                })
+              : new Request(schemaUrl, { headers: { host: "host" } }),
+            Context.make(
+              RequestIdentity,
+              admittedRequestIdentity(
+                anonymous ? { kind: "anonymous" } : { kind: "human", via: "local" },
+                { bridgeSessionId: "session" },
+              ),
+            ),
+          ),
+        );
       const call = yield* request(true).pipe(Effect.forkScoped);
       yield* until(() => jobs.length === 1);
       const sibling = yield* request().pipe(Effect.forkScoped);
@@ -419,12 +501,23 @@ effectTest(
       const replacementProcess = yield* request().pipe(Effect.forkScoped);
       yield* until(() => jobs.length === 4);
       expect(jobs.map((job) => [job.openId, job.start])).toEqual([
-        ["open-a", 1000], ["open-b", 1000], ["open-b", 1000], ["open-b", 2000],
+        ["open-a", 1000],
+        ["open-b", 1000],
+        ["open-b", 1000],
+        ["open-b", 2000],
       ]);
       for (const job of jobs) {
-        yield* Deferred.succeed(job.answer, { value: { schemaJson: "{}" }, nativeRequestId: job.id,
-          actualTarget: { processIncarnation: { pid: process.pid, startedAt: job.start }, openDocumentLifetime: { openId: job.openId } },
-          freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" }, cost: {}, outcome: "native-acknowledged" });
+        yield* Deferred.succeed(job.answer, {
+          value: { schemaJson: "{}" },
+          nativeRequestId: job.id,
+          actualTarget: {
+            processIncarnation: { pid: process.pid, startedAt: job.start },
+            openDocumentLifetime: { openId: job.openId },
+          },
+          freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" },
+          cost: {},
+          outcome: "native-acknowledged",
+        });
         yield* Deferred.succeed(job.terminal, "native-acknowledged");
       }
       const callResponse = yield* Fiber.join(call);
@@ -436,19 +529,36 @@ effectTest(
         expect(yield* Effect.promise(() => response.text())).toBe("{}");
       }
 
-      const conflict = yield* Effect.promise(() => web.handler(new Request("http://host/ops?session=other", { headers: { "x-pe-bridge-session-id": "session" } }),
-        Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {}))));
+      const conflict = yield* Effect.promise(() =>
+        web.handler(
+          new Request("http://host/ops?session=other", {
+            headers: { "x-pe-bridge-session-id": "session" },
+          }),
+          Context.make(
+            RequestIdentity,
+            admittedRequestIdentity({ kind: "human", via: "local" }, {}),
+          ),
+        ),
+      );
       expect(conflict.status).toBe(400);
       connected = false;
       const beforeFallback = sdkCalls;
-      const fallback = yield* Effect.promise(() => web.handler(new Request("http://host/ops"),
-        Context.make(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {}))));
+      const fallback = yield* Effect.promise(() =>
+        web.handler(
+          new Request("http://host/ops"),
+          Context.make(
+            RequestIdentity,
+            admittedRequestIdentity({ kind: "human", via: "local" }, {}),
+          ),
+        ),
+      );
       expect(fallback.status).toBe(200);
       const catalog = yield* Effect.promise(() => fallback.json());
-      expect(catalog.operations.some((op: { key: string }) => op.key === "revit.detail.elements")).toBe(true);
+      expect(
+        catalog.operations.some((op: { key: string }) => op.key === "revit.detail.elements"),
+      ).toBe(true);
       expect(catalog.bridgeCatalogError).toBe("No Revit session is connected to the bridge.");
       expect(sdkCalls).toBe(beforeFallback);
-
     }),
 );
 
@@ -460,7 +570,8 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
   const { ActionJournal } = await import("../src/action-journal.ts");
   const { NATIVE_BODY_VERSION_HEADER } = await import("@pe/agent-contracts");
   const { DUCTS_REFRESH_HEADER } = await import("@pe/ducts-contract/reading");
-  const { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } = await import("@pe/host-contracts/operation-types");
+  const { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } =
+    await import("@pe/host-contracts/operation-types");
   const { human, pea } = await import("./callers.ts");
   const { sdkSessions } = await import("./native-receipt-fixture.ts");
   const { readSessionScope } = await import("../src/sdk-session.ts");
@@ -475,41 +586,97 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
   let wait = Promise.resolve();
   let release = () => {};
   const bridge = detachedBridge({
-    list: Effect.sync(() => [sessionView({
-      connected: true, sessionId: target.session, sdkSessionId: "dev", ...hostOwnership,
-      processId: 42, processStartUtcUnixMs: observedStart,
-      state: { openDocuments: [{ openId: target.openId, address: "C:/HVAC.rvt", title: "HVAC", isFamilyDocument: false, projectHome: null }] },
-    })]),
-    subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    invokeHandle: (key, _input, _session, openId, id) => Effect.gen(function* () {
-      nativeIds.push(id!);
-      const pending = wait;
-      const start = wrongAnswer ? 2000 : observedStart;
-      const answer = yield* Effect.cached(Effect.promise(async () => {
-        await pending;
-        return { value: key === "ducts.tables" ? { folder: "fixture", tables: {}, missing: [], unsupported: {} } : snapshot,
-          nativeRequestId: id!, actualTarget: { processIncarnation: { pid: 42, startedAt: start },
-            openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const } },
-          freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const }, cost: {}, outcome: "native-acknowledged" as const };
-      }));
-      return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
-    }),
+    list: Effect.sync(() => [
+      sessionView({
+        connected: true,
+        sessionId: target.session,
+        sdkSessionId: "dev",
+        ...hostOwnership,
+        processId: 42,
+        processStartUtcUnixMs: observedStart,
+        state: {
+          openDocuments: [
+            {
+              openId: target.openId,
+              address: "C:/HVAC.rvt",
+              title: "HVAC",
+              isFamilyDocument: false,
+              projectHome: null,
+            },
+          ],
+        },
+      }),
+    ]),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    invokeHandle: (key, _input, _session, openId, id) =>
+      Effect.gen(function* () {
+        nativeIds.push(id!);
+        const pending = wait;
+        const start = wrongAnswer ? 2000 : observedStart;
+        const answer = yield* Effect.cached(
+          Effect.promise(async () => {
+            await pending;
+            return {
+              value:
+                key === "ducts.tables"
+                  ? { folder: "fixture", tables: {}, missing: [], unsupported: {} }
+                  : snapshot,
+              nativeRequestId: id!,
+              actualTarget: {
+                processIncarnation: { pid: 42, startedAt: start },
+                openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const },
+              },
+              freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+              cost: {},
+              outcome: "native-acknowledged" as const,
+            };
+          }),
+        );
+        return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
+      }),
   });
   const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
   const web = HttpRouter.toWebHandler(
     callRouteOver(journal, undefined, { sdk: sdkSessions }, { captureHostOp: () => {} }).pipe(
       nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
       HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici)),
-      Layer.provide(testHostInputs), Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
-    ), { disableLogger: true },
+      Layer.provide(testHostInputs),
+      Layer.provideMerge(Layer.succeed(RevitBridge, bridge)),
+    ),
+    { disableLogger: true },
   );
-  const post = (key: string, caller: Caller = human, extra: Record<string, string> = {}, session = target.session, input?: unknown) => {
-    const headers = { "content-type": "application/json", [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
-      ...(key !== "ducts.tables" ? { [HOST_RPC_DOCUMENT_HEADER]: target.openId } : {}), ...extra };
+  const post = (
+    key: string,
+    caller: Caller = human,
+    extra: Record<string, string> = {},
+    session = target.session,
+    input?: unknown,
+  ) => {
+    const headers = {
+      "content-type": "application/json",
+      [HOST_RPC_BRIDGE_SESSION_HEADER]: session,
+      ...(key !== "ducts.tables" ? { [HOST_RPC_DOCUMENT_HEADER]: target.openId } : {}),
+      ...extra,
+    };
     const identity = admittedRequestIdentity(caller, readSessionScope(headers));
-    return web.handler(new Request("http://host/call", { method: "POST", headers,
-      body: JSON.stringify({ key, request: input ?? (key === "ducts.tables" ? { ids: ["SD5-9"] } : { selector: { kind: "ids", ids: [1] } }) }),
-    }), Context.make(RequestIdentity, identity));
+    return web.handler(
+      new Request("http://host/call", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          key,
+          request:
+            input ??
+            (key === "ducts.tables" ? { ids: ["SD5-9"] } : { selector: { kind: "ids", ids: [1] } }),
+        }),
+      }),
+      Context.make(RequestIdentity, identity),
+    );
   };
   try {
     for (const key of ["ducts.snapshot.walk", "ducts.tables"]) {
@@ -523,9 +690,16 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
       cold.resolve();
       const [first, joined] = await Promise.all([firstRead, joinedRead]);
       expect(joined.status, await joined.clone().text()).toBe(200);
-      expect(joined.headers.get("x-pe-native-request-id")).toBe(first.headers.get("x-pe-native-request-id"));
-      expect(joined.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(first.headers.get(NATIVE_BODY_VERSION_HEADER));
-      expect([first, joined].map((response) => response.headers.get("x-pe-ducts-reused"))).toEqual(["false", "false"]);
+      expect(joined.headers.get("x-pe-native-request-id")).toBe(
+        first.headers.get("x-pe-native-request-id"),
+      );
+      expect(joined.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(
+        first.headers.get(NATIVE_BODY_VERSION_HEADER),
+      );
+      expect([first, joined].map((response) => response.headers.get("x-pe-ducts-reused"))).toEqual([
+        "false",
+        "false",
+      ]);
       wait = Promise.resolve();
       expect(first.status, await first.clone().text()).toBe(200);
       expect(first.headers.get("x-pe-ducts-reused")).toBe("false");
@@ -538,13 +712,19 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
       expect(next.headers.get("x-pe-ducts-reused")).toBe("true");
       expect(await next.json()).toEqual(await first.json());
       expect(nativeIds).toHaveLength(before + 1);
-      expect((await post(key, { kind: "anonymous" }, { [NATIVE_BODY_VERSION_HEADER]: version })).status).toBe(403);
+      expect(
+        (await post(key, { kind: "anonymous" }, { [NATIVE_BODY_VERSION_HEADER]: version })).status,
+      ).toBe(403);
       expect((await post(key, pea(), { [NATIVE_BODY_VERSION_HEADER]: version })).status).toBe(200);
-      expect((await post(key, human, { [NATIVE_BODY_VERSION_HEADER]: "missing" })).status).toBe(409);
+      expect((await post(key, human, { [NATIVE_BODY_VERSION_HEADER]: "missing" })).status).toBe(
+        409,
+      );
       expect((await post(key, human, {}, "foreign-session")).status).toBe(409);
       expect((await post(key, human, {}, target.session, { unexpected: true })).status).toBe(400);
       if (key !== "ducts.tables")
-        expect((await post(key, human, { [HOST_RPC_DOCUMENT_HEADER]: "foreign-open" })).status).toBe(409);
+        expect(
+          (await post(key, human, { [HOST_RPC_DOCUMENT_HEADER]: "foreign-open" })).status,
+        ).toBe(409);
       observedStart = 2000;
       expect((await post(key, human, { [NATIVE_BODY_VERSION_HEADER]: version })).status).toBe(409);
       observedStart = 1000;
@@ -559,7 +739,9 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
       const [a, b] = await Promise.all([one, two]);
       expect(a.status, await a.clone().text()).toBe(200);
       expect(b.status, await b.clone().text()).toBe(200);
-      expect(a.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(b.headers.get(NATIVE_BODY_VERSION_HEADER));
+      expect(a.headers.get(NATIVE_BODY_VERSION_HEADER)).toBe(
+        b.headers.get(NATIVE_BODY_VERSION_HEADER),
+      );
       expect(a.headers.get(NATIVE_BODY_VERSION_HEADER)).not.toBe(version);
       expect(a.headers.get("x-pe-native-request-id")).toBe(b.headers.get("x-pe-native-request-id"));
       expect(nativeIds).toHaveLength(before + 2);
@@ -568,7 +750,9 @@ test("retained /fans acquisition admits every caller and keeps miss, refresh and
     const retained = await post("ducts.snapshot.walk");
     const version = retained.headers.get(NATIVE_BODY_VERSION_HEADER)!;
     wrongAnswer = true;
-    const mismatched = await post("ducts.snapshot.walk", human, { [DUCTS_REFRESH_HEADER]: version });
+    const mismatched = await post("ducts.snapshot.walk", human, {
+      [DUCTS_REFRESH_HEADER]: version,
+    });
     expect(mismatched.status).toBe(409);
     expect(await mismatched.text()).toContain("Native read target changed");
   } finally {
@@ -587,68 +771,150 @@ import { serveRoutes } from "./real-server.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 
-test.each([false, true])("retained Ducts abort both=%s preserves shared native custody and request admission", async (both) => {
-  let dispatches = 0, cancels = 0;
-  const identities: string[] = [];
-  let reads: NativeReads["Service"];
-  let finish = () => {};
-  const bridge = detachedBridge({
-    list: Effect.succeed([sessionView({ ...hostOwnership, connected: true, sessionId: "session", processId: 42,
-      processStartUtcUnixMs: 1000, state: { openDocuments: [{ openId: "open-a", isActive: true, title: "Model", address: "C:/model.rvt" }] } })]),
-    invokeHandle: (_key, _input, _session, _open, id) => Effect.gen(function* () {
-      dispatches++;
-      const gate = yield* Deferred.make<void>();
-      finish = () => { void settle(Deferred.succeed(gate, undefined)); };
-      return { answer: Deferred.await(gate).pipe(Effect.as({ value: snapshot, nativeRequestId: id!,
-        actualTarget: { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: { openId: "open-a" } },
-        freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const }, cost: {}, outcome: "native-acknowledged" as const })),
-        terminal: Deferred.await(gate).pipe(Effect.as("native-acknowledged" as const)) };
-    }),
-    invoke: (key) => Effect.sync(() => {
-      expect(key).toBe(CANCEL_OPERATION_KEY); cancels++;
-      return { value: {}, target: { session: "session", document: null } };
-    }),
-  });
-  const decorated = Layer.effect(HostNativeRead, Effect.gen(function* () {
-    const native = yield* HostNativeRead;
-    reads = yield* NativeReads;
-    return { ...native, read: (input: Parameters<typeof native.read>[0]) => Effect.gen(function* () {
-      identities.push((yield* RequestIdentity).requestId);
-      return yield* native.read(input);
-    }) };
-  })).pipe(Layer.provide(HostNativeReadLive));
-  const owner = new DuctsReadings();
-  const server = await serveRoutes(HttpRouter.add("POST", "/call", () => retainedDuctsRead(owner,
-    { key: "ducts.snapshot.roster", input: { selector: { kind: "roster" } }, scope: { bridgeSessionId: "session", openDocumentId: "open-a" } }, {},
-    { document: () => Effect.succeed({ session: "session", openId: "open-a", address: addressSchema.parse("C:/model.rvt") }) },
-  )).pipe(HttpRouter.provideRequest(decorated)), bridge,
-    Layer.succeed(SdkDriver, () => Effect.succeed(replay("doc-list", { result: { documents: [] }, resolved: {
-      payload: hostOwnership.lane === "dev" ? "checkout" : "installed", sourceRoot: hostOwnership.sourceRoot,
-      installedRoot: hostOwnership.installedRoot, pid: 42, processStartUtc: new Date(1000).toISOString(),
-      id: null, how: null, buildStamp: null, observedAtUtc: new Date(1000).toISOString(), origin: null,
-    } }))));
-  const controllers = [new AbortController(), new AbortController()];
-  const token = mintContext({ kind: "human", via: "cli" });
-  const responses = controllers.map((controller) => fetch(`${server.base}/call`, { method: "POST", signal: controller.signal,
-    headers: { "x-pe-context": token } }).catch(() => undefined));
-  try {
-    await expect.poll(async () => reads && (await settle(reads.retained)).joiners).toBe(2);
-    expect(new Set(identities).size).toBe(2);
-    controllers[0]!.abort(); await responses[0];
-    await expect.poll(async () => (await settle(reads.retained)).joiners).toBe(1);
-    expect(cancels).toBe(0);
-    if (both) {
-      controllers[1]!.abort(); await responses[1];
-      await expect.poll(() => cancels).toBe(1);
-    } else {
-      finish();
-      const response = (await responses[1])!;
-      expect(response.status).toBe(200); expect(await response.json()).toEqual(snapshot);
+test.each([false, true])(
+  "retained Ducts abort both=%s preserves shared native custody and request admission",
+  async (both) => {
+    let dispatches = 0,
+      cancels = 0;
+    const identities: string[] = [];
+    let reads: NativeReads["Service"];
+    let finish = () => {};
+    const bridge = detachedBridge({
+      list: Effect.succeed([
+        sessionView({
+          ...hostOwnership,
+          connected: true,
+          sessionId: "session",
+          processId: 42,
+          processStartUtcUnixMs: 1000,
+          state: {
+            openDocuments: [
+              { openId: "open-a", isActive: true, title: "Model", address: "C:/model.rvt" },
+            ],
+          },
+        }),
+      ]),
+      invokeHandle: (_key, _input, _session, _open, id) =>
+        Effect.gen(function* () {
+          dispatches++;
+          const gate = yield* Deferred.make<void>();
+          finish = () => {
+            void settle(Deferred.succeed(gate, undefined));
+          };
+          return {
+            answer: Deferred.await(gate).pipe(
+              Effect.as({
+                value: snapshot,
+                nativeRequestId: id!,
+                actualTarget: {
+                  processIncarnation: { pid: 42, startedAt: 1000 },
+                  openDocumentLifetime: { openId: "open-a" },
+                },
+                freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+                cost: {},
+                outcome: "native-acknowledged" as const,
+              }),
+            ),
+            terminal: Deferred.await(gate).pipe(Effect.as("native-acknowledged" as const)),
+          };
+        }),
+      invoke: (key) =>
+        Effect.sync(() => {
+          expect(key).toBe(CANCEL_OPERATION_KEY);
+          cancels++;
+          return { value: {}, target: { session: "session", document: null } };
+        }),
+    });
+    const decorated = Layer.effect(
+      HostNativeRead,
+      Effect.gen(function* () {
+        const native = yield* HostNativeRead;
+        reads = yield* NativeReads;
+        return {
+          ...native,
+          read: (input: Parameters<typeof native.read>[0]) =>
+            Effect.gen(function* () {
+              identities.push((yield* RequestIdentity).requestId);
+              return yield* native.read(input);
+            }),
+        };
+      }),
+    ).pipe(Layer.provide(HostNativeReadLive));
+    const owner = new DuctsReadings();
+    const server = await serveRoutes(
+      HttpRouter.add("POST", "/call", () =>
+        retainedDuctsRead(
+          owner,
+          {
+            key: "ducts.snapshot.roster",
+            input: { selector: { kind: "roster" } },
+            scope: { bridgeSessionId: "session", openDocumentId: "open-a" },
+          },
+          {},
+          {
+            document: () =>
+              Effect.succeed({
+                session: "session",
+                openId: "open-a",
+                address: addressSchema.parse("C:/model.rvt"),
+              }),
+          },
+        ),
+      ).pipe(HttpRouter.provideRequest(decorated)),
+      bridge,
+      Layer.succeed(SdkDriver, () =>
+        Effect.succeed(
+          replay("doc-list", {
+            result: { documents: [] },
+            resolved: {
+              payload: hostOwnership.lane === "dev" ? "checkout" : "installed",
+              sourceRoot: hostOwnership.sourceRoot,
+              installedRoot: hostOwnership.installedRoot,
+              pid: 42,
+              processStartUtc: new Date(1000).toISOString(),
+              id: null,
+              how: null,
+              buildStamp: null,
+              observedAtUtc: new Date(1000).toISOString(),
+              origin: null,
+            },
+          }),
+        ),
+      ),
+    );
+    const controllers = [new AbortController(), new AbortController()];
+    const token = mintContext({ kind: "human", via: "cli" });
+    const responses = controllers.map((controller) =>
+      fetch(`${server.base}/call`, {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "x-pe-context": token },
+      }).catch(() => undefined),
+    );
+    try {
+      await expect.poll(async () => reads && (await settle(reads.retained)).joiners).toBe(2);
+      expect(new Set(identities).size).toBe(2);
+      controllers[0]!.abort();
+      await responses[0];
+      await expect.poll(async () => (await settle(reads.retained)).joiners).toBe(1);
       expect(cancels).toBe(0);
+      if (both) {
+        controllers[1]!.abort();
+        await responses[1];
+        await expect.poll(() => cancels).toBe(1);
+      } else {
+        finish();
+        const response = (await responses[1])!;
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual(snapshot);
+        expect(cancels).toBe(0);
+      }
+      expect(dispatches).toBe(1);
+    } finally {
+      controllers.forEach((controller) => controller.abort());
+      finish();
+      retireContext(token);
+      await server.close();
     }
-    expect(dispatches).toBe(1);
-  } finally {
-    controllers.forEach((controller) => controller.abort()); finish();
-    retireContext(token); await server.close();
-  }
-});
+  },
+);

@@ -10,7 +10,11 @@ import { workKeySchema } from "./route-state.ts";
 
 /** The step the host would take now, for this caller. A home save has no Work, so it is its own arm. */
 export const stepRefSchema = z.union([
-  z.strictObject({ work: workKeySchema, revision: z.number().int().nonnegative(), label: z.string() }),
+  z.strictObject({
+    work: workKeySchema,
+    revision: z.number().int().nonnegative(),
+    label: z.string(),
+  }),
   z.strictObject({ home: z.string().min(1), sha256: z.string().min(1), label: z.string() }),
 ]);
 export type StepRef = z.infer<typeof stepRefSchema>;
@@ -46,7 +50,9 @@ export const timelineRowSchema = z.union([
     label: z.string(),
     state: z.enum(["applied", "undone", "superseded", "blocked"]),
     /** A rejected write consumed this edit without writing it to the model. */
-    notWritten: z.strictObject({ invocation: z.string(), reason: z.string(), rejected: z.boolean() }).optional(),
+    notWritten: z
+      .strictObject({ invocation: z.string(), reason: z.string(), rejected: z.boolean() })
+      .optional(),
     /** Why undo stops here, when it does. */
     blockedBy: z
       .union([
@@ -92,7 +98,12 @@ export type WorkTimeline = z.infer<typeof workTimelineSchema>;
 export const workTimelineArgsSchema = z.strictObject({
   works: z.array(workKeySchema).readonly(),
   /** The global document head only: the host resolves every registered Work at this binding. */
-  document: workKeySchema.refine(key => key.binding === "open" || key.binding === "address", "Timeline needs a document binding").optional(),
+  document: workKeySchema
+    .refine(
+      (key) => key.binding === "open" || key.binding === "address",
+      "Timeline needs a document binding",
+    )
+    .optional(),
 });
 export type WorkTimelineArgs = z.infer<typeof workTimelineArgsSchema>;
 

@@ -79,17 +79,23 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
       const caller = await createHostRpcCaller();
       // A focus commits a temporary crop, so it is the SessionWrite twin; no focus is the read.
       const result = await caller.callOperation(
-        input.focus ? "revit.context.view-image.focus" : "revit.context.view-image", {
-        target: input.target,
-        focus: input.focus,
-        marginPercent: input.marginPercent,
-        pixelSize: input.pixelSize,
-      });
+        input.focus ? "revit.context.view-image.focus" : "revit.context.view-image",
+        {
+          target: input.target,
+          focus: input.focus,
+          marginPercent: input.marginPercent,
+          pixelSize: input.pixelSize,
+        },
+      );
       if (!result.ok) return { text: `capture_view failed: ${result.message}`, isError: true };
       const data = result.response as RevitViewImageData;
-      const exclusions = (data.notDrawn ?? []).map(item => `${item.elementId}: ${item.reasons.join(", ")}`).join("; ");
-      const restoreWarning = data.restore && !data.restore.held
-        ? ` View restore failed: ${data.restore.left.join(", ")}.` : "";
+      const exclusions = (data.notDrawn ?? [])
+        .map((item) => `${item.elementId}: ${item.reasons.join(", ")}`)
+        .join("; ");
+      const restoreWarning =
+        data.restore && !data.restore.held
+          ? ` View restore failed: ${data.restore.left.join(", ")}.`
+          : "";
       if (data.refused)
         return { text: `capture_view refused: ${exclusions}.${restoreWarning}`, isError: true };
       // The read names its capture in headers; the focused command carries it on its result.
@@ -99,7 +105,10 @@ export function createCaptureViewTool(createHostRpcCaller: () => Promise<HostRpc
       const extras = [
         exclusions ? `not drawn: ${exclusions}` : null,
         `lens ${data.lens.basis} (view ${data.lens.viewId})`,
-        ...data.hidden.map(item => `hidden ${item.what}: ${item.count} host-document instances (${item.why}; category switch only)`),
+        ...data.hidden.map(
+          (item) =>
+            `hidden ${item.what}: ${item.count} host-document instances (${item.why}; category switch only)`,
+        ),
         data.sheetNumber ? `on sheet ${data.sheetNumber}` : null,
         data.viewScale ? `1:${data.viewScale}` : null,
         data.modelRect
@@ -123,13 +132,10 @@ Warning: ${data.warning}`
         if (!sha) throw new Error("The host returned an invalid capture URL");
         if (data.byteSize > defaultReadImageMaxBytes)
           throw new Error("Image exceeds the 5MB limit; capture again with a smaller pixelSize");
-        const response = await fetch(
-          `${caller.hostBaseUrl.replace(/\/$/, "")}${capture.url}`,
-          {
-            redirect: "error",
-            signal: AbortSignal.timeout(30_000),
-          },
-        );
+        const response = await fetch(`${caller.hostBaseUrl.replace(/\/$/, "")}${capture.url}`, {
+          redirect: "error",
+          signal: AbortSignal.timeout(30_000),
+        });
         if (!response.ok || response.headers.get("content-type")?.split(";")[0] !== "image/png")
           throw new Error(`Capture PNG was not available (${response.status})`);
         if (!response.body) throw new Error("Capture PNG had no body");
@@ -148,7 +154,9 @@ Warning: ${data.warning}`
             chunks.push(chunk.value);
           }
         } finally {
-          await reader.cancel().catch((error) => { console.error("capture-view: asynchronous operation failed", error); });
+          await reader.cancel().catch((error) => {
+            console.error("capture-view: asynchronous operation failed", error);
+          });
         }
         const bytes = Buffer.concat(chunks);
         if (createHash("sha256").update(bytes).digest("hex") !== sha)

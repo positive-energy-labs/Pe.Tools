@@ -349,7 +349,9 @@ test("wrong request or plan cannot overwrite a confirmed receipt; a corrupt admi
       storedNotices(stateMachine(f.path)).filter((notice) => notice.path === f.path),
     ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex("{}") }]);
     // Nothing is lost: the discarded bytes rest in the blob store under the hash the notice names.
-    expect(await readFile(join(stateMachine(f.path).blobs, "sha256", sha256Hex("{}")), "utf8")).toBe("{}");
+    expect(
+      await readFile(join(stateMachine(f.path).blobs, "sha256", sha256Hex("{}")), "utf8"),
+    ).toBe("{}");
     expect(f.calls.filter(({ args }) => args[1] === "apply")).toHaveLength(1);
     // A plan this host checks after the discard is a new decision: it is admitted, and its record
     // carries the discard forward.
@@ -511,7 +513,10 @@ test("an admission that does not decode is discarded on the request that meets i
     { disableLogger: true },
   );
   try {
-    const read = await web.handler(new Request("http://host/host/update"), Context.empty() as never);
+    const read = await web.handler(
+      new Request("http://host/host/update"),
+      Context.empty() as never,
+    );
     expect(read.status, await read.clone().text()).toBe(200);
     expect(await read.json()).toMatchObject({ receipt: null, receiptLeg: { error: null } });
     const admitted = await web.handler(
@@ -531,9 +536,9 @@ test("an admission that does not decode is discarded on the request that meets i
     expect(
       storedNotices(stateMachine(f.path)).filter((notice) => notice.path === f.path),
     ).toMatchObject([{ class: "discard", place: "Update status", sha256: sha256Hex(corrupt) }]);
-    expect(await readFile(join(stateMachine(f.path).blobs, "sha256", sha256Hex(corrupt)), "utf8")).toBe(
-      corrupt,
-    );
+    expect(
+      await readFile(join(stateMachine(f.path).blobs, "sha256", sha256Hex(corrupt)), "utf8"),
+    ).toBe(corrupt);
   } finally {
     await web.dispose();
     await f.close();

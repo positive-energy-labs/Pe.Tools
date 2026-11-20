@@ -2,7 +2,7 @@
 import { manyField, pane, split, type RouteGraph } from "@pe/agent-contracts";
 import { z } from "zod";
 import { field } from "../../../../packages/agent-contracts/src/route-field";
-import type {RouteDeclaration} from "../../../../packages/agent-contracts/src/route-field.ts";
+import type { RouteDeclaration } from "../../../../packages/agent-contracts/src/route-field.ts";
 
 /** Galvanized steel's absolute roughness in feet: the duct-loss default and its material row. */
 import { GALVANIZED_STEEL_ROUGHNESS } from "@pe/ducts-contract/duct-loss-read";
@@ -32,7 +32,6 @@ export const ductLossAddress = {
       "Set the duct the person sees: shape, a (diameter, or width when rect), b (height, rect only), cfm, length in ft, roughness in ft, density in lb/ft3, and the wheel face. The calculation is local to the browser and writes nothing to Revit. Facts carry the solved loss, velocity and equivalent diameter for the displayed inputs.",
   },
 } satisfies RouteDeclaration;
-
 
 export type DuctLossPage = { case: "duct" } & {
   [K in keyof typeof ductLossAddress.fields]: z.output<
@@ -70,8 +69,19 @@ export const ductLossGraph: RouteGraph<DuctLossPage, null> = {
   key: "duct-loss",
   address: "duct-loss",
   name: "Duct Loss",
-  subjectField: { kind: "singleton", field: "case", noun: "hypothetical duct case", keyKind: "name", cardinality: "one", roster: "case", detail: "result", pane: "inputs", show: (id) => id },
-  fields: { selected: { ...manyField("name", {}), role: "selection" },
+  subjectField: {
+    kind: "singleton",
+    field: "case",
+    noun: "hypothetical duct case",
+    keyKind: "name",
+    cardinality: "one",
+    roster: "case",
+    detail: "result",
+    pane: "inputs",
+    show: (id) => id,
+  },
+  fields: {
+    selected: { ...manyField("name", {}), role: "selection" },
     case: { ...field(z.enum(["duct"]).default("duct"), {}), role: "subject" },
     shape: { ...fields.shape, role: "query" },
     a: { ...fields.a, role: "query" },

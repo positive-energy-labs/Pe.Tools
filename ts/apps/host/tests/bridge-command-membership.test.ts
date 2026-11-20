@@ -7,9 +7,7 @@ test("nonempty provenance cannot authorize another command's Internal leaf", () 
   const owner = [...catalog.values()].find(
     (entry) =>
       entry.key.startsWith("command:") &&
-      entry.uses.some((use) =>
-        catalog.get(typeof use === "string" ? use : use.key)?.internal,
-      ),
+      entry.uses.some((use) => catalog.get(typeof use === "string" ? use : use.key)?.internal),
   )!;
   expect(owner).toBeDefined();
   const leaf = owner.uses
@@ -28,9 +26,9 @@ test("every advertised native preview admits a direct Pea call and agrees with C
   for (const op of hostOpCatalog)
     for (const column of ["rollsBack", "intent", "usesTransactions"])
       expect(op, op.key).not.toHaveProperty(column);
-  const previews = hostOpCatalog.filter(op => op.key.endsWith(".preview"));
+  const previews = hostOpCatalog.filter((op) => op.key.endsWith(".preview"));
   // ducts.apply.preview became the Read ducts.apply.plan (V1, 0d237121).
-  expect(previews.map(op => op.key).sort()).toEqual([
+  expect(previews.map((op) => op.key).sort()).toEqual([
     "ducts.assign-fan.preview",
     "ducts.heal.preview",
     "revit.apply.parameter-links.preview",
@@ -42,6 +40,8 @@ test("every advertised native preview admits a direct Pea call and agrees with C
     expect(op.effect, op.key).toBe(rehearses ? "TransactRead" : "Read");
     expect(op.internal, op.key).toBe(false);
     expect(commandLeafRefusal(op.key, undefined)).toBeNull();
-    expect(() => requireEligibleCaller({ ...op, principal: ["human", "pea"] }, pea(), "/call")).not.toThrow();
+    expect(() =>
+      requireEligibleCaller({ ...op, principal: ["human", "pea"] }, pea(), "/call"),
+    ).not.toThrow();
   }
 });

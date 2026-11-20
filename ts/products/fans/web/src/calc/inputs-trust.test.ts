@@ -16,7 +16,8 @@ const firm = <T>(value: T): Stated<T> => ({
   ref: "seed",
   units: null,
   version: null,
-  status: "valid", author: null,
+  status: "valid",
+  author: null,
 });
 const inputs = (extra: Partial<DuctsInputs> = {}): DuctsInputs =>
   ductsInputsSchema.parse({
@@ -60,13 +61,16 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
     source,
     units: null,
     version: null,
-    status: "valid" as const, author: null, ref: "test",
+    status: "valid" as const,
+    author: null,
+    ref: "test",
     ...(source === "default" ? { ref: "name" } : {}),
   },
   role: {
     units: null,
     version: null,
-    status: "valid" as const, author: null,
+    status: "valid" as const,
+    author: null,
     value: "fan" as const,
     source: "default" as const,
     ref: "name",
@@ -74,7 +78,8 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
   cfm: {
     units: "cfm",
     version: null,
-    status: "valid" as const, author: null,
+    status: "valid" as const,
+    author: null,
     value: 35,
     source: "model" as const,
     ref: "PE_M_Fan_AirFlow",
@@ -82,7 +87,9 @@ const unit = (kind: "erv" | "air-handler", source: "Work" | "default") => ({
   esp: {
     units: "in-wg",
     version: null,
-    status: "missing" as const, author: null, ref: null,
+    status: "missing" as const,
+    author: null,
+    ref: null,
     value: null,
     source: "none" as const,
   },
@@ -152,7 +159,9 @@ it("picking the rule's own table over a typed choice clears it instead of typing
         source: "Work",
         units: null,
         version: null,
-        status: "valid", author: "human", ref: "test",
+        status: "valid",
+        author: "human",
+        ref: "test",
       },
     },
   });
@@ -195,7 +204,9 @@ it("unmatched fittings group by family, and a choice in Work no fitting of this 
           source: "Work",
           units: null,
           version: null,
-          status: "valid", author: "human", ref: "test",
+          status: "valid",
+          author: "human",
+          ref: "test",
         },
       },
     }),
@@ -218,11 +229,13 @@ it("ASHRAE titles read as the fitting, without the id and the source", () => {
 
 it("a kind that would take the unit off the fan list is a disabled reason; the rest stay pickable", () => {
   // The B160's two outlets: an air handler takes exactly one, so it is disabled with its reason.
-  const b160 = erv(6105264), u = unit("erv", "default");
+  const b160 = erv(6105264),
+    u = unit("erv", "default");
   expect(kindDisabledReason(b160, "air-handler", u)).toMatch(
     /^no fan port: 2 outlets \(supply out c2, exhaust out c3\).*leave the fan list/,
   );
-  for (const kind of ["erv", "other", "dehumidifier"] as const) expect(kindDisabledReason(b160, kind, u)).toBeNull();
+  for (const kind of ["erv", "other", "dehumidifier"] as const)
+    expect(kindDisabledReason(b160, kind, u)).toBeNull();
   // A one-outlet unit keeps air-handler enabled.
   const single = {
     ...erv(7),

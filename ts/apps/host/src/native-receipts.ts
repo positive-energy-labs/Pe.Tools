@@ -32,9 +32,7 @@ export async function readOriginalProcess(
   const envelope = await sdkResult<unknown>(sessionListArgv({ all: true }), read);
   if (envelope.diagnostics.length) throw Error("SDK process identity read reported diagnostics");
   const result = decodePeRevitPayload("SessionListResult", envelope.result);
-  const candidates = result.sessions.flatMap((row) =>
-    "process" in row ? [row.process] : [],
-  );
+  const candidates = result.sessions.flatMap((row) => ("process" in row ? [row.process] : []));
   const matches = candidates.filter(
     (process) => process.pid === pid && Date.parse(process.processStartUtc) === startMs,
   );
@@ -98,14 +96,26 @@ export async function readNativeReceipt(
     localRef: { requestId: step.id, key: step.key, process: original },
   };
   const unchanged = () => ({ step, evidence, observation });
-  const intent = { id: step.id, key: step.key, kind: step.kind, input: step.input,
-    ...(step.transport === "bridge" ? { transport: step.transport,
-      ...(step.touched ? { touched: step.touched } : {}),
-      ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
-      ...(step.bridgeReply ? { bridgeReply: step.bridgeReply } : {}),
-    } : "opReceipt" in step ? { transport: step.transport, opReceipt: step.opReceipt,
-      touched: step.touched, ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
-    } : { transport: step.transport }),
+  const intent = {
+    id: step.id,
+    key: step.key,
+    kind: step.kind,
+    input: step.input,
+    ...(step.transport === "bridge"
+      ? {
+          transport: step.transport,
+          ...(step.touched ? { touched: step.touched } : {}),
+          ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
+          ...(step.bridgeReply ? { bridgeReply: step.bridgeReply } : {}),
+        }
+      : "opReceipt" in step
+        ? {
+            transport: step.transport,
+            opReceipt: step.opReceipt,
+            touched: step.touched,
+            ...(step.nativeEvidence ? { nativeEvidence: step.nativeEvidence } : {}),
+          }
+        : { transport: step.transport }),
     ...(step.process ? { process: step.process } : {}),
     ...(step.dispatchedAt ? { dispatchedAt: step.dispatchedAt } : {}),
   };
@@ -130,7 +140,8 @@ export async function readNativeReceipt(
         error: `Revit process ${original.pid} ended before '${step.key}' recorded an outcome`,
         status: 503,
         ...(step.transport === "bridge" && step.dispatchedAt && step.bridgeReply !== "touched"
-          ? { touched: { kind: "unknown" as const, reason: "process-exit" as const } } : {}),
+          ? { touched: { kind: "unknown" as const, reason: "process-exit" as const } }
+          : {}),
         evidence: {
           result: {
             process: original,
@@ -149,13 +160,18 @@ export async function readNativeReceipt(
   if (!decoded.success) return unchanged();
   const response = decoded.data;
   // The C# op receipt supplies evidence, never a replacement for the host's dispatch fact.
-  const terminal = intent.transport === "bridge"
-    ? { ...intent, bridgeReply: "touched" as const, touched: response.touched }
-    : { ...intent, opReceipt: receipt.data, touched: response.touched };
+  const terminal =
+    intent.transport === "bridge"
+      ? { ...intent, bridgeReply: "touched" as const, touched: response.touched }
+      : { ...intent, opReceipt: receipt.data, touched: response.touched };
   if (receipt.data.verdict === "ok" && "payload" in response)
     return {
-      step: { ...terminal, state: "succeeded", result: response.payload,
-        ...(response.evidence ? { nativeEvidence: response.evidence } : {}) },
+      step: {
+        ...terminal,
+        state: "succeeded",
+        result: response.payload,
+        ...(response.evidence ? { nativeEvidence: response.evidence } : {}),
+      },
       evidence,
       observation,
     };

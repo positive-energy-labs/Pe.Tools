@@ -14,50 +14,106 @@ import { ductsInputsSchema } from "@pe/fans-contract/calc-read";
 import { fansReadRequest, fansReadResponse, fansCalcData } from "@pe/fans-contract/fans-read";
 
 const numberOrNull = z.number().nullable();
-export const ductsPriceRow = z
+export const ductsPriceRow = z.object({
+  id: z.number(),
+  kind: z.enum(["friction", "fitting", "tap-branch", "tap-straight", "terminal"]),
+  dp: numberOrNull,
+  desc: z.string(),
+  rule: z.string().optional(),
+  leg: z.enum(["C", "Cb", "Cs", "ps"]).optional(),
+  source: catalogTableSchema.shape.source.optional(),
+  finding: z
+    .enum([
+      "catalog-missing-link",
+      "catalog-missing-table",
+      "catalog-input",
+      "catalog-out-of-range",
+      "no-rule",
+    ])
+    .optional(),
+  inputs: z
+    .object({
+      res: z.enum(["Co", "Cb", "Cs"]),
+      x: z.number(),
+      y: z.number().optional(),
+      xLabel: z.string(),
+      yLabel: z.string().optional(),
+      notes: z.array(z.string()).optional(),
+    })
+    .optional(),
+  implausible: z
+    .object({
+      coefficient: z.number(),
+      res: z.enum(["Co", "Cb", "Cs"]),
+      fpm: z.number(),
+      cfm: z.number(),
+      reasons: z.array(z.enum(["drop", "velocity"])),
+    })
+    .optional(),
+  table: z.string().optional(),
+  c: z.number().optional(),
+  pv: z.number().optional(),
+  fpm: z.number().optional(),
+  lengthFt: z.number().optional(),
+  roughnessFt: z.number().optional(),
+  rate: z.number().optional(),
+  eqFt: numberOrNull.optional(),
+  family: z.string().optional(),
+  staticInWg: numberOrNull.optional(),
+  revitDp: z.number().optional(),
+  notes: z.array(z.string()).optional(),
+  error: z.string().optional(),
+});
+const splitPart = z.object({ dp: z.number(), ids: z.array(z.number()), unpriced: z.number() });
+const split = z.object({
+  rows: z.array(ductsPriceRow).readonly(),
+  unit: splitPart,
+  duct: splitPart,
+  terminal: splitPart,
+  groups: z.array(
+    z.object({
+      key: z.string(),
+      part: z.enum(["unit", "duct", "terminal"]),
+      element: z.enum(["duct", "fitting", "unit", "terminal"]),
+      label: z.string(),
+      dp: z.number(),
+      ids: z.array(z.number()),
+      unpriced: z.number(),
+    }),
+  ),
+});
+const provisional = z
   .object({
-    id: z.number(),
-    kind: z.enum(["friction", "fitting", "tap-branch", "tap-straight", "terminal"]),
-    dp: numberOrNull,
-    desc: z.string(),
-    rule: z.string().optional(),
-    leg:z.enum(["C","Cb","Cs","ps"]).optional(),
-    source:catalogTableSchema.shape.source.optional(),
-    finding:z.enum(["catalog-missing-link","catalog-missing-table","catalog-input","catalog-out-of-range","no-rule"]).optional(),
-    inputs:z.object({res:z.enum(["Co","Cb","Cs"]),x:z.number(),y:z.number().optional(),xLabel:z.string(),yLabel:z.string().optional(),notes:z.array(z.string()).optional()}).optional(),
-    implausible:z.object({coefficient:z.number(),res:z.enum(["Co","Cb","Cs"]),fpm:z.number(),cfm:z.number(),reasons:z.array(z.enum(["drop","velocity"]))}).optional(),
-    table: z.string().optional(),
-    c: z.number().optional(),
-    pv: z.number().optional(),
-    fpm: z.number().optional(),
-    lengthFt: z.number().optional(),
-    roughnessFt: z.number().optional(),
-    rate: z.number().optional(),
-    eqFt: numberOrNull.optional(),
-    family: z.string().optional(),
-    staticInWg: numberOrNull.optional(),
-    revitDp: z.number().optional(),
-    notes: z.array(z.string()).optional(),
-    error: z.string().optional(),
-  });
-const splitPart=z.object({dp:z.number(),ids:z.array(z.number()),unpriced:z.number()});
-const split=z.object({rows:z.array(ductsPriceRow).readonly(),unit:splitPart,duct:splitPart,terminal:splitPart,groups:z.array(z.object({key:z.string(),part:z.enum(["unit","duct","terminal"]),element:z.enum(["duct","fitting","unit","terminal"]),label:z.string(),dp:z.number(),ids:z.array(z.number()),unpriced:z.number()}))});
-const provisional=z.object({worst:z.enum(DUCT_INFERENCE_GRADES),count:z.number(),findingIds:z.array(z.string())}).nullable();
-const systemRow = z
-  .object({
-    key: z.string(),
-    name: z.string(),
-    kind: z.literal("system"),
-    groups: z.array(z.string()),
-    classification: z.string().nullable(),
-    sub: z.string(),
-    rating: numberOrNull,
-    total: numberOrNull,
-    fanless: z.boolean(),
-    blocked: z.boolean(),
-    id:numberOrNull,self:numberOrNull,ft:numberOrNull,selfFt:numberOrNull,rate:numberOrNull,unpriced:numberOrNull,
-    split:split.nullable(),level:numberOrNull,scale:numberOrNull,critical:numberOrNull,provisional,terminal:numberOrNull,children:z.array(z.never()),
-  });
+    worst: z.enum(DUCT_INFERENCE_GRADES),
+    count: z.number(),
+    findingIds: z.array(z.string()),
+  })
+  .nullable();
+const systemRow = z.object({
+  key: z.string(),
+  name: z.string(),
+  kind: z.literal("system"),
+  groups: z.array(z.string()),
+  classification: z.string().nullable(),
+  sub: z.string(),
+  rating: numberOrNull,
+  total: numberOrNull,
+  fanless: z.boolean(),
+  blocked: z.boolean(),
+  id: numberOrNull,
+  self: numberOrNull,
+  ft: numberOrNull,
+  selfFt: numberOrNull,
+  rate: numberOrNull,
+  unpriced: numberOrNull,
+  split: split.nullable(),
+  level: numberOrNull,
+  scale: numberOrNull,
+  critical: numberOrNull,
+  provisional,
+  terminal: numberOrNull,
+  children: z.array(z.never()),
+});
 export const ductsRosterArgs = z.object({ target: documentRefSchema });
 export const DUCTS_SYSTEM_MAX = 512;
 export const ductsNetworkArgs = ductsRosterArgs.extend({
@@ -71,19 +127,30 @@ export const ductsNetworkData = nativeResponseSchema("ducts.snapshot.walk").and(
   }),
 );
 export const ductsRosterData = nativeResponseSchema("ducts.snapshot.roster").and(
-  z.object({ sourceVersion: z.string(), rows: z.array(systemRow), slotSources: ductSlotSourcesSchema.optional() }),
+  z.object({
+    sourceVersion: z.string(),
+    rows: z.array(systemRow),
+    slotSources: ductSlotSourcesSchema.optional(),
+  }),
 );
 const record = <T extends z.ZodType>(schema: T) => z.record(z.string(), schema);
-export const ductTerminalFlowSourceSchema=z.union([z.enum(["override","revit"]),z.templateLiteral(["rooms:",z.string()])]);
-export const ductEquipmentFlowSourceSchema=z.enum(["override","revit","derived"]);
-export type DuctTerminalFlowSource=z.infer<typeof ductTerminalFlowSourceSchema>;
-export type DuctEquipmentFlowSource=z.infer<typeof ductEquipmentFlowSourceSchema>;
+export const ductTerminalFlowSourceSchema = z.union([
+  z.enum(["override", "revit"]),
+  z.templateLiteral(["rooms:", z.string()]),
+]);
+export const ductEquipmentFlowSourceSchema = z.enum(["override", "revit", "derived"]);
+export type DuctTerminalFlowSource = z.infer<typeof ductTerminalFlowSourceSchema>;
+export type DuctEquipmentFlowSource = z.infer<typeof ductEquipmentFlowSourceSchema>;
 const flow = z.object({
   cfm: numberOrNull,
   source: ductTerminalFlowSourceSchema.nullable(),
   finding: z.literal("no-flow").optional(),
 });
-const equipmentFlow=z.object({cfm:numberOrNull,source:ductEquipmentFlowSourceSchema.nullable(),grilles:z.number().optional()});
+const equipmentFlow = z.object({
+  cfm: numberOrNull,
+  source: ductEquipmentFlowSourceSchema.nullable(),
+  grilles: z.number().optional(),
+});
 export type DuctsPriceRow = z.infer<typeof ductsPriceRow>;
 export const ductsPricingData = z.object({
   fanRows: fansCalcData.shape.rows,
@@ -167,5 +234,3 @@ export const ductsReadResponse = z.union([
 ]);
 export type DuctsNetworkData = z.infer<typeof ductsNetworkData>;
 export type DuctsPricingData = z.infer<typeof ductsPricingData>;
-
-

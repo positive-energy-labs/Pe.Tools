@@ -51,8 +51,20 @@ function WriteActionSpecimen() {
                 word: "heal · planned 2",
                 summary: "2 pass · 0 refused",
                 cells: [
-                  { key: "12", label: "duct 12 end 1", before: "open", after: "capped", author: "pea" },
-                  { key: "18", label: "duct 18 end 0", before: "open", after: "capped", author: "human" },
+                  {
+                    key: "12",
+                    label: "duct 12 end 1",
+                    before: "open",
+                    after: "capped",
+                    author: "pea",
+                  },
+                  {
+                    key: "18",
+                    label: "duct 18 end 0",
+                    before: "open",
+                    after: "capped",
+                    author: "human",
+                  },
                 ],
               }
             : null

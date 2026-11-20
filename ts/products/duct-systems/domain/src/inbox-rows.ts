@@ -50,7 +50,12 @@ const COMPACT: Record<string, string> = {
 };
 
 export type RowVerb =
-  | { kind: "encounter"; issue: import("@pe/fans-contract/fans-inputs").FanIssue; choice: "connect" | "ignore"; label: string }
+  | {
+      kind: "encounter";
+      issue: import("@pe/fans-contract/fans-inputs").FanIssue;
+      choice: "connect" | "ignore";
+      label: string;
+    }
   | { kind: "price-as"; family: string }
   | {
       kind: "verdict";
@@ -106,7 +111,10 @@ export interface TriageInput {
   doc: DuctsDesign | null;
   nameOf?: (id: number) => string;
   groupLabel?: (id: string) => string;
-  heal?: HealPlan | import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"] | null;
+  heal?:
+    | HealPlan
+    | import("@pe/duct-systems-contract/ducts-read").DuctsPricingData["analysis"]["heal"]
+    | null;
   airflow?: { current: string; options: readonly AirflowOption[] };
   unitAirflow?: { current: string; options: readonly AirflowOption[] };
   roles?: ReadIndex<number, { role: "fan" | "passive"; why: string; reason: string }>;
@@ -200,7 +208,7 @@ const proximityIds = (key: string) =>
 export function triage(input: TriageInput) {
   const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
   // The role a unit plays now: the survey's (ruled, edit, else proposed), else Work's edit one.
-  const roleNow = (id: number) => readIndex(input.roles,id)?.role ?? roleOf(doc, id);
+  const roleNow = (id: number) => readIndex(input.roles, id)?.role ?? roleOf(doc, id);
   const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
@@ -266,7 +274,14 @@ export function triage(input: TriageInput) {
     );
   for (const f of healFindings(findings, heal)) {
     if (!inScope(f) || f.kind === "no-flow" || f.kind === "no-terminal-flow") continue;
-    if (f.findingIds.some((id) => (Array.isArray(heal?.covered)?heal.covered.includes(id):(heal?.covered as ReadonlySet<string>|undefined)?.has(id)))) continue;
+    if (
+      f.findingIds.some((id) =>
+        Array.isArray(heal?.covered)
+          ? heal.covered.includes(id)
+          : (heal?.covered as ReadonlySet<string> | undefined)?.has(id),
+      )
+    )
+      continue;
     const base = { key: f.id, findingIds: f.findingIds, ids: f.elementIds, note: f.note };
     // A Fix or Set row off the system's runs is another system's in a shared group: Diagnostics.
     const off = !pricesSystem(f);
@@ -573,7 +588,7 @@ export function triage(input: TriageInput) {
   const othersFlowless: number[] = [];
   for (const n of snapshot.nodes) {
     if (n.kind !== "terminal" || !n.groupId || (scope && !inGroups.has(n.groupId))) continue;
-    if (fanless.has(n.groupId) || readIndex(flows,n.id)?.cfm != null) continue;
+    if (fanless.has(n.groupId) || readIndex(flows, n.id)?.cfm != null) continue;
     if (scope && !scope.terminals.has(n.id)) {
       othersFlowless.push(n.id);
       continue;
@@ -643,7 +658,7 @@ export function triage(input: TriageInput) {
       if (units.has(id) || nodes.get(id)?.kind !== "equipment" || roleNow(id) === "passive")
         continue;
       units.add(id);
-      if (readIndex(equipmentFlows,id)?.cfm != null) continue;
+      if (readIndex(equipmentFlows, id)?.cfm != null) continue;
       unitFlowless.push(id);
       set.push({
         key: `equipmentFlows:${id}`,
@@ -883,4 +898,3 @@ export function focusRow(issue: string, rowKeys: ReadonlySet<string>): string | 
   const rest = issue.slice(at + 1);
   return rowKeys.has(rest) ? rest : "write";
 }
-

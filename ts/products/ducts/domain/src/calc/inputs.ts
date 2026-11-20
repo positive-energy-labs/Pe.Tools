@@ -52,7 +52,9 @@ export interface WorkLayer {
   kinds?: Cells<DuctUnitKind>;
   criteria?: DuctsCriteriaLayer;
   /** Who staged each criterion cell and its ref (`criteriaMeta`); a criterion with none resolves invalid. */
-  criteriaMeta?: Partial<Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref"> | InvalidCell>>;
+  criteriaMeta?: Partial<
+    Record<DuctsCriteriaCell, Pick<WorkCell<unknown>, "by" | "ref"> | InvalidCell>
+  >;
   /** Loss-rule key to table (Work `rules`). */
   rules?: Cells<string>;
   /** Fitting family to the rule key it is priced as where no rule matches (Work `ruleAssignments`). */
@@ -67,9 +69,16 @@ export interface WorkLayer {
 
 /** A staged cell as a value layer: its caller is the author, its ref the evidence. */
 function staged<T>(cell: WorkCell<T> | InvalidCell | undefined): ValueCell<T>;
-function staged<T, V>(cell: WorkCell<T> | InvalidCell | undefined, value: (v: T) => V | null | undefined): ValueCell<V>;
-function staged<T>(cell: WorkCell<T> | InvalidCell | undefined, value: (v: T) => unknown = (v) => v): ValueCell<unknown> {
-  if (cell && "invalid" in cell) return { value: null, invalid: cell.invalid, author: null, ref: cell.ref };
+function staged<T, V>(
+  cell: WorkCell<T> | InvalidCell | undefined,
+  value: (v: T) => V | null | undefined,
+): ValueCell<V>;
+function staged<T>(
+  cell: WorkCell<T> | InvalidCell | undefined,
+  value: (v: T) => unknown = (v) => v,
+): ValueCell<unknown> {
+  if (cell && "invalid" in cell)
+    return { value: null, invalid: cell.invalid, author: null, ref: cell.ref };
   return { value: cell ? value(cell.value) : undefined, author: cell?.by ?? null, ref: cell?.ref };
 }
 /** A Work criterion as a value layer: the author is its cell's `by`. */
@@ -79,7 +88,8 @@ const authored = <T>(
   value: T | undefined,
 ): ValueCell<T> => {
   const meta = layer?.criteriaMeta?.[cell];
-  return meta && "invalid" in meta ? { value: null, invalid: meta.invalid, author: null, ref: meta.ref }
+  return meta && "invalid" in meta
+    ? { value: null, invalid: meta.invalid, author: null, ref: meta.ref }
     : { value, author: meta?.by ?? null, ref: meta?.ref ?? `work:duct-systems/criteria/${cell}` };
 };
 /** Every model, store, project, firm and default layer cell: no author, and a ref of its tier and location. */
@@ -125,31 +135,55 @@ const positive = (v: number | null | undefined) => (v != null && v > 0 ? v : nul
 type Slots = CalcSnapshot["slots"];
 // One design value where Pe writes it: the slot parameter (`at`), what it reads now, and the receipt of what Pe last wrote there.
 // The reader says null for an absent parameter and 0 for one that reads 0. A written parameter reads as it stands; an unwritten one states a value only when positive.
-const written = (at: string, read: number | null | undefined, wrote: number | undefined, unit: string) => {
+const written = (
+  at: string,
+  read: number | null | undefined,
+  wrote: number | undefined,
+  unit: string,
+) => {
   const live = wrote == null ? positive(read) : (read ?? null);
   return { at, wrote, unit, live };
 };
 const writtenFlow = (at: string, read: number | null, receipt: FlowReceipt | undefined) =>
   written(at, read, receipt?.parameter === at ? receipt.cfm : undefined, "cfm");
-const WRITTEN = { // keyed by the Work segment that stages each value
+const WRITTEN = {
+  // keyed by the Work segment that stages each value
   flows: (n: Node, slots: Slots, store: StoreLayer) =>
-    writtenFlow(slots.terminalFlow, slotFlowOf(n, slots.terminalFlow).cfm, store.terminalFlows?.[n.id]),
-  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) => written(slots.terminalDrop, n.terminalDrop?.catalogDropInWg, store.terminals?.[n.id]?.inWg, "in-wg"),
-  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) => writtenFlow(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]),
+    writtenFlow(
+      slots.terminalFlow,
+      slotFlowOf(n, slots.terminalFlow).cfm,
+      store.terminalFlows?.[n.id],
+    ),
+  terminalDrops: (n: Node, slots: Slots, store: StoreLayer) =>
+    written(
+      slots.terminalDrop,
+      n.terminalDrop?.catalogDropInWg,
+      store.terminals?.[n.id]?.inWg,
+      "in-wg",
+    ),
+  equipmentFlows: (n: Node, slots: Slots, store: StoreLayer) =>
+    writtenFlow(slots.fanFlow, factOf(n, "fanFlow"), store.equipmentFlows?.[n.id]),
 };
 
 /** Drift: the one place a receipt is compared with the live parameter. Null where Pe never wrote or the two agree; else what the cell says beside its value. Shown, never blocking, and no write re-asserts it. */
-export function receiptDrift(snapshot: Pick<CalcSnapshot, "nodes" | "slots"> & { store?: StoreLayer | null }, segment: keyof typeof WRITTEN, id: number): string | null {
+export function receiptDrift(
+  snapshot: Pick<CalcSnapshot, "nodes" | "slots"> & { store?: StoreLayer | null },
+  segment: keyof typeof WRITTEN,
+  id: number,
+): string | null {
   const node = snapshot.nodes.find((n) => n.id === id);
   if (!node) return null;
   const { at, live, wrote, unit } = WRITTEN[segment](node, snapshot.slots, snapshot.store ?? {});
   if (wrote == null) return null;
   if (live == null) return `Pe wrote ${wrote} ${unit} to ${at}, which no longer reads`;
   // DuctSnapshots rounds each connector flow to 3 places and parameter reads to 4.
-  const tolerance = segment === "flows" && at === REVIT_FLOW_SLOT
-    ? 0.5e-3 * node.connectors.filter(c => c.flowCfm != null).length
-    : 0.5e-4;
-  return Math.abs(live - wrote) <= tolerance + 1e-9 ? null : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
+  const tolerance =
+    segment === "flows" && at === REVIT_FLOW_SLOT
+      ? 0.5e-3 * node.connectors.filter((c) => c.flowCfm != null).length
+      : 0.5e-4;
+  return Math.abs(live - wrote) <= tolerance + 1e-9
+    ? null
+    : `Changed in Revit since Pe wrote ${wrote} ${unit}`;
 }
 
 export const JOIN_KEY = (pair: readonly [string, string]) => `join:${[...pair].sort().join("|")}`;
@@ -243,11 +277,22 @@ export function resolveCriteria(
     return { ...result, version: result.version ?? versions?.[result.source] ?? null };
   };
   const criterion = <K extends Scalar>(key: K): Stated<DuctsCriteriaValues[K]> =>
-    layered(work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined, firm.criteria[key], key === "splitPolicy" ? null : key === "terminalDropInWg" ? "in-wg" : "in",
-      run?.criteria?.[key] as DuctsCriteriaValues[K] | undefined, criteriaCellOf(key)!);
+    layered(
+      work?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
+      firm.criteria[key],
+      key === "splitPolicy" ? null : key === "terminalDropInWg" ? "in-wg" : "in",
+      run?.criteria?.[key] as DuctsCriteriaValues[K] | undefined,
+      criteriaCellOf(key)!,
+    );
   // Each side resolves on its own: typing return keeps supply's source (ducts LEDGER, sided criteria).
   const side = (key: Sided, at: "supply" | "return") =>
-    layered(work?.criteria?.[key]?.[at], firm.criteria[key][at], key === "velocityLimitFpm" ? "fpm" : "in-wg", run?.criteria?.[key]?.[at], criteriaCellOf(key, at)!);
+    layered(
+      work?.criteria?.[key]?.[at],
+      firm.criteria[key][at],
+      key === "velocityLimitFpm" ? "fpm" : "in-wg",
+      run?.criteria?.[key]?.[at],
+      criteriaCellOf(key, at)!,
+    );
   const sided = (key: Sided) => ({ supply: side(key, "supply"), return: side(key, "return") });
   return {
     velocityLimitFpm: sided("velocityLimitFpm"),
@@ -296,7 +341,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
   const components: DuctsInputs["components"] = {};
   const placeholders = familyPlaceholders(snapshot);
   for (const n of snapshot.nodes) {
-    const id = String(n.id), key = elementSubject(n);
+    const id = String(n.id),
+      key = elementSubject(n);
     if (n.kind === "terminal") {
       const flow = WRITTEN.flows(n, slots, store);
       const flowRef = layers.terminalFlow?.ref ?? flow.at;
@@ -310,7 +356,9 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       );
       const dropCell = criteriaCellOf("terminalDropInWg")!;
       const tables = Object.fromEntries(
-        Object.entries(work.catalogs ?? {}).flatMap(([k, c]) => ("value" in c ? [[k, { table: c.value }]] : [])),
+        Object.entries(work.catalogs ?? {}).flatMap(([k, c]) =>
+          "value" in c ? [[k, { table: c.value }]] : [],
+        ),
       );
       const parameter = WRITTEN.terminalDrops(n, slots, store);
       // D2: a written parameter outranks the lookup, so the lookup runs only where Pe has not written.
@@ -322,8 +370,14 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       const served = firm.served?.terminalDropInWg ?? "firm";
       // Below Work, one of three (ADR 0053). Written: the parameter Pe wrote, missing when it no longer reads (D2, D3).
       // Catalog: the lookup, under its home's tier. Fallback: the parameter, over the criterion's base under the tier that served it.
-      const catalogRung = catalog?.dp != null ? { [catalog.tier]: observed(catalog.tier, `${id}/${catalog.table}`, catalog.dp) } : null;
-      const fallbackRung = { model, [served]: observed(served, dropCell, firm.criteria.terminalDropInWg, firm.version) };
+      const catalogRung =
+        catalog?.dp != null
+          ? { [catalog.tier]: observed(catalog.tier, `${id}/${catalog.table}`, catalog.dp) }
+          : null;
+      const fallbackRung = {
+        model,
+        [served]: observed(served, dropCell, firm.criteria.terminalDropInWg, firm.version),
+      };
       const drop = pick(
         {
           run: run.terminalDrops?.[key]
@@ -353,7 +407,11 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         {
           run: staged(run.roles?.[key]),
           Work: staged(work.roles?.[key]),
-          "model-store": observed("model-store", `${id}/${STORE}`, store.roles?.[id]?.role as "fan" | "passive"),
+          "model-store": observed(
+            "model-store",
+            `${id}/${STORE}`,
+            store.roles?.[id]?.role as "fan" | "passive",
+          ),
           default: observed("default", `${id}/name`, suggestRole(n, kind.value ?? suggestion.kind)),
         },
         null,
@@ -366,7 +424,11 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
             {
               run: staged(run.componentDrops?.[key]),
               Work: typedDropOf(key, n.family),
-              model: observed("model", `${id}/${slots.componentDrop}`, positive(factOf(n, "pressureDrop"))),
+              model: observed(
+                "model",
+                `${id}/${slots.componentDrop}`,
+                positive(factOf(n, "pressureDrop")),
+              ),
             },
             "in-wg",
           ),
@@ -383,7 +445,18 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         "cfm",
       );
       // P-030: ratedStatic comes only from the separate RatedEsp slot, below stated Work and run values.
-      const esp = pick({ run: staged(run.ratedEsp?.[key]), Work: staged(work.ratedEsp?.[key]), model: observed("model", snapshot.slots.ratedEsp ?? "", snapshot.slots.ratedEsp ? factOf(n, "ratedStatic") : null) }, "in-wg");
+      const esp = pick(
+        {
+          run: staged(run.ratedEsp?.[key]),
+          Work: staged(work.ratedEsp?.[key]),
+          model: observed(
+            "model",
+            snapshot.slots.ratedEsp ?? "",
+            snapshot.slots.ratedEsp ? factOf(n, "ratedStatic") : null,
+          ),
+        },
+        "in-wg",
+      );
       units[id] = { kind, role, cfm, esp };
       if (work.componentDrops?.[key] || run.componentDrops?.[key])
         components[id] = {
@@ -397,7 +470,10 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       // The cells themselves gate the row: an unreadable one still resolves, as invalid (P-040).
       const typed = work.componentDrops?.[key];
       const familyCell = n.family ? work.assumptions?.[`component-drop:${n.family}`] : undefined;
-      const family = familyCell && ("invalid" in familyCell || familyCell.value.inWg != null) ? familyCell : undefined;
+      const family =
+        familyCell && ("invalid" in familyCell || familyCell.value.inWg != null)
+          ? familyCell
+          : undefined;
       const stated = n.kind === "accessory" ? positive(factOf(n, "pressureDrop")) : null;
       const placeholder = placeholderOf(placeholders, n);
       if (
@@ -420,8 +496,15 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
         components[id] = {
           drop:
             resolved.status === "missing" && placeholder
-              ? { status: "invalid", value: null, source: "model", author: null, version: null, units: resolved.units,
-                  ref: `family placeholder ${placeholder.inWg} on ${placeholder.count}` }
+              ? {
+                  status: "invalid",
+                  value: null,
+                  source: "model",
+                  author: null,
+                  version: null,
+                  units: resolved.units,
+                  ref: `family placeholder ${placeholder.inWg} on ${placeholder.count}`,
+                }
               : resolved,
         };
       }
@@ -440,7 +523,8 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
       };
   }
 
-  const verdictOf = (a: { kind: string; verdict?: string }) => (a.kind === "verdict" ? a.verdict : null);
+  const verdictOf = (a: { kind: string; verdict?: string }) =>
+    a.kind === "verdict" ? a.verdict : null;
   const verdictAt = (key: string) =>
     resolveValue({
       run: staged(run.assumptions?.[key], verdictOf),
@@ -525,7 +609,15 @@ export function resolveInputs(layers: InputLayers): DuctsInputs {
 
 /** A resolved number as the contract's sourced value: the same kernel resolution, with an absent input read as missing. */
 export const sourced = (r: Resolved<number> | undefined): SourcedValue<number> =>
-  r ?? { status: "missing", value: null, source: "none", author: null, ref: null, version: null, units: null };
+  r ?? {
+    status: "missing",
+    value: null,
+    source: "none",
+    author: null,
+    ref: null,
+    version: null,
+    units: null,
+  };
 
 /** Encounter rulings use Work's network verdicts: connect accepts, ignore refuses. */
 export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): EncounterRuling[] {
@@ -533,13 +625,21 @@ export function encounterRulings(layers: Pick<InputLayers, "run" | "work">): Enc
   const verdict = (v: { verdict?: string }): EncounterRuling["verdict"] | null =>
     v.verdict === "connect" ? "accepted" : v.verdict === "ignore" ? "refused" : null;
   return Object.keys({ ...work, ...run }).flatMap((key): EncounterRuling[] => {
-    const [elementId, connector] = key.startsWith("encounter:") ? key.slice(10).split(":").map(Number) : [];
+    const [elementId, connector] = key.startsWith("encounter:")
+      ? key.slice(10).split(":").map(Number)
+      : [];
     if (elementId == null || connector == null) return [];
     const at = { elementId, connector };
-    if (!Number.isInteger(elementId) || !Number.isInteger(connector) || ENCOUNTER_KEY(at) !== key) return [];
+    if (!Number.isInteger(elementId) || !Number.isInteger(connector) || ENCOUNTER_KEY(at) !== key)
+      return [];
     // P-029: a ruling is a staged value like any other, so one no known caller stamped is invalid and rules nothing.
-    const r = resolveValue({ run: staged(run?.[key], verdict), Work: staged(work?.[key], verdict) });
-    return r.status === "valid" && r.author && r.ref ? [{ at, verdict: r.value, by: r.author, ref: r.ref }] : [];
+    const r = resolveValue({
+      run: staged(run?.[key], verdict),
+      Work: staged(work?.[key], verdict),
+    });
+    return r.status === "valid" && r.author && r.ref
+      ? [{ at, verdict: r.value, by: r.author, ref: r.ref }]
+      : [];
   });
 }
 

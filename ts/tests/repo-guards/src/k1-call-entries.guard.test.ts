@@ -18,8 +18,11 @@ export function keyBranches(text: string) {
           ts.SyntaxKind.ExclamationEqualsToken,
           ts.SyntaxKind.ExclamationEqualsEqualsToken,
         ].includes(node.operatorToken.kind) &&
-        (catalogKey(node.left) || catalogKey(node.right) ||
-          [node.left, node.right].some((part) => /^(?:(?:body\.)?work\.route|work\.key\.binding|kind)$/.test(part.getText(source))))) ||
+        (catalogKey(node.left) ||
+          catalogKey(node.right) ||
+          [node.left, node.right].some((part) =>
+            /^(?:(?:body\.)?work\.route|work\.key\.binding|kind)$/.test(part.getText(source)),
+          ))) ||
       (ts.isCaseClause(node) && catalogKey(node.expression))
     )
       found.push(node.getText(source));
@@ -27,7 +30,11 @@ export function keyBranches(text: string) {
   return found;
 }
 
-for (const file of ["apps/host/src/call-route", "products/ducts/host/src/action-runtime", "apps/host/src/work-write-boundary"])
+for (const file of [
+  "apps/host/src/call-route",
+  "products/ducts/host/src/action-runtime",
+  "apps/host/src/work-write-boundary",
+])
   test(`${file} reads declarations, never branches on catalog, route or command kind keys`, () => {
     expect(keyBranches(readFileSync(resolve(root, `ts/${file}.ts`), "utf8"))).toEqual([]);
   });
@@ -43,5 +50,9 @@ test("the guard catches either comparison direction and switch cases, but permit
 });
 
 test("route, binding and command kind branches cannot hide behind unqualified keys", () => {
-  expect(keyBranches(`if (work.route !== "families") go(); if ("families" === body.work.route) go(); if (kind === "losses") go(); if (work.key.binding === "open") go();`)).toHaveLength(4);
+  expect(
+    keyBranches(
+      `if (work.route !== "families") go(); if ("families" === body.work.route) go(); if (kind === "losses") go(); if (work.key.binding === "open") go();`,
+    ),
+  ).toHaveLength(4);
 });

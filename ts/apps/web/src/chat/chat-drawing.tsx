@@ -14,10 +14,7 @@ import {
 import { RegistryContext, useAtomRefresh, useAtomValue } from "@effect/atom-react";
 import { NewThreadButton, ThreadsSidebar } from "#/chat/thread-palette";
 import { useTranscript, useTranscriptAtom, useWorkbench } from "#/workbench/provider";
-import {
-  selectBreakdown,
-  selectTitle,
-} from "@pe/agent-contracts/chat-state";
+import { selectBreakdown, selectTitle } from "@pe/agent-contracts/chat-state";
 import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
@@ -47,7 +44,10 @@ import { ThreadBody } from "#/workbench/lens/thread-body";
 import { ComposerBank } from "#/chat/composer-bank";
 import { useThreadPresence } from "#/machine/os-notices";
 
-import { DockSurface as ChatSurfaceProps, type DockSurfaceProps as ChatShellProps } from "../workbench/hosted-route";
+import {
+  DockSurface as ChatSurfaceProps,
+  type DockSurfaceProps as ChatShellProps,
+} from "../workbench/hosted-route";
 
 /** A new thread is a draft until its first send; in the tray it replaces Activity meanwhile. */
 function useNewThread() {

@@ -162,13 +162,19 @@ export const bridgeInFlightRequestSchema = Schema.Struct({
 export const bridgeInFlightSnapshotSchema = Schema.Struct({
   processId: Schema.Number,
   processStartUtcUnixMs: Schema.Number,
-  requests: Schema.optional(Schema.Array(bridgeInFlightRequestSchema)).pipe(Schema.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  terminals: Schema.optional(Schema.Array(bridgeTerminalSchema)).pipe(Schema.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  requests: Schema.optional(Schema.Array(bridgeInFlightRequestSchema)).pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed([])),
+  ),
+  terminals: Schema.optional(Schema.Array(bridgeTerminalSchema)).pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed([])),
+  ),
 });
 export type BridgeInFlightSnapshot = Schema.Schema.Type<typeof bridgeInFlightSnapshotSchema>;
 
 export const bridgeRegistrationRequestSchema = Schema.Struct({
-  inFlight: Schema.optional(Schema.NullOr(bridgeInFlightSnapshotSchema)).pipe(Schema.withDecodingDefaultTypeKey(Effect.succeed(null))),
+  inFlight: Schema.optional(Schema.NullOr(bridgeInFlightSnapshotSchema)).pipe(
+    Schema.withDecodingDefaultTypeKey(Effect.succeed(null)),
+  ),
   buildStamp: nullableString,
   contractVersion: Schema.Number,
   lane: nullableString,

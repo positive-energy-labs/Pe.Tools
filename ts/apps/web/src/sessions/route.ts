@@ -1,11 +1,17 @@
 import { z } from "zod";
-import { route, field, paneLayout, type ContextOf, type Verbs } from "../route/defaults";
+import { route, field, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { fields as openFields, loaded } from "../machine/open-fields";
 import { module as open } from "../open/route";
-import { draw } from "../route/draw";
+import { draw } from "@pe/web-kernel/route/draw";
 export const fields = { ...openFields, session: field(z.string(), "", "pose", "push") };
-export type SessionContext = ContextOf<typeof fields, typeof loaded, never, never, Verbs<"start" | "stop" | "restart">>;
+export type SessionContext = ContextOf<
+  typeof fields,
+  typeof loaded,
+  never,
+  never,
+  Verbs<"start" | "stop" | "restart">
+>;
 export const module = route({
   key: "session-admin",
   name: "Sessions",

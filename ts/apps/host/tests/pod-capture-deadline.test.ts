@@ -57,7 +57,9 @@ test("capture refreshes every home's identity and local bytes without walking fo
   const started = performance.now();
   const captured = await capturePackage("local", [local, foreign]);
   expect(performance.now() - started).toBeLessThan(1_000);
-  expect(spy.mock.calls.map(([path]) => String(path))).toEqual(expect.arrayContaining([local, foreign, directory]));
+  expect(spy.mock.calls.map(([path]) => String(path))).toEqual(
+    expect.arrayContaining([local, foreign, directory]),
+  );
   expect(spy.mock.calls.map(([path]) => String(path))).not.toContain(neighbour);
   expect(
     Buffer.from(
@@ -70,9 +72,17 @@ test("capture refreshes every home's identity and local bytes without walking fo
 test("default capture never probes homes, including when passed admitted bytes", async () => {
   const { local, foreign } = await fixture();
   vi.stubEnv("PE_TOOLS_PRODUCT_HOME", join(local, ".."));
-  const probe = vi.spyOn(productPaths, "resolveHomes").mockResolvedValue(new Map([["", [
-    { tier: "user", root: join(local, "..") }, { tier: "firm", root: join(foreign, "..") },
-  ]]]));
+  const probe = vi.spyOn(productPaths, "resolveHomes").mockResolvedValue(
+    new Map([
+      [
+        "",
+        [
+          { tier: "user", root: join(local, "..") },
+          { tier: "firm", root: join(foreign, "..") },
+        ],
+      ],
+    ]),
+  );
   const listing = await listPackages();
   probe.mockImplementation(() => {
     throw Error("slow synchronous Drive probe");
@@ -88,14 +98,19 @@ test("a stalled selected folder refuses at its Pod bound and stops walking when 
   const release = Promise.withResolvers<void>();
   const actual = filesystem.readdir;
   const spy = vi.spyOn(filesystem, "readdir").mockImplementation(async (...args) => {
-    if (String(args[0]) === directory) { entered.resolve(); await release.promise; }
+    if (String(args[0]) === directory) {
+      entered.resolve();
+      await release.promise;
+    }
     return actual(...args);
   });
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const capture = capturePackage("local", [local, foreign]);
   const refused = expect(capture).rejects.toMatchObject({
     code: "pod.discovery.exceeded",
-    message: expect.stringContaining(`Pod work exceeded ${packagePodWorkTimeoutMs} ms reading '${directory}'`),
+    message: expect.stringContaining(
+      `Pod work exceeded ${packagePodWorkTimeoutMs} ms reading '${directory}'`,
+    ),
   });
   await entered.promise;
   await vi.advanceTimersByTimeAsync(packagePodWorkTimeoutMs);

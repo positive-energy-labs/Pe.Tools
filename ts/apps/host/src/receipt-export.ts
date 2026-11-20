@@ -550,7 +550,8 @@ export function createReceiptExport(options: {
       if (file.path !== r.body.localRef.path)
         throw Error("Saved feedback identity does not match its address");
       const saved = readStoredFile(file);
-      if (saved.kind !== "ok") throw Error(saved.kind === "missing" ? "The saved feedback is missing" : saved.reason);
+      if (saved.kind !== "ok")
+        throw Error(saved.kind === "missing" ? "The saved feedback is missing" : saved.reason);
       const { component: ui_component, ...content } = saved.value.feedback;
       event = projectReceipt(r, { ...content, ui_component });
       if (!event || !send)
@@ -913,13 +914,7 @@ export function createThreadReceiptAdapter(
   } as const;
   const accept = (id: string, _title: string, event: HarnessEvent) => {
     if (
-      ![
-        "prompt",
-        "turn_end",
-        "error",
-        "question_request",
-        "question_resolved",
-      ].includes(event.kind)
+      !["prompt", "turn_end", "error", "question_request", "question_resolved"].includes(event.kind)
     )
       return;
     const failure = event.kind === "error" ? event.failure?.kind : undefined;

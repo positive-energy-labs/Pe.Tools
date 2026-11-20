@@ -45,7 +45,11 @@ async function ensureDevTray(sourceRoot: string) {
 }
 
 /** Own one icon for the checkout; backend and frontend incarnations are read by the native adapter. */
-export async function createDevTraySupervisor(sourceRoot: string, showWindow = false, watchedHostRoot?: string) {
+export async function createDevTraySupervisor(
+  sourceRoot: string,
+  showWindow = false,
+  watchedHostRoot?: string,
+) {
   const directory = devTrayDirectory(sourceRoot);
   const path = join(directory, "supervisor.json");
   await mkdir(directory, { recursive: true });

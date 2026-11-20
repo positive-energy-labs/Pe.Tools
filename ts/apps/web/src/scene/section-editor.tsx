@@ -13,9 +13,16 @@ import { StateCell, type CellHandle } from "@pe/kit/lang/cell";
 import { PaneOverlay } from "@pe/kit/lang/pane";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { token } from "@pe/kit/lib/token";
-import { AXIS_LABEL } from "./plane";
-import { CUT_AXES, mergeCut, moveCutEdge, sectionCuts, type CutAxis, type Point } from "./cuts";
-import type { Bounds } from "./types";
+import { AXIS_LABEL } from "@pe/web-kernel/scene/plane";
+import {
+  CUT_AXES,
+  mergeCut,
+  moveCutEdge,
+  sectionCuts,
+  type CutAxis,
+  type Point,
+} from "@pe/web-kernel/scene/cuts";
+import type { Bounds } from "@pe/web-kernel/scene/types";
 import type { SectionEditorController } from "./section-editor-controller";
 
 /** Existing renderer supplies all three previews; the editor draws interaction geometry only. */

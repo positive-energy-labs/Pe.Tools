@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { Activity, StrictMode } from "react";
 import * as Atom from "effect/reactivity/Atom";
 import { makeAtomRegistry, useOwned, useRouteOwner } from "#/shell/owner";
-import { RouteActivity, type RouteActivityScope } from "../route/activity";
+import { RouteActivity, type RouteActivityScope } from "@pe/web-kernel/route/activity";
 
 afterEach(cleanup);
 

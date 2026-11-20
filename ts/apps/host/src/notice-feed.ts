@@ -36,7 +36,6 @@ import { noFirmHomeText, type FirmHome } from "@pe/host-contracts/product-paths"
 import { note, sha256Hex, type StoredNotice, type StateRoot } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
 
-
 /** The Place a no-firm-home notice is filed under; its row is a finding, not a file that did not decode. */
 const FIRM_HOME_PLACE = "Firm home";
 const EARLIER_WORK_PLACE = "Work saved by an earlier version";
@@ -45,15 +44,20 @@ export const SETTING_WRITE_PLACE = "Setting saved";
 
 async function holdsFileAsync(path: string): Promise<boolean> {
   for await (const entry of await opendir(path))
-    if (entry.isFile() || (entry.isDirectory() && await holdsFileAsync(join(path, entry.name)))) return true;
+    if (entry.isFile() || (entry.isDirectory() && (await holdsFileAsync(join(path, entry.name)))))
+      return true;
   return false;
 }
 
 /** Run after the async home census; old Work is noticed without blocking requests. */
-export async function noteEarlierWork(user: string, machine: StateRoot = hostState()): Promise<void> {
+export async function noteEarlierWork(
+  user: string,
+  machine: StateRoot = hostState(),
+): Promise<void> {
   const path = join(user, "Work");
-  try { if (await holdsFileAsync(path)) noteEarlierWorkFinding(path, machine); }
-  catch (error) {
+  try {
+    if (await holdsFileAsync(path)) noteEarlierWorkFinding(path, machine);
+  } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
       console.warn(`Could not check earlier Work at '${path}': ${String(error)}`);
   }
@@ -92,7 +96,9 @@ export function noteNoFirmHome(firm: FirmHome, machine: StateRoot = hostState())
 export type NoticeDraft = Omit<NoticeRow, "attended">;
 
 export interface NoticeSources {
-  readonly threads: readonly (HarnessThreadSummary & { readonly events: readonly HarnessEvent[] })[];
+  readonly threads: readonly (HarnessThreadSummary & {
+    readonly events: readonly HarnessEvent[];
+  })[];
   /** Action receipts with their envelope's revision. */
   readonly receipts: readonly { readonly revision: number; readonly action: ActionReceipt }[];
   readonly works: readonly NavigationWork[];
@@ -161,7 +167,9 @@ function threadRow(thread: NoticeSources["threads"][number], now: number): Notic
   });
   if (state === "waiting" || pending > 0) {
     const ask = openAsk(thread.id, thread.events);
-    return ask ? { ...row("waits", ask.verb, ask.says), act: ask.act } : row("waits", "asks", message);
+    return ask
+      ? { ...row("waits", ask.verb, ask.says), act: ask.act }
+      : row("waits", "asks", message);
   }
   if (state === "running") return row("working", "running", null);
   if (state === "failed" && message === HOST_RESTARTED)
@@ -181,7 +189,10 @@ function threadRow(thread: NoticeSources["threads"][number], now: number): Notic
   }
   const unread = thread.lifecycle.explicitUnread || thread.lifecycle.readSeq < thread.lastSeq;
   return unread && thread.lastSeq > 0
-    ? { ...row("unread", "done", lastSaid(thread.events)), act: { kind: "reply", threadId: thread.id } }
+    ? {
+        ...row("unread", "done", lastSaid(thread.events)),
+        act: { kind: "reply", threadId: thread.id },
+      }
     : null;
 }
 
@@ -189,15 +200,31 @@ function threadRow(thread: NoticeSources["threads"][number], now: number): Notic
 const STORED_FOR_MS = 7 * 24 * 3_600_000;
 
 /** A file that did not decode: discarded, or "can't read, kept" (ADR 0039 rule 1). */
-function storedRow(notice: StoredNotice, now: number, firmHomeUnavailable?: boolean): NoticeDraft | null {
-  if (firmHomeUnavailable === false && notice.place === FIRM_HOME_PLACE && notice.reason.startsWith("Firm home unavailable at ")) return null;
+function storedRow(
+  notice: StoredNotice,
+  now: number,
+  firmHomeUnavailable?: boolean,
+): NoticeDraft | null {
+  if (
+    firmHomeUnavailable === false &&
+    notice.place === FIRM_HOME_PLACE &&
+    notice.reason.startsWith("Firm home unavailable at ")
+  )
+    return null;
   // ponytail: a fixed window and no dismiss door; add a dismiss act when a person asks for one.
   if (now - Date.parse(notice.at) > STORED_FOR_MS) return null;
-  if (notice.class === "sent") return {
-    key: `stored:${notice.path}:${notice.sha256}`, group: "unread", revision: 0,
-    verb: "sent", what: notice.path, where: notice.place, says: notice.reason,
-    at: notice.at, url: null,
-  };
+  if (notice.class === "sent")
+    return {
+      key: `stored:${notice.path}:${notice.sha256}`,
+      group: "unread",
+      revision: 0,
+      verb: "sent",
+      what: notice.path,
+      where: notice.place,
+      says: notice.reason,
+      at: notice.at,
+      url: null,
+    };
   const kept = notice.class === "keep";
   if (notice.place === EARLIER_WORK_PLACE)
     return {
@@ -239,7 +266,8 @@ function storedRow(notice: StoredNotice, now: number, firmHomeUnavailable?: bool
       says: notice.reason,
       at: notice.at,
       url: null,
-      refusal: "Nothing to open: firm Pods, Pages, Catalogs, Settings and keys are off until it is found",
+      refusal:
+        "Nothing to open: firm Pods, Pages, Catalogs, Settings and keys are off until it is found",
       detail: notice.reason,
     };
   return {
@@ -255,7 +283,9 @@ function storedRow(notice: StoredNotice, now: number, firmHomeUnavailable?: bool
       : `Could not be read, so it was discarded: ${notice.reason}`,
     at: notice.at,
     url: null,
-    refusal: kept ? "No address yet: fix or remove the file by hand" : "Nothing to open: the file is gone",
+    refusal: kept
+      ? "No address yet: fix or remove the file by hand"
+      : "Nothing to open: the file is gone",
     detail: notice.path,
   };
 }
@@ -285,9 +315,15 @@ function receiptRow(
   const who = pin ? `Page ${pin.page}, as the person who pinned it` : callerWord(receipt.caller);
   // A held act (ADR 0038) is one row that waits on the person, in its own words, never a failure.
   // A held send's one row is its `held` source, which carries Confirm; its receipt adds no second.
-  const resultHeld = receipt.state === "succeeded" && "result" in receipt &&
-    receipt.result && typeof receipt.result === "object" && "held" in receipt.result &&
-    typeof receipt.result.held === "string" ? receipt.result.held : null;
+  const resultHeld =
+    receipt.state === "succeeded" &&
+    "result" in receipt &&
+    receipt.result &&
+    typeof receipt.result === "object" &&
+    "held" in receipt.result &&
+    typeof receipt.result.held === "string"
+      ? receipt.result.held
+      : null;
   const heldRefusal = receipt.refusal?.kind === "held" ? receipt.refusal : null;
   if (heldRefusal || resultHeld)
     return now - Date.parse(receipt.startedAt) > HELD_FOR_MS
@@ -308,19 +344,26 @@ function receiptRow(
   // whose last step was refused still waits on the person, because its earlier steps changed
   // something (an acquisition's local copies) that needs cleanup before it runs again.
   const last = receipt.steps?.at(-1);
-  const refusedTail = receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
-  const refused = receipt.state === "failed" && receipt.notDispatched === true || refusedTail;
+  const refusedTail =
+    receipt.state === "incomplete" && last?.state === "failed" && last.notDispatched === true;
+  const refused = (receipt.state === "failed" && receipt.notDispatched === true) || refusedTail;
   const result = receipt.key === "instances.cleanup" && "result" in receipt ? receipt.result : null;
-  const kept = result && typeof result === "object" && "kept" in result && Array.isArray(result.kept)
-    ? result.kept.filter((path): path is string => typeof path === "string")
-    : [];
+  const kept =
+    result && typeof result === "object" && "kept" in result && Array.isArray(result.kept)
+      ? result.kept.filter((path): path is string => typeof path === "string")
+      : [];
   const group = RECEIPT_GROUP[receipt.state] ?? (kept.length || pin ? "unread" : undefined);
   if (!group) return null;
   const failure =
     "error" in receipt
       ? summarizeFailure(receipt.error)
       : {
-          summary: receipt.state === "succeeded" ? (pin ? "Finished on the document this person pinned." : "Cleanup finished with kept files.") : "The outcome is not known. Check Revit before running it again.",
+          summary:
+            receipt.state === "succeeded"
+              ? pin
+                ? "Finished on the document this person pinned."
+                : "Cleanup finished with kept files."
+              : "The outcome is not known. Check Revit before running it again.",
           door: null,
           detail: null,
         };
@@ -328,7 +371,11 @@ function receiptRow(
     key: `action:${receipt.id}`,
     group,
     revision,
-    verb: refused ? (invocationOutcome(receipt).state === "stale" ? "stale" : "refused") : receipt.state,
+    verb: refused
+      ? invocationOutcome(receipt).state === "stale"
+        ? "stale"
+        : "refused"
+      : receipt.state,
     what: receipt.key,
     where: who,
     says: `${refused && "error" in receipt ? receipt.error : failure.summary}${refusedTail ? " Earlier steps already changed something; clean up before running it again." : ""}`,
@@ -338,34 +385,68 @@ function receiptRow(
       ? `${routeAddress("settings").link({ section: failure.door.section })}${failure.door.hash ? `#${failure.door.hash}` : ""}`
       : null,
     ...(failure.door ? {} : { refusal: "No address yet: this receipt has no page" }),
-    ...(failure.detail || kept.length ? { detail: [failure.detail, kept.length ? `kept: ${kept.join(", ")}` : null].filter(Boolean).join("\n") } : {}),
+    ...(failure.detail || kept.length
+      ? {
+          detail: [failure.detail, kept.length ? `kept: ${kept.join(", ")}` : null]
+            .filter(Boolean)
+            .join("\n"),
+        }
+      : {}),
   };
 }
 
 function nativeTouchedRows(receipt: ActionReceipt): NoticeDraft[] {
   return receipt.steps.flatMap((step): NoticeDraft[] => {
-    if ((step.transport !== "bridge" && !("opReceipt" in step)) || step.state === "running") return [];
-    if (step.transport === "bridge" && !step.touched && (step.bridgeReply === "missing-touched" || step.bridgeReply === "invalid-touched"))
-      return [{ key: `native:${step.id}`, group: "failed" as const, revision: 0,
-        verb: step.bridgeReply, what: step.key, where: callerWord(receipt.caller),
-        says: step.bridgeReply === "missing-touched"
-          ? "Revit answered without a touched value. Its document changes were not reported."
-          : "Revit answered with an invalid touched value. Its document changes could not be decoded.",
-        at: receipt.startedAt, url: null, refusal: "No address yet: this receipt has no page" }];
-    if (!step.touched || !["restoreFailed", "unauthorized", "unknown"].includes(step.touched.kind)) return [];
+    if ((step.transport !== "bridge" && !("opReceipt" in step)) || step.state === "running")
+      return [];
+    if (
+      step.transport === "bridge" &&
+      !step.touched &&
+      (step.bridgeReply === "missing-touched" || step.bridgeReply === "invalid-touched")
+    )
+      return [
+        {
+          key: `native:${step.id}`,
+          group: "failed" as const,
+          revision: 0,
+          verb: step.bridgeReply,
+          what: step.key,
+          where: callerWord(receipt.caller),
+          says:
+            step.bridgeReply === "missing-touched"
+              ? "Revit answered without a touched value. Its document changes were not reported."
+              : "Revit answered with an invalid touched value. Its document changes could not be decoded.",
+          at: receipt.startedAt,
+          url: null,
+          refusal: "No address yet: this receipt has no page",
+        },
+      ];
+    if (!step.touched || !["restoreFailed", "unauthorized", "unknown"].includes(step.touched.kind))
+      return [];
     const touched = step.touched;
-    return [{
-      // One card per native step, even when the parent receipt advances after its terminal.
-      key: `native:${step.id}`, group: "failed" as const, revision: 0,
-      verb: touched.kind, what: step.key, where: callerWord(receipt.caller),
-      says: touched.kind === "restoreFailed" ? "Revit could not restore the captured view. Check its view settings."
-        : touched.kind === "unauthorized" ? "Revit changed the document outside the permitted scope."
-        : touched.kind === "unknown" && touched.reason === "process-exit"
-          ? "Revit exited before answering. It may have changed the model; the outcome is unknown."
-        : "The native call's changes are unknown. Check Revit before running it again.",
-      detail: JSON.stringify(touched), at: receipt.startedAt, url: null,
-      refusal: "No address yet: this receipt has no page",
-    }];
+    return [
+      {
+        // One card per native step, even when the parent receipt advances after its terminal.
+        key: `native:${step.id}`,
+        group: "failed" as const,
+        revision: 0,
+        verb: touched.kind,
+        what: step.key,
+        where: callerWord(receipt.caller),
+        says:
+          touched.kind === "restoreFailed"
+            ? "Revit could not restore the captured view. Check its view settings."
+            : touched.kind === "unauthorized"
+              ? "Revit changed the document outside the permitted scope."
+              : touched.kind === "unknown" && touched.reason === "process-exit"
+                ? "Revit exited before answering. It may have changed the model; the outcome is unknown."
+                : "The native call's changes are unknown. Check Revit before running it again.",
+        detail: JSON.stringify(touched),
+        at: receipt.startedAt,
+        url: null,
+        refusal: "No address yet: this receipt has no page",
+      },
+    ];
   });
 }
 
@@ -391,7 +472,9 @@ export function noticeRows(sources: NoticeSources, now: number): NoticeDraft[] {
       const parent = receiptRow(receipt, now);
       return [...(parent ? [parent] : []), ...nativeTouchedRows(receipt.action)];
     }),
-    ...sources.stored.flatMap((notice) => storedRow(notice, now, sources.firmHomeUnavailable) ?? []),
+    ...sources.stored.flatMap(
+      (notice) => storedRow(notice, now, sources.firmHomeUnavailable) ?? [],
+    ),
     // Staged Work includes human edits and scope choices; it carries no proposal-actor count.
     ...sources.works
       .filter((work) => work.staged > 0)

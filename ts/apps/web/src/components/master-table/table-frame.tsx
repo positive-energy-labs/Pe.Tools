@@ -172,7 +172,8 @@ export function TableFrame<Row extends RowData>({
         <>
           {modes}
           {selection && reach.length > 0 && (
-            <Button kind="quiet"
+            <Button
+              kind="quiet"
               type="button"
               label={
                 selectedShown === reach.length ? `clear ${reach.length}` : `select ${reach.length}`

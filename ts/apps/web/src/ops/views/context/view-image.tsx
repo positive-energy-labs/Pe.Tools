@@ -20,14 +20,24 @@ export function ViewImageView({ data }: OpViewProps) {
   if (res.refused && Array.isArray(res.notDrawn))
     return (
       <Section label={res.view.label ?? "view"}>
-        <OutcomeLine kind="refused" label="Picture refused" says="No requested element can be drawn in this view." />
-        {res.notDrawn.map(item => (
+        <OutcomeLine
+          kind="refused"
+          label="Picture refused"
+          says="No requested element can be drawn in this view."
+        />
+        {res.notDrawn.map((item) => (
           <div key={item.elementId} {...revitTarget([item.elementId])}>
-            <Provenance>Element {item.elementId}: {item.reasons.join(", ")}</Provenance>
+            <Provenance>
+              Element {item.elementId}: {item.reasons.join(", ")}
+            </Provenance>
           </div>
         ))}
         {res.restore && !res.restore.held ? (
-          <OutcomeLine kind="error" label="View restore failed" says={res.restore.left.join(", ")} />
+          <OutcomeLine
+            kind="error"
+            label="View restore failed"
+            says={res.restore.left.join(", ")}
+          />
         ) : null}
       </Section>
     );

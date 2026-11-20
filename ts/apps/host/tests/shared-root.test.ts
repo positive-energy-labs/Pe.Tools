@@ -1,3 +1,4 @@
+import { homes as catalogHomes } from "@pe/host-contracts/product-paths";
 import { hostState } from "../src/host-ownership.ts";
 import { contentRootsReady } from "../src/content-roots.ts";
 import { ledgerFixture } from "./storage.ts";
@@ -6,8 +7,14 @@ import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync,
-  readFileSync, readdirSync, rmSync, statSync, writeFileSync,
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
@@ -16,11 +23,22 @@ import { stateTree } from "@pe/host-contracts/service-identity";
 import * as paths from "../src/product-paths.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { capturePackage, listPackages, readPackage } from "../src/packages.ts";
-import { productPagesRoots, scratchPageDescriptors, scratchPageDirectory } from "../src/page-libraries.ts";
+import {
+  productPagesRoots,
+  scratchPageDescriptors,
+  scratchPageDirectory,
+} from "../src/page-libraries.ts";
 import { commitPagePublication, pageVersion } from "../src/page-publication.ts";
 import { importShippedPods } from "../src/installed-pods.ts";
 import { readDuctCatalogs } from "@pe/ducts-host/duct-catalogs";
-import { listPods, listRuns, readMember, saveMember, writeMember, writeRun } from "../src/settings.ts";
+import {
+  listPods,
+  listRuns,
+  readMember,
+  saveMember,
+  writeMember,
+  writeRun,
+} from "../src/settings.ts";
 import { sourceRunDirectory } from "../src/family-actions.ts";
 import { writeZip } from "../src/pod-transfer.ts";
 import { importPod } from "./pod-import.ts";
@@ -84,11 +102,32 @@ const catalog = (home: string, folder: string, id: string, title: string) => {
   const table = {
     id,
     title,
-    source: { file: "source.pdf", title: "t", edition: "1", url: "https://x.test", page: 1, pdfPage: 1 },
+    source: {
+      file: "source.pdf",
+      title: "t",
+      edition: "1",
+      url: "https://x.test",
+      page: 1,
+      pdfPage: 1,
+    },
     rows: axis,
     columns: axis,
-    cells: { quantity: "q", unit: "u", values: [[1, 2], [3, 4]] },
-    result: { from: "cells", quantity: "coefficient", unit: "1", toInWg: 1, velocityBasis: "connector", note: "n" },
+    cells: {
+      quantity: "q",
+      unit: "u",
+      values: [
+        [1, 2],
+        [3, 4],
+      ],
+    },
+    result: {
+      from: "cells",
+      quantity: "coefficient",
+      unit: "1",
+      toInWg: 1,
+      velocityBasis: "connector",
+      note: "n",
+    },
   };
   writeFileSync(
     join(home, "Catalogs", folder, "catalog.json"),
@@ -190,7 +229,9 @@ test("H4: an overwrite in the firm home leaves the prior bytes in Blobs under th
   const member = { pod: "theirs", path: "settings/a.json" };
   const blobs = stateTree(hostOwnership.rootPath).blobs;
   expect(under(firm, blobs) || under(user, blobs)).toBe(false);
-  const written = await run(saveMember({ ...member, content: '{"next":1}', expectedSha256: sha(prior) }));
+  const written = await run(
+    saveMember({ ...member, content: '{"next":1}', expectedSha256: sha(prior) }),
+  );
   expect(written).toEqual({ ...member, sha256: sha('{"next":1}') });
   // The receipt's prior hash is the one the caller sent, and the blob store holds those bytes.
   expect(readFileSync(join(blobs, "sha256", sha(prior)), "utf8")).toBe(prior);
@@ -198,11 +239,16 @@ test("H4: an overwrite in the firm home leaves the prior bytes in Blobs under th
   const held = readdirSync(join(blobs, "sha256")).length;
   await expect(
     run(saveMember({ ...member, content: '{"late":1}', expectedSha256: sha(prior) })),
-  ).rejects.toMatchObject({ statusCode: 409, message: expect.stringContaining("changed since it was read") });
+  ).rejects.toMatchObject({
+    statusCode: 409,
+    message: expect.stringContaining("changed since it was read"),
+  });
   expect(readFileSync(join(theirs, "settings", "a.json"), "utf8")).toBe('{"next":1}');
   expect(readdirSync(join(blobs, "sha256"))).toHaveLength(held);
   // A create over an existing member is refused the same way.
-  await expect(run(writeMember({ ...member, content: "{}" }))).rejects.toMatchObject({ statusCode: 409 });
+  await expect(run(writeMember({ ...member, content: "{}" }))).rejects.toMatchObject({
+    statusCode: 409,
+  });
   expect(readFileSync(join(theirs, "settings", "a.json"), "utf8")).toBe('{"next":1}');
 });
 
@@ -230,9 +276,15 @@ test("a catalog table id in two homes admits no table, with a finding", async ()
   catalog(firm, "smacna", "square", "same folder name, another id");
   catalog(firm, "firm", "round", "firm round");
   catalog(firm, "oval", "oval", "firm oval");
-  const reading = await readDuctCatalogs();
-  expect(reading.findings).toEqual(["Duplicate catalog table round; no table with this id is admitted"]);
-  expect(Object.values(reading.tables).map((t) => [t.id, t.title]).sort()).toEqual([
+  const reading = await readDuctCatalogs(catalogHomes(), hostState().home);
+  expect(reading.findings).toEqual([
+    "Duplicate catalog table round; no table with this id is admitted",
+  ]);
+  expect(
+    Object.values(reading.tables)
+      .map((t) => [t.id, t.title])
+      .sort(),
+  ).toEqual([
     ["oval", "firm oval"],
     ["square", "same folder name, another id"],
   ]);
@@ -244,13 +296,17 @@ test("run output is machine state: declaring and filing a run of a firm-only pod
   const runs = join(stateTree(hostOwnership.rootPath).runs, "theirs");
   // Every Pod-run command's bind declares this effect before consent (ADR 0027): pure, no write.
   expect((await sourceRunDirectory("theirs", {})).path).toBe(runs);
-  expect((await sourceRunDirectory(null, {})).path).toBe(stateTree(hostOwnership.rootPath).podlessRuns);
+  expect((await sourceRunDirectory(null, {})).path).toBe(
+    stateTree(hostOwnership.rootPath).podlessRuns,
+  );
   expect(existsSync(runs)).toBe(false);
-  expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe(join(runs, "run-1"));
+  expect(await run(writeRun("theirs", "run-1", { "receipt.json": "{}" }))).toBe(
+    join(runs, "run-1"),
+  );
   expect(readFileSync(join(runs, "run-1", "receipt.json"), "utf8")).toBe("{}");
-  expect((await run(listRuns({ pod: "theirs" }))).runs.map((r) => [r.runId, r.receiptPath])).toEqual([
-    ["run-1", join(runs, "run-1", "receipt.json")],
-  ]);
+  expect(
+    (await run(listRuns({ pod: "theirs" }))).runs.map((r) => [r.runId, r.receiptPath]),
+  ).toEqual([["run-1", join(runs, "run-1", "receipt.json")]]);
   expect([tree(user), tree(firm)]).toEqual(before);
   await expect(sourceRunDirectory("absent", {})).rejects.toThrow(/No installed pod/);
 });
@@ -260,9 +316,18 @@ test("importing a pod whose id the firm home already holds is refused: no duplic
   const archive = join(user, "theirs.zip");
   writeFileSync(
     archive,
-    writeZip(new Map([["pod.json", Buffer.from(JSON.stringify({ schemaVersion: 2, id: "theirs", entrypoints: [] }))]])),
+    writeZip(
+      new Map([
+        [
+          "pod.json",
+          Buffer.from(JSON.stringify({ schemaVersion: 2, id: "theirs", entrypoints: [] })),
+        ],
+      ]),
+    ),
   );
-  await expect(importPod({ archivePath: archive })).rejects.toThrow(`already installed at '${theirs}'`);
+  await expect(importPod({ archivePath: archive })).rejects.toThrow(
+    `already installed at '${theirs}'`,
+  );
   expect(existsSync(join(user, "Pods"))).toBe(false);
 });
 
@@ -284,7 +349,11 @@ test("H2: a read says which home a pod is in, and a member read says when its fi
 const archiveOf = (path: string, id: string) => {
   writeFileSync(
     path,
-    writeZip(new Map([["pod.json", Buffer.from(JSON.stringify({ schemaVersion: 2, id, entrypoints: [] }))]])),
+    writeZip(
+      new Map([
+        ["pod.json", Buffer.from(JSON.stringify({ schemaVersion: 2, id, entrypoints: [] }))],
+      ]),
+    ),
   );
   return path;
 };
@@ -296,11 +365,18 @@ test("W1: a shipped example whose id the firm home holds is not installed again 
   const shipped = join(user, "shipped");
   mkdirSync(shipped);
   archiveOf(join(shipped, "example.zip"), "example");
-  const report = await importShippedPods({ shippedRoot: shipped, ledger: ledgerFixture(join(user, "state", "shipped-pods.json")) });
-  expect(report.outcomes).toMatchObject([{ outcome: "present", id: "example", reason: `installed at '${theirs}'` }]);
+  const report = await importShippedPods({
+    shippedRoot: shipped,
+    ledger: ledgerFixture(join(user, "state", "shipped-pods.json")),
+  });
+  expect(report.outcomes).toMatchObject([
+    { outcome: "present", id: "example", reason: `installed at '${theirs}'` },
+  ]);
   expect(existsSync(join(user, "Pods", "example"))).toBe(false);
   // The sentinel: the firm pod is still the one admitted pod of that id.
-  expect((await listPackages()).packages.filter((p) => p.id === "example").map((p) => p.directory)).toEqual([theirs]);
+  expect(
+    (await listPackages()).packages.filter((p) => p.id === "example").map((p) => p.directory),
+  ).toEqual([theirs]);
 });
 
 // Mutant, run red once (2026-11-12): in `installArchive`, check the folder in the user home only.
@@ -328,7 +404,9 @@ test("W2: page.publish writes a firm Page where it is, through the door, and mak
   expect(readFileSync(join(theirs, "index.html"), "utf8")).toBe("<title>new</title>");
   expect(existsSync(join(user, "Pages", "plan"))).toBe(false);
   // Item 5: the door's safety net holds the bytes the publication replaced.
-  expect(readFileSync(join(stateTree(hostOwnership.rootPath).blobs, "sha256", version!), "utf8")).toBe(before);
+  expect(
+    readFileSync(join(stateTree(hostOwnership.rootPath).blobs, "sha256", version!), "utf8"),
+  ).toBe(before);
   // A slug two homes hold is refused with both paths, and nothing is written.
   page(user, "twice", "mine");
   const firms = page(firm, "twice", "theirs");

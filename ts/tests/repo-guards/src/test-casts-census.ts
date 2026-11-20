@@ -133,8 +133,13 @@ export function census(): TestCasts {
 }
 
 const isTestCasts = (value: unknown): value is TestCasts =>
-  typeof value === "object" && value !== null && "total" in value && typeof value.total === "number" &&
-  "byFile" in value && typeof value.byFile === "object" && value.byFile !== null &&
+  typeof value === "object" &&
+  value !== null &&
+  "total" in value &&
+  typeof value.total === "number" &&
+  "byFile" in value &&
+  typeof value.byFile === "object" &&
+  value.byFile !== null &&
   Object.values(value.byFile).every((n) => typeof n === "number");
 
 /** The files whose count rose, as `file: baseline -> actual`. */
@@ -148,7 +153,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const actual = census();
   if (process.argv.includes("--tighten")) {
     const parsed: unknown = existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
-    if (parsed !== undefined && !isTestCasts(parsed)) throw new Error(`test-casts: ${path} is not a test-casts baseline`);
+    if (parsed !== undefined && !isTestCasts(parsed))
+      throw new Error(`test-casts: ${path} is not a test-casts baseline`);
     const baseline = isTestCasts(parsed) ? parsed : undefined;
     if (baseline && (actual.total > baseline.total || rises(actual, baseline).length))
       throw new Error(

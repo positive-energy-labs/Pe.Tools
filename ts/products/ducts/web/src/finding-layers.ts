@@ -22,9 +22,9 @@ import {
 } from "@pe/ducts-domain/proximity";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { inkOf } from "@pe/web/scene/ink";
-import { markFrame, markLines, markVolume } from "@pe/web/scene/marks";
-import type { Layer3D } from "@pe/web/scene/types";
+import { inkOf } from "@pe/web-kernel/scene/ink";
+import { markFrame, markLines, markVolume } from "@pe/web-kernel/scene/marks";
+import type { Layer3D } from "@pe/web-kernel/scene/types";
 import type { NoRunBranch } from "@pe/ducts-domain/no-run-types";
 import { issueAt, type StageIssue } from "@pe/ducts-domain/stage-issue";
 
@@ -372,4 +372,3 @@ export function noRunLayers(
     ];
   });
 }
-

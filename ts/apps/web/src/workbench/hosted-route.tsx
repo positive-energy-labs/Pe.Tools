@@ -2,7 +2,7 @@ import { createContext, useSyncExternalStore } from "react";
 import { publicRoutes } from "../route/route-discovery";
 import type { AdmittedAddressPort } from "../shell/typed-address";
 import { subjectCode } from "@pe/agent-contracts";
-import type { TypedRoute } from "../route/typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 export type DockSurfaceProps = { target?: string; docked?: boolean };
 export const DockSurface = createContext<DockSurfaceProps>({});
 export function dockChatAddress(address: AdmittedAddressPort): AdmittedAddressPort {
@@ -20,7 +20,7 @@ export function dockChatAddress(address: AdmittedAddressPort): AdmittedAddressPo
       else search.set("fixture", fixture);
       address.write(search, history);
     },
-    subscribe: listener => address.subscribe(listener),
+    subscribe: (listener) => address.subscribe(listener),
   };
 }
 export interface HostedRouteProps {
@@ -38,7 +38,16 @@ export function hostedRouteAddress(
   const listeners = new Set<() => void>();
   const retainSubject = () => {
     const subject = route.spec.subject;
-    if (work !== undefined && subject) search.set(subject.field, JSON.stringify(route.spec.fields[subject.field]!.schema.parse({kind:"ids", ids:[subjectCode({ keyKind: "workspace", key: work })]})));
+    if (work !== undefined && subject)
+      search.set(
+        subject.field,
+        JSON.stringify(
+          route.spec.fields[subject.field]!.schema.parse({
+            kind: "ids",
+            ids: [subjectCode({ keyKind: "workspace", key: work })],
+          }),
+        ),
+      );
   };
   retainSubject();
   return {

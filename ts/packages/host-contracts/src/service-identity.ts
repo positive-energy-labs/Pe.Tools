@@ -12,7 +12,13 @@ import {
   productInstallLayout,
   productPathNames,
 } from "./contracts/product.ts";
-import { documentsUserRoot, firmHome, insideTestRoot, projectHomeAbove, useHomesConfig, type Home,
+import {
+  documentsUserRoot,
+  firmHome,
+  insideTestRoot,
+  projectHomeAbove,
+  useHomesConfig,
+  type Home,
 } from "./product-paths.ts";
 import { mintStatePath } from "./store-paths.ts";
 import {
@@ -66,7 +72,9 @@ export function stateRoot(
     const fence = resolve(home.root.trim());
     const away = relative(fence, root);
     if (away !== ".." && !away.startsWith(`..${sep}`) && !isAbsolute(away))
-      throw Error(`Machine state root '${root}' cannot be at or under ${fenceNames[home.tier]} '${fence}'.`);
+      throw Error(
+        `Machine state root '${root}' cannot be at or under ${fenceNames[home.tier]} '${fence}'.`,
+      );
   }
   return root;
 }
@@ -116,8 +124,7 @@ export function stateTree(root: string): StateRoot & {
   home(home: Home): HomeRoot;
 } {
   const state = (...segments: string[]) =>
-    mintStatePath(
-    join(root, productPathNames.stateDirectoryName, ...segments));
+    mintStatePath(join(root, productPathNames.stateDirectoryName, ...segments));
   const paths = {
     /** The `state` folder itself: every state kind's root. */
     state: state(),
@@ -129,7 +136,10 @@ export function stateTree(root: string): StateRoot & {
     /** Run output, `<pod-id>\<run-id>`. */
     runs: state(productPathNames.runsDirectoryName),
     /** Where a run no pod owns writes. Not a pod id: an id cannot start with `_`. */
-    podlessRuns: state(productPathNames.runsDirectoryName, productPathNames.podlessRunsDirectoryName),
+    podlessRuns: state(
+      productPathNames.runsDirectoryName,
+      productPathNames.podlessRunsDirectoryName,
+    ),
     /** The write door's `blobRoot`: prior bytes rest in `sha256\<hash>` under it. */
     blobs: state(productPathNames.blobsDirectoryName),
     t3: state("T3"),
@@ -242,9 +252,14 @@ export function installedRuntimeRoot(
   )
     throw Error(`Installed ${app} must execute from an SDK install ('${manifest}' is missing).`);
   const decoded: unknown = JSON.parse(readFileSync(manifest, "utf8"));
-  if (typeof decoded !== "object" || decoded === null ||
-      !("product" in decoded) || decoded.product !== productIdentity.productName ||
-      !("vendor" in decoded) || decoded.vendor !== productIdentity.vendorName)
+  if (
+    typeof decoded !== "object" ||
+    decoded === null ||
+    !("product" in decoded) ||
+    decoded.product !== productIdentity.productName ||
+    !("vendor" in decoded) ||
+    decoded.vendor !== productIdentity.vendorName
+  )
     throw Error(`Installed ${app} manifest '${manifest}' names another product.`);
   return insideTestRoot(root);
 }

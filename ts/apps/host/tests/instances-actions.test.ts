@@ -33,42 +33,55 @@ vi.mock("node:fs/promises", async (original) => {
   return { ...fs, rmdir: vi.fn(fs.rmdir) };
 });
 
-test.each(["EBUSY", "EPERM", "ENOTEMPTY"])("cleanup keeps a folder on rmdir %s and still stops its Revit", async (code) => {
-  const { f, acquired } = await acquisitionSetup();
-  let blocked = "";
-  vi.mocked(rmdir).mockImplementationOnce(async (path) => {
-    blocked = String(path);
-    throw Object.assign(Error(code), { code });
-  });
-  const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
-  expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
-  expect(f.calls.some(args => args[0] === "session" && args[1] === "stop")).toBe(true);
-  expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(blocked);
-  expect(existsSync(blocked)).toBe(true);
-});
+test.each(["EBUSY", "EPERM", "ENOTEMPTY"])(
+  "cleanup keeps a folder on rmdir %s and still stops its Revit",
+  async (code) => {
+    const { f, acquired } = await acquisitionSetup();
+    let blocked = "";
+    vi.mocked(rmdir).mockImplementationOnce(async (path) => {
+      blocked = String(path);
+      throw Object.assign(Error(code), { code });
+    });
+    const receipt = await f.admit("instances.cleanup", {
+      acquisition: acquired.id,
+      unsaved: "discard",
+    });
+    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+    expect(f.calls.some((args) => args[0] === "session" && args[1] === "stop")).toBe(true);
+    expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(blocked);
+    expect(existsSync(blocked)).toBe(true);
+  },
+);
 
-test.each(["absolute", "parent", "junction"])("cleanup refuses a tampered %s prune root", async (kind) => {
-  const { f, acquired, acquisition } = await acquisitionSetup();
-  await rm(acquisition.intent.root, { recursive: true });
-  const outside = join(f.dir, "outside");
-  await mkdir(join(outside, "empty"), { recursive: true });
-  let root = outside;
-  if (kind === "parent") root = join(f.peaWork, "..", "outside");
-  if (kind === "junction") {
-    root = join(f.peaWork, "junction");
-    await symlink(outside, root, "junction");
-  }
-  const actual = vi.mocked(foldAcquisitions).getMockImplementation()!;
-  vi.mocked(foldAcquisitions).mockImplementation((...args) =>
-    actual(...args).map(row => ({ ...row, intent: { ...row.intent, root } })));
-  try {
-    const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
-    expect(existsSync(join(outside, "empty"))).toBe(true);
-    expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(root);
-  } finally {
-    vi.mocked(foldAcquisitions).mockImplementation(actual);
-  }
-});
+test.each(["absolute", "parent", "junction"])(
+  "cleanup refuses a tampered %s prune root",
+  async (kind) => {
+    const { f, acquired, acquisition } = await acquisitionSetup();
+    await rm(acquisition.intent.root, { recursive: true });
+    const outside = join(f.dir, "outside");
+    await mkdir(join(outside, "empty"), { recursive: true });
+    let root = outside;
+    if (kind === "parent") root = join(f.peaWork, "..", "outside");
+    if (kind === "junction") {
+      root = join(f.peaWork, "junction");
+      await symlink(outside, root, "junction");
+    }
+    const actual = vi.mocked(foldAcquisitions).getMockImplementation()!;
+    vi.mocked(foldAcquisitions).mockImplementation((...args) =>
+      actual(...args).map((row) => ({ ...row, intent: { ...row.intent, root } })),
+    );
+    try {
+      const receipt = await f.admit("instances.cleanup", {
+        acquisition: acquired.id,
+        unsaved: "discard",
+      });
+      expect(existsSync(join(outside, "empty"))).toBe(true);
+      expect((receipt as { result?: { kept: string[] } }).result?.kept).toContain(root);
+    } finally {
+      vi.mocked(foldAcquisitions).mockImplementation(actual);
+    }
+  },
+);
 // K2: deleting the symlinked-ancestor guard must prune the external empty folder.
 test("cleanup keeps an acquisition root beneath a junction ancestor", async () => {
   const { f, acquired, acquisition } = await acquisitionSetup();
@@ -85,8 +98,12 @@ test("cleanup keeps an acquisition root beneath a junction ancestor", async () =
   const actual = vi.mocked(foldAcquisitions).getMockImplementation()!;
   try {
     vi.mocked(foldAcquisitions).mockImplementation((...args) =>
-      actual(...args).map(row => ({ ...row, intent: { ...row.intent, root } })));
-    const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
+      actual(...args).map((row) => ({ ...row, intent: { ...row.intent, root } })),
+    );
+    const receipt = await f.admit("instances.cleanup", {
+      acquisition: acquired.id,
+      unsaved: "discard",
+    });
     expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
     expect(existsSync(externalRoot)).toBe(true);
     expect(existsSync(empty)).toBe(true);
@@ -98,29 +115,43 @@ test("cleanup keeps an acquisition root beneath a junction ancestor", async () =
   }
 });
 const cleanup: (() => Promise<void>)[] = [];
-test.each(["prepare", "run"])("cleanup excludes a temporary file that vanishes before %s", async (phase) => {
-  let work = "";
-  const { f, acquired, acquisition } = await acquisitionSetup(() => {
-    if (phase === "run") unlinkSync(work);
-  });
-  const origin = acquisition.intent.document!.origin;
-  if (origin.kind !== "file-copy") throw Error("expected file copy");
-  work = origin.work;
-  let vanished = false;
-  f.census.beforeSdkList = () => {
-    if (phase === "prepare" && !vanished) {
-      vanished = true;
-      unlinkSync(work);
+test.each(["prepare", "run"])(
+  "cleanup excludes a temporary file that vanishes before %s",
+  async (phase) => {
+    let work = "";
+    const { f, acquired, acquisition } = await acquisitionSetup(() => {
+      if (phase === "run") unlinkSync(work);
+    });
+    const origin = acquisition.intent.document!.origin;
+    if (origin.kind !== "file-copy") throw Error("expected file copy");
+    work = origin.work;
+    let vanished = false;
+    f.census.beforeSdkList = () => {
+      if (phase === "prepare" && !vanished) {
+        vanished = true;
+        unlinkSync(work);
+      }
+    };
+    const receipt = await f.admit("instances.cleanup", {
+      acquisition: acquired.id,
+      unsaved: "discard",
+    });
+    expect(receipt.state).toBe("succeeded");
+    expect((receipt as { result?: { removed: string[] } }).result?.removed).not.toContain(work);
+    if (phase === "prepare") {
+      expect(receipt.prepared).toMatchObject({
+        state: "ready",
+        value: { removals: expect.not.arrayContaining([work]) },
+      });
+      expect(
+        receipt.steps.some(
+          (step) =>
+            step.key === "acquisition.remove" && (step.input as { to?: string }).to === work,
+        ),
+      ).toBe(false);
     }
-  };
-  const receipt = await f.admit("instances.cleanup", { acquisition: acquired.id, unsaved: "discard" });
-  expect(receipt.state).toBe("succeeded");
-  expect((receipt as { result?: { removed: string[] } }).result?.removed).not.toContain(work);
-  if (phase === "prepare") {
-    expect(receipt.prepared).toMatchObject({ state: "ready", value: { removals: expect.not.arrayContaining([work]) } });
-    expect(receipt.steps.some(step => step.key === "acquisition.remove" && (step.input as { to?: string }).to === work)).toBe(false);
-  }
-});
+  },
+);
 afterEach(async () => {
   for (const f of cleanup.splice(0).reverse()) await f();
 });
@@ -199,12 +230,27 @@ async function setup(
     // The SDK answers a name it no longer lists with `result: {}` (pe-revit 0.1.0-beta.224).
     if (args[0] === "session" && args[1] === "list") {
       if (census.beforeSessionList) await census.beforeSessionList();
-      return args.includes("--id") && !sessionRows.some((row) => (row as { id?: string }).id === flag(args, "--id"))
-        ? replayAnswer(args, { result: {}, exitCode: 3,
-            diagnostics: [{ code: "session.no-match", detail: `no session '${flag(args, "--id")}'`, fix: "pe-revit session list" }] })
-        : replayAnswer(args, { result: {
-            state: "ok", sessions: sessionRows, processReadErrors: [], unreadableReceipts: [],
-          } });
+      return args.includes("--id") &&
+        !sessionRows.some((row) => (row as { id?: string }).id === flag(args, "--id"))
+        ? replayAnswer(args, {
+            result: {},
+            exitCode: 3,
+            diagnostics: [
+              {
+                code: "session.no-match",
+                detail: `no session '${flag(args, "--id")}'`,
+                fix: "pe-revit session list",
+              },
+            ],
+          })
+        : replayAnswer(args, {
+            result: {
+              state: "ok",
+              sessions: sessionRows,
+              processReadErrors: [],
+              unreadableReceipts: [],
+            },
+          });
     }
     if (args[0] === "doc" && args[1] === "list") {
       census.beforeSdkList?.();
@@ -311,18 +357,20 @@ async function setup(
       if (census.fail) throw Error("census unavailable");
       return sessionRows.map((row) => {
         const session = row as SessionObservation;
-        return session.case === "observed-active" ? session : {
-          ...session,
-          observedAtUtc: new Date().toISOString(),
-          bridge: {
-            bridge: "ready",
-            documents: census.documents.map((openId) => ({
-              openId,
-              title: openId,
-              ...census.facts,
-            })),
-          },
-        };
+        return session.case === "observed-active"
+          ? session
+          : {
+              ...session,
+              observedAtUtc: new Date().toISOString(),
+              bridge: {
+                bridge: "ready",
+                documents: census.documents.map((openId) => ({
+                  openId,
+                  title: openId,
+                  ...census.facts,
+                })),
+              },
+            };
       }) as SessionObservation[];
     },
     holdings: async () => null,
@@ -363,12 +411,8 @@ async function setup(
     id?: string,
   ) => {
     if (!bound) {
-      bindCommandRuntime(
-        owner,
-        sdkOnlyBridge,
-        captureStore(join(dir, "captures")),
-        deps,
-        () => Effect.fail(Error("Instances must dispatch through the SDK")),
+      bindCommandRuntime(owner, sdkOnlyBridge, captureStore(join(dir, "captures")), deps, () =>
+        Effect.fail(Error("Instances must dispatch through the SDK")),
       );
       bound = true;
     }
@@ -1320,7 +1364,9 @@ test("/actions/cancel stops a running Instances step through the SDK op cancel, 
     return { result: { state: "cancelled" } };
   });
   const server = await serveRoutes(
-    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(
+      Layer.provide(testHostInputs),
+    ),
     sdkOnlyBridge,
   );
   cleanup.push(async () => {
@@ -1371,7 +1417,9 @@ test("K3: /actions/cancel answers 200 when nothing was signalled to Revit; the S
     return { result: { state: "ok" } };
   });
   const server = await serveRoutes(
-    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(
+      Layer.provide(testHostInputs),
+    ),
     sdkOnlyBridge,
   );
   cleanup.push(async () => {
@@ -1379,32 +1427,44 @@ test("K3: /actions/cancel answers 200 when nothing was signalled to Revit; the S
     await server.close();
   });
   const headers = { "content-type": "application/json", ...contextHeaders() };
-  const save = (id: string) => fetch(`${server.base}/actions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      id,
-      key: "instances.save",
-      target: { kind: "sdk-session", selection: session.selection },
-      input: { session, document: sdkDocument, to: { kind: "self" } },
-    }),
-  });
+  const save = (id: string) =>
+    fetch(`${server.base}/actions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        id,
+        key: "instances.save",
+        target: { kind: "sdk-session", selection: session.selection },
+        input: { session, document: sdkDocument, to: { kind: "self" } },
+      }),
+    });
   expect((await save("save-first")).status).toBe(202);
   while (!f.calls.some((args) => args[1] === "save")) await new Promise((r) => setTimeout(r, 5));
   // The second save waits for its turn behind the first: running, with no step sent anywhere.
   const second = await save("save-second");
   const waiting = (await f.owner.list(undefined, "save-second"))[0]!;
-  expect([second.status, waiting.state, waiting.steps.length], JSON.stringify(waiting)).toEqual([202, "running", 0]);
+  expect([second.status, waiting.state, waiting.steps.length], JSON.stringify(waiting)).toEqual([
+    202,
+    "running",
+    0,
+  ]);
   const response = await fetch(`${server.base}/actions/cancel`, {
     method: "POST",
     headers,
     body: JSON.stringify({ id: "save-second" }),
   });
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ id: "save-second", state: "running", cancellationRequested: true });
+  expect(await response.json()).toMatchObject({
+    id: "save-second",
+    state: "running",
+    cancellationRequested: true,
+  });
   expect(f.calls.some((args) => args[0] === "op" && args[1] === "cancel")).toBe(false);
   release();
-  expect(await f.owner.wait("save-second")).toMatchObject({ state: "cancelled", notDispatched: true });
+  expect(await f.owner.wait("save-second")).toMatchObject({
+    state: "cancelled",
+    notDispatched: true,
+  });
 });
 /**
  * R5 (acceptance 2026-10-13): Pea's stop succeeded, then the action client called its own receipt
@@ -1421,7 +1481,9 @@ test.each([
       result: { id: "dev", state: "ok", phase: verb === "reset" ? "ready" : "stopped" },
     }));
     const server = await serveRoutes(
-      callRouteOver(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }).pipe(Layer.provide(testHostInputs)),
+      callRouteOver(f.owner, captureStore(join(f.dir, "captures")), { sdk: f.deps.sdk }).pipe(
+        Layer.provide(testHostInputs),
+      ),
       sdkOnlyBridge,
     );
     cleanup.push(() => server.close());
@@ -1499,7 +1561,12 @@ test.each(
   const f = await guardSetup();
   f.census.modified = who !== "saved project document";
   f.census.family = who === "family document";
-  const row = await f.admit(key, discardDoors[key]!, undefined, who === "person" ? "human" : "agent");
+  const row = await f.admit(
+    key,
+    discardDoors[key]!,
+    undefined,
+    who === "person" ? "human" : "agent",
+  );
   expect(row.state, JSON.stringify(row)).toBe("succeeded");
   expect(sdkActs(f)).toHaveLength(1);
 });
@@ -1529,9 +1596,9 @@ test("guards 1 and 2: Pea's save over a project document is held; a Save As, a f
     expect((await f.admit("instances.save", input(to), undefined, actor)).state).toBe("succeeded");
   // Not held: Pea saving a family document in place (ADR 0038 rule 3).
   f.census.family = true;
-  expect(
-    (await f.admit("instances.save", input({ kind: "self" }), undefined, "agent")).state,
-  ).toBe("succeeded");
+  expect((await f.admit("instances.save", input({ kind: "self" }), undefined, "agent")).state).toBe(
+    "succeeded",
+  );
   expect(sdkActs(f).filter((argv) => argv[1] === "save")).toHaveLength(4);
 });
 test("guard 2: Pea's discard cleanup is held over unsaved changes on its open project document; a family document is not", async () => {
@@ -1552,95 +1619,173 @@ test("guard 2: Pea's discard cleanup is held over unsaved changes on its open pr
 // Mutant: drop the refused-tail branch, so the row reads "incomplete" with no reason or cleanup line.
 test("a quarantined launch refused through /actions reads refused in the feed and still waits on cleanup of its local copies", async () => {
   const f = await setup(() => ({
-    result: null, exitCode: 2,
-    diagnostics: [{ code: "session.quarantine-unavailable", detail: "Another session holds the quarantine lease.", fix: null }],
+    result: null,
+    exitCode: 2,
+    diagnostics: [
+      {
+        code: "session.quarantine-unavailable",
+        detail: "Another session holds the quarantine lease.",
+        fix: null,
+      },
+    ],
   }));
   const path = await f.file("refused.rvt", "Worksharing: Not enabled");
   const server = await serveRoutes(
-    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
+    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(
+      Layer.provide(testHostInputs),
+    ),
     sdkOnlyBridge,
   );
   cleanup.push(() => server.close());
   const headers = { "content-type": "application/json", ...contextHeaders() };
-  const posted = await fetch(`${server.base}/actions`, { method: "POST", headers,
-    body: JSON.stringify({ id: "quarantine-refused", key: "instances.open", target: { kind: "host" },
-      input: { source: path, into: newRevit({ owner: "pea", addins: "off" }) } }),
+  const posted = await fetch(`${server.base}/actions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      id: "quarantine-refused",
+      key: "instances.open",
+      target: { kind: "host" },
+      input: { source: path, into: newRevit({ owner: "pea", addins: "off" }) },
+    }),
   });
   expect(posted.status, await posted.clone().text()).toBeLessThan(300);
-  const [receipt] = await (await fetch(`${server.base}/actions?id=quarantine-refused&wait=10000`, { headers })).json();
+  const [receipt] = await (
+    await fetch(`${server.base}/actions?id=quarantine-refused&wait=10000`, { headers })
+  ).json();
   expect(receipt, JSON.stringify(receipt)).toMatchObject({ state: "incomplete" });
   expect(receipt.steps.at(-1)).toMatchObject({ state: "failed", notDispatched: true });
-  const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
+  const rows = noticeRows(
+    {
+      threads: [],
+      works: [],
+      machine: null,
+      stored: [],
+      receipts: [{ revision: 1, action: receipt }],
+    },
+    Date.now(),
+  );
   // Its local copies were made before the refused launch, so the row still waits on cleanup.
-  expect(rows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/quarantine[\s\S]*clean up/) }]);
+  expect(rows).toMatchObject([
+    { group: "waits", verb: "refused", says: expect.stringMatching(/quarantine[\s\S]*clean up/) },
+  ]);
   // The cleanup line rides on the refused tail itself, not on the receipt carrying an error.
   const { error: _error, ...bare } = receipt;
-  const bareRows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: bare }] }, Date.now());
-  expect(bareRows).toMatchObject([{ group: "waits", verb: "refused", says: expect.stringMatching(/clean up/) }]);
+  const bareRows = noticeRows(
+    {
+      threads: [],
+      works: [],
+      machine: null,
+      stored: [],
+      receipts: [{ revision: 1, action: bare }],
+    },
+    Date.now(),
+  );
+  expect(bareRows).toMatchObject([
+    { group: "waits", verb: "refused", says: expect.stringMatching(/clean up/) },
+  ]);
 });
-
 
 // Mutant: skip removeEmptyAcquisitionRoot; the empty-root assertion must fail.
-test.each([false, true])("cleanup through /actions removes empty instance folders and preserves stray files: %s", async (stray) => {
-  const f = await setup(async (args) => {
-    if (args[0] === "session") return args[1] === "start" ? startedAnswer : { result: { state: "ok" } };
-    if (args[1] === "close") f.census.documents = [];
-    return { result: { state: "ok", document: { openId, path: args[2] } } };
-  }, [controlledRow({ shape: shape("background") })]);
-  const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
-  const server = await serveRoutes(
-    callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(Layer.provide(testHostInputs)),
-    sdkOnlyBridge,
-  );
-  cleanup.push(() => server.close());
-  const opening = await fetch(`${server.base}/actions`, {
-    method: "POST", headers: { "content-type": "application/json", ...contextHeaders() },
-    body: JSON.stringify({ id: "plant", key: "instances.open", target: { kind: "host" },
-      input: { source, into: newRevit({ owner: "pea" }) } }),
-  });
-  expect(opening.status).toBe(202);
-  const acquired = await f.owner.wait((await opening.json() as { id: string }).id);
-  expect(acquired.state, JSON.stringify(acquired)).toBe("succeeded");
-  const acquisition = foldAcquisitions(await f.owner.list())[0]!;
-  const root = acquisition.intent.root;
-  const origin = acquisition.intent.document!.origin;
-  if (origin.kind !== "file-copy") throw Error("expected file copy");
-  expect(existsSync(origin.work)).toBe(true);
-  expect(existsSync(origin.baseline)).toBe(true);
-  const extra = join(dirname(origin.work), "stray.txt");
-  if (stray) await writeFile(extra, "keep me");
-  const response = await fetch(`${server.base}/actions`, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...contextHeaders() },
-    body: JSON.stringify({ id: "cleanup-folders", key: "instances.cleanup", target: { kind: "host" },
-      input: { acquisition: acquired.id, unsaved: "discard" } }),
-  });
-  expect(response.status).toBe(202);
-  const receipt = await f.owner.wait((await response.json() as { id: string }).id);
-  expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
-  expect(existsSync(root)).toBe(stray);
-  if (!("result" in receipt)) throw Error("cleanup did not return a result");
-  const result = receipt.result as { removed: string[]; kept: string[] };
-  expect(receipt.effects.filter(effect => effect.kind === "file").map(effect => effect.path)).toEqual(result.removed);
-  expect(JSON.stringify(receipt.effects)).not.toContain(".part");
-  if (stray) {
-    expect(await readFile(extra, "utf8")).toBe("keep me");
-    expect(result.kept).toContain(extra);
-    for (const step of receipt.steps) expect(step).not.toHaveProperty("touched");
-    const rows = noticeRows({ threads: [], works: [], machine: null, stored: [], receipts: [{ revision: 1, action: receipt }] }, Date.now());
-    expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
-  }
-});
+test.each([false, true])(
+  "cleanup through /actions removes empty instance folders and preserves stray files: %s",
+  async (stray) => {
+    const f = await setup(
+      async (args) => {
+        if (args[0] === "session")
+          return args[1] === "start" ? startedAnswer : { result: { state: "ok" } };
+        if (args[1] === "close") f.census.documents = [];
+        return { result: { state: "ok", document: { openId, path: args[2] } } };
+      },
+      [controlledRow({ shape: shape("background") })],
+    );
+    const source = await f.file("Tower.rvt", "Worksharing: Not enabled");
+    const server = await serveRoutes(
+      callRouteOver(f.owner, captureStore(join(f.dir, "captures")), f.deps).pipe(
+        Layer.provide(testHostInputs),
+      ),
+      sdkOnlyBridge,
+    );
+    cleanup.push(() => server.close());
+    const opening = await fetch(`${server.base}/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...contextHeaders() },
+      body: JSON.stringify({
+        id: "plant",
+        key: "instances.open",
+        target: { kind: "host" },
+        input: { source, into: newRevit({ owner: "pea" }) },
+      }),
+    });
+    expect(opening.status).toBe(202);
+    const acquired = await f.owner.wait(((await opening.json()) as { id: string }).id);
+    expect(acquired.state, JSON.stringify(acquired)).toBe("succeeded");
+    const acquisition = foldAcquisitions(await f.owner.list())[0]!;
+    const root = acquisition.intent.root;
+    const origin = acquisition.intent.document!.origin;
+    if (origin.kind !== "file-copy") throw Error("expected file copy");
+    expect(existsSync(origin.work)).toBe(true);
+    expect(existsSync(origin.baseline)).toBe(true);
+    const extra = join(dirname(origin.work), "stray.txt");
+    if (stray) await writeFile(extra, "keep me");
+    const response = await fetch(`${server.base}/actions`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...contextHeaders() },
+      body: JSON.stringify({
+        id: "cleanup-folders",
+        key: "instances.cleanup",
+        target: { kind: "host" },
+        input: { acquisition: acquired.id, unsaved: "discard" },
+      }),
+    });
+    expect(response.status).toBe(202);
+    const receipt = await f.owner.wait(((await response.json()) as { id: string }).id);
+    expect(receipt.state, JSON.stringify(receipt)).toBe("succeeded");
+    expect(existsSync(root)).toBe(stray);
+    if (!("result" in receipt)) throw Error("cleanup did not return a result");
+    const result = receipt.result as { removed: string[]; kept: string[] };
+    expect(
+      receipt.effects.filter((effect) => effect.kind === "file").map((effect) => effect.path),
+    ).toEqual(result.removed);
+    expect(JSON.stringify(receipt.effects)).not.toContain(".part");
+    if (stray) {
+      expect(await readFile(extra, "utf8")).toBe("keep me");
+      expect(result.kept).toContain(extra);
+      for (const step of receipt.steps) expect(step).not.toHaveProperty("touched");
+      const rows = noticeRows(
+        {
+          threads: [],
+          works: [],
+          machine: null,
+          stored: [],
+          receipts: [{ revision: 1, action: receipt }],
+        },
+        Date.now(),
+      );
+      expect(rows).toMatchObject([{ detail: expect.stringContaining(`kept: ${extra}`) }]);
+    }
+  },
+);
 
 // K1c option B, shaped like drive1: launch 29d6cc45 succeeded; 55261b6e is the SDK's refusal of a
 // same-year start beside a live session. Only a running action holds a claim, so the SDK guards the year.
-const beside = (rows: unknown[]) => (args: readonly string[]): Answer =>
-  args[1] !== "start"
-    ? { result: { id: "dev", state: "ok", phase: "stopped" } }
-    : rows.length
-      ? { result: { state: "refused", requestId: flag(args, "--request-id") ?? null, legs: [] }, exitCode: 2,
-          diagnostics: [{ code: "op.stale-expectation", detail: "expected no session row, but 'dev' exists. Nothing was dispatched.", fix: null }] }
-      : startedAnswer;
+const beside =
+  (rows: unknown[]) =>
+  (args: readonly string[]): Answer =>
+    args[1] !== "start"
+      ? { result: { id: "dev", state: "ok", phase: "stopped" } }
+      : rows.length
+        ? {
+            result: { state: "refused", requestId: flag(args, "--request-id") ?? null, legs: [] },
+            exitCode: 2,
+            diagnostics: [
+              {
+                code: "op.stale-expectation",
+                detail: "expected no session row, but 'dev' exists. Nothing was dispatched.",
+                fix: null,
+              },
+            ],
+          }
+        : startedAnswer;
 const start2025 = { year: "2025", owner: "you", addins: "on" };
 
 test("K1c: a start beside a live Revit of its year reaches the SDK and fails undispatched, saying so plainly", async () => {
@@ -1652,7 +1797,9 @@ test("K1c: a start beside a live Revit of its year reaches the SDK and fails und
   expect(second, JSON.stringify(second)).toMatchObject({
     state: "failed",
     notDispatched: true,
-    error: expect.stringMatching(/^Revit 2025 already has a session, so nothing was started\. .*'dev' exists/),
+    error: expect.stringMatching(
+      /^Revit 2025 already has a session, so nothing was started\. .*'dev' exists/,
+    ),
   });
   expect(f.calls.filter((argv) => argv[1] === "start")).toHaveLength(2);
 });
@@ -1664,15 +1811,26 @@ test("K1c: once that Revit is gone by any route, a second start of the year runs
   expect(await f.admit("instances.start", start2025)).toMatchObject({ state: "succeeded" });
 });
 
-test.each([false, true])("K1c: stopping a Revit that already closed succeeds with historical rows=%s", async (history) => {
-  const f = await setup(() => Error("Unexpected SDK mutation"), history ? [
-    { case: "gone-receipt", id: "dev", process: originalProcess },
-    { case: "failed-receipt", id: "older", failure: { source: "receipt" } },
-  ] : []);
-  const stop = await f.admit("instances.stop", { session, unsaved: "discard" });
-  expect(stop).toMatchObject({ state: "succeeded", result: { state: "ok", phase: "already-gone" } });
-  expect(f.calls.every((args) => args[0] === "session" && args[1] === "list")).toBe(true);
-});
+test.each([false, true])(
+  "K1c: stopping a Revit that already closed succeeds with historical rows=%s",
+  async (history) => {
+    const f = await setup(
+      () => Error("Unexpected SDK mutation"),
+      history
+        ? [
+            { case: "gone-receipt", id: "dev", process: originalProcess },
+            { case: "failed-receipt", id: "older", failure: { source: "receipt" } },
+          ]
+        : [],
+    );
+    const stop = await f.admit("instances.stop", { session, unsaved: "discard" });
+    expect(stop).toMatchObject({
+      state: "succeeded",
+      result: { state: "ok", phase: "already-gone" },
+    });
+    expect(f.calls.every((args) => args[0] === "session" && args[1] === "list")).toBe(true);
+  },
+);
 
 test("Stop refuses in three seconds if the SDK cannot answer its opening census", async () => {
   const f = await setup(() => Error("Unexpected SDK mutation"));

@@ -68,8 +68,14 @@ test("refused input survives release, shares conflict admission, and clears only
       undoable: true,
     };
     expect(
-      (await next.writer.write(fresh, retry, async () => ({ ok: true, revision: 5, handle: { key: ack.key, revision: 5 }, write: ack })))
-        .ok,
+      (
+        await next.writer.write(fresh, retry, async () => ({
+          ok: true,
+          revision: 5,
+          handle: { key: ack.key, revision: 5 },
+          write: ack,
+        }))
+      ).ok,
     ).toBe(true);
     expect(next.writer.pending()).toEqual([]);
     await next.writer.write({ ...fresh, closed: true }, { ...retry, press: "closed-edit" }, port);
@@ -164,8 +170,14 @@ test("a transport failure retains the edit and an acknowledgement for another Wo
       undoable: true,
     };
     expect(
-      (await held.writer.write(scope, request, async () => ({ ok: true, revision: 1, handle: { key: ack.key, revision: 1 }, write: ack })))
-        .ok,
+      (
+        await held.writer.write(scope, request, async () => ({
+          ok: true,
+          revision: 1,
+          handle: { key: ack.key, revision: 1 },
+          write: ack,
+        }))
+      ).ok,
     ).toBe(false);
     expect(held.writer.pending()).toEqual([request]);
     held.writer.discard("failed");
@@ -226,12 +238,24 @@ test("sequential human edits wait for the acknowledged revision of the same Work
   expect((await second).ok).toBe(true);
   expect(port.mock.calls.map(([, request]) => request.expectedRevision)).toEqual([0, 1]);
   // A query observed r0: it may not overwrite either acknowledged human edit.
-  const query = { kind: "apply" as const, press: "query", expectedRevision: 0,
-    patches: [{ path: ["query"], value: "old observation" }] };
+  const query = {
+    kind: "apply" as const,
+    press: "query",
+    expectedRevision: 0,
+    patches: [{ path: ["query"], value: "old observation" }],
+  };
   await held.writer.write(scope, query, port);
   expect(port.mock.calls.at(-1)![1].expectedRevision).toBe(0);
   // A foreign acknowledgement is not our sequential human intent.
-  held.writer.accept({ ...query, key, by: "pea", base: 2, revision: 3, inverse: [], undoable: true });
+  held.writer.accept({
+    ...query,
+    key,
+    by: "pea",
+    base: 2,
+    revision: 3,
+    inverse: [],
+    undoable: true,
+  });
   await edit("after-foreign");
   expect(port.mock.calls.at(-1)![1].expectedRevision).toBe(2);
   held.release();

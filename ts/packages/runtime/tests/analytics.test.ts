@@ -48,7 +48,9 @@ test("lane selection: dev never uses the installed key, and no person's file opt
   writeFileSync(join(firm, "pe-home.json"), `{"tier":"firm"}`);
   writeFileSync(join(firm, "keys.json"), JSON.stringify({ "posthog.api-key": "firm-dev-key" }));
   process.env.PE_TOOLS_SHARED_ROOT = firm;
-  expect(analyticsConfig("dev")).toEqual({ apiKey: "firm-dev-key", host: "https://us.i.posthog.com",
+  expect(analyticsConfig("dev")).toEqual({
+    apiKey: "firm-dev-key",
+    host: "https://us.i.posthog.com",
   });
   expect(analyticsConfig("installed")?.apiKey).toBe("installed-key");
 });

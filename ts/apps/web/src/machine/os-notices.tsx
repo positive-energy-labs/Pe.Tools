@@ -25,7 +25,10 @@ export function useThreadPresence(thread: string | null) {
           params: { caller },
           body: { thread, visible, focused },
         })
-        .catch((error) => { console.error("os-notices: asynchronous operation failed", error); throw error; }); // A lost beat expires on the host.
+        .catch((error) => {
+          console.error("os-notices: asynchronous operation failed", error);
+          throw error;
+        }); // A lost beat expires on the host.
     const beat = () => send(document.visibilityState === "visible", document.hasFocus());
     const now = () => void beat().catch(() => {}); // Already said above.
     // The 5 s beat backs off while the host does not answer; a person's own move still beats at once.

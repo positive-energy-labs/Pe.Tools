@@ -42,13 +42,14 @@ export function terminalFlows(
     const override = flowsStaged[elementSubject(node)];
     const revit = slotFlowOf(node, snapshot.slots.terminalFlow).cfm;
     const room = roomFlows?.get(node.id);
-    const flow: TerminalFlow = override != null
-      ? { cfm: override, source: "override" }
-      : room
-        ? { cfm: room.cfm, source: `rooms:${room.source}` }
-        : revit != null && revit > 0
-          ? { cfm: revit, source: "revit" }
-          : { cfm: null, source: null, finding: "no-flow" };
+    const flow: TerminalFlow =
+      override != null
+        ? { cfm: override, source: "override" }
+        : room
+          ? { cfm: room.cfm, source: `rooms:${room.source}` }
+          : revit != null && revit > 0
+            ? { cfm: revit, source: "revit" }
+            : { cfm: null, source: null, finding: "no-flow" };
     if (flow.finding) findings.push({ kind: "no-flow", terminal: node.id });
     flows.set(node.id, flow);
   }
@@ -75,11 +76,12 @@ export function equipmentFlows(
       .map((node) => {
         const override = edit[elementSubject(node)];
         const revit = node.facts.find((f) => f.key === "fanFlow")?.value ?? null;
-        const flow: EquipmentFlow = override != null
-          ? { cfm: override, source: "override" }
-          : revit != null && revit > 0
-            ? { cfm: revit, source: "revit" }
-            : { cfm: null, source: null };
+        const flow: EquipmentFlow =
+          override != null
+            ? { cfm: override, source: "override" }
+            : revit != null && revit > 0
+              ? { cfm: revit, source: "revit" }
+              : { cfm: null, source: null };
         return [node.id, flow];
       }),
   );

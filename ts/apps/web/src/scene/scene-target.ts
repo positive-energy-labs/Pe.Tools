@@ -1,6 +1,6 @@
-import { observedElements, type NativeObservation } from "#/revit/observation";
-import type { ElementTarget } from "#/revit/element-target";
-import type { SceneInstance } from "./types";
+import { observedElements, type NativeObservation } from "@pe/web-kernel/revit/observation";
+import type { ElementTarget } from "@pe/web-kernel/revit/element-target";
+import type { SceneInstance } from "@pe/web-kernel/scene/types";
 
 /**
  * What the element menu acts on for one drawn element: the displayed observation's captured member,

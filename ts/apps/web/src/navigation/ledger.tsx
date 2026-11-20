@@ -155,12 +155,17 @@ export function useLedgerList(
         : item.kind === "row" && item.row.visibleDetail
           ? {
               lines: 2 as const,
-              sub: <span className="block whitespace-normal break-all face-mono">{item.row.visibleDetail}</span>,
+              sub: (
+                <span className="block whitespace-normal break-all face-mono">
+                  {item.row.visibleDetail}
+                </span>
+              ),
             }
           : {}),
-      refusal: item.kind === "row" && shown.refusal && item.row.detail
-        ? `${shown.refusal}\n${item.row.detail}`
-        : shown.refusal,
+      refusal:
+        item.kind === "row" && shown.refusal && item.row.detail
+          ? `${shown.refusal}\n${item.row.detail}`
+          : shown.refusal,
       // Only visibleDetail opts into a second line; raw detail folds behind the row:
       // its tooltip and the copy press.
       title: item.kind === "row" ? item.row.detail : undefined,

@@ -8,8 +8,8 @@ import { nativePrincipals } from "@pe/agent-contracts";
 import { admitAnonymousCall } from "./control.ts";
 import { requireEligibleCaller } from "./gateway-catalog.ts";
 import { isDoorFailure } from "./http-problems.ts";
-import { InvalidRead } from "./native-reads.ts";
-import { RequestIdentity } from "./request-services.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 
 export const readRefusal = (message: string, problem: string, status = 409) =>
   new InvalidRead({ message, status, problem });
@@ -24,10 +24,7 @@ export const admitted = <A>(check: () => A) =>
 export const admitNativeCaller = Effect.fn("NativeReadPolicy.caller")(function* (key: string) {
   const { caller } = yield* RequestIdentity;
   const definition = hostOpCatalog.find((entry) => entry.key === key);
-  if (
-    !definition ||
-    (definition.effect !== "Read" && definition.effect !== "TransactRead")
-  )
+  if (!definition || (definition.effect !== "Read" && definition.effect !== "TransactRead"))
     return yield* readRefusal("Only declared native Reads can be admitted", "read.intent");
   yield* admitted(() => {
     admitAnonymousCall(caller, key);

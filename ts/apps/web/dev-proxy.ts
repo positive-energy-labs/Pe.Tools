@@ -1,6 +1,6 @@
-import { ductsReadingSchema } from "@pe/ducts-contract/reading";
-import { readingRequestSchema, READING_MAX_KEYS } from "@pe/agent-contracts";
-﻿import { request, type IncomingMessage } from "node:http";
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
+import { READING_MAX_KEYS } from "@pe/agent-contracts";
+import { request, type IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
 import { matchPeRoute } from "@pe/mcps/product-catalog";
@@ -17,8 +17,6 @@ import {
   checkoutRootFrom,
 } from "@pe/host-contracts/service-identity";
 import { checkoutRoot } from "./checkout-paths.ts";
-
-const resourceReadingSchema = readingRequestSchema.or(ductsReadingSchema);
 
 /** Web-only exception: borrow another checkout's reads, never its host lifecycle or writes. */
 export function readHostCheckout(): string | undefined {
@@ -60,15 +58,25 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
     );
   }
   if (method === "POST" && path === "/pe/resource-subscriptions") {
-    const decoded = decodeResourceSubscriptionUpdate(typeof body === "string" ? body : JSON.stringify(body) ?? "", resourceReadingSchema);
+    const decoded = decodeResourceSubscriptionUpdate(
+      typeof body === "string" ? body : (JSON.stringify(body) ?? ""),
+      resourceReadingSchema,
+    );
     return !("error" in decoded) && readsOnly(decoded.add);
   }
   if (method !== "GET") return false;
   if (path === "/pe/resources") {
     try {
       const query = new URL(url, "http://127.0.0.1").searchParams;
-      return !query.has("keys") && !!query.get("connection") || readsOnly(
-        resourceReadingSchema.array().min(1).max(READING_MAX_KEYS).parse(JSON.parse(query.get("keys") ?? "null")),
+      return (
+        (!query.has("keys") && !!query.get("connection")) ||
+        readsOnly(
+          resourceReadingSchema
+            .array()
+            .min(1)
+            .max(READING_MAX_KEYS)
+            .parse(JSON.parse(query.get("keys") ?? "null")),
+        )
       );
     } catch {
       return false;
@@ -89,8 +97,12 @@ export function readHostRequest(method: string, url: string, body?: unknown): bo
 }
 
 // This read adapter performs temporary family placement; neither GET nor POST is a safety signal.
-const readsOnly = (requests: ReadingRequest[]) => requests.every(request =>
-  request.kind !== "families-matrix" || readHostRequest("POST", "/call", { key: "revit.matrix.loaded-families" }));
+const readsOnly = (requests: ReadingRequest[]) =>
+  requests.every(
+    (request) =>
+      request.kind !== "families-matrix" ||
+      readHostRequest("POST", "/call", { key: "revit.matrix.loaded-families" }),
+  );
 
 export function checkoutServiceName(): string {
   const base = sourceHostServiceName(readHostCheckout() ?? checkoutRoot);
@@ -184,8 +196,17 @@ async function checkoutMiddleware(
         }
         body = Buffer.concat(chunks).toString("utf8");
       }
-      if (!readHostRequest(req.method ?? "GET", req.url!,
-        new URL(req.url!, target).pathname === "/pe/resource-subscriptions" ? body : body ? JSON.parse(body) : undefined)) {
+      if (
+        !readHostRequest(
+          req.method ?? "GET",
+          req.url!,
+          new URL(req.url!, target).pathname === "/pe/resource-subscriptions"
+            ? body
+            : body
+              ? JSON.parse(body)
+              : undefined,
+        )
+      ) {
         res.statusCode = 403;
         res.setHeader("content-type", "application/json");
         res.end(

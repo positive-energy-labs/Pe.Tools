@@ -93,14 +93,15 @@ export function NodeFactsView({ node, issues }: { node: DuctNode; issues: readon
       <Rows
         rows={[
           ["part", node.partType ?? null, "revit-reported"],
-          ...node.facts.filter((fact) =>
-            node.kind !== "terminal" || fact.key !== `slot:${node.flowParameter}`).map(
-            (fact): Row => [
-              fact.key,
-              fact.value != null ? factNumber(fact.value, fact.unit) : (fact.text ?? null),
-              fact.provenance,
-            ],
-          ),
+          ...node.facts
+            .filter((fact) => node.kind !== "terminal" || fact.key !== `slot:${node.flowParameter}`)
+            .map(
+              (fact): Row => [
+                fact.key,
+                fact.value != null ? factNumber(fact.value, fact.unit) : (fact.text ?? null),
+                fact.provenance,
+              ],
+            ),
         ]}
       />
       <Issues issues={issues} />

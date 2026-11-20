@@ -27,54 +27,106 @@ import type {
 } from "../../../../packages/agent-contracts/src/work-journal-door";
 import type { CausalParentId } from "../../../../packages/agent-contracts/src/route-kernel-page";
 import { commandTable } from "@pe/agent-contracts/command-axes";
-import { hostFetch } from "../host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import { opResponseSchema } from "../host/catalog-client";
 import type { ActionAdmission } from "@pe/agent-contracts/semantic-actions";
 import type { CommandHandle } from "@pe/agent-contracts/handle";
 import { handle } from "@pe/agent-contracts/handle";
 import { httpRoutes } from "@pe/agent-contracts/pe-api";
 import { familyReadingRoute, savedFamilyRead, scheduleReadingRoute } from "@pe/agent-contracts";
-import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
 import { peClient } from "../host/pe-client";
 import { publicationSource } from "../host/publication-source";
 import { routeInput } from "../route/host";
-import { workTimelineSchema, type WorkKey, type WorkStepRequest, type WorkTimeline } from "@pe/agent-contracts";
+import {
+  workTimelineSchema,
+  type WorkKey,
+  type WorkStepRequest,
+  type WorkTimeline,
+} from "@pe/agent-contracts";
 
 export interface TimelineClient {
-  open(works: readonly WorkKey[], deliver: (value: WorkTimeline | null, reason?: string) => void, document?: WorkKey): () => void;
+  open(
+    works: readonly WorkKey[],
+    deliver: (value: WorkTimeline | null, reason?: string) => void,
+    document?: WorkKey,
+  ): () => void;
   step(request: WorkStepRequest): Promise<{ message: string } | null>;
 }
 /** One host publication, invalidated on Work and receipt changes, shared with Pea's step door. */
-export function createTimelineClient(client: Pick<typeof peClient, "response"> = peClient): TimelineClient {
+export function createTimelineClient(
+  client: Pick<typeof peClient, "response"> = peClient,
+): TimelineClient {
   return {
     open(works, deliver, document) {
       const args = { works, ...(document ? { document } : {}) };
       const controller = new AbortController();
-      const source = publicationSource({ async read(_ctx, publication, release) {
-        const response = await client.response("reads.value", { body: { ...publication, read: "work.timeline", args, release } });
-        if (!response.ok) {
-          const refusal = z.object({ message: z.string(), problem: z.string() }).safeParse(await response.json().catch(() => null));
-          throw Error(refusal.success ? `${refusal.data.message} [${refusal.data.problem}]` : `Timeline unavailable (${response.status})`);
-        }
-        return await response.json();
-      } });
-      const stop = source.open({ target: { kind: "host" }, workKey: null, workRevision: null, page: {}, work: null,
-        args, inputs: {}, signal: controller.signal, attempt: { target: { kind: "host" }, workKey: null, generation: 0 }, trigger: { kind: "demand" } }, frame => {
-        if (frame.kind === "complete") {
-          const parsed = workTimelineSchema.safeParse(frame.value.value?.data);
-          deliver(parsed.success ? parsed.data : null, parsed.success ? undefined : "Timeline answer does not match its contract");
-        } else if (frame.kind === "failure") deliver(null, String(frame.error));
-        else if (frame.kind !== "log") deliver(null, "Refreshing Timeline");
+      const source = publicationSource({
+        async read(_ctx, publication, release) {
+          const response = await client.response("reads.value", {
+            body: { ...publication, read: "work.timeline", args, release },
+          });
+          if (!response.ok) {
+            const refusal = z
+              .object({ message: z.string(), problem: z.string() })
+              .safeParse(await response.json().catch(() => null));
+            throw Error(
+              refusal.success
+                ? `${refusal.data.message} [${refusal.data.problem}]`
+                : `Timeline unavailable (${response.status})`,
+            );
+          }
+          return await response.json();
+        },
       });
-      return () => { controller.abort(); if (typeof stop === "function") stop(); };
+      const stop = source.open(
+        {
+          target: { kind: "host" },
+          workKey: null,
+          workRevision: null,
+          page: {},
+          work: null,
+          args,
+          inputs: {},
+          signal: controller.signal,
+          attempt: { target: { kind: "host" }, workKey: null, generation: 0 },
+          trigger: { kind: "demand" },
+        },
+        (frame) => {
+          if (frame.kind === "complete") {
+            const parsed = workTimelineSchema.safeParse(frame.value.value?.data);
+            deliver(
+              parsed.success ? parsed.data : null,
+              parsed.success ? undefined : "Timeline answer does not match its contract",
+            );
+          } else if (frame.kind === "failure") deliver(null, String(frame.error));
+          else if (frame.kind !== "log") deliver(null, "Refreshing Timeline");
+        },
+      );
+      return () => {
+        controller.abort();
+        if (typeof stop === "function") stop();
+      };
     },
     async step(request) {
       const key = request.works[0] ?? request.document;
       if (!key) return { message: "No Work in this Timeline" };
-      const response = await client.response("work.history", { ...routeInput(key.route, key), body: request });
+      const response = await client.response("work.history", {
+        ...routeInput(key.route, key),
+        body: request,
+      });
       const wire = await response.json();
-      return response.ok && wire?.ok !== false ? null : { message: typeof wire?.error === "string"
-        ? wire.error : wire?.error?.message ?? `Timeline step refused (${response.status})` };
+      return response.ok && wire?.ok !== false
+        ? null
+        : {
+            message:
+              typeof wire?.error === "string"
+                ? wire.error
+                : (wire?.error?.message ?? `Timeline step refused (${response.status})`),
+          };
     },
   };
 }
@@ -84,8 +136,11 @@ type DirectAnswer = { state: "answered"; result: unknown };
 export async function sendCommand(
   command: CommandHandle,
   admission: ActionAdmission,
-  ports = { submit: submitAction, fetch: hostFetch,
-    decode: async (key: string, value: unknown) => (await opResponseSchema(key)).parse(value) },
+  ports = {
+    submit: submitAction,
+    fetch: hostFetch,
+    decode: async (key: string, value: unknown) => (await opResponseSchema(key)).parse(value),
+  },
 ): Promise<Awaited<ReturnType<typeof submitAction>> | DirectAnswer> {
   if (command.key !== admission.key) throw Error("Handle and admission command differ");
   if (command.via === "command") return ports.submit(admission);
@@ -113,33 +168,60 @@ export async function sendCommand(
     if (admission.target.kind === "document") {
       headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.ref.session;
       headers[HOST_RPC_DOCUMENT_HEADER] = admission.target.ref.openId;
-    } else if (admission.target.kind === "session") headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.session;
+    } else if (admission.target.kind === "session")
+      headers[HOST_RPC_BRIDGE_SESSION_HEADER] = admission.target.session;
   } else if (route === familyReadingRoute || route === scheduleReadingRoute) {
     path = httpRoutes[route].path;
     const { work, ...input } = admission.input;
-    const scope = route === familyReadingRoute && command.key !== savedFamilyRead
-      ? workHandleSchema.parse(work).key : undefined;
-    body = { key: command.key, input,
+    const scope =
+      route === familyReadingRoute && command.key !== savedFamilyRead
+        ? workHandleSchema.parse(work).key
+        : undefined;
+    body = {
+      key: command.key,
+      input,
       target: admission.target.kind === "document" ? admission.target.ref : undefined,
-      ...(scope ? { scope } : {}) };
+      ...(scope ? { scope } : {}),
+    };
   } else throw Error(`Unsupported command transport: ${route}`);
   const started = performance.now();
-  const response = await ports.fetch(path, { method, headers,
+  const response = await ports.fetch(path, {
+    method,
+    headers,
     signal: AbortSignal.timeout(30_000),
-    ...(method === "GET" ? {} : { body: JSON.stringify(body) }) });
+    ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
+  });
   const result = await response.json();
-  if (!response.ok) throw Error(typeof result?.error === "string" ? result.error : result?.error?.message ?? `Command refused (${response.status})`);
+  if (!response.ok)
+    throw Error(
+      typeof result?.error === "string"
+        ? result.error
+        : (result?.error?.message ?? `Command refused (${response.status})`),
+    );
   if (route.startsWith("action") && route !== "actions.read")
     return { state: "answered", result: actionReceiptSchema.parse(result) };
   if (route === "actions.read") {
-    const row = actionReceiptSchema.array().parse(result).find((row) => row.id === admission.input.id);
+    const row = actionReceiptSchema
+      .array()
+      .parse(result)
+      .find((row) => row.id === admission.input.id);
     if (!row) throw Error("Original action not found");
     return { state: "answered", result: row };
   }
-  return { state: "answered", result: nativeKey !== undefined
-    ? { kind: "value", value: await ports.decode(nativeKey, result), elapsedMs: Math.round(performance.now() - started),
-        op: nativeKey, request: admission.input.request,
-        document: admission.target.kind === "document" ? admission.target.ref : null } : result };
+  return {
+    state: "answered",
+    result:
+      nativeKey !== undefined
+        ? {
+            kind: "value",
+            value: await ports.decode(nativeKey, result),
+            elapsedMs: Math.round(performance.now() - started),
+            op: nativeKey,
+            request: admission.input.request,
+            document: admission.target.kind === "document" ? admission.target.ref : null,
+          }
+        : result,
+  };
 }
 
 const cursorSchema = z.number().int().nonnegative();
@@ -167,11 +249,15 @@ import { completion, workOutcome, failedWrite } from "./work-door-observation";
 // The shared Reading transport outlives shell/target remounts in this tab. A registration
 // mismatch latches until reload; recreating a client must never retry against other bytes.
 const reloadFailures = new WeakMap<Readings, Map<string, WorkFeedFailure>>();
-const isCommandKey = (key: string): key is keyof typeof commandTable => Object.hasOwn(commandTable, key);
-export const browserWorkPorts = { write: writeRouteWork, submit: (admission: ActionAdmission) => {
-  if (!isCommandKey(admission.key)) throw Error(`Unknown command: ${admission.key}`);
-  return sendCommand(handle(admission.key), admission);
-} };
+const isCommandKey = (key: string): key is keyof typeof commandTable =>
+  Object.hasOwn(commandTable, key);
+export const browserWorkPorts = {
+  write: writeRouteWork,
+  submit: (admission: ActionAdmission) => {
+    if (!isCommandKey(admission.key)) throw Error(`Unknown command: ${admission.key}`);
+    return sendCommand(handle(admission.key), admission);
+  },
+};
 
 /** Complete Work and native journal client over the existing host doors. */
 export function createWorkFeedClient(
@@ -297,25 +383,25 @@ export function createWorkFeedClient(
             row.state === "answered"
               ? { kind: "accepted-native", outcome: "committed", result: row.result }
               : row.state === "detached"
-              ? { kind: "pending" }
-              : row.state === "succeeded"
-                ? {
-                    kind: "accepted-native",
-                    receiptId: row.id,
-                    outcome: "committed",
-                    result: row.result,
-                  }
-                : row.state === "unknown"
+                ? { kind: "pending" }
+                : row.state === "succeeded"
                   ? {
                       kind: "accepted-native",
                       receiptId: row.id,
-                      outcome: "unknown-until-reconciled",
+                      outcome: "committed",
+                      result: row.result,
                     }
-                  : {
-                      kind: "rejected",
-                      failure: "failed",
-                      problem: "error" in row ? row.error : row.state,
-                    };
+                  : row.state === "unknown"
+                    ? {
+                        kind: "accepted-native",
+                        receiptId: row.id,
+                        outcome: "unknown-until-reconciled",
+                      }
+                    : {
+                        kind: "rejected",
+                        failure: "failed",
+                        problem: "error" in row ? row.error : row.state,
+                      };
         } catch (error) {
           result = { kind: "rejected", failure: "unavailable", problem: String(error) };
         }

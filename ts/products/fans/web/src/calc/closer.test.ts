@@ -89,11 +89,7 @@ it("an unknown drop takes the typed value, else the firm shim named in the verb"
     action: null,
   });
   // The firm's terminal drop seeds terminals only: a part's unknown drop is typed, never seeded.
-  const part = describeCloser(
-    { ...blocker, elementId: 6 },
-    null,
-    walk,
-  );
+  const part = describeCloser({ ...blocker, elementId: 6 }, null, walk);
   expect(part).toMatchObject({
     refusal: "Type the drop in in-wg",
     input: { placeholder: null },
@@ -333,8 +329,18 @@ it("a side-stream unit's no-flow row sets the unit's design flow, one number for
       "the fan's own flow splits across 3 receiving fan/merge ends; no unit design flow or complete typed shares are available",
   });
   // The engine's typed closer names the unit's design-flow cell; the prose above is for people.
-  const withFan = { ...context, fan: { unitId: 14577391, name: "MUAS-1" },
-    fix: (b: { id: string }) => b.id === blocker.id ? { kind: "cell" as const, target: { work: "fans" as const, segment: "equipmentFlows", row: "unit" }, offers: [] } : null };
+  const withFan = {
+    ...context,
+    fan: { unitId: 14577391, name: "MUAS-1" },
+    fix: (b: { id: string }) =>
+      b.id === blocker.id
+        ? {
+            kind: "cell" as const,
+            target: { work: "fans" as const, segment: "equipmentFlows", row: "unit" },
+            offers: [],
+          }
+        : null,
+  };
   expect(describeCloser(blocker, null, withFan)).toMatchObject({
     verb: "set MUAS-1 design flow",
     refusal: "Type the unit's design cfm",

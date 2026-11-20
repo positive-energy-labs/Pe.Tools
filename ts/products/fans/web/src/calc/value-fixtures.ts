@@ -11,13 +11,11 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 /** Providers answer the same semantic read; selection changes never reuse a per-route seed. */
 const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly string[] }) => {
-  const rows = ductsRosterResponseSchema.parse(fixture.roster).rows.filter((row) =>
-    snapshot.nodes.some((node) => node.id === row.unitId),
-  );
+  const rows = ductsRosterResponseSchema
+    .parse(fixture.roster)
+    .rows.filter((row) => snapshot.nodes.some((node) => node.id === row.unitId));
   const requested =
-    args.fan === "all"
-      ? rows
-      : rows.filter((row) => args.fan.includes(stableFanKey(row)));
+    args.fan === "all" ? rows : rows.filter((row) => args.fan.includes(stableFanKey(row)));
   const candidate = openFanCalcSchema.parse({
     overview: fixture.overview,
     inputs: fixture.inputs,
@@ -45,7 +43,8 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     .map(stableFanKey);
   const ductSystemsWork = ductsDocumentSchema.parse({}),
     fansWork = fansDocumentSchema.parse({});
-  const data = fansCalcData.parse({open,
+  const data = fansCalcData.parse({
+    open,
     opened,
     rows,
     progress: null,
@@ -63,9 +62,11 @@ const provide = (snapshot: DuctSnapshot) => (args: { fan: "all" | readonly strin
     data,
     coverage: {
       requested: requested.map(stableFanKey),
-      covered: opened.map(
-        (sheet) =>
-          stableFanKey({ uniqueId: rows.find((row) => row.unitId === sheet.overview.fan!.unitId)!.uniqueId, portIndex: sheet.overview.fan!.portIndex }),
+      covered: opened.map((sheet) =>
+        stableFanKey({
+          uniqueId: rows.find((row) => row.unitId === sheet.overview.fan!.unitId)!.uniqueId,
+          portIndex: sheet.overview.fan!.portIndex,
+        }),
       ),
       unknown,
       refused: [],

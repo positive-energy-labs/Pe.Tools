@@ -34,7 +34,6 @@ export const hostOwnership = resolveHostOwnership();
  */
 export const hostState = () => stateTree(hostOwnership.rootPath);
 
-
 function resolveHostCapabilities(argv: readonly string[] = process.argv): PeaRuntimeCapabilities {
   return { revit: !argv.includes(NO_REVIT_ARGUMENT) };
 }

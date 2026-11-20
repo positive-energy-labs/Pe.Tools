@@ -4,10 +4,7 @@ import type { HostWorkRegistration } from "@pe/agent-contracts";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { RouteWorkspace } from "@pe/runtime";
 import { routeRegistry } from "./routes.generated.ts";
-import {
-  createBuiltinRouteInventory,
-  createHostAdmittedRouteRegistry,
-} from "@pe/agent-contracts";
+import { createBuiltinRouteInventory, createHostAdmittedRouteRegistry } from "@pe/agent-contracts";
 import { captureHostModule } from "@pe/agent-contracts";
 import type { HostAdmittedRoute } from "@pe/agent-contracts";
 import { builtinEnrollments, type BuiltinEnrollment } from "./builtin-enrollment.ts";

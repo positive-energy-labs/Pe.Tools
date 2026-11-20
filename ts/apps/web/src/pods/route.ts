@@ -1,16 +1,18 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf } from "../route/defaults";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { read } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { memberWork, settingsRouteState, type Immutable } from "@pe/agent-contracts";
-import { field, route, split, subjectSchema } from "../route/defaults";
-import { hostRead } from "../route/host-read.ts";
-import { draw } from "../route/draw.tsx";
+import { field, route, split, subjectSchema } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
-import { podsArgs,
+import {
+  podsArgs,
   podMemberCode,
-  podMemberOfCode, } from "../../../../packages/agent-contracts/src/pods-read.ts";
+  podMemberOfCode,
+} from "../../../../packages/agent-contracts/src/pods-read.ts";
 
 /** The open member: the subject's one id, a `name` SubjectRef `[pod, path]` (ADR 0035 rule 2). */
 export const member = (page: { member: Immutable<z.output<ReturnType<typeof subjectSchema>>> }) =>
@@ -79,7 +81,12 @@ export const module = route({
     return ref ? `${ref.pod} · ${ref.path}` : null;
   },
   panes: {
-    sheet: { title: "Member fields", purpose: "Edit the member’s arbitrary JSON over its saved bytes", body: "scroll", draw: draw("scroll", () => import("./fields.tsx"), "MemberFields") },
+    sheet: {
+      title: "Member fields",
+      purpose: "Edit the member’s arbitrary JSON over its saved bytes",
+      body: "scroll",
+      draw: draw("scroll", () => import("./fields.tsx"), "MemberFields"),
+    },
     members: {
       subjectList: true,
       title: "Members",
@@ -135,15 +142,28 @@ export const module = route({
       label: "Save as new member",
       input: ({ page }) => {
         const ref = member(page);
-        return ref ? { destination: { pod: ref.pod, path: ref.path.replace(/(\.json)?$/, `.${crypto.randomUUID()}.json`) } } : {};
+        return ref
+          ? {
+              destination: {
+                pod: ref.pod,
+                path: ref.path.replace(/(\.json)?$/, `.${crypto.randomUUID()}.json`),
+              },
+            }
+          : {};
       },
     },
   },
   band: ["open", "adopt", "save", "saveNew"],
   layout: split(
     "h",
-    ["members", split("v", ["sheet",
-      split("h", ["goal", "runs"], { id: "pods-results", size: 320, sized: "start" })], { id: "pods-detail", size: 240, sized: "end" })],
+    [
+      "members",
+      split(
+        "v",
+        ["sheet", split("h", ["goal", "runs"], { id: "pods-results", size: 320, sized: "start" })],
+        { id: "pods-detail", size: 240, sized: "end" },
+      ),
+    ],
     { id: "pods-main", size: 300, sized: "start" },
   ),
 });

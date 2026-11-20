@@ -50,7 +50,6 @@ export const markSchema = z.strictObject({
 });
 export type Mark = z.infer<typeof markSchema>;
 
-
 export const roomsDocumentSchema = z
   .strictObject({
     writeIntent: writeIntentSchema.optional(),

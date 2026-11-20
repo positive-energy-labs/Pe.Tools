@@ -11,12 +11,7 @@ import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
  * throws, so no stored file can stop the host.
  */
 import { createHash, randomUUID } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync, readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
@@ -117,7 +112,11 @@ const updates = (path: string) =>
     pid: 1,
   });
 const captures = () =>
-  new TakeoffCaptures(stateFixture(join(root, "captures")), join(root, "aps.json"), () => "2026-11-11T00:00:00Z");
+  new TakeoffCaptures(
+    stateFixture(join(root, "captures")),
+    join(root, "aps.json"),
+    () => "2026-11-11T00:00:00Z",
+  );
 
 describe("discard: the corrupt bytes are gone, with one notice that does not repeat", () => {
   test.each(kinds)("$name", async ({ place, file, read }) => {
@@ -150,14 +149,21 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
     const read = seed(join(dir, name("duct-systems", "doc-a")), CORRUPT);
     expect(await store.getState({ route: "duct-systems", targetKey: "doc-a" })).toBeNull();
     expect(existsSync(read)).toBe(false);
-    expect(posted(read)).toMatchObject([{ class: "discard", place: "Work for duct-systems (doc-a)" }]);
+    expect(posted(read)).toMatchObject([
+      { class: "discard", place: "Work for duct-systems (doc-a)" },
+    ]);
     expect(await store.getState({ route: "duct-systems", targetKey: "doc-a" })).toBeNull();
     expect(posted(read)).toHaveLength(1);
 
     const listed = seed(join(dir, name("fans", "doc-b")), CORRUPT);
     const misplaced = seed(
       join(dir, name("fans", "doc-c")),
-      JSON.stringify({ format: "route-state-record-v2", targetKey: "other", route: "fans", value: 1 }),
+      JSON.stringify({
+        format: "route-state-record-v2",
+        targetKey: "other",
+        route: "fans",
+        value: 1,
+      }),
     );
     // Discovery is read-only (commit 556652bc): it counts both files and touches neither.
     expect(await store.listState!()).toMatchObject({ records: [], unreadable: 2, unindexed: 0 });
@@ -225,7 +231,10 @@ describe("discard: the corrupt bytes are gone, with one notice that does not rep
 
 describe("keep: a person's file is listed \"can't read, kept\", its bytes never change, and no write lands over it", () => {
   const lifecycle = (decisionsPath: string) =>
-    createPackageLifecycle({ packages: () => listPackages({ podsRoots: join(root, "Pods") }), machine: stateMachine(storedParent(decisionsPath)) });
+    createPackageLifecycle({
+      packages: () => listPackages({ podsRoots: join(root, "Pods") }),
+      machine: stateMachine(storedParent(decisionsPath)),
+    });
   const kinds = [
     {
       name: "Pod on and off choices",
@@ -319,7 +328,11 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
   await expect(updates(update).refresh(false)).resolves.toBeDefined();
   expect(posted(update)).toHaveLength(1);
   expect(rests(TORN_UPDATE)).toBe(true);
-  expect(inputs!.source).toMatchObject({ kind: "live", capturing: false, truncated: { reason: "setup" } });
+  expect(inputs!.source).toMatchObject({
+    kind: "live",
+    capturing: false,
+    truncated: { reason: "setup" },
+  });
   expect(readFileSync(join(bundle, "takings.jsonl"))).toEqual(torn);
   expect(posted(bundle)).toMatchObject([{ class: "keep", place: "Recording history" }]);
   expect(posted(bundle)[0]!.reason).toContain("recording.tamper");

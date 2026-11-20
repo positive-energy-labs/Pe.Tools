@@ -115,7 +115,11 @@ test("first Send from /duct-systems?target=… creates one chat with no targets 
   const router = createRouter({
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/" }),
-      createRoute({ getParentRoute: () => root, path: "/duct-systems", component: () => <p>duct-systems</p> }),
+      createRoute({
+        getParentRoute: () => root,
+        path: "/duct-systems",
+        component: () => <p>duct-systems</p>,
+      }),
     ]),
     history: createMemoryHistory({
       initialEntries: ["/", "/duct-systems?target=C%3A%2FModels%2FOffice.rvt"],
@@ -154,7 +158,10 @@ test("first Send from /duct-systems?target=… creates one chat with no targets 
   expect(call.mock.calls.filter(([door]) => door === "thread.place")).toEqual([
     [
       "thread.place",
-      { params: { id: "NEW" }, body: { route: "duct-systems", link: expect.stringContaining("/duct-systems") } },
+      {
+        params: { id: "NEW" },
+        body: { route: "duct-systems", link: expect.stringContaining("/duct-systems") },
+      },
     ],
   ]);
 
@@ -239,44 +246,88 @@ test("a streamed chat chunk updates the transcript without rendering a route pan
 // Row 12 (owner ruling 2026-11-13): a docked thread binds to the document the URL's `?target` names,
 // including a draft with no id yet. The draft's document is the workbench's `draftTarget`, which
 // the composer's picker draws (chat/composer-head.tsx `useThreadHead`).
-test.each([false, true])("review probe: a ?target naming a document that is not open leaves the sole other document unbound: %s", async (missing) => {
-  sessionStorage.clear();
-  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
-  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("B")] }]) };
-  const root = createRootRoute({ component: () => <WorkbenchProvider><Probe /><Outlet /></WorkbenchProvider> });
-  const router = createRouter({
-    routeTree: root.addChildren([createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> })]),
-    history: createMemoryHistory({ initialEntries: [missing ? "/fans?target=C%3A%2FJobs%2FA.rvt" : "/fans"] }),
-  });
-  await router.load();
-  client.threads.mockImplementation(async () => []);
-  render(<RegistryContext.Provider value={appAtomRegistry}><RouterProvider router={router} /></RegistryContext.Provider>);
-  await screen.findByText("fans");
-  expect(draftTarget).toEqual(missing ? null : { kind: "open", ref: { session: "s1", openId: "B" } });
-});
+test.each([false, true])(
+  "review probe: a ?target naming a document that is not open leaves the sole other document unbound: %s",
+  async (missing) => {
+    sessionStorage.clear();
+    const doc = (openId: string) => ({
+      openId,
+      title: `${openId}.rvt`,
+      address: `C:/Jobs/${openId}.rvt`,
+      isFamilyDocument: false,
+      isActive: true,
+    });
+    machine.reading = {
+      state: "ready",
+      observation: machineFixture([{ session: "s1", documents: [doc("B")] }]),
+    };
+    const root = createRootRoute({
+      component: () => (
+        <WorkbenchProvider>
+          <Probe />
+          <Outlet />
+        </WorkbenchProvider>
+      ),
+    });
+    const router = createRouter({
+      routeTree: root.addChildren([
+        createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> }),
+      ]),
+      history: createMemoryHistory({
+        initialEntries: [missing ? "/fans?target=C%3A%2FJobs%2FA.rvt" : "/fans"],
+      }),
+    });
+    await router.load();
+    client.threads.mockImplementation(async () => []);
+    render(
+      <RegistryContext.Provider value={appAtomRegistry}>
+        <RouterProvider router={router} />
+      </RegistryContext.Provider>,
+    );
+    await screen.findByText("fans");
+    expect(draftTarget).toEqual(
+      missing ? null : { kind: "open", ref: { session: "s1", openId: "B" } },
+    );
+  },
+);
 
 function DraftDocumentControl() {
   const head = useThreadHead();
-  return <Ladder
-    disabled={head.stale}
-    title="Draft document"
-    face="control"
-    levels={[{
-      key: "document",
-      label: "A.rvt",
-      placeholder: "choose document",
-      multi: true,
-      options: [{ id: "A", label: "A.rvt" }],
-      checked: () => head.targets.length > 0,
-      pick: () => { void head.toggle({ kind: "open", ref: { session: "s1", openId: "A" } }); },
-    }]}
-  />;
+  return (
+    <Ladder
+      disabled={head.stale}
+      title="Draft document"
+      face="control"
+      levels={[
+        {
+          key: "document",
+          label: "A.rvt",
+          placeholder: "choose document",
+          multi: true,
+          options: [{ id: "A", label: "A.rvt" }],
+          checked: () => head.targets.length > 0,
+          pick: () => {
+            void head.toggle({ kind: "open", ref: { session: "s1", openId: "A" } });
+          },
+        },
+      ]}
+    />
+  );
 }
 
 test("on /fans?target=A a new thread's draft binds to A among two open documents, and its first Send seeds A", async () => {
   sessionStorage.clear();
-  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
-  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("A"), doc("B")] }]) };
+  const doc = (openId: string) => ({
+    openId,
+    title: `${openId}.rvt`,
+    address: `C:/Jobs/${openId}.rvt`,
+    isFamilyDocument: false,
+    isActive: true,
+  });
+  machine.reading = {
+    state: "ready",
+    observation: machineFixture([{ session: "s1", documents: [doc("A"), doc("B")] }]),
+  };
   const root = createRootRoute({
     component: () => (
       <WorkbenchProvider>
@@ -309,7 +360,9 @@ test("on /fans?target=A a new thread's draft binds to A among two open documents
   await waitFor(() => expect(draftTarget).toBeNull());
   // Toggling the same document back on restores the first-Send seed.
   fireEvent.click(screen.getByRole("option", { name: "A.rvt" }));
-  await waitFor(() => expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "A" } }));
+  await waitFor(() =>
+    expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "A" } }),
+  );
   await act(() => send!("size it"));
   expect(client.create).toHaveBeenCalledTimes(1);
   expect(client.target).toHaveBeenCalledTimes(1);
@@ -320,9 +373,25 @@ test("on /fans?target=A a new thread's draft binds to A among two open documents
 // The sole open document is the default only when the URL names no document.
 test("a ?target naming a document that is not open leaves the draft unbound, never the sole open document", async () => {
   sessionStorage.clear();
-  const doc = (openId: string) => ({ openId, title: `${openId}.rvt`, address: `C:/Jobs/${openId}.rvt`, isFamilyDocument: false, isActive: true });
-  machine.reading = { state: "ready", observation: machineFixture([{ session: "s1", documents: [doc("B")] }]) };
-  const root = createRootRoute({ component: () => <WorkbenchProvider><Probe /><Outlet /></WorkbenchProvider> });
+  const doc = (openId: string) => ({
+    openId,
+    title: `${openId}.rvt`,
+    address: `C:/Jobs/${openId}.rvt`,
+    isFamilyDocument: false,
+    isActive: true,
+  });
+  machine.reading = {
+    state: "ready",
+    observation: machineFixture([{ session: "s1", documents: [doc("B")] }]),
+  };
+  const root = createRootRoute({
+    component: () => (
+      <WorkbenchProvider>
+        <Probe />
+        <Outlet />
+      </WorkbenchProvider>
+    ),
+  });
   const router = createRouter({
     routeTree: root.addChildren([
       createRoute({ getParentRoute: () => root, path: "/fans", component: () => <p>fans</p> }),
@@ -343,5 +412,7 @@ test("a ?target naming a document that is not open leaves the draft unbound, nev
   expect(client.target, "nothing seeds the chat with B").not.toHaveBeenCalled();
   // With no pin, the same machine's sole document is the default, as before.
   act(() => router.history.push("/fans"));
-  await waitFor(() => expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "B" } }));
+  await waitFor(() =>
+    expect(draftTarget).toEqual({ kind: "open", ref: { session: "s1", openId: "B" } }),
+  );
 });

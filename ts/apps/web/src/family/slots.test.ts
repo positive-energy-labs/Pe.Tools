@@ -10,7 +10,13 @@ import { z } from "zod";
  */
 import { readFileSync } from "node:fs";
 import { expect, test } from "vite-plus/test";
-import { decode, familyData, familyDraftSchema, podMemberCode, subjectCode } from "@pe/agent-contracts";
+import {
+  decode,
+  familyData,
+  familyDraftSchema,
+  podMemberCode,
+  subjectCode,
+} from "@pe/agent-contracts";
 import { local } from "@pe/agent-contracts/slots";
 import { sheetCells } from "../route/slots/sheet/index.ts";
 import { titlePane } from "../shell/typed-shell.tsx";
@@ -21,19 +27,26 @@ import { member, module } from "./route.ts";
 const here = (file: string) => new URL(file, import.meta.url);
 const CARRY = ["thread", "target", "work", "fixture", "open", "at", "atInstance", "compare"];
 const box = { pod: "mech-library", path: "settings/family/Box.json" };
-const pods = [{
-  id: "mech-library",
-  name: "Mechanical library",
-  members: [
-    { path: box.path, sha256: "a".repeat(64), schema: FAMILY_MODEL_SCHEMA },
-    { path: "settings/checks.json", sha256: "b".repeat(64), schema: "./checks.schema.json" },
-  ],
-}];
+const pods = [
+  {
+    id: "mech-library",
+    name: "Mechanical library",
+    members: [
+      { path: box.path, sha256: "a".repeat(64), schema: FAMILY_MODEL_SCHEMA },
+      { path: "settings/checks.json", sha256: "b".repeat(64), schema: "./checks.schema.json" },
+    ],
+  },
+];
 const picked = { kind: "ids" as const, ids: [podMemberCode(box)] };
 
 test("/family declares subject, query and goal, and no carry key", () => {
   const { spec, data } = module;
-  expect(data.subject).toMatchObject({ field: "member", noun: "family", pane: "workspace", roster: "value" });
+  expect(data.subject).toMatchObject({
+    field: "member",
+    noun: "family",
+    pane: "workspace",
+    roster: "value",
+  });
   expect(Object.fromEntries(Object.entries(data.fields).map(([k, f]) => [k, f.role]))).toEqual({
     pod: "query",
     query: "query",
@@ -51,25 +64,40 @@ test("/family declares subject, query and goal, and no carry key", () => {
   expect(Object.keys(data.fields).filter((key) => CARRY.includes(key))).toEqual([]);
   // The core read is the Goal, drawn by the kernel's goal pane beside the route's one hand body.
   expect(data.goal).toBe("value");
-  expect(Object.fromEntries(Object.entries(spec.panes).map(([id, p]) => [id, (p as { kernel?: string }).kernel ?? "route"])))
-    .toEqual({ workspace: "route", goal: "goal" });
+  expect(
+    Object.fromEntries(
+      Object.entries(spec.panes).map(([id, p]) => [
+        id,
+        (p as { kernel?: string }).kernel ?? "route",
+      ]),
+    ),
+  ).toEqual({ workspace: "route", goal: "goal" });
   expect(spec.sheet).toBeUndefined();
   expect(titlePane(spec)).toBe("workspace");
 });
 
 test("a family is a name SubjectRef over its saved member, and the roster lists Family Foundry models only", () => {
   const options = module.spec.subject!.options({ pods } as never);
-  expect(options).toEqual([{ id: podMemberCode(box), label: "Mechanical library · settings/family/Box.json" }]);
-  expect(decode(options[0]!.id)).toEqual({ ok: true, value: { keyKind: "name", key: [box.pod, box.path] } });
+  expect(options).toEqual([
+    { id: podMemberCode(box), label: "Mechanical library · settings/family/Box.json" },
+  ]);
+  expect(decode(options[0]!.id)).toEqual({
+    ok: true,
+    value: { keyKind: "name", key: [box.pod, box.path] },
+  });
   expect(member({ member: picked })).toEqual(box);
   // No subject is the Work's own captured draft, not a member.
   expect(member({ member: { kind: "ids", ids: [] } })).toBeNull();
-  expect((module.spec.core as { args(page: object): unknown }).args({ member: picked })).toEqual({ member: box });
+  expect((module.spec.core as { args(page: object): unknown }).args({ member: picked })).toEqual({
+    member: box,
+  });
 });
 
 test("Open member takes the member from the subject and its exact bytes from the roster", () => {
   const open = module.spec.verbs.open as { input(context: object): unknown };
-  expect(open.input({ page: { member: picked }, value: { pods } })).toEqual({ source: { ...box, sha256: "a".repeat(64) } });
+  expect(open.input({ page: { member: picked }, value: { pods } })).toEqual({
+    source: { ...box, sha256: "a".repeat(64) },
+  });
   expect(open.input({ page: { member: { kind: "ids", ids: [] } }, value: { pods } })).toEqual({});
 });
 
@@ -77,29 +105,60 @@ test("the Goal is the doc-lab acceptance: every Pea-staged cell is a person's to
   const work = familyDraftSchema.parse({
     reading: "{}",
     cells: {
-      "/types/Wide/Width": { edit: { value: "40in", by: "pea", sources: [{ blockId: "p2-b7" }, { blockId: "img-3" }] } },
+      "/types/Wide/Width": {
+        edit: { value: "40in", by: "pea", sources: [{ blockId: "p2-b7" }, { blockId: "img-3" }] },
+      },
       "/parameters/Height/value": { edit: { value: "12in", by: "pea" } },
       "/parameters/Depth/value": { edit: { value: "6in", by: "human" } },
     },
   });
   const goal = familyGoal(work, { member: true, profileError: null, spec: true, specError: null });
   expect(goal.unresolved).toEqual([
-    { id: "cell:/types/Wide/Width", says: "Keep or revert Pea's /types/Wide/Width: cited to 2 regions of the cut sheet", resolver: "person" },
-    { id: "cell:/parameters/Height/value", says: "Keep or revert Pea's /parameters/Height/value: no citation", resolver: "person" },
+    {
+      id: "cell:/types/Wide/Width",
+      says: "Keep or revert Pea's /types/Wide/Width: cited to 2 regions of the cut sheet",
+      resolver: "person",
+    },
+    {
+      id: "cell:/parameters/Height/value",
+      says: "Keep or revert Pea's /parameters/Height/value: no citation",
+      resolver: "person",
+    },
   ]);
   expect(goal.assumed).toEqual([]);
   expect(goal.result).toEqual({ kind: "estimate", value: null, sources: [] });
   // A person's own cells leave nothing unresolved; no cut sheet is an assumption, not a blocker.
-  const kept = familyDraftSchema.parse({ reading: "{}", cells: { "/a": { edit: { value: 1, by: "human" } } } });
-  const done = familyGoal(kept, { member: false, profileError: null, spec: false, specError: null });
+  const kept = familyDraftSchema.parse({
+    reading: "{}",
+    cells: { "/a": { edit: { value: 1, by: "human" } } },
+  });
+  const done = familyGoal(kept, {
+    member: false,
+    profileError: null,
+    spec: false,
+    specError: null,
+  });
   expect(done.unresolved).toEqual([]);
-  expect(done.assumed.map((c) => [c.id, c.resolver])).toEqual([["spec", { op: "family.attach-spec" }]]);
+  expect(done.assumed.map((c) => [c.id, c.resolver])).toEqual([
+    ["spec", { op: "family.attach-spec" }],
+  ]);
   expect(done.result).toEqual({ kind: "complete", value: "1 staged cell reviewed" });
   // Nothing captured and nothing open: the first closer names the capture.
-  const empty = familyGoal(familyDraftSchema.parse({}), { member: false, profileError: null, spec: false, specError: null });
+  const empty = familyGoal(familyDraftSchema.parse({}), {
+    member: false,
+    profileError: null,
+    spec: false,
+    specError: null,
+  });
   expect(empty.next).toMatchObject({ id: "capture", resolver: { op: "family.capture" } });
   // The host read publishes it: the core value carries the Goal's fields, and decodes this one.
-  const published = familyData.pick({ unresolved: true, assumed: true, next: true, inputs: true, result: true });
+  const published = familyData.pick({
+    unresolved: true,
+    assumed: true,
+    next: true,
+    inputs: true,
+    result: true,
+  });
   expect(published.safeParse(goal).success).toBe(true);
 });
 
@@ -120,8 +179,19 @@ test("the hand member list and the pod/path identity pair are deleted", () => {
  * /family declares its sheet and the table and its codecs go.
  */
 test.fails("kernel gap: cited-cell (10)", () => {
-  const slot = { draft: true as const, bindings: { cells: local({ kind: "enum", shape: z.string(), choices: [] }, "subject", { rows: () => ["/types/Wide/Width"] }) } };
-  const work = { cells: { "/types/Wide/Width": { edit: { value: "40in", by: "pea", sources: [{ blockId: "p2-b7" }] } } } };
+  const slot = {
+    draft: true as const,
+    bindings: {
+      cells: local({ kind: "enum", shape: z.string(), choices: [] }, "subject", {
+        rows: () => ["/types/Wide/Width"],
+      }),
+    },
+  };
+  const work = {
+    cells: {
+      "/types/Wide/Width": { edit: { value: "40in", by: "pea", sources: [{ blockId: "p2-b7" }] } },
+    },
+  };
   const [cell] = sheetCells(slot, { rows: [], work, read: {} });
   expect(cell).toMatchObject({ value: "40in", pending: { by: "pea" } });
   expect(cell).toHaveProperty("sources", [{ blockId: "p2-b7" }]);
@@ -139,7 +209,15 @@ test.fails("kernel gap: cited-cell (10)", () => {
 test.fails("kernel gap: family-type-parameter (10)", async () => {
   const { sheetWrites } = await import("../../../host/src/slots/sheet.ts");
   const type = subjectCode({ keyKind: "name", key: ["Box", "Wide"] });
-  const sheet = { bindings: { width: { home: { at: "parameter" as const, parameter: "Width" }, domain: { kind: "number" as const }, per: "subject" as const } } };
+  const sheet = {
+    bindings: {
+      width: {
+        home: { at: "parameter" as const, parameter: "Width" },
+        domain: { kind: "number" as const },
+        per: "subject" as const,
+      },
+    },
+  };
   expect(sheetWrites(sheet, { width: { [type]: "40in" } })).toHaveLength(1);
 });
 
@@ -153,5 +231,7 @@ test.fails("kernel gap: family-type-parameter (10)", async () => {
  */
 test.fails("kernel gap: picture-pane (10)", () => {
   expect(module.data).toHaveProperty("picture");
-  expect(Object.values(module.spec.panes).map((pane) => (pane as { kernel?: string }).kernel)).toContain("picture");
+  expect(
+    Object.values(module.spec.panes).map((pane) => (pane as { kernel?: string }).kernel),
+  ).toContain("picture");
 });

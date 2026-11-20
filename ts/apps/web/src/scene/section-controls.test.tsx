@@ -2,7 +2,7 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { SectionControls, SectionHandles } from "./section-controls";
-import type { Section } from "./section";
+import type { Section } from "@pe/web-kernel/scene/section";
 
 afterEach(cleanup);
 const subject = { minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 10, maxZ: 10 };

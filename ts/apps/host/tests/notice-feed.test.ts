@@ -11,12 +11,7 @@ import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import { expect, test } from "vite-plus/test";
 import { NOTICE_GROUPS, noticeFeedSchema, type ReadingFrame } from "@pe/agent-contracts";
 import { createNoticeFeed } from "../src/notice-feed.ts";
-import {
-  mkdirSync, readFileSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { noteEarlierWork, noticeRows } from "../src/notice-feed.ts";
@@ -38,7 +33,7 @@ test("start census notices earlier Work once per folder without changing files",
     const text = `Work saved by an earlier version is at ${work}. This version no longer reads it. Nothing was changed or deleted. You may delete the folder.`;
     expect(stored[0]!.reason).toBe(text);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored, },
+      { threads: [], receipts: [], works: [], machine: null, stored },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);
@@ -121,11 +116,16 @@ test("no firm home posts one Settings notice, and it draws as one row", async ()
     const stored = storedNotices(stateMachine(storedParent(notices)));
     expect(stored).toHaveLength(1);
     const rows = noticeRows(
-      { threads: [], receipts: [], works: [], machine: null, stored, },
+      { threads: [], receipts: [], works: [], machine: null, stored },
       Date.parse(stored[0]!.at),
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ group: "failed", verb: "not found", what: "Firm home", revision: 0 });
+    expect(rows[0]).toMatchObject({
+      group: "failed",
+      verb: "not found",
+      what: "Firm home",
+      revision: 0,
+    });
     expect(rows[0]!.says).toBe("Set your firm home in Settings");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -141,8 +141,13 @@ test("outbox and host writers post to the notice feed's contract path", async ()
   const { createHash } = await import("node:crypto");
   const { dirname } = await import("node:path");
   const slot = `notice-path-${crypto.randomUUID()}`;
-  const file = join(runtimeRoot(), "state", resolveLaneAndRoot().serviceName, "invocation-outbox",
-    `${createHash("sha256").update(slot).digest("hex")}.json`);
+  const file = join(
+    runtimeRoot(),
+    "state",
+    resolveLaneAndRoot().serviceName,
+    "invocation-outbox",
+    `${createHash("sha256").update(slot).digest("hex")}.json`,
+  );
   expect(runtimeRoot()).toBe(hostOwnership.rootPath);
   expect(hostState().notices).toBe(stateTree(runtimeRoot()).notices);
   mkdirSync(dirname(file), { recursive: true });
@@ -153,10 +158,10 @@ test("outbox and host writers post to the notice feed's contract path", async ()
     expect(() => writeOutbox(slot, { id: slot })).toThrow(file);
     noteNoFirmHome({ root: null, looked });
     const notices = storedNotices(stateMachine(storedParent(hostState().notices)));
-    expect(notices.filter(notice => notice.path === file)).toMatchObject([
+    expect(notices.filter((notice) => notice.path === file)).toMatchObject([
       { class: "keep", place: "Pending action" },
     ]);
-    expect(notices.some(notice => notice.reason === "Set your firm home in Settings")).toBe(true);
+    expect(notices.some((notice) => notice.reason === "Set your firm home in Settings")).toBe(true);
   } finally {
     rmSync(file, { force: true });
   }

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Refused } from "@pe/host-internal/refused";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -32,24 +32,6 @@ import type {
  * a host restart kills every harness child, so a token from before it is `context.unknown`.
  */
 
-export class Refused extends Schema.TaggedError<Refused>()("Refused", {
-  message: Schema.String,
-  status: Schema.Number,
-  problem: Schema.String,
-  refusal: Schema.declare<Refusal>(
-    (value): value is Refusal =>
-      typeof value === "object" && value !== null && "code" in value && "reason" in value,
-  ),
-}) {
-  constructor(refusal: Refusal) {
-    super({
-      message: `${refusal.code}: ${refusal.reason}`,
-      status: 403,
-      problem: refusal.code,
-      refusal,
-    });
-  }
-}
 /** A door's 403 names its refusal code here; request admission counts it (request-identity.ts). */
 export const REFUSAL_HEADER = "x-pe-refusal";
 export const refusalHeaders = (code: RefusalCode) => ({ [REFUSAL_HEADER]: code });
@@ -80,11 +62,16 @@ const browserCookiePair = (headers: Readonly<Record<string, string | undefined>>
     .find((part) => part.startsWith(`${BROWSER_CONTEXT_COOKIE}=`));
 
 /** Mint on a verified SPA navigation; headers on a later API request cannot create a human. */
-export function mintBrowserContext(principal: RequestPrincipal, headers: Readonly<Record<string, string | undefined>> = {}): string {
+export function mintBrowserContext(
+  principal: RequestPrincipal,
+  headers: Readonly<Record<string, string | undefined>> = {},
+): string {
   const existing = browserCookiePair(headers)?.slice(BROWSER_CONTEXT_COOKIE.length + 1);
   // Navigation in another tab must not change the owner of already-open Readings.
-  const token = existing && browserContexts.get(existing)?.transport === transportKey(principal)
-    ? existing : randomBytes(24).toString("base64url");
+  const token =
+    existing && browserContexts.get(existing)?.transport === transportKey(principal)
+      ? existing
+      : randomBytes(24).toString("base64url");
   browserContexts.set(token, {
     transport: transportKey(principal),
     caller:
@@ -376,7 +363,11 @@ export const assertRunAdmission = (origin: Origin) => {
   if (origin.caller.kind !== "pea") return;
   if (!sources.runs) throw refuse("run.none", "/actions", "No harness run owns this write.");
   if (!origin.run || !origin.root)
-    throw refuse("run.none", "/actions", "This Pea process is not inside a running turn, so it has no run. Send the command from a tool call or shell of the current turn.");
+    throw refuse(
+      "run.none",
+      "/actions",
+      "This Pea process is not inside a running turn, so it has no run. Send the command from a tool call or shell of the current turn.",
+    );
   try {
     sources.runs.assertOpen(origin);
   } catch (error) {
@@ -533,8 +524,13 @@ export function admitCrossing(
       destination.kind === "document" &&
       admitted.readConsent !== null &&
       sameRef(admitted.readConsent, destination.ref);
-    return admitPage(admitted.slot, destination, admitted.door, reads,
-      admitted.readConsent ? { page: caller.page, target: admitted.readConsent } : undefined);
+    return admitPage(
+      admitted.slot,
+      destination,
+      admitted.door,
+      reads,
+      admitted.readConsent ? { page: caller.page, target: admitted.readConsent } : undefined,
+    );
   }
   if (caller.kind === "human") return { kind: "human" };
   if (caller.kind === "external-mcp" && caller.device) {
@@ -615,7 +611,12 @@ export function admitPage(
     );
   if (reads || destination.kind === "host" || destination.kind === "sdk-session") return null;
   // ADR 0043 supersedes 0017 rule 8 only for a person's pin, never for another lifetime.
-  if (slot.kind === "pinned" && pin && destination.kind === "document" && sameRef(pin.target, destination.ref))
+  if (
+    slot.kind === "pinned" &&
+    pin &&
+    destination.kind === "document" &&
+    sameRef(pin.target, destination.ref)
+  )
     return { kind: "person-pin", page: pin.page, boundBy: "human", lifetime: destination.ref };
   const acquired = pin ? null : acquisitionBasis(destination);
   if (acquired) return acquired;
@@ -685,9 +686,12 @@ export async function live(basis: Basis | null, door = "step begin"): Promise<Re
     const pin = await sources.pagePin?.(basis.page);
     return pin && sameRef(pin, basis.lifetime)
       ? null
-      : refuse("grant.revoked", door,
+      : refuse(
+          "grant.revoked",
+          door,
           `Refused at ${door}: this Page no longer has a person's pin on the admitted document.`,
-          { lifetime: basis.lifetime });
+          { lifetime: basis.lifetime },
+        );
   }
   if (basis?.kind === "grant" && basis.device) {
     try {

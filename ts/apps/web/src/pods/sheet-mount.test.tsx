@@ -2,15 +2,25 @@
 import { useSyncExternalStore } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { KeyScopeHost } from "@pe/kit/keys";
-import { podMemberCode, settingsCandidate, settingsRouteState, workFingerprintSchema } from "@pe/agent-contracts";
+import {
+  podMemberCode,
+  settingsCandidate,
+  settingsRouteState,
+  workFingerprintSchema,
+} from "@pe/agent-contracts";
 import { memberFields, fieldsNote } from "./fields.tsx";
 import { module as pods } from "./route";
 import { TypedChrome } from "../shell/typed-shell";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 
 afterEach(cleanup);
 
@@ -23,40 +33,81 @@ const author = (fields: Record<string, never>) => ({
   member: { member: ref, content: saved, sha256: basis.sha256 },
   work: { basis, fields },
   // The draft is the host's own candidate: the saved bytes with every staged edit applied (pods/host.ts).
-  draft: settingsCandidate(saved, fields), composition: null, schemaRef: null, runs: [], unresolved: [], assumed: [], next: null, inputs: [],
+  draft: settingsCandidate(saved, fields),
+  composition: null,
+  schemaRef: null,
+  runs: [],
+  unresolved: [],
+  assumed: [],
+  next: null,
+  inputs: [],
   result: { kind: "complete" as const, value: "settings/checks.json is ready to run" },
 });
 const publication = (key: string, data: unknown) => ({
-  key, generation: 0, version: 1, state: "current", value: {
-    data, evaluation: key, inputs: key, coverage: { requested: [], covered: [], unknown: [], refused: [] },
-    origin: {}, works: [], trace: [], freshness: "current",
+  key,
+  generation: 0,
+  version: 1,
+  state: "current",
+  value: {
+    data,
+    evaluation: key,
+    inputs: key,
+    coverage: { requested: [], covered: [], unknown: [], refused: [] },
+    origin: {},
+    works: [],
+    trace: [],
+    freshness: "current",
   },
 });
 const source = (key: string, data: unknown): UseSource => ({
   kind: "use",
-  open(_ctx, deliver) { deliver({ kind: "complete", revision: 1, value: publication(key, data) }); return () => {}; },
+  open(_ctx, deliver) {
+    deliver({ kind: "complete", revision: 1, value: publication(key, data) });
+    return () => {};
+  },
 });
 
 /** /pods at a picked member, mounted as the shell mounts its route-local member editor. */
 function mountPods(fields: Record<string, never> = {}) {
-  const mount = mountTypedRoute(pods, {
-    address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
-    fixture: null, target: { kind: "host" }, work: { address: null, open: null }, custody: { current: () => true },
-    memory: () => ({ member: { kind: "ids", ids: [podMemberCode(ref)] } }),
-  }, workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`), {
-    work: createFixtureWorkDoor(settingsRouteState, { basis, fields }),
-    sources: {
-      "pods.author": source("pods.author", author(fields)),
-      "pods.roster": source("pods.roster", { pods: [] }),
+  const mount = mountTypedRoute(
+    pods,
+    {
+      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      fixture: null,
+      target: { kind: "host" },
+      work: { address: null, open: null },
+      custody: { current: () => true },
+      memory: () => ({ member: { kind: "ids", ids: [podMemberCode(ref)] } }),
     },
-  });
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+    {
+      work: createFixtureWorkDoor(settingsRouteState, { basis, fields }),
+      sources: {
+        "pods.author": source("pods.author", author(fields)),
+        "pods.roster": source("pods.roster", { pods: [] }),
+      },
+    },
+  );
   function Journey() {
     useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
-    return <KeyScopeHost id="pods-sheet"><TypedChrome mount={mount} document={<span>Pods</span>} /></KeyScopeHost>;
+    return (
+      <KeyScopeHost id="pods-sheet">
+        <TypedChrome mount={mount} document={<span>Pods</span>} />
+      </KeyScopeHost>
+    );
   }
-  const router = createRouter({ routeTree: createRootRoute({ component: Journey }), history: createMemoryHistory({ initialEntries: ["/pods"] }) });
+  const router = createRouter({
+    routeTree: createRootRoute({ component: Journey }),
+    history: createMemoryHistory({ initialEntries: ["/pods"] }),
+  });
   const view = render(<RouterProvider router={router} />);
-  return { mount, close() { view.unmount(); mount.dispose(); } };
+  return {
+    mount,
+    close() {
+      view.unmount();
+      mount.dispose();
+    },
+  };
 }
 
 /* The member pane must keep the core read when arbitrary JSON moves outside the binding grammar. */
@@ -67,7 +118,9 @@ test("the /pods sheet pane draws the picked member's cells from the core read", 
     expect(await screen.findByText("maxSystems")).toBeTruthy();
     expect(screen.getByText("names")).toBeTruthy();
     expect(screen.queryByText("Pick a member on the left to edit its Work")).toBeNull();
-  } finally { pods.close(); }
+  } finally {
+    pods.close();
+  }
 }, 30_000);
 
 /*
@@ -81,14 +134,20 @@ const hiddenEdits = {
   "/names": { edit: { delete: true, by: "pea" } },
   "": { edit: { value: saved, by: "pea" } },
 } as unknown as Record<string, never>;
-const sheetNote = "Save also writes staged edits these cells do not show: /limits/depth, delete /limits/old, delete /names, the whole file as raw text";
+const sheetNote =
+  "Save also writes staged edits these cells do not show: /limits/depth, delete /limits/old, delete /names, the whole file as raw text";
 
 test("staged edits no cell shows are named: beneath a key on its row, and every one on the sheet's note", () => {
   const read = author(hiddenEdits);
   const cells = memberFields(read);
   expect(cells.map((c) => [c.label, c.value, c.source, c.note])).toEqual([
     ["maxSystems", 26, "work", undefined],
-    ["limits", { depth: 3, old: 1 }, "model", "Save also writes beneath this key: /limits/depth, delete /limits/old"],
+    [
+      "limits",
+      { depth: 3, old: 1 },
+      "model",
+      "Save also writes beneath this key: /limits/depth, delete /limits/old",
+    ],
   ]);
   expect(fieldsNote(read)).toBe(sheetNote);
   // A sheet whose every staged edit has its own cell says nothing more.
@@ -100,5 +159,7 @@ test("the /pods sheet pane draws that note above the cells Save will write past"
   try {
     expect(await screen.findByText("limits")).toBeTruthy();
     expect(screen.getByRole("note").textContent).toBe(sheetNote);
-  } finally { pods.close(); }
+  } finally {
+    pods.close();
+  }
 }, 30_000);

@@ -49,8 +49,10 @@ export const nativeReadRoot =
           ),
         );
         const backend = HostNativeReadLive.pipe(Layer.provide(Layer.succeedContext(base)));
-        const supplied=yield* Effect.serviceOption(PictureCaptureStore);
-        const pictures=Option.isSome(supplied)?supplied.value:yield* PictureCaptureStore.pipe(Effect.provide(PictureCaptureStore.layer()));
+        const supplied = yield* Effect.serviceOption(PictureCaptureStore);
+        const pictures = Option.isSome(supplied)
+          ? supplied.value
+          : yield* PictureCaptureStore.pipe(Effect.provide(PictureCaptureStore.layer()));
         const reads = yield* Layer.build(
           guardedNativeRead().pipe(
             Layer.provide(nativeOutputLayer(pictures).pipe(Layer.provide(backend))),

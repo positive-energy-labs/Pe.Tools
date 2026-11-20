@@ -1,12 +1,5 @@
-import { z } from "zod";
 import { Schema } from "effect";
-import {
-  tsOnlyOperationSchemas,
-  type OpRequestOf,
-  type OpResponseOf,
-} from "@pe/host-contracts/operation-types";
-import { effectDecoder } from "@pe/host-contracts/decoders";
-import { leaf } from "./reads/evaluator.ts";
+import { tsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";
 import { listPods, resolvePodIdentity, listRuns, readMember, composeMember } from "./settings.ts";
 import { runPods } from "./family-actions.ts";
 
@@ -36,22 +29,8 @@ const operations = {
       {},
       listRuns(Schema.decodeUnknownSync(tsOnlyOperationSchemas["pod.runs"].request)(raw)),
     ),
-};
-export type LocalReadKey = keyof typeof operations;
-type JsonData<T> = T extends readonly (infer U)[]
-  ? JsonData<U>[]
-  : T extends object
-    ? { -readonly [K in keyof T]: JsonData<T[K]> }
-    : T;
-type LocalOutput<K extends LocalReadKey> = JsonData<
-  K extends "pod.list" ? Extract<OpResponseOf<K>, { pods: unknown }> : OpResponseOf<K>
->;
-export const localRead = <K extends LocalReadKey>(key: K) => {
-  const contract = tsOnlyOperationSchemas[key];
-  const input = effectDecoder(contract.request) as unknown as z.ZodType<OpRequestOf<K>>;
-  const output = effectDecoder(contract.response) as unknown as z.ZodType<LocalOutput<K>>;
-  return leaf(`local:${key}`, input, output);
-};
+} satisfies Record<LocalReadKey, (raw: unknown) => Promise<unknown>>;
+import type { LocalReadKey } from "@pe/host-internal/reads/local";
 export async function readLocal(key: string, args: unknown): Promise<unknown> {
   if (!Object.hasOwn(operations, key)) throw Error(`Unknown local input ${key}`);
   return operations[key as LocalReadKey](args);

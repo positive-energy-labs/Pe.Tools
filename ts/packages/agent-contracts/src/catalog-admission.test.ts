@@ -1,5 +1,7 @@
 import { expect, test } from "vite-plus/test";
-import { linkedCatalog } from "./pe-api.ts";
+import { createPeCatalog } from "./pe-api.ts";
+import { builtinHostActions } from "./semantic-actions.ts";
+const { linkedCatalog } = createPeCatalog(builtinHostActions);
 const catalogEntries = [...linkedCatalog().entries.values()];
 import { link, requireLinkedCatalog, type CatalogLink } from "./catalog.ts";
 

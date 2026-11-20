@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { SceneMeshes } from "@pe/web/scene/types";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { FanPort } from "@pe/ducts-web/calc/model";
 export const DuctsOwner = createContext<{
   selected: string;

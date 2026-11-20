@@ -404,7 +404,10 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     // page, as every journey does (marks.ts). The race itself, a pick behind the page's own
     // unacknowledged edit, is the product's and is witnessed in kernel-journeys-work.test.ts.
     await expect
-      .poll(async () => settled(await marks(page)), { timeout: 180_000, message: "page settled after the ESP edit" })
+      .poll(async () => settled(await marks(page)), {
+        timeout: 180_000,
+        message: "page settled after the ESP edit",
+      })
       .toBe(true);
     // The person scopes the write to this fan, then re-reads the sheet the edits made stale.
     await pickFansWriteScope(
@@ -417,15 +420,16 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
     // The Inputs pane's reading status (PaneStatus) is absent only when every reading it draws is
     // current. Its other status cells (the write scope's) are not readings.
     const status = () =>
-      page.evaluate((inputs) =>
-        [...document.querySelectorAll(`[data-pane-id="${inputs}"] [role="status"]`)]
-          .map((e) => e.textContent!.trim())
-          .filter((text) =>
-            /^Showing previous reading|^Reading\.\.\.$|unavailable|Reading is stale|Explicit demand/.test(
-              text,
-            ),
-          )
-          .join(" "),
+      page.evaluate(
+        (inputs) =>
+          [...document.querySelectorAll(`[data-pane-id="${inputs}"] [role="status"]`)]
+            .map((e) => e.textContent!.trim())
+            .filter((text) =>
+              /^Showing previous reading|^Reading\.\.\.$|unavailable|Reading is stale|Explicit demand/.test(
+                text,
+              ),
+            )
+            .join(" "),
         fansPanes.inputs,
       );
     await expect
@@ -442,7 +446,9 @@ test("H1: a MUAS-1 ESP write refuses for its shared type and MUAS-2 keeps its va
         // D43: per-cell refusals draw in the popover body, not only as a whole-plan outcome.
         popover:
           document.querySelector('[data-write-outcome="refused"]')?.textContent ??
-          [document.querySelector("[data-write-popover]")?.textContent ?? ""].find((text) => /refused/i.test(text)) ??
+          [document.querySelector("[data-write-popover]")?.textContent ?? ""].find((text) =>
+            /refused/i.test(text),
+          ) ??
           null,
         // D43: the kit marks `armed` whenever a plan is held, refused or not (kit write-action.tsx);
         // Apply is offered only as an enabled "Write to Revit" button inside the popover.

@@ -64,7 +64,9 @@ test("a Page-less owner shows its staged cells with authors and plans then appli
   ]);
   // Before is the plan's stored read, never an inferred unknown.
   expect(document.querySelectorAll("[data-write-cell]").length).toBe(3);
-  expect(document.querySelector('[data-write-cell="columns/text:0"]')?.textContent).toContain("Old A");
+  expect(document.querySelector('[data-write-cell="columns/text:0"]')?.textContent).toContain(
+    "Old A",
+  );
   fireEvent.click(screen.getByRole("button", { name: /apply data-tables/ }));
   await waitFor(() => expect(sent.at(-1)?.key).toBe("data-table.apply"));
 });
@@ -110,30 +112,75 @@ test("a host Work update disarms the plan without reopening its review", async (
 });
 
 test("parameter links: the held plan shows before and after per touched id with its author, from the plan response", async () => {
-  const links = { binding: "address" as const, target: "c:\models\a.rvt", route: "parameter-links" };
-  const d = (name: string) => ({ sourceCategoryId: -2001040, sourceParameter: { name: "MOCP" }, relationship: "sameElement", targetParameter: { name } });
+  const links = {
+    binding: "address" as const,
+    target: "c:\models\a.rvt",
+    route: "parameter-links",
+  };
+  const d = (name: string) => ({
+    sourceCategoryId: -2001040,
+    sourceParameter: { name: "MOCP" },
+    relationship: "sameElement",
+    targetParameter: { name },
+  });
   const client: CatalogWorkClient = {
     watch: (_key, receive) => {
-      receive({ doc: { definitions: { D1: { edit: { value: d("B1-new"), by: "human" } }, D3: { edit: { value: d("B3"), by: "pea" } } }, assignments: {} }, handle: workHandle(links as never, 2) });
+      receive({
+        doc: {
+          definitions: {
+            D1: { edit: { value: d("B1-new"), by: "human" } },
+            D3: { edit: { value: d("B3"), by: "pea" } },
+          },
+          assignments: {},
+        },
+        handle: workHandle(links as never, 2),
+      });
       return () => {};
     },
     write: vi.fn(async () => null),
-    submit: vi.fn(async (admission) => ({
-      id: admission.id,
-      state: "succeeded",
-      result: {
-        ...sealed,
-        evidence: {
-          before: { formatVersion: 1, definitions: [{ id: "D1", ...d("B1") }, { id: "D2", ...d("B2") }], assignments: [] },
-          touched: [
-            { path: ["definitions", "D1"], before: { id: "D1", ...d("B1") }, after: { id: "D1", ...d("B1-new") }, by: "human" },
-            { path: ["definitions", "D3"], before: null, after: { id: "D3", ...d("B3") }, by: "pea" },
-          ],
-        },
-      },
-    }) as never),
+    submit: vi.fn(
+      async (admission) =>
+        ({
+          id: admission.id,
+          state: "succeeded",
+          result: {
+            ...sealed,
+            evidence: {
+              before: {
+                formatVersion: 1,
+                definitions: [
+                  { id: "D1", ...d("B1") },
+                  { id: "D2", ...d("B2") },
+                ],
+                assignments: [],
+              },
+              touched: [
+                {
+                  path: ["definitions", "D1"],
+                  before: { id: "D1", ...d("B1") },
+                  after: { id: "D1", ...d("B1-new") },
+                  by: "human",
+                },
+                {
+                  path: ["definitions", "D3"],
+                  before: null,
+                  after: { id: "D3", ...d("B3") },
+                  by: "pea",
+                },
+              ],
+            },
+          },
+        }) as never,
+    ),
   };
-  render(<CatalogWorkReview owner="parameter-links" at={links as never} target={target} client={client} />);
+  render(
+    <CatalogWorkReview
+      owner="parameter-links"
+      at={links as never}
+      target={target}
+      client={client}
+    />,
+  );
   await screen.findByText(/r2 · 2 staged/);
   fireEvent.click(screen.getByRole("button", { name: /plan parameter-links/ }));
   await waitFor(() => expect(document.querySelector("[data-write-action=armed]")).not.toBeNull());

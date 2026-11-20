@@ -2,10 +2,19 @@ import { expect, test } from "vite-plus/test";
 import { applyPatches, rebindScheduleWork, unstale, scheduleGridRouteState } from "../src/index.ts";
 
 test("a wrong-typed schedule edit returns the invalid-document refusal and edit hint", () => {
-  const result = applyPatches(scheduleGridRouteState, { version: 1, revision: 0, doc: { cells: {} } }, "human", [
-    { path: ["cells", "1::2", "edit"], value: { value: { bogus: true } } },
-  ], 0);
-  expect(result).toMatchObject({ ok: false, kind: "error", error: "the patched document is invalid", hint: expect.stringContaining("Cell edits wrap the typed value") });
+  const result = applyPatches(
+    scheduleGridRouteState,
+    { version: 1, revision: 0, doc: { cells: {} } },
+    "human",
+    [{ path: ["cells", "1::2", "edit"], value: { value: { bogus: true } } }],
+    0,
+  );
+  expect(result).toMatchObject({
+    ok: false,
+    kind: "error",
+    error: "the patched document is invalid",
+    hint: expect.stringContaining("Cell edits wrap the typed value"),
+  });
 });
 
 test("reconciliation throws on an unstamped edit instead of silently preserving stale marks", () => {
@@ -13,9 +22,11 @@ test("reconciliation throws on an unstamped edit instead of silently preserving 
     basis: { captureId: "a".repeat(64), stale: [{ key: "1::2", was: "100 VA" }] },
     cells: { "1::2": { edit: { value: "150 VA" } } },
   };
-  expect(() => scheduleGridRouteState.reconcileEdit(doc, [
-    { path: ["cells", "1::2", "edit"], value: { value: "150 VA" } },
-  ])).toThrow();
+  expect(() =>
+    scheduleGridRouteState.reconcileEdit(doc, [
+      { path: ["cells", "1::2", "edit"], value: { value: "150 VA" } },
+    ]),
+  ).toThrow();
 });
 
 /** A reading as the rebind sees it: an id and each row's bindings. */
@@ -40,7 +51,10 @@ const reading = (id: string, load: string | null, mark = "P-1") =>
 test("a rebind names each changed staged cell with the value reviewed against; the first `was` survives later rebinds", () => {
   const doc = {
     basis: { captureId: "a".repeat(64) },
-    cells: { "1::1": { edit: { by: "human" as const, value: "P-9" } }, "1::2": { edit: { by: "human" as const, value: "150 VA" } } },
+    cells: {
+      "1::1": { edit: { by: "human" as const, value: "P-9" } },
+      "1::2": { edit: { by: "human" as const, value: "150 VA" } },
+    },
     takenAt: null,
   };
   const [first] = rebindScheduleWork(doc, reading("a", "100"), reading("b", "120"));

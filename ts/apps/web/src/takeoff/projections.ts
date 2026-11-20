@@ -44,7 +44,6 @@ export interface AtlasRow {
   readonly damage: string | null;
 }
 
-
 /* ── Pure projections ──────────────────────────────────────────────────────── */
 
 export const EMPTY_WORLD: TakeoffModel = {

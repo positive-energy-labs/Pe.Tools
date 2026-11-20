@@ -27,7 +27,11 @@ const said = (thread: string, seq: number, text = `t${seq}`): HostEvent => ({
 
 test("retention drops whole old segments; a cursor below the floor reads as a gap", () => {
   const path = dir();
-  const log = new HostLog(stateFixture(path), Date.now, { segmentBytes: 400, segments: 2, entryBytes: 4096 });
+  const log = new HostLog(stateFixture(path), Date.now, {
+    segmentBytes: 400,
+    segments: 2,
+    entryBytes: 4096,
+  });
   for (let seq = 1; seq <= 40; seq++) log.append(said("a", seq));
   expect(readdirSync(path).length).toBeLessThanOrEqual(2);
   expect(log.floor).toBeGreaterThan(1);
@@ -36,7 +40,10 @@ test("retention drops whole old segments; a cursor below the floor reads as a ga
   expect(stale.entries[0]!.id).toBe(log.floor);
   expect(stale.entries.at(-1)!.id).toBe(40);
   expect(log.read(log.floor - 1).gap).toBe(false);
-  expect(new HostLog(stateFixture(path), Date.now, { segmentBytes: 400, segments: 2, entryBytes: 4096 }).last).toBe(40);
+  expect(
+    new HostLog(stateFixture(path), Date.now, { segmentBytes: 400, segments: 2, entryBytes: 4096 })
+      .last,
+  ).toBe(40);
 });
 
 test("forget removes a deleted thread's entries and never reuses its ids", () => {
@@ -62,7 +69,9 @@ test("a torn last line from a crash is skipped, not fatal", async () => {
   expect(reopened.last).toBe(1);
   expect(reopened.read(0).entries.map((e) => e.id)).toEqual([1]);
   reopened.append(said("a", 2));
-  expect(new HostLog(stateFixture(path), Date.now).read(0).entries.map((e) => e.id)).toEqual([1, 2]);
+  expect(new HostLog(stateFixture(path), Date.now).read(0).entries.map((e) => e.id)).toEqual([
+    1, 2,
+  ]);
 });
 
 test("GET /pe/log pages the log after a cursor, by kind and thread", async () => {

@@ -80,7 +80,10 @@ const maxOf = (legs: readonly Leg[]) => {
   return v.length ? Math.max(...v) : null;
 };
 
-export function calcBreakdown(sheet: Omit<Calc, "claim"> & { claim: import("@pe/fans-contract/fans-inputs").FanClaim }, limits: CalcBreakdownLimits): CalcBreakdown {
+export function calcBreakdown(
+  sheet: Omit<Calc, "claim"> & { claim: import("@pe/fans-contract/fans-inputs").FanClaim },
+  limits: CalcBreakdownLimits,
+): CalcBreakdown {
   const side = (s: Side): CalcBreakdownSide => {
     const paths = sheet.paths.filter((p) => p.side === s);
     const leg = (id: string) => {

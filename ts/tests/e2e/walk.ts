@@ -62,7 +62,11 @@ export async function run(
   /** Actions a walk never draws, e.g. one that trips a known defect: `--skip reopenPlace`. */
   const skip = flag("skip")?.split(",") ?? [];
   const steps = flag("steps")?.split(",") ?? (walk ? null : [...list]);
-  const mode = steps ? (flag("steps") ? "steps" : "journey") : `walk${walk}${skip.length ? `-skip-${skip.join("+")}` : ""}`;
+  const mode = steps
+    ? flag("steps")
+      ? "steps"
+      : "journey"
+    : `walk${walk}${skip.length ? `-skip-${skip.join("+")}` : ""}`;
   const random = rng(seed);
   const byName = new Map(actions.map((a) => [a.name, a]));
   for (const s of steps ?? []) if (!byName.has(s)) throw new Error(`unknown action ${s}`);
@@ -128,12 +132,23 @@ export async function run(
       const broken = Object.entries(results).filter(([, v]) => v !== true);
       appendFileSync(
         journal,
-        JSON.stringify({ i, action: action.name, drawn: { ...drawn }, ms, rules: results, notes: [...net.notes] }) + "\n",
+        JSON.stringify({
+          i,
+          action: action.name,
+          drawn: { ...drawn },
+          ms,
+          rules: results,
+          notes: [...net.notes],
+        }) + "\n",
       );
-      step(`${i} ${action.name} ${JSON.stringify(drawn)} ${ms}ms${broken.length ? " RULE FAIL" : ""}`);
+      step(
+        `${i} ${action.name} ${JSON.stringify(drawn)} ${ms}ms${broken.length ? " RULE FAIL" : ""}`,
+      );
       if (broken.length) {
         await shot(`step${i}-${action.name}`);
-        failures.push(...broken.map(([says, saw]) => `step ${i} ${action.name}: ${says} saw: ${saw}`));
+        failures.push(
+          ...broken.map(([says, saw]) => `step ${i} ${action.name}: ${says} saw: ${saw}`),
+        );
         // A broken rule is evidence and the walk goes on; a failed action leaves no page to read.
         if ("The action settles." in results) break;
       }
@@ -158,7 +173,11 @@ function watchNetwork(page: Page, watch: (url: string) => boolean, net: Ctx["net
         net.mutations.push(`${r.method} ${r.url}`);
     }
     if (e.method === "Network.responseReceived" && watch(e.params.response.url))
-      pending.set(e.params.requestId, { url: e.params.response.url, status: e.params.response.status, method: methods.get(e.params.requestId) ?? "GET" });
+      pending.set(e.params.requestId, {
+        url: e.params.response.url,
+        status: e.params.response.status,
+        method: methods.get(e.params.requestId) ?? "GET",
+      });
     if (e.method === "Network.loadingFinished") {
       const r = pending.get(e.params.requestId);
       if (!r) return;
@@ -178,7 +197,10 @@ function watchNetwork(page: Page, watch: (url: string) => boolean, net: Ctx["net
       const why = failedBody(e.params.response.payloadData);
       if (why) net.failed.push(`ws: ${why}`);
     }
-    if (e.method === "Network.webSocketFrameSent" && MUTATES_FRAME.test(e.params.response.payloadData))
+    if (
+      e.method === "Network.webSocketFrameSent" &&
+      MUTATES_FRAME.test(e.params.response.payloadData)
+    )
       net.mutations.push(`ws: ${e.params.response.payloadData.slice(0, 200)}`);
   });
 }
@@ -198,7 +220,8 @@ function failedBody(text: string): string | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
   if (b.ok === false) return `ok:false ${JSON.stringify(b.error ?? b.reason ?? "").slice(0, 200)}`;
-  if (b.error && typeof b.error === "object") return `error ${JSON.stringify(b.error).slice(0, 200)}`;
+  if (b.error && typeof b.error === "object")
+    return `error ${JSON.stringify(b.error).slice(0, 200)}`;
   if (b.outcome === "failed" || b.status === "failed") return `failed ${text.slice(0, 200)}`;
   return null;
 }

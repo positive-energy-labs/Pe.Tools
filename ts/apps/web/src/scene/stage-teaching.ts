@@ -1,6 +1,6 @@
 import { actionTeaching, type ActionDefinition } from "@pe/kit/keys";
 import type { TeachDescriptor } from "@pe/kit/lang/teach";
-import { ORBIT_GESTURES } from "./gestures";
+import { ORBIT_GESTURES } from "@pe/web-kernel/scene/gestures";
 export const STAGE_ACTIONS = {
   frame: {
     id: "stage.frame",

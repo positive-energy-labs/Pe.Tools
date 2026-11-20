@@ -25,7 +25,7 @@ import {
   type ScheduleCellWrites,
 } from "./columns";
 import type { Refusal } from "#/route/refusal";
-import { useNativeObservation, type NativeObservation } from "#/revit/observation";
+import { useNativeObservation, type NativeObservation } from "@pe/web-kernel/revit/observation";
 
 export interface ScheduleGridState {
   slice: ScheduleGridDocument | null;
@@ -81,7 +81,7 @@ export function useScheduleCellWrites({
   const bindingAt = (key: string) => bindingOf(snapshot, key);
   /** The measured cell's one call, owned by this snapshot: a re-read aborts what is in flight. */
   const parse = useMeasuredParse(snapshot, documentScope);
-  const nativeObservation=useNativeObservation();
+  const nativeObservation = useNativeObservation();
   const parseMeasured: ScheduleCellWrites["parseMeasured"] = (key, text) => {
     const scope = nativeObservation?.scope;
     if (
@@ -311,10 +311,7 @@ export function ScheduleGridWorkspace({
                       : null;
                   }}
                   empty={
-                    <EmptyState
-                      story="scope"
-                      exit="Read it again, or Choose schedule for another"
-                    >
+                    <EmptyState story="scope" exit="Read it again, or Choose schedule for another">
                       this schedule has no rows
                     </EmptyState>
                   }

@@ -16,8 +16,13 @@ import {
   type ReadingFrame,
 } from "@pe/agent-contracts";
 import { commandTool } from "@pe/mcps/product-actions";
-import { resourceSnapshot, type ResourceObserver, type OwnerValue, type WorkCarriage } from "@pe/runtime";
-import type { BridgeError, RevitBridge } from "./bridge.ts";
+import {
+  resourceSnapshot,
+  type ResourceObserver,
+  type OwnerValue,
+  type WorkCarriage,
+} from "@pe/runtime";
+import type { BridgeError, RevitBridge } from "@pe/host-internal/bridge";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { ActionJournal } from "./action-journal.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
@@ -119,54 +124,105 @@ const documentIn = (value: unknown): DocumentRef | null => {
  * against today's clock. No consumer compares clocks. Work uses this same envelope boundary.
  */
 export const markReadings =
-  (marks: DocumentMarks, readFrame: (ref: DocumentRef | null, key: string, at?: number, carriage?: WorkCarriage, update?: boolean) => Promise<import('./document-marks.ts').MarkFrame | null>) =>
+  (
+    marks: DocumentMarks,
+    readFrame: (
+      ref: DocumentRef | null,
+      key: string,
+      at?: number,
+      carriage?: WorkCarriage,
+      update?: boolean,
+    ) => Promise<import("./document-marks.ts").MarkFrame | null>,
+  ) =>
   (observe: ResourceObserver): ResourceObserver =>
   (request, publish, after) => {
     // Thread logs have no document frame to capture; their bounded SSE lane owns cursor recovery.
     if (request.kind === "thread") return observe(request, publish, after);
     let bound = documentOf(request as never);
-    let latest: (ReadingFrame & { kind: 'snapshot' }) | null = null;
+    let latest: (ReadingFrame & { kind: "snapshot" }) | null = null;
     let servedAt: number | undefined;
     let latestCarriage: WorkCarriage | undefined;
     let emittedChanged: boolean | undefined;
-    let closed = false, queued = 0;
+    let closed = false,
+      queued = 0;
     let tail = Promise.resolve();
     let release = () => {};
     let unwatch = () => {};
     const end = () => {
       closed = true;
-      const stopSource = release, stopMarks = unwatch;
+      const stopSource = release,
+        stopMarks = unwatch;
       release = unwatch = () => {};
-      stopSource(); stopMarks();
+      stopSource();
+      stopMarks();
     };
     const fail = (error: unknown) => {
       if (closed) return;
       const failure = error as { problem?: string; message?: string };
-      publish({ kind: 'failure', key: readingKey(request), error: failure.message ?? String(error),
-        failure: { kind: 'failed', code: failure.problem ?? 'ReadingFrameFailed', message: failure.message ?? String(error) } });
+      publish({
+        kind: "failure",
+        key: readingKey(request),
+        error: failure.message ?? String(error),
+        failure: {
+          kind: "failed",
+          code: failure.problem ?? "ReadingFrameFailed",
+          message: failure.message ?? String(error),
+        },
+      });
       end();
     };
     const enqueue = (frame: ReadingFrame, update = false, carriage?: WorkCarriage) => {
       if (closed) return;
-      if (!update && frame.kind === 'snapshot') { latest = frame; latestCarriage = carriage; }
-      if (++queued > 64) return fail({ problem: 'ReadingFrameBacklog', message: 'Mark-frame capture backlog exceeded its bound' });
-      tail = tail.then(async () => {
-        if (closed) return;
-        if (frame.kind !== 'snapshot') { publish(frame); return; }
-        bound ??= documentIn(frame.value);
-        const consumed = await readFrame(bound, readingKey(request), update ? servedAt : takenIn(frame.value) ?? undefined, carriage, update);
-        if (closed) return;
-        if (!consumed) { publish(frame); return; }
-        if (!update) servedAt = consumed.servedAt;
-        const changed = (consumed.marks.observedSince ?? 0) > consumed.servedAt || (consumed.marks.changedAt ?? 0) > consumed.servedAt;
-        if (update && changed === emittedChanged) return;
-        emittedChanged = changed;
-        publish({ ...frame, changed });
-      }).catch(fail).finally(() => { queued--; });
+      if (!update && frame.kind === "snapshot") {
+        latest = frame;
+        latestCarriage = carriage;
+      }
+      if (++queued > 64)
+        return fail({
+          problem: "ReadingFrameBacklog",
+          message: "Mark-frame capture backlog exceeded its bound",
+        });
+      tail = tail
+        .then(async () => {
+          if (closed) return;
+          if (frame.kind !== "snapshot") {
+            publish(frame);
+            return;
+          }
+          bound ??= documentIn(frame.value);
+          const consumed = await readFrame(
+            bound,
+            readingKey(request),
+            update ? servedAt : (takenIn(frame.value) ?? undefined),
+            carriage,
+            update,
+          );
+          if (closed) return;
+          if (!consumed) {
+            publish(frame);
+            return;
+          }
+          if (!update) servedAt = consumed.servedAt;
+          const changed =
+            (consumed.marks.observedSince ?? 0) > consumed.servedAt ||
+            (consumed.marks.changedAt ?? 0) > consumed.servedAt;
+          if (update && changed === emittedChanged) return;
+          emittedChanged = changed;
+          publish({ ...frame, changed });
+        })
+        .catch(fail)
+        .finally(() => {
+          queued--;
+        });
     };
-    unwatch = marks.subscribe(() => { if (latest && bound) enqueue(latest, true, latestCarriage); });
-    try { release = observe(request, (frame, carriage) => enqueue(frame, false, carriage), after); }
-    catch (error) { fail(error); }
+    unwatch = marks.subscribe(() => {
+      if (latest && bound) enqueue(latest, true, latestCarriage);
+    });
+    try {
+      release = observe(request, (frame, carriage) => enqueue(frame, false, carriage), after);
+    } catch (error) {
+      fail(error);
+    }
     if (closed) end();
     return end;
   };
@@ -256,30 +312,33 @@ export function hostResourceObserver(
           let release = () => {};
           // effect-edge: island, phase 5
           void Effect.runPromise(
-            SdkSession.resolve(bridge, { id: request.kind === "ducts-snapshot" ? request.target.session : request.session }).pipe(
-              Effect.flatMap((session) => resolveSession(bridge, {
+            SdkSession.resolve(bridge, {
+              id: request.kind === "ducts-snapshot" ? request.target.session : request.session,
+            }).pipe(
+              Effect.flatMap((session) =>
+                resolveSession(bridge, {
                   bridgeSessionId: session.sessionId,
                   openDocumentId:
                     request.kind === "ducts-snapshot" ? request.target.openId : undefined,
-                })),
+                }),
+              ),
             ),
-          )
-            .then(
-              (resolved) => {
-                if (!live) return;
-                const canonical =
-                  request.kind === "ducts-snapshot"
-                    ? {
-                        ...request,
-                        target: { session: resolved.sessionId, openId: request.target.openId },
-                      }
-                    : { ...request, session: resolved.sessionId };
-                release = ductsReadings(bridge).observe(canonical, (value) => accept({ value }));
-              },
-              (error: unknown) => {
-                if (live) accept({ error: String(error) });
-              },
-            );
+          ).then(
+            (resolved) => {
+              if (!live) return;
+              const canonical =
+                request.kind === "ducts-snapshot"
+                  ? {
+                      ...request,
+                      target: { session: resolved.sessionId, openId: request.target.openId },
+                    }
+                  : { ...request, session: resolved.sessionId };
+              release = ductsReadings(bridge).observe(canonical, (value) => accept({ value }));
+            },
+            (error: unknown) => {
+              if (live) accept({ error: String(error) });
+            },
+          );
           return () => {
             live = false;
             release();
@@ -326,7 +385,7 @@ export function hostResourceObserver(
         case "takeoff-reading":
           return captures().observe(request.target, accept);
         case "families-reading":
-          return captures().observeFamilies(request.work,accept);
+          return captures().observeFamilies(request.work, accept);
         case "families-matrix":
           return captures().observeFamiliesMatrix(request.target, request.filter, accept);
         case "family-readings": {

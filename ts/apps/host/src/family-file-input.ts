@@ -5,7 +5,11 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export const readFamilySpec = async (raw: unknown, pointer?: string | null) => {
   const member = podMemberSchema.parse(raw);
   const asset = (path: string) =>
-    familySpecAsset(new URL(`http://host/family/spec?${new URLSearchParams({ ...member, path })}`), undefined, pointer);
+    familySpecAsset(
+      new URL(`http://host/family/spec?${new URLSearchParams({ ...member, path })}`),
+      undefined,
+      pointer,
+    );
   const link = await asset(`${member.path}.spec.json`);
   if (link.status === 404) return { doc: null, error: null };
   try {

@@ -1,37 +1,20 @@
-
-
-
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 import { healPlan, healRequestGroup } from "@pe/ducts-domain/heal";
 import { fanOf } from "@pe/duct-systems-domain/action-targets";
 
-
-
-
-
-
-
-
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
-import type { RevitBridge } from "@pe/host/bridge";
-import { refused } from "@pe/host/command-executor";
-
-
-
-
-
-
-
-
-
-
-
+import type { RevitBridge } from "@pe/host-internal/bridge";
+import { refused } from "@pe/host-internal/command-executor";
 
 import type { DuctsHeal } from "@pe/host-contracts/generated";
 
-import { ductActionExecutors, type DuctActionPreparation, type DuctActionDependencies } from "@pe/ducts-host/action-runtime";
+import {
+  ductActionExecutors,
+  type DuctActionPreparation,
+  type DuctActionDependencies,
+} from "@pe/ducts-host/action-runtime";
 /** Resolve group seeds through metadata, then read only their systems' complete geometry. */
 export async function healSnapshot(
   groups: readonly string[],
@@ -80,41 +63,68 @@ export function healedCellPaths(
 async function prepareHeal(p: DuctActionPreparation) {
   let { intent, snapshot, design } = p;
 
-            if (!intent?.groups?.length)
-              throw refused("Stage writeIntent.groups in Work before healing");
-            const plan = healPlan(snapshot, design);
-            const input = {
-              groups: intent.groups.map((group) => {
-                const found = plan.groups.find((item) => item.group === group);
-                if (!found) throw refused(`Group ${group} has nothing to heal`);
-                return healRequestGroup(found);
-              }),
-            };
-            return { input, dependencies: ductWriteEvidence(snapshot) };
-
+  if (!intent?.groups?.length) throw refused("Stage writeIntent.groups in Work before healing");
+  const plan = healPlan(snapshot, design);
+  const input = {
+    groups: intent.groups.map((group) => {
+      const found = plan.groups.find((item) => item.group === group);
+      if (!found) throw refused(`Group ${group} has nothing to heal`);
+      return healRequestGroup(found);
+    }),
+  };
+  return { input, dependencies: ductWriteEvidence(snapshot) };
 }
 async function prepareFanAssignment(p: DuctActionPreparation) {
   let { intent, snapshot } = p;
 
-            if (!intent?.fan) throw refused("Stage writeIntent.fan in Work before assigning a fan");
-            fanOf(snapshot, intent.fan);
-            return { input: intent.fan, dependencies: ductWriteEvidence(snapshot) };
-
+  if (!intent?.fan) throw refused("Stage writeIntent.fan in Work before assigning a fan");
+  fanOf(snapshot, intent.fan);
+  return { input: intent.fan, dependencies: ductWriteEvidence(snapshot) };
 }
 
-export function ductSystemsExecutors(bridge: RevitBridge["Service"], deps: DuctActionDependencies = {}) {
+export function ductSystemsExecutors(
+  bridge: RevitBridge["Service"],
+  deps: DuctActionDependencies = {},
+) {
   return {
-    ...ductActionExecutors({
-      snapshot: (intent, read) => healSnapshot(intent.groups ?? [], read), derive: prepareHeal,
-      entry: { key: "ducts.heal", native: "ducts.heal.preview", refusePlan: null,
-        retires: (input, value) => healedCellPaths(input, value as DuctsHeal.Res.Response) },
-      bindings: [["ducts.apply-heal", "heal", "apply"], ["ducts.rehearse-heal", "heal", "rehearse"]],
-    }, bridge, deps),
-    ...ductActionExecutors({
-      snapshot: (intent, read) => { if (!intent.fan) throw refused("Stage writeIntent.fan before assigning a fan"); return read({kind: "systems", systemIds: [intent.fan.systemId]}); },
-      derive: prepareFanAssignment,
-      entry: { key: "ducts.assign-fan", native: "ducts.assign-fan.preview", refusePlan: null, retires: () => [] },
-      bindings: [["ducts.apply-assign-fan", "assign-fan", "apply"], ["ducts.rehearse-assign-fan", "assign-fan", "rehearse"]],
-    }, bridge, deps),
+    ...ductActionExecutors(
+      {
+        snapshot: (intent, read) => healSnapshot(intent.groups ?? [], read),
+        derive: prepareHeal,
+        entry: {
+          key: "ducts.heal",
+          native: "ducts.heal.preview",
+          refusePlan: null,
+          retires: (input, value) => healedCellPaths(input, value as DuctsHeal.Res.Response),
+        },
+        bindings: [
+          ["ducts.apply-heal", "heal", "apply"],
+          ["ducts.rehearse-heal", "heal", "rehearse"],
+        ],
+      },
+      bridge,
+      deps,
+    ),
+    ...ductActionExecutors(
+      {
+        snapshot: (intent, read) => {
+          if (!intent.fan) throw refused("Stage writeIntent.fan before assigning a fan");
+          return read({ kind: "systems", systemIds: [intent.fan.systemId] });
+        },
+        derive: prepareFanAssignment,
+        entry: {
+          key: "ducts.assign-fan",
+          native: "ducts.assign-fan.preview",
+          refusePlan: null,
+          retires: () => [],
+        },
+        bindings: [
+          ["ducts.apply-assign-fan", "assign-fan", "apply"],
+          ["ducts.rehearse-assign-fan", "assign-fan", "rehearse"],
+        ],
+      },
+      bridge,
+      deps,
+    ),
   };
 }

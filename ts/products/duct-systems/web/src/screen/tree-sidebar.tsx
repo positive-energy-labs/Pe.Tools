@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { AttentionDocument } from "@pe/kit/lang/attention";
-import { useElementIndex } from "@pe/web/element-index";
+import { useElementIndex } from "@pe/web-kernel/element-index";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { useCallback } from "react";
 import { ListTree } from "lucide-react";
@@ -8,7 +8,7 @@ import { Button } from "@pe/kit/lang/button";
 import { useList, type ListPersist, type ListOptions } from "@pe/kit/lang/collection";
 import { ListView, listColumns, type ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
-import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
+import { observedElements, useNativeObservation } from "@pe/web-kernel/revit/observation";
 
 import { formatQuantity, type Encoding, type Quantity } from "@pe/ducts-web/encoding";
 
@@ -173,7 +173,9 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
     subjectOf: useCallback(
       (node: TreeNode) => {
         const key =
-          node.kind === "element" ? elements.keyOf(node.id!) : (`${node.kind}:${node.key}` as const);
+          node.kind === "element"
+            ? elements.keyOf(node.id!)
+            : (`${node.kind}:${node.key}` as const);
         return doc && key ? { doc, key } : undefined;
       },
       [doc, elements],
@@ -268,7 +270,9 @@ export function SystemTree({ ctx, address }: { ctx: TreeCtx; address?: ListPersi
           />
         ) : undefined,
         // What the row cannot say with a number: "Rule a fan to price this system", a shared network, a subtotal.
-        ...(n.message ? { sub: <span data-e-message="">{n.message}</span>, lines: 2 as const } : {}),
+        ...(n.message
+          ? { sub: <span data-e-message="">{n.message}</span>, lines: 2 as const }
+          : {}),
         revit: target.ids,
         revitRefs: target.refs,
       };

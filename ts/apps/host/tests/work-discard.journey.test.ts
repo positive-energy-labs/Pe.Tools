@@ -16,57 +16,112 @@ import { human, actAs } from "./callers.ts";
 
 test("D rule 5 opens discarded disk Work empty and saves the first edit without retaining old bytes", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-discard-http-"));
-  const key = bindWork("discard-journey", null), targetKey = workKey(key);
+  const key = bindWork("discard-journey", null),
+    targetKey = workKey(key);
   const name = createHash("sha256").update(`${key.route}:${targetKey}`).digest("hex") + ".json";
   const path = join(dir, name);
   const posted = () => storedNotices(stateMachine(path)).filter((notice) => notice.path === path);
-  const spec = { route: key.route, title: "Work", description: "Authored Work", schemaVersion: 2,
-    schema: z.object({ note: z.string().default("") }) };
+  const spec = {
+    route: key.route,
+    title: "Work",
+    description: "Authored Work",
+    schemaVersion: 2,
+    schema: z.object({ note: z.string().default("") }),
+  };
   const store = fileRouteDocumentStore(stateFixture(dir));
-  const request = (method: string, suffix = "", body?: unknown) => new Request(`http://host/pe/route-state/${key.route}${suffix}`, {
-    method, ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
-  });
+  const request = (method: string, suffix = "", body?: unknown) =>
+    new Request(`http://host/pe/route-state/${key.route}${suffix}`, {
+      method,
+      ...(body === undefined
+        ? {}
+        : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+    });
   try {
     // The old stamp is rejected even when the document otherwise fits today's schema.
-    const old = JSON.stringify({ format: "route-state-record-v2", targetKey, route: key.route,
-      value: { version: 1, schemaVersion: 1, revision: 7, doc: { note: "OLD WORK MUST DISAPPEAR" }, history: [] } });
-    const foreign = JSON.stringify({ format: "route-state-record-v2", targetKey: "foreign/target:", route: key.route,
-      value: { version: 1, schemaVersion: 2, revision: 7, doc: { note: "FOREIGN WORK MUST DISAPPEAR" }, history: [] } });
+    const old = JSON.stringify({
+      format: "route-state-record-v2",
+      targetKey,
+      route: key.route,
+      value: {
+        version: 1,
+        schemaVersion: 1,
+        revision: 7,
+        doc: { note: "OLD WORK MUST DISAPPEAR" },
+        history: [],
+      },
+    });
+    const foreign = JSON.stringify({
+      format: "route-state-record-v2",
+      targetKey: "foreign/target:",
+      route: key.route,
+      value: {
+        version: 1,
+        schemaVersion: 2,
+        revision: 7,
+        doc: { note: "FOREIGN WORK MUST DISAPPEAR" },
+        history: [],
+      },
+    });
     for (const bytes of [old, "{UNDECODABLE WORK MUST DISAPPEAR", foreign]) {
       await writeFile(path, bytes);
       const app = createPeRoutes({ store, registrations: [{ spec }] });
       const opened = await app.fetch(request("GET"));
       expect(opened.status).toBe(200);
       expect(await opened.json()).toMatchObject({ doc: { note: "" }, revision: 0 });
-      expect(await readdir(dir), "opening discards the original, with no aside or archive").toEqual([]);
-      const saved = await actAs(human, () => app.fetch(request("POST", "/apply", {
-        patches: [{ path: ["note"], value: "First edit" }], expectedRevision: 0, press: crypto.randomUUID(),
-      })));
+      expect(await readdir(dir), "opening discards the original, with no aside or archive").toEqual(
+        [],
+      );
+      const saved = await actAs(human, () =>
+        app.fetch(
+          request("POST", "/apply", {
+            patches: [{ path: ["note"], value: "First edit" }],
+            expectedRevision: 0,
+            press: crypto.randomUUID(),
+          }),
+        ),
+      );
       expect(saved.status).toBe(200);
       expect(await saved.json()).toMatchObject({ ok: true, revision: 1 });
       const reopened = createPeRoutes({ store, registrations: [{ spec }] });
-      expect(await (await reopened.fetch(request("GET"))).json()).toMatchObject({ doc: { note: "First edit" }, revision: 1 });
+      expect(await (await reopened.fetch(request("GET"))).json()).toMatchObject({
+        doc: { note: "First edit" },
+        revision: 1,
+      });
       expect(await readdir(dir)).toEqual([name]);
       const persisted = await readFile(path, "utf8");
       expect(persisted).not.toContain("MUST DISAPPEAR");
-      expect(JSON.parse(persisted)).toMatchObject({ value: { schemaVersion: 2, revision: 1, doc: { note: "First edit" } } });
+      expect(JSON.parse(persisted)).toMatchObject({
+        value: { schemaVersion: 2, revision: 1, doc: { note: "First edit" } },
+      });
       expect((await app.fetch(request("POST", "/start-fresh", {}))).status).toBe(404);
       expect((await app.fetch(request("GET", "/salvage"))).status).toBe(404);
     }
     // One notice per discarded file in the feed's durable source, naming the Place (ADR 0039 rule 1).
     expect(posted()).toHaveLength(3);
     for (const notice of posted()) {
-      expect(notice).toMatchObject({ class: "discard", place: `Work for ${key.route} (${targetKey})` });
+      expect(notice).toMatchObject({
+        class: "discard",
+        place: `Work for ${key.route} (${targetKey})`,
+      });
       expect(notice.reason).toMatch(/.+/);
       expect(notice.reason).not.toMatch(/[\r\n]/);
     }
     // A failed disk access has a different boundary: it must not become empty Work.
-    const io = createPeRoutes({ registrations: [{ spec }], store: { ...store,
-      getState: async () => { throw Object.assign(Error("disk access denied"), { code: "EACCES" }); } } });
+    const io = createPeRoutes({
+      registrations: [{ spec }],
+      store: {
+        ...store,
+        getState: async () => {
+          throw Object.assign(Error("disk access denied"), { code: "EACCES" });
+        },
+      },
+    });
     const failed = await io.fetch(request("GET"));
     expect(failed.status).toBe(403);
     expect(await failed.json()).toMatchObject({ error: "disk access denied" });
     expect(await readdir(dir)).toEqual([name]);
     expect(posted()).toHaveLength(3);
-  } finally { await rm(dir, { recursive: true, force: true }); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

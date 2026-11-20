@@ -9,7 +9,7 @@ import { fmtNum } from "@pe/kit/table/model";
 import { type CandidateRegion } from "#/takeoff/model";
 import type { Immutable } from "@pe/agent-contracts";
 import type { CellLike } from "@pe/agent-contracts";
-import type { CellWire } from "../components/work/band";
+import type { CellWire } from "@pe/web-kernel/components/work/band";
 export interface AdoptionStore {
   views: readonly string[];
   world: { zones: readonly unknown[] };

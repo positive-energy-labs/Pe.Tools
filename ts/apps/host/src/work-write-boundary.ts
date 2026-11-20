@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { createHash } from "node:crypto";
 import { type DocumentMarks, type DocumentRef } from "./document-marks.ts";
 import { lifetime } from "./document-lifetime.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { z } from "zod";
 import {
@@ -21,7 +21,11 @@ import {
   type WriteBoundaryBinding,
 } from "@pe/agent-contracts";
 import { tools } from "@pe/mcps/product-actions";
-import { refused, type CommandContext, type CommandExecutor } from "./command-executor.ts";
+import {
+  refused,
+  type CommandContext,
+  type CommandExecutor,
+} from "@pe/host-internal/command-executor";
 
 const hash = (value: unknown) =>
   createHash("sha256").update(canonicalRouteInput(value)).digest("hex");
@@ -29,7 +33,9 @@ const hash = (value: unknown) =>
 const canonicalSet = <T>(values: readonly T[]): T[] =>
   [...new Set(values.map(canonicalRouteInput))].sort().map((value) => JSON.parse(value));
 /** The document mark the plan read, as the seal carries it (ADR 0030 rule 4). */
-export const sealedDocumentMark = (marks: DocumentMarks, ref: DocumentRef,
+export const sealedDocumentMark = (
+  marks: DocumentMarks,
+  ref: DocumentRef,
 ): WriteSeal["documentMark"] => ({
   session: ref.session,
   openId: ref.openId,
@@ -47,22 +53,29 @@ export interface WriteSealInput {
   consumed: readonly Exclude<Consumed, { kind: "document-mark" }>[];
   evidence: unknown;
 }
-export function writeSeal({ caller, request, input, work, incarnation, documentMark, consumed, evidence ,
+export function writeSeal({
+  caller,
+  request,
+  input,
+  work,
+  incarnation,
+  documentMark,
+  consumed,
+  evidence,
 }: WriteSealInput): WriteSeal {
   const dependencies = canonicalSet(
-    consumed
-      .map((item) =>
-        item.kind === "work"
-          ? {
-              ...item,
-              probe: {
-                ...item.probe,
-                paths: canonicalSet(item.probe.paths),
-                edits: canonicalSet(item.probe.edits ?? []),
-              },
-            }
-          : item,
-      ),
+    consumed.map((item) =>
+      item.kind === "work"
+        ? {
+            ...item,
+            probe: {
+              ...item.probe,
+              paths: canonicalSet(item.probe.paths),
+              edits: canonicalSet(item.probe.edits ?? []),
+            },
+          }
+        : item,
+    ),
   );
   return {
     caller,
@@ -88,15 +101,21 @@ const workSpec = (
   route: string,
   registeredWork?: import("@pe/agent-contracts").RouteStateSpec<z.ZodType>,
 ) =>
-  (registeredWork ?? (Object.values(tools) as readonly Tool[]).find(tool => tool.work?.route === route)?.work) as WorkSpec;
-type Workspace = { spec(route: string): import("@pe/agent-contracts").RouteStateSpec<z.ZodType> | undefined };
-/** A door bound to one owner has its spec at boot; `ANY_ROUTE` (the sheet pair) resolves the handle's owner. */
-const specFor = (route: string, fixed: WorkSpec | undefined, workspace?: Workspace) => (handle: WorkHandle) => {
-  if (route !== ANY_ROUTE) return fixed!;
-  const spec = workspace?.spec(handle.key.route) ?? workSpec(handle.key.route);
-  if (!spec) throw refused(`No Work is registered for route ${handle.key.route}`, "work.unavailable");
-  return spec as WorkSpec;
+  (registeredWork ??
+    (Object.values(tools) as readonly Tool[]).find((tool) => tool.work?.route === route)
+      ?.work) as WorkSpec;
+type Workspace = {
+  spec(route: string): import("@pe/agent-contracts").RouteStateSpec<z.ZodType> | undefined;
 };
+/** A door bound to one owner has its spec at boot; `ANY_ROUTE` (the sheet pair) resolves the handle's owner. */
+const specFor =
+  (route: string, fixed: WorkSpec | undefined, workspace?: Workspace) => (handle: WorkHandle) => {
+    if (route !== ANY_ROUTE) return fixed!;
+    const spec = workspace?.spec(handle.key.route) ?? workSpec(handle.key.route);
+    if (!spec)
+      throw refused(`No Work is registered for route ${handle.key.route}`, "work.unavailable");
+    return spec as WorkSpec;
+  };
 
 /** Primitive 1 on the host: admit the Work to its document, read the authored cells, derive the input. */
 async function deriveFromWork(
@@ -107,7 +126,9 @@ async function deriveFromWork(
   bridge: RevitBridge["Service"],
   deps: { sdk?: SdkReceiptReader },
 ) {
-  const { work, readWorks } = workAdmissionSchema.parse(definition.input.parse(ctx.admission.input));
+  const { work, readWorks } = workAdmissionSchema.parse(
+    definition.input.parse(ctx.admission.input),
+  );
   if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
   const target = ctx.admission.target.ref;
   const observed = await lifetime(bridge, target, false, deps);
@@ -196,7 +217,11 @@ export function workWriteBoundary(
   if (!executor.seal) throw Error("Write command requires a producer-owned seal projection");
   const project = executor.seal;
   const { route } = hooks;
-  const specOf = specFor(route, route === ANY_ROUTE ? undefined : workSpec(route, registeredWork), deps.workspace);
+  const specOf = specFor(
+    route,
+    route === ANY_ROUTE ? undefined : workSpec(route, registeredWork),
+    deps.workspace,
+  );
   return {
     ...executor,
     boundary: "work",
@@ -223,16 +248,20 @@ export function workWriteBoundary(
         );
       const latest = previews.at(-1);
       const planRefusal =
-        latest?.state === "succeeded"
-          ? writePreviewSchema.parse(latest.result)
-          : null;
+        latest?.state === "succeeded" ? writePreviewSchema.parse(latest.result) : null;
       if (!previewOnly && planRefusal?.planRefusal)
         throw refused(planRefusal.planRefusal, planRefusal.planRefusalCode ?? "preview.refused");
-      const preview = previews.filter((row ) => row.state === "succeeded" &&
-        sameCaller((row.result as { seal?: WriteSeal }).seal?.caller, ctx.caller),
-      ).at(-1);
+      const preview = previews
+        .filter(
+          (row) =>
+            row.state === "succeeded" &&
+            sameCaller((row.result as { seal?: WriteSeal }).seal?.caller, ctx.caller),
+        )
+        .at(-1);
       if (!previewOnly && !preview && previews.length)
-        throw refused("Plan belongs to another caller; plan the current Work first", "preview.caller",
+        throw refused(
+          "Plan belongs to another caller; plan the current Work first",
+          "preview.caller",
         );
       const derivedContext = withInput(ctx, input);
       // Reproduce generated paths and plan references from this exact preview, never a new caller payload.
@@ -240,12 +269,12 @@ export function workWriteBoundary(
       const bound = await executor.bind(derivedContext);
       const prepare = async () => {
         const value = executor.prepared.parse(await bound.prepare?.());
-        if (!previewOnly && !preview)
-          throw refused("Plan the current Work first", "preview.stale");
+        if (!previewOnly && !preview) throw refused("Plan the current Work first", "preview.stale");
         // The seal names the document mark itself; mark probes (the plan's sealed mark below, a document
         // read's takenAt) are the journal's dispatch guard and stay out of the hash.
         const dependencies = [...ctx.consumed, ...(bound.consumes ?? [])].filter(
-          (item): item is Exclude<Consumed, { kind: "document-mark" }> => item.kind !== "document-mark",
+          (item): item is Exclude<Consumed, { kind: "document-mark" }> =>
+            item.kind !== "document-mark",
         );
         const projection = project(value);
         await marks.settled?.();
@@ -264,8 +293,10 @@ export function workWriteBoundary(
             ? (preview.result as { seal?: WriteSeal }).seal
             : undefined;
         // Wrap field values so a missing field cannot compare equal to an empty object.
-        const changed = [...new Set([...Object.keys(previousSeal ?? {}), ...Object.keys(seal)])].filter(
-          (key) => key === "caller"
+        const changed = [
+          ...new Set([...Object.keys(previousSeal ?? {}), ...Object.keys(seal)]),
+        ].filter((key) =>
+          key === "caller"
             ? !sameCaller(previousSeal?.caller, seal.caller)
             : canonicalRouteInput({ value: previousSeal?.[key as keyof WriteSeal] }) !==
               canonicalRouteInput({ value: seal[key as keyof WriteSeal] }),
@@ -294,7 +325,9 @@ export function workWriteBoundary(
                   kind: "document-mark" as const,
                   probe: {
                     ref: target,
-                    sealed: { observedSince: plannedMark.observedSince, changedAt: plannedMark.changedAt ,
+                    sealed: {
+                      observedSince: plannedMark.observedSince,
+                      changedAt: plannedMark.changedAt,
                     },
                   },
                   expected: true as const,
@@ -304,10 +337,12 @@ export function workWriteBoundary(
         ],
         effects: previewOnly ? [] : bound.effects,
         // A read-only preview must not consume the adopted plan before Apply can claim it.
-        claims: previewOnly ? [] : [
-          ...(bound.claims ?? []),
-          ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
-        ],
+        claims: previewOnly
+          ? []
+          : [
+              ...(bound.claims ?? []),
+              ...(!previewOnly && preview ? [{ kind: "receipt" as const, id: preview.id }] : []),
+            ],
         // Seal eligibility is read-only; rederive again at preparation to catch intervening changes.
         preflight: previewOnly
           ? undefined
@@ -317,34 +352,39 @@ export function workWriteBoundary(
         prepare,
       };
     },
-    run: (ctx, execution) => Effect.gen(function* () {
-      const p = preparedSchema.parse(execution.prepared);
-      if (p.previewOnly && !ownsPreview)
+    run: (ctx, execution) =>
+      Effect.gen(function* () {
+        const p = preparedSchema.parse(execution.prepared);
+        if (p.previewOnly && !ownsPreview)
+          return {
+            previewOnly: true,
+            derivedRequest: project(p.value).request,
+            // What the plan observed beside the request (a before, touched ids): the review draws from this response.
+            evidence: project(p.value).evidence,
+            authoredIntent: p.input,
+            seal: p.seal,
+          };
+        const result = yield* executor.run(withInput(ctx, p.input), {
+          ...execution,
+          prepared: p.value,
+        });
+        const retires = executor.retires;
+        if (!p.previewOnly && retires) {
+          const paths = retires(result);
+          if (paths.length)
+            yield* execution.retireWork(
+              (p.input.work as WorkHandle).key,
+              (p.input.work as WorkHandle).key.route,
+              paths,
+            );
+        }
         return {
-          previewOnly: true,
+          ...(result as object),
+          previewOnly: p.previewOnly,
           derivedRequest: project(p.value).request,
-          // What the plan observed beside the request (a before, touched ids): the review draws from this response.
-          evidence: project(p.value).evidence,
-          authoredIntent: p.input,
           seal: p.seal,
         };
-      const result = yield* executor.run(withInput(ctx, p.input), {
-        ...execution,
-        prepared: p.value,
-      });
-      const retires = executor.retires;
-      if (!p.previewOnly && retires) {
-        const paths = retires(result);
-        if (paths.length)
-          yield* execution.retireWork((p.input.work as WorkHandle).key, (p.input.work as WorkHandle).key.route, paths);
-      }
-      return {
-        ...(result as object),
-        previewOnly: p.previewOnly,
-        derivedRequest: project(p.value).request,
-        seal: p.seal,
-      };
-    }),
+      }),
     recover: executor.recover
       ? (step, prepared, target) =>
           executor.recover!(step, preparedSchema.parse(prepared).value, target)

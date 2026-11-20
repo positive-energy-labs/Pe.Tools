@@ -15,9 +15,15 @@ import {
   type WorkTimeline,
 } from "@pe/agent-contracts";
 import { FINDINGS_OWNER } from "@pe/agent-contracts/slots";
-import { mergeTimeline, sameStep, type RouteWorkspace, type TimelinePart, type TimelineReceipts } from "@pe/runtime";
+import {
+  mergeTimeline,
+  sameStep,
+  type RouteWorkspace,
+  type TimelinePart,
+  type TimelineReceipts,
+} from "@pe/runtime";
 import type { ActionJournal } from "../action-journal.ts";
-import { leaf, read } from "./door.ts";
+import { leaf, read } from "@pe/host-internal/read-graph";
 import type { DocumentRow } from "../session-inventory.ts";
 
 /**
@@ -25,7 +31,12 @@ import type { DocumentRow } from "../session-inventory.ts";
  * for the Works of one Place: its rows oldest first, and the caller's next step each way.
  */
 export interface TimelineSource {
-  read(works: readonly WorkKey[], by: WorkAuthor, documents: readonly DocumentRow[], settingsOwners: readonly string[]): Promise<TimelinePart> | TimelinePart;
+  read(
+    works: readonly WorkKey[],
+    by: WorkAuthor,
+    documents: readonly DocumentRow[],
+    settingsOwners: readonly string[],
+  ): Promise<TimelinePart> | TimelinePart;
   /** Takes the step the Timeline chose from this source; the result is the door's response. */
   step(direction: "undo" | "redo", expected: StepRef, caller: Caller): Promise<unknown>;
 }
@@ -48,21 +59,45 @@ export const timelineMembers = (works: readonly WorkKey[]): WorkKey[] => {
 
 // ponytail: one scan of every action receipt per Timeline read or step; an index by consumed Work
 // (the action journal's phase 5 C) replaces it when the journal is large enough to feel.
-export const timelineReceipts = async (journal: Pick<ActionJournal, "read">): Promise<ActionStatus[]> =>
+export const timelineReceipts = async (
+  journal: Pick<ActionJournal, "read">,
+): Promise<ActionStatus[]> =>
   (await journal.read({ kinds: ["action"] })).flatMap((row) =>
     row.body.kind === "action" ? [actionStatusSchema.parse(row.body.value)] : [],
   );
 
 /** The host Timeline (ADR 0042): one read and one step door over the Work journals and every registered source. */
-export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJournal, "read"> | TimelineReceipts, documents: () => Promise<readonly DocumentRow[]> = async () => []) {
-  const membersOf = (works: readonly WorkKey[], document?: WorkKey) => timelineMembers(document
-    ? workspace.list().map(({ route }) => ({ ...document, route })) : works);
+export function hostTimeline(
+  workspace: RouteWorkspace,
+  source: Pick<ActionJournal, "read"> | TimelineReceipts,
+  documents: () => Promise<readonly DocumentRow[]> = async () => [],
+) {
+  const membersOf = (works: readonly WorkKey[], document?: WorkKey) =>
+    timelineMembers(
+      document ? workspace.list().map(({ route }) => ({ ...document, route })) : works,
+    );
   /** The action journal, or the reader a host with no journal of its own supplies. */
-  const receiptsNow: TimelineReceipts = typeof source === "function" ? source : () => timelineReceipts(source);
-  const parts = async (works: readonly WorkKey[], by: WorkAuthor, receipts: readonly ActionStatus[]) =>
-    documents().then((docs) => Promise.all([workspace.timeline(works, by, receipts), ...[...sources].map((source) => source.read(works, by, docs, workspace.settingsOwners(works)))]));
+  const receiptsNow: TimelineReceipts =
+    typeof source === "function" ? source : () => timelineReceipts(source);
+  const parts = async (
+    works: readonly WorkKey[],
+    by: WorkAuthor,
+    receipts: readonly ActionStatus[],
+  ) =>
+    documents().then((docs) =>
+      Promise.all([
+        workspace.timeline(works, by, receipts),
+        ...[...sources].map((source) =>
+          source.read(works, by, docs, workspace.settingsOwners(works)),
+        ),
+      ]),
+    );
   return {
-    async read(works: readonly WorkKey[], by: WorkAuthor, document?: WorkKey): Promise<WorkTimeline> {
+    async read(
+      works: readonly WorkKey[],
+      by: WorkAuthor,
+      document?: WorkKey,
+    ): Promise<WorkTimeline> {
       const members = membersOf(works, document);
       return mergeTimeline(await parts(members, by, await receiptsNow())).timeline;
     },
@@ -71,7 +106,8 @@ export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJourn
       const members = membersOf(request.works, request.document);
       const receipts = await receiptsNow();
       const next = mergeTimeline(await parts(members, by, receipts))[request.direction];
-      if (!next) return refuse("refused", `Nothing to ${request.direction}`, "Re-read the Timeline.");
+      if (!next)
+        return refuse("refused", `Nothing to ${request.direction}`, "Re-read the Timeline.");
       if (!sameStep(next.candidate.ref, request.expected))
         return refuse(
           "refused",
@@ -79,7 +115,8 @@ export function hostTimeline(workspace: RouteWorkspace, source: Pick<ActionJourn
           "Re-read the Timeline.",
           "stale_revision",
         );
-      if (next.candidate.refusal) return refuse("refused", next.candidate.refusal, "Re-read the Timeline.");
+      if (next.candidate.refusal)
+        return refuse("refused", next.candidate.refusal, "Re-read the Timeline.");
       return next.source === 0
         ? workspace.step(members, by, request.direction, request.expected, receiptsNow)
         : [...sources][next.source - 1]!.step(request.direction, request.expected, caller);

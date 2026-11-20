@@ -64,14 +64,18 @@ function lossesOf(calcs: readonly Calc[]): Map<number, number> {
   const losses = new Map<number, number>();
   for (const run of runsOf(calcs)) {
     const own = new Map<number, number>();
-    for (const row of run.rows) if (row.dp != null) own.set(row.id, (own.get(row.id) ?? 0) + row.dp);
+    for (const row of run.rows)
+      if (row.dp != null) own.set(row.id, (own.get(row.id) ?? 0) + row.dp);
     for (const [id, dp] of own) losses.set(id, Math.max(losses.get(id) ?? 0, dp));
   }
   lossCache.set(calcs, losses);
   return losses;
 }
 
-export function indexOf(snapshot: DuctSnapshot, priced: { calcs: readonly Calc[] } | null = null): DuctIndex {
+export function indexOf(
+  snapshot: DuctSnapshot,
+  priced: { calcs: readonly Calc[] } | null = null,
+): DuctIndex {
   const levels = [...snapshot.levels].sort((a, b) => a.elevationFt - b.elevationFt);
   const flows = new Map(snapshot.flows.map((flow) => [flow.segmentId, flow.cfm]));
   const issuesOf = new Map<number, Issue[]>();
@@ -177,11 +181,7 @@ export interface SubjectDrawn {
  * The subject scene: the ordered ids' elements from `snapshotById`, no group, with the cut the
  * picture pins.
  */
-export function subjectScene(
-  index: DuctIndex,
-  ids: readonly number[],
-  cut: SubjectCut,
-): Scene {
+export function subjectScene(index: DuctIndex, ids: readonly number[], cut: SubjectCut): Scene {
   const { nodes: nodeById, segments: segmentById } = snapshotById(index.snapshot);
   const legOf = new Map<number, Leg>();
   for (const leg of cut.legs) for (const id of leg.ids) legOf.set(id, leg);

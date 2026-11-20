@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import type { ReadingRequest } from "@pe/agent-contracts";
 import { harnessClient, streamThread } from "./harness-client";
 
-type Listener = Parameters<NonNullable<Parameters<typeof streamThread>[0]["readings"]>["subscribe"]>[1];
+type Listener = Parameters<
+  NonNullable<Parameters<typeof streamThread>[0]["readings"]>["subscribe"]
+>[1];
 /** The tab's one stream, stood in: each subscription is one key, with its own cursor. */
 class FakeReadings {
   readonly keys: { request: ReadingRequest; listener: Listener; released: boolean }[] = [];
@@ -72,11 +74,24 @@ describe("streamThread", () => {
     const reread = vi.fn();
     const fault = vi.fn();
     const event = vi.fn();
-    const stop = streamThread({ threadId: "th 1", cursor: 40, lastSeq: 4,
-      readings, onEvent: event, onReread: reread, onFault: fault });
-    readings.keys[0]!.listener({ kind: "failure", key: "k", error: "Mark-frame capture backlog exceeded its bound" });
+    const stop = streamThread({
+      threadId: "th 1",
+      cursor: 40,
+      lastSeq: 4,
+      readings,
+      onEvent: event,
+      onReread: reread,
+      onFault: fault,
+    });
+    readings.keys[0]!.listener({
+      kind: "failure",
+      key: "k",
+      error: "Mark-frame capture backlog exceeded its bound",
+    });
     expect(reread).toHaveBeenCalledOnce();
-    expect(fault).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringContaining("backlog") }));
+    expect(fault).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining("backlog") }),
+    );
     expect(readings.keys[0]!.released).toBe(true);
     expect(event).not.toHaveBeenCalled();
     stop();
@@ -124,10 +139,24 @@ describe("streamThread", () => {
   it("a gap ends the follow with a reread, and a stop releases its key", () => {
     const readings = new FakeReadings();
     let rereads = 0;
-    streamThread({ threadId: "th 1", cursor: 40, lastSeq: 4, readings, onEvent: () => {}, onReread: () => rereads++ });
+    streamThread({
+      threadId: "th 1",
+      cursor: 40,
+      lastSeq: 4,
+      readings,
+      onEvent: () => {},
+      onReread: () => rereads++,
+    });
     readings.keys[0]!.listener({ kind: "gap", key: "k", dropped: null, id: 90 });
     expect([rereads, readings.keys[0]!.released]).toEqual([1, true]);
-    const stop = streamThread({ threadId: "th 1", cursor: 90, lastSeq: 4, readings, onEvent: () => {}, onReread: () => rereads++ });
+    const stop = streamThread({
+      threadId: "th 1",
+      cursor: 90,
+      lastSeq: 4,
+      readings,
+      onEvent: () => {},
+      onReread: () => rereads++,
+    });
     stop();
     expect(readings.keys[1]!.released).toBe(true);
   });

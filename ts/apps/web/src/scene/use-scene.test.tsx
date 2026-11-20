@@ -4,7 +4,7 @@ import { Activity, StrictMode, useRef, useState, type ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { sceneRequest } from "./host";
 import { useScene, useSceneArtifact } from "./use-scene";
-import { RouteVisibility, VisibleRouteResource } from "#/route/activity";
+import { RouteVisibility, VisibleRouteResource } from "@pe/web-kernel/route/activity";
 
 vi.mock("#/host/client", () => ({
   callHostRpc: async () => ({ id: "partial-context" }),

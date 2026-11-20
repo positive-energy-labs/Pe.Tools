@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useValue } from "@pe/kit/lang/collection";
 import { inboxCards } from "./cards";
 import { roomsPageSchema, type RoomsPage } from "./page";
-import { useAdmittedSubject } from "#/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { regionOf } from "./rows";
 import { regionSubject } from "./subject";
 import type { RoomsContext } from "./route";
@@ -20,14 +20,20 @@ function useWorkspace(ctx: RoomsContext) {
   const all = data?.snapshot.regions ?? [];
   // The subject is the open rooms (ADR 0035 rule 1); the drawing reads their carrier GUIDs.
   const selected =
-    raw.room.kind === "all" ? all.map((region) => region.guid) : raw.room.ids.flatMap((id) => regionOf(id) ?? []);
+    raw.room.kind === "all"
+      ? all.map((region) => region.guid)
+      : raw.room.ids.flatMap((id) => regionOf(id) ?? []);
   const page = roomsPageSchema.parse({ ...raw, selected });
   const setPage = (patch: Partial<RoomsPage>) => {
     const { view, selected, ...pose } = patch;
     if (view !== undefined) ctx.page.query({ view });
-    if (selected !== undefined) door?.select((selected === "all" ? [] : selected).map(regionSubject));
+    if (selected !== undefined)
+      door?.select((selected === "all" ? [] : selected).map(regionSubject));
     // A new pick or view lets go of the pinned mark; the picked rooms' first mark shows instead.
-    ctx.page.pose({ ...pose, ...(selected !== undefined || view !== undefined ? { card: "" } : {}) });
+    ctx.page.pose({
+      ...pose,
+      ...(selected !== undefined || view !== undefined ? { card: "" } : {}),
+    });
   };
   const view = page.view;
   const snapshot = data?.snapshot ?? null;
@@ -48,8 +54,10 @@ function useWorkspace(ctx: RoomsContext) {
   );
   // The pinned mark: the one the address names, else the first that concerns a picked room.
   const pinned =
-    (cards.find((card) => card.id === raw.card) ??
-      cards.find((card) => card.guids.some((guid) => selected.includes(guid))))?.id ?? null;
+    (
+      cards.find((card) => card.id === raw.card) ??
+      cards.find((card) => card.guids.some((guid) => selected.includes(guid)))
+    )?.id ?? null;
   const pin = (id: string | null) => {
     const card = cards.find((item) => item.id === id);
     if (card) door?.select(card.guids.map(regionSubject));
@@ -95,7 +103,7 @@ function useWorkspace(ctx: RoomsContext) {
 }
 
 /** Domain projection only; pane providers belong to the shell. */
-export function RoomsProvider({ctx,children}:{ctx:RoomsContext;children:ReactNode}) {
-  const value=useWorkspace(ctx);
+export function RoomsProvider({ ctx, children }: { ctx: RoomsContext; children: ReactNode }) {
+  const value = useWorkspace(ctx);
   return <Workspace value={value}>{children}</Workspace>;
 }

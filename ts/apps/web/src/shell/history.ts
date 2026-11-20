@@ -6,7 +6,7 @@ import {
   type HistoryPose,
 } from "@pe/agent-contracts";
 import { z } from "zod";
-import { hostFetch } from "../host/runtime.ts";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import type { WorkJournalDoor } from "@pe/agent-contracts";
 
 export const historySnapshotSchema = z.object({

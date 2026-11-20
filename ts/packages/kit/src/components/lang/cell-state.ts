@@ -1,8 +1,4 @@
-import {
-  type CellLike,
-  type MeasuredDisplayUnit,
-  type MeasuredValue,
-} from "@pe/agent-contracts";
+import { type CellLike, type MeasuredDisplayUnit, type MeasuredValue } from "@pe/agent-contracts";
 import type React from "react";
 
 /** The one squiggle slot. Ranked; exactly one may draw. `never` is not here: nothing exists to distrust. */

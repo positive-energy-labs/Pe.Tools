@@ -19,7 +19,11 @@ import {
   type StoredFile,
 } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
-import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs, requirePackageAvailable } from "./pod-capture.ts";
+import {
+  PackageDiscoveryExceeded,
+  packageDiscoveryTimeoutMs,
+  requirePackageAvailable,
+} from "./pod-capture.ts";
 import { productPodsRootPath } from "./product-paths.ts";
 import {
   builtinPeaSkillSnapshots,
@@ -110,7 +114,10 @@ export async function requirePackageEnabled(
       await Promise.race([
         discover(),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new PackageDiscoveryExceeded(podsRoots ?? productPodsRoots())), packageDiscoveryTimeoutMs);
+          timer = setTimeout(
+            () => reject(new PackageDiscoveryExceeded(podsRoots ?? productPodsRoots())),
+            packageDiscoveryTimeoutMs,
+          );
         }),
       ]);
     } finally {
@@ -131,7 +138,8 @@ export async function activePackages(
     packages.map((pod) => requirePackageEnabled(pod.id, podsRoots, outsideCensus, owner)),
   );
   for (const result of enabled)
-    if (result.status === "rejected" && result.reason instanceof PackageDiscoveryExceeded) throw result.reason;
+    if (result.status === "rejected" && result.reason instanceof PackageDiscoveryExceeded)
+      throw result.reason;
   return packages.filter((_, index) => enabled[index]!.status === "fulfilled");
 }
 
@@ -171,8 +179,9 @@ export function createPackageLifecycle(
       decisions = next;
     },
   });
-  const ready = initialize().catch(error => {
-    if (!closed) logPackageDiscovery(`Pod startup census failed; retry on refresh: ${String(error)}`);
+  const ready = initialize().catch((error) => {
+    if (!closed)
+      logPackageDiscovery(`Pod startup census failed; retry on refresh: ${String(error)}`);
   });
   let settled: Promise<unknown> = ready;
   async function initialize() {
@@ -201,8 +210,13 @@ export function createPackageLifecycle(
     // Import already admitted these exact bytes before CAS publication. A second bounded capture
     // can expire during startup and turn a successful write into an unknown plugin and rollback.
     const listing = imported
-      ? { ...initialListing, packages: [...initialListing.packages.filter(p => p.id !== imported.id), imported] }
-      : await (options.packages ? options.packages({ packageId }) : listPackages({ podsRoots: roots, wait: "background", packageId }));
+      ? {
+          ...initialListing,
+          packages: [...initialListing.packages.filter((p) => p.id !== imported.id), imported],
+        }
+      : await (options.packages
+          ? options.packages({ packageId })
+          : listPackages({ podsRoots: roots, wait: "background", packageId }));
     if (closed) return initialListing;
     const current = new Set(listing.packages.map((p) => `pod:${p.id}`));
     for (const id of signatures.keys())
@@ -240,8 +254,11 @@ export function createPackageLifecycle(
         decisions[id] !== false,
       );
       installations.set(id, installation);
-      try { await installation; }
-      finally { if (installations.get(id) === installation) installations.delete(id); }
+      try {
+        await installation;
+      } finally {
+        if (installations.get(id) === installation) installations.delete(id);
+      }
     }
     if (closed) return initialListing;
     if (imported) {
@@ -266,8 +283,10 @@ export function createPackageLifecycle(
       .catch(() => {});
     return next;
   }
-  const backgroundRefresh = () => refresh().catch((error) => {
-      if (!closed) console.error("package-lifecycle: background refresh failed; keeping last listing", error);
+  const backgroundRefresh = () =>
+    refresh().catch((error) => {
+      if (!closed)
+        console.error("package-lifecycle: background refresh failed; keeping last listing", error);
     });
   const requestRefresh = () => {
     if (closed || Date.now() - refreshedAt < contentRootsRefreshMs) return;
@@ -275,7 +294,9 @@ export function createPackageLifecycle(
   };
   // Whole inventory follows the roots cadence. Named requests validate their Pod's members
   // and all manifest identities independently; human/agent writes still await explicit refresh.
-  const refreshTimer = setInterval(() => { if (!closed) void backgroundRefresh(); }, contentRootsRefreshMs);
+  const refreshTimer = setInterval(() => {
+    if (!closed) void backgroundRefresh();
+  }, contentRootsRefreshMs);
   refreshTimer.unref();
   function reconcile(initial = false, packageId?: string, imported?: AdmittedPackage) {
     // A named admission, like an action, must follow a read begun before its arrival.
@@ -287,9 +308,11 @@ export function createPackageLifecycle(
         return synchronize(packageId, imported);
       });
     inFlight = next;
-    void next.finally(() => {
-      if (inFlight === next) inFlight = undefined;
-    }).catch(() => {});
+    void next
+      .finally(() => {
+        if (inFlight === next) inFlight = undefined;
+      })
+      .catch(() => {});
     settled = next;
     return next;
   }

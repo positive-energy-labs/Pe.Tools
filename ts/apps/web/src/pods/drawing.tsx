@@ -2,7 +2,7 @@ import { Button } from "@pe/kit/lang/button";
 import { useList } from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { podMemberCode } from "@pe/agent-contracts";
-import { useAdmittedSubject } from "#/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { member, type PodsContext, type PodsRosterContext } from "./route.ts";
 import { runRow } from "./run-row.tsx";
 import { podDiagnostic } from "../route/readable-refusal";
@@ -76,4 +76,3 @@ export function Runs({ ctx }: { ctx: PodsContext }) {
     </>
   );
 }
-

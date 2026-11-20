@@ -12,7 +12,7 @@ import { hostContextTokenPath } from "@pe/host-contracts/service-identity";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { readServiceFile } from "@pe/host-contracts/pe-service";
 import { nativeReadRoot, makeHttpLive } from "../src/app.ts";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 import { TestClock } from "effect/testing";
@@ -73,7 +73,12 @@ export async function serveRoutes<E, R>(
  * The whole host (`makeHttpLive`) on isolated state and product homes. `terminal` is the human/cli
  * context the host writes beside its receipt, as the owner's own `pea` reads it.
  */
-export async function bootHost(options: Pick<Partial<import("../src/app.ts").HttpLiveOptions>, "inputs" | "reads" | "webRoot" | "revitCompositionFactory"> & { clock?: number; productHome?: null } = {}) {
+export async function bootHost(
+  options: Pick<
+    Partial<import("../src/app.ts").HttpLiveOptions>,
+    "inputs" | "reads" | "webRoot" | "revitCompositionFactory"
+  > & { clock?: number; productHome?: null } = {},
+) {
   const base = process.env.PE_TEST_HOME_ROOT ?? tmpdir();
   const localAppData = mkdtempSync(join(base, "pe-host-real-"));
   const home = mkdtempSync(join(base, "pe-host-real-home-"));
@@ -106,9 +111,16 @@ export async function bootHost(options: Pick<Partial<import("../src/app.ts").Htt
           port: 0,
           lifecycle: { latch, handle },
           webRoot: options.webRoot === undefined ? webDir : options.webRoot,
-        }).pipe(Layer.provide(ActionJournalService.live(null)),
-          Layer.provide(options.clock === undefined ? Layer.empty :
-            Layer.effectDiscard(TestClock.setTime(options.clock)).pipe(Layer.provideMerge(TestClock.layer()))));
+        }).pipe(
+          Layer.provide(ActionJournalService.live(null)),
+          Layer.provide(
+            options.clock === undefined
+              ? Layer.empty
+              : Layer.effectDiscard(TestClock.setTime(options.clock)).pipe(
+                  Layer.provideMerge(TestClock.layer()),
+                ),
+          ),
+        );
         yield* Effect.raceFirst(Layer.launch(HttpLive), Deferred.await(latch));
       }),
     ),

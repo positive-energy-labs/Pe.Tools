@@ -1,4 +1,4 @@
-import { reasonOf } from "#/route/typed-route";
+import { reasonOf } from "@pe/web-kernel/route/typed-route";
 /** The graph owns state, acquisition, layout and keys; these adapters supply pane content. */
 import { useEffect, useId, useState, type ReactNode } from "react";
 import type { DuctLossContext } from "./route";
@@ -25,11 +25,22 @@ function Field({ label, unit, children }: { label: string; unit?: string; childr
   );
 }
 
-function Num({ value, onChange, positive = false }: { value: number; onChange: (v: number) => void; positive?: boolean }) {
+function Num({
+  value,
+  onChange,
+  positive = false,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  positive?: boolean;
+}) {
   const [draft, setDraft] = useState(String(value));
   const [refusal, setRefusal] = useState<string | null>(null);
   const reasonId = useId();
-  useEffect(() => { setDraft(String(value)); setRefusal(null); }, [value]);
+  useEffect(() => {
+    setDraft(String(value));
+    setRefusal(null);
+  }, [value]);
   const commit = () => {
     const text = draft.trim();
     const parsed = Number(text);
@@ -55,14 +66,27 @@ function Num({ value, onChange, positive = false }: { value: number; onChange: (
         value={draft}
         aria-invalid={refusal ? true : undefined}
         aria-describedby={refusal ? reasonId : undefined}
-        onChange={(event) => { setDraft(event.target.value); setRefusal(null); }}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setRefusal(null);
+        }}
         onBlur={commit}
         onKeyDown={(event) => {
-          if (event.key === "Enter") { event.preventDefault(); commit(); }
-          if (event.key === "Escape") { setDraft(String(value)); setRefusal(null); }
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+          if (event.key === "Escape") {
+            setDraft(String(value));
+            setRefusal(null);
+          }
         }}
       />
-      {refusal && <span id={reasonId} role="alert" data-tone="caution">{refusal}</span>}
+      {refusal && (
+        <span id={reasonId} role="alert" data-tone="caution">
+          {refusal}
+        </span>
+      )}
     </span>
   );
 }
@@ -98,7 +122,9 @@ const setPage = (ctx: Body, patch: Partial<ReturnType<typeof pageOf>>) => {
 const result = (ctx: Body): DuctResult | undefined =>
   ctx.value.state === "ready" ? (ctx.value.value.result ?? undefined) : undefined;
 const status = (ctx: Body) =>
-  ctx.value.state === "ready" ? (ctx.value.value.error ?? "Calculating duct loss") : reasonOf(ctx.value);
+  ctx.value.state === "ready"
+    ? (ctx.value.value.error ?? "Calculating duct loss")
+    : reasonOf(ctx.value);
 
 function Wheel(body: Body) {
   const r = result(body);

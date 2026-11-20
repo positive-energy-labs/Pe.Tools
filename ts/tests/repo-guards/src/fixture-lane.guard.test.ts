@@ -8,8 +8,9 @@ import { ROOT, productionFiles } from "./import-census.js";
 test("S1: fixture transports never branch on operation keys or seed routes", () => {
   const paths = [
     ...productionFiles("apps/web/src").filter((path) => /fixture[^/]*\.[jt]sx?$/.test(path)),
-    ...productWebDirectories().flatMap(dir => productionFiles(relative(ROOT, join(dir, "src")).replaceAll("\\", "/")))
-      .filter(path => /fixture[^/]*\.[jt]sx?$/.test(path)),
+    ...productWebDirectories()
+      .flatMap((dir) => productionFiles(relative(ROOT, join(dir, "src")).replaceAll("\\", "/")))
+      .filter((path) => /fixture[^/]*\.[jt]sx?$/.test(path)),
     "apps/host/src/demo-owner.ts",
     "packages/host-contracts/src/fixture-host.ts",
   ];

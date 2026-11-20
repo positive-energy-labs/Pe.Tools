@@ -15,7 +15,10 @@ export const SETTING_TIERS = ["user", "project", "firm"] as const;
 export type SettingTier = (typeof SETTING_TIERS)[number];
 
 /** Who last wrote a tier's file and when. One stamp per file; the write door sets it. */
-export const settingWrittenSchema = z.strictObject({ by: z.string().min(1), at: z.string().min(1) });
+export const settingWrittenSchema = z.strictObject({
+  by: z.string().min(1),
+  at: z.string().min(1),
+});
 
 /** One tier's `Settings/<owner>.json` as the host read it. */
 export const settingTierSchema = z.strictObject({
@@ -36,7 +39,13 @@ export type SettingTierRead = z.infer<typeof settingTierSchema>;
 export const settingTiersSchema = z.array(settingTierSchema);
 
 const at = (json: unknown, path: readonly string[]) =>
-  path.reduce<unknown>((value, key) => (value !== null && typeof value === "object" ? (value as Record<string, unknown>)[key] : undefined), json);
+  path.reduce<unknown>(
+    (value, key) =>
+      value !== null && typeof value === "object"
+        ? (value as Record<string, unknown>)[key]
+        : undefined,
+    json,
+  );
 
 /** What served a setting: the tier, its home, and what the sheet says about it. */
 export interface ServedSetting<T = unknown> {
@@ -82,12 +91,20 @@ export function serveSetting<T>(
       home: null,
       ...(missing.length ? { ref: missing.join(", ") } : {}),
     };
-  const stamp = settingWrittenSchema.safeParse((served.read.json as { written?: unknown } | null)?.written);
+  const stamp = settingWrittenSchema.safeParse(
+    (served.read.json as { written?: unknown } | null)?.written,
+  );
   return {
     value: served.value,
     tier: served.read.tier,
     home: served.read.home,
-    ref: [served.read.name, ...(stamp.success ? [stamp.data.by, stamp.data.at] : [])].filter(Boolean).join(" · "),
-    ...(under.length ? { note: `overrides ${under.map((hit) => `${hit.read.tier} ${JSON.stringify(hit.value)}`).join(", ")}` } : {}),
+    ref: [served.read.name, ...(stamp.success ? [stamp.data.by, stamp.data.at] : [])]
+      .filter(Boolean)
+      .join(" · "),
+    ...(under.length
+      ? {
+          note: `overrides ${under.map((hit) => `${hit.read.tier} ${JSON.stringify(hit.value)}`).join(", ")}`,
+        }
+      : {}),
   };
 }

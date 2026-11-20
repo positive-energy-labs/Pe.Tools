@@ -15,7 +15,9 @@ import { Deferred } from "@pe/kit/lang/section";
 import { Table } from "@pe/kit/table/table";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 const diagram = vi.fn(() => null);
-function LocalDiagram() { return diagram(); }
+function LocalDiagram() {
+  return diagram();
+}
 vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,

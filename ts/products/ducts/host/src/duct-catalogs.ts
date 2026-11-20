@@ -4,10 +4,9 @@ import { catalogSchema, type CatalogTable } from "@pe/ducts-domain/catalog";
 import { type ductCatalogReadingSchema } from "@pe/ducts-contract/duct-catalog";
 import type { z } from "zod";
 import { productPathNames } from "@pe/host-contracts/contracts";
-import { homes, type Home } from "@pe/host-contracts/product-paths";
-import { read as readStoredFile, homeKind } from "@pe/host-contracts/kinds";
-import { hostState } from "@pe/host/host-ownership";
-  const catalogKind = homeKind({
+import { type Home } from "@pe/host-contracts/product-paths";
+import { read as readStoredFile, homeKind, type HomeRoot } from "@pe/host-contracts/kinds";
+const catalogKind = homeKind({
   schema: catalogSchema,
   place: (_library: string, id: string) => `Catalog ${id}`,
   segments: (library: string, id: string) => [library, id, "catalog.json"],
@@ -20,16 +19,19 @@ export type CatalogReading = z.infer<typeof ductCatalogReadingSchema>;
  * creation on a missing root. A table id is unique across every catalog in every home: an id
  * claimed twice admits no table, with a finding. Nothing shadows. Each table carries its home's tier as the home list (`list`: user, project, firm) gave it, the only source of a tier (D8), and its file.
  */
-export async function readDuctCatalogs(list: readonly Home[] = homes()): Promise<CatalogReading> {
+export async function readDuctCatalogs(
+  list: readonly Home[],
+  bindHome: (home: Home) => HomeRoot,
+): Promise<CatalogReading> {
   const tables: Record<string, CatalogTable> = Object.create(null);
   const findings: string[] = [];
   const duplicates = new Set<string>();
-  for (const home of list) await readCatalogsFolder(home, tables, duplicates, findings);
+  for (const home of list) await readCatalogsFolder(bindHome(home), tables, duplicates, findings);
   return { tables, findings };
 }
 
 async function readCatalogsFolder(
-  home: Home,
+  home: HomeRoot,
   tables: Record<string, CatalogTable>,
   duplicates: Set<string>,
   findings: string[],
@@ -47,9 +49,10 @@ async function readCatalogsFolder(
       const dir = await realpath(join(root, folder.name));
       // Authored (ADR 0039): a catalog that does not decode is refused and kept, with its reason.
       const read = readStoredFile(
-        catalogKind.in(hostState().home(home), productPathNames.catalogsDirectoryName, folder.name),
+        catalogKind.in(home, productPathNames.catalogsDirectoryName, folder.name),
       );
-      if (read.kind !== "ok") throw Error(read.kind === "missing" ? "catalog.json is missing" : read.reason);
+      if (read.kind !== "ok")
+        throw Error(read.kind === "missing" ? "catalog.json is missing" : read.reason);
       const catalog = read.value;
       for (const table of catalog.tables) {
         const file = await realpath(resolve(dir, table.source.file));
@@ -62,7 +65,11 @@ async function readCatalogsFolder(
           delete tables[table.id];
           duplicates.add(table.id);
           findings.push(`Duplicate catalog table ${table.id}; no table with this id is admitted`);
-        } else tables[table.id] = { ...table, home: { tier: home.tier, file: join(dir, "catalog.json") } };
+        } else
+          tables[table.id] = {
+            ...table,
+            home: { tier: home.tier, file: join(dir, "catalog.json") },
+          };
       }
     } catch (error) {
       findings.push(`${folder.name}: ${String(error)}`);

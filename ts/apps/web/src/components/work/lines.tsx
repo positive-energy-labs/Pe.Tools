@@ -9,7 +9,13 @@ import { Button } from "@pe/kit/lang/button";
 import { StateCell, type StateCellProps } from "@pe/kit/lang/cell";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { Switcher } from "@pe/kit/lang/switcher";
-import { clearWord, plural, UnstageAll, type CellWire, type ClearOutcome } from "./band";
+import {
+  clearWord,
+  plural,
+  UnstageAll,
+  type CellWire,
+  type ClearOutcome,
+} from "@pe/web-kernel/components/work/band";
 
 /** One pending cell as its route addresses it. */
 export interface WorkCell {

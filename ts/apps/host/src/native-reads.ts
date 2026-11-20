@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { Context, Deferred, Effect, Exit, Layer, Schema } from "effect";
-import type { DoorFailure, NativeAnswer, PreparedRead, RequestIdentityData, CausalTerminalState, NativeOutcome, NativeTerminalEvidence } from "@pe/host-internal/request-contracts";
+import type {
+  DoorFailure,
+  NativeAnswer,
+  PreparedRead,
+  RequestIdentityData,
+  CausalTerminalState,
+  NativeOutcome,
+  NativeTerminalEvidence,
+} from "@pe/host-internal/request-contracts";
 import {
   canonicalJson,
   decodePreparedRead,
 } from "../../../packages/host-internal/src/read-admission.ts";
-import { RevitBridge, CANCEL_OPERATION_KEY } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 
-const fields = { message: Schema.String, status: Schema.Number, problem: Schema.String };
-export class ReadBusy extends Schema.TaggedError<ReadBusy>()("ReadBusy", fields) {}
-export class ReadRetiring extends Schema.TaggedError<ReadRetiring>()("ReadRetiring", fields) {}
-export class InvalidRead extends Schema.TaggedError<InvalidRead>()("InvalidRequest", fields) {}
+import { InvalidRead, ReadBusy, ReadRetiring } from "@pe/host-internal/read-errors";
 
 export const NativeReadLimits = Context.Reference<{
   entries: number;
@@ -63,7 +69,9 @@ export class NativeReads extends Context.Service<
       const state = (owner: RequestIdentityData): CausalTerminalState => {
         const evidence = [...(owned.get(owner) ?? [])].map((flight): NativeTerminalEvidence => {
           const outcome = flight.outcome ?? "unknown-until-reconciled";
-          return !flight.terminal || outcome === "unknown-until-reconciled" || outcome === "native-cancel-requested"
+          return !flight.terminal ||
+            outcome === "unknown-until-reconciled" ||
+            outcome === "native-cancel-requested"
             ? { nativeRequestId: flight.requestId, outcome, settlement: "unknown-until-reconciled" }
             : { nativeRequestId: flight.requestId, outcome, settlement: "terminal" };
         });
@@ -209,9 +217,11 @@ export class NativeReads extends Context.Service<
                         problem: "read.response",
                       }),
                   ),
-                  Effect.tapError((error) => Effect.logError(
-                    `Native read decode failed op=${descriptor.operationKey} request=${joined.requestId}: ${error.message}`,
-                  )),
+                  Effect.tapError((error) =>
+                    Effect.logError(
+                      `Native read decode failed op=${descriptor.operationKey} request=${joined.requestId}: ${error.message}`,
+                    ),
+                  ),
                   Effect.map((value) => ({ ...answer, value })),
                 ),
               ),
@@ -255,10 +265,11 @@ export class NativeReads extends Context.Service<
       return {
         join,
         state,
-        settle: (owner) => Effect.gen(function* () {
-          for (const flight of owned.get(owner) ?? []) yield* Deferred.await(flight.settled);
-          return state(owner);
-        }),
+        settle: (owner) =>
+          Effect.gen(function* () {
+            for (const flight of owned.get(owner) ?? []) yield* Deferred.await(flight.settled);
+            return state(owner);
+          }),
         retained: Effect.sync(() => ({
           entries: flights.size,
           joiners: [...flights.values()].reduce((n, f) => n + f.callers, 0),

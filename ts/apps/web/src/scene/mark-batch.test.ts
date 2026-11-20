@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { expect, it } from "vite-plus/test";
 import { createMarkBatch } from "./mark-batch";
-import { markFrame, markLines } from "./marks";
+import { markFrame, markLines } from "@pe/web-kernel/scene/marks";
 
 it("batches semantic strokes, keeps transforms and dash origins, and only rebuilds changed styles", () => {
   const color = new THREE.Color(0.3, 0.2, 0.1);

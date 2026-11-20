@@ -1,7 +1,7 @@
 /// <reference path="./source-closure.d.ts" />
 import { workFingerprintSchema, type RouteFingerprint } from "@pe/agent-contracts";
 import { closureSchema } from "./builtin-closure.ts";
-import type { TypedRoute } from "./typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 
 /**
  * The web's builtin routes, discovered (ADR 0035 rule 4): Vite expands both globs at build and test
@@ -9,13 +9,16 @@ import type { TypedRoute } from "./typed-route";
  * (`ts/products/<product>/web`, ADR 0046). The host's registry is the generated
  * `apps/host/src/routes.generated.ts`; this file never reaches a `host.ts`.
  */
-// Literal globs mirror routeFolderCandidates in @pe/host-contracts/route-startup.
+// Literal globs mirror routeFolderCandidates in ts/apps/web/route-startup.ts.
 const declarations = import.meta.glob<{
   module: TypedRoute;
   router?: { dock?: boolean };
 }>(["../*/route.ts", "../../../../products/*/web/route.ts"], { eager: true });
 const closures = import.meta.glob<unknown>(
-  ["../*/source-closure.generated.json", "../../../../products/*/web/source-closure.generated.json"],
+  [
+    "../*/source-closure.generated.json",
+    "../../../../products/*/web/source-closure.generated.json",
+  ],
   {
     eager: true,
     import: "default",
@@ -36,8 +39,17 @@ export const routeRegistry: Readonly<Record<string, WebRoute>> = Object.fromEntr
     const closure = closures[path.replace(/route\.ts$/, "source-closure.generated.json")];
     if (!closure) throw Error(`${module.data.key} has no builtin closure: run codegen:routes`);
     const key = module.data.key;
-    return [key, { key, module, dock: router?.dock === true,
-      fingerprint: workFingerprintSchema.parse(`builtin-closure:${closureSchema.parse(closure).fingerprint}`) }];
+    return [
+      key,
+      {
+        key,
+        module,
+        dock: router?.dock === true,
+        fingerprint: workFingerprintSchema.parse(
+          `builtin-closure:${closureSchema.parse(closure).fingerprint}`,
+        ),
+      },
+    ];
   }),
 );
 

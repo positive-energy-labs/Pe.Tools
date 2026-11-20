@@ -1,4 +1,4 @@
-import type { AffineFrame } from "#/lib/affine-frame";
+import type { AffineFrame } from "@pe/web-kernel/lib/affine-frame";
 import type { PlanRefusal } from "./plan-reading";
 
 // CHEAT: keep the small drawing primitives local while the archived takeoff implementation remains.

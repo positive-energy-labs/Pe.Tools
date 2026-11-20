@@ -3,10 +3,10 @@
  * metadata JSON, padding to 4 bytes, then float32 xyz positions, nine per triangle, unindexed.
  * Space and ducts fetch the same artifact; both decode it here.
  */
-import { SceneMeshes, type SceneInstance } from "./types";
+import { SceneMeshes, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 import type { RevitDetailSpaceScene } from "@pe/host-contracts/generated";
-import type { Bounds, ScenePrimitive } from "./types";
+import type { Bounds, ScenePrimitive } from "@pe/web-kernel/scene/types";
 import { assertLevels } from "./levels";
 import { spaceElementKey } from "@pe/agent-contracts";
 
@@ -176,7 +176,8 @@ export function decodeScene(buffer: ArrayBuffer): { metadata: Psc1Metadata; mesh
       link = h.linkInstanceId ?? null;
     // ADR 0035 rule 2: identity is the UniqueId seen through the link's UniqueId; `documentKey`
     // stays on the instance as observation basis (the element menu's document scope), not identity.
-    if (link !== null && !h.linkInstanceUniqueId) throw Error("Linked scene element has no link UniqueId");
+    if (link !== null && !h.linkInstanceUniqueId)
+      throw Error("Linked scene element has no link UniqueId");
     return {
       key: spaceElementKey({
         uniqueId: h.uniqueId,

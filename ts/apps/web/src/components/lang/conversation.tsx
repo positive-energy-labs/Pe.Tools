@@ -70,11 +70,7 @@ export function ConversationBody({
     </div>
   );
 }
-export function ToolStatus({
-  state,
-}: {
-  state: "working" | "failed" | "done" | "cancelled";
-}) {
+export function ToolStatus({ state }: { state: "working" | "failed" | "done" | "cancelled" }) {
   return (
     <span
       className="dl-tool-status"

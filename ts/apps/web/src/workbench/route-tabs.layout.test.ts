@@ -27,7 +27,14 @@ document.body.textContent = "OUT" + JSON.stringify(out) + "END";
     );
     const dom = execFileSync(
       await chromeExecutable(),
-      ["--headless=new", "--disable-gpu", "--no-first-run", `--user-data-dir=${join(dir, "profile")}`, "--dump-dom", pathToFileURL(join(dir, "tabs.html")).href],
+      [
+        "--headless=new",
+        "--disable-gpu",
+        "--no-first-run",
+        `--user-data-dir=${join(dir, "profile")}`,
+        "--dump-dom",
+        pathToFileURL(join(dir, "tabs.html")).href,
+      ],
       { encoding: "utf8", timeout: 60_000, stdio: ["ignore", "pipe", "ignore"] },
     );
     expect(JSON.parse(/OUT(.*)END/.exec(dom)![1]!)).toEqual({

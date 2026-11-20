@@ -1,6 +1,6 @@
 import type { AdmittedAddressPort } from "./typed-address";
 import type { PlaceInput } from "./typed-place";
-import { fixtureName } from "./fixture-name";
+import { fixtureName } from "@pe/web-kernel/shell/fixture-name";
 export function placeInput(
   address: AdmittedAddressPort,
   overrides: Partial<PlaceInput> = {},

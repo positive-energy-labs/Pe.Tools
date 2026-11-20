@@ -52,4 +52,3 @@ export function WorksharingNote({ worksharing: w }: { worksharing: Worksharing }
     </section>
   );
 }
-

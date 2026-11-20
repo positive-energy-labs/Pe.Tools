@@ -6,10 +6,13 @@
 import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { hostOpSafety } from "@pe/host-contracts/generated";
-import { nativeReadInput, nativeReadValue, type NativeArgs, type NativeValue } from "./native-output-read.ts";
-import type {
-  HostOperationKey,
-} from "@pe/host-contracts/operation-types";
+import {
+  nativeReadInput,
+  nativeReadValue,
+  type NativeArgs,
+  type NativeValue,
+} from "./native-output-read.ts";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import { nativeAxes, type CatalogAxes } from "./catalog.ts";
 import type { SubjectKeyKind } from "./subject-ref.ts";
 import { publicationSchema, type Publication } from "./value.ts";
@@ -33,18 +36,18 @@ export interface ReadHandle<K extends string = string, I = unknown, D = unknown>
 /** A read handle with its input and data erased: what a registry or a `uses` list holds. */
 export type AnyReadHandle = Pick<ReadHandle, typeof minted | "key" | "axes">;
 /** Keep schema outputs named at declaration boundaries, including recursive JSON. */
-export interface ReadContract<K extends string, I extends z.ZodType<z.output<I>>, D extends z.ZodType>
-  extends ReadHandle<K, z.output<I>, z.output<D>> {
+export interface ReadContract<
+  K extends string,
+  I extends z.ZodType<z.output<I>>,
+  D extends z.ZodType,
+> extends ReadHandle<K, z.output<I>, z.output<D>> {
   readonly input: I;
 }
 const costs = ["Cheap", "Bounded", "Expensive", "Mutation"] as const;
 type Safety = typeof hostOpSafety;
 /** The generated effect admits Read and TransactRead keys. */
 export type CatalogReadKey = {
-  [K in keyof Safety]: Safety[K] extends (
-    | { effect: "Read" }
-    | { effect: "TransactRead" }
-  )
+  [K in keyof Safety]: Safety[K] extends { effect: "Read" } | { effect: "TransactRead" }
     ? K
     : never;
 }[keyof Safety] &
@@ -67,10 +70,7 @@ export function native<K extends CatalogReadKey>(
   const made = nativeHandles.get(key);
   if (mintedFor(made, key)) return made;
   const op = hostOpCatalog.find((op) => op.key === key);
-  if (
-    !op ||
-    !(op.effect === "Read" || op.effect === "TransactRead")
-  )
+  if (!op || !(op.effect === "Read" || op.effect === "TransactRead"))
     throw Error(`Not a catalog Read: ${key}`);
   const { subject, touches, effect, cost, cardinality, rollsBack } = nativeAxes(op);
   const data = nativeReadValue(key);
@@ -102,7 +102,8 @@ function rows(schema: z.ZodType, path: readonly string[]): boolean {
   const [head, ...rest] = path;
   if (head === undefined) return def.type === "array" || def.type === "record";
   const shape = part("shape");
-  const child: unknown = typeof shape === "object" && shape !== null ? Reflect.get(shape, head) : undefined;
+  const child: unknown =
+    typeof shape === "object" && shape !== null ? Reflect.get(shape, head) : undefined;
   return child instanceof z.ZodType && rows(child, rest);
 }
 const used = new WeakMap<AnyReadHandle, readonly string[]>();
@@ -114,7 +115,11 @@ export const usesOf = (h: AnyReadHandle): readonly string[] => used.get(h) ?? []
  * Effect, cost and touches join. Subject and cardinality do not: a read with no document says so
  * with `subject`, and otherwise it is one value about the Document.
  */
-export function contract<K extends string, I extends z.ZodType<z.output<I>>, D extends z.ZodType<z.output<D>>>(
+export function contract<
+  K extends string,
+  I extends z.ZodType<z.output<I>>,
+  D extends z.ZodType<z.output<D>>,
+>(
   key: K,
   def: {
     input: I;
@@ -140,14 +145,25 @@ export function contract<K extends string, I extends z.ZodType<z.output<I>>, D e
     axes: {
       subject: def.subject ?? "Document",
       touches: touches.length ? touches : ["Metadata"],
-      effect: highest(effects, uses.map((axes) => axes.effect), "Read"),
-      cost: highest(costs, uses.map((axes) => axes.cost), "Cheap"),
+      effect: highest(
+        effects,
+        uses.map((axes) => axes.effect),
+        "Read",
+      ),
+      cost: highest(
+        costs,
+        uses.map((axes) => axes.cost),
+        "Cheap",
+      ),
       cardinality: "One",
       ...(uses.some((axes) => axes.rollsBack) ? { rollsBack: true } : {}),
     },
     keyedBy: def.keyedBy ?? {},
     ...(def.demand ? { demand: def.demand } : {}),
   });
-  used.set(made, handles.map((use) => use.key));
+  used.set(
+    made,
+    handles.map((use) => use.key),
+  );
   return made;
 }

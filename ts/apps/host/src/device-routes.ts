@@ -4,7 +4,8 @@ import { servePeRoute } from "@pe/mcps/product-catalog";
 import { peRoutes } from "@pe/mcps/product-catalog";
 import { invocationContext } from "@pe/runtime/context";
 import { DEVICE_COOKIE, type Devices } from "./remote-device.ts";
-import { threadHead, Refused, refusalHeaders } from "./control.ts";
+import { threadHead, refusalHeaders } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 
 export const deviceRoutes = (devices: Devices) =>
   HttpRouter.use((router) =>

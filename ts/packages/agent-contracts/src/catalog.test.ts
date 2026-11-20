@@ -4,7 +4,9 @@ const errorsOf = (entries: readonly CatalogLink[]) => {
   const result = link(entries);
   return result.ok ? [] : [...result.errors];
 };
-import { httpRoutes, linkedCatalog, peRoutes } from "./pe-api.ts";
+import { httpRoutes, createPeCatalog } from "./pe-api.ts";
+import { builtinHostActions } from "./semantic-actions.ts";
+const { linkedCatalog, peRoutes } = createPeCatalog(builtinHostActions);
 const catalogEntries = [...linkedCatalog().entries.values()];
 const leaf = (key: string, uses: CatalogLink["uses"] = []): CatalogLink => ({
   key,
@@ -31,9 +33,7 @@ describe("catalog dependency graph", () => {
       expect(peRoutes[id].catalog.effect).toBe("SessionWrite");
   });
   test("refuses uncapped geometry cardinality", () => {
-    expect(errorsOf([{ ...leaf("all"), cardinality: "Many" }]).join()).toContain(
-      "requires a cap",
-    );
+    expect(errorsOf([{ ...leaf("all"), cardinality: "Many" }]).join()).toContain("requires a cap");
   });
   test("rejects missing keys and cycles", () => {
     expect(errorsOf([leaf("a", ["missing"])]).join()).toContain("unknown dependency");
@@ -56,8 +56,17 @@ describe("catalog dependency graph", () => {
   });
   test("binds every ModelWrite's seal step to a plan (Read or rolled-back TransactRead) of the same footprint", () => {
     const derivation = { derive: (work: unknown) => work, preview: (request: unknown) => request };
-    const write = { ...leaf("command:x.apply"), ...derivation, effect: "ModelWrite" as const, previewBy: "command:x.preview" };
-    const preview = { ...leaf("command:x.preview"), effect: "TransactRead" as const, rollsBack: true };
+    const write = {
+      ...leaf("command:x.apply"),
+      ...derivation,
+      effect: "ModelWrite" as const,
+      previewBy: "command:x.preview",
+    };
+    const preview = {
+      ...leaf("command:x.preview"),
+      effect: "TransactRead" as const,
+      rollsBack: true,
+    };
     expect(errorsOf([write, preview])).toEqual([]);
     // ADR 0030 rule 4: a plan that opens no transaction is a Read and links.
     expect(errorsOf([write, { ...preview, effect: "Read", rollsBack: undefined }])).toEqual([]);
@@ -65,7 +74,9 @@ describe("catalog dependency graph", () => {
     expect(errorsOf([write, { ...preview, effect: "ModelWrite" }])).toContain(
       "command:x.apply: plan command:x.preview is ModelWrite, not Read or TransactRead",
     );
-    expect(errorsOf([write, { ...preview, effect: "SessionWrite" }]).join()).toContain("not Read or TransactRead");
+    expect(errorsOf([write, { ...preview, effect: "SessionWrite" }]).join()).toContain(
+      "not Read or TransactRead",
+    );
     expect(errorsOf([write, { ...preview, rollsBack: false }])).toContain(
       "command:x.preview: TransactRead must declare rollback",
     );
@@ -77,7 +88,6 @@ describe("catalog dependency graph", () => {
       "command:x.apply: ModelWrite has no preview binding",
     );
   });
-
 });
 
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -86,11 +96,20 @@ import { isViewImage, nativeOutputSchema } from "./native-output-read.ts";
 // The host projects a call's picture when its policy says capture, and a command step when
 // isViewImage says so. One list drifting from the other hands a host file path to a caller.
 test("the capture policy rows are exactly the view-image keys, and the focused twin is the SessionWrite", () => {
-  const captures = Object.entries(callPolicies).filter(([, row]) => row.capture).map(([key]) => key);
-  expect(captures.sort()).toEqual(hostOpCatalog.map((op) => op.key).filter(isViewImage).sort());
+  const captures = Object.entries(callPolicies)
+    .filter(([, row]) => row.capture)
+    .map(([key]) => key);
+  expect(captures.sort()).toEqual(
+    hostOpCatalog
+      .map((op) => op.key)
+      .filter(isViewImage)
+      .sort(),
+  );
   const effect = (key: string) => hostOpCatalog.find((op) => op.key === key)?.effect;
   expect(effect("revit.context.view-image")).toBe("Read");
   expect(effect("revit.context.view-image.focus")).toBe("SessionWrite");
   for (const key of captures)
-    expect(JSON.stringify(nativeOutputSchema(key as never).toJSONSchema()), key).not.toContain("filePath");
+    expect(JSON.stringify(nativeOutputSchema(key as never).toJSONSchema()), key).not.toContain(
+      "filePath",
+    );
 });

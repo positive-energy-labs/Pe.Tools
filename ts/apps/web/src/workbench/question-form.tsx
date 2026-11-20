@@ -13,14 +13,20 @@ import { Button } from "@pe/kit/lang/button";
 import { useScopeKeys } from "@pe/kit/keys";
 import type { Question } from "@pe/agent-contracts/chat-state";
 
-const optionSchema = z.object({ const: z.unknown(), title: z.string().optional(), description: z.string().optional() });
+const optionSchema = z.object({
+  const: z.unknown(),
+  title: z.string().optional(),
+  description: z.string().optional(),
+});
 const propertySchema = z.object({
   type: z.string().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
   oneOf: z.array(optionSchema).optional(),
   enum: z.array(z.unknown()).optional(),
-  items: z.object({ anyOf: z.array(optionSchema).optional(), enum: z.array(z.unknown()).optional() }).optional(),
+  items: z
+    .object({ anyOf: z.array(optionSchema).optional(), enum: z.array(z.unknown()).optional() })
+    .optional(),
 });
 const questionSchema = z.object({
   properties: z.record(z.string(), propertySchema).optional(),
@@ -294,7 +300,8 @@ function Field({
           }}
         >
           {options.map((option, index) => (
-            <Button kind="quiet"
+            <Button
+              kind="quiet"
               key={label(option.const)}
               type="button"
               label={option.title ?? label(option.const)}
@@ -322,7 +329,8 @@ function Field({
           ))}
           {other ? (
             // Clears the pick and moves to the box; it never answers by itself.
-            <Button kind="quiet"
+            <Button
+              kind="quiet"
               type="button"
               label="Other"
               refusal={disabled ? "The answer is being sent." : null}

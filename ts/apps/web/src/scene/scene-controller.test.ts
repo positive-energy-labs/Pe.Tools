@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { SceneController } from "./scene-controller";
-import { SceneMeshes } from "./types";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { scenePlan } from "./scene-plan";
-import { LOOK } from "./grounds";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
 import { sceneMemory } from "./scene-memory";
 import type { SceneRenderer } from "./renderer";
 import type { PreparedGeometry } from "./prepare-geometry";

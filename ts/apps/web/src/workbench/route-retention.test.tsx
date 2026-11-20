@@ -2,58 +2,86 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { useMemo } from "react";
 import { afterEach, expect, test } from "vite-plus/test";
-import { createMemoryHistory, createRootRoute, createRoute, createRouter,
-  RouterProvider, RouterContextProvider, useRouterState, useRouter } from "@tanstack/react-router";
-import { useRouteActivity, type RouteActivityScope } from "#/route/activity";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+  RouterContextProvider,
+  useRouterState,
+  useRouter,
+} from "@tanstack/react-router";
+import { useRouteActivity, type RouteActivityScope } from "@pe/web-kernel/route/activity";
 import { RouteRetention } from "./route-retention";
 import { PlaceBoundary, admittedRouterAddress } from "#/shell/typed-place-boundary";
 import type { AdmittedPlace } from "#/shell/typed-place";
 afterEach(cleanup);
 
-test.each(["families", "fans", "duct-systems"])("N-03 %s retains codec bytes before resolving Page or target on return", async (route) => {
-  const query = new URLSearchParams({
-    subject: JSON.stringify({ kind: "ids", ids: ["one"] }),
-    selected: JSON.stringify([{ kind: "item", id: "one" }]),
-    pose: JSON.stringify({ x: 21, y: 34 }),
-    target: JSON.stringify({ kind: "open", ref: { session: "primary", openId: "document" } }),
-  });
-  const path = `/${route}`;
-  const tab = { id: "11111111-1111-4111-8111-111111111111", route, link: `${path}?${query}`, at: "2026-11-07T03:00:00.000Z" };
-  const identity = {};
-  let held: AdmittedPlace<{ dispose(): void }> | undefined;
-  function Tool() {
-    const router = useRouter();
-    const address = useMemo(() => admittedRouterAddress(router.history), [router]);
-    return <PlaceBoundary identity={identity} path={path} address={address}>{place => {
-      held = place;
-      return <output>{place.address.read().toString()}</output>;
-    }}</PlaceBoundary>;
-  }
-  function Root() {
-    const location = useRouterState({ select: (state) => state.location });
-    return <RouteRetention route={location.pathname === path ? route : null} active={location.pathname === path ? {id:tab.id} : null} tabs={[tab]} ready renderRoute={body => body} />;
-  }
-  const root = createRootRoute({ component: Root });
-  const router = createRouter({
-    routeTree: root.addChildren([
-      createRoute({ getParentRoute: () => root, path, component: Tool }),
-      createRoute({ getParentRoute: () => root, path: "/" }),
-    ]),
-    history: createMemoryHistory({ initialEntries: [`${path}?${query}`] }),
-  });
-  await router.load();
-  render(<RouterProvider router={router} />);
-  await waitFor(() => expect(held?.current()).toBe(true));
-  const original = held;
-  expect(held!.address.read().toString()).toBe(query.toString());
-  await act(() => router.navigate({ to: "/" }));
-  // The hidden tree must retain all four inputs, before target/Work re-admission can run.
-  expect(held!.address.read().toString()).toBe(query.toString());
-  await act(() => router.navigate({ href: `${path}?${query}` }));
-  await waitFor(() => expect(held!.current()).toBe(true));
-  expect(held).toBe(original);
-  expect(held!.address.read().toString()).toBe(query.toString());
-});
+test.each(["families", "fans", "duct-systems"])(
+  "N-03 %s retains codec bytes before resolving Page or target on return",
+  async (route) => {
+    const query = new URLSearchParams({
+      subject: JSON.stringify({ kind: "ids", ids: ["one"] }),
+      selected: JSON.stringify([{ kind: "item", id: "one" }]),
+      pose: JSON.stringify({ x: 21, y: 34 }),
+      target: JSON.stringify({ kind: "open", ref: { session: "primary", openId: "document" } }),
+    });
+    const path = `/${route}`;
+    const tab = {
+      id: "11111111-1111-4111-8111-111111111111",
+      route,
+      link: `${path}?${query}`,
+      at: "2026-11-07T03:00:00.000Z",
+    };
+    const identity = {};
+    let held: AdmittedPlace<{ dispose(): void }> | undefined;
+    function Tool() {
+      const router = useRouter();
+      const address = useMemo(() => admittedRouterAddress(router.history), [router]);
+      return (
+        <PlaceBoundary identity={identity} path={path} address={address}>
+          {(place) => {
+            held = place;
+            return <output>{place.address.read().toString()}</output>;
+          }}
+        </PlaceBoundary>
+      );
+    }
+    function Root() {
+      const location = useRouterState({ select: (state) => state.location });
+      return (
+        <RouteRetention
+          route={location.pathname === path ? route : null}
+          active={location.pathname === path ? { id: tab.id } : null}
+          tabs={[tab]}
+          ready
+          renderRoute={(body) => body}
+        />
+      );
+    }
+    const root = createRootRoute({ component: Root });
+    const router = createRouter({
+      routeTree: root.addChildren([
+        createRoute({ getParentRoute: () => root, path, component: Tool }),
+        createRoute({ getParentRoute: () => root, path: "/" }),
+      ]),
+      history: createMemoryHistory({ initialEntries: [`${path}?${query}`] }),
+    });
+    await router.load();
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(held?.current()).toBe(true));
+    const original = held;
+    expect(held!.address.read().toString()).toBe(query.toString());
+    await act(() => router.navigate({ to: "/" }));
+    // The hidden tree must retain all four inputs, before target/Work re-admission can run.
+    expect(held!.address.read().toString()).toBe(query.toString());
+    await act(() => router.navigate({ href: `${path}?${query}` }));
+    await waitFor(() => expect(held!.current()).toBe(true));
+    expect(held).toBe(original);
+    expect(held!.address.read().toString()).toBe(query.toString());
+  },
+);
 
 test("retaining the tools index selects its leaf rather than the root with the same full path", async () => {
   const root = createRootRoute({ component: () => <output>root shell</output> });
@@ -100,7 +128,11 @@ test("an untabbed route keeps custody across its own history push, before the ba
     );
   }
   const root = createRootRoute({ component: Root });
-  const ducts = createRoute({ getParentRoute: () => root, path: "/duct-systems", component: Capture });
+  const ducts = createRoute({
+    getParentRoute: () => root,
+    path: "/duct-systems",
+    component: Capture,
+  });
   const router = createRouter({
     routeTree: root.addChildren([ducts]),
     history: createMemoryHistory({ initialEntries: ["/duct-systems?selected=1"] }),

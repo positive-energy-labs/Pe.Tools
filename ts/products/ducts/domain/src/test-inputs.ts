@@ -11,7 +11,14 @@ import { catalogLinkKey } from "./catalog.ts";
 import type { DuctSnapshot } from "./types.ts";
 import type { CalcSnapshot } from "./input-snapshot.ts";
 import { coverageOf } from "./calc/coverage.ts";
-import { END_KEY, FITTING_DROP_CELL, JOIN_KEY, resolveInputs, type WorkCell, type WorkLayer } from "./calc/inputs.ts";
+import {
+  END_KEY,
+  FITTING_DROP_CELL,
+  JOIN_KEY,
+  resolveInputs,
+  type WorkCell,
+  type WorkLayer,
+} from "./calc/inputs.ts";
 
 /** Test-only: a native walk that read every peer, so a fixture's coverage is known (P-028). */
 export const TEST_WALK: NonNullable<DuctSnapshot["walk"]> = {
@@ -29,20 +36,35 @@ export const TEST_WALK: NonNullable<DuctSnapshot["walk"]> = {
 export const TEST_COVERAGE = coverageOf({ nodes: [], segments: [], walk: TEST_WALK }, new Set());
 
 /** Test-only: a staged cell as a person staged it (contract amendment 2). */
-export const cell = <T>(value: T, by: WorkCell<T>["by"] = "human", ref = "work:test"): WorkCell<T> => ({
+export const cell = <T>(
+  value: T,
+  by: WorkCell<T>["by"] = "human",
+  ref = "work:test",
+): WorkCell<T> => ({
   value,
   by,
   ref,
 });
 /** Test-only: a person staged every criterion the layer states. */
-export const stamped = (criteria: NonNullable<WorkLayer["criteria"]>): Pick<WorkLayer, "criteria" | "criteriaMeta"> => ({
+export const stamped = (
+  criteria: NonNullable<WorkLayer["criteria"]>,
+): Pick<WorkLayer, "criteria" | "criteriaMeta"> => ({
   criteria,
   criteriaMeta: Object.fromEntries(
-    Object.entries(DUCTS_CRITERIA_CELLS).flatMap(([name, { layer: [key, side] }]) => {
-      const at = (criteria as Record<string, unknown>)[key];
-      const value = side ? (at as Record<string, unknown> | undefined)?.[side] : at;
-      return value === undefined ? [] : [[name as DuctsCriteriaCell, { by: "human", ref: "work:test" }] as const];
-    }),
+    Object.entries(DUCTS_CRITERIA_CELLS).flatMap(
+      ([
+        name,
+        {
+          layer: [key, side],
+        },
+      ]) => {
+        const at = (criteria as Record<string, unknown>)[key];
+        const value = side ? (at as Record<string, unknown> | undefined)?.[side] : at;
+        return value === undefined
+          ? []
+          : [[name as DuctsCriteriaCell, { by: "human", ref: "work:test" }] as const];
+      },
+    ),
   ),
 });
 
@@ -92,7 +114,10 @@ export interface InputsShorthand {
 
 export function inputsFor(snapshot: CalcSnapshot, s: InputsShorthand = {}): DuctsInputs {
   const byId = new Map(snapshot.nodes.map((n) => [n.id, n]));
-  type Cells<K extends Exclude<keyof WorkLayer, "criteria" | "criteriaMeta">> = Record<string, NonNullable<WorkLayer[K]>[string]>;
+  type Cells<K extends Exclude<keyof WorkLayer, "criteria" | "criteriaMeta">> = Record<
+    string,
+    NonNullable<WorkLayer[K]>[string]
+  >;
   const flows: Cells<"flows"> = {};
   const equipmentFlows: Cells<"equipmentFlows"> = {};
   const terminalDrops: Cells<"terminalDrops"> = {};
@@ -108,7 +133,9 @@ export function inputsFor(snapshot: CalcSnapshot, s: InputsShorthand = {}): Duct
     roles,
     kinds,
     assumptions,
-    rules: Object.fromEntries(Object.entries(s.choices ?? {}).map(([k, table]) => [k, cell(table)])),
+    rules: Object.fromEntries(
+      Object.entries(s.choices ?? {}).map(([k, table]) => [k, cell(table)]),
+    ),
     ruleAssignments: Object.fromEntries(
       Object.entries(s.assignments ?? {}).map(([family, rule]) => [family, cell(rule)]),
     ),
@@ -128,9 +155,13 @@ export function inputsFor(snapshot: CalcSnapshot, s: InputsShorthand = {}): Duct
   for (const [key, inWg] of Object.entries(s.fittingDrops ?? {}))
     assumptions[FITTING_DROP_CELL(key)] = cell({ kind: "component-drop", inWg });
   for (const [id, cfm] of Object.entries(s.endCfm ?? {}))
-    (byId.get(Number(id))?.kind === "equipment" ? equipmentFlows : flows)[elementSubject(byId.get(Number(id))!)] = cell(cfm);
+    (byId.get(Number(id))?.kind === "equipment" ? equipmentFlows : flows)[
+      elementSubject(byId.get(Number(id))!)
+    ] = cell(cfm);
   for (const [id, inWg] of Object.entries(s.drops ?? {}))
-    (byId.get(Number(id))?.kind === "terminal" ? terminalDrops : componentDrops)[elementSubject([...snapshot.nodes, ...snapshot.segments].find(e => e.id === Number(id))!)] = cell(inWg);
+    (byId.get(Number(id))?.kind === "terminal" ? terminalDrops : componentDrops)[
+      elementSubject([...snapshot.nodes, ...snapshot.segments].find((e) => e.id === Number(id))!)
+    ] = cell(inWg);
   for (const r of s.rulings ?? [])
     assumptions[JOIN_KEY(r.pair)] = cell({
       kind: "verdict",
@@ -142,8 +173,7 @@ export function inputsFor(snapshot: CalcSnapshot, s: InputsShorthand = {}): Duct
     roles[elementSubject(byId.get(Number(id))!)] = cell(role);
   for (const [id, kind] of Object.entries(s.kinds ?? {})) {
     const n = byId.get(Number(id));
-    if (n)
-      kinds[catalogLinkKey(n.family, n.type)] = cell<DuctUnitKind>(kind);
+    if (n) kinds[catalogLinkKey(n.family, n.type)] = cell<DuctUnitKind>(kind);
   }
   const snap = s.slot
     ? { ...snapshot, slots: { ...snapshot.slots, terminalFlow: s.slot } }

@@ -281,9 +281,11 @@ const takeoffModelSchema = z.object({
 export type TakeoffModel = z.infer<typeof takeoffModelSchema>;
 export type ModelSystem = TakeoffModel["systems"][number];
 
-export const takeoffUnreadableBlobSchema = nativeResponseDefinitionSchema<TakeoffsSnapshot.Res.TakeoffUnreadableBlob>(
-  "takeoffs.snapshot", "TakeoffUnreadableBlob",
-);
+export const takeoffUnreadableBlobSchema =
+  nativeResponseDefinitionSchema<TakeoffsSnapshot.Res.TakeoffUnreadableBlob>(
+    "takeoffs.snapshot",
+    "TakeoffUnreadableBlob",
+  );
 export const takeoffSnapshotSchema = z.object({
   reading: observationSchema,
   carriers: takeoffCarrierPreflightSchema,
@@ -369,7 +371,8 @@ const tupleOf = (key: string, length: number): string[] | null => {
       tupleKey(parts) === key
       ? parts
       : null;
-  } catch (error) { console.warn("ts/packages/agent-contracts/src/takeoffs.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/packages/agent-contracts/src/takeoffs.ts: fallback after failure", error);
     return null;
   }
 };
@@ -413,10 +416,19 @@ const takeoffsDocumentSchema = z
     edits: z.record(keyed(2, "edit"), editCellSchema).default({}).meta({ title: "Room edits" }),
     bases: z.record(z.string(), roomEditSchema).default({}).meta({ title: "Baseline room values" }),
     /** Keyed by candidate (`<view>:<elementId>`). */
-    adopt: z.record(z.string(), draftCellSchema(adoptChoiceSchema)).default({}).meta({ title: "Adoption choices" }),
-    decisions: z.record(keyed(2, "decision"), draftCellSchema(verdictSchema)).default({}).meta({ title: "Flag decisions" }),
+    adopt: z
+      .record(z.string(), draftCellSchema(adoptChoiceSchema))
+      .default({})
+      .meta({ title: "Adoption choices" }),
+    decisions: z
+      .record(keyed(2, "decision"), draftCellSchema(verdictSchema))
+      .default({})
+      .meta({ title: "Flag decisions" }),
     /** A flag has no commit verb: the edited set is the durable judgment and the export. */
-    reviewFlags: z.record(keyed(2, "review flag"), draftCellSchema(z.literal(true))).default({}).meta({ title: "Review flags" }),
+    reviewFlags: z
+      .record(keyed(2, "review flag"), draftCellSchema(z.literal(true)))
+      .default({})
+      .meta({ title: "Review flags" }),
   })
   .superRefine((doc, ctx) => {
     // Each edit's rungs hold a value that field accepts.

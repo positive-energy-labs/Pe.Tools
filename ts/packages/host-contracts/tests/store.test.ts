@@ -41,7 +41,7 @@ vi.mock("node:fs", async (original) => {
     writeFileSync: vi.fn(fs.writeFileSync),
   };
 });
-  const schema = z.strictObject({ name: z.string() });
+const schema = z.strictObject({ name: z.string() });
 const valueKind = stateKind({
   schema,
   place: (_name: string) => "Work for /ducts",
@@ -74,45 +74,45 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(root, { recursive: true, force: true }));
 const value = () => valueKind.in(machine, "work.json");
-  const home = () => authoredKind.in(machine.home({ root: join(root, "home"), tier: "user" }));
-    const blob = (bytes: string) => join(machine.blobs, "sha256", sha256Hex(bytes));
+const home = () => authoredKind.in(machine.home({ root: join(root, "home"), tier: "user" }));
+const blob = (bytes: string) => join(machine.blobs, "sha256", sha256Hex(bytes));
 const seed = (file: { path: string }, bytes: string) => {
   mkdirSync(join(file.path, ".."), { recursive: true });
   writeFileSync(file.path, bytes);
 };
 const held = (path: string, from = 0) => {
-    const real = vi.mocked(readFileSync).getMockImplementation()!;
-    let reads = 0;
-    vi.mocked(readFileSync).mockImplementation(((target: never, ...args: never[]) => {
-      if (target === path && reads++ >= from)
-        throw Object.assign(Error("EBUSY: resource busy or locked"), { code: "EBUSY" });
-      return (real as (...args: never[]) => unknown)(target, ...args);
-    }) as typeof readFileSync);
-    return () => vi.mocked(readFileSync).mockImplementation(real);
-  };
+  const real = vi.mocked(readFileSync).getMockImplementation()!;
+  let reads = 0;
+  vi.mocked(readFileSync).mockImplementation(((target: never, ...args: never[]) => {
+    if (target === path && reads++ >= from)
+      throw Object.assign(Error("EBUSY: resource busy or locked"), { code: "EBUSY" });
+    return (real as (...args: never[]) => unknown)(target, ...args);
+  }) as typeof readFileSync);
+  return () => vi.mocked(readFileSync).mockImplementation(real);
+};
 
-  test("atomic state writes replace complete bytes and leave no staging file", () => {
-    const file = textKind.in(machine, "state.json");
+test("atomic state writes replace complete bytes and leave no staging file", () => {
+  const file = textKind.in(machine, "state.json");
   writeState(file, "one");
   writeState(file, new TextEncoder().encode("two"));
-    expect(readFileSync(file.path, "utf8")).toBe("two");
+  expect(readFileSync(file.path, "utf8")).toBe("two");
   expect(readdirSync(machine.state)).toEqual(["state.json"]);
 });
 test.each(["EPERM", "EBUSY", "EACCES"])("a transient %s is retried", (code) => {
   const file = textKind.in(machine, "state.json");
   writeState(file, "one");
   vi.mocked(renameSync).mockClear();
-    vi.mocked(renameSync).mockImplementationOnce(() => {
+  vi.mocked(renameSync).mockImplementationOnce(() => {
     throw Object.assign(Error("held"), { code });
   });
   writeState(file, "two");
-    expect(renameSync).toHaveBeenCalledTimes(2);
+  expect(renameSync).toHaveBeenCalledTimes(2);
   expect(readFileSync(file.path, "utf8")).toBe("two");
 });
 test("a partial write removes its staging file and keeps the original", () => {
   const file = textKind.in(machine, "state.json");
   writeState(file, "original");
-    vi.mocked(writeFileSync).mockImplementationOnce((target, bytes) => {
+  vi.mocked(writeFileSync).mockImplementationOnce((target, bytes) => {
     if (typeof target !== "number") throw Error("Expected the kernel's open staging descriptor");
     writeSync(target, String(bytes).slice(0, 2));
     throw Error("partial");
@@ -126,12 +126,12 @@ test("a persistent hold is bounded and keeps the original", () => {
   writeState(file, "original");
   vi.mocked(renameSync).mockClear();
   const real = vi.mocked(renameSync).getMockImplementation()!;
-    vi.mocked(renameSync).mockImplementation(() => {
+  vi.mocked(renameSync).mockImplementation(() => {
     throw Object.assign(Error("held"), { code: "EPERM" });
   });
   try {
     expect(() => writeState(file, "candidate")).toThrow("held");
-      expect(renameSync).toHaveBeenCalledTimes(6);
+    expect(renameSync).toHaveBeenCalledTimes(6);
   } finally {
     vi.mocked(renameSync).mockImplementation(real);
   }
@@ -192,7 +192,7 @@ test.each(["{ not json", '{"name":1}'])("authored bytes %s are refused and kept"
   const file = home();
   seed(file, bytes);
   expect(read(file)).toMatchObject({ kind: "kept" });
-    expect(read(file)).toMatchObject({ kind: "kept" });
+  expect(read(file)).toMatchObject({ kind: "kept" });
   expect(readFileSync(file.path, "utf8")).toBe(bytes);
   expect(notices(machine)).toMatchObject([
     { class: "keep", path: file.path, sha256: sha256Hex(bytes) },
@@ -236,8 +236,8 @@ test("unreadable state stays, including an owner's own refusal", () => {
   const release = held(file.path);
   expect(read(file)).toMatchObject({ kind: "kept" });
   expect(setAside(file, "stale")).toMatchObject({ kind: "kept" });
-    release();
-    expect(readFileSync(file.path, "utf8")).toBe('{"name":"mine"}');
+  release();
+  expect(readFileSync(file.path, "utf8")).toBe('{"name":"mine"}');
   expect(notices(machine)).toMatchObject([{ class: "keep", path: file.path, sha256: null }]);
 });
 test("a failed copy keeps the file and blocks replacement until its bytes can rest", () => {
@@ -247,7 +247,7 @@ test("a failed copy keeps the file and blocks replacement until its bytes can re
   expect(read(file)).toMatchObject({ kind: "kept" });
   expect(setAside(file, "stale")).toMatchObject({ kind: "kept" });
   expect(() => writeState(file, "fresh")).toThrow();
-    expect(readFileSync(file.path, "utf8")).toBe("{ torn");
+  expect(readFileSync(file.path, "utf8")).toBe("{ torn");
   rmSync(machine.blobs);
   writeState(file, "fresh");
   expect(readFileSync(blob("{ torn"), "utf8")).toBe("{ torn");
@@ -262,47 +262,46 @@ test("a locked file also blocks replacement until its original bytes can rest", 
   release();
   writeState(file, "fresh");
   expect(readFileSync(blob('{"name":"mine"}'), "utf8")).toBe('{"name":"mine"}');
-  });
+});
 
-  test("a short copy is detected by independent readback and keeps its original", () => {
-    const file = value();
+test("a short copy is detected by independent readback and keeps its original", () => {
+  const file = value();
   seed(file, "{ torn");
-    const real = vi.mocked(writeFileSync).getMockImplementation()!;
-    vi.mocked(writeFileSync).mockImplementationOnce((target) => real(target, "{ to"));
-    expect(read(file)).toMatchObject({ kind: "kept" });
-    expect(readFileSync(file.path, "utf8")).toBe("{ torn");
+  const real = vi.mocked(writeFileSync).getMockImplementation()!;
+  vi.mocked(writeFileSync).mockImplementationOnce((target) => real(target, "{ to"));
+  expect(read(file)).toMatchObject({ kind: "kept" });
+  expect(readFileSync(file.path, "utf8")).toBe("{ torn");
   expect(read(file)).toMatchObject({ kind: "set-aside" });
-    expect(readFileSync(blob("{ torn"), "utf8")).toBe(
-      "{ torn");
-  });
+  expect(readFileSync(blob("{ torn"), "utf8")).toBe("{ torn");
+});
 
-  test("a file changed or locked during its copy stays", () => {
-    const file = value();
+test("a file changed or locked during its copy stays", () => {
+  const file = value();
   seed(file, "{ torn");
-    const real = vi.mocked(writeFileSync).getMockImplementation()!;
-    vi.mocked(writeFileSync).mockImplementationOnce((target, bytes) => {
-      real(file.path, '{"name":"new"}');
-      return real(target, bytes);
-    });
-    expect(read(file)).toMatchObject({ kind: "kept" });
-    expect(readFileSync(file.path, "utf8")).toBe('{"name":"new"}');
-  seed(file, "{ other");
-    const release = held(file.path, 1);
-    expect(read(file)).toMatchObject({ kind: "kept" });
-    release();
-    expect(readFileSync(file.path, "utf8")).toBe("{ other");
+  const real = vi.mocked(writeFileSync).getMockImplementation()!;
+  vi.mocked(writeFileSync).mockImplementationOnce((target, bytes) => {
+    real(file.path, '{"name":"new"}');
+    return real(target, bytes);
   });
+  expect(read(file)).toMatchObject({ kind: "kept" });
+  expect(readFileSync(file.path, "utf8")).toBe('{"name":"new"}');
+  seed(file, "{ other");
+  const release = held(file.path, 1);
+  expect(read(file)).toMatchObject({ kind: "kept" });
+  release();
+  expect(readFileSync(file.path, "utf8")).toBe("{ other");
+});
 
-  test("derived readers skip forged names without removing bytes, and a write repairs the name", () => {
+test("derived readers skip forged names without removing bytes, and a write repairs the name", () => {
   const dir = derivedIn(machine);
   const path = dir.file(derivedName("key", "whole"));
   seed({ path }, "forged");
-    expect(readDerivedIn(dir, "key")).toBeNull();
-    expect(readFileSync(path, "utf8")).toBe("forged");
+  expect(readDerivedIn(dir, "key")).toBeNull();
+  expect(readFileSync(path, "utf8")).toBe("forged");
   expect(notices(machine)).toMatchObject([{ class: "keep", path, sha256: sha256Hex("forged") }]);
   expect(writeDerivedIn(dir, "key", "whole").path).toBe(path);
   expect(readDerivedIn(dir, "key")?.bytes.toString()).toBe("whole");
-    expect(readFileSync(blob("forged"), "utf8")).toBe("forged");
+  expect(readFileSync(blob("forged"), "utf8")).toBe("forged");
   vi.mocked(writeFileSync).mockClear();
   writeDerivedIn(dir, "key", "whole");
   expect(
@@ -316,7 +315,8 @@ test("an unavailable notice writer never stops a verified set-aside", () => {
   seed(file, "{ torn");
   const actual = vi.mocked(writeFileSync).getMockImplementation()!;
   vi.mocked(writeFileSync).mockImplementation((...args) => {
-    if (typeof args[1] === "string" && args[1].includes('"place":')) throw Error("notice unavailable");
+    if (typeof args[1] === "string" && args[1].includes('"place":'))
+      throw Error("notice unavailable");
     return actual(...args);
   });
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -325,30 +325,33 @@ test("an unavailable notice writer never stops a verified set-aside", () => {
     expect(existsSync(file.path)).toBe(false);
     expect(readFileSync(blob("{ torn"), "utf8")).toBe("{ torn");
     expect(warn).toHaveBeenCalledOnce();
-  } finally { vi.mocked(writeFileSync).mockImplementation(actual); warn.mockRestore(); }
+  } finally {
+    vi.mocked(writeFileSync).mockImplementation(actual);
+    warn.mockRestore();
+  }
 });
 test("an owner sets aside exactly one file with one notice, and siblings stay identical", () => {
   const file = value();
   seed(file, '{"name":"stale"}');
-    const sibling = textKind.in(machine, "sibling.json");
+  const sibling = textKind.in(machine, "sibling.json");
   seed(sibling, "keep");
-    expect(setAside(file, "identity does not match")).toMatchObject({ kind: "set-aside" });
+  expect(setAside(file, "identity does not match")).toMatchObject({ kind: "set-aside" });
   expect(setAside(file, "identity does not match")).toEqual({ kind: "missing" });
   expect(readFileSync(sibling.path, "utf8")).toBe("keep");
   expect(notices(machine)).toMatchObject([
-      { reason: expect.stringContaining("identity does not match") },
-    ]);
+    { reason: expect.stringContaining("identity does not match") },
+  ]);
 });
 test("a directory cannot be set aside, and all children stay", () => {
   const folder = valueKind.in(machine, "folder");
   const child = join(folder.path, "child.json");
   seed({ path: child }, "keep");
   expect(read(folder)).toMatchObject({ kind: "kept" });
-    expect(setAside(folder, "stale")).toMatchObject({ kind: "kept" });
-    expect(readFileSync(child, "utf8")).toBe("keep");
-  });
+  expect(setAside(folder, "stale")).toMatchObject({ kind: "kept" });
+  expect(readFileSync(child, "utf8")).toBe("keep");
+});
 
-  test("a missing log is missing, and whole lines list in order", () => {
+test("a missing log is missing, and whole lines list in order", () => {
   const log = eventsKind.in(machine);
   expect(readLines(log)).toEqual({ kind: "missing" });
   appendLine(log, { id: 1 });
@@ -374,7 +377,7 @@ test("bad middle lines and wrong shapes each post their own hash without hiding 
   seed(log, '{"id":1}\nnot json\n{"id":"two"}\n{"id":4}\n');
   expect(readLines(log)).toMatchObject({ values: [{ id: 1 }, { id: 4 }], skipped: 2 });
   expect(notices(machine).map((notice) => notice.sha256)).toEqual([
-      sha256Hex("not json"),
-      sha256Hex('{"id":"two"}'),
-    ]);
+    sha256Hex("not json"),
+    sha256Hex('{"id":"two"}'),
+  ]);
 });

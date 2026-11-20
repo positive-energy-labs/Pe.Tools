@@ -52,7 +52,9 @@ function fixture() {
   const journal = createWorkJournal(key);
   workspace.subscribeUncaptured((event) => {
     if (event.ok) {
-      journal.observe(z.object({ revision: z.number(), doc: z.unknown() }).parse(stored.get(workKey(key))));
+      journal.observe(
+        z.object({ revision: z.number(), doc: z.unknown() }).parse(stored.get(workKey(key))),
+      );
       journal.accept(event, event.by === "human" ? { label: event.press ?? "Restore" } : undefined);
     }
   });
@@ -122,20 +124,29 @@ test.each([{ path: ["settings"] }, { path: ["settings", "width", "child"] }, { p
   },
 );
 
-test.each(["succeeded", "outcome-unknown"] as const)("%s: a retained receipt blocks redo without a browser projection", async (state) => {
-  const f = fixture();
-  f.journal.record({ kind: "receipt", at: 100, receiptId: "earlier", paths: [[]] });
-  await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
-  f.journal.record({ kind: "checkpoint", at: 2, paths: [[]] });
-  f.journal.record({ kind: "receipt", at: 3, paths: [["cells"]] });
-  expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true });
-  f.journal.record({ kind: "receipt", at: 0, receiptId: "after-undo", outcome: { id: "after-undo", state, input: {} }, paths: [["settings"]] });
-  expect(await f.journal.redo(f.writer)).toMatchObject({
-    ok: false,
-    code: "barrier",
-    barrier: { receiptId: "after-undo" },
-  });
-});
+test.each(["succeeded", "outcome-unknown"] as const)(
+  "%s: a retained receipt blocks redo without a browser projection",
+  async (state) => {
+    const f = fixture();
+    f.journal.record({ kind: "receipt", at: 100, receiptId: "earlier", paths: [[]] });
+    await f.apply([{ path: ["settings", "width"], value: 20 }], "human-1");
+    f.journal.record({ kind: "checkpoint", at: 2, paths: [[]] });
+    f.journal.record({ kind: "receipt", at: 3, paths: [["cells"]] });
+    expect(await f.journal.undo(f.writer)).toMatchObject({ ok: true });
+    f.journal.record({
+      kind: "receipt",
+      at: 0,
+      receiptId: "after-undo",
+      outcome: { id: "after-undo", state, input: {} },
+      paths: [["settings"]],
+    });
+    expect(await f.journal.redo(f.writer)).toMatchObject({
+      ok: false,
+      code: "barrier",
+      barrier: { receiptId: "after-undo" },
+    });
+  },
+);
 
 test("a barrier between acknowledgements of one press is retained", async () => {
   const f = fixture();

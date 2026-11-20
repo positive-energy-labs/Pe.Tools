@@ -1,12 +1,11 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf } from "../route/defaults";
-import { read } from "../route/defaults";
-import { paneLayout } from "../route/defaults";
+import type { ContextOf } from "@pe/web-kernel/route";
+import { read } from "@pe/web-kernel/route";
+import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
-import { field, route } from "../route/defaults";
-import { hostRead } from "../route/host-read.ts";
-import { draw } from "../route/draw.tsx";
-
+import { field, route } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
 export const loaded = read(hostRead(contracts.browse));
 export const fields = {

@@ -11,7 +11,8 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { expect, test } from "vite-plus/test";
-import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "../src/bridge.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
 import { requestIdentityLayer } from "../src/request-identity.ts";
 import { hostStatusRoute } from "../src/app.ts";

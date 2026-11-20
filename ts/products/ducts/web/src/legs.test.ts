@@ -159,14 +159,18 @@ it("a break the builder bridges by proximity is inferred, not a gap, until a ver
     { after: 14107111, before: 14122436, findingId: finding, grade: "stretched", confirmed: false },
   ]);
   const work = designOf({
-    assumptions: { [finding]: { edit: { by: "human", value: { kind: "verdict", verdict: "ignore" } } } },
+    assumptions: {
+      [finding]: { edit: { by: "human", value: { kind: "verdict", verdict: "ignore" } } },
+    },
   });
   const ruled = legsOf(snapshot, ids, undefined, work);
   expect(ruled.inferred).toEqual([]);
   expect(ruled.gaps).toEqual([{ after: 14107111, before: 14122436 }]);
   // A person's edit connect confirms it; the break stays drawn, ruled.
   const confirmed = designOf({
-    assumptions: { [finding]: { edit: { by: "human", value: { kind: "verdict", verdict: "connect" } } } },
+    assumptions: {
+      [finding]: { edit: { by: "human", value: { kind: "verdict", verdict: "connect" } } },
+    },
   });
   expect(legsOf(snapshot, ids, undefined, confirmed).inferred).toMatchObject([
     { findingId: finding, confirmed: true },

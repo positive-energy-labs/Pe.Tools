@@ -16,6 +16,7 @@ export function routeWorkSubject(
   if (typeof value !== "string") throw Error("Invalid Work subject identity");
   const ref = decode(value);
   if (!ref.ok) throw Error(ref.reason);
-  if (ref.value.keyKind !== "workspace") throw Error("workSubject must name a workspace SubjectRef");
+  if (ref.value.keyKind !== "workspace")
+    throw Error("workSubject must name a workspace SubjectRef");
   return ref.value.key;
 }

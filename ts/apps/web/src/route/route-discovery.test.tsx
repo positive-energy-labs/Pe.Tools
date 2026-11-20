@@ -67,6 +67,9 @@ test("Schedules' hosted workspace uses its typed subject codec without changing 
     work: "schedule-42",
     visible: true,
   });
-  expect(JSON.parse(address.read().get("workspaceId")!)).toEqual({kind:"ids",ids:[subjectCode({ keyKind: "workspace", key: "schedule-42" })]});
+  expect(JSON.parse(address.read().get("workspaceId")!)).toEqual({
+    kind: "ids",
+    ids: [subjectCode({ keyKind: "workspace", key: "schedule-42" })],
+  });
   expect(address.read().get("work")).toBe("schedule-42");
 });

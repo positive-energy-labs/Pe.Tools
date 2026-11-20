@@ -137,7 +137,16 @@ export function Ladder({
     <ListPopup<Hit>
       anchor="trigger"
       face={face}
-      trigger={levels.some((rung) => rung.provenance) ? <>{word}{levels.find((rung) => rung.provenance)?.provenance}</> : word}
+      trigger={
+        levels.some((rung) => rung.provenance) ? (
+          <>
+            {word}
+            {levels.find((rung) => rung.provenance)?.provenance}
+          </>
+        ) : (
+          word
+        )
+      }
       title={title}
       disabled={disabled}
       open={isOpen}
@@ -192,9 +201,17 @@ export function Ladder({
             {rungOf(hit).picked?.(hit.id) ? "☑" : "☐"}
           </span>
         ) : undefined,
-        label: rungOf(hit).provenance ? <>{hit.label}{rungOf(hit).provenance}</> : hit.label,
+        label: rungOf(hit).provenance ? (
+          <>
+            {hit.label}
+            {rungOf(hit).provenance}
+          </>
+        ) : (
+          hit.label
+        ),
         meta: rungOf(hit).only ? (
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label={`Only ${hit.label}`}
             onClick={(event) => {
               event.stopPropagation();

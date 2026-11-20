@@ -41,7 +41,13 @@ function linkedSubjects(observation: TurnElementNamesObservation, text: string) 
     if (!entry || subjects.has(id)) continue;
     // The attention doc every route scopes a document by: `session/openId`.
     const doc = `${entry.target.session}/${entry.target.openId}`;
-    subjects.set(id, { id, name: entry.name, number: subjects.size + 1, doc, uniqueId: entry.uniqueId });
+    subjects.set(id, {
+      id,
+      name: entry.name,
+      number: subjects.size + 1,
+      doc,
+      uniqueId: entry.uniqueId,
+    });
   }
   return subjects;
 }
@@ -115,7 +121,9 @@ export function TurnSubjectText({
 }) {
   const part = { ...subject, connector };
   return (
-    <SubjectTextContext value={{ doc: subject.doc, nameOf: () => subject.name, uniqueIdOf: () => subject.uniqueId }}>
+    <SubjectTextContext
+      value={{ doc: subject.doc, nameOf: () => subject.name, uniqueIdOf: () => subject.uniqueId }}
+    >
       <SubjectText document={{ parts: [part], references: [subject] }} />
     </SubjectTextContext>
   );

@@ -73,16 +73,16 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
-    "@pe/agent-contracts": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*"
   },
   "devDependencies": {
-    "zod": "4.3.6",
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:"
+    "vite-plus": "catalog:",
+    "zod": "4.3.6"
   }
 }

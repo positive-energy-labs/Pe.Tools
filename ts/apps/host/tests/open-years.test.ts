@@ -3,7 +3,7 @@ import type { ResourceObserver } from "@pe/runtime";
 import { createJiti } from "jiti";
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { read } from "../src/reads/evaluator.ts";
+import { read } from "@pe/host-internal/reads/evaluator";
 import { registeredReads } from "../src/reads/routes.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { fixture, who } from "./host-read-graph.test-support.ts";
@@ -21,8 +21,13 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
     host: null,
     revit: { years, sessions: [], unclassifiedAttachments: [] },
     update: {
-      plan: null, receipt: null, requestId: null, admittedPlanId: null,
-      planLeg: leg, receiptLeg: leg, automatic: false,
+      plan: null,
+      receipt: null,
+      requestId: null,
+      admittedPlanId: null,
+      planLeg: leg,
+      receiptLeg: leg,
+      automatic: false,
     },
     share: null,
     providers: null,
@@ -46,22 +51,33 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
   const host = await fixture(false, { resourceObserver });
   const subscription = "open-years";
   const url = new URL("http://host/pe/resources");
-  url.searchParams.set("keys", JSON.stringify([{ kind: "publication", subscription, generation: 0 }]));
+  url.searchParams.set(
+    "keys",
+    JSON.stringify([{ kind: "publication", subscription, generation: 0 }]),
+  );
   const response = await host.request(new Request(url));
   const stream = response.body!.getReader();
   await stream.read();
   return {
     async read(recipe = "open.documents") {
-      const response = await host.request(new Request("http://host/pe/reads/value", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ read: recipe, subscription, generation: 0, args: { target: { kind: "host" } } }),
-      }));
+      const response = await host.request(
+        new Request("http://host/pe/reads/value", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            read: recipe,
+            subscription,
+            generation: 0,
+            args: { target: { kind: "host" } },
+          }),
+        }),
+      );
       expect(response.status, await response.clone().text()).toBe(200);
       return response.json();
     },
     observations: () => machineObservations,
-    publication: () => host.reads.publications.publication(canonicalRouteInput([who, subscription])),
+    publication: () =>
+      host.reads.publications.publication(canonicalRouteInput([who, subscription])),
     async nextEvent(state: string) {
       const decoder = new TextDecoder();
       let text = "";
@@ -74,7 +90,9 @@ async function openYears(years: Machine["revit"]["years"], error: string | null)
     pass(years: Machine["revit"]["years"], error: string | null) {
       const now = "2026-11-19T00:00:05Z";
       machine = {
-        ...machine, observedAtUtc: now, revit: { ...machine.revit, years },
+        ...machine,
+        observedAtUtc: now,
+        revit: { ...machine.revit, years },
         legs: { years: { ...leg, attemptedAtUtc: now, error } },
       };
       for (const notify of listeners) notify();

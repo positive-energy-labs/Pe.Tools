@@ -9,9 +9,7 @@ test("GET Pod inventory requests background discovery without action reconciliat
   const content = {
     lifecycle: { ready: Promise.resolve(), inventory: () => statuses, refresh, requestRefresh },
   } as unknown as Parameters<typeof createPluginsHandler>[0];
-  const response = await createPluginsHandler(
-    content,
-  )(new Request("http://localhost/pe/plugins"));
+  const response = await createPluginsHandler(content)(new Request("http://localhost/pe/plugins"));
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual(statuses);
   expect(refresh).not.toHaveBeenCalled();

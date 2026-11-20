@@ -4,7 +4,9 @@ import { fansDocumentSchema, type FansRouteDocument } from "@pe/fans-contract/fa
 
 const fanSegment = (key: string) => key !== "writeIntent" && key in fansDocumentSchema.shape;
 
-export function designOf(raw: Record<string, unknown> = {}): DuctsRouteDocument & Omit<FansRouteDocument, "writeIntent"> {
+export function designOf(
+  raw: Record<string, unknown> = {},
+): DuctsRouteDocument & Omit<FansRouteDocument, "writeIntent"> {
   const part = (fans: boolean) =>
     Object.fromEntries(Object.entries(raw).filter(([key]) => fanSegment(key) === fans));
   return { ...fansDocumentSchema.parse(part(true)), ...ductsDocumentSchema.parse(part(false)) };

@@ -20,8 +20,10 @@ export function bindPackageScanLogger(log: (message: string) => void, file?: Sto
         const batch = queued;
         queued = [];
         writing = appendLinesBounded(file, batch, packageScanLogLineLimit)
-          .catch(error => log(`Pod scan log append failed: ${String(error)}`))
-          .finally(() => { writing = undefined; });
+          .catch((error) => log(`Pod scan log append failed: ${String(error)}`))
+          .finally(() => {
+            writing = undefined;
+          });
       }
       await writing;
     }

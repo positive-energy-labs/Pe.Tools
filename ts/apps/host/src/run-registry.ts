@@ -114,7 +114,10 @@ const makeRunRegistry = Effect.gen(function* () {
       const own = runs.get(key(origin.run)),
         root = runs.get(key(origin.root));
       if (!own || !root || key(own.root) !== key(origin.root))
-        throw refused("run.closed", "host restarted; this command's run ended, so submit it as a new action");
+        throw refused(
+          "run.closed",
+          "host restarted; this command's run ended, so submit it as a new action",
+        );
       for (const [run, what] of [
         [root, "root"],
         [own, "turn"],

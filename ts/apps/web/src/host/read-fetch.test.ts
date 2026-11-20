@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vite-plus/test";
-import { createReadFetch } from "./read-fetch";
+import { createReadFetch } from "@pe/web-kernel/host/read-fetch";
 
 test("geometry representation and reach payloads never join, in either order", async () => {
   const payloads = [

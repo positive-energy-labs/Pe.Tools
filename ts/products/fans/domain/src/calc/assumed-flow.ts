@@ -121,8 +121,9 @@ export function assumedFanFlows(
     const sum = (m: Map<number, number | null>) =>
       [...m.values()].reduce<number>((a, v) => a + (v ?? 0), 0);
     const served =
-      terminalSides.find(side => [...side.values()].some(v => v == null)) ??
-      terminalSides.sort((a, b) => sum(b) - sum(a))[0] ?? new Map<number, number | null>();
+      terminalSides.find((side) => [...side.values()].some((v) => v == null)) ??
+      terminalSides.sort((a, b) => sum(b) - sum(a))[0] ??
+      new Map<number, number | null>();
     direct.set(ref, served);
     receiving.set(ref, others);
   }

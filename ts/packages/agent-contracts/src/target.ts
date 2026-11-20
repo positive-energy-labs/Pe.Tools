@@ -38,11 +38,16 @@ export type DocumentRef = z.infer<typeof documentRefSchema>;
  */
 export function bridgeSessionFor(
   session: string,
-  attachments: readonly { sessionId?: string | null; sdkSessionId?: string | null; connected: boolean }[],
+  attachments: readonly {
+    sessionId?: string | null;
+    sdkSessionId?: string | null;
+    connected: boolean;
+  }[],
 ): string {
   if (attachments.some((attachment) => attachment.sessionId === session)) return session;
   const named = attachments.filter(
-    (attachment) => attachment.connected && attachment.sessionId && attachment.sdkSessionId === session,
+    (attachment) =>
+      attachment.connected && attachment.sessionId && attachment.sdkSessionId === session,
   );
   return named.length === 1 ? named[0]!.sessionId! : session;
 }

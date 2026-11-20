@@ -1,4 +1,4 @@
-import { reasonOf, refusalOf } from "#/route/typed-route";
+import { reasonOf, refusalOf } from "@pe/web-kernel/route/typed-route";
 import { actionScopeKeys, useScopeKeys } from "@pe/kit/keys";
 import { useEffect, useState } from "react";
 import { routeAddress, canonicalRouteInput } from "@pe/agent-contracts";
@@ -26,11 +26,15 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   });
   const page = ctx.page.read();
   // The pane's own read. A catalogue that is not current stays readable, not pickable.
-  const catalogue = ctx.value, views = catalogue.value;
+  const catalogue = ctx.value,
+    views = catalogue.value;
   const viewsReading = catalogue.state === "refreshing";
-  const viewNote = catalogue.state === "ready" ? undefined : viewsReading
-    ? "Reading views; showing the last known catalogue"
-    : `View catalogue unavailable: ${refusalOf(catalogue)}; showing the last known catalogue`;
+  const viewNote =
+    catalogue.state === "ready"
+      ? undefined
+      : viewsReading
+        ? "Reading views; showing the last known catalogue"
+        : `View catalogue unavailable: ${refusalOf(catalogue)}; showing the last known catalogue`;
   const selectedViews = page.views === "all" ? views.viewOptions.map((row) => row.id) : page.views;
   const [pending, setPending] = useState<{ id: "initialize" | "adopt"; request: unknown } | null>(
     null,
@@ -42,10 +46,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
     const entry = `takeoffs.${pending.id}`;
     const authored = ctx.cells.doc?.writeIntent?.[entry]?.edit?.value;
     if (canonicalRouteInput(authored) !== canonicalRouteInput(pending.request)) return;
-    if (
-      canonicalRouteInput(data?.[pending.id].request) !==
-      canonicalRouteInput(pending.request)
-    ) {
+    if (canonicalRouteInput(data?.[pending.id].request) !== canonicalRouteInput(pending.request)) {
       setPending(null);
       setProblem("Adoption choices changed; prepare the current rows again");
       return;
@@ -97,7 +98,8 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
       },
     },
     candidatesReading: coreReading,
-    candidatesIssue: core.state === "stale" || core.state === "refused" ? Error(reasonOf(core)) : null,
+    candidatesIssue:
+      core.state === "stale" || core.state === "refused" ? Error(reasonOf(core)) : null,
     actions: {
       patchAdopt(view, elementId, patch) {
         const row = data?.rows.find(
@@ -123,7 +125,11 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         label: "Adopt",
         bindings: ["Mod+Shift+A"],
         available: () =>
-          !frozen && core.state === "ready" && ctx.cells.state.state === "ready" && !pending && !data?.adopt.refusal,
+          !frozen &&
+          core.state === "ready" &&
+          ctx.cells.state.state === "ready" &&
+          !pending &&
+          !data?.adopt.refusal,
         invoke: () => {
           void stage("adopt");
         },
@@ -143,8 +149,12 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
         </a>
       </nav>
       {data?.unreadable?.map((blob, index) => (
-        <OutcomeLine key={index} kind="refused" label="can't read, kept"
-          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`} />
+        <OutcomeLine
+          key={index}
+          kind="refused"
+          label="can't read, kept"
+          says={`${blob.parameter} / ${blob.elementId == null ? "Project Information" : "Element name unavailable"}: ${blob.reason}`}
+        />
       ))}
       {"value" in core ? null : ctx.absent(core)}
       {problem && <OutcomeLine kind="error" label="Adoption" says={problem} />}
@@ -154,17 +164,31 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
             Archived takeoff · {data?.saved?.capturedAt ?? "Reading saved capture…"} ·{" "}
             {data?.saved?.provenance.target.session} / {data?.saved?.provenance.target.openId}
           </p>
-          {data?.saved && <section aria-label="Saved takeoff contents">
-            <p>This capture stores takeoff data, not a view image.</p>
-            {data.saved.snapshot.world.zones.length === 0 ?
-              <EmptyState story="scope" exit="Return to live, choose views and adopt zoning regions">No adopted zones in this saved takeoff</EmptyState> :
-              <PlainList
-                list={savedZones}
-                aria-label="Saved takeoff zones"
-                empty={{ message: "No adopted zones in this saved takeoff", exit: "Return to live, choose views and adopt zoning regions" }}
-                row={(row) => ({ label: `${row.name} / ${row.zone.lane.label} / ${row.zone.declaredSqft} sf / ${row.stage}` })}
-              />}
-          </section>}
+          {data?.saved && (
+            <section aria-label="Saved takeoff contents">
+              <p>This capture stores takeoff data, not a view image.</p>
+              {data.saved.snapshot.world.zones.length === 0 ? (
+                <EmptyState
+                  story="scope"
+                  exit="Return to live, choose views and adopt zoning regions"
+                >
+                  No adopted zones in this saved takeoff
+                </EmptyState>
+              ) : (
+                <PlainList
+                  list={savedZones}
+                  aria-label="Saved takeoff zones"
+                  empty={{
+                    message: "No adopted zones in this saved takeoff",
+                    exit: "Return to live, choose views and adopt zoning regions",
+                  }}
+                  row={(row) => ({
+                    label: `${row.name} / ${row.zone.lane.label} / ${row.zone.declaredSqft} sf / ${row.stage}`,
+                  })}
+                />
+              )}
+            </section>
+          )}
           <Button kind="quiet" label="live" onClick={() => ctx.page.query({ work: "" })}>
             live
           </Button>
@@ -177,7 +201,8 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
               key: "views",
               label: selectedViews.length ? `${selectedViews.length} views` : null,
               placeholder: "choose views",
-              options: views.viewOptions.map((row) => ({ ...row,
+              options: views.viewOptions.map((row) => ({
+                ...row,
                 ...(catalogue.state !== "ready" ? { refusal: viewNote } : {}),
               })),
               note: viewNote,
@@ -208,7 +233,7 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
                 label: row.title || row.id,
                 sub: row.capturedAt,
               })) ?? null,
-            note: coreReading ? "Reading saved captures..." : refusalOf(core) ?? undefined,
+            note: coreReading ? "Reading saved captures..." : (refusalOf(core) ?? undefined),
             picked: (id) => id === page.work,
             pick: (work) => {
               setPending(null);

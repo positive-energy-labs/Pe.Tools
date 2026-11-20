@@ -1,6 +1,11 @@
 import { stateScope } from "@pe/host-contracts/service-identity";
-import { acquireContentRoots, contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
-import { targetHomes } from "./call-route.ts";
+import {
+  acquireContentRoots,
+  contentRootsReady,
+  contentHomes,
+  ContentHomeUnavailable,
+} from "./content-roots.ts";
+import { targetHomes } from "@pe/host-internal/target-homes";
 import { readSessionScope } from "./sdk-session.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { servePeRoute, peClientScript, matchPeRoute } from "@pe/mcps/product-catalog";
@@ -53,7 +58,7 @@ import {
 import { z } from "zod";
 import { parse, type DefaultTreeAdapterMap } from "parse5";
 import { resourceSnapshot, type OwnerValue } from "@pe/runtime";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { hostOwnership, hostState } from "./host-ownership.ts";
 import {
   admitPage,
@@ -62,15 +67,25 @@ import {
   mintPageDoor,
   pageActDoor,
   readsOnly,
-  Refused,
   refusalHeaders,
   documentAcquisition,
   threadHead,
   subscribeHeads,
   emitPagePinRevoke,
 } from "./control.ts";
-import { capturePackage, listPackages, productPodsRoots, type AdmittedPackage, type PodsRoots } from "./packages.ts";
-import { PackageDiscoveryExceeded, packageDiscoveryTimeoutMs, requirePackageAvailable } from "./pod-capture.ts";
+import { Refused } from "@pe/host-internal/refused";
+import {
+  capturePackage,
+  listPackages,
+  productPodsRoots,
+  type AdmittedPackage,
+  type PodsRoots,
+} from "./packages.ts";
+import {
+  PackageDiscoveryExceeded,
+  packageDiscoveryTimeoutMs,
+  requirePackageAvailable,
+} from "./pod-capture.ts";
 import { activePackages, requirePackageEnabled } from "./package-lifecycle.ts";
 import {
   pageDescriptors,
@@ -251,8 +266,12 @@ function resolveSlot(slot: PageChoice, sessions: readonly LiveSession[]): Target
       headRequests(threadHead(slot.thread) ?? emptyThreadHead),
       inventoryOf(sessions),
     );
-  if (slot.kind === "pinned") return resolveCallTarget(
-    { needs: "document", target: { kind: "open", ref: slot.ref } }, [], inventoryOf(sessions));
+  if (slot.kind === "pinned")
+    return resolveCallTarget(
+      { needs: "document", target: { kind: "open", ref: slot.ref } },
+      [],
+      inventoryOf(sessions),
+    );
   return { kind: "choose", reason: "missing" };
 }
 
@@ -464,8 +483,14 @@ export function createPagesHandler(
   stored: StateDirectory = stateScope(hostState(), hostState().pages),
 ) {
   /** One budget covers listing and lifecycle; a late listing must not start another wait. */
-  const pagePackages = async (id?: string, requestWait?: DiscoveryWait): Promise<AdmittedPackage[]> => {
-    if (!pods) { requestWait?.done(); return []; }
+  const pagePackages = async (
+    id?: string,
+    requestWait?: DiscoveryWait,
+  ): Promise<AdmittedPackage[]> => {
+    if (!pods) {
+      requestWait?.done();
+      return [];
+    }
     let expired = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
@@ -478,7 +503,10 @@ export function createPagesHandler(
       const listing = await listPackages({ podsRoots: pods, packageId: id });
       if (expired || requestWait?.expired) return [];
       for (const pod of listing.packages) if (pod.id === id) requirePackageAvailable(pod);
-      return activePackages(listing.packages.filter((pod) => id === undefined || pod.id === id), pods);
+      return activePackages(
+        listing.packages.filter((pod) => id === undefined || pod.id === id),
+        pods,
+      );
     };
     try {
       const listing = await Promise.race([discover(), timeout]);
@@ -540,18 +568,14 @@ export function createPagesHandler(
         return null;
       const resolution = resolveSlot(binding.slots.default, sessions);
       return resolution.kind === "resolved" && resolution.target.kind === "document"
-        ? resolution.target.ref : null;
+        ? resolution.target.ref
+        : null;
     },
   });
 
   /** `GET /pages`: the one Page projection, as rows: scratch newest first, then packaged by key. */
   const list = async (requestWait?: DiscoveryWait): Promise<PageRow[]> =>
-    (
-      await pageDescriptors(
-        await pagePackages(undefined, requestWait),
-        root,
-      )
-    ).map((page) => ({
+    (await pageDescriptors(await pagePackages(undefined, requestWait), root)).map((page) => ({
       slug: page.slug,
       key: page.key,
       title: page.title,
@@ -700,14 +724,34 @@ export function createPagesHandler(
           ?.documents?.find((d) => d.openId === ref.openId)?.title ?? "")
       : "";
     const podId = parseContributionKey(page)?.packageId;
-    const model = pods && podId
-      ? (await listPackages({ podsRoots: pods, packageId: podId })).packages.find((pod) => pod.id === podId)?.for
-      : undefined;
+    const model =
+      pods && podId
+        ? (await listPackages({ podsRoots: pods, packageId: podId })).packages.find(
+            (pod) => pod.id === podId,
+          )?.for
+        : undefined;
     if (model && ref) {
-      const response = await cross(page, slot, false, ref, "/pages/target", "/call", {
-        [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
-        [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
-      }, { key: "revit.detail.elements", request: { query: { kind: "ElementReferences", elementIds: model.probes.map((probe) => probe.elementId) } } });
+      const response = await cross(
+        page,
+        slot,
+        false,
+        ref,
+        "/pages/target",
+        "/call",
+        {
+          [HOST_RPC_BRIDGE_SESSION_HEADER]: ref.session,
+          [HOST_RPC_DOCUMENT_HEADER]: ref.openId,
+        },
+        {
+          key: "revit.detail.elements",
+          request: {
+            query: {
+              kind: "ElementReferences",
+              elementIds: model.probes.map((probe) => probe.elementId),
+            },
+          },
+        },
+      );
       if (!response.ok) throw Error(await response.text());
       const message = wrongPodModel(model, await response.json());
       if (message) resolution = { kind: "refused", reason: "wrong-model", message };
@@ -715,14 +759,27 @@ export function createPagesHandler(
     let write: PageWrite | null =
       slot.kind === "none" ? { kind: "read", refusal: unboundRefusal(actDoor) } : null;
     if (resolution.kind === "refused")
-      write = { kind: "read", refusal: { code: "wrong-model", door: actDoor, reason: resolution.message } };
+      write = {
+        kind: "read",
+        refusal: { code: "wrong-model", door: actDoor, reason: resolution.message },
+      };
     if (resolution.kind === "resolved")
       try {
-        const basis = admitPage(slot, resolution.target, actDoor, false,
-          binding.boundBy.default === "human" && slot.kind === "pinned" && ref ? { page, target: ref } : undefined);
+        const basis = admitPage(
+          slot,
+          resolution.target,
+          actDoor,
+          false,
+          binding.boundBy.default === "human" && slot.kind === "pinned" && ref
+            ? { page, target: ref }
+            : undefined,
+        );
         write =
-          basis?.kind === "person-pin" ? { kind: "human" } :
-          basis?.kind === "grant" ? { kind: "thread", thread: basis.thread } : { kind: "pea" };
+          basis?.kind === "person-pin"
+            ? { kind: "human" }
+            : basis?.kind === "grant"
+              ? { kind: "thread", thread: basis.thread }
+              : { kind: "pea" };
       } catch (error) {
         if (!(error instanceof Refused)) throw error;
         write = { kind: "read", refusal: error.refusal };
@@ -832,8 +889,15 @@ export function createPagesHandler(
       const action = await operationOf(body.data.key, body.data.input, page);
       if ("problem" in action) return problem(400, action.problem);
       // Decided here first, so a refusal names this door; `/actions` decides again under the same slot.
-      admitPage(slot, resolution.target, at, humanBound && readsOnly(action.key, action.input),
-        humanBound && resolution.target.kind === "document" ? { page, target: resolution.target.ref } : undefined);
+      admitPage(
+        slot,
+        resolution.target,
+        at,
+        humanBound && readsOnly(action.key, action.input),
+        humanBound && resolution.target.kind === "document"
+          ? { page, target: resolution.target.ref }
+          : undefined,
+      );
       return await cross(
         page,
         slot,
@@ -869,7 +933,9 @@ export function createPagesHandler(
       return { problem: `${key} is a ${ref.kind}: it reads and mentions, it never runs.` };
     await requirePackageEnabled(ref.packageId, pods);
     const pod = pods
-      ? (await listPackages({ podsRoots: pods, packageId: ref.packageId })).packages.find((one) => one.id === ref.packageId)
+      ? (await listPackages({ podsRoots: pods, packageId: ref.packageId })).packages.find(
+          (one) => one.id === ref.packageId,
+        )
       : undefined;
     if (pod) requirePackageAvailable(pod);
     const row = pod?.contributions.find((row) => row.kind === "script" && row.key === key);
@@ -877,9 +943,7 @@ export function createPagesHandler(
       // D41: a path read from the other base names an existing declaration, not a missing entrypoint.
       const pageRef = parseContributionKey(page);
       const prefix =
-        pageRef?.kind === "page" && pageRef.packageId === ref.packageId
-          ? `${pageRef.path}/`
-          : null;
+        pageRef?.kind === "page" && pageRef.packageId === ref.packageId ? `${pageRef.path}/` : null;
       const alternate = prefix
         ? ref.path.startsWith(prefix)
           ? ref.path.slice(prefix.length)
@@ -942,10 +1006,7 @@ export function createPagesHandler(
         reason: `Refused at ${at}: a Page cannot bind itself; Bind… opens the picker.`,
       });
     if (caller.kind !== "human") {
-      const resolution =
-        slot.kind === "pinned"
-          ? resolveSlot(slot, await live.sessions())
-          : null;
+      const resolution = slot.kind === "pinned" ? resolveSlot(slot, await live.sessions()) : null;
       const lifetime =
         resolution?.kind === "resolved" && resolution.target.kind === "document"
           ? resolution.target.ref
@@ -1028,23 +1089,30 @@ export function createPagesHandler(
     };
   };
 
-  return Object.assign((request: Request, requestWait?: DiscoveryWait) => handle(request, requestWait).catch((error: unknown) => {
-    if (!(error instanceof PackageDiscoveryExceeded)) throw error;
-    // A browser opening the Page itself (a tab, or the app's frame) has no pe.js yet to ask again, so
-    // the answer is a document that says the host's words and asks again by itself.
-    // ponytail: a fixed 2 s pause; each ask already spends the 5 s discovery budget before it answers.
-    if (
-      request.method === "GET" &&
-      (request.headers.get("accept") ?? "").includes("text/html") &&
-      !matchPeRoute("GET", new URL(request.url).pathname)
-    )
-      return new Response(
-        `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="2"><title>Waiting for the Pods folder</title><p role="status" style="margin:0;padding:8px 12px;background:#374151;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap">waiting for the Pods folder: ${escapeHtml(error.message)}</p>`,
-        { status: 503, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } },
-      );
-    // The code tells pe.js this 503 is a wait, not a refusal: it asks again by itself.
-    return json({ error: error.message, message: error.message, code: error.code }, 503);
-  }), { observeTarget });
+  return Object.assign(
+    (request: Request, requestWait?: DiscoveryWait) =>
+      handle(request, requestWait).catch((error: unknown) => {
+        if (!(error instanceof PackageDiscoveryExceeded)) throw error;
+        // A browser opening the Page itself (a tab, or the app's frame) has no pe.js yet to ask again, so
+        // the answer is a document that says the host's words and asks again by itself.
+        // ponytail: a fixed 2 s pause; each ask already spends the 5 s discovery budget before it answers.
+        if (
+          request.method === "GET" &&
+          (request.headers.get("accept") ?? "").includes("text/html") &&
+          !matchPeRoute("GET", new URL(request.url).pathname)
+        )
+          return new Response(
+            `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="2"><title>Waiting for the Pods folder</title><p role="status" style="margin:0;padding:8px 12px;background:#374151;color:#fff;font:13px/1.4 system-ui,sans-serif;white-space:pre-wrap">waiting for the Pods folder: ${escapeHtml(error.message)}</p>`,
+            {
+              status: 503,
+              headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+            },
+          );
+        // The code tells pe.js this 503 is a wait, not a refusal: it asks again by itself.
+        return json({ error: error.message, message: error.message, code: error.code }, 503);
+      }),
+    { observeTarget },
+  );
   async function handle(request: Request, requestWait?: DiscoveryWait): Promise<Response> {
     const caller = currentCaller();
     const url = new URL(request.url);
@@ -1286,7 +1354,9 @@ export const pagesRoute = (
         let timer: ReturnType<typeof setTimeout> | undefined;
         const discoveryWait: DiscoveryWait = {
           done: () => clearTimeout(timer),
-          get expired() { return expired; },
+          get expired() {
+            return expired;
+          },
         };
         const timeout = new Promise<Response>((resolve) => {
           if (request.method !== "GET") return;
@@ -1301,9 +1371,12 @@ export const pagesRoute = (
           const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
           if (root === productPagesRoots || pods === productPodsRoots) {
             await contentRootsReady(pointer);
-            if (!contentHomes().some(home => home.tier === "user")) {
+            if (!contentHomes().some((home) => home.tier === "user")) {
               const error = new ContentHomeUnavailable();
-              return json({ code: error.code, error: error.message, message: error.message }, error.status);
+              return json(
+                { code: error.code, error: error.message, message: error.message },
+                error.status,
+              );
             }
           }
           if (expired) return timeout;
@@ -1322,8 +1395,11 @@ export const pagesRoute = (
             ? servePeRoute(request, answer)
             : answer(request);
         };
-        try { return await Promise.race([resolvePage(), timeout]); }
-        finally { clearTimeout(timer); }
+        try {
+          return await Promise.race([resolvePage(), timeout]);
+        } finally {
+          clearTimeout(timer);
+        }
       });
       // One registration claims the bare `/pages` too (a second `add` is refused at boot; see captures).
       yield* router.add("*", "/pages/*", handler);

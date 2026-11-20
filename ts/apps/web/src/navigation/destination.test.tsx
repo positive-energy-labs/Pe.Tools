@@ -77,7 +77,9 @@ test("an explicit conversation link selects its own thread", async () => {
 test("a new destination carries no prior Page or Pea open state", async () => {
   const open = await at("/pea?thread=T");
   open.router.history.replace("/pea?thread=T", {
-    __pePageMove: true, __peViewOpenCommandId: "old-open", __peRouteTab: { id: "old", route: "fans" },
+    __pePageMove: true,
+    __peViewOpenCommandId: "old-open",
+    __peRouteTab: { id: "old", route: "fans" },
   } as never);
   await open("/duct-systems");
   expect(open.router.history.location.state).not.toHaveProperty("__pePageMove");

@@ -32,12 +32,7 @@ export function CatalogueActions() {
         </div>
         <div className="flex flex-wrap gap-x-10 gap-y-5">
           <ActionGroup title="stays here" radius="page · document">
-            <Button
-              label="refresh"
-              icon={RefreshCw}
-              onClick={noop}
-              reason="Re-reads the model"
-            >
+            <Button label="refresh" icon={RefreshCw} onClick={noop} reason="Re-reads the model">
               refresh
             </Button>
           </ActionGroup>

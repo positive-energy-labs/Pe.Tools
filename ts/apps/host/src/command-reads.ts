@@ -2,7 +2,7 @@ import { get } from "./action-blobs.ts";
 import { readSdk, SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
 import type { CommandResources } from "./command-executor.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { assertFresh, assertSealed } from "./document-marks.ts";
 import { readOriginalProcess } from "./native-receipts.ts";
@@ -18,12 +18,15 @@ import { readBootstrapIdle, readBootstrapInstallation } from "./bootstrap.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import type { RequestIdentityData, NativeAnswer } from "@pe/host-internal/request-contracts";
 import type { OpResponseOf } from "@pe/host-contracts/operation-types";
-import { RequestIdentity } from "./request-services.ts";
-import { InvalidRead, type NativeReads } from "./native-reads.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { type NativeReads } from "./native-reads.ts";
 import { isDoorFailure } from "./http-problems.ts";
 import { createReadOwnership, type ReadOwner } from "./reads/read-ownership.ts";
 
-export type NativeReadTerminals = Pick<NativeReads["Service"], "state" | "settle"> | { readonly kind: "recorded" };
+export type NativeReadTerminals =
+  | Pick<NativeReads["Service"], "state" | "settle">
+  | { readonly kind: "recorded" };
 
 /** The command's Promise boundary owns read leases; NativeReads owns native terminal evidence. */
 export function commandReadOwnership(
@@ -38,18 +41,23 @@ export function commandReadOwnership(
       if (!native) throw Error("Native read service is unavailable");
       // Cancellation detaches this read lease, never native cleanup.
       // effect-edge: island, phase 5
-      const result = await Effect.runPromise(native.read({ key, input, scope: identity.scope }).pipe(
-        Effect.provideService(RequestIdentity, identity), Effect.result,
-      ), { signal });
+      const result = await Effect.runPromise(
+        native
+          .read({ key, input, scope: identity.scope })
+          .pipe(Effect.provideService(RequestIdentity, identity), Effect.result),
+        { signal },
+      );
       if (result._tag === "Failure") throw result.failure;
       return result.success as NativeAnswer<OpResponseOf<typeof key>>;
     },
     // No NativeReads exists on a recording lane: it dispatched no native work to clean up.
-    state: (identity) => live?.state(identity) ?? { kind: "settled", requiredDescendants: [], evidence: [] },
-    settle: async (identity) => live
-      // effect-edge: island, phase 5
-      ? Effect.runPromise(live.settle(identity))
-      : { kind: "settled", requiredDescendants: [], evidence: [] },
+    state: (identity) =>
+      live?.state(identity) ?? { kind: "settled", requiredDescendants: [], evidence: [] },
+    settle: async (identity) =>
+      live
+        ? // effect-edge: island, phase 5
+          Effect.runPromise(live.settle(identity))
+        : { kind: "settled", requiredDescendants: [], evidence: [] },
   });
   const readOwnership = {
     ...lifetime,
@@ -61,18 +69,24 @@ export function commandReadOwnership(
   };
   const nativeRead: HostNativeRead["Service"] | undefined = native && {
     resolve: native.resolve,
-    read: (request) => Effect.gen(function* () {
-      const identity = yield* RequestIdentity;
-      const owner = owners.get(identity);
-      if (!owner) return yield* native.read(request);
-      // ReadOwner's port admits again under the captured scope, never the supplied target.
-      const readOwned = owner.native as (key: string, input: unknown) => Promise<NativeAnswer<unknown>>;
-      return (yield* Effect.tryPromise({
-        try: () => readOwned(request.key, request.input),
-        catch: (error) => isDoorFailure(error) ? error
-          : new InvalidRead({ message: String(error), status: 503, problem: "read.owner" }),
-      })) as NativeAnswer<import("effect").Schema.Json>;
-    }),
+    read: (request) =>
+      Effect.gen(function* () {
+        const identity = yield* RequestIdentity;
+        const owner = owners.get(identity);
+        if (!owner) return yield* native.read(request);
+        // ReadOwner's port admits again under the captured scope, never the supplied target.
+        const readOwned = owner.native as (
+          key: string,
+          input: unknown,
+        ) => Promise<NativeAnswer<unknown>>;
+        return (yield* Effect.tryPromise({
+          try: () => readOwned(request.key, request.input),
+          catch: (error) =>
+            isDoorFailure(error)
+              ? error
+              : new InvalidRead({ message: String(error), status: 503, problem: "read.owner" }),
+        })) as NativeAnswer<import("effect").Schema.Json>;
+      }),
   };
   return { readOwnership, nativeRead };
 }
@@ -152,13 +166,15 @@ export function commandResources(
             pod = runPods(deps, readMemberPod(dependency.probe.pod, ctx, true));
             pods?.set(dependency.probe.pod, pod);
           }
-          return pod.then((admitted) => runPods(deps, readMember(dependency.probe, ctx, admitted))).then(
-            (value) => value.sha256,
-            (error: { statusCode?: number }) => {
-              if (error.statusCode === 404) return null;
-              throw error;
-            },
-          );
+          return pod
+            .then((admitted) => runPods(deps, readMember(dependency.probe, ctx, admitted)))
+            .then(
+              (value) => value.sha256,
+              (error: { statusCode?: number }) => {
+                if (error.statusCode === 404) return null;
+                throw error;
+              },
+            );
         }
         case "document-mark":
           if ("sealed" in dependency.probe)
@@ -173,13 +189,16 @@ export function commandResources(
           // start and must still be connected, is the proof. A missing moment is the strongest reading.
           const sdkProof = moment === undefined || moment === "admit" || moment === "dispatch";
           const target = dependency.probe.target;
-          const readProcess = (signal?: AbortSignal) => readOriginalProcess(
-            dependency.probe.process.pid,
-            Date.parse(dependency.probe.process.processStartUtc),
-            signal ? (args) => (deps.sdk ?? readSdk)(args, signal) : deps.sdk,
-          );
+          const readProcess = (signal?: AbortSignal) =>
+            readOriginalProcess(
+              dependency.probe.process.pid,
+              Date.parse(dependency.probe.process.processStartUtc),
+              signal ? (args) => (deps.sdk ?? readSdk)(args, signal) : deps.sdk,
+            );
           const actual = sdkProof
-            ? await (target.kind === "sdk-session" ? withinLifecycleCensus(readProcess) : readProcess())
+            ? await (target.kind === "sdk-session"
+                ? withinLifecycleCensus(readProcess)
+                : readProcess())
             : dependency.probe.process;
           if (target.kind === "document" || target.kind === "session") {
             const id = target.kind === "document" ? target.ref.session : target.session;
@@ -202,7 +221,8 @@ export function commandResources(
             if (!session.documents) throw Error("SDK document census unavailable");
             return session.documents.map((doc) => doc.openId).sort();
           }
-          const session = await runPods(deps,
+          const session = await runPods(
+            deps,
             SdkSession.resolve(bridge, { session: dependency.probe.session }),
           );
           if (!session.state) throw Error("Document census unavailable");

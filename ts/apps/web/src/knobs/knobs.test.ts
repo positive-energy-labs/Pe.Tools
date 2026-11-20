@@ -11,7 +11,7 @@ import {
   resetKnob,
   set,
   setKnob,
-} from "./knobs";
+} from "@pe/web-kernel/knobs/knobs";
 
 afterEach(() => {
   resetKnob();

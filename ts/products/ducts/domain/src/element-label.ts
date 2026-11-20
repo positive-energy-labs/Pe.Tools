@@ -6,7 +6,8 @@ import type { DuctSnapshot } from "./types.ts";
  * twins are told apart by level, system, then snapshot order, never by a key. Total: an id the snapshot
  * does not hold still reads as words.
  */
-export function elementLabeler(snapshot: Pick<DuctSnapshot, "nodes" | "segments">& Partial<Pick<DuctSnapshot, "levels">>,
+export function elementLabeler(
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments"> & Partial<Pick<DuctSnapshot, "levels">>,
   options?: { unique: boolean },
 ) {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
@@ -65,7 +66,7 @@ export function elementLabeler(snapshot: Pick<DuctSnapshot, "nodes" | "segments"
       .map((f) => {
         const value = f(element);
         return value && twins.every((e) => e.id === id || f(e) !== value) ? value : null;
-      } )
+      })
       .find(Boolean);
     return place
       ? `${label} · ${place}`

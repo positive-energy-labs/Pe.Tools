@@ -45,18 +45,31 @@ test("a homes write lands in state homes.json, re-resolves before answering, and
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({ firm });
 
     // The declared doors: GET answers the status, a refused PUT is a 400 whose message the web client reads.
-    const routes = createPeRoutes({ registrations: [], store: { getState: async () => null, setState: async () => {} } as never });
+    const routes = createPeRoutes({
+      registrations: [],
+      store: { getState: async () => null, setState: async () => {} } as never,
+    });
     const read = await routes.fetch(new Request("http://local/pe/homes"));
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual(marked);
-    const refused = await routes.fetch(new Request("http://local/pe/homes", {
-      method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ firm: "relative" }),
-    }));
+    const refused = await routes.fetch(
+      new Request("http://local/pe/homes", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ firm: "relative" }),
+      }),
+    );
     expect(refused.status).toBe(400);
-    expect(((await refused.json()) as { error: { message: string } }).error.message).toContain("absolute path");
-    const cleared = await routes.fetch(new Request("http://local/pe/homes", {
-      method: "PUT", headers: { "content-type": "application/json" }, body: "{}",
-    }));
+    expect(((await refused.json()) as { error: { message: string } }).error.message).toContain(
+      "absolute path",
+    );
+    const cleared = await routes.fetch(
+      new Request("http://local/pe/homes", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    );
     expect(cleared.status).toBe(200);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({});
   } finally {

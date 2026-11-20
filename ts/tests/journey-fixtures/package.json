@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@pe/ducts-contract": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
     "@pe/fans-contract": "workspace:*"
   },
   "devDependencies": {
     "@pe/agent-contracts": "workspace:*",
     "@pe/browser": "workspace:*",
-    "@pe/ducts-host": "workspace:*",
-    "@pe/ducts-domain": "workspace:*",
     "@pe/duct-systems-web": "workspace:*",
+    "@pe/ducts-domain": "workspace:*",
+    "@pe/ducts-host": "workspace:*",
     "vite-plus": "catalog:"
   }
 }

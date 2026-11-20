@@ -95,7 +95,8 @@ export function loadLedger(storage: Store): NoticeLedger {
 export function saveLedger(storage: Store, ledger: NoticeLedger) {
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(ledger));
-  } catch (error) { console.warn("ts/apps/web/src/machine/notice-policy.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/machine/notice-policy.ts: fallback after failure", error);
     /* Storage can be unavailable or full: the ledger then lasts for this page only. */
   }
 }
@@ -103,7 +104,9 @@ export function saveLedger(storage: Store, ledger: NoticeLedger) {
 /** A follower's record of the last feed it saw (`notice-follow.ts`); unreadable is a first follow. */
 export function loadSeen(storage: Store, key: string): Readonly<Record<string, number>> | null {
   try {
-    const parsed = z.record(z.string(), z.number()).safeParse(JSON.parse(storage.getItem(key) ?? "null"));
+    const parsed = z
+      .record(z.string(), z.number())
+      .safeParse(JSON.parse(storage.getItem(key) ?? "null"));
     return parsed.success ? parsed.data : null;
   } catch {
     return null;

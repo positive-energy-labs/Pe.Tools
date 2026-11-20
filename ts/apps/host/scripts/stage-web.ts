@@ -26,12 +26,16 @@ const { PAGE_LIBRARY_SOURCES } = await createJiti(import.meta.url).import<
   typeof import("../src/page-library-sources.ts")
 >("../src/page-library-sources.ts");
 for (const [name, source] of Object.entries(PAGE_LIBRARY_SOURCES)) {
-  const from = fileURLToPath(new URL(source, new URL("../src/page-library-sources.ts", import.meta.url)));
+  const from = fileURLToPath(
+    new URL(source, new URL("../src/page-library-sources.ts", import.meta.url)),
+  );
   const to = join(pages, name);
   mkdirSync(dirname(to), { recursive: true });
   // A kit built outside NODE_ENV=production calls jsxDEV, which production React lacks: no kit component would draw.
   if (name === "kit/pe-kit.js" && readFileSync(from, "utf8").includes("jsxDEV"))
-    throw Error(`${from} is a development build (jsxDEV); rebuild @pe/kit with NODE_ENV=production`);
+    throw Error(
+      `${from} is a development build (jsxDEV); rebuild @pe/kit with NODE_ENV=production`,
+    );
   cpSync(from, to);
 }
 console.log(`staged page assets -> ${pages}`);

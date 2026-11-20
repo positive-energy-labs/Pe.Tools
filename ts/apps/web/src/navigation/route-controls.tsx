@@ -55,10 +55,13 @@ export function useHasBand() {
   return useContext(Context)?.band != null;
 }
 export function RouteBand({ route, children }: { route: string; children: ReactNode }) {
-  const shell = useContext(Context), dock = useContext(DockBand);
+  const shell = useContext(Context),
+    dock = useContext(DockBand);
   const primary = useIsPrimaryRoute(route);
   const target = dock ? dock.node : primary ? shell?.band : null;
-  const [host] = useState(() => typeof document === "undefined" ? null : document.createElement("div"));
+  const [host] = useState(() =>
+    typeof document === "undefined" ? null : document.createElement("div"),
+  );
   useLayoutEffect(() => {
     if (!target || !host) return;
     host.className = "contents";
@@ -108,7 +111,8 @@ export function RouteControlsProvider({ children }: { children: ReactNode }) {
   return (
     <Context
       value={{
-        band, setBand,
+        band,
+        setBand,
         elements,
         setElement,
         owners,

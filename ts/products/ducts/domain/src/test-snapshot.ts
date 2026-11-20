@@ -127,8 +127,19 @@ export const slots: DuctSnapshot["slots"] = {
   terminalFlow: "PE_M_Grd_AirFlow",
 };
 
-export const storeOf = (over: Partial<NonNullable<DuctSnapshot["store"]>> = {}): NonNullable<DuctSnapshot["store"]> => ({
-  version: 2, workRevision: 0, rules: {}, instances: {}, terminals: {}, terminalFlows: {}, equipmentFlows: {}, verdicts: {}, roles: {}, ...over,
+export const storeOf = (
+  over: Partial<NonNullable<DuctSnapshot["store"]>> = {},
+): NonNullable<DuctSnapshot["store"]> => ({
+  version: 2,
+  workRevision: 0,
+  rules: {},
+  instances: {},
+  terminals: {},
+  terminalFlows: {},
+  equipmentFlows: {},
+  verdicts: {},
+  roles: {},
+  ...over,
 });
 
 export const snapshotOf = (over: Partial<DuctSnapshot> = {}): DuctSnapshot => ({

@@ -4,10 +4,12 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { HealPlan } from "@pe/ducts-domain/heal";
 import { healSystems, healWords, networkWord, outcomeWords } from "@pe/ducts-domain/words";
 type ReviewEvidence = {
-  readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan,"groups">> | null;
+  readonly heal?: import("@pe/agent-contracts").Immutable<Pick<HealPlan, "groups">> | null;
   readonly page?: { readonly stage?: "network" | "calc" };
   readonly work?:
-    | import("@pe/agent-contracts").Immutable<import("@pe/ducts-contract/system-work").DuctsRouteDocument>
+    | import("@pe/agent-contracts").Immutable<
+        import("@pe/ducts-contract/system-work").DuctsRouteDocument
+      >
     | null;
   readonly readings: {
     readonly ducts?: { readonly value?: unknown };
@@ -32,19 +34,36 @@ const snapshotOf = (scope: ReviewEvidence) =>
     : scope.readings.ducts?.value) as DuctSnapshot | undefined;
 
 export function presentHeal(result: unknown, scope: ReviewEvidence) {
-  const native = responseOf<DuctsHeal.Res.Response & {
-    derivedRequest?: DuctsHeal.Req.Request;
-  }>(result);
+  const native = responseOf<
+    DuctsHeal.Res.Response & {
+      derivedRequest?: DuctsHeal.Req.Request;
+    }
+  >(result);
   const request = native.derivedRequest;
   const sealed = native.previewOnly && !native.groups ? request : undefined;
   const groups = sealed?.groups.map((group) => ({
-    group: group.group, outcome: "planned", systemsBefore: [], systemsAfter: [],
-    items: (group.items ?? []).map((item) => ({ ...item, outcome: "planned", created: [], replaced: [] })),
+    group: group.group,
+    outcome: "planned",
+    systemsBefore: [],
+    systemsAfter: [],
+    items: (group.items ?? []).map((item) => ({
+      ...item,
+      outcome: "planned",
+      created: [],
+      replaced: [],
+    })),
   }));
-  const response: DuctsHeal.Res.Response = groups ? {
-    previewOnly: true, groups,
-    counts: { planned: groups.reduce((count, group) => count + group.items.length, 0), healed: 0, refused: 0 },
-  } : native;
+  const response: DuctsHeal.Res.Response = groups
+    ? {
+        previewOnly: true,
+        groups,
+        counts: {
+          planned: groups.reduce((count, group) => count + group.items.length, 0),
+          healed: 0,
+          refused: 0,
+        },
+      }
+    : native;
   const snapshot = snapshotOf(scope);
   const name = snapshot ? subjectNamer(snapshot) : () => null;
   const plan = scope.heal ?? null;
@@ -53,7 +72,9 @@ export function presentHeal(result: unknown, scope: ReviewEvidence) {
       const proposed = plan?.groups
         .find((g) => g.group === group.group)
         ?.items.find((i) => i.key === item.key);
-      const requested = sealed?.groups.find((g) => g.group === group.group)?.items?.find((i) => i.key === item.key);
+      const requested = sealed?.groups
+        .find((g) => g.group === group.group)
+        ?.items?.find((i) => i.key === item.key);
       return {
         key: item.key,
         end: requested?.end ?? proposed?.end ?? item.key.replace(/^(cap|join):/, "").split("|")[0]!,
@@ -152,7 +173,9 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
   const response = responseOf<DuctsApply.Res.Response>(result);
   const envelope = result as {
     derivedRequest?: import("@pe/duct-systems-contract/ducts").DuctsApplyInput;
-    receipt?: { result?: { derivedRequest?: import("@pe/duct-systems-contract/ducts").DuctsApplyInput } };
+    receipt?: {
+      result?: { derivedRequest?: import("@pe/duct-systems-contract/ducts").DuctsApplyInput };
+    };
   };
   const request = envelope.derivedRequest ?? envelope.receipt?.result?.derivedRequest;
   const snapshot =
@@ -184,7 +207,10 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
             : write.kind === "terminal"
               ? slots.terminalDrop
               : write.kind === "terminal-flow"
-                ? proposed && "slot" in proposed ? proposed.slot : slots.terminalFlow: write.kind === "fitting"
+                ? proposed && "slot" in proposed
+                  ? proposed.slot
+                  : slots.terminalFlow
+                : write.kind === "fitting"
                   ? "Loss Method"
                   : proposed && "slot" in proposed
                     ? proposed.slot
@@ -242,25 +268,39 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     }
     // Write review is an audit: show a searchable id here. element-label.ts stays id-free elsewhere.
     const element = `${write.elementLabel ?? name(write.id) ?? "element"} · ${write.id}`;
-    const group = write.kind === "component" &&
+    const group =
+      write.kind === "component" &&
       !scope.readings.fansWork?.value?.componentDrops?.[fanSubject(scope, write.id) ?? ""]?.edit
-        ? "Computed losses written back" : "Your edits";
-    const changes = write.changes?.length ? write.changes : [{
-      parameter: write.parameter ?? slot ?? write.kind, before: write.before, after: write.after ?? next,
-    }];
+        ? "Computed losses written back"
+        : "Your edits";
+    const changes = write.changes?.length
+      ? write.changes
+      : [
+          {
+            parameter: write.parameter ?? slot ?? write.kind,
+            before: write.before,
+            after: write.after ?? next,
+          },
+        ];
     return changes.map((change, index) => {
       const label = `${element} · ${change.parameter}${write.scope ? ` (${write.scope})` : ""}`;
-      const reported = change.parameter === "Specific Loss" && write.reportedPressureDropInWg != null
-        ? ` (reported effective pressure: ${write.reportedPressureDropInWg} in-wg)` : "";
+      const reported =
+        change.parameter === "Specific Loss" && write.reportedPressureDropInWg != null
+          ? ` (reported effective pressure: ${write.reportedPressureDropInWg} in-wg)`
+          : "";
       const before = change.before == null ? null : `${spoken(change.before)}${reported}`;
       const after = spoken(change.after) ?? "unavailable";
-      const remedy = write.outcome === "refused" && /neither|missing|no .*parameter/i.test(write.reason ?? "")
-        ? "; add the missing parameter to the family or map to an existing writable parameter" : "";
+      const remedy =
+        write.outcome === "refused" && /neither|missing|no .*parameter/i.test(write.reason ?? "")
+          ? "; add the missing parameter to the family or map to an existing writable parameter"
+          : "";
       return {
         row: `${label}: ${before ?? "unavailable"} → ${after} · source: ${source} · ${tail}${remedy}`,
         cell: {
           key: changes.length === 1 ? key : `${key}:${index}`,
-          label, group, before,
+          label,
+          group,
+          before,
           after: `${after} · ${source} · ${tail}${remedy}`,
           author: fanAuthor(scope, write.kind, write.id!),
         },
@@ -268,11 +308,14 @@ export function presentLosses(result: unknown, scope: ReviewEvidence) {
     });
   });
   return {
-    sentence: (slots.requiredEsp === "" ? "Required ESP writes nowhere. " : "") + (response.writes.length
-      ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
-      : "Nothing to write: no native targets were derived from this Work in the selected scope."),
+    sentence:
+      (slots.requiredEsp === "" ? "Required ESP writes nowhere. " : "") +
+      (response.writes.length
+        ? `${response.writes.length} Revit target${response.writes.length === 1 ? "" : "s"}: ${outcomeWords(response)}`
+        : "Nothing to write: no native targets were derived from this Work in the selected scope."),
     rows: lines.map((line) => line.row),
-    cells: lines.map((line) => line.cell)
+    cells: lines
+      .map((line) => line.cell)
       .sort(
         (a, b) =>
           ["Your edits", "Computed losses written back", "Pe loss record"].indexOf(a.group) -
@@ -303,7 +346,9 @@ function fanAuthor(scope: ReviewEvidence, kind: string, id: number): "pea" | "hu
 
 function fanSubject(scope: ReviewEvidence, id: number) {
   const snapshot = snapshotOf(scope);
-  const element = [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].find(e => e.id === id);
+  const element = [...(snapshot?.nodes ?? []), ...(snapshot?.segments ?? [])].find(
+    (e) => e.id === id,
+  );
   return element ? elementSubject(element) : null;
 }
 
@@ -312,13 +357,16 @@ export const fanWords = (response: DuctsAssignFan.Res.Response) =>
     ? `refused: ${response.reason ?? "refused"}`
     : (response.check ?? response.outcome);
 export function presentFan(result: unknown, scope: ReviewEvidence) {
-  const native = responseOf<DuctsAssignFan.Res.Response & {
-    derivedRequest?: DuctsAssignFan.Req.Request;
-  }>(result);
+  const native = responseOf<
+    DuctsAssignFan.Res.Response & {
+      derivedRequest?: DuctsAssignFan.Req.Request;
+    }
+  >(result);
   const request = native.derivedRequest;
-  const response = native.previewOnly && native.systemId == null && request
-    ? { ...request, previewOnly: true, outcome: "planned" }
-    : native;
+  const response =
+    native.previewOnly && native.systemId == null && request
+      ? { ...request, previewOnly: true, outcome: "planned" }
+      : native;
   const snapshot = snapshotOf(scope);
   const system = snapshot?.systems.find((s) => s.id === response.systemId)?.name ?? "Duct system";
   const unit = snapshot ? subjectNamer(snapshot)(response.unitId) : null;

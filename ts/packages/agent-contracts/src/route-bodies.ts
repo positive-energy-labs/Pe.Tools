@@ -11,7 +11,7 @@ import {
 } from "./route-kernel-data.ts";
 import type { SchemaTable } from "./route-kernel-page.ts";
 import { routeWorkSubject } from "./route-work-subject.ts";
-import { commands, isWritePreviewKey } from "./semantic-actions.ts";
+import { builtinCommands, isWritePreviewKey } from "./semantic-actions.ts";
 
 const fn = z.custom<(...args: unknown[]) => unknown>((value) => typeof value === "function");
 const schema = z.custom<z.ZodType>((value) => value instanceof z.ZodType);
@@ -171,13 +171,19 @@ export function linkRouteBodies(
   const list = (table: object, ids: readonly string[], path: string, kind: string) =>
     ids.forEach((id, i) => reference(table, id, `${path}.${i}`, kind));
   if (
-    Object.values(data.fields).filter((f) => f.role === "subject").length !== (data.subject ? 1 : 0) ||
+    Object.values(data.fields).filter((f) => f.role === "subject").length !==
+      (data.subject ? 1 : 0) ||
     (data.subject && data.fields[data.subject!.field]?.role !== "subject")
   )
-    fail("subject.field", data.subject?.field ?? "", "declared subject field", "Subject fields must match the subject declaration");
+    fail(
+      "subject.field",
+      data.subject?.field ?? "",
+      "declared subject field",
+      "Subject fields must match the subject declaration",
+    );
   if (Object.values(data.fields).filter((f) => f.role === "selection").length !== 1)
     fail("fields", "", "one selection field", "Declare exactly one selection");
-  if(data.subject) {
+  if (data.subject) {
     reference(data.panes, data.subject!.pane, "subject.pane", "pane");
     reference(data.readings, data.subject!.roster, "subject.roster", "reading");
     reference(data.readings, data.subject!.detail, "subject.detail", "reading");
@@ -497,9 +503,10 @@ export function linkRouteBodies(
   if (data.work?.adopt) {
     const id = data.work.adopt;
     const verb = data.verbs[id];
+    // Automatic adoption is a built-in privilege: extension entries cannot grant it to themselves.
     const command: Command | undefined =
-      verb?.kind === "command" && Object.hasOwn(commands, verb.entry)
-        ? commands[verb.entry as keyof typeof commands]
+      verb?.kind === "command" && Object.hasOwn(builtinCommands, verb.entry)
+        ? builtinCommands[verb.entry as keyof typeof builtinCommands]
         : undefined;
     const reachesModelWrite = (key: string, seen = new Set<string>()): boolean => {
       if (seen.has(key)) return false;
@@ -548,12 +555,18 @@ export function linkRouteBodies(
     if (node.kind === "pane") reference(data.panes, node.id, `${path}.id`, "pane");
     else if (node.kind === "gate") {
       if (node.when === "subject") {
-        if (!data.subject) fail(`${path}.when`, "subject", "subject declaration", "Subject gate requires a subject");
+        if (!data.subject)
+          fail(`${path}.when`, "subject", "subject declaration", "Subject gate requires a subject");
       } else {
         const field = data.fields[node.when.field];
         const schema = field && "schema" in field ? bindings.schemas[field.schema] : undefined;
         if (!schema?.safeParse(node.when.value).success)
-          fail(`${path}.when`, node.when.field, "declared field value", "Gate must name a field and a value accepted by its schema");
+          fail(
+            `${path}.when`,
+            node.when.field,
+            "declared field value",
+            "Gate must name a field and a value accepted by its schema",
+          );
       }
       layout(node.child, `${path}.child`);
     } else {

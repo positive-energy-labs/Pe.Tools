@@ -11,7 +11,8 @@ import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
 import { memberWork, settingsRouteState, type Caller, type WorkKey } from "@pe/agent-contracts";
 import { type ActionJournal } from "../src/action-journal.ts";
-import { RevitBridge, RevitBridgeLive } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { bindControl, currentCaller, workAuthorOf } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
@@ -55,7 +56,8 @@ test.each([
       await writeFile(join(directory, "design", "pod.json"), JSON.stringify({ id: "design" }));
       const original = '{"width":1}';
       await writeFile(file, original);
-      const work = new RouteWorkspace({ publicationAuthor: () => "human",
+      const work = new RouteWorkspace({
+        publicationAuthor: () => "human",
         registrations: [{ spec: settingsRouteState }],
         store: fileRouteDocumentStore(stateFixture(workDir)),
       });
@@ -86,12 +88,8 @@ test.each([
         observed.revision,
       );
       if (!staged.ok) throw Error(JSON.stringify(staged));
-      bindCommandRuntime(
-        owner,
-        bridge,
-        captures,
-        { workspace: work, podsRoot: directory },
-        () => Effect.fail(Error("settings.write owns its writer")),
+      bindCommandRuntime(owner, bridge, captures, { workspace: work, podsRoot: directory }, () =>
+        Effect.fail(Error("settings.write owns its writer")),
       );
       let crashBytes: Buffer | undefined;
       let workBytes: Array<readonly [string, Buffer]> = [];
@@ -131,7 +129,8 @@ test.each([
       }
       // The production author, as pe-routes builds it: the retirement must carry a real caller,
       // because boot's reconcile runs outside any request.
-      const restoredWork = new RouteWorkspace({ publicationAuthor: () => workAuthorOf(currentCaller()),
+      const restoredWork = new RouteWorkspace({
+        publicationAuthor: () => workAuthorOf(currentCaller()),
         registrations: [{ spec: settingsRouteState }],
         store: fileRouteDocumentStore(stateFixture(workDir)),
       });
@@ -158,12 +157,19 @@ test.each([
       // Boot finishes the interrupted row by itself: its steps all answered and succeeded, so it
       // retires its Work with no SDK read and no person pressing anything (K1b).
       const recovered = crash
-        ? await vi.waitFor(async () => {
-            const row = (await restarted!.list(undefined, "once"))[0]!;
-            expect(row.steps.at(-1)).toMatchObject({ kind: "publication", key: "work.retire", state: "succeeded" });
-            expect(row.state).not.toBe("running");
-            return row;
-          }, { timeout: 10_000 })
+        ? await vi.waitFor(
+            async () => {
+              const row = (await restarted!.list(undefined, "once"))[0]!;
+              expect(row.steps.at(-1)).toMatchObject({
+                kind: "publication",
+                key: "work.retire",
+                state: "succeeded",
+              });
+              expect(row.state).not.toBe("running");
+              return row;
+            },
+            { timeout: 10_000 },
+          )
         : (await restarted.list(undefined, "once"))[0]!;
       expect(recovered.state).toBe(crash ? "incomplete" : "succeeded");
       if (crash) {
@@ -185,10 +191,17 @@ test.each([
       const settledBytes = await readFile(path);
       for (let boot = 0; boot < 2; boot++) {
         restarted = journalAt(path, Date.now);
-        bindCommandRuntime(restarted, bridge, captures, { workspace: restoredWork, podsRoot: directory },
-          () => Effect.fail(Error("settings.write owns its writer")));
+        bindCommandRuntime(
+          restarted,
+          bridge,
+          captures,
+          { workspace: restoredWork, podsRoot: directory },
+          () => Effect.fail(Error("settings.write owns its writer")),
+        );
         await restarted.reconcile();
-        expect((await restarted.list(undefined, "once"))[0]!.state).toBe(crash ? "incomplete" : "succeeded");
+        expect((await restarted.list(undefined, "once"))[0]!.state).toBe(
+          crash ? "incomplete" : "succeeded",
+        );
         await restarted.close();
         expect(await readFile(path)).toEqual(settledBytes);
       }

@@ -54,7 +54,11 @@ export const withComputed = (roster: readonly FanPort[], computed: readonly FanP
 
 /** Mark is a display label; a fan port is the SubjectRef `UniqueId:<unit>#port:<n>` (ADR 0035 rule 2). */
 export const stableFanKey = (fan: { uniqueId: string; portIndex: number }): SubjectRefCode =>
-  subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(fan.uniqueId), sub: { port: fan.portIndex } });
+  subjectCode({
+    keyKind: "UniqueId",
+    key: uniqueIdSchema.parse(fan.uniqueId),
+    sub: { port: fan.portIndex },
+  });
 
 export function selectedFans<T extends { uniqueId: string; portIndex: number }>(
   keys: string[] | "all",
@@ -70,8 +74,9 @@ export function selectedFans<T extends { uniqueId: string; portIndex: number }>(
   });
 }
 
-type Labelled = { mark: string; uniqueId: string; portIndex: number } &
-  Partial<Pick<FanPort, "level" | "system">>;
+type Labelled = { mark: string; uniqueId: string; portIndex: number } & Partial<
+  Pick<FanPort, "level" | "system">
+>;
 /** A duplicate mark is told apart by where it is (level, then system), else by its order; never by its key. */
 export const fanLabel = (fan: Labelled, rows: readonly Labelled[]) => {
   const twins = rows.filter((row) => row.mark === fan.mark && row.uniqueId !== fan.uniqueId);

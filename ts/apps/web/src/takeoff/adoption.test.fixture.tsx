@@ -1,5 +1,5 @@
-import { refusalOf } from "../route/typed-route";
-﻿import { useSyncExternalStore } from "react";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
+import { useSyncExternalStore } from "react";
 import { cleanup, waitFor } from "@testing-library/react";
 import { expect } from "vite-plus/test";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
@@ -17,14 +17,22 @@ import { createWorkFeedClient } from "../shell/work-feed-client";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { completion } from "../shell/work-door-observation";
 import { mountTypedRoute, type TypedMount } from "../shell/typed-mount";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { routeRegistry } from "../route/registry";
 import { module, viewCatalogue } from "./route";
 import { AdoptionBody } from "./typed-adoption";
 import { module as familiesModule } from "../families/route";
 
 // Real HTTP read graph, disk captures and Work. Only the native boundary and router are recorded.
-export async function journey(options: { unreadable?: { elementId: number | null; parameter: string; reason: string }[]; catalogue?: ReturnType<typeof gate>; snapshot?: ReturnType<typeof gate>; start?: boolean; route?: "families" } = {}) {
+export async function journey(
+  options: {
+    unreadable?: { elementId: number | null; parameter: string; reason: string }[];
+    catalogue?: ReturnType<typeof gate>;
+    snapshot?: ReturnType<typeof gate>;
+    start?: boolean;
+    route?: "families";
+  } = {},
+) {
   const selectedModule = options.route === "families" ? familiesModule : module;
   let carriers = "needs-initialization";
   let catalogueState: "views" | "empty" | "failed" = "views";
@@ -32,7 +40,7 @@ export async function journey(options: { unreadable?: { elementId: number | null
   const nativeCalls: { key: string; input: unknown }[] = [];
   const nativeScopes: unknown[] = [];
   const actions: { key: string; input: Record<string, unknown> }[] = [];
-  bindControl({runs:testRegistry(), acquired:() => null});
+  bindControl({ runs: testRegistry(), acquired: () => null });
   const host = await fixture(true, {
     actions: true,
     inventory: {
@@ -42,7 +50,14 @@ export async function journey(options: { unreadable?: { elementId: number | null
           connected: true,
           openDocumentCount: 1,
           openDocuments: [
-            { ...ref, title: "Chadds", address: path, isActive: true, isFamilyDocument: false, projectHome: null },
+            {
+              ...ref,
+              title: "Chadds",
+              address: path,
+              isActive: true,
+              isFamilyDocument: false,
+              projectHome: null,
+            },
           ],
         },
       ],
@@ -57,8 +72,25 @@ export async function journey(options: { unreadable?: { elementId: number | null
           catalogueHold = undefined;
         }
         return {
-          summary: { totalFamilies: 1, placedFamilies: 0, unplacedFamilies: 1, totalTypes: 1, totalPlacedInstances: 0, truncated: false },
-          families: [{ familyId: 1, familyUniqueId: "air-tag", familyName: "Air Terminal Tag", categoryName: "Air Terminal Tags", typeCount: 1, placedInstanceCount: 0, types: [{ typeName: "Standard" }] }],
+          summary: {
+            totalFamilies: 1,
+            placedFamilies: 0,
+            unplacedFamilies: 1,
+            totalTypes: 1,
+            totalPlacedInstances: 0,
+            truncated: false,
+          },
+          families: [
+            {
+              familyId: 1,
+              familyUniqueId: "air-tag",
+              familyName: "Air Terminal Tag",
+              categoryName: "Air Terminal Tags",
+              typeCount: 1,
+              placedInstanceCount: 0,
+              types: [{ typeName: "Standard" }],
+            },
+          ],
           issues: [],
         };
       }
@@ -69,7 +101,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
           await hold.release.promise;
           if (catalogueHold === hold) catalogueHold = undefined;
         }
-        if (catalogueState === "failed") throw Error("View catalogue refused: project index unavailable");
+        if (catalogueState === "failed")
+          throw Error("View catalogue refused: project index unavailable");
         return {
           summary: {
             levelCount: 0,
@@ -87,20 +120,28 @@ export async function journey(options: { unreadable?: { elementId: number | null
           families: [],
           browserOrganizations: [],
           issues: [],
-          views: catalogueState === "empty" ? [] : [
-            {
-              handle: { kind: "View", documentKey: path, elementId: 11, label: "Zoning plan" },
-              name: "Zoning plan",
-              viewType: "FloorPlan",
-              levelName: "Level 1",
-              isTemplate: false,
-              canBePrinted: true,
-              isPlacedOnSheet: false,
-              sheetHandles: [],
-              browserPaths: [],
-              provenance: [],
-            },
-          ],
+          views:
+            catalogueState === "empty"
+              ? []
+              : [
+                  {
+                    handle: {
+                      kind: "View",
+                      documentKey: path,
+                      elementId: 11,
+                      label: "Zoning plan",
+                    },
+                    name: "Zoning plan",
+                    viewType: "FloorPlan",
+                    levelName: "Level 1",
+                    isTemplate: false,
+                    canBePrinted: true,
+                    isPlacedOnSheet: false,
+                    sheetHandles: [],
+                    browserPaths: [],
+                    provenance: [],
+                  },
+                ],
         };
       }
       if (input.key === "takeoffs.snapshot") {
@@ -113,9 +154,17 @@ export async function journey(options: { unreadable?: { elementId: number | null
           snapshot: {
             status: {
               systems: [],
-              carriers: { stage: "Adoption", status: carriers,
-                missingCarrierGuids: carriers === "needs-initialization"
-                  ? ["00000000-0000-4000-8000-000000000001", "00000000-0000-4000-8000-000000000002"] : [] },
+              carriers: {
+                stage: "Adoption",
+                status: carriers,
+                missingCarrierGuids:
+                  carriers === "needs-initialization"
+                    ? [
+                        "00000000-0000-4000-8000-000000000001",
+                        "00000000-0000-4000-8000-000000000002",
+                      ]
+                    : [],
+              },
             },
             unreadable: options.unreadable ?? [],
             zoneFrs: [],
@@ -154,7 +203,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
   const source = (read: string): UseSource => ({
     kind: "use",
     open(ctx, deliver) {
-      let closed = false, version = 0;
+      let closed = false,
+        version = 0;
       const refresh = () => {
         const mine = ++version;
         const stamp = ++generation;
@@ -162,7 +212,10 @@ export async function journey(options: { unreadable?: { elementId: number | null
         const task = host
           .probe({
             read,
-            args: { ...(ctx.args as object), target: options.route === "families" ? ref : { kind: "document", ref } },
+            args: {
+              ...(ctx.args as object),
+              target: options.route === "families" ? ref : { kind: "document", ref },
+            },
             subscription: `takeoffs-${stamp}`,
             generation: stamp,
           })
@@ -173,7 +226,8 @@ export async function journey(options: { unreadable?: { elementId: number | null
               deliver({ kind: "complete", value: packet, revision: stamp });
           })
           .catch((error) => {
-            if (!closed && !ctx.signal.aborted && mine === version) deliver({ kind: "failure", error });
+            if (!closed && !ctx.signal.aborted && mine === version)
+              deliver({ kind: "failure", error });
           });
         pending.add(task);
         void task.finally(() => pending.delete(task));
@@ -188,16 +242,22 @@ export async function journey(options: { unreadable?: { elementId: number | null
   });
   const first = host.probe({
     read: options.route === "families" ? "families.view" : "takeoffs.adoption",
-    args: options.route === "families" ? { target: ref } : { views: [], zones: [], work: "", target: { kind: "document", ref } },
+    args:
+      options.route === "families"
+        ? { target: ref }
+        : { views: [], zones: [], work: "", target: { kind: "document", ref } },
     subscription: "setup",
     generation: 0,
   });
   pending.add(first);
   void first.finally(() => pending.delete(first));
-  if (options.catalogue) await Promise.race([
-    options.catalogue.entered.promise,
-    first.then(async response => { throw Error(`Read finished before the catalogue hold: ${await response.text()}`); }),
-  ]);
+  if (options.catalogue)
+    await Promise.race([
+      options.catalogue.entered.promise,
+      first.then(async (response) => {
+        throw Error(`Read finished before the catalogue hold: ${await response.text()}`);
+      }),
+    ]);
   else {
     const response = await first;
     expect(response.status, await response.clone().text()).toBe(200);
@@ -206,8 +266,13 @@ export async function journey(options: { unreadable?: { elementId: number | null
   const streams = new Set<() => void>();
   const readings: Readings = {
     subscribe(reading, deliver) {
-      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined, closed = false;
-      const stop = () => { closed = true; void reader?.cancel(); streams.delete(stop); };
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined,
+        closed = false;
+      const stop = () => {
+        closed = true;
+        void reader?.cancel();
+        streams.delete(stop);
+      };
       streams.add(stop);
       void (async () => {
         const url = new URL(peRouteUrl("resources.stream", {}), "http://host");
@@ -223,30 +288,38 @@ export async function journey(options: { unreadable?: { elementId: number | null
           buffer += decoder.decode(chunk.value, { stream: true });
           let end: number;
           while ((end = buffer.indexOf("\n\n")) >= 0) {
-            const frame = buffer.slice(0, end); buffer = buffer.slice(end + 2);
-            for (const line of frame.split("\n")) if (line.startsWith("data: ")) { deliver(JSON.parse(line.slice(6))); }
+            const frame = buffer.slice(0, end);
+            buffer = buffer.slice(end + 2);
+            for (const line of frame.split("\n"))
+              if (line.startsWith("data: ")) {
+                deliver(JSON.parse(line.slice(6)));
+              }
           }
         }
       })();
       return stop;
-    }, dirty() {},
-  };
-  const feed = createWorkFeedClient(
-    readings,
-    {
-      write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
-      submit: async command => {
-        const response = await host.request(new Request("http://host/actions", {method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify(command)}));
-        expect([200,202],await response.clone().text()).toContain(response.status);
-        await host.journal.wait(command.id);
-        return actionReceiptSchema.parse((await host.journal.list(undefined,command.id))[0]);
-      },
     },
-  );
+    dirty() {},
+  };
+  const feed = createWorkFeedClient(readings, {
+    write: (key, write) => host.workspace.write(key, key.route, "human", write, async () => []),
+    submit: async (command) => {
+      const response = await host.request(
+        new Request("http://host/actions", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(command),
+        }),
+      );
+      expect([200, 202], await response.clone().text()).toContain(response.status);
+      await host.journal.wait(command.id);
+      return actionReceiptSchema.parse((await host.journal.list(undefined, command.id))[0]);
+    },
+  });
   const work: WorkJournalDoor = {
     ...feed,
     submit(command) {
-      if(command.key === "work.start") return feed.submit(command);
+      if (command.key === "work.start") return feed.submit(command);
       actions.push({ key: command.key, input: command.input });
       if (command.key === "takeoffs.initialize") carriers = "ready";
       const result =
@@ -296,7 +369,15 @@ export async function journey(options: { unreadable?: { elementId: number | null
       },
     },
     routeRegistry[options.route ?? "takeoffs"]!.fingerprint,
-    { work, timeline: fixtureTimeline(host.workspace), sources: { "takeoffs.adoption": source("takeoffs.adoption"), "takeoffs.views": source("takeoffs.views"), "families.view": source("families.view") } },
+    {
+      work,
+      timeline: fixtureTimeline(host.workspace),
+      sources: {
+        "takeoffs.adoption": source("takeoffs.adoption"),
+        "takeoffs.views": source("takeoffs.views"),
+        "families.view": source("families.view"),
+      },
+    },
   );
   const stop = mount.subscribe(() => {});
   await waitFor(() => expect(mount.startAction()).not.toBeNull());
@@ -318,7 +399,10 @@ export async function journey(options: { unreadable?: { elementId: number | null
       waitFor(
         () => {
           const value = mount.value();
-          expect(value.state === "ready", (value.state === "ready") ? "" : refusalOf(value) ?? "").toBe(true);
+          expect(
+            value.state === "ready",
+            value.state === "ready" ? "" : (refusalOf(value) ?? ""),
+          ).toBe(true);
           if (!options.route) expect(mount.value(viewCatalogue).state === "ready").toBe(true);
           expect(mount.workBasis()).toBeTruthy();
         },

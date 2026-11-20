@@ -159,7 +159,9 @@ test("acknowledgements and publications include reconciliation and inverse footp
   ]);
   expect(h.events.at(-1)).toMatchObject(edited.write);
   expect((await h.restore(edited.write)).doc).toEqual(h.spec.schema.parse({}));
-  const published = await actAs(human, () => h.app.workspace.publish(h.scope, h.scope.route, width(22), 2));
+  const published = await actAs(human, () =>
+    h.app.workspace.publish(h.scope, h.scope.route, width(22), 2),
+  );
   expect(published).toMatchObject({
     ok: true,
     write: { kind: "publish", press: null, patches: width(22) },
@@ -267,7 +269,12 @@ test("undo through the Timeline door is per author: pre-edit Work, a restore rev
   /** As a client presses: it sends back the step the read shows, or a step that is not there. */
   const history = async (direction: "undo" | "redo", caller: Caller = pea(), expected?: unknown) =>
     h.post(
-      { direction, works: [h.scope], expected: expected ?? (await shown(direction, caller)) ?? { work: h.scope, revision: 0, label: "" } },
+      {
+        direction,
+        works: [h.scope],
+        expected: expected ??
+          (await shown(direction, caller)) ?? { work: h.scope, revision: 0, label: "" },
+      },
       caller,
       "history",
     );
@@ -295,7 +302,10 @@ test("undo through the Timeline door is per author: pre-edit Work, a restore rev
   expect(await history("redo")).toMatchObject({ ok: false });
 
   // A raw restore meets the Timeline's admission: a person cannot restore Pea's write, and Work is unchanged.
-  expect(await h.restore(redone.write)).toMatchObject({ ok: false, error: expect.stringContaining("own next Timeline step") });
+  expect(await h.restore(redone.write)).toMatchObject({
+    ok: false,
+    error: expect.stringContaining("own next Timeline step"),
+  });
   expect(((await h.stored()) as { revision: number }).revision).toBe(4);
 
   // Undo is per author on every Work (ADR 0042): Pea's undo never takes the person's width edit.
@@ -309,12 +319,15 @@ test("undo through the Timeline door is per author: pre-edit Work, a restore rev
   expect(await history("undo", human, first)).toMatchObject({ ok: false, code: "stale_revision" });
 });
 
-
 test("wrong cell edit shape returns a concrete wrapper example and remains unchanged", async () => {
   const h = await fixture();
-  const result = await h.post({patches: [{path: ["cells", "a", "edit"], value: {value: 1050}}], expectedRevision: 0, press: "bad-cell"});
-  expect(result).toMatchObject({ok: false});
-  expect(result.hint).toContain('Cell edits wrap the typed value');
+  const result = await h.post({
+    patches: [{ path: ["cells", "a", "edit"], value: { value: 1050 } }],
+    expectedRevision: 0,
+    press: "bad-cell",
+  });
+  expect(result).toMatchObject({ ok: false });
+  expect(result.hint).toContain("Cell edits wrap the typed value");
   // Contract amendment 1: airflow is a plain number.
   expect(result.hint).toContain('{"value":1050}');
 });

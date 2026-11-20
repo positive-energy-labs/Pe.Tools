@@ -1,6 +1,6 @@
 import "../route/builtin-routes";
-import {installOpenControls} from "../machine/context";
-import {OpenControls} from "../machine/kernel";
+import { installOpenControls } from "../machine/context";
+import { OpenControls } from "../machine/kernel";
 installOpenControls(OpenControls);
 import { useRestoreTabPage } from "../route/url";
 import { useEffect, useState } from "react";
@@ -36,10 +36,11 @@ import { Button } from "@pe/kit/lang/button";
 import { RemoteDeviceGate } from "#/machine/devices";
 
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
-import { ElementMenu } from "#/revit/element-menu";
+import { ElementMenu, ElementActionSubmission } from "@pe/web-kernel/revit/element-menu";
+import { submitAction } from "@pe/mcps/actions";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
-import { useRouteActivity } from "#/route/activity";
+import { useRouteActivity } from "@pe/web-kernel/route/activity";
 import { bindActionReadings } from "#/host/resource-stream";
 
 import { startupWatch } from "#/route/startup-watch";
@@ -63,7 +64,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     shell: search.shell === "tray" || search.shell === "card" ? search.shell : undefined,
   }),
   // Resource identity crosses links; shell presentation belongs to the local surface adapter.
-  search: { middlewares: [retainSearchParams(["thread", "target", "work", "fixture", "at", "atInstance", "compare"])] },
+  search: {
+    middlewares: [
+      retainSearchParams(["thread", "target", "work", "fixture", "at", "atInstance", "compare"]),
+    ],
+  },
   head: () => ({
     meta: [
       {
@@ -94,34 +99,34 @@ export function RootComponent() {
   const shell = useRouterState({ select: (state) => state.location.search.shell });
   if (shell === "card") return <NoticeShell />;
   return (
-      <NavigationProvider>
-        <RouteControlsProvider>
-          <SettingsProvider>
-            <WorkbenchProvider>
-              <div className="flex h-dvh min-h-0 min-w-0 flex-col">
-                <AppBar />
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <NavigationProvider>
+      <RouteControlsProvider>
+        <SettingsProvider>
+          <WorkbenchProvider>
+            <div className="flex h-dvh min-h-0 min-w-0 flex-col">
+              <AppBar />
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                <div
+                  className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
+                  data-app-content
+                >
+                  <SituationPinnedControl />
                   <div
-                    className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto overscroll-none"
-                    data-app-content
+                    aria-label={SHELL_REGIONS.workspace.label}
+                    className="min-h-0 min-w-0 flex-1"
                   >
-                    <SituationPinnedControl />
-                    <div
-                      aria-label={SHELL_REGIONS.workspace.label}
-                      className="min-h-0 min-w-0 flex-1"
-                    >
-                      <RouteDock renderRoute={renderSurfaceRoute}>
-                        <SurfaceOutlet />
-                      </RouteDock>
-                    </div>
+                    <RouteDock renderRoute={renderSurfaceRoute}>
+                      <SurfaceOutlet />
+                    </RouteDock>
                   </div>
                 </div>
               </div>
-              <ElementMenu />
-            </WorkbenchProvider>
-          </SettingsProvider>
-        </RouteControlsProvider>
-      </NavigationProvider>
+            </div>
+            <ElementMenu />
+          </WorkbenchProvider>
+        </SettingsProvider>
+      </RouteControlsProvider>
+    </NavigationProvider>
   );
 }
 
@@ -144,7 +149,11 @@ function SurfaceOutlet({ children }: { children?: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3 p-3">
       <p>{appRouteByPath(pathname)?.label ?? "This tool"} opens in a full window.</p>
-      <Button kind="quiet" label="Open in full window" onClick={() => host.openFullWindow(window.location.href)}>
+      <Button
+        kind="quiet"
+        label="Open in full window"
+        onClick={() => host.openFullWindow(window.location.href)}
+      >
         Open in full window
       </Button>
     </div>
@@ -171,27 +180,29 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: startupWatch }} />
         <RegistryContext.Provider value={appAtomRegistry}>
           <PaneFaultProvider onFault={(error) => reportFault({ code: "pane.failed" }, error)}>
-            <WorkOwner owner="root" className="contents">
-              {card ? (
-                <TooltipProvider>{children}</TooltipProvider>
-              ) : (
-                <SurfaceHostProvider>
-                  <TooltipProvider>
-                    <TeachTarget value={pathname}>
-                      <TeachReference value={reference}>
-                        <RemoteDeviceGate
-                          name="Positive Energy Tools"
-                          guidance={<HelpWorld facts={reference} />}
-                        >
-                          {children}
-                          <AppUtilities />
-                        </RemoteDeviceGate>
-                      </TeachReference>
-                    </TeachTarget>
-                  </TooltipProvider>
-                </SurfaceHostProvider>
-              )}
-            </WorkOwner>
+            <ElementActionSubmission value={submitAction}>
+              <WorkOwner owner="root" className="contents">
+                {card ? (
+                  <TooltipProvider>{children}</TooltipProvider>
+                ) : (
+                  <SurfaceHostProvider>
+                    <TooltipProvider>
+                      <TeachTarget value={pathname}>
+                        <TeachReference value={reference}>
+                          <RemoteDeviceGate
+                            name="Positive Energy Tools"
+                            guidance={<HelpWorld facts={reference} />}
+                          >
+                            {children}
+                            <AppUtilities />
+                          </RemoteDeviceGate>
+                        </TeachReference>
+                      </TeachTarget>
+                    </TooltipProvider>
+                  </SurfaceHostProvider>
+                )}
+              </WorkOwner>
+            </ElementActionSubmission>
           </PaneFaultProvider>
         </RegistryContext.Provider>
         {KnobsFloater && (

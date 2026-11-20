@@ -80,11 +80,7 @@ export function ColourLaws({ owner }: { owner: (name: string) => string }) {
         </Button>
         {/* The pick mark: the feedback picker's target, veil plus ink outline over any content. */}
         <span className="relative w-fit">
-          <Button
-            label="picked for a note"
-            onClick={noop}
-            reason="Pick mark specimen"
-          >
+          <Button label="picked for a note" onClick={noop} reason="Pick mark specimen">
             picked for a note
           </Button>
           <span className="pick-mark absolute inset-0" />

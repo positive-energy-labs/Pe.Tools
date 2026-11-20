@@ -4,7 +4,8 @@ import { Clock, Context, Effect, FiberMap, Layer, Option } from "effect";
 import { NodeFileSystem, NodeHttpClient, NodePath } from "@effect/platform-node";
 import type { HttpClient } from "effect/http";
 import { receiptStampSchema, type ReceiptStamp } from "@pe/agent-contracts";
-import { ActionJournal, journalKind, type AttemptHost, type FiberOwner } from "./action-journal.ts";
+import { ActionJournal, journalKind, type FiberOwner } from "./action-journal.ts";
+import { type AttemptHost } from "@pe/host-internal/action-execution";
 import { HostLog } from "./host-log.ts";
 import { hostState, hostOwnership } from "./host-ownership.ts";
 

@@ -22,7 +22,11 @@ const oneWrite = (rung: { value?: unknown; delete?: true }) =>
 const ONE_WRITE = { error: "a rung sets a value or deletes the property: exactly one" };
 export { authorSchema, type Author } from "./author.ts";
 const CALLER_META = {
-  ref: z.string().min(1).refine(value => value.trim().length > 0, "cite a nonempty evidence ref").optional(),
+  ref: z
+    .string()
+    .min(1)
+    .refine((value) => value.trim().length > 0, "cite a nonempty evidence ref")
+    .optional(),
   at: z.string().nullable().optional(),
   base: z.number().int().nonnegative().nullable().optional(),
   note: z.string().nullish(),
@@ -43,7 +47,8 @@ const valueCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra
         .refine(oneWrite, ONE_WRITE)
         .nullish(),
     })
-    .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
+    .strict()
+    .refine((cell) => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
 const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, extra: E) =>
   z
     .object({
@@ -55,26 +60,45 @@ const deletableCell = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, e
         .refine(oneWrite, ONE_WRITE)
         .nullish(),
     })
-    .strict().refine(cell => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
+    .strict()
+    .refine((cell) => !cell.invalid || cell.edit == null, "invalid cells cannot carry an edit");
 
 /** Caller edit input: attribution belongs only to the stored cell, never to the request. */
 export function draftEditSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
-  value: V, options?: { deletable?: boolean; extend?: E },
+  value: V,
+  options?: { deletable?: boolean; extend?: E },
 ): ReturnType<typeof callerEdit<V, E>>;
 export function draftEditSchema(
-  value: z.ZodType, { deletable = false, extend = {} }: { deletable?: boolean; extend?: z.ZodRawShape } = {},
-) { return callerEdit(value, { deletable, extend }); }
-const callerEdit = <V extends z.ZodType, E extends z.ZodRawShape>(value: V, { deletable, extend }: { deletable: boolean; extend: E }) => deletable
-  ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
-  : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
+  value: z.ZodType,
+  { deletable = false, extend = {} }: { deletable?: boolean; extend?: z.ZodRawShape } = {},
+) {
+  return callerEdit(value, { deletable, extend });
+}
+const callerEdit = <V extends z.ZodType, E extends z.ZodRawShape>(
+  value: V,
+  { deletable, extend }: { deletable: boolean; extend: E },
+) =>
+  deletable
+    ? deletableRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE)
+    : valueRung(value).extend(CALLER_META).extend(extend).strict().refine(oneWrite, ONE_WRITE);
 
 /** Caller Work retains domain fields, but only the metadata admitted by draftEditSchema. */
 type CallerEdit<E> = E extends object
-  ? Omit<E, "by"> & { [K in Exclude<keyof Change, keyof z.output<ReturnType<typeof draftEditSchema>>>]?: never }
+  ? Omit<E, "by"> & {
+      [K in Exclude<keyof Change, keyof z.output<ReturnType<typeof draftEditSchema>>>]?: never;
+    }
   : E;
 export type CallerWorkValue<T> = T extends readonly unknown[]
   ? { [K in keyof T]: CallerWorkValue<T[K]> }
-  : T extends object ? { [K in keyof T]: K extends "invalid" ? never : K extends "edit" ? CallerEdit<T[K]> : CallerWorkValue<T[K]> } : T;
+  : T extends object
+    ? {
+        [K in keyof T]: K extends "invalid"
+          ? never
+          : K extends "edit"
+            ? CallerEdit<T[K]>
+            : CallerWorkValue<T[K]>;
+      }
+    : T;
 
 /** One staged edit; domain metadata (`extend`) may ride on it. */
 export function draftCellSchema<V extends z.ZodType, E extends z.ZodRawShape = {}>(
@@ -142,7 +166,9 @@ export function cellPatches(
   cell: CellLike,
   write: CellWrite,
 ): RouteStatePatch[] {
-  const edit = (value: unknown): RouteStatePatch[] => [{ path: [...cellsPath, key, "edit"], value }];
+  const edit = (value: unknown): RouteStatePatch[] => [
+    { path: [...cellsPath, key, "edit"], value },
+  ];
   switch (write.kind) {
     case "set":
       return edit(sameValue(write.rung, write.baseline) ? null : rungOf(write.rung));

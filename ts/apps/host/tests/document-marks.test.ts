@@ -17,7 +17,7 @@ import {
   familiesMatrixEnvelopeSchema,
   type ReadingFrame,
 } from "@pe/agent-contracts";
-import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
+import { RevitBridge, type HostBridgeEvent } from "@pe/host-internal/bridge";
 import { assertFresh, HostDocumentMarks, STALE_READ } from "../src/document-marks.ts";
 import { setup } from "./schedule-recorded-fixture.ts";
 import { hostResourceObserver, markReadings } from "../src/resource-adapters.ts";
@@ -26,17 +26,32 @@ const A = { session: "S1", openId: "open-A" };
 
 test("mark frames await capture, retain comparison time through queued changes and suppress late completion", async () => {
   const frames: ReadingFrame[] = [];
-  const pending: { at?: number; done: (frame: import("../src/document-marks.ts").MarkFrame) => void }[] = [];
-  let changed = () => {}, released = 0, unwatched = 0;
-  const release = markReadings({
-    changedAt: () => { throw Error("A frame must use its Effect input boundary"); },
-    subscribe: (notify) => { changed = notify; return () => { unwatched++; }; },
-  }, (_ref, _key, at) => new Promise((done) => pending.push({ at, done })))(
-    (request, publish) => {
-      publish({ kind: "snapshot", key: "frame", value: { target: A } });
-      return () => { released++; };
+  const pending: {
+    at?: number;
+    done: (frame: import("../src/document-marks.ts").MarkFrame) => void;
+  }[] = [];
+  let changed = () => {},
+    released = 0,
+    unwatched = 0;
+  const release = markReadings(
+    {
+      changedAt: () => {
+        throw Error("A frame must use its Effect input boundary");
+      },
+      subscribe: (notify) => {
+        changed = notify;
+        return () => {
+          unwatched++;
+        };
+      },
     },
-  )({ kind: "schedule-reading", subject: "saved", target: A }, (frame) => frames.push(frame));
+    (_ref, _key, at) => new Promise((done) => pending.push({ at, done })),
+  )((request, publish) => {
+    publish({ kind: "snapshot", key: "frame", value: { target: A } });
+    return () => {
+      released++;
+    };
+  })({ kind: "schedule-reading", subject: "saved", target: A }, (frame) => frames.push(frame));
   await vi.waitFor(() => expect(pending).toHaveLength(1));
   expect(frames).toEqual([]);
   changed();
@@ -51,7 +66,8 @@ test("mark frames await capture, retain comparison time through queued changes a
   await vi.waitFor(() => expect(pending).toHaveLength(3));
   release();
   pending[2]!.done({ marks: { changedAt: 400 }, servedAt: 200 });
-  await Promise.resolve(); await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
   expect(frames).toHaveLength(2);
   expect([released, unwatched]).toEqual([1, 1]);
 });
@@ -134,7 +150,9 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   const { marks } = await holdMarks(world.bridge);
   const frames: ReadingFrame[] = [];
   const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
-  const observe = markReadings(marks, (ref, key, at) => ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null))(
+  const observe = markReadings(marks, (ref, key, at) =>
+    ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+  )(
     hostResourceObserver(
       world.bridge,
       undefined as never,
@@ -177,7 +195,10 @@ test.each(["changed", "disconnected"])(
     if (event === "changed") await f.revitChanged();
     else await f.bridgeDetached();
     await settle();
-    expect(await f.submit()).toMatchObject({ error: event === "changed" ? STALE_READ : expect.stringContaining("No attached Revit session") });
+    expect(await f.submit()).toMatchObject({
+      error:
+        event === "changed" ? STALE_READ : expect.stringContaining("No attached Revit session"),
+    });
     expect(f.sent.filter((call) => call.key === "schedule.cells.apply")).toEqual([]);
     expect((await f.view()).doc.cells["2::1"].edit.value).toBe("TC-SHARED");
   },
@@ -194,9 +215,12 @@ test("the families matrix Reading streams an envelope, never the body, and wears
     placementScope: "AllLoaded" as const,
   };
   const frames: ReadingFrame[] = [];
-  const release = markReadings(marks, (ref, key, at) => ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null))(
-    hostResourceObserver(world.bridge, undefined as never, () => captures),
-  )({ kind: "families-matrix", target: A, filter }, (frame) => frames.push(frame));
+  const release = markReadings(marks, (ref, key, at) =>
+    ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+  )(hostResourceObserver(world.bridge, undefined as never, () => captures))(
+    { kind: "families-matrix", target: A, filter },
+    (frame) => frames.push(frame),
+  );
   await vi.waitFor(() => expect(frames).toHaveLength(1));
   expect(frames[0]).toMatchObject({ kind: "snapshot", value: null });
 

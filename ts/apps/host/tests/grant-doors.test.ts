@@ -19,17 +19,37 @@ import * as receipts from "../src/receipt-export.ts";
 let root: string, journal: ActionJournal, server: Awaited<ReturnType<typeof serveRoutes>>;
 let native: Awaited<ReturnType<typeof fixtureNative>>;
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-  fetch(`${server.base}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+  fetch(`${server.base}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
 const pea = () => contextHeaders({ kind: "pea", thread: "foreign" });
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "pe-refusal-doors-"));
   native = await fixtureNative(join(root, "native"));
   journal = native.journal;
-  const workspace = new RouteWorkspace({ registrations: [{ spec: tools.takeoffs.work }], store: fileRouteDocumentStore(stateFixture(join(root, "work"))) });
-  server = await serveRoutes(callRouteOver(journal, undefined, { workspace }).pipe(Layer.provide(testHostInputs)), native.bridge);
-  const response = await post("/actions", { id: "human-action", key: "work.start", target: { kind: "host" },
-    input: { key: bindWork("takeoffs", address("C:/Models/guard.rvt")), seed: tools.takeoffs.work.schema.parse({}) } },
-    contextHeaders());
+  const workspace = new RouteWorkspace({
+    registrations: [{ spec: tools.takeoffs.work }],
+    store: fileRouteDocumentStore(stateFixture(join(root, "work"))),
+  });
+  server = await serveRoutes(
+    callRouteOver(journal, undefined, { workspace }).pipe(Layer.provide(testHostInputs)),
+    native.bridge,
+  );
+  const response = await post(
+    "/actions",
+    {
+      id: "human-action",
+      key: "work.start",
+      target: { kind: "host" },
+      input: {
+        key: bindWork("takeoffs", address("C:/Models/guard.rvt")),
+        seed: tools.takeoffs.work.schema.parse({}),
+      },
+    },
+    contextHeaders(),
+  );
   expect([200, 202]).toContain(response.status);
   expect(await journal.wait("human-action")).toMatchObject({ state: "succeeded" });
 });
@@ -37,13 +57,29 @@ afterEach(async () => {
   await server.close();
   await native.close();
   await rm(root, { recursive: true, force: true });
-  expect((await journal.list()).flatMap(row => row.steps).filter(step => step.kind === "native")).toEqual([]);
+  expect(
+    (await journal.list()).flatMap((row) => row.steps).filter((step) => step.kind === "native"),
+  ).toEqual([]);
 });
 
 test("RHVAC launch requires journaled action admission for authenticated callers", async () => {
-  const page = { origin: server.base, "sec-fetch-site": "same-origin", referer: `${server.base}/pages/refusals/`, ...serviceHeaders() };
-  for (const headers of [contextHeaders(), pea(), contextHeaders({ kind: "external-mcp", label: "unpaired" }), page]) {
-    const response = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } }, headers);
+  const page = {
+    origin: server.base,
+    "sec-fetch-site": "same-origin",
+    referer: `${server.base}/pages/refusals/`,
+    ...serviceHeaders(),
+  };
+  for (const headers of [
+    contextHeaders(),
+    pea(),
+    contextHeaders({ kind: "external-mcp", label: "unpaired" }),
+    page,
+  ]) {
+    const response = await post(
+      "/call",
+      { key: "rhvac.launch", request: { path: "test.r10" } },
+      headers,
+    );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       message: "Submit the original exact admission to /actions; raw mutation dispatch is retired",
@@ -54,10 +90,19 @@ test("RHVAC launch requires journaled action admission for authenticated callers
   expect(anonymous.status).toBe(403);
 });
 test("an unavailable Pod query has one typed refusal before dispatch", async () => {
-  const response = await post("/call", { key: "pod.fixture.unavailable", request: {} }, contextHeaders());
+  const response = await post(
+    "/call",
+    { key: "pod.fixture.unavailable", request: {} },
+    contextHeaders(),
+  );
   expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ refusal: { code: "permission.undeclared", door: "/call",
-    reason: "Pod query has no admitted route: pod.fixture.unavailable" } });
+  expect(await response.json()).toMatchObject({
+    refusal: {
+      code: "permission.undeclared",
+      door: "/call",
+      reason: "Pod query has no admitted route: pod.fixture.unavailable",
+    },
+  });
 });
 
 test("a successful /call records a succeeded host operation", async () => {
@@ -66,9 +111,13 @@ test("a successful /call records a succeeded host operation", async () => {
     const response = await post("/call", { key: "takeoffs.saved", request: {} }, contextHeaders());
     expect(response.status).toBe(200);
     expect(record).toHaveBeenCalledWith(
-      expect.objectContaining({ event: "host_op", counters: expect.objectContaining({
-        op: "takeoffs.saved", outcome: "succeeded",
-      }) }),
+      expect.objectContaining({
+        event: "host_op",
+        counters: expect.objectContaining({
+          op: "takeoffs.saved",
+          outcome: "succeeded",
+        }),
+      }),
       expect.objectContaining({ requestId: expect.any(String) }),
     );
   } finally {
@@ -79,8 +128,14 @@ test("action controls cannot borrow a human receipt across caller threads", asyn
   for (const verb of ["cancel"]) {
     const response = await post(`/actions/${verb}`, { id: "human-action" }, pea());
     expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ notDispatched: true, refusal: { code: "context.foreign-thread",
-      door: "/actions", reason: "This command belongs to another authenticated caller" } });
+    expect(await response.json()).toMatchObject({
+      notDispatched: true,
+      refusal: {
+        code: "context.foreign-thread",
+        door: "/actions",
+        reason: "This command belongs to another authenticated caller",
+      },
+    });
   }
   expect((await journal.list(undefined, "human-action"))[0]!.state).toBe("succeeded");
 });

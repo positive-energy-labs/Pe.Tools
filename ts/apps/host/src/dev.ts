@@ -12,7 +12,8 @@ import { prepareDevRouteProjection } from "./source-closures.ts";
 
 // scripts/time-cold-start.ts reads these marks (ms since process start); silent otherwise.
 const mark = (phase: string) =>
-  process.env.PE_START_TIMING && console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
+  process.env.PE_START_TIMING &&
+  console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
 mark("entry");
 // The host graph imports closures from disk: prepare them, then link it (see source-closures.ts).
 const routeProjection = await prepareDevRouteProjection();

@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { stateRoot, stateScope, stateTree } from "../../packages/host-contracts/src/service-identity.ts";
+import {
+  stateRoot,
+  stateScope,
+  stateTree,
+} from "../../packages/host-contracts/src/service-identity.ts";
 
 export const CONVERSATION_THREADS = {
   office: "cac00000-0000-4000-8000-000000000001",
@@ -45,10 +49,12 @@ export async function seedConversationWork(homeInput: string, artifactInput: str
     await import("../../packages/agent-contracts/src/index.ts");
   const { RouteWorkspace } = await import("../../packages/runtime/src/route-workspace.ts");
   const { createRouteRegistrations } = await import("../../packages/mcps/src/pea/routes.ts");
-  const { constructorWorkRegistrations, admittedBuiltinsLayer } = await import("../../apps/host/src/admitted-builtins.ts");
+  const { constructorWorkRegistrations, admittedBuiltinsLayer } =
+    await import("../../apps/host/src/admitted-builtins.ts");
   const { fileRouteDocumentStore } = await import("../../apps/host/src/route-document-store.ts");
   const { homeDirs } = await import("../../packages/host-contracts/src/product-paths.ts");
-  const { productPathNames } = await import("../../packages/host-contracts/src/contracts/product.ts");
+  const { productPathNames } =
+    await import("../../packages/host-contracts/src/contracts/product.ts");
   const machine = stateTree(stateRoot("dev", home, home));
   // Authored Pages use the user home, first in the canonical home order; Page state is separate.
   const [pagesRoot] = homeDirs(productPathNames.pagesDirectoryName);

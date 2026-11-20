@@ -5,7 +5,7 @@ import { expect, test, vi } from "vite-plus/test";
 import { FaceBatches, prepareFaceBatches } from "./face-batches";
 import { prepareGeometry } from "./prepare-geometry";
 import { createFacePicker } from "./picking";
-import { SceneMeshes, type Paint, type SceneInstance } from "./types";
+import { SceneMeshes, type Paint, type SceneInstance } from "@pe/web-kernel/scene/types";
 
 function fixture(context = false, shifted = false) {
   const positions: number[] = [],

@@ -55,8 +55,12 @@ export class SessionClient implements BrowserSession {
         if (message.event && message.targetId)
           for (const listener of this.listeners.get(message.targetId) ?? []) {
             try {
-              Promise.resolve(listener(message.event)).catch((error) => { console.error("client: asynchronous operation failed", error); });
-            } catch (error) { console.error("client: asynchronous operation failed", error); }
+              Promise.resolve(listener(message.event)).catch((error) => {
+                console.error("client: asynchronous operation failed", error);
+              });
+            } catch (error) {
+              console.error("client: asynchronous operation failed", error);
+            }
           }
         if (!message.id) continue;
         const pending = this.pending.get(message.id);

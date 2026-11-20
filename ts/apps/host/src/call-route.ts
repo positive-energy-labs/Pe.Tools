@@ -4,7 +4,7 @@ import { captureReceiptSchema } from "@pe/agent-contracts";
 import { canonicalRouteInput, nativePrincipals } from "@pe/agent-contracts";
 import { runPodScript, scriptNeedsDocument } from "./operation-script.ts";
 import { NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
-import { readingBasisHeaders } from "./product-contracts.ts";
+import { readingBasisHeaders } from "@pe/mcps/product-contracts";
 import { receiptsForWork } from "@pe/agent-contracts";
 import { commandTool } from "@pe/mcps/product-actions";
 import type { Caller } from "@pe/agent-contracts";
@@ -47,15 +47,12 @@ import {
 } from "../../../packages/mcps/src/shared/takeoff-ops.ts";
 import { ActionJournal } from "./action-journal.ts";
 import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-auth.ts";
-import { RevitBridge, BridgeError, NoRevitSession } from "./bridge.ts";
-import {
-  PictureCaptureStore,
-  PictureStoreFull,
-} from "./captures-route.ts";
-import { CommandRejected, StepFailure } from "./command-executor.ts";
+import { RevitBridge, BridgeError, NoRevitSession } from "@pe/host-internal/bridge";
+import { PictureCaptureStore, PictureStoreFull } from "./captures-route.ts";
+import { CommandRejected, StepFailure } from "@pe/host-internal/command-executor";
 import { bindCommandRuntime } from "./command-registry.ts";
 import { ActionJournalService } from "./receipt-services.ts";
-import type { AttemptHost } from "./action-journal.ts";
+import type { AttemptHost } from "@pe/host-internal/action-execution";
 import type { GatewayLocal, GatewayLocalContext } from "./gateway-actions.ts";
 import {
   admitCrossing,
@@ -63,10 +60,10 @@ import {
   consentedRead,
   currentCaller,
   readsOnly,
-  Refused,
   refusalHeaders,
   admitAnonymousCall,
 } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { ductBodySubject, type DuctsBodyBasisSource } from "@pe/ducts-host/ducts-body-basis";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
@@ -88,12 +85,13 @@ import {
   tailLogs,
 } from "./local-ops.ts";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { validateNativeInput } from "./native-input.ts";
 import { capturePackage } from "./packages.ts";
 import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { recordHostFact } from "./receipt-export.ts";
-import { ReadFreshness, RequestIdentity } from "./request-services.ts";
+import { ReadFreshness } from "./request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import {
   rhvacAssemblies,
   rhvacLaunch,
@@ -115,7 +113,8 @@ import {
   writeMember,
   type PodContext,
 } from "./settings.ts";
-import { readSettingTiers, writeSettingTier } from "./tiered-settings.ts";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
+import { writeSettingTier } from "./tiered-settings.ts";
 import { fileVersion } from "./takeoff-actions.ts";
 import { CaptureStore as TakeoffCaptureStore, type TakeoffCaptures } from "./takeoff-captures.ts";
 import { pointerThread, type ThreadPointers } from "./thread-pointers.ts";
@@ -158,9 +157,10 @@ export const makeCallRoute = Effect.fn("makeCallRoute")(function* (
 function callRoutes(
   operations: ActionJournal,
   captures?: TakeoffCaptures,
-  actionDeps: FamilyActionDependencies & InstancesActionDependencies & {
-    launchShell?: (path: string) => Promise<void>;
-  } = {},
+  actionDeps: FamilyActionDependencies &
+    InstancesActionDependencies & {
+      launchShell?: (path: string) => Promise<void>;
+    } = {},
   composition?: {
     readonly forwardBase?: string | null;
     readonly dispatch?: CallRouteDispatch;
@@ -172,10 +172,20 @@ function callRoutes(
     /** Thread meta's pointer surface; pointer ops refuse without it. */
     readonly pointers?: ThreadPointers;
     readonly retainedBasis?: DuctsBodyBasisSource;
-    readonly retainedRead?: (input: NativeReadInput, options: { version?: string; refresh?: string }) => ReturnType<typeof retainedDuctsRead>;
-    readonly nativeBody?: (input: NativeReadInput, read: ReturnType<typeof readNativeCall>) => Effect.Effect<{
-      answer: Effect.Success<ReturnType<typeof readNativeCall>>;
-    }, Effect.Error<ReturnType<typeof readNativeCall>>, Effect.Services<ReturnType<typeof readNativeCall>>>;
+    readonly retainedRead?: (
+      input: NativeReadInput,
+      options: { version?: string; refresh?: string },
+    ) => ReturnType<typeof retainedDuctsRead>;
+    readonly nativeBody?: (
+      input: NativeReadInput,
+      read: ReturnType<typeof readNativeCall>,
+    ) => Effect.Effect<
+      {
+        answer: Effect.Success<ReturnType<typeof readNativeCall>>;
+      },
+      Effect.Error<ReturnType<typeof readNativeCall>>,
+      Effect.Services<ReturnType<typeof readNativeCall>>
+    >;
   },
 ) {
   const CALL_FORWARD_BASE = process.env.PE_TOOLS_CALL_FORWARD?.trim().replace(/\/$/, "");
@@ -193,7 +203,12 @@ function callRoutes(
     return captures;
   };
   const owner = () => operations;
-  const admit = async (raw: unknown, caller: Caller, parent: string, sentAt: string | undefined) => {
+  const admit = async (
+    raw: unknown,
+    caller: Caller,
+    parent: string,
+    sentAt: string | undefined,
+  ) => {
     const input = actionAdmissionSchema.parse(raw);
     const crossing = {
       caller,
@@ -213,7 +228,13 @@ function callRoutes(
   };
   const callDoor = peRoutes["operation.call"];
   const post = HttpRouter.add(callDoor.method, callDoor.path, (req) => {
-    if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
+    if (req.headers["x-pe-history-point"])
+      return Effect.succeed(
+        Response.jsonUnsafe(
+          { error: { code: "history.read-only", message: "needs live Revit" } },
+          { status: 409 },
+        ),
+      );
     let captureId: string | undefined;
     let admissionRequestId: string = randomUUID();
     // Set once dispatch begins so the catch below can attribute failures to the op.
@@ -264,9 +285,15 @@ function callRoutes(
       yield* Effect.try({ try: () => admitAnonymousCall(caller, key), catch: (error) => error });
       const request = "request" in body ? body.request : undefined;
       let scope: HostSessionScope = identity.scope;
-      if (entry.canonicalSession && scope.bridgeSessionId && !(entry.reading && composition?.retainedRead)) {
+      if (
+        entry.canonicalSession &&
+        scope.bridgeSessionId &&
+        !(entry.reading && composition?.retainedRead)
+      ) {
         const bridgeForScope = yield* RevitBridge;
-        const canonicalSession = yield* SdkSession.resolve(bridgeForScope, { id: scope.bridgeSessionId }).pipe(
+        const canonicalSession = yield* SdkSession.resolve(bridgeForScope, {
+          id: scope.bridgeSessionId,
+        }).pipe(
           Effect.mapError((error) => new BridgeError(error.message, 409, { notDispatched: true })),
         );
         scope = { ...scope, bridgeSessionId: canonicalSession.sessionId };
@@ -282,9 +309,14 @@ function callRoutes(
       }
 
       if (entry.reading && composition?.retainedRead) {
-        const response = yield* composition.retainedRead({ key, input: request ?? {}, scope },
-          readingBasisHeaders(req.headers));
-        recordOperation({ key, tsOnly: false, startedAt: Date.now(), origin, originClass, requestId }, { ok: true });
+        const response = yield* composition.retainedRead(
+          { key, input: request ?? {}, scope },
+          readingBasisHeaders(req.headers),
+        );
+        recordOperation(
+          { key, tsOnly: false, startedAt: Date.now(), origin, originClass, requestId },
+          { ok: true },
+        );
         return response;
       }
       if (entry.hostOnly) openDocumentId = null;
@@ -358,7 +390,9 @@ function callRoutes(
             // Defence in depth: `scripting.execute` needs a document today, so `gatewayTarget` never answers a
             // session for it. This admission must not depend on that, nor on `runPodScript` refusing later.
             if (target.kind !== "document")
-              return yield* Effect.fail(new BridgeError(scriptNeedsDocument, 409, { notDispatched: true }));
+              return yield* Effect.fail(
+                new BridgeError(scriptNeedsDocument, 409, { notDispatched: true }),
+              );
             yield* Effect.try({
               try: () => admitScript(caller, target.ref, "/call", readsOnly(key, request)),
               catch: (error) => error,
@@ -367,17 +401,40 @@ function callRoutes(
         }
       }
       if (entry.reading) {
-        const response = yield* retainedDuctsRead(ductsReadings(bridge), {
-          key, input: request ?? {}, scope: { ...scope, bridgeSessionId: bridgeSessionId!, openDocumentId: openDocumentId ?? undefined },
-        }, readingBasisHeaders(req.headers), {
-          basis: composition?.retainedBasis,
-          document: (ref) => Effect.suspend(() => {
-            const document = resolvedSession?.state?.openDocuments.find((doc) => doc.openId === ref.openId);
-            return document && resolvedSession?.sessionId === ref.session
-              ? Effect.succeed({ ...ref, address: addressSchema.nullable().parse(document.address ?? null) })
-              : Effect.fail(new InvalidRead({ message: 'Exact Ducts document is unavailable', status: 409, problem: 'read.target' }));
-          }),
-        });
+        const response = yield* retainedDuctsRead(
+          ductsReadings(bridge),
+          {
+            key,
+            input: request ?? {},
+            scope: {
+              ...scope,
+              bridgeSessionId: bridgeSessionId!,
+              openDocumentId: openDocumentId ?? undefined,
+            },
+          },
+          readingBasisHeaders(req.headers),
+          {
+            basis: composition?.retainedBasis,
+            document: (ref) =>
+              Effect.suspend(() => {
+                const document = resolvedSession?.state?.openDocuments.find(
+                  (doc) => doc.openId === ref.openId,
+                );
+                return document && resolvedSession?.sessionId === ref.session
+                  ? Effect.succeed({
+                      ...ref,
+                      address: addressSchema.nullable().parse(document.address ?? null),
+                    })
+                  : Effect.fail(
+                      new InvalidRead({
+                        message: "Exact Ducts document is unavailable",
+                        status: 409,
+                        problem: "read.target",
+                      }),
+                    );
+              }),
+          },
+        );
         recordOperation(op, { ok: true });
         return response;
       }
@@ -396,13 +453,20 @@ function callRoutes(
                 openId: openDocumentId,
               });
               const sessions = yield* SdkSession;
-              const readScope = { ...scope, bridgeSessionId: target.session, openDocumentId: target.openId };
+              const readScope = {
+                ...scope,
+                bridgeSessionId: target.session,
+                openDocumentId: target.openId,
+              };
               const selected = Effect.map(sessions.resolve(readScope), (session) =>
                 session.state?.openDocuments.find((doc) => doc.openId === target.openId),
               );
               const document = yield* selected;
               if (!document?.address)
-                return yield* new BridgeError("Snapshot requires an exact open saved document", 409);
+                return yield* new BridgeError(
+                  "Snapshot requires an exact open saved document",
+                  409,
+                );
               const at = addressSchema.parse(document.address);
               const native = yield* HostNativeRead;
               // Both natives are per-caller admitted and joined by NativeReads: a peer fetch shares them.
@@ -412,30 +476,45 @@ function callRoutes(
                   const [result, index] = yield* Effect.all(
                     [
                       native.read({ key, input: request ?? {}, scope: readScope }),
-                      native.read({ key: "revit.catalog.project-index", input: takeoffProjectIndexRequest, scope: readScope }),
+                      native.read({
+                        key: "revit.catalog.project-index",
+                        input: takeoffProjectIndexRequest,
+                        scope: readScope,
+                      }),
                     ],
                     { concurrency: "unbounded" },
                   );
                   const snapshot = projectTakeoffSnapshot(
                     result.value as unknown as OpResponseOf<"takeoffs.snapshot">,
                     document.title,
-                    projectTakeoffViews(index.value as unknown as OpResponseOf<"revit.catalog.project-index">),
+                    projectTakeoffViews(
+                      index.value as unknown as OpResponseOf<"revit.catalog.project-index">,
+                    ),
                   );
                   if (!sameAddress(snapshot.reading.at, at))
                     return yield* new BridgeError("Snapshot returned a different document", 409);
                   return { result, snapshot };
                 }),
-                Effect.map(selected, (now) => !!now?.address && sameAddress(addressSchema.parse(now.address), at)),
+                Effect.map(
+                  selected,
+                  (now) => !!now?.address && sameAddress(addressSchema.parse(now.address), at),
+                ),
               );
               captureId = published.capture.id;
               return {
                 value: published.result.value,
                 nativeRequestId: published.result.nativeRequestId,
-                target: { session: target.session, document: document.address, documentRef: target },
+                target: {
+                  session: target.session,
+                  document: document.address,
+                  documentRef: target,
+                },
               };
             }).pipe(
               Effect.mapError((error) =>
-                isDoorFailure(error) || error instanceof BridgeError ? error : new BridgeError(String(error), 409),
+                isDoorFailure(error) || error instanceof BridgeError
+                  ? error
+                  : new BridgeError(String(error), 409),
               ),
             )
           : (effect === "Read" || effect === "TransactRead") && !entry.script
@@ -446,13 +525,26 @@ function callRoutes(
                     status: 409,
                     problem: "read.target",
                   });
-                const input = { key, input: request ?? {}, scope: { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined } };
+                const input = {
+                  key,
+                  input: request ?? {},
+                  scope: { ...scope, bridgeSessionId, openDocumentId: openDocumentId ?? undefined },
+                };
                 const read = readNativeCall(key, input.input, input.scope);
-                const captured = composition?.nativeBody ? yield* composition.nativeBody(input, read) : { answer: yield* read };
+                const captured = composition?.nativeBody
+                  ? yield* composition.nativeBody(input, read)
+                  : { answer: yield* read };
                 const answer = captured.answer;
-                if (answer.actualTarget.processIncarnation.pid !== resolvedSession.processId ||
-                    answer.actualTarget.processIncarnation.startedAt !== resolvedSession.processStartUtcUnixMs)
-                  return yield* new InvalidRead({ message: "Native read incarnation changed during admission", status: 409, problem: "read.target" });
+                if (
+                  answer.actualTarget.processIncarnation.pid !== resolvedSession.processId ||
+                  answer.actualTarget.processIncarnation.startedAt !==
+                    resolvedSession.processStartUtcUnixMs
+                )
+                  return yield* new InvalidRead({
+                    message: "Native read incarnation changed during admission",
+                    status: 409,
+                    problem: "read.target",
+                  });
                 const actualOpen =
                   "openId" in answer.actualTarget.openDocumentLifetime
                     ? answer.actualTarget.openDocumentLifetime.openId
@@ -472,17 +564,43 @@ function callRoutes(
                 };
               })
             : entry.script
-              ? { value: yield* runPodScript(bridge, { session: bridgeSessionId ?? (yield* new NoRevitSession()), openId: openDocumentId }, yield* Effect.try({
-                  try: () => z.record(z.string(), z.unknown()).parse(request ?? {}),
-                  catch: () => new CommandRejected({ kind: "domain", code: "script.input", message: "Script input must be an object" }, 400),
-                }), requestId) }
-              : yield* bridge.invoke(key, request ?? {}, bridgeSessionId, openDocumentId, requestId);
+              ? {
+                  value: yield* runPodScript(
+                    bridge,
+                    {
+                      session: bridgeSessionId ?? (yield* new NoRevitSession()),
+                      openId: openDocumentId,
+                    },
+                    yield* Effect.try({
+                      try: () => z.record(z.string(), z.unknown()).parse(request ?? {}),
+                      catch: () =>
+                        new CommandRejected(
+                          {
+                            kind: "domain",
+                            code: "script.input",
+                            message: "Script input must be an object",
+                          },
+                          400,
+                        ),
+                    }),
+                    requestId,
+                  ),
+                }
+              : yield* bridge.invoke(
+                  key,
+                  request ?? {},
+                  bridgeSessionId,
+                  openDocumentId,
+                  requestId,
+                );
       // A joined Read names the dispatch that actually ran, never this caller's unsent id.
       const nativeRequestId =
         "nativeRequestId" in result && typeof result.nativeRequestId === "string"
           ? result.nativeRequestId
           : requestId;
-      const kept = captureReceiptSchema.safeParse((result.value as {capture?:unknown}|null)?.capture).data;
+      const kept = captureReceiptSchema.safeParse(
+        (result.value as { capture?: unknown } | null)?.capture,
+      ).data;
       recordOperation(op, { ok: true });
       // Every /call response names the target it actually ran against, so a tool card can show
       // what was touched rather than the selector that was typed. Headers, not a payload wrapper.
@@ -607,18 +725,34 @@ function callRoutes(
     Effect.gen(function* () {
       const caller = currentCaller();
       if (caller.kind !== "human" && caller.kind !== "pea")
-        return Response.jsonUnsafe({ error: "Upload requires a human or Pea caller" }, { status: 403 });
+        return Response.jsonUnsafe(
+          { error: "Upload requires a human or Pea caller" },
+          { status: 403 },
+        );
       if (req.headers["x-pe-history-point"])
         return Response.jsonUnsafe({ error: "History is read-only" }, { status: 409 });
       const body = yield* req.json;
-      const input = yield* Effect.try({ try: () => blobUploadSchema.parse(body), catch: error => error });
-      return Response.jsonUnsafe(yield* Effect.promise(() => putBlob(Buffer.from(input.base64, "base64"), input.fileName)));
-    }).pipe(Effect.catch((error) => Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })))),
+      const input = yield* Effect.try({
+        try: () => blobUploadSchema.parse(body),
+        catch: (error) => error,
+      });
+      return Response.jsonUnsafe(
+        yield* Effect.promise(() => putBlob(Buffer.from(input.base64, "base64"), input.fileName)),
+      );
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(Response.jsonUnsafe({ error: String(error) }, { status: 400 })),
+      ),
+    ),
   );
   const admitDoor = peRoutes["actions.admit"];
   const actions = HttpRouter.add(admitDoor.method, admitDoor.path, (req) =>
     Effect.gen(function* () {
-      if (req.headers["x-pe-history-point"]) return Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 });
+      if (req.headers["x-pe-history-point"])
+        return Response.jsonUnsafe(
+          { error: { code: "history.read-only", message: "needs live Revit" } },
+          { status: 409 },
+        );
       // The caller lives in AsyncLocalStorage; the Node body read resumes outside it. Read first.
       const caller = currentCaller();
       const sentAt = req.headers[ADMISSION_RESEND_HEADER];
@@ -641,7 +775,8 @@ function callRoutes(
                 {
                   error: error instanceof Error ? error.message : String(error),
                   ...(error instanceof CommandRejected && "code" in error.refusal
-                    ? { code: error.refusal.code } : {}),
+                    ? { code: error.refusal.code }
+                    : {}),
                   message:
                     typeof error === "object" && error && "message" in error
                       ? String(error.message)
@@ -720,56 +855,70 @@ function callRoutes(
     );
   });
   // action.read is GET /actions; Stop is the one write control (K1b deleted Recover and Resume).
-  const cancelControl = HttpRouter.add(peRoutes["action.cancel"].method, peRoutes["action.cancel"].path, (req) => {
-    if (req.headers["x-pe-history-point"]) return Effect.succeed(Response.jsonUnsafe({ error: { code: "history.read-only", message: "needs live Revit" } }, { status: 409 }));
-    const caller = currentCaller();
-    return RevitBridge.use((_bridge) =>
-      Effect.flatMap(req.json, (body) => Effect.tryPromise({
-        try: async () => {
-          if (!isRecord(body) || typeof body.id !== "string")
-            throw Error("An original action ID is required");
-          const controlled = (await owner().readFor(caller, undefined, body.id))[0];
-          if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
-          const { receipt, signalled } = await owner().cancel(body.id);
-          // 202: a cancel reached a running native request; 200: saved, nothing was signalled to Revit.
-          return Response.jsonUnsafe(receipt, { status: signalled ? 202 : 200 });
-        },
-        catch: (error) => error,
-      })).pipe(
-        Effect.catch((error) =>
-          Effect.succeed(
-            error instanceof Refused
-              ? refusedResponse(error)
-              : Response.jsonUnsafe({ error: said(error) }, { status: 409 }),
+  const cancelControl = HttpRouter.add(
+    peRoutes["action.cancel"].method,
+    peRoutes["action.cancel"].path,
+    (req) => {
+      if (req.headers["x-pe-history-point"])
+        return Effect.succeed(
+          Response.jsonUnsafe(
+            { error: { code: "history.read-only", message: "needs live Revit" } },
+            { status: 409 },
+          ),
+        );
+      const caller = currentCaller();
+      return RevitBridge.use((_bridge) =>
+        Effect.flatMap(req.json, (body) =>
+          Effect.tryPromise({
+            try: async () => {
+              if (!isRecord(body) || typeof body.id !== "string")
+                throw Error("An original action ID is required");
+              const controlled = (await owner().readFor(caller, undefined, body.id))[0];
+              if (!controlled) throw Error(`Action '${body.id}' has no admitted receipt`);
+              const { receipt, signalled } = await owner().cancel(body.id);
+              // 202: a cancel reached a running native request; 200: saved, nothing was signalled to Revit.
+              return Response.jsonUnsafe(receipt, { status: signalled ? 202 : 200 });
+            },
+            catch: (error) => error,
+          }),
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.succeed(
+              error instanceof Refused
+                ? refusedResponse(error)
+                : Response.jsonUnsafe({ error: said(error) }, { status: 409 }),
+            ),
           ),
         ),
-      ),
-    );
-  });
+      );
+    },
+  );
   const familyReadings = HttpRouter.add("*", "/family/readings", (req) =>
     RevitBridge.use((bridge) =>
-      Effect.flatMap(req.method === "POST" ? req.json : Effect.succeed<Schema.Json>(null), (body) => Effect.tryPromise({
-        try: async () => {
-          if (req.method === "POST") {
-            if (!isRecord(body) || typeof body.key !== "string")
-              throw Error("A Family read key is required");
-            return Response.jsonUnsafe(
-              await readFamily(
-                { ...body, key: body.key, scope: body.scope },
-                observations(),
-                bridge,
-                actionDeps,
-              ),
-            );
-          }
-          const query = new URL(req.url, "http://host").searchParams;
-          if (query.has("id"))
-            return Response.jsonUnsafe(await observations().family(query.get("id")!));
-          const scope = workKeySchema.parse(JSON.parse(query.get("scope") ?? "{}"));
-          return Response.jsonUnsafe(await observations().familyReadings(scope));
-        },
-        catch: (error) => error,
-      })).pipe(
+      Effect.flatMap(req.method === "POST" ? req.json : Effect.succeed<Schema.Json>(null), (body) =>
+        Effect.tryPromise({
+          try: async () => {
+            if (req.method === "POST") {
+              if (!isRecord(body) || typeof body.key !== "string")
+                throw Error("A Family read key is required");
+              return Response.jsonUnsafe(
+                await readFamily(
+                  { ...body, key: body.key, scope: body.scope },
+                  observations(),
+                  bridge,
+                  actionDeps,
+                ),
+              );
+            }
+            const query = new URL(req.url, "http://host").searchParams;
+            if (query.has("id"))
+              return Response.jsonUnsafe(await observations().family(query.get("id")!));
+            const scope = workKeySchema.parse(JSON.parse(query.get("scope") ?? "{}"));
+            return Response.jsonUnsafe(await observations().familyReadings(scope));
+          },
+          catch: (error) => error,
+        }),
+      ).pipe(
         Effect.catch((error) =>
           Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
         ),
@@ -778,21 +927,23 @@ function callRoutes(
   );
   const scheduleReadings = HttpRouter.add("POST", "/schedules/readings", (req) =>
     RevitBridge.use((bridge) =>
-      Effect.flatMap(req.json, (body) => Effect.tryPromise({
-        try: async () => {
-          if (!isRecord(body) || typeof body.key !== "string")
-            throw Error("Schedule read key required");
-          return Response.jsonUnsafe(
-            await readSchedule(
-              { key: body.key, input: body.input, target: body.target },
-              observations(),
-              bridge,
-              actionDeps,
-            ),
-          );
-        },
-        catch: (error) => error,
-      })).pipe(
+      Effect.flatMap(req.json, (body) =>
+        Effect.tryPromise({
+          try: async () => {
+            if (!isRecord(body) || typeof body.key !== "string")
+              throw Error("Schedule read key required");
+            return Response.jsonUnsafe(
+              await readSchedule(
+                { key: body.key, input: body.input, target: body.target },
+                observations(),
+                bridge,
+                actionDeps,
+              ),
+            );
+          },
+          catch: (error) => error,
+        }),
+      ).pipe(
         Effect.catch((error) =>
           Effect.succeed(Response.jsonUnsafe({ error: said(error) }, { status: 409 })),
         ),
@@ -808,7 +959,12 @@ function callRoutes(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(TakeoffCaptureStore)) ??
             Context.get(yield* Layer.build(TakeoffCaptureStore.layer()), TakeoffCaptureStore);
-          actionDeps = { ...actionDeps, marks: yield* HostDocumentMarks, pictures: yield* PictureCaptureStore, files: yield* DuctFiles };
+          actionDeps = {
+            ...actionDeps,
+            marks: yield* HostDocumentMarks,
+            pictures: yield* PictureCaptureStore,
+            files: yield* DuctFiles,
+          };
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.
@@ -835,16 +991,32 @@ function callRoutes(
           const nativeReads = Option.getOrUndefined(yield* Effect.serviceOption(NativeReads));
           const source = yield* HostInputContext;
           if (source.lane.kind === "live" && !nativeReads)
-            return yield* Effect.die(Error("Live command reads require native terminal observation"));
+            return yield* Effect.die(
+              Error("Live command reads require native terminal observation"),
+            );
           bindCommandRuntime(
             operations,
             bridge,
             observations(),
-            { ...actionDeps, families: composition?.families, nativeRead: yield* HostNativeRead,
-              nativeReads: nativeReads ?? { kind: "recorded" } },
+            {
+              ...actionDeps,
+              families: composition?.families,
+              nativeRead: yield* HostNativeRead,
+              nativeReads: nativeReads ?? { kind: "recorded" },
+            },
             composition?.local ??
               ((key, input, scope, context) =>
-                executeGatewayLocal(key, input, bridge, observations(), actionDeps.pictures!, actionDeps.launchShell, scope, context, composition?.pointers)),
+                executeGatewayLocal(
+                  key,
+                  input,
+                  bridge,
+                  observations(),
+                  actionDeps.pictures!,
+                  actionDeps.launchShell,
+                  scope,
+                  context,
+                  composition?.pointers,
+                )),
             composition?.origin,
           );
         }),
@@ -862,10 +1034,15 @@ function callRoutes(
     cancelControl,
   ).pipe(
     HttpRouter.provideRequest(Layer.effect(PictureCaptureStore, PictureCaptureStore)),
-    HttpRouter.provideRequest(Layer.effectContext(Effect.gen(function* () {
-      return Context.make(HostNativeRead, yield* HostNativeRead)
-        .pipe(Context.add(SdkSession, yield* SdkSession));
-    }))),
+    HttpRouter.provideRequest(
+      Layer.effectContext(
+        Effect.gen(function* () {
+          return Context.make(HostNativeRead, yield* HostNativeRead).pipe(
+            Context.add(SdkSession, yield* SdkSession),
+          );
+        }),
+      ),
+    ),
   );
 }
 
@@ -974,10 +1151,13 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   // pod.export, pod.import and pod.promote have no local entry: the gateway runs their prepared
   // archive inline (gateway-actions.ts host-leaf), and /call refuses them as mutations.
   if (!hasLocalEntry(key))
-    return yield* Effect.fail(new BridgeError(`${key} runs only through /actions`, 409, { notDispatched: true }));
+    return yield* Effect.fail(
+      new BridgeError(`${key} runs only through /actions`, 409, { notDispatched: true }),
+    );
   return yield* localEntries[key]({ request, scope, bridge, captures, ...via });
 });
-const hasLocalEntry = (key: string): key is keyof typeof localEntries => Object.hasOwn(localEntries, key);
+const hasLocalEntry = (key: string): key is keyof typeof localEntries =>
+  Object.hasOwn(localEntries, key);
 
 type LocalCall = {
   request: unknown;
@@ -1074,15 +1254,29 @@ const localEntries = {
     const { owner } = yield* decodeRequest("settings.tiers.read", request);
     return { tiers: readSettingTiers(owner, (yield* targetHomes(bridge, scope)).pointer) };
   }),
-  "settings.tiers.write": Effect.fnUntraced(function* ({ request, scope, bridge, action, caller }: LocalCall) {
+  "settings.tiers.write": Effect.fnUntraced(function* ({
+    request,
+    scope,
+    bridge,
+    action,
+    caller,
+  }: LocalCall) {
     const key = "settings.tiers.write";
     const input = yield* decodeRequest(key, request);
     const { pointer } = yield* targetHomes(bridge, scope);
     const wrote = yield* Effect.try({
-      try: () => writeSettingTier(input, { pointer, caller, receiptId: action?.receiptId, expectedPath: action?.settingPath }),
-      catch: (error) => new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
+      try: () =>
+        writeSettingTier(input, {
+          pointer,
+          caller,
+          receiptId: action?.receiptId,
+          expectedPath: action?.settingPath,
+        }),
+      catch: (error) =>
+        new LocalOpError(key, error instanceof Error ? error.message : String(error), 500),
     });
-    if (!wrote.ok) return yield* Effect.fail(new StepFailure(wrote.message, wrote.status, "refused"));
+    if (!wrote.ok)
+      return yield* Effect.fail(new StepFailure(wrote.message, wrote.status, "refused"));
     const { ok: _ok, ...written } = wrote;
     return written;
   }),
@@ -1153,22 +1347,7 @@ const packageError = (key: string, error: unknown) => {
   );
 };
 
-/**
- * The home list a call reads (ADR 0037): the pointer of the document the call targets, as the
- * bridge's open-document snapshot reports it. A call that targets no open document has no project
- * home, and a targeted document with no pointer is `null`.
- */
-export const targetHomes = Effect.fnUntraced(function* (
-  bridge: Pick<RevitBridge["Service"], "list">,
-  scope: HostSessionScope | undefined,
-) {
-  if (!scope?.openDocumentId) return {} satisfies PodContext;
-  const target = (yield* bridge.list)
-    .filter((session) => !scope.bridgeSessionId || session.sessionId === scope.bridgeSessionId)
-    .flatMap((session) => session.state?.openDocuments ?? [])
-    .find((document) => document.openId === scope.openDocumentId);
-  return (target ? { pointer: target.projectHome } : {}) satisfies PodContext;
-});
+import { targetHomes } from "@pe/host-internal/target-homes";
 
 /** A session-less host composes schema-only; it never pretends a bridge is there. */
 const podContext = Effect.fnUntraced(function* (
@@ -1215,7 +1394,13 @@ function toProblem(error: unknown): {
   resolvedTarget?: BridgeError["evidence"]["resolvedTarget"];
 } {
   if (error instanceof PackageDiscoveryExceeded)
-    return { kind: "HostFailure", code: error.code, message: error.message, status: 503, notDispatched: true };
+    return {
+      kind: "HostFailure",
+      code: error.code,
+      message: error.message,
+      status: 503,
+      notDispatched: true,
+    };
   if (
     error &&
     typeof error === "object" &&
@@ -1304,7 +1489,9 @@ function executeGatewayLocal(
   // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
     return dispatchTsOnlyOperation(key, input, scope, bridge, captures, {
-      caller: action?.caller ?? { kind: "anonymous" }, action, pointers,
+      caller: action?.caller ?? { kind: "anonymous" },
+      action,
+      pointers,
     }).pipe(Effect.provideService(PictureCaptureStore, pictures));
   return Effect.flatMap(decodeRequest("host.shell.open", input), (input) =>
     openShellPath(input, launch),
@@ -1312,44 +1499,44 @@ function executeGatewayLocal(
 }
 
 export const nativeReadResolveRoute = HttpRouter.add(
-    nativeReadResolveEndpoint.method,
-    nativeReadResolveEndpoint.path,
-    (req) =>
-      Effect.gen(function* () {
-        const identity = yield* RequestIdentity;
-        const input = yield* req.json.pipe(
-          Effect.flatMap(Schema.decodeUnknownEffect(nativeReadResolveEndpoint.body)),
-          Effect.mapError(
-            () =>
-              new InvalidRead({
-                message: "Invalid native read resolution request",
-                status: 400,
-                problem: "read.input",
-              }),
+  nativeReadResolveEndpoint.method,
+  nativeReadResolveEndpoint.path,
+  (req) =>
+    Effect.gen(function* () {
+      const identity = yield* RequestIdentity;
+      const input = yield* req.json.pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(nativeReadResolveEndpoint.body)),
+        Effect.mapError(
+          () =>
+            new InvalidRead({
+              message: "Invalid native read resolution request",
+              status: 400,
+              problem: "read.input",
+            }),
+        ),
+      );
+      const descriptor = yield* (yield* HostNativeRead).resolve({
+        key: input.operationKey,
+        input: input.input,
+        scope: identity.scope,
+      });
+      return Response.jsonUnsafe(descriptor);
+    }).pipe(
+      Effect.catch((error) => {
+        if (isDoorFailure(error)) return Effect.fail(error);
+        const problem = toProblem(error);
+        return Effect.succeed(
+          Response.jsonUnsafe(
+            {
+              kind: "refused",
+              failure: { code: "ReadResolutionRefused", message: problem.message },
+            },
+            { status: problem.status },
           ),
         );
-        const descriptor = yield* (yield* HostNativeRead).resolve({
-          key: input.operationKey,
-          input: input.input,
-          scope: identity.scope,
-        });
-        return Response.jsonUnsafe(descriptor);
-      }).pipe(
-        Effect.catch((error) => {
-          if (isDoorFailure(error)) return Effect.fail(error);
-          const problem = toProblem(error);
-          return Effect.succeed(
-            Response.jsonUnsafe(
-              {
-                kind: "refused",
-                failure: { code: "ReadResolutionRefused", message: problem.message },
-              },
-              { status: problem.status },
-            ),
-          );
-        }),
-      ),
-  );
+      }),
+    ),
+);
 
 /** One native read operation path; callers keep their existing RequestIdentity. */
 const readNativeCall = (key: string, input: unknown, scope: HostSessionScope) =>
@@ -1368,81 +1555,164 @@ export const retainedDuctsRead = Effect.fn("Call.retainedDucts")(function* (
   const replaying = source.basis?.replaying;
   if (replaying) yield* admitNativeCaller(input.key);
   const resolved = !replaying ? yield* native.resolve(input) : undefined;
-  const subject = yield* Effect.try({ try: () => ductBodySubject(input), catch: (error) =>
-    isDoorFailure(error) ? error : new InvalidRead({ message: said(error), status: 400, problem: "read.input" }) });
+  const subject = yield* Effect.try({
+    try: () => ductBodySubject(input),
+    catch: (error) =>
+      isDoorFailure(error)
+        ? error
+        : new InvalidRead({ message: said(error), status: 400, problem: "read.input" }),
+  });
   const basis = source.basis ? yield* source.basis.prepare(input, subject) : undefined;
   const admitted = resolved ?? (yield* native.resolve(input));
-  const target = { processIncarnation: admitted.processIncarnation, openDocumentLifetime: admitted.openDocumentLifetime };
-  const shared = yield* owner.read(subject, Effect.gen(function* () {
-    const answer = yield* native.read(input);
-    if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput(target))
-      return yield* new InvalidRead({ message: "Ducts native response changed its admitted target", status: 409, problem: "read.target" });
-    const actual = answer.actualTarget.openDocumentLifetime;
-    // A cold historical owner reconstructs the original retained body, including its admitted
-    // target metadata. A live hit did not consume another inventory row to record for this child.
-    const capturedTarget = basis?.recorded?.target;
-    const document = !capturedTarget && "openId" in actual
-      ? yield* source.document({ session: input.scope.bridgeSessionId!, openId: actual.openId }) : undefined;
-    const nativeTakingId = basis ? yield* basis.link(answer) : undefined;
-    return { value: answer.value, nativeRequestId: answer.nativeRequestId, nativeTakingId,
-      target: capturedTarget ?? { session: input.scope.bridgeSessionId!, document: document?.address ?? null,
-        ...(document ? { documentRef: { session: document.session, openId: document.openId } } : {}) } };
-  }), { ...options, ...(basis ? { source: {
-    revision: basis.recorded?.version,
-    beforeReady: (body) => basis.consume(body, target),
-  } } : {}) }).pipe(Effect.catch((error) =>
-    basis && options.version && isRetainedReadFailure(error)
-      ? basis.refuse(error) : Effect.fail(error)));
+  const target = {
+    processIncarnation: admitted.processIncarnation,
+    openDocumentLifetime: admitted.openDocumentLifetime,
+  };
+  const shared = yield* owner
+    .read(
+      subject,
+      Effect.gen(function* () {
+        const answer = yield* native.read(input);
+        if (canonicalRouteInput(answer.actualTarget) !== canonicalRouteInput(target))
+          return yield* new InvalidRead({
+            message: "Ducts native response changed its admitted target",
+            status: 409,
+            problem: "read.target",
+          });
+        const actual = answer.actualTarget.openDocumentLifetime;
+        // A cold historical owner reconstructs the original retained body, including its admitted
+        // target metadata. A live hit did not consume another inventory row to record for this child.
+        const capturedTarget = basis?.recorded?.target;
+        const document =
+          !capturedTarget && "openId" in actual
+            ? yield* source.document({
+                session: input.scope.bridgeSessionId!,
+                openId: actual.openId,
+              })
+            : undefined;
+        const nativeTakingId = basis ? yield* basis.link(answer) : undefined;
+        return {
+          value: answer.value,
+          nativeRequestId: answer.nativeRequestId,
+          nativeTakingId,
+          target: capturedTarget ?? {
+            session: input.scope.bridgeSessionId!,
+            document: document?.address ?? null,
+            ...(document
+              ? { documentRef: { session: document.session, openId: document.openId } }
+              : {}),
+          },
+        };
+      }),
+      {
+        ...options,
+        ...(basis
+          ? {
+              source: {
+                revision: basis.recorded?.version,
+                beforeReady: (body) => basis.consume(body, target),
+              },
+            }
+          : {}),
+      },
+    )
+    .pipe(
+      Effect.catch((error) =>
+        basis && options.version && isRetainedReadFailure(error)
+          ? basis.refuse(error)
+          : Effect.fail(error),
+      ),
+    );
   if (basis && shared.reused) yield* basis.consume(shared, target);
-  yield* Effect.try({ try: () => owner.assertCurrent(subject, shared.version), catch: retainedReadFailure });
-  return Response.text(shared.json, { headers: { "content-type": "application/json",
-    ...resolvedTargetHeaders(shared.target), "x-pe-native-request-id": shared.nativeRequestId,
-    [NATIVE_BODY_VERSION_HEADER]: shared.version, "x-pe-ducts-reused": String(shared.reused) } });
+  yield* Effect.try({
+    try: () => owner.assertCurrent(subject, shared.version),
+    catch: retainedReadFailure,
+  });
+  return Response.text(shared.json, {
+    headers: {
+      "content-type": "application/json",
+      ...resolvedTargetHeaders(shared.target),
+      "x-pe-native-request-id": shared.nativeRequestId,
+      [NATIVE_BODY_VERSION_HEADER]: shared.version,
+      "x-pe-ducts-reused": String(shared.reused),
+    },
+  });
 });
 
 // The legacy retained owner uses statusCode; the typed HTTP mapper consumes status.
-const retainedReadFailure = (error: unknown) => isDoorFailure(error) ? error : new InvalidRead({
-  message: said(error), status: error instanceof BridgeError ? error.statusCode : 409, problem: "read.retained",
-});
+const retainedReadFailure = (error: unknown) =>
+  isDoorFailure(error)
+    ? error
+    : new InvalidRead({
+        message: said(error),
+        status: error instanceof BridgeError ? error.statusCode : 409,
+        problem: "read.retained",
+      });
 
 /** The same native door without live target/cache acquisition. Unsupported sources refuse first. */
-export const nativeCallRouteFor = (retained?: (input: NativeReadInput, options: {version?:string;refresh?:string}) => ReturnType<typeof retainedDuctsRead>,
-  normal?: (input: NativeReadInput) => ReturnType<typeof retainedDuctsRead>) => HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
-  Effect.gen(function* () {
-    if (req.headers["x-pe-history-point"]) return yield* new InvalidRead({ message: "needs live Revit", status: 409, problem: "history.read-only" });
-    const identity = yield* RequestIdentity;
-    const body = yield* nativeCallBody(req);
-    const inputs = yield* HostInputContext;
-    const refusal = inputs.check({ kind: "native", key: body.key });
-    if (refusal) return yield* refusal;
-    // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
-    if (linkedCatalog().entries.get(body.key)?.call?.reading) {
-      if (retained) return yield* retained({ key: body.key, input: body.request ?? {}, scope: identity.scope },
-        readingBasisHeaders(req.headers));
-      const missing = inputs.check({ kind: "input", input: "document" });
-      if (missing) return yield* missing;
-    }
-    if (normal) return yield* normal({ key: body.key, input: body.request ?? {}, scope: identity.scope });
-    const answer = yield* readNativeCall(body.key, body.request ?? {}, identity.scope);
-    return Response.jsonUnsafe(answer.value, { headers: { "x-pe-native-request-id": answer.nativeRequestId } });
-  }).pipe(Effect.catch((error) => {
-    if (isDoorFailure(error)) return Effect.fail(error);
-    const problem = toProblem(error);
-    return Effect.succeed(Response.jsonUnsafe(problem, { status: problem.status, headers: { "content-type": "application/problem+json" } }));
-  })),
-);
+export const nativeCallRouteFor = (
+  retained?: (
+    input: NativeReadInput,
+    options: { version?: string; refresh?: string },
+  ) => ReturnType<typeof retainedDuctsRead>,
+  normal?: (input: NativeReadInput) => ReturnType<typeof retainedDuctsRead>,
+) =>
+  HttpRouter.add("POST", peRoutes["operation.call"].path, (req) =>
+    Effect.gen(function* () {
+      if (req.headers["x-pe-history-point"])
+        return yield* new InvalidRead({
+          message: "needs live Revit",
+          status: 409,
+          problem: "history.read-only",
+        });
+      const identity = yield* RequestIdentity;
+      const body = yield* nativeCallBody(req);
+      const inputs = yield* HostInputContext;
+      const refusal = inputs.check({ kind: "native", key: body.key });
+      if (refusal) return yield* refusal;
+      // Retained Ducts HTTP bodies also need source metadata and version ownership, not just a native taking.
+      if (linkedCatalog().entries.get(body.key)?.call?.reading) {
+        if (retained)
+          return yield* retained(
+            { key: body.key, input: body.request ?? {}, scope: identity.scope },
+            readingBasisHeaders(req.headers),
+          );
+        const missing = inputs.check({ kind: "input", input: "document" });
+        if (missing) return yield* missing;
+      }
+      if (normal)
+        return yield* normal({ key: body.key, input: body.request ?? {}, scope: identity.scope });
+      const answer = yield* readNativeCall(body.key, body.request ?? {}, identity.scope);
+      return Response.jsonUnsafe(answer.value, {
+        headers: { "x-pe-native-request-id": answer.nativeRequestId },
+      });
+    }).pipe(
+      Effect.catch((error) => {
+        if (isDoorFailure(error)) return Effect.fail(error);
+        const problem = toProblem(error);
+        return Effect.succeed(
+          Response.jsonUnsafe(problem, {
+            status: problem.status,
+            headers: { "content-type": "application/problem+json" },
+          }),
+        );
+      }),
+    ),
+  );
 export const nativeCallRoute = nativeCallRouteFor();
 
-const nativeCallBody = (req: HttpServerRequest.HttpServerRequest) => Effect.gen(function* () {
-  const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
-  if (!isRecord(body) || typeof body.key !== "string") return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
-  const unknown = Object.keys(body).find((key) => key !== "key" && key !== "request");
-  if (unknown) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknown)));
-  const key = body.key;
-  if (!isTsOnlyOperationKey(key))
-    yield* Effect.try({
-      try: () => validateNativeInput(key, body.request ?? {}),
-      catch: (error) => new InvalidHostRequest(key, said(error)),
-    });
-  return { key: body.key, request: body.request };
-});
+const nativeCallBody = (req: HttpServerRequest.HttpServerRequest) =>
+  Effect.gen(function* () {
+    const body = yield* req.json.pipe(Effect.mapError(() => invalidBody("unreadable JSON body")));
+    if (!isRecord(body) || typeof body.key !== "string")
+      return yield* Effect.fail(invalidBody("body must be { key: string, request?: object }"));
+    const unknown = Object.keys(body).find((key) => key !== "key" && key !== "request");
+    if (unknown) return yield* Effect.fail(invalidBody(unknownBodyKeyMessage(unknown)));
+    const key = body.key;
+    if (!isTsOnlyOperationKey(key))
+      yield* Effect.try({
+        try: () => validateNativeInput(key, body.request ?? {}),
+        catch: (error) => new InvalidHostRequest(key, said(error)),
+      });
+    return { key: body.key, request: body.request };
+  });

@@ -42,7 +42,10 @@ const pathLabel = (ack: WorkWriteAck) =>
  * The host's journal for one Work: its acks replayed, then every receipt recorded, so the journal's
  * own barrier rule runs (a step a successful Revit write consumed cannot be stepped back).
  */
-export function timelineJournal(work: TimelineWork, receipts: readonly ActionStatus[]): WorkJournal {
+export function timelineJournal(
+  work: TimelineWork,
+  receipts: readonly ActionStatus[],
+): WorkJournal {
   const journal = createWorkJournal(work.key);
   // An ack stored without a stamp sorts first. The journal would otherwise read the clock, and the
   // same history would then project differently on each read.
@@ -54,7 +57,9 @@ export function timelineJournal(work: TimelineWork, receipts: readonly ActionSta
       at: receipt.startedAt,
       receiptId: receipt.id,
       paths: receipt.consumes.flatMap((item) =>
-        item.kind === "work" && sameReceiptWork(item.probe.handle.key, work.key) ? item.probe.paths : [],
+        item.kind === "work" && sameReceiptWork(item.probe.handle.key, work.key)
+          ? item.probe.paths
+          : [],
       ),
       outcome: receipt.outcome,
       basis: { receipt },
@@ -82,7 +87,9 @@ export function projectWorks(
       if (ack.kind === "publish") continue;
       const found =
         ack.kind === "apply" && ack.undoable
-          ? steps.get(ack.step ?? `${ack.by === "pea" ? "pea:" : ""}${ack.press ?? `r${ack.revision}`}`)
+          ? steps.get(
+              ack.step ?? `${ack.by === "pea" ? "pea:" : ""}${ack.press ?? `r${ack.revision}`}`,
+            )
           : undefined;
       const step = found?.step;
       const receipt = step?.barrier?.receiptId;
@@ -92,7 +99,13 @@ export function projectWorks(
         revision: ack.revision,
         by: ack.by,
         label: ack.label ?? step?.label ?? pathLabel(ack),
-        state: found?.undone ? "undone" : step?.superseded ? "superseded" : step?.barrier ? "blocked" : "applied",
+        state: found?.undone
+          ? "undone"
+          : step?.superseded
+            ? "superseded"
+            : step?.barrier
+              ? "blocked"
+              : "applied",
         ...(step?.notWritten ? { notWritten: step.notWritten } : {}),
         ...(step?.superseded
           ? { blockedBy: { reason: step.superseded.message } }
@@ -121,10 +134,12 @@ export function projectWorks(
   });
   for (const receipt of receipts) {
     const consumed = receipt.consumes.find(
-      (item) => item.kind === "work" && works.some(work=>sameReceiptWork(item.probe.handle.key, work.key)),
+      (item) =>
+        item.kind === "work" &&
+        works.some((work) => sameReceiptWork(item.probe.handle.key, work.key)),
     );
     if (consumed?.kind !== "work") continue;
-    const work = works.find(work => sameReceiptWork(consumed.probe.handle.key, work.key));
+    const work = works.find((work) => sameReceiptWork(consumed.probe.handle.key, work.key));
     if (!work) throw Error(`Missing timeline Work for receipt ${receipt.id}`);
     rows.push({
       kind: "receipt",
@@ -137,11 +152,15 @@ export function projectWorks(
     });
   }
   const latest = (list: TimelineCandidate[]) =>
-    list.reduce<TimelineCandidate | null>((best, next) => (!best || next.at > best.at ? next : best), null);
+    list.reduce<TimelineCandidate | null>(
+      (best, next) => (!best || next.at > best.at ? next : best),
+      null,
+    );
   return { rows, undo: latest(candidates.undo), redo: latest(candidates.redo) };
 }
 
-const rowTime = (row: TimelineRow) => (typeof row.at === "number" ? row.at : Date.parse(row.at) || 0);
+const rowTime = (row: TimelineRow) =>
+  typeof row.at === "number" ? row.at : Date.parse(row.at) || 0;
 
 /**
  * One Timeline from every source: rows in host order, and the one next step across all of them.
@@ -155,11 +174,14 @@ export function mergeTimeline(parts: readonly TimelinePart[]): {
   const pick = (direction: "undo" | "redo") =>
     parts.reduce<{ source: number; candidate: TimelineCandidate } | null>((best, part, source) => {
       const candidate = part[direction];
-      return candidate && (!best || candidate.at > best.candidate.at) ? { source, candidate } : best;
+      return candidate && (!best || candidate.at > best.candidate.at)
+        ? { source, candidate }
+        : best;
     }, null);
   const undo = pick("undo"),
     redo = pick("redo");
-  const offered = (pick: typeof undo) => (pick && !pick.candidate.refusal ? pick.candidate.ref : null);
+  const offered = (pick: typeof undo) =>
+    pick && !pick.candidate.refusal ? pick.candidate.ref : null;
   return {
     timeline: {
       // Array.prototype.sort is stable: rows that share a time keep their source order.

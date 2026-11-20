@@ -20,16 +20,29 @@ export function editPatches(edits: CalcEdits): RouteStatePatch[] {
       patches.push(
         value === null
           ? { path: [segment, key] }
-          : { path: [segment, key, "edit"], value: { value, ...(edits.refs?.[field]?.[key] ? { ref: edits.refs[field][key] } : {}) } },
+          : {
+              path: [segment, key, "edit"],
+              value: {
+                value,
+                ...(edits.refs?.[field]?.[key] ? { ref: edits.refs[field][key] } : {}),
+              },
+            },
       );
   }
   // One cell per criterion and side: a value stages it, null removes its pending edit, absent keeps it.
   for (const [key, value] of Object.entries(edits.criteria ?? {})) {
-    const sides = value !== null && typeof value === "object" ? Object.entries(value) : [[undefined, value] as const];
+    const sides =
+      value !== null && typeof value === "object"
+        ? Object.entries(value)
+        : [[undefined, value] as const];
     for (const [side, n] of sides) {
       const cell = criteriaCellOf(key, side);
       if (!cell || n === undefined) continue;
-      patches.push(n === null ? { path: ["criteria", cell] } : { path: ["criteria", cell, "edit"], value: { value: n } });
+      patches.push(
+        n === null
+          ? { path: ["criteria", cell] }
+          : { path: ["criteria", cell, "edit"], value: { value: n } },
+      );
     }
   }
   for (const { pair, verdict } of edits.joins ?? [])

@@ -9,10 +9,7 @@ import {
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
 import { hostDescriptorSchema } from "@pe/host-contracts/host-descriptor";
-import {
-  sourceProvenanceSchema,
-  type SourceProvenance,
-} from "@pe/agent-contracts";
+import { sourceProvenanceSchema, type SourceProvenance } from "@pe/agent-contracts";
 import { Input } from "@pe/kit/lang/input";
 import type { Column } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";

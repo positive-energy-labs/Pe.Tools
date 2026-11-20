@@ -79,7 +79,10 @@ export const consumedSchema = z.discriminatedUnion("kind", [
       z.strictObject({ ref: documentRefSchema, takenAt: z.string() }),
       z.strictObject({
         ref: documentRefSchema,
-        sealed: z.strictObject({ observedSince: z.number().nullable(), changedAt: z.number().nullable() }),
+        sealed: z.strictObject({
+          observedSince: z.number().nullable(),
+          changedAt: z.number().nullable(),
+        }),
       }),
     ]),
     expected: z.literal(true),

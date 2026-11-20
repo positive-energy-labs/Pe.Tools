@@ -89,8 +89,10 @@ export function splitRows(rows: readonly TypeRow[]) {
   return { rows: values, facts };
 }
 /** The browser's join of the wire split back into the rows the grid draws. */
-export const joinRows = (rows: readonly TypeValues[], facts: Readonly<Record<string, Omit<TypeRow, keyof TypeValues>>>): TypeRow[] =>
-  rows.map((row) => ({ ...facts[row.familyId]!, ...row }));
+export const joinRows = (
+  rows: readonly TypeValues[],
+  facts: Readonly<Record<string, Omit<TypeRow, keyof TypeValues>>>,
+): TypeRow[] => rows.map((row) => ({ ...facts[row.familyId]!, ...row }));
 type TypeValues = Omit<TypeRow, "scopes" | "formulas" | "storageTypes" | "displayUnits" | "yesNos">;
 
 export const filledValue = (value: string | undefined) =>

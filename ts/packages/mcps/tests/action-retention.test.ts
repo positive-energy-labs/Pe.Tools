@@ -142,7 +142,7 @@ test("pre-admission loss survives a client reload and resends exact bytes despit
     0,
   );
   expect(first).toMatchObject({ state: "detached", acceptance: "unknown" });
-  const sentAt = api.inspectRetainedActions().find(record => record.id === first.id)?.sentAt;
+  const sentAt = api.inspectRetainedActions().find((record) => record.id === first.id)?.sentAt;
   expect(sentAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   vi.resetModules();
   api = await client();
@@ -251,7 +251,11 @@ test("a schema-valid ACK for another target is rejected and preserves pre-ACK in
   await expect(api.submitAction(admission, endpoint, 100)).rejects.toThrow(
     "different intent or target",
   );
-  expect(api.inspectRetainedActions()).toContainEqual({ id: admission.id, admission, sentAt: expect.any(String) });
+  expect(api.inspectRetainedActions()).toContainEqual({
+    id: admission.id,
+    admission,
+    sentAt: expect.any(String),
+  });
 });
 
 test("browser completion follows the existing receipt observer without a GET and releases synchronous snapshots", async () => {
@@ -338,23 +342,57 @@ test("a fresh receipt observer cannot substitute another admitted target", async
   }
 });
 
-test.each(["same","target","input"] as const)("INT-RECEIPT observer compares %s retained identity without live input reinterpretation",async(change)=>{
-  const api=await client(),release=vi.fn();
-  const original=actionReceiptSchema.parse({...receipt({id:crypto.randomUUID(),key:"pod.export",target:{kind:"host"},input:{}},"running"),
-    key:"families.apply",input:{originalWorkKey:"families/open:private-original/original-open"},
-    target:{kind:"unavailable-original",original:{kind:"document",ref:{session:"private-original",openId:"original-open"}}}});
-  const next=actionReceiptSchema.parse({...original,state:"succeeded",result:{original:true},
-    ...(change==="target"?{target:{kind:"unavailable-original",original:{kind:"document",ref:{session:"other-original",openId:"original-open"}}}}:{}),
-    ...(change==="input"?{input:{originalWorkKey:"changed"}}:{}),
-  });
-  const unbind=api.bindActionObserver((_id,_base,accept)=>{accept(next);return release;});
-  try{
-    const waiting=api.waitForAction(original.id,base(),1000,undefined,original);
-    if(change==="same") expect(await waiting).toEqual(next);
-    else await expect(waiting).rejects.toThrow("different intent or target");
-    expect(release).toHaveBeenCalledOnce();
-  }finally{unbind();}
-});
+test.each(["same", "target", "input"] as const)(
+  "INT-RECEIPT observer compares %s retained identity without live input reinterpretation",
+  async (change) => {
+    const api = await client(),
+      release = vi.fn();
+    const original = actionReceiptSchema.parse({
+      ...receipt(
+        { id: crypto.randomUUID(), key: "pod.export", target: { kind: "host" }, input: {} },
+        "running",
+      ),
+      key: "families.apply",
+      input: { originalWorkKey: "families/open:private-original/original-open" },
+      target: {
+        kind: "unavailable-original",
+        original: {
+          kind: "document",
+          ref: { session: "private-original", openId: "original-open" },
+        },
+      },
+    });
+    const next = actionReceiptSchema.parse({
+      ...original,
+      state: "succeeded",
+      result: { original: true },
+      ...(change === "target"
+        ? {
+            target: {
+              kind: "unavailable-original",
+              original: {
+                kind: "document",
+                ref: { session: "other-original", openId: "original-open" },
+              },
+            },
+          }
+        : {}),
+      ...(change === "input" ? { input: { originalWorkKey: "changed" } } : {}),
+    });
+    const unbind = api.bindActionObserver((_id, _base, accept) => {
+      accept(next);
+      return release;
+    });
+    try {
+      const waiting = api.waitForAction(original.id, base(), 1000, undefined, original);
+      if (change === "same") expect(await waiting).toEqual(next);
+      else await expect(waiting).rejects.toThrow("different intent or target");
+      expect(release).toHaveBeenCalledOnce();
+    } finally {
+      unbind();
+    }
+  },
+);
 
 test("an authoritative no-dispatch refusal releases the slot for a new explicit press", async () => {
   const endpoint = base(),
@@ -511,36 +549,60 @@ test("a receipt poll that outlives its slice is asked again, so the run's own ti
   try {
     const api = await client();
     expect(
-      await api.waitForAction(admission.id, endpoint, 300_000, undefined, receipt(admission, "running")),
+      await api.waitForAction(
+        admission.id,
+        endpoint,
+        300_000,
+        undefined,
+        receipt(admission, "running"),
+      ),
     ).toMatchObject({ state: "succeeded", result: { done: true } });
     expect(polls).toBe(2);
     expect(
-      new api.ActionResultError({ state: "detached", id: "a1", key: "scripting.execute", acceptance: "admitted" }).message,
+      new api.ActionResultError({
+        state: "detached",
+        id: "a1",
+        key: "scripting.execute",
+        acceptance: "admitted",
+      }).message,
     ).toContain("action.read");
   } finally {
     vi.restoreAllMocks();
   }
 });
 
-
 test.each(["succeeded", "running"] as const)(
   "explicit-ID reconnect reads %s historical input without fresh admission or POST",
   async (state) => {
-    const api = await client(), endpoint = base();
-    const original = receipt({
-      id: crypto.randomUUID(), key: "families.apply",
-      input: { originalWorkKey: "families/open:private-original/original-open" },
-      target: { kind: "unavailable-original", original: { kind: "document", ref: target } },
-    }, state);
+    const api = await client(),
+      endpoint = base();
+    const original = receipt(
+      {
+        id: crypto.randomUUID(),
+        key: "families.apply",
+        input: { originalWorkKey: "families/open:private-original/original-open" },
+        target: { kind: "unavailable-original", original: { kind: "document", ref: target } },
+      },
+      state,
+    );
     const requests = vi.fn(async (_input: unknown, init?: RequestInit) => {
       expect(init?.method).not.toBe("POST");
       return Response.json([original]);
     });
     vi.stubGlobal("fetch", requests);
-    const result = await api.recoverAction(original.id, original.key, original.input, undefined, endpoint, 0);
-    expect(result).toEqual(state === "running"
-      ? { state: "detached", id: original.id, key: original.key, acceptance: "admitted" }
-      : original);
+    const result = await api.recoverAction(
+      original.id,
+      original.key,
+      original.input,
+      undefined,
+      endpoint,
+      0,
+    );
+    expect(result).toEqual(
+      state === "running"
+        ? { state: "detached", id: original.id, key: original.key, acceptance: "admitted" }
+        : original,
+    );
     expect(requests).toHaveBeenCalledOnce();
   },
 );
@@ -548,9 +610,11 @@ test.each(["succeeded", "running"] as const)(
 test.each(["id", "key", "input", "target"] as const)(
   "explicit-ID historical reconnect refuses mismatched %s without POST",
   async (change) => {
-    const api = await client(), endpoint = base();
+    const api = await client(),
+      endpoint = base();
     const original = receipt({
-      id: crypto.randomUUID(), key: "families.apply",
+      id: crypto.randomUUID(),
+      key: "families.apply",
       input: { originalWorkKey: "families/open:private-original/original-open" },
       target: { kind: "unavailable-original", original: { kind: "document", ref: target } },
     });
@@ -559,24 +623,35 @@ test.each(["id", "key", "input", "target"] as const)(
       return Response.json([original]);
     });
     vi.stubGlobal("fetch", requests);
-    await expect(api.recoverAction(
-      change === "id" ? "another-id" : original.id,
-      change === "key" ? "families.plan" : original.key,
-      change === "input" ? { ...original.input, changed: true } : original.input,
-      change === "target" ? { kind: "document", ref: target } : undefined,
-      endpoint, 100,
-    )).rejects.toThrow(change === "id" ? "different receipt id" : "different intent or target");
+    await expect(
+      api.recoverAction(
+        change === "id" ? "another-id" : original.id,
+        change === "key" ? "families.plan" : original.key,
+        change === "input" ? { ...original.input, changed: true } : original.input,
+        change === "target" ? { kind: "document", ref: target } : undefined,
+        endpoint,
+        100,
+      ),
+    ).rejects.toThrow(change === "id" ? "different receipt id" : "different intent or target");
     expect(requests).toHaveBeenCalledOnce();
   },
 );
 
 test("fresh admission still rejects historical command input before any POST", async () => {
-  const api = await client(), requests = vi.fn();
+  const api = await client(),
+    requests = vi.fn();
   vi.stubGlobal("fetch", requests);
-  await expect(api.submitAction({
-    id: crypto.randomUUID(), key: "families.apply",
-    target: { kind: "document", ref: target },
-    input: { originalWorkKey: "families/open:private-original/original-open" },
-  }, base(), 100)).rejects.toThrow();
+  await expect(
+    api.submitAction(
+      {
+        id: crypto.randomUUID(),
+        key: "families.apply",
+        target: { kind: "document", ref: target },
+        input: { originalWorkKey: "families/open:private-original/original-open" },
+      },
+      base(),
+      100,
+    ),
+  ).rejects.toThrow();
   expect(requests).not.toHaveBeenCalled();
 });

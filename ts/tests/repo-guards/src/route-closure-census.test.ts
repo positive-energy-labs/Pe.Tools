@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { routeFolderCandidates } from "@pe/host-contracts/route-startup";
+import { routeFolderCandidates } from "@pe/web/route-startup";
 import { webSourceFiles } from "./route-closure-census.ts";
 
 test("a planted product web folder is discovered when the web app has no route folders", () => {

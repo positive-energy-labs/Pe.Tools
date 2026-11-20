@@ -1,5 +1,5 @@
 import { peClient } from "./pe-client";
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 /**
  * The machine's mutations other than update (`install.ts`): the share switch, and the tray's two
  * host verbs. Each is a plain call; the Machine reading is the only state, so success dirties it.
@@ -37,7 +37,10 @@ async function setShare(
 ): Promise<void> {
   const response = await peClient.response("share.set", { body });
   if (!response.ok && response.status !== 409) {
-    const body = (await response.json().catch((error) => { console.error("machine: asynchronous operation failed", error); return null; })) as {
+    const body = (await response.json().catch((error) => {
+      console.error("machine: asynchronous operation failed", error);
+      return null;
+    })) as {
       error?: { message: string };
     } | null;
     throw Error(body?.error?.message ?? `share switch refused (${response.status})`);

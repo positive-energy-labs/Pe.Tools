@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import { routeAddress, type SceneSection } from "@pe/agent-contracts";
 import { SectionEditorController } from "./section-editor-controller";
-import { emptyCuts } from "./cuts";
+import { emptyCuts } from "@pe/web-kernel/scene/cuts";
 
 const bounds = { minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 10, maxZ: 10 };
 const plane = (offset: number): SceneSection => ({

@@ -12,7 +12,7 @@ import {
   WorkStanding,
   workSummary,
   type CellWire,
-} from "#/components/work/band";
+} from "@pe/web-kernel/components/work/band";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Tag } from "@pe/kit/lang/chip";
 import { KeyHint } from "@pe/kit/lang/key-hint";

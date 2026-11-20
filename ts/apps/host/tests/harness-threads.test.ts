@@ -3,7 +3,11 @@ import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { updateFixture } from "./storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { markReadings } from "../src/resource-adapters.ts";
-import { openRecordingWriter, openRecordingReader, nativeCatalogIdentity } from "../src/native-recording.ts";
+import {
+  openRecordingWriter,
+  openRecordingReader,
+  nativeCatalogIdentity,
+} from "../src/native-recording.ts";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -14,11 +18,24 @@ import { admittedBuiltinsLayer } from "../src/admitted-builtins.ts";
 import { builtinEnrollments } from "../src/builtin-enrollment.ts";
 import { workHandleSchema, canonicalWorkKey } from "@pe/agent-contracts";
 import { z } from "zod";
-import { closedFan, recordedTables } from "../../../products/fans/host/src/tests/closed-fan.fixture.ts";
-import { detachedBridge, sessionView, registryService, harnessThreads, testSpawner, settle, testHostInputs, captureStore, journalAt } from "./effect-test.ts";
+import {
+  closedFan,
+  recordedTables,
+} from "../../../products/fans/host/src/tests/closed-fan.fixture.ts";
+import {
+  detachedBridge,
+  sessionView,
+  registryService,
+  harnessThreads,
+  testSpawner,
+  settle,
+  testHostInputs,
+  captureStore,
+  journalAt,
+} from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
-import { RevitBridge } from "../src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
@@ -34,12 +51,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Context, Effect, Exit, Layer, Schema, Scope } from "effect";
 import { HarnessEventLine } from "../src/harness/thread-store.ts";
-import type {
-  Caller,
-  HarnessEvent,
-  HarnessThreadBody,
-  WorkHandle,
-} from "@pe/agent-contracts";
+import type { Caller, HarnessEvent, HarnessThreadBody, WorkHandle } from "@pe/agent-contracts";
 import {
   HARNESS_EVENT_MAX_BYTES,
   readingKey,
@@ -55,13 +67,13 @@ import {
   admitCrossing,
   bindControl,
   onRevoke,
-  Refused,
   callerOf,
   currentCaller,
   workAuthorOf,
   originOf,
   assertRunAdmission,
 } from "../src/control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { createProviders } from "../src/harness/providers.ts";
 import {
   IDLE_CHILD_MS,
@@ -218,11 +230,16 @@ const kinds = (events: HarnessEvent[]) =>
     )
     .map((e) => (e.kind === "update" ? `update:${e.update.sessionUpdate}` : e.kind));
 
-const chainTitle = "canonical Address Work joins find, stage, sealed preview, journal apply and receipt in one chain, asking nobody";
+const chainTitle =
+  "canonical Address Work joins find, stage, sealed preview, journal apply and receipt in one chain, asking nobody";
 test.each([
   { harness: "claude", capturedNetwork: false, title: chainTitle },
   { harness: "codex", capturedNetwork: false, title: chainTitle },
-  { harness: "codex", capturedNetwork: true, title: "captured network chain refuses an unresolved fan before writing, asking nobody" },
+  {
+    harness: "codex",
+    capturedNetwork: true,
+    title: "captured network chain refuses an unresolved fan before writing, asking nobody",
+  },
 ] as const)(
   "$harness: $title",
   async ({ harness, capturedNetwork }) => {
@@ -233,11 +250,14 @@ test.each([
     const target = { session: "A", openId: "open-A" };
     const address = documentAddress("C:/Models/chain.rvt");
     const key = bindWork("fans", address, undefined, target);
-    const workspace = new RouteWorkspace({ registrations: [],
+    const workspace = new RouteWorkspace({
+      registrations: [],
       publicationAuthor: () => workAuthorOf(currentCaller()),
-      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))) });
+      store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
+    });
     const routes = createPeRoutes({
-      registrations: [], workspace,
+      registrations: [],
+      workspace,
       heads: { observe: () => () => {} },
       navigation: { documents: async () => [{ ...target, address }], threads: async () => [] },
     });
@@ -252,41 +272,70 @@ test.each([
     );
     // This is a harness transport witness; an unresolved captured walk cannot authorize its write.
     const snapshot = capturedNetwork
-      ? nativeResponseSchema("ducts.snapshot.walk").parse({ ...captured,
-          vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] } })
+      ? nativeResponseSchema("ducts.snapshot.walk").parse({
+          ...captured,
+          vocabulary: { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] },
+        })
       : closedFan(14577391, { requiredEsp: captured.slots.requiredEsp ?? undefined });
-    const fan = snapshot.nodes.find(node => node.id === 14577391)!;
+    const fan = snapshot.nodes.find((node) => node.id === 14577391)!;
     if (!capturedNetwork) {
       snapshot.slots.fanFlow = captured.slots.fanFlow;
       fan.flowParameter = captured.slots.fanFlow;
       fan.connectors[0]!.index = 2;
-      for (const item of [...snapshot.nodes, ...snapshot.segments]) for (const port of item.connectors)
-        if (port.connectedTo?.elementId === fan.id && port.connectedTo.connector === 0) port.connectedTo.connector = 2;
+      for (const item of [...snapshot.nodes, ...snapshot.segments])
+        for (const port of item.connectors)
+          if (port.connectedTo?.elementId === fan.id && port.connectedTo.connector === 0)
+            port.connectedTo.connector = 2;
     }
     const writes: unknown[] = [];
-    const equipmentSubject = elementSubject(snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!);
-    const invokeFixture = (op: string, input: unknown, _session?: string, _doc?: string | null, requestId?: string) =>
-        Effect.promise(async () => {
-          let value: unknown;
-          if (op.startsWith("ducts.snapshot.")) value = snapshot;
-          else if (op === "ducts.tables") value = recordedTables();
-          else if (op === "ducts.apply" || op === "ducts.apply.plan") {
-            const preview = op === "ducts.apply.plan";
-            await journal.markDispatched(requestId!, "bridge");
-            if (!preview) writes.push(input);
-            value = {
-              previewOnly: preview,
-              counts: { written: preview ? 0 : 1, planned: preview ? 1 : 0, refused: 0, unchanged: 0 },
-              writes: [{ kind: "equipment-flow", id: 14577391, outcome: preview ? "planned" : "written" }],
-              storeRevision: 1,
-              systemsAfter: [],
-            };
-            // Explicit terminal evidence for this controlled fixture, never inferred from the catalog.
-            await recordNativeTerminal(requestId!, preview ? { kind: "none" }
-              : { kind: "wrote", transactions: ["Apply equipment flow"], added: 0, modified: 1, deleted: 0 });
-          } else throw Error(`Unexpected bridge op ${op}`);
-          return { value, target: { session: "A", document: address, documentRef: target } };
-        });
+    const equipmentSubject = elementSubject(
+      snapshot.nodes.find((node: { id: number }) => node.id === 14577391)!,
+    );
+    const invokeFixture = (
+      op: string,
+      input: unknown,
+      _session?: string,
+      _doc?: string | null,
+      requestId?: string,
+    ) =>
+      Effect.promise(async () => {
+        let value: unknown;
+        if (op.startsWith("ducts.snapshot.")) value = snapshot;
+        else if (op === "ducts.tables") value = recordedTables();
+        else if (op === "ducts.apply" || op === "ducts.apply.plan") {
+          const preview = op === "ducts.apply.plan";
+          await journal.markDispatched(requestId!, "bridge");
+          if (!preview) writes.push(input);
+          value = {
+            previewOnly: preview,
+            counts: {
+              written: preview ? 0 : 1,
+              planned: preview ? 1 : 0,
+              refused: 0,
+              unchanged: 0,
+            },
+            writes: [
+              { kind: "equipment-flow", id: 14577391, outcome: preview ? "planned" : "written" },
+            ],
+            storeRevision: 1,
+            systemsAfter: [],
+          };
+          // Explicit terminal evidence for this controlled fixture, never inferred from the catalog.
+          await recordNativeTerminal(
+            requestId!,
+            preview
+              ? { kind: "none" }
+              : {
+                  kind: "wrote",
+                  transactions: ["Apply equipment flow"],
+                  added: 0,
+                  modified: 1,
+                  deleted: 0,
+                },
+          );
+        } else throw Error(`Unexpected bridge op ${op}`);
+        return { value, target: { session: "A", document: address, documentRef: target } };
+      });
     const bridge = detachedBridge({
       list: Effect.succeed([
         sessionView({
@@ -295,34 +344,62 @@ test.each([
           ...hostOwnership,
           processId: 42,
           processStartUtcUnixMs: 1000,
-          state: { openDocuments: [{ ...target, address, isFamilyDocument: false, projectHome: null }] },
+          state: {
+            openDocuments: [{ ...target, address, isFamilyDocument: false, projectHome: null }],
+          },
         }),
       ]),
       invoke: invokeFixture,
-      invokeHandle: (key, input, session, openId, requestId) => Effect.gen(function* () {
-        const answer = yield* Effect.cached(invokeFixture(key, input, session, openId, requestId).pipe(
-          Effect.map(({ value }) => ({
-            value,
-            nativeRequestId: requestId!,
-            actualTarget: { processIncarnation: { pid: 42, startedAt: 1000 }, openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const } },
-            freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
-            cost: {}, outcome: "native-acknowledged" as const,
-          })),
-        ));
-        return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
-      }),
+      invokeHandle: (key, input, session, openId, requestId) =>
+        Effect.gen(function* () {
+          const answer = yield* Effect.cached(
+            invokeFixture(key, input, session, openId, requestId).pipe(
+              Effect.map(({ value }) => ({
+                value,
+                nativeRequestId: requestId!,
+                actualTarget: {
+                  processIncarnation: { pid: 42, startedAt: 1000 },
+                  openDocumentLifetime: openId ? { openId } : { kind: "session-only" as const },
+                },
+                freshness: { freshnessGeneration: null, freshnessEvidence: "unavailable" as const },
+                cost: {},
+                outcome: "native-acknowledged" as const,
+              })),
+            ),
+          );
+          return { answer, terminal: Effect.as(answer, "native-acknowledged" as const) };
+        }),
     });
     const readScope = Scope.makeUnsafe();
     onTestFinished(() => settle(Scope.close(readScope, Exit.void)));
-    const readContext = await settle(Layer.buildWithScope(
-      Layer.mergeAll(Layer.effect(HostNativeRead, HostNativeRead), testHostInputs,
-        admittedBuiltinsLayer(workspace, builtinEnrollments.filter(entry => ["fans", "duct-systems"].includes(entry.routeKey)))).pipe(
-        nativeReadRoot(Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args)))),
-        Layer.provide(Layer.succeed(RevitBridge, bridge)),
-      ), readScope,
-    ));
-    const deps = { sdk: sdkSessions, workspace, nativeRead: Context.get(readContext, HostNativeRead), files: Context.get(readContext, DuctFiles), marks: Context.get(readContext, HostDocumentMarks) };
-    const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () => Effect.fail(Error("No local command in this journey")));
+    const readContext = await settle(
+      Layer.buildWithScope(
+        Layer.mergeAll(
+          Layer.effect(HostNativeRead, HostNativeRead),
+          testHostInputs,
+          admittedBuiltinsLayer(
+            workspace,
+            builtinEnrollments.filter((entry) => ["fans", "duct-systems"].includes(entry.routeKey)),
+          ),
+        ).pipe(
+          nativeReadRoot(
+            Layer.succeed(SdkDriver, (args) => Effect.promise(() => sdkSessions(args))),
+          ),
+          Layer.provide(Layer.succeed(RevitBridge, bridge)),
+        ),
+        readScope,
+      ),
+    );
+    const deps = {
+      sdk: sdkSessions,
+      workspace,
+      nativeRead: Context.get(readContext, HostNativeRead),
+      files: Context.get(readContext, DuctFiles),
+      marks: Context.get(readContext, HostDocumentMarks),
+    };
+    const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () =>
+      Effect.fail(Error("No local command in this journey")),
+    );
     const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({
       work: routes.workspace,
@@ -360,9 +437,18 @@ test.each([
             if (path === "/pe/reads/value") {
               const chunks: Buffer[] = [];
               for await (const chunk of incoming) chunks.push(Buffer.from(chunk));
-              const graph = graphRoute("reads.value", JSON.parse(Buffer.concat(chunks).toString("utf8")));
-              const data = await graph.evaluate({ evaluation: "harness-route", origin: {},
-                take: async name => { throw Error(`Unexpected route metadata input ${name}`); }, revision: () => 0 });
+              const graph = graphRoute(
+                "reads.value",
+                JSON.parse(Buffer.concat(chunks).toString("utf8")),
+              );
+              const data = await graph.evaluate({
+                evaluation: "harness-route",
+                origin: {},
+                take: async (name) => {
+                  throw Error(`Unexpected route metadata input ${name}`);
+                },
+                revision: () => 0,
+              });
               return Response.json({ value: { data } });
             }
             if (path === "/chain/locate") {
@@ -383,7 +469,8 @@ test.each([
               expect(census.works).toHaveLength(1);
               expect(census.works[0]).toMatchObject({ scope: { binding: "address" }, revision: 1 });
               expect(workKey(census.works[0]!.scope)).toBe(workKey({ ...key, route: "fans" }));
-              located = z.object({ result: z.object({ handle: workHandleSchema }) }).parse(found).result.handle;
+              located = z.object({ result: z.object({ handle: workHandleSchema }) }).parse(found)
+                .result.handle;
               return Response.json(found);
             }
             if (path === "/pe/capabilities")
@@ -473,8 +560,11 @@ test.each([
       expect(JSON.stringify(done.events)).toContain("chain find:");
       const preview = (await journal.list(undefined, "preview"))[0];
       if (capturedNetwork) {
-        expect(preview, JSON.stringify(preview)).toMatchObject({ state: "failed", notDispatched: true,
-          error: expect.stringContaining("Nothing is written from a incomplete fan calc") });
+        expect(preview, JSON.stringify(preview)).toMatchObject({
+          state: "failed",
+          notDispatched: true,
+          error: expect.stringContaining("Nothing is written from a incomplete fan calc"),
+        });
         expect(writes).toEqual([]);
         expect((await journal.wait("apply")).steps).toEqual([]);
         return;
@@ -489,14 +579,26 @@ test.each([
       expect(applied, JSON.stringify(applied)).toMatchObject({
         state: "succeeded",
         steps: [
-          { kind: "native", state: "succeeded", dispatchedAt: expect.any(String), touched: { kind: "wrote", modified: 1 } },
+          {
+            kind: "native",
+            state: "succeeded",
+            dispatchedAt: expect.any(String),
+            touched: { kind: "wrote", modified: 1 },
+          },
           { kind: "publication", state: "succeeded" },
         ],
       });
-      const saved = (await routes.workspace.view({ ...key, route: "duct-systems" }, "duct-systems"))!.doc as never;
-      const fans = fansDocumentSchema.parse((await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc);
+      const saved = (await routes.workspace.view(
+        { ...key, route: "duct-systems" },
+        "duct-systems",
+      ))!.doc as never;
+      const fans = fansDocumentSchema.parse(
+        (await routes.workspace.view({ ...key, route: "fans" }, "fans"))!.doc,
+      );
       expect(stagedDucts(saved, fans).equipmentFlows).toEqual({});
-      expect(writes[0]).toMatchObject({ equipmentFlows: [{ id: 14577391, cfm: 975, source: "Work:chain" }] });
+      expect(writes[0]).toMatchObject({
+        equipmentFlows: [{ id: 14577391, cfm: 975, source: "Work:chain" }],
+      });
     } finally {
       await h.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -836,16 +938,26 @@ test("a child whose init frame has an undeclared server is refused and stopped; 
   const call = caller(threads);
   const clean = await call("POST", "/pe/threads", { providerId: "claude" });
   await call("POST", `/pe/threads/${clean.json.id}/prompt`, { text: "init-clean" });
-  const ok = await until(reader(threads), clean.json.id, (b) => said(b, "init sent") !== undefined || b.events.some((e) => e.kind === "update" && JSON.stringify(e).includes("init sent")));
+  const ok = await until(
+    reader(threads),
+    clean.json.id,
+    (b) =>
+      said(b, "init sent") !== undefined ||
+      b.events.some((e) => e.kind === "update" && JSON.stringify(e).includes("init sent")),
+  );
   expect(ok.events.some((e) => e.kind === "error")).toBe(false);
   expect(ok.session).not.toBe("closed");
   const leaked = await call("POST", "/pe/threads", { providerId: "claude" });
   await call("POST", `/pe/threads/${leaked.json.id}/prompt`, { text: "init-leak" });
-  const refused = await until(reader(threads), leaked.json.id, (b) => b.events.some((e) => e.kind === "error"));
+  const refused = await until(reader(threads), leaked.json.id, (b) =>
+    b.events.some((e) => e.kind === "error"),
+  );
   const error = refused.events.find((e) => e.kind === "error") as { message: string };
   expect(error.message).toContain("refused to start this harness");
   expect(error.message).toContain("claude.ai Gmail");
-  expect((await until(reader(threads), leaked.json.id, (b) => b.session === "closed")).session).toBe("closed");
+  expect(
+    (await until(reader(threads), leaked.json.id, (b) => b.session === "closed")).session,
+  ).toBe("closed");
 });
 
 async function envOf(threads: Host, providerId: string) {
@@ -1776,9 +1888,15 @@ test("Stop escalation kills the child even when the transcript disk append fails
   try {
     await call("POST", `/pe/threads/${id}/cancel`);
     await until(read, id, (b) => JSON.stringify(b.events).includes("ignoring cancel"));
-    await expect.poll(() => stop.mock.calls.some(([child]) =>
-      child && (child.exitCode !== null || child.signalCode !== null),
-    ), { timeout: 2500 }).toBe(true);
+    await expect
+      .poll(
+        () =>
+          stop.mock.calls.some(
+            ([child]) => child && (child.exitCode !== null || child.signalCode !== null),
+          ),
+        { timeout: 2500 },
+      )
+      .toBe(true);
     expect((await call("GET", `/pe/threads/${id}`)).status).toBe(200);
   } finally {
     stop.mockRestore();
@@ -1814,40 +1932,66 @@ test("Stop escalation logs a retiring failure as ThreadRetireFailed", async () =
   }
 });
 
-
 test("DocLab terminal burst replays through HTTP beside real mark capture without a false backlog", async () => {
   const dir = await mkdtemp(join(root, "mark-burst-"));
   const identity = { build: "mark-burst", catalog: nativeCatalogIdentity() };
   const bounds = { maxBytes: 1024 * 1024, maxTakings: 100 };
-  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds));
+  const writer = await settle(
+    openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds),
+  );
   const live = hostMarks({ changedAt: () => null, subscribe: () => () => {} });
-  const marks = await settle(HostDocumentMarks.pipe(Effect.provide(
-    HostDocumentMarks.capturing(writer).pipe(Layer.provide(Layer.succeed(HostDocumentMarks, live))),
-  )));
+  const marks = await settle(
+    HostDocumentMarks.pipe(
+      Effect.provide(
+        HostDocumentMarks.capturing(writer).pipe(
+          Layer.provide(Layer.succeed(HostDocumentMarks, live)),
+        ),
+      ),
+    ),
+  );
   const h = await host();
   const thread = "doclab-burst";
   const ref = { session: "A", openId: "open-A" };
   // Gate c1 copied events seq 49..341: 293 terminal deltas in 328 ms from one skill-file read.
   const events: HarnessEvent[] = Array.from({ length: 293 }, (_, i) => ({
-    kind: "update", seq: i + 1, at: new Date(1_000 + i).toISOString(), turnId: "doclab",
-    update: { sessionUpdate: "tool_call_update", toolCallId: "read-skill",
-      _meta: { terminal_output_delta: { data: `line ${i}\n`, terminal_id: "read-skill" } } },
+    kind: "update",
+    seq: i + 1,
+    at: new Date(1_000 + i).toISOString(),
+    turnId: "doclab",
+    update: {
+      sessionUpdate: "tool_call_update",
+      toolCallId: "read-skill",
+      _meta: { terminal_output_delta: { data: `line ${i}\n`, terminal_id: "read-skill" } },
+    },
   }));
-  events.push({ kind: "turn_end", seq: 294, at: new Date(1_294).toISOString(),
-    turnId: "doclab", stopReason: "end_turn" });
+  events.push({
+    kind: "turn_end",
+    seq: 294,
+    at: new Date(1_294).toISOString(),
+    turnId: "doclab",
+    stopReason: "end_turn",
+  });
   const cursor = h.log.last;
   for (const event of events) h.log.append({ kind: "thread", thread, event });
   let storm = false;
   const routes = createPeRoutes({
-    registrations: [], heads: { observe: () => () => {} },
+    registrations: [],
+    heads: { observe: () => () => {} },
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
-    observeHostResource: (request, publish, after) => h.observe(request, publish, after) ?? (() => {
-      for (let i = 0; i < (storm ? 65 : 1); i++)
-        publish({ kind: "snapshot", key: readingKey(request), value: { takenAt: new Date(1).toISOString() } });
-      return () => {};
-    })(),
-    markReadings: markReadings(marks, (ref, key, at) => ref
-      ? settle(marks.readFrame(ref, key, at)) : Promise.resolve(null)),
+    observeHostResource: (request, publish, after) =>
+      h.observe(request, publish, after) ??
+      (() => {
+        for (let i = 0; i < (storm ? 65 : 1); i++)
+          publish({
+            kind: "snapshot",
+            key: readingKey(request),
+            value: { takenAt: new Date(1).toISOString() },
+          });
+        return () => {};
+      })(),
+    markReadings: markReadings(marks, (ref, key, at) =>
+      ref ? settle(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+    ),
   });
   const schedule = { kind: "schedule-reading", subject: "catalog", target: ref };
   const connect = async (keys: unknown[], after?: number) => {
@@ -1858,7 +2002,10 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
     expect(response.status).toBe(200);
     return response.body!.getReader();
   };
-  const frames = async (stream: ReadableStreamDefaultReader<Uint8Array>, until: (f: any[]) => boolean) => {
+  const frames = async (
+    stream: ReadableStreamDefaultReader<Uint8Array>,
+    until: (f: any[]) => boolean,
+  ) => {
     let text = "";
     const result: any[] = [];
     while (!until(result)) {
@@ -1867,8 +2014,9 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
       text += new TextDecoder().decode(chunk.value);
       let end: number;
       while ((end = text.indexOf("\n\n")) >= 0) {
-        const block = text.slice(0, end); text = text.slice(end + 2);
-        const data = block.split("\n").find(line => line.startsWith("data: "));
+        const block = text.slice(0, end);
+        text = text.slice(end + 2);
+        const data = block.split("\n").find((line) => line.startsWith("data: "));
         if (data) result.push(JSON.parse(data.slice(6)));
       }
     }
@@ -1876,17 +2024,28 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
   };
   const stream = await connect([{ kind: "thread", thread }, schedule], cursor);
   try {
-    const got = await frames(stream, fs => fs.some(f => f.kind === "failure") ||
-      (fs.some(f => f.value?.kind === "turn_end") && fs.some(f => f.kind === "snapshot")));
-    expect(got.filter(f => f.kind === "failure")).toEqual([]);
-    expect(got.filter(f => f.kind === "event").map(f => f.value)).toEqual(events);
-    const next: HarnessEvent = { kind: "turn_end", seq: 295, at: new Date(1_295).toISOString(),
-      turnId: "next", stopReason: "end_turn" };
+    const got = await frames(
+      stream,
+      (fs) =>
+        fs.some((f) => f.kind === "failure") ||
+        (fs.some((f) => f.value?.kind === "turn_end") && fs.some((f) => f.kind === "snapshot")),
+    );
+    expect(got.filter((f) => f.kind === "failure")).toEqual([]);
+    expect(got.filter((f) => f.kind === "event").map((f) => f.value)).toEqual(events);
+    const next: HarnessEvent = {
+      kind: "turn_end",
+      seq: 295,
+      at: new Date(1_295).toISOString(),
+      turnId: "next",
+      stopReason: "end_turn",
+    };
     h.log.append({ kind: "thread", thread, event: next });
-    expect(await frames(stream, fs => fs.length > 0)).toEqual([
+    expect(await frames(stream, (fs) => fs.length > 0)).toEqual([
       expect.objectContaining({ kind: "event", value: next }),
     ]);
-  } finally { await stream.cancel(); }
+  } finally {
+    await stream.cancel();
+  }
   const recorded = await settle(openRecordingReader(join(dir, "recording"), identity, bounds));
   expect(recorded.takingAt(0)?.input.kind).toBe("marks");
   expect(recorded.takingAt(0)?.outcome.kind).toBe("observed");
@@ -1894,9 +2053,15 @@ test("DocLab terminal burst replays through HTTP beside real mark capture withou
   storm = true;
   const overloaded = await connect([schedule]);
   try {
-    const got = await frames(overloaded, fs => fs.some(f => f.kind === "failure"));
-    expect(got).toContainEqual(expect.objectContaining({ kind: "failure",
-      error: "Mark-frame capture backlog exceeded its bound",
-      failure: expect.objectContaining({ code: "ReadingFrameBacklog" }) }));
-  } finally { await overloaded.cancel(); }
+    const got = await frames(overloaded, (fs) => fs.some((f) => f.kind === "failure"));
+    expect(got).toContainEqual(
+      expect.objectContaining({
+        kind: "failure",
+        error: "Mark-frame capture backlog exceeded its bound",
+        failure: expect.objectContaining({ code: "ReadingFrameBacklog" }),
+      }),
+    );
+  } finally {
+    await overloaded.cancel();
+  }
 });

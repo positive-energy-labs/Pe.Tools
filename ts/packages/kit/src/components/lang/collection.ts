@@ -190,7 +190,9 @@ function collectionKey(definition: ScopeKey, region: HTMLElement | null): ScopeK
       // Navigation and explicit Enter choices still belong to that input's collection.
       if (
         event.key === " " &&
-        control?.matches('input,textarea,[contenteditable="true"],[role="textbox"],[role="combobox"]')
+        control?.matches(
+          'input,textarea,[contenteditable="true"],[role="textbox"],[role="combobox"]',
+        )
       )
         return;
       // A list body ignores its search field; the field's own suggestion list (region === control) does not.
@@ -708,8 +710,11 @@ interface ListOptionsBase<T, Sort extends string = string> {
   refusalOf?: (item: T) => string | null | undefined;
 }
 
-export type ListOptions<T, Sort extends string = string, Data = readonly T[]> =
-  Omit<ListOptionsBase<T, Sort>, "items"> & ValueItems<T, Data>;
+export type ListOptions<T, Sort extends string = string, Data = readonly T[]> = Omit<
+  ListOptionsBase<T, Sort>,
+  "items"
+> &
+  ValueItems<T, Data>;
 
 export interface ListItem<T> extends Pick<RowState, "revit" | "uniqueIds" | "damage"> {
   subject?: Ref;

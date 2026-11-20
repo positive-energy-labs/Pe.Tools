@@ -1,3 +1,4 @@
+import { hostState } from "../src/host-ownership.ts";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
@@ -36,7 +37,7 @@ import { HostSessionInventory } from "../src/session-inventory.ts";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { DuctsReadings } from "@pe/ducts-host/ducts-readings";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { settle } from "./effect-test.ts";
 export const ref = { session: "spike", openId: "model" };
@@ -56,8 +57,14 @@ export const identity = { build: "host-read-spike", catalog: nativeCatalogIdenti
 export const bounds = { maxBytes: 256 * 1024 * 1024, maxTakings: 2000 };
 // The captures predate the native vocabulary; it is the generated one, added whole.
 const vocabulary = { unitKinds: [...DUCT_UNIT_KINDS], blockerKinds: [...FAN_BLOCKER_KINDS] };
-export const roster = nativeResponseSchema("ducts.snapshot.walk").parse({ ...rosterCapture, vocabulary });
-export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...fanCapture, vocabulary });
+export const roster = nativeResponseSchema("ducts.snapshot.walk").parse({
+  ...rosterCapture,
+  vocabulary,
+});
+export const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({
+  ...fanCapture,
+  vocabulary,
+});
 export async function fixture(
   capture = false,
   recorded: {
@@ -72,10 +79,14 @@ export async function fixture(
     freshness?: () => string;
   } = {},
 ) {
-  const native = recorded.read && recorded.inventory ? { read: recorded.read, inventory: recorded.inventory } : undefined;
+  const native =
+    recorded.read && recorded.inventory
+      ? { read: recorded.read, inventory: recorded.inventory }
+      : undefined;
   const dir = await mkdtemp(join(tmpdir(), "host-read-spike-"));
   await mkdir(join(dir, "Catalogs"));
-  await mkdir(join(dir, "Settings"), { recursive: true }); await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
+  await mkdir(join(dir, "Settings"), { recursive: true });
+  await writeFile(join(dir, "Settings", "ducts.json"), JSON.stringify(FIRM_SEED));
   let workspace!: RouteWorkspace;
   let mark = 10,
     generation = 0,
@@ -101,7 +112,9 @@ export async function fixture(
         HostInputContext.layer({
           kind: "live",
           captureStore: capture
-            ? await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds))
+            ? await settle(
+                openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds),
+              )
             : undefined,
         }),
       ),
@@ -109,21 +122,49 @@ export async function fixture(
   );
   const journal = journalAt(join(dir, "actions.jsonl"), Date.now);
   let reads!: Effect.Success<ReturnType<typeof makeReadOwner>>;
-  const fixtureRoutes = (options: Parameters<typeof makeReadOwner>[1]) => Layer.unwrap(Effect.gen(function* () {
-    reads = yield* makeReadOwner(inputs, options);
-    const captures = yield* CaptureStore;
-    const routes = createPeRoutes({ inputs, workspace: reads.work.workspace, registrations: reads.work.registrations,
-      observeHostResource: recorded.resourceObserver ?? hostResourceObserver(undefined, () => journal, () => captures) });
-    return Layer.mergeAll(peCoreRoutes(routes, reads.invocation, inputs), historyRoutes(reads.history),
-      recorded.actions ? callRouteOver(journal, undefined, {workspace: reads.work.workspace, workReads: reads.work.reads}).pipe(
-        nativeReadRoot(), Layer.provide(RevitBridgeLive),
-        Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "pictures")))),
-        HttpRouter.provideRequest(Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, RevitBridgeLive)),
-      ) : Layer.empty).pipe(
-      HttpRouter.provideRequest(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))),
-      Layer.provide(Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs))),
+  const fixtureRoutes = (options: Parameters<typeof makeReadOwner>[1]) =>
+    Layer.unwrap(
+      Effect.gen(function* () {
+        reads = yield* makeReadOwner(inputs, options);
+        const captures = yield* CaptureStore;
+        const routes = createPeRoutes({
+          inputs,
+          workspace: reads.work.workspace,
+          registrations: reads.work.registrations,
+          observeHostResource:
+            recorded.resourceObserver ??
+            hostResourceObserver(
+              undefined,
+              () => journal,
+              () => captures,
+            ),
+        });
+        return Layer.mergeAll(
+          peCoreRoutes(routes, reads.invocation, inputs),
+          historyRoutes(reads.history),
+          recorded.actions
+            ? callRouteOver(journal, undefined, {
+                workspace: reads.work.workspace,
+                workReads: reads.work.reads,
+              }).pipe(
+                nativeReadRoot(),
+                Layer.provide(RevitBridgeLive),
+                Layer.provideMerge(PictureCaptureStore.layer(stateFixture(join(dir, "pictures")))),
+                HttpRouter.provideRequest(
+                  Layer.mergeAll(NodeServices.layer, NodeHttpClient.layerUndici, RevitBridgeLive),
+                ),
+              )
+            : Layer.empty,
+        ).pipe(
+          HttpRouter.provideRequest(
+            Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs)),
+          ),
+          Layer.provide(
+            Layer.succeedContext(Context.add(reads.services, HostInputContext, inputs)),
+          ),
+        );
+      }),
     );
-  }));
   const web = HttpRouter.toWebHandler(
     fixtureRoutes({
       store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
@@ -132,7 +173,10 @@ export async function fixture(
       },
       live: {
         owner,
-        files: DuctFiles.layer({ firm: join(dir, "Settings"), catalogs: [{ tier: "firm", root: dir }] }),
+        files: DuctFiles.layer(hostState().home, {
+          firm: join(dir, "Settings"),
+          catalogs: [{ tier: "firm", root: dir }],
+        }),
         marks: Layer.succeed(HostDocumentMarks, {
           ...marks,
           snapshot: (doc) =>
@@ -152,7 +196,12 @@ export async function fixture(
           document: recorded.document ?? (() => Effect.succeed({ ...ref, address: path })),
           session: () => Effect.succeed({ sessionId: ref.session }),
           attachment: () => Effect.succeed({ sessionId: ref.session }),
-          list: recorded.list ?? (() => native ? Effect.succeed(native.inventory) : Effect.die("No inventory list requested")),
+          list:
+            recorded.list ??
+            (() =>
+              native
+                ? Effect.succeed(native.inventory)
+                : Effect.die("No inventory list requested")),
           subscribe: () => () => {},
         }),
         native: Layer.succeed(HostNativeRead, {
@@ -179,18 +228,20 @@ export async function fixture(
               }
               return {
                 value: Schema.decodeUnknownSync(Schema.Json)(
-                  native ? yield* Effect.promise(async () => native.read(input)) : input.key === "revit.catalog.field-options"
-                    ? unavailableFieldOptions
-                    : input.key === "ducts.tables"
-                      ? {
-                          folder: "captured",
-                          tables: {},
-                          missing: (input.input as { ids: string[] }).ids,
-                          unsupported: {},
-                        }
-                      : input.key === "ducts.snapshot.roster"
-                        ? (recorded.roster ?? roster)
-                        : (recorded.snapshot ?? snapshot),
+                  native
+                    ? yield* Effect.promise(async () => native.read(input))
+                    : input.key === "revit.catalog.field-options"
+                      ? unavailableFieldOptions
+                      : input.key === "ducts.tables"
+                        ? {
+                            folder: "captured",
+                            tables: {},
+                            missing: (input.input as { ids: string[] }).ids,
+                            unsupported: {},
+                          }
+                        : input.key === "ducts.snapshot.roster"
+                          ? (recorded.roster ?? roster)
+                          : (recorded.snapshot ?? snapshot),
                 ),
                 nativeRequestId: `native-${nativeCalls}`,
                 actualTarget:
@@ -209,13 +260,20 @@ export async function fixture(
   );
   // Initialize the lazy owner before tests install input-open barriers. These fixtures hold
   // publications directly; publication-connections.test.ts exercises real stream cleanup.
-  const ready = await actAs(who, () => web.handler(new Request("http://host/pe/resources?connection=fixture"),
-    Context.make(RequestIdentity, admittedRequestIdentity(who, scope))));
+  const ready = await actAs(who, () =>
+    web.handler(
+      new Request("http://host/pe/resources?connection=fixture"),
+      Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
+    ),
+  );
   await ready.body!.cancel();
   const holders = new Map<string, () => void>();
   const holdPublication = (subscription: string) => {
     if (holders.has(subscription)) return;
-    holders.set(subscription, reads.publications.observe(canonicalJson([who, subscription]), () => {}));
+    holders.set(
+      subscription,
+      reads.publications.observe(canonicalJson([who, subscription]), () => {}),
+    );
   };
   const send = async (
     generation: number,
@@ -262,11 +320,15 @@ export async function fixture(
   return {
     dir,
     holdPublication,
-    get reads() { return reads; },
+    get reads() {
+      return reads;
+    },
     inputs,
     journal,
-    request: (request: Request) => actAs(who, () =>
-      web.handler(request, Context.make(RequestIdentity, admittedRequestIdentity(who, scope)))),
+    request: (request: Request) =>
+      actAs(who, () =>
+        web.handler(request, Context.make(RequestIdentity, admittedRequestIdentity(who, scope))),
+      ),
     publicationEvent: async (generation: number) => {
       const url = new URL(peRouteUrl("resources.stream", {}), "http://host");
       url.searchParams.set(
@@ -274,7 +336,10 @@ export async function fixture(
         JSON.stringify([{ kind: "publication", subscription: "sheet", generation }]),
       );
       const response = await actAs(who, () =>
-        web.handler(new Request(url), Context.make(RequestIdentity, admittedRequestIdentity(who, scope))),
+        web.handler(
+          new Request(url),
+          Context.make(RequestIdentity, admittedRequestIdentity(who, scope)),
+        ),
       );
       expect(response.status).toBe(200);
       const reader = response.body!.getReader();

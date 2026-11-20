@@ -2,11 +2,22 @@ import { expect, test } from "vite-plus/test";
 import { routeRegistry } from "../route/registry.ts";
 
 test.each(Object.values(routeRegistry).map(({ module }) => [module.data.key, module] as const))(
-  "%s registered fixture providers satisfy every read contract", async (_, module) => {
+  "%s registered fixture providers satisfy every read contract",
+  async (_, module) => {
     const spec = module.spec;
-    const page = { ...Object.fromEntries(Object.entries(spec.fields).map(([key, field]) => [key, field.initial])), selected: [] };
-    const reads = new Set([spec.core, spec.goal, spec.subject?.read, ...Object.values(spec.reads ?? {}),
-      ...Object.values(spec.panes).map(pane => pane.read)]);
+    const page = {
+      ...Object.fromEntries(
+        Object.entries(spec.fields).map(([key, field]) => [key, field.initial]),
+      ),
+      selected: [],
+    };
+    const reads = new Set([
+      spec.core,
+      spec.goal,
+      spec.subject?.read,
+      ...Object.values(spec.reads ?? {}),
+      ...Object.values(spec.panes).map((pane) => pane.read),
+    ]);
     for (const read of reads) {
       if (!read?.fixtures) continue;
       const providers = typeof read.fixtures === "function" ? await read.fixtures() : read.fixtures;

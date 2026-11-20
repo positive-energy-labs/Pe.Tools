@@ -1,8 +1,8 @@
 import { deliverFeedback, sendFeedback, type Feedback } from "#/host/feedback";
-import { hostFetch } from "#/host/runtime";
+import { hostFetch } from "@pe/web-kernel/host/runtime";
 import { expect, test, vi } from "vite-plus/test";
 
-vi.mock("#/host/runtime", () => ({ hostFetch: vi.fn() }));
+vi.mock("@pe/web-kernel/host/runtime", () => ({ hostFetch: vi.fn() }));
 
 const note: Feedback = {
   comment: "the duct table hides the 4th column",

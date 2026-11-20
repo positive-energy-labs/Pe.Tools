@@ -3,9 +3,20 @@ import { CALC_READ, CALC_DETAIL_READ, CALC_BREAKDOWN_READ } from "./fan-calc.ts"
 import { uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
-import { fanClaimSchema, fanCloserSchema, legEvidenceSchema, fanParameterCohortSchema, fanEspValuesSchema } from "./fans-inputs.ts";
+import {
+  fanClaimSchema,
+  fanCloserSchema,
+  legEvidenceSchema,
+  fanParameterCohortSchema,
+  fanEspValuesSchema,
+} from "./fans-inputs.ts";
 export * from "@pe/ducts-contract/duct-inputs";
-import { elementSubjectSchema, ductsInputsSchema, ductFirmLineSchema, calcNoteSchema } from "@pe/ducts-contract/duct-inputs";
+import {
+  elementSubjectSchema,
+  ductsInputsSchema,
+  ductFirmLineSchema,
+  calcNoteSchema,
+} from "@pe/ducts-contract/duct-inputs";
 
 const elementId = z.number().int().positive();
 const portIndex = z.number().int().nonnegative();
@@ -38,11 +49,17 @@ export const ductsRosterRequestSchema = z.strictObject({
     .string()
     .min(1)
     .optional()
-    .describe("Equipment mark, e.g. MA-1. Returns only the ports whose mark matches (case-insensitive). Omit for the whole roster."),
+    .describe(
+      "Equipment mark, e.g. MA-1. Returns only the ports whose mark matches (case-insensitive). Omit for the whole roster.",
+    ),
 });
 
 /** Pea's product instructions for the pressure-drop sheet. */
-export const GUIDE_CALC_READS = { calc: CALC_READ, detail: CALC_DETAIL_READ, breakdown: CALC_BREAKDOWN_READ } as const;
+export const GUIDE_CALC_READS = {
+  calc: CALC_READ,
+  detail: CALC_DETAIL_READ,
+  breakdown: CALC_BREAKDOWN_READ,
+} as const;
 
 export const FAN_CALC_GUIDE = {
   summary:
@@ -70,7 +87,9 @@ const fan = fanRef.extend({
   inletPortIndex: portIndex.nullable(),
   dischargePortIndex: portIndex,
   /** Q4: the family's connector direction set the roles and the network's ends read the other way; null when they agree. */
-  directionMismatch: z.object({ discharge: portIndex, networkDischarge: portIndex, evidence: z.string() }).nullable(),
+  directionMismatch: z
+    .object({ discharge: portIndex, networkDischarge: portIndex, evidence: z.string() })
+    .nullable(),
   flowCfm: z.number().nullable(),
 });
 const pathEnd = z.object({
@@ -285,7 +304,12 @@ export const ductsCalcResponseSchema = z.discriminatedUnion("kind", [
   z.object({
     ...responseBase,
     kind: z.literal("worksheet"),
-    limits: z.object({ supplyFpm: z.number(), returnFpm: z.number(), supplySource: z.string(), returnSource: z.string() }),
+    limits: z.object({
+      supplyFpm: z.number(),
+      returnFpm: z.number(),
+      supplySource: z.string(),
+      returnSource: z.string(),
+    }),
     supply: calcBreakdownSide,
     return: calcBreakdownSide,
     /** Every leg a run names, by leg id. */

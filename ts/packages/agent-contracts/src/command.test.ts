@@ -1,10 +1,14 @@
 import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 import { z } from "zod";
-import { tools } from "./semantic-actions.ts";
+import { builtinTools as tools } from "./semantic-actions.ts";
 import { consumedSchema, type Command, type Consumed, type WorkHandle } from "./command.ts";
 import { retainedConsumedSchema } from "./receipt-evidence.ts";
 import { bindWork } from "./route-state.ts";
-import { familyActions, familyApplyResultSchema, type FamilyApplyResult } from "./family-actions.ts";
+import {
+  familyActions,
+  familyApplyResultSchema,
+  type FamilyApplyResult,
+} from "./family-actions.ts";
 
 describe("portable tool consumers", () => {
   it("lets the host choose sealed preview hashes and rejects competing apply intent", () => {
@@ -77,7 +81,9 @@ describe("family.capture destination", () => {
     const capture = tools.family.commands["family.capture"];
     const work = { key: bindWork("family", null, "reviewed"), revision: 1 };
     expect(capture.says).toContain('writeIntent["family.capture"].edit.value.pod');
-    const example = capture.says.match(/Example: writeIntent\["family.capture"\]\.edit = (\{.*\})\./);
+    const example = capture.says.match(
+      /Example: writeIntent\["family.capture"\]\.edit = (\{.*\})\./,
+    );
     expect(example).not.toBeNull();
     const edit = JSON.parse(example![1]!);
     expect(capture.workIntent.derive({ writeIntent: { "family.capture": { edit } } })).toEqual({
@@ -91,20 +97,33 @@ describe("family.capture destination", () => {
   it("refuses a path that leaves the family folder, as the host does", () => {
     const input = familyActions["family.capture"].input;
     expect(input.safeParse({ pod: "lab", path: "settings/family/box.json" }).success).toBe(true);
-    expect(input.safeParse({ pod: "lab", path: "settings/family/../../x.json" }).success).toBe(false);
+    expect(input.safeParse({ pod: "lab", path: "settings/family/../../x.json" }).success).toBe(
+      false,
+    );
     expect(input.safeParse({ pod: "lab", path: "settings/family/a\b.json" }).success).toBe(false);
   });
 });
 
 describe("consumed member facts (K2)", () => {
-  const member = { kind: "member", probe: { pod: "p", path: "pod.json" }, expected: "0".repeat(64) } as const;
+  const member = {
+    kind: "member",
+    probe: { pod: "p", path: "pod.json" },
+    expected: "0".repeat(64),
+  } as const;
   const blob = { digest: "1".repeat(64), size: 3, fileName: "a.pdf" };
   it("refuses a member's bytes in a live fact, by type and by parse", () => {
     // @ts-expect-error a member fact names its sha alone
     const fact: Consumed = { ...member, bytesBase64: "QUJD" };
     expect(consumedSchema.safeParse(fact).success).toBe(false);
     expect(consumedSchema.safeParse({ ...member, blob }).success).toBe(false);
-    expect(consumedSchema.safeParse({ kind: "file", probe: { path: "a" }, expected: null, bytesBase64: "QUJD" }).success).toBe(false);
+    expect(
+      consumedSchema.safeParse({
+        kind: "file",
+        probe: { path: "a" },
+        expected: null,
+        bytesBase64: "QUJD",
+      }).success,
+    ).toBe(false);
   });
   it("drops the retired bytes from a fact a journal stored before, and keeps a file's blob", () => {
     expect(retainedConsumedSchema.parse({ ...member, bytesBase64: "QUJD", blob })).toEqual(member);

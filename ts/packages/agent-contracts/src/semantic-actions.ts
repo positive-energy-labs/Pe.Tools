@@ -151,7 +151,7 @@ import { takeoffsRouteState } from "./takeoffs.ts";
 import { roomsRouteState } from "./rooms.ts";
 import { catalogWorkCommands } from "./catalog-work.ts";
 import { findingsCommands, findingsWork } from "./slots/findings.ts";
-export const tools = {
+export const builtinTools = {
   pods: {
     name: "pods",
     says: settingsRouteState.description,
@@ -298,25 +298,25 @@ export const tools = {
 export const builtinCommandHead = {
   "work.start": {
     catalogEffect: "SessionWrite",
-    says:"Start this Work", needs:"nothing", effect:"command", dirties:[],
-    input:z.object({key:workKeySchema,seed:z.json()}),
+    says: "Start this Work",
+    needs: "nothing",
+    effect: "command",
+    dirties: [],
+    input: z.object({ key: workKeySchema, seed: z.json() }),
   } as const,
   ...catalogWorkCommands,
 };
-export const commands = {
+export const builtinCommands = {
   ...builtinCommandHead,
-  ...tools.pods.commands,
-  ...tools.family.commands,
-  ...tools.families.commands,
-  ...tools.schedules.commands,
-  ...tools.takeoffs.commands,
-  ...tools.rooms.commands,
-  ...tools.findings.commands,
-  ...tools.instances.commands,
+  ...builtinTools.pods.commands,
+  ...builtinTools.family.commands,
+  ...builtinTools.families.commands,
+  ...builtinTools.schedules.commands,
+  ...builtinTools.takeoffs.commands,
+  ...builtinTools.rooms.commands,
+  ...builtinTools.findings.commands,
+  ...builtinTools.instances.commands,
 };
-export function commandTool(key: string): Tool | undefined {
-  return Object.values(tools).find((tool) => Object.hasOwn(tool.commands, key));
-}
 export function targetForCommand(
   actions: Readonly<Record<string, Command>>,
   key: string,
@@ -332,12 +332,6 @@ export function targetForCommand(
       : { kind: "document", ref: document };
   throw Error(`Command '${key}' requires an exact target`);
 }
-
-export const commandTarget = (
-  key: string,
-  input: Record<string, unknown>,
-  document?: import("./target.ts").DocumentRef,
-) => targetForCommand(hostActions, key, input, document);
 
 export const actionControls = {
   "action.read": {
@@ -375,16 +369,30 @@ export const preparedTakeoffSchema = z.strictObject({
 const hostActionHead = {
   "ops.read": {
     via: { route: "operation.call" },
-    native: [...hostOpCatalog, ...tsOnlyOperationCatalog].filter((op) => isReadEffect(op.effect)).map((op) => op.key),
+    native: [...hostOpCatalog, ...tsOnlyOperationCatalog]
+      .filter((op) => isReadEffect(op.effect))
+      .map((op) => op.key),
     says: "Read one native operation through the guarded operation door.",
-    needs: "nothing", effect: "query", dirties: [],
-    input: z.object({ op: z.object({ key: z.string(), effect: z.string().refine(isReadEffect, "ops.read requires a native Read") }).passthrough(), request: z.unknown() }),
+    needs: "nothing",
+    effect: "query",
+    dirties: [],
+    input: z.object({
+      op: z
+        .object({
+          key: z.string(),
+          effect: z.string().refine(isReadEffect, "ops.read requires a native Read"),
+        })
+        .passthrough(),
+      request: z.unknown(),
+    }),
   } as const,
   "page.bind": {
     via: { route: "page.bind" },
     catalogEffect: "SessionWrite",
     says: "Bind a Page to its exact execution target.",
-    needs: "nothing", effect: "command", dirties: [],
+    needs: "nothing",
+    effect: "command",
+    dirties: [],
     input: z.object({ slug: z.string().min(1), binding: z.unknown() }),
   } as const,
 } satisfies Record<string, Command>;
@@ -404,10 +412,11 @@ export const withHostActions = <const C extends Record<string, Command>>(registe
   ...registered,
   ...hostActionTail,
 });
-export const hostActions = withHostActions(commands);
-export type SemanticActionKey = keyof typeof commands;
+export const builtinHostActions = withHostActions(builtinCommands);
 type PlannedRow = Extract<(typeof commandTable)[keyof typeof commandTable], { plan: string }>;
 export type SemanticPreviewKey = PlannedRow["plan"];
-const previews = new Set<string>(Object.values(commandTable).flatMap(row => "plan" in row ? [row.plan] : []));
+const previews = new Set<string>(
+  Object.values(commandTable).flatMap((row) => ("plan" in row ? [row.plan] : [])),
+);
 /** The plan half of a Work write: its receipt is review evidence, never a commit. */
 export const isWritePreviewKey = (key: string): boolean => previews.has(key);

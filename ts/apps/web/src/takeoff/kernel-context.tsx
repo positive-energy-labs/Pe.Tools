@@ -1,7 +1,11 @@
 import { createContext, useContext } from "react";
 export interface TakeoffCellControls {
-  control(id: string, input: { segment: string | null; key: string }): {
-    refusal: string | null; label: string;
+  control(
+    id: string,
+    input: { segment: string | null; key: string },
+  ): {
+    refusal: string | null;
+    label: string;
     run(): Promise<{ state?: string; refusal?: { code: string; message: string } }>;
   };
 }

@@ -68,15 +68,28 @@ const reviewSchema = z.object({
   preview: z.unknown().optional(),
   sentence: z.string().nullable(),
   rows: z.array(z.string()),
-  cells: z.array(z.object({
-    key: z.string(), group: z.string().optional(), label: z.string(),
-    before: z.string().nullable(), after: z.string(), author: z.enum(["pea", "human"]).nullable(),
-  })).optional(),
+  cells: z
+    .array(
+      z.object({
+        key: z.string(),
+        group: z.string().optional(),
+        label: z.string(),
+        before: z.string().nullable(),
+        after: z.string(),
+        author: z.enum(["pea", "human"]).nullable(),
+      }),
+    )
+    .optional(),
   stale: z.boolean(),
 });
 
 /** The handle stays authoritative across remounts; local state only redraws after a gesture. */
-export function PreviewAction({ handle, label, says = `Plan ${label} from current Work`, ...props }: {
+export function PreviewAction({
+  handle,
+  label,
+  says = `Plan ${label} from current Work`,
+  ...props
+}: {
   handle: PlanHandle;
   label: string;
   says?: string;
@@ -85,35 +98,74 @@ export function PreviewAction({ handle, label, says = `Plan ${label} from curren
   const raw = handle.read();
   const parsed = reviewSchema.safeParse(raw);
   const review = parsed.success ? parsed.data : null;
-  const nativeWrites = z.object({ value: z.object({ writes: z.array(z.object({ outcome: z.string(), reason: z.string().optional() })) }) }).safeParse(review?.preview);
-  const refused = nativeWrites.success ? nativeWrites.data.value.writes.filter(write => write.outcome === "refused") : [];
+  const nativeWrites = z
+    .object({
+      value: z.object({
+        writes: z.array(z.object({ outcome: z.string(), reason: z.string().optional() })),
+      }),
+    })
+    .safeParse(review?.preview);
+  const refused = nativeWrites.success
+    ? nativeWrites.data.value.writes.filter((write) => write.outcome === "refused")
+    : [];
   const preview = writePreviewSchema.safeParse(review?.preview);
-  const planRefusal = preview.success ? preview.data.planRefusal ?? preview.data.planRefusalCode : null;
-  const refusal = planRefusal ?? (refused.length
-    ? [...new Set(refused.map(write => write.reason).filter(Boolean))].join("; ") || `${refused.length} planned writes were refused.`
-    : null);
-  const empty = nativeWrites.success && (!nativeWrites.data.value.writes.some((write) => write.outcome === "planned") ||
+  const planRefusal = preview.success
+    ? (preview.data.planRefusal ?? preview.data.planRefusalCode)
+    : null;
+  const refusal =
+    planRefusal ??
+    (refused.length
+      ? [...new Set(refused.map((write) => write.reason).filter(Boolean))].join("; ") ||
+        `${refused.length} planned writes were refused.`
+      : null);
+  const empty =
+    nativeWrites.success &&
+    (!nativeWrites.data.value.writes.some((write) => write.outcome === "planned") ||
       nativeWrites.data.value.writes.some((write) => write.outcome === "refused"));
   const sealed = !!review && !review.stale && writeResponseSchema.safeParse(review.preview).success;
   const run = async (action: () => unknown): WriteRun => {
-    try { await action(); return null; }
-    catch (error) { return { message: error instanceof Error ? error.message : String(error) }; }
-    finally { redraw(); }
+    try {
+      await action();
+      return null;
+    } catch (error) {
+      return { message: error instanceof Error ? error.message : String(error) };
+    } finally {
+      redraw();
+    }
   };
   return (
-    <WriteAction {...props} busy={handle.pending ?? props.busy} refusal={handle.refusal ?? props.refusal} label={`plan ${label}`} says={says}
-    failed={raw != null && !parsed.success ? "Plan review unavailable" : (handle.failure ?? props.failed)
+    <WriteAction
+      {...props}
+      busy={handle.pending ?? props.busy}
+      refusal={handle.refusal ?? props.refusal}
+      label={`plan ${label}`}
+      says={says}
+      failed={
+        raw != null && !parsed.success
+          ? "Plan review unavailable"
+          : (handle.failure ?? props.failed)
       }
-    held={review && !review.stale ? {
-      word: writeWord(label, review.cells?.length || review.rows.length, false),
-      summary: review.sentence ?? "",
-      ...(review.cells?.length ? { cells: review.cells } : { rows: review.rows }),
-    } : null}
-    stale={review?.stale ? "changed since plan" : null}
-    plan={() => run(() => handle.plan())}
-    apply={{ hidden: empty, label, says: `${label} what the plan sealed`, refusal: refusal ?? (sealed ? null : "Plan the current Work first"),
-      run: () => run(() => handle.apply()), done: `${label} sent`,
-      }} />);
+      held={
+        review && !review.stale
+          ? {
+              word: writeWord(label, review.cells?.length || review.rows.length, false),
+              summary: review.sentence ?? "",
+              ...(review.cells?.length ? { cells: review.cells } : { rows: review.rows }),
+            }
+          : null
+      }
+      stale={review?.stale ? "changed since plan" : null}
+      plan={() => run(() => handle.plan())}
+      apply={{
+        hidden: empty,
+        label,
+        says: `${label} what the plan sealed`,
+        refusal: refusal ?? (sealed ? null : "Plan the current Work first"),
+        run: () => run(() => handle.apply()),
+        done: `${label} sent`,
+      }}
+    />
+  );
 }
 /** The armed word. A plan is a Read: only a successful declared rehearsal says "checked in Revit". */
 export const writeWord = (verb: string, count: number, rehearsed: boolean) =>
@@ -238,9 +290,18 @@ export function WriteAction({
                   <p className="t-small">{cell.group}</p>
                 ) : null}
                 <span className="t-small text-ink-2">
-                  {cell.label} ·<span data-write-author={cell.author ?? "none"}>{cell.author ? AUTHOR[cell.author] : "no author"}</span>
+                  {cell.label} ·
+                  <span data-write-author={cell.author ?? "none"}>
+                    {cell.author ? AUTHOR[cell.author] : "no author"}
+                  </span>
                 </span>
-                <StateCell value={cell.after} modelValue={cell.before ?? "unavailable"} agree="drift" author={cell.author ?? undefined} stage="edit" />
+                <StateCell
+                  value={cell.after}
+                  modelValue={cell.before ?? "unavailable"}
+                  agree="drift"
+                  author={cell.author ?? undefined}
+                  stage="edit"
+                />
               </div>
             ))}
             {held.rows?.map((row, index) => (
@@ -261,7 +322,9 @@ export function WriteAction({
         ) : null}
         {/* E8-03: the action refusal is an exception to sentence-free working surfaces; a hidden Apply must explain its hold. */}
         {armed && apply.refusal ? (
-          <p role="status" data-tone="caution" className="t-small">Apply is held: {apply.refusal}</p>
+          <p role="status" data-tone="caution" className="t-small">
+            Apply is held: {apply.refusal}
+          </p>
         ) : null}
         {armed && outcome?.kind !== "done" ? (
           <div className="mt-2 flex items-center justify-between gap-2">

@@ -40,7 +40,8 @@ export function observeResources(
 ): ResourceObserver {
   return (request, publish, after) => {
     const key = readingKey(request);
-    const accept = (value: OwnerValue<unknown>, carriage?: WorkCarriage) => publish(resourceSnapshot(key, value), carriage);
+    const accept = (value: OwnerValue<unknown>, carriage?: WorkCarriage) =>
+      publish(resourceSnapshot(key, value), carriage);
     if ((request.kind === "work" || request.kind === "work-acks") && request.admission) {
       let closed = false;
       let release = () => {};
@@ -107,7 +108,8 @@ export function observeResources(
       publish({ kind: "failure", key, error: failure.message, failure });
       return () => {};
     }
-    if (request.kind === "work") return work.observe(request, request.route, accept, false, false, context);
+    if (request.kind === "work")
+      return work.observe(request, request.route, accept, false, false, context);
     if (request.kind === "thread-head" && heads) return heads.observe(request.thread, accept);
     if (request.kind === "work-acks")
       return work.observeAccepted(
@@ -129,10 +131,16 @@ export function observeResources(
 // Subscription ownership is host-local and scoped to the same observer as the stream.
 const connections = new WeakMap<
   ResourceObserver,
-  Map<string, { update: (add: ReadingRequest[], remove: string[], owner: string | null) => Response | void }>
+  Map<
+    string,
+    { update: (add: ReadingRequest[], remove: string[], owner: string | null) => Response | void }
+  >
 >();
 /** The host and its borrowed-read proxy admit the same bounded subscription body. */
-export function decodeResourceSubscriptionUpdate(raw: string, requests: z.ZodType<ReadingRequest> = readingRequestSchema): { add: ReadingRequest[]; remove: string[] } | { error: string } {
+export function decodeResourceSubscriptionUpdate(
+  raw: string,
+  requests: z.ZodType<ReadingRequest> = readingRequestSchema,
+): { add: ReadingRequest[]; remove: string[] } | { error: string } {
   if (new TextEncoder().encode(raw).byteLength > READING_MAX_REQUEST_BYTES)
     return { error: "Resource request is too large" };
   try {
@@ -149,7 +157,12 @@ export function decodeResourceSubscriptionUpdate(raw: string, requests: z.ZodTyp
     return { error: "Invalid resource keys" };
   }
 }
-export async function updateResourceSubscriptions(request: Request, observe: ResourceObserver, owner: string | null = null, requests: z.ZodType<ReadingRequest> = readingRequestSchema): Promise<Response> {
+export async function updateResourceSubscriptions(
+  request: Request,
+  observe: ResourceObserver,
+  owner: string | null = null,
+  requests: z.ZodType<ReadingRequest> = readingRequestSchema,
+): Promise<Response> {
   const id = new URL(request.url).searchParams.get("connection") ?? "";
   const update = connections.get(observe)?.get(id);
   if (!update) return retiredConnection();
@@ -158,9 +171,8 @@ export async function updateResourceSubscriptions(request: Request, observe: Res
   return update.update(value.add, value.remove, owner) ?? Response.json({ ok: true });
 }
 
-const retiredConnection = () => Response.json(
-  { code: "reading.retired", error: "Reading connection retired" }, { status: 409 },
-);
+const retiredConnection = () =>
+  Response.json({ code: "reading.retired", error: "Reading connection retired" }, { status: 409 });
 
 /** The pseudo-key of the one host log lane in the ready set. */
 const LOG = "\u0000log";
@@ -197,8 +209,10 @@ export function resourceResponse(
     return Response.json({ error: "Resource request is too large" }, { status: 400 });
   let requests: ReadingRequest[];
   try {
-    requests = !url.searchParams.has("keys") && url.searchParams.get("connection")
-      ? [] : requestSchema.array().min(1).max(READING_MAX_KEYS).parse(JSON.parse(raw));
+    requests =
+      !url.searchParams.has("keys") && url.searchParams.get("connection")
+        ? []
+        : requestSchema.array().min(1).max(READING_MAX_KEYS).parse(JSON.parse(raw));
   } catch {
     return Response.json({ error: "Invalid resource keys" }, { status: 400 });
   }
@@ -373,13 +387,18 @@ export function resourceResponse(
             }
           }
         };
-        if (connection) registry!.set(connection, { update: (add, remove, caller) => {
-          if (closed) return retiredConnection();
-          if (owner && caller !== owner) return Response.json(
-            { code: "reading.foreign", error: "Foreign reading connection" }, { status: 403 },
-          );
-          update(add, remove);
-        } });
+        if (connection)
+          registry!.set(connection, {
+            update: (add, remove, caller) => {
+              if (closed) return retiredConnection();
+              if (owner && caller !== owner)
+                return Response.json(
+                  { code: "reading.foreign", error: "Foreign reading connection" },
+                  { status: 403 },
+                );
+              update(add, remove);
+            },
+          });
         update([...requested.values()], []);
       },
       pull() {

@@ -1,10 +1,10 @@
 import { expect, it } from "vite-plus/test";
 import { PerspectiveCamera } from "three";
-import { instanceBounds } from "./geometry";
-import { boundsOfInstances, boundsOfPoints } from "./orbit";
-import { captionObstacles, framingPoints } from "./framing";
-import { projectThrough } from "./projection";
-import { SceneMeshes } from "./types";
+import { instanceBounds } from "@pe/web-kernel/scene/geometry";
+import { boundsOfInstances, boundsOfPoints } from "@pe/web-kernel/scene/orbit";
+import { captionObstacles, framingPoints } from "@pe/web-kernel/scene/framing";
+import { projectThrough } from "@pe/web-kernel/scene/projection";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 
 const positions = new Float32Array([
   -2, -1, -1, 2, 1, 1, 0, 0, 0, 100, 100, 100, 102, 100, 100, 100, 101, 100,

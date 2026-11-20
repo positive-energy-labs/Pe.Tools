@@ -1,24 +1,26 @@
-import type { ContextOf } from "@pe/web/route";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./src/bindings.ts";
-import { read } from "@pe/web/route";
-import { stageField } from "@pe/web/route";
-import { listFields } from "@pe/web/route";
+import { read } from "@pe/web-kernel/route";
+import { stageField } from "@pe/web-kernel/route";
+import { listFields } from "@pe/web-kernel/route";
 import { fansDocumentSchema, fansRouteState } from "@pe/fans-contract/fans";
 import { z } from "zod";
 import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
 import { type Immutable } from "@pe/agent-contracts";
 import * as reads from "@pe/fans-contract/contract";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
-import { field, picturePose, route, subjectSchema, split } from "@pe/web/route";
-import { hostRead } from "@pe/web/host-read";
-import { draw } from "@pe/web/route/draw";
-import { fillBody, scrollBody } from "@pe/web/route/body";
-import { overlay } from "@pe/web/route/slots/picture/overlay";
+import { field, picturePose, route, subjectSchema, split } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
+import { fillBody, scrollBody } from "@pe/web-kernel/route/body";
+import { overlay } from "@pe/web-kernel/route/slots/picture/overlay";
 import { fanLabel, stableFanKey } from "@pe/ducts-web/calc/model";
 import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
 import { lazyFixtures } from "@pe/ducts-web/registry";
-const calcValueFixtures = lazyFixtures(() => import("./src/calc/value-fixtures.ts").then(m => m.calcValueFixtures));
+const calcValueFixtures = lazyFixtures(() =>
+  import("./src/calc/value-fixtures.ts").then((m) => m.calcValueFixtures),
+);
 import { presentLosses } from "@pe/ducts-web/reviews";
 import { fansCalc } from "./src/calc.ts";
 import { fansPanes } from "./src/panes.ts";
@@ -46,7 +48,12 @@ const roster = read(hostRead(reads.calc, calcValueFixtures), () => ({
   fan: [],
   calcPath: "",
 }));
-export type FansDrawContext = ContextOf<typeof fields, typeof calc, typeof import("@pe/fans-contract/fans").fansDocumentSchema, typeof import("@pe/ducts-contract/duct-inputs").fansCalcEditsSchema>;
+export type FansDrawContext = ContextOf<
+  typeof fields,
+  typeof calc,
+  typeof import("@pe/fans-contract/fans").fansDocumentSchema,
+  typeof import("@pe/ducts-contract/duct-inputs").fansCalcEditsSchema
+>;
 export const module = route({
   key: "fans",
   retiredPage: { fields: ["sheetPath"], values: { stage: ["sheet"] } },
@@ -80,7 +87,10 @@ export const module = route({
   reads: { roster },
   sheet: fansCalc,
   // The open fans' walk. Strands, blocker skins and the ESP readout are beyond the closed marks: the overlay hands them over.
-  picture: { scope: { derive: fanScope }, overlay: overlay(() => import("./src/picture.tsx"), "FanPicture") },
+  picture: {
+    scope: { derive: fanScope },
+    overlay: overlay(() => import("./src/picture.tsx"), "FanPicture"),
+  },
   fields,
   panes: {
     [fansPanes.roster]: {
@@ -144,7 +154,11 @@ export const module = route({
   layout: split(
     "h",
     [
-      split("v", [fansPanes.roster, fansPanes.inputs], { id: "calc-side", size: 360, sized: "end" }),
+      split("v", [fansPanes.roster, fansPanes.inputs], {
+        id: "calc-side",
+        size: 360,
+        sized: "end",
+      }),
       split("v", [fansPanes.picture, fansPanes.ledger], {
         id: "calc-main",
         size: 360,

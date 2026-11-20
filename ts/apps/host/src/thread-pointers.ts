@@ -12,7 +12,10 @@ export interface ThreadPointers {
   dismiss(threadId: string, id: string): Pointers;
 }
 export function threadPointerPort(inputs?: HostInputContext["Service"]) {
-  const writable = () => { const denied = inputs?.check({ kind: "recording", verb: "write-metadata" }); if (denied) throw denied; };
+  const writable = () => {
+    const denied = inputs?.check({ kind: "recording", verb: "write-metadata" });
+    if (denied) throw denied;
+  };
   let bound: ThreadPointers | null = null;
   const owner = () => {
     if (!bound) throw Error("Thread pointers are unavailable until the thread store has loaded.");
@@ -21,8 +24,14 @@ export function threadPointerPort(inputs?: HostInputContext["Service"]) {
   return {
     bind: (threads: ThreadPointers) => void (bound = threads),
     read: (threadId: string) => owner().read(threadId),
-    point: (threadId: string, input: Omit<Pointer, "id" | "at">) => { writable(); return owner().point(threadId, input); },
-    dismiss: (threadId: string, id: string) => { writable(); return owner().dismiss(threadId, id); },
+    point: (threadId: string, input: Omit<Pointer, "id" | "at">) => {
+      writable();
+      return owner().point(threadId, input);
+    },
+    dismiss: (threadId: string, id: string) => {
+      writable();
+      return owner().dismiss(threadId, id);
+    },
   } satisfies ThreadPointers & { bind(threads: ThreadPointers): void };
 }
 export type ThreadPointerPort = ReturnType<typeof threadPointerPort>;

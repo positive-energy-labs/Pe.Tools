@@ -7,10 +7,10 @@ import {
   rebaseClip,
   sectionContains,
   sectionVolume,
-} from "./section";
+} from "@pe/web-kernel/scene/section";
 import { moveSectionFace } from "./section-controls";
 import { presetLook } from "./presets";
-import { LOOK } from "./grounds";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
 import { contextVisible } from "./context";
 import { CATEGORY_IDS } from "./categories";
 

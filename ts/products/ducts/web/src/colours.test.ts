@@ -5,8 +5,8 @@ import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { coloursOf, FIRM_COLOURS } from "./colours.ts";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
 import { paintOfDucts } from "./selection.ts";
-import { kindHue } from "../../../../apps/web/src/scene/kinds.ts";
-import type { SceneInstance } from "../../../../apps/web/src/scene/types.ts";
+import { kindHue } from "@pe/web-kernel/scene/kinds";
+import type { SceneInstance } from "@pe/web-kernel/scene/types";
 
 test("the edit palette persists with Work, supplies the kinds table and never enters Revit apply", () => {
   const palette = { ...FIRM_COLOURS, supply: "#123456" };

@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
-import { decodeField } from "./field-codec";
+import { decodeField } from "@pe/web-kernel/route/field-codec";
 
 test("URL fields accept JSON, validated text, or their default without throwing", () => {
   const stage = { schema: z.enum(["audit", "apply"]), initial: "apply" };

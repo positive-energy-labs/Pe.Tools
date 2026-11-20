@@ -249,7 +249,11 @@ export function proposalCell(
         : first
           ? {
               value: first.proposed,
-              by: first.by ?? (() => { throw Error("A proposal requires its host-stamped author"); })(),
+              by:
+                first.by ??
+                (() => {
+                  throw Error("A proposal requires its host-stamped author");
+                })(),
               note: first.note,
               ...(first.confidence ? { confidence: first.confidence } : {}),
               source: first,

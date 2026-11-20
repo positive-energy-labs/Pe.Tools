@@ -555,7 +555,8 @@ export function CoreListPanel({
     <section aria-label="Shared list core" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <span>355 synthetic rows · 5 tree roots · single selection</span>
-        <Button kind="quiet"
+        <Button
+          kind="quiet"
           label="Select last row"
           onClick={() => {
             onState({ ...state, selected: ["system-10354"] });
@@ -563,7 +564,8 @@ export function CoreListPanel({
         >
           Select last row
         </Button>
-        <Button kind="quiet"
+        <Button
+          kind="quiet"
           label="Reveal last selected"
           refusal={selected ? null : "Select a row first"}
           onClick={() => {
@@ -572,7 +574,11 @@ export function CoreListPanel({
         >
           Reveal last selected
         </Button>
-        <Button kind="quiet" label="Reset list address" onClick={() => onState(initialCoreListState())}>
+        <Button
+          kind="quiet"
+          label="Reset list address"
+          onClick={() => onState(initialCoreListState())}
+        >
           Reset
         </Button>
       </div>

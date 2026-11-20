@@ -15,7 +15,9 @@ const native = vi.hoisted(() => ({
 vi.mock("#/host/client", () => ({
   callHostRpc: vi.fn(
     (_key, request, options) =>
-      new Promise((resolve, reject) => native.calls.push({ request, signal: options.signal, resolve, reject })),
+      new Promise((resolve, reject) =>
+        native.calls.push({ request, signal: options.signal, resolve, reject }),
+      ),
   ),
 }));
 vi.mock("./artifact", () => ({
@@ -55,10 +57,6 @@ const finish = async (index: number, id: string) => {
   await waitFor(() => expect(native.calls[index]).toBeDefined());
   await act(async () => native.calls[index]!.resolve({ id }));
 };
-
-
-
-
 
 it("fences late scopes and revisions", async () => {
   const view = renderHook(

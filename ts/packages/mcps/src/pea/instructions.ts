@@ -32,4 +32,7 @@ To the person, each Pe page with its own address is a tool: use its visible name
 
 Use diagram only inside that Page or when the user asks for a one-shot diagram; never write mermaid fences.
 
-${productGuides.map((guide) => guide.instructions).filter(Boolean).join("\n\n")}`;
+${productGuides
+  .map((guide) => guide.instructions)
+  .filter(Boolean)
+  .join("\n\n")}`;

@@ -572,7 +572,8 @@ function initialShelfState(
     try {
       const saved = localStorage.getItem(`pe.shelf.${shelf}`);
       if (saved !== null) return saved !== "open";
-    } catch (error) { console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
+    } catch (error) {
+      console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
       /* The list still works without storage. */
     }
     return shelf === "snoozed" || shelf === "settled" || shelf === "archived";
@@ -611,9 +612,7 @@ function ThreadActivityMark({
     <TooltipHint content={word}>
       <span
         data-slot="nav-state"
-        data-tone={
-          activity === "failed" || activity === "waiting" || woke ? "caution" : undefined
-        }
+        data-tone={activity === "failed" || activity === "waiting" || woke ? "caution" : undefined}
         role={Icon ? "img" : undefined}
         aria-label={Icon ? word : undefined}
       >
@@ -798,7 +797,8 @@ export function ThreadsSidebar({
               `pe.shelf.${shelf}`,
               next.closed.includes(SHELF_WORD[shelf]) ? "closed" : "open",
             );
-          } catch (error) { console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
+          } catch (error) {
+            console.warn("ts/apps/web/src/chat/thread-palette.tsx: fallback after failure", error);
             /* Collapse is still held in page state. */
           }
         }
@@ -842,7 +842,12 @@ export function ThreadsSidebar({
     const lead = leadWork(work);
     // The remembered documents lead; the conversation title stands in when there are none.
     // TODO: Manual D drive-7 verdict E (S9): "Thread titles carry ids" including a model GUID and "grille 8747668". Give historical titles readable names.
-    const title = [documentsLabel(work) ?? thread.title, work?.place ? chatPluginTitle(work.place) : null].filter(Boolean).join(" \u00b7 ");
+    const title = [
+      documentsLabel(work) ?? thread.title,
+      work?.place ? chatPluginTitle(work.place) : null,
+    ]
+      .filter(Boolean)
+      .join(" \u00b7 ");
     return {
       label: compactRows ? (
         <span className="pe-thread-label">

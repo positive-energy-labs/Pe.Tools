@@ -15,15 +15,10 @@ import {
 } from "../../../packages/agent-contracts/src/subject-ref.ts";
 import { canonicalJson } from "@pe/host-internal/native-read";
 import { hostSessionScopeSchema } from "@pe/host-contracts/operation-types";
-import {
-  defaultReadSetLimits,
-  readSetRecords,
-  HostInputReadSets,
-  type InputConsumption,
-  type ReadSetId,
-} from "./input-occurrence.ts";
-import type { ConsumerRecipe, RecordingReader } from "./native-recording.ts";
-import { InvalidRead } from "./native-reads.ts";
+import { defaultReadSetLimits, readSetRecords, HostInputReadSets } from "./input-occurrence.ts";
+import { type InputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import type { ConsumerRecipe, RecordingReader } from "@pe/host-internal/input-recording";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 
 type Document = DocumentKey;
 type ReadSets = HostInputReadSets["Service"];
@@ -177,8 +172,7 @@ export function recordingPoints(reader: RecordingReader, readSets: ReadSets): Re
     let bytes = 0;
     for (const binding of point.bindings) {
       const key = bindingKey(binding);
-      if (seen.has(key))
-        return yield* refuse("ambiguous", "Point binds one subscription twice");
+      if (seen.has(key)) return yield* refuse("ambiguous", "Point binds one subscription twice");
       seen.add(key);
       const refs = yield* recordingReadSetReferences(reader, document, binding.readSetId);
       bytes += refs.metadata;
@@ -208,8 +202,7 @@ export function recordingPoints(reader: RecordingReader, readSets: ReadSets): Re
     open: Effect.fn("RecordingPoints.open")(function* (document, id, consumer, recipe) {
       const point = yield* get(document, id);
       const binding = point.bindings.find((bound) => bindingKey(bound) === bindingKey(consumer));
-      if (!binding)
-        return yield* refuse("miss", "Point holds no binding for this subscription");
+      if (!binding) return yield* refuse("miss", "Point holds no binding for this subscription");
       const graph = new Map(
         (yield* readSetRecords(reader, binding.readSetId)).map((record) => [record.id, record]),
       );

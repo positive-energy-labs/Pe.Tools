@@ -82,7 +82,9 @@ function shapeWords(session: MachineSession) {
 function PhaseWord({ facts, session }: { facts: SessionFacts; session: MachineSession }) {
   const status = sessionReadStatus(session);
   const detail = session.row.execution?.detail ?? session.holdingsLeg.error;
-  const word = <span data-tone={status === facts.phase ? facts.phaseTone : "caution"}>{status}</span>;
+  const word = (
+    <span data-tone={status === facts.phase ? facts.phaseTone : "caution"}>{status}</span>
+  );
   return (
     <>
       {detail ? <TooltipHint content={detail}>{word}</TooltipHint> : word}
@@ -183,8 +185,8 @@ export function SessionCard({
   children?: ReactNode;
 }) {
   const documents = session.documents;
-  const outsideScope = session.row.execution?.allowed !== true &&
-    facts.phase !== "gone" && facts.phase !== "failed";
+  const outsideScope =
+    session.row.execution?.allowed !== true && facts.phase !== "gone" && facts.phase !== "failed";
   const targets = targetsOf(session);
   const empty = outsideScope
     ? {
@@ -198,9 +200,10 @@ export function SessionCard({
           message: session.documentsLeg.error
             ? `documents unread: ${session.documentsLeg.error}`
             : "documents unknown",
-          exit: facts.phase === "booting"
-            ? "its documents are read once its bridge answers"
-            : "check the session’s status",
+          exit:
+            facts.phase === "booting"
+              ? "its documents are read once its bridge answers"
+              : "check the session’s status",
         }
       : { message: "no document open", exit: "open a document into it from the table" };
   type Item =
@@ -265,9 +268,7 @@ export function SessionCard({
       headTrail={verbs}
     >
       <div className="flex flex-col py-1" aria-label="documents">
-        {documents === null && targets.length > 0 ? (
-          <p role="status">{empty.message}</p>
-        ) : null}
+        {documents === null && targets.length > 0 ? <p role="status">{empty.message}</p> : null}
         <ListView
           list={list}
           aria-label="documents"

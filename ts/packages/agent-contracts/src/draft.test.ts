@@ -31,7 +31,13 @@ describe("one staged value per cell", () => {
     expect(cellSchema.safeParse({ suggestion: { value: "x" } }).success).toBe(false);
     expect(cellSchema.safeParse({ edit: { value: "x", by: "pea" } }).success).toBe(true);
     expect(
-      applyPatches(spec, envelope({}), "pea", [{ path: ["cells", "k", "suggestion"], value: { value: "x" } }], 3),
+      applyPatches(
+        spec,
+        envelope({}),
+        "pea",
+        [{ path: ["cells", "k", "suggestion"], value: { value: "x" } }],
+        3,
+      ),
     ).toMatchObject({ ok: false });
   });
 
@@ -47,16 +53,23 @@ describe("one staged value per cell", () => {
 
   it("a set equal to the baseline stages nothing", () => {
     expect(
-      cellPatches(["cells"], "k", {}, { kind: "set", rung: { value: "m" }, baseline: { value: "m" } }),
+      cellPatches(
+        ["cells"],
+        "k",
+        {},
+        { kind: "set", rung: { value: "m" }, baseline: { value: "m" } },
+      ),
     ).toEqual([{ path: ["cells", "k", "edit"], value: null }]);
   });
 
   it("retire clears only the consumed value; a later writer's value survives", () => {
     const consumed = { value: "a" };
-    expect(cellPatches(["cells"], "k", { edit: { value: "a" } }, { kind: "retire", consumed })).toEqual([
-      { path: ["cells", "k", "edit"], value: null },
-    ]);
-    expect(cellPatches(["cells"], "k", { edit: { value: "b" } }, { kind: "retire", consumed })).toEqual([]);
+    expect(
+      cellPatches(["cells"], "k", { edit: { value: "a" } }, { kind: "retire", consumed }),
+    ).toEqual([{ path: ["cells", "k", "edit"], value: null }]);
+    expect(
+      cellPatches(["cells"], "k", { edit: { value: "b" } }, { kind: "retire", consumed }),
+    ).toEqual([]);
   });
 });
 

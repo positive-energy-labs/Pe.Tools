@@ -128,13 +128,19 @@ it.each([
   { flowCfm: 0, connected: false },
   { flowCfm: 0, connected: null },
   { flowCfm: 0, connected: undefined },
-])("requires a measured zero and a confirmed well-connected system (%j)", ({ flowCfm, connected }) => {
-  const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
-  s.segments[0]!.connectors[1]!.flowCfm = flowCfm;
-  s.systems = connected === undefined ? [] : s.systems.map(system => ({ ...system, isWellConnected: connected }));
-  expect(items(s).map(item => item.end)).not.toContain("10:1");
-  expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(/flow unknown.*Fix it in Revit/);
-});
+])(
+  "requires a measured zero and a confirmed well-connected system (%j)",
+  ({ flowCfm, connected }) => {
+    const s = snap([duct(10, [0, 0, 0], [10, 0, 0])]);
+    s.segments[0]!.connectors[1]!.flowCfm = flowCfm;
+    s.systems =
+      connected === undefined
+        ? []
+        : s.systems.map((system) => ({ ...system, isWellConnected: connected }));
+    expect(items(s).map((item) => item.end)).not.toContain("10:1");
+    expect(healPlan(s).hard.get("open-end:10:1")?.note).toMatch(/flow unknown.*Fix it in Revit/);
+  },
+);
 
 it("never pairs two ends Revit already connects through a bend; each is a cap", () => {
   // A 1 in stub (20) and a riser (21) joined by an elbow, all one Revit group: their loose ends

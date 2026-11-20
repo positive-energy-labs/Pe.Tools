@@ -35,21 +35,26 @@ export function renderAddressTable(rows: readonly AddressRow[]): string {
     `import { jsonCodec, ${uses("textCodec") ? "textCodec, " : ""}type RouteDeclaration } from "../route-field.ts";`,
     ...sorted.flatMap((row) => {
       const hand = !row.body && HAND_ADDRESSES[row.key];
-      if (!row.body && !hand) throw Error(`${row.key}: no declaration projects it and no hand file holds it`);
+      if (!row.body && !hand)
+        throw Error(`${row.key}: no declaration projects it and no hand file holds it`);
       return hand ? [`import { ${hand[0]} } from "${hand[1]}";`] : [];
     }),
   ];
   const helpers = [
     `const field = <S extends z.ZodType>(schema: S, url: "push" | "replace") => ({ schema, url, agent: "set" as const, codec: jsonCodec(schema) });`,
     ...(uses("personField(")
-      ? [`const personField = <S extends z.ZodType>(schema: S, url: "push" | "replace") => ({ schema, url, codec: jsonCodec(schema) });`]
+      ? [
+          `const personField = <S extends z.ZodType>(schema: S, url: "push" | "replace") => ({ schema, url, codec: jsonCodec(schema) });`,
+        ]
       : []),
   ];
   const entries = sorted.map((row) => {
     const module = row.module ? `, module: ${JSON.stringify(row.module)}` : "";
     const value = row.body
       ? `${row.body.slice(0, -1).trimEnd()}${module} }`
-      : module ? `{ ...${HAND_ADDRESSES[row.key]![0]}${module} }` : HAND_ADDRESSES[row.key]![0];
+      : module
+        ? `{ ...${HAND_ADDRESSES[row.key]![0]}${module} }`
+        : HAND_ADDRESSES[row.key]![0];
     return `${JSON.stringify(row.key)}: ${value}`;
   });
   return [

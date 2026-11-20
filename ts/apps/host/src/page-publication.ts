@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { pageKeyOf, pageOpenUrl } from "@pe/agent-contracts";
-import { command, io, StepFailure } from "./command-executor.ts";
+import { command, io, StepFailure } from "@pe/host-internal/command-executor";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";

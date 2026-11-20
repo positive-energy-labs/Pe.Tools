@@ -31,10 +31,18 @@ import {
   type RevitCatalogSchedules,
   type ScheduleCellsApply,
 } from "@pe/host-contracts/generated";
-import { invokeBridge as invoke, type RevitBridge } from "./bridge.ts";
-import { ActionIncomplete, type ActionExecution } from "./action-journal.ts";
+import { invokeBridge as invoke } from "./bridge.ts";
+import { type RevitBridge } from "@pe/host-internal/bridge";
+import { ActionIncomplete } from "./action-journal.ts";
+import { type ActionExecution } from "@pe/host-internal/action-execution";
 import { z } from "zod";
-import { command, io, nativeStep, refused, type CommandContext } from "./command-executor.ts";
+import {
+  command,
+  io,
+  nativeStep,
+  refused,
+  type CommandContext,
+} from "@pe/host-internal/command-executor";
 import type { TakeoffActionDependencies } from "./takeoff-actions.ts";
 import { readOriginalProcess, type NativeProcess } from "./native-receipts.ts";
 import { StaleScheduleReading, type TakeoffCaptures } from "./takeoff-captures.ts";
@@ -341,54 +349,58 @@ export function scheduleExecutors(
     ctx: CommandContext,
     execution: ActionExecution,
     input: z.output<(typeof scheduleActions)["schedule.grid.bind"]["input"]>,
-  ) => Effect.gen(function* () {
-    const reading = input.reading ?? (yield* io(() => captures.schedule(input.readingId)));
-    if (reading.id !== input.readingId)
-      throw refused("Reading identity differs from the requested evidence");
-    const { id, ...value } = reading;
-    if (
-      input.reading &&
-      createHash("sha256").update(canonicalRouteInput(value)).digest("hex") !== id
-    )
-      throw refused("Schedule evidence hash differs from its content");
-    const work = ctx.work;
-    if (!work) throw refused("Schedule Work is unavailable");
-    const scope = {
-      binding: "workspace" as const,
-      route: "schedules",
-      target: null,
-      work: reading.workspaceId,
-    };
-    const view = yield* io(() => work.view(scope, "schedules"));
-    if (!view || view.revision !== input.expectedRevision)
-      throw refused("Schedule Work changed; read it and bind again");
-    const document = scheduleGridDocumentSchema.parse(view.doc);
-    const previous = document.basis
-      ? yield* io(() => captures.schedule(document.basis!.captureId).catch((error) => {
-          console.error("schedule-actions: asynchronous operation failed", error);
-          return null;
-        }))
-      : null;
-    const patches = document.basis
-      ? rebindScheduleWork(document, previous, reading)
-      : [
-          { path: ["basis"], value: { captureId: reading.id } },
-          { path: ["takenAt"], value: reading.capturedAt },
-        ];
-    if (input.reading)
-      yield* execution.step("publication", "schedule.retain", { id }, () => io(() => captures.saveSchedule(value)),
-      );
-    if (patches.length) {
-      const result = yield* execution.step(
-        "publication",
-        "schedule.bind",
-        { scope, patches, expectedRevision: input.expectedRevision },
-        () => io(() => work.publish(scope, "schedules", patches, input.expectedRevision)),
-      );
-      if (!result.ok) throw refused(refusalText(result));
-    }
-    return { envelope: yield* io(() => work.read(scope, "schedules")) };
-  });
+  ) =>
+    Effect.gen(function* () {
+      const reading = input.reading ?? (yield* io(() => captures.schedule(input.readingId)));
+      if (reading.id !== input.readingId)
+        throw refused("Reading identity differs from the requested evidence");
+      const { id, ...value } = reading;
+      if (
+        input.reading &&
+        createHash("sha256").update(canonicalRouteInput(value)).digest("hex") !== id
+      )
+        throw refused("Schedule evidence hash differs from its content");
+      const work = ctx.work;
+      if (!work) throw refused("Schedule Work is unavailable");
+      const scope = {
+        binding: "workspace" as const,
+        route: "schedules",
+        target: null,
+        work: reading.workspaceId,
+      };
+      const view = yield* io(() => work.view(scope, "schedules"));
+      if (!view || view.revision !== input.expectedRevision)
+        throw refused("Schedule Work changed; read it and bind again");
+      const document = scheduleGridDocumentSchema.parse(view.doc);
+      const previous = document.basis
+        ? yield* io(() =>
+            captures.schedule(document.basis!.captureId).catch((error) => {
+              console.error("schedule-actions: asynchronous operation failed", error);
+              return null;
+            }),
+          )
+        : null;
+      const patches = document.basis
+        ? rebindScheduleWork(document, previous, reading)
+        : [
+            { path: ["basis"], value: { captureId: reading.id } },
+            { path: ["takenAt"], value: reading.capturedAt },
+          ];
+      if (input.reading)
+        yield* execution.step("publication", "schedule.retain", { id }, () =>
+          io(() => captures.saveSchedule(value)),
+        );
+      if (patches.length) {
+        const result = yield* execution.step(
+          "publication",
+          "schedule.bind",
+          { scope, patches, expectedRevision: input.expectedRevision },
+          () => io(() => work.publish(scope, "schedules", patches, input.expectedRevision)),
+        );
+        if (!result.ok) throw refused(refusalText(result));
+      }
+      return { envelope: yield* io(() => work.read(scope, "schedules")) };
+    });
   const bindReading = command(commands["schedule.grid.bind"], z.null(), {
     bind: async () => ({ effects: [] }),
     run: (ctx, execution) =>
@@ -407,29 +419,33 @@ export function scheduleExecutors(
           throw refused("Schedule Work changed; read its current revision");
         return { effects: [], prepare: async () => input };
       },
-      run: (ctx, execution) => Effect.gen(function* () {
-        const input = execution.prepared;
-        const reading = scheduleReadingSchema.parse(
-          yield* io(() => readSchedule(
-            {
-              key: "schedule.grid.snapshot",
-              input: { scheduleId: input.scheduleId, maxRows: input.maxRows },
-              target: ctx.admission.target.kind === "document" ? ctx.admission.target.ref : null,
-            },
-            captures,
-            bridge,
-            deps,
-          )),
-        );
-        if (input.work.key.binding !== "workspace" || input.work.key.work !== reading.workspaceId)
-          throw refused("The schedule read belongs to another Work");
-        yield* bind(ctx, execution, {
-          readingId: reading.id,
-          reading,
-          expectedRevision: input.work.revision,
-        });
-        return reading;
-      }),
+      run: (ctx, execution) =>
+        Effect.gen(function* () {
+          const input = execution.prepared;
+          const reading = scheduleReadingSchema.parse(
+            yield* io(() =>
+              readSchedule(
+                {
+                  key: "schedule.grid.snapshot",
+                  input: { scheduleId: input.scheduleId, maxRows: input.maxRows },
+                  target:
+                    ctx.admission.target.kind === "document" ? ctx.admission.target.ref : null,
+                },
+                captures,
+                bridge,
+                deps,
+              ),
+            ),
+          );
+          if (input.work.key.binding !== "workspace" || input.work.key.work !== reading.workspaceId)
+            throw refused("The schedule read belongs to another Work");
+          yield* bind(ctx, execution, {
+            readingId: reading.id,
+            reading,
+            expectedRevision: input.work.revision,
+          });
+          return reading;
+        }),
     },
   );
   const gridPush = command(commands["schedule.grid.push"], preparedSchedulePushSchema, {
@@ -457,7 +473,18 @@ export function scheduleExecutors(
         effects: [
           { kind: "document", ref: target },
           ...(input.pod
-            ? [{ kind: "directory" as const, path: (await sourceRunDirectory(input.pod, deps, await podContext(deps, bridge, target))).path }]
+            ? [
+                {
+                  kind: "directory" as const,
+                  path: (
+                    await sourceRunDirectory(
+                      input.pod,
+                      deps,
+                      await podContext(deps, bridge, target),
+                    )
+                  ).path,
+                },
+              ]
             : []),
         ],
         consumes: [
@@ -488,7 +515,11 @@ export function scheduleExecutors(
             );
           if (!reading.snapshot.scheduleUniqueId)
             throw refused("Schedule unique identity is missing");
-          if (input.pod) await runPods(deps, podFolder(input.pod, await podContext(deps, bridge, scheduleTarget(ctx))));
+          if (input.pod)
+            await runPods(
+              deps,
+              podFolder(input.pod, await podContext(deps, bridge, scheduleTarget(ctx))),
+            );
           return {
             process: reading.process,
             document,
@@ -500,138 +531,149 @@ export function scheduleExecutors(
         },
       };
     },
-    run: (ctx, execution) => Effect.gen(function* () {
-      const { admission, work } = ctx;
-      const target = scheduleTarget(ctx);
-      const base = admission.input.work!;
-      const pod = admission.input.pod;
-      const prepared = execution.prepared;
-      const { edits, reading, document } = prepared;
-      // The journal seals this exact request as the step input before dispatch. The domain compares
-      // every reviewed target against a fresh read inside its own transaction.
-      const request: ScheduleCellsApply.Req.Request = {
-        scheduleId: reading.snapshot.scheduleId,
-        scheduleUniqueId: reading.snapshot.scheduleUniqueId!,
-        edits: edits.map(({ key: _key, ...edit }) => edit),
-        transactionName: "Schedule grid push",
-      };
-      const native = edits.length
-        ? yield* execution.step(
-            "native",
-            "schedule.cells.apply",
-            request,
-            (id) => nativeStep(bridge, target, "schedule.cells.apply", request, id),
-            { process: prepared.process },
-          )
-        : {
-            appliedCells: 0,
-            appliedParameterWrites: 0,
-            dryRun: false,
-            results: [],
-            diagnostics: [],
-          };
-      const outcome = acknowledge(native, edits);
-      const failures = [...prepared.failures, ...outcome.failures];
-      const publication = outcome.successes.length
-        ? yield* execution.retireWork(
-            base.key,
-            scheduleGridRouteState.route,
-            outcome.successes.map((key) => ["cells", key]),
-          )
-        : null;
-      let readback: ScheduleReading | undefined, readbackError: string | undefined;
-      const read = yield* Effect.exit(io(() => readSchedule(
-          {
-            key: "schedule.grid.snapshot",
-            target,
-            input: {
-              scheduleId: reading.snapshot.scheduleId,
-              maxRows: Math.min(2000, Math.max(200, reading.snapshot.rows.length + 1)),
-            },
-          },
-          captures,
-          bridge,
-          deps,
-        )));
-      if (Exit.isSuccess(read)) readback = read.value as ScheduleReading;
-      else readbackError = String(Cause.squash(read.cause));
-      // The readback rebinds the Work, as the person's re-read does: a cell refused on moved evidence
-      // comes back stale with what was reviewed (`was`) beside what Revit holds now. No readback, no
-      // rebind, nor does an unresolved push (its resume publishes against the original basis); a
-      // person's re-read that moved the basis meanwhile is the newer rebind and stands. A
-      // post-publication convenience: nothing it throws changes the push's outcome (`rebindError`).
-      let rebind: "rebound" | `skipped:${string}` = !readback
-          ? "skipped:no-readback"
-          : outcome.unresolved
-            ? "skipped:unresolved"
-            : "skipped:unchanged",
-        rebindError: string | undefined;
-      try {
-        if (readback && !outcome.unresolved) {
-          const { id, ...value } = readback;
-          // Explicit command publication retains evidence before Work can reference it.
-          yield* execution.step("publication", "schedule.retain-readback", { id }, () => io(() => captures.saveSchedule(value)),
-          );
-          const view = yield* io(() => work.read(base.key, scheduleGridRouteState.route));
-          const latest = view && scheduleGridDocumentSchema.parse(view.doc);
-          if (!latest || latest.basis?.captureId !== document.basis!.captureId)
-            rebind = "skipped:basis-moved";
-          else {
-            const patches = rebindScheduleWork(latest, reading, readback);
-            if (patches.length) {
-              yield* execution.publishWork(base.key, scheduleGridRouteState.route, patches);
-              rebind = "rebound";
+    run: (ctx, execution) =>
+      Effect.gen(function* () {
+        const { admission, work } = ctx;
+        const target = scheduleTarget(ctx);
+        const base = admission.input.work!;
+        const pod = admission.input.pod;
+        const prepared = execution.prepared;
+        const { edits, reading, document } = prepared;
+        // The journal seals this exact request as the step input before dispatch. The domain compares
+        // every reviewed target against a fresh read inside its own transaction.
+        const request: ScheduleCellsApply.Req.Request = {
+          scheduleId: reading.snapshot.scheduleId,
+          scheduleUniqueId: reading.snapshot.scheduleUniqueId!,
+          edits: edits.map(({ key: _key, ...edit }) => edit),
+          transactionName: "Schedule grid push",
+        };
+        const native = edits.length
+          ? yield* execution.step(
+              "native",
+              "schedule.cells.apply",
+              request,
+              (id) => nativeStep(bridge, target, "schedule.cells.apply", request, id),
+              { process: prepared.process },
+            )
+          : {
+              appliedCells: 0,
+              appliedParameterWrites: 0,
+              dryRun: false,
+              results: [],
+              diagnostics: [],
+            };
+        const outcome = acknowledge(native, edits);
+        const failures = [...prepared.failures, ...outcome.failures];
+        const publication = outcome.successes.length
+          ? yield* execution.retireWork(
+              base.key,
+              scheduleGridRouteState.route,
+              outcome.successes.map((key) => ["cells", key]),
+            )
+          : null;
+        let readback: ScheduleReading | undefined, readbackError: string | undefined;
+        const read = yield* Effect.exit(
+          io(() =>
+            readSchedule(
+              {
+                key: "schedule.grid.snapshot",
+                target,
+                input: {
+                  scheduleId: reading.snapshot.scheduleId,
+                  maxRows: Math.min(2000, Math.max(200, reading.snapshot.rows.length + 1)),
+                },
+              },
+              captures,
+              bridge,
+              deps,
+            ),
+          ),
+        );
+        if (Exit.isSuccess(read)) readback = read.value as ScheduleReading;
+        else readbackError = String(Cause.squash(read.cause));
+        // The readback rebinds the Work, as the person's re-read does: a cell refused on moved evidence
+        // comes back stale with what was reviewed (`was`) beside what Revit holds now. No readback, no
+        // rebind, nor does an unresolved push (its resume publishes against the original basis); a
+        // person's re-read that moved the basis meanwhile is the newer rebind and stands. A
+        // post-publication convenience: nothing it throws changes the push's outcome (`rebindError`).
+        let rebind: "rebound" | `skipped:${string}` = !readback
+            ? "skipped:no-readback"
+            : outcome.unresolved
+              ? "skipped:unresolved"
+              : "skipped:unchanged",
+          rebindError: string | undefined;
+        try {
+          if (readback && !outcome.unresolved) {
+            const { id, ...value } = readback;
+            // Explicit command publication retains evidence before Work can reference it.
+            yield* execution.step("publication", "schedule.retain-readback", { id }, () =>
+              io(() => captures.saveSchedule(value)),
+            );
+            const view = yield* io(() => work.read(base.key, scheduleGridRouteState.route));
+            const latest = view && scheduleGridDocumentSchema.parse(view.doc);
+            if (!latest || latest.basis?.captureId !== document.basis!.captureId)
+              rebind = "skipped:basis-moved";
+            else {
+              const patches = rebindScheduleWork(latest, reading, readback);
+              if (patches.length) {
+                yield* execution.publishWork(base.key, scheduleGridRouteState.route, patches);
+                rebind = "rebound";
+              }
             }
           }
+        } catch (error) {
+          rebind = "skipped:error";
+          rebindError = String(error);
         }
-      } catch (error) {
-        rebind = "skipped:error";
-        rebindError = String(error);
-      }
-      const result = {
-        applied: outcome.successes.length,
-        failures,
-        diagnostics: outcome.diagnostics,
-        native,
-        publication,
-        readback,
-        readbackError,
-        rebind,
-        rebindError,
-      };
-      if (outcome.unresolved)
-        throw new ActionIncomplete(
-          "Native acknowledgment incomplete; staging retained. Read this receipt and the schedule before staging again.",
-          result,
+        const result = {
+          applied: outcome.successes.length,
+          failures,
+          diagnostics: outcome.diagnostics,
+          native,
+          publication,
+          readback,
+          readbackError,
+          rebind,
+          rebindError,
+        };
+        if (outcome.unresolved)
+          throw new ActionIncomplete(
+            "Native acknowledgment incomplete; staging retained. Read this receipt and the schedule before staging again.",
+            result,
+          );
+        if (readbackError)
+          throw new ActionIncomplete(
+            "Native outcome recorded; actual readback unavailable",
+            result,
+          );
+        // ponytail: a settled push only; an incomplete one files its run when resume settles it.
+        const receipt = pushReceipt(
+          pod ?? null,
+          reading,
+          readback!,
+          edits,
+          failures,
+          outcome.results,
         );
-      if (readbackError)
-        throw new ActionIncomplete("Native outcome recorded; actual readback unavailable", result);
-      // ponytail: a settled push only; an incomplete one files its run when resume settles it.
-      const receipt = pushReceipt(
-        pod ?? null,
-        reading,
-        readback!,
-        edits,
-        failures,
-        outcome.results,
-      );
-      // One run per admission: a resume overwrites the same folder (`writeRun`).
-      const run = pod
-        ? yield* io(async () => runPods(
-            deps,
-            writeRun(
-              pod,
-              `${prepared.at.replace(/[:.]/g, "-")}-${admission.id.slice(0, 8)}`,
-              {
-                "receipt.json": `${JSON.stringify(receipt, null, 2)}
+        // One run per admission: a resume overwrites the same folder (`writeRun`).
+        const run = pod
+          ? yield* io(async () =>
+              runPods(
+                deps,
+                writeRun(
+                  pod,
+                  `${prepared.at.replace(/[:.]/g, "-")}-${admission.id.slice(0, 8)}`,
+                  {
+                    "receipt.json": `${JSON.stringify(receipt, null, 2)}
 `,
-              },
-              await podContext(deps, bridge, scheduleTarget(ctx)),
-            ),
-          ))
-        : null;
-      return { ...result, run, receipt };
-    }),
+                  },
+                  await podContext(deps, bridge, scheduleTarget(ctx)),
+                ),
+              ),
+            )
+          : null;
+        return { ...result, run, receipt };
+      }),
   });
   const capture = command(commands["schedule.capture"], preparedScheduleCaptureSchema, {
     bind: async (ctx) => {
@@ -647,7 +689,12 @@ export function scheduleExecutors(
         ],
         effects: [
           { kind: "document", ref: target },
-          { kind: "directory", path: (await sourceRunDirectory(input.pod, deps, await podContext(deps, bridge, target))).path },
+          {
+            kind: "directory",
+            path: (
+              await sourceRunDirectory(input.pod, deps, await podContext(deps, bridge, target))
+            ).path,
+          },
           { kind: "member", pod: input.pod, path },
         ],
         prepare: async () => {
@@ -662,24 +709,29 @@ export function scheduleExecutors(
         },
       };
     },
-    run: (ctx, execution) => Effect.gen(function* () {
-      const target = scheduleTarget(ctx);
-      const prepared = execution.prepared;
-      const input = { scheduleId: prepared.scheduleId };
-      const result = yield* execution.step(
-        "native",
-        "schedule.capture",
-        input,
-        (id) => nativeStep<ScheduleCapture.Res.Response>(bridge, target, "schedule.capture", input, id),
-        { process: prepared.process },
-      );
-      const pods = yield* io(() => podContext(deps, bridge, target));
-      const request = { pod: prepared.pod, path: prepared.path, content: result.specJson };
-      const member = (yield* execution.step("file", "pod.member.write", request, () => io(() => writeMemberOnce(deps, request, pods)),
-      )) as PodMemberWritten;
-      const run = yield* io(() => writeCaptureRun(deps, pods, prepared.at, member, "schedule.capture"));
-      return { executionContext: target, member, run };
-    }),
+    run: (ctx, execution) =>
+      Effect.gen(function* () {
+        const target = scheduleTarget(ctx);
+        const prepared = execution.prepared;
+        const input = { scheduleId: prepared.scheduleId };
+        const result = yield* execution.step(
+          "native",
+          "schedule.capture",
+          input,
+          (id) =>
+            nativeStep<ScheduleCapture.Res.Response>(bridge, target, "schedule.capture", input, id),
+          { process: prepared.process },
+        );
+        const pods = yield* io(() => podContext(deps, bridge, target));
+        const request = { pod: prepared.pod, path: prepared.path, content: result.specJson };
+        const member = (yield* execution.step("file", "pod.member.write", request, () =>
+          io(() => writeMemberOnce(deps, request, pods)),
+        )) as PodMemberWritten;
+        const run = yield* io(() =>
+          writeCaptureRun(deps, pods, prepared.at, member, "schedule.capture"),
+        );
+        return { executionContext: target, member, run };
+      }),
   });
   const apply = command(commands["schedule.apply"], preparedScheduleApplySchema, {
     seal: (p) => ({ request: p.input }),
@@ -708,25 +760,31 @@ export function scheduleExecutors(
         ],
         effects: [
           { kind: "document", ref: target },
-          { kind: "directory", path: (await sourceRunDirectory(source.id, deps, await podContext(deps, bridge, target))).path },
+          {
+            kind: "directory",
+            path: (
+              await sourceRunDirectory(source.id, deps, await podContext(deps, bridge, target))
+            ).path,
+          },
         ],
         prepare: async () => {
           return { process, input: { specJson: spec, source: { root: source, dependencies } } };
         },
       };
     },
-    run: (ctx, execution) => Effect.gen(function* () {
-      const target = scheduleTarget(ctx);
-      const { process, input } = execution.prepared;
-      const native = yield* execution.step(
-        "native",
-        "schedule.apply",
-        input,
-        (id) => nativeStep(bridge, target, "schedule.apply", input, id),
-        { process },
-      );
-      return { executionContext: target, native };
-    }),
+    run: (ctx, execution) =>
+      Effect.gen(function* () {
+        const target = scheduleTarget(ctx);
+        const { process, input } = execution.prepared;
+        const native = yield* execution.step(
+          "native",
+          "schedule.apply",
+          input,
+          (id) => nativeStep(bridge, target, "schedule.apply", input, id),
+          { process },
+        );
+        return { executionContext: target, native };
+      }),
   });
   return {
     "schedule.grid.read": readGrid,

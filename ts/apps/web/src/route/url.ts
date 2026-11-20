@@ -6,19 +6,14 @@
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import {
-  routeAddress,
-  type History,
-  type RouteKey,
-  type RoutePage,
-} from "@pe/agent-contracts";
+import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useState, useRef, useSyncExternalStore } from "react";
 import { places } from "../workbench/places";
 import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
-import { useRouteActivity } from "./activity";
+import { useRouteActivity } from "@pe/web-kernel/route/activity";
 
 import { commitAddress, rawQuery } from "./address-transport";
 export { commitAddress, rawQuery } from "./address-transport";

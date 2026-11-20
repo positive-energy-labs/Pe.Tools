@@ -13,4 +13,3 @@ export interface ParamSpec {
   /** Absent means TYPE (Revit's default). */
   isInstance?: boolean;
 }
-

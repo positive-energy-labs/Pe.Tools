@@ -1,5 +1,5 @@
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { linkedCatalog } from "./product-catalog.ts";
+import { linkedCatalog } from "./product-catalog.generated.ts";
 import {
   discoveryMachine,
   capabilityPrincipals,
@@ -12,7 +12,7 @@ import {
   type AdmittedView,
   type PackageProjection,
 } from "@pe/agent-contracts";
-import { commands } from "./product-actions.ts";
+import { commands } from "./product-actions.generated.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import { z } from "zod";
@@ -129,7 +129,10 @@ export function createCapabilityCatalogSource(options: {
         readScoped(scope),
         recents(),
         options.machine(),
-        options.pages?.(scope).catch((error) => { console.error("capabilities: asynchronous operation failed", error); return undefined; }),
+        options.pages?.(scope).catch((error) => {
+          console.error("capabilities: asynchronous operation failed", error);
+          return undefined;
+        }),
       ]);
       const catalog = pages
         ? {
@@ -159,7 +162,10 @@ export function createCapabilityCatalogSource(options: {
 
   async function readScoped(scope: HostSessionScope): Promise<Omit<CapabilityCatalog, "machine">> {
     // Live registrations key the cache, so a trusted, replaced or withdrawn route is never served stale.
-    const cacheKey = JSON.stringify([scope, (options.admittedRoutes?.() ?? []).map(({ work: _work, ...view }) => view)]);
+    const cacheKey = JSON.stringify([
+      scope,
+      (options.admittedRoutes?.() ?? []).map(({ work: _work, ...view }) => view),
+    ]);
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < CATALOG_TTL_MS) return hit.catalog;
 

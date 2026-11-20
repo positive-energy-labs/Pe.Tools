@@ -62,7 +62,9 @@ test("scopes share immutable loss projections, preserving interval sums and alte
   const refreshed = indexOf(raw, { calcs: structuredClone(calcs) });
   expect(refreshed.loss).toEqual(index.loss);
   expect(refreshed.loss).not.toBe(index.loss);
-  const changed = [calcOf(1, [legOf("10:1>2", 10, "duct", 9)], [{ terminal: 30, legIds: ["10:1>2"] }])];
+  const changed = [
+    calcOf(1, [legOf("10:1>2", 10, "duct", 9)], [{ terminal: 30, legIds: ["10:1>2"] }]),
+  ];
   expect([...indexOf(raw, { calcs: changed }).loss]).toEqual([[10, 9]]);
   expect(indexOf(raw, current).loss).toBe(index.loss);
   expect(indexOf(raw).loss.size).toBe(0);
@@ -71,8 +73,16 @@ test("scopes share immutable loss projections, preserving interval sums and alte
 test("a shared duct draws one loss, the same on each fan's calc, never their sum (Q7)", () => {
   const shared = () => legOf("10:1>2", 10, "duct", 2);
   const calcs = [
-    calcOf(1, [shared(), legOf("30:1>", 30, "terminal", 0.1)], [{ terminal: 30, legIds: ["10:1>2", "30:1>"] }]),
-    calcOf(2, [shared(), legOf("31:1>", 31, "terminal", 0.2)], [{ terminal: 31, legIds: ["10:1>2", "31:1>"] }]),
+    calcOf(
+      1,
+      [shared(), legOf("30:1>", 30, "terminal", 0.1)],
+      [{ terminal: 30, legIds: ["10:1>2", "30:1>"] }],
+    ),
+    calcOf(
+      2,
+      [shared(), legOf("31:1>", 31, "terminal", 0.2)],
+      [{ terminal: 31, legIds: ["10:1>2", "31:1>"] }],
+    ),
   ];
   expect(indexOf(syntheticSnapshot(), { calcs }).loss.get(10)).toBe(2);
 });

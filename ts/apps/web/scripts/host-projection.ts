@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import ts from "typescript";
 import { z } from "zod";
-import type { TypedRoute } from "../src/route/typed-route.ts";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 /** Preserve imported Work functions and refinements in either builtin or Pod host projection. */
 export async function projectWork(
   entry: string,
@@ -63,7 +63,9 @@ export async function projectWork(
     throw Error(`${entry}: typed route Work must reference an imported Work definition`);
   // The host imports the Work from where the declaration does, so it must not be the declaration.
   if (binding.specifier.startsWith(".") && /(?:^|\/)route(?:\.tsx?)?$/.test(binding.specifier))
-    throw Error(`${entry}: declare Work in a neutral module beside route.ts; the host never imports route.ts`);
+    throw Error(
+      `${entry}: declare Work in a neutral module beside route.ts; the host never imports route.ts`,
+    );
   const schemaImport = binding.specifier.startsWith(".")
     ? JSON.stringify(
         (() => {
@@ -79,7 +81,12 @@ export async function projectWork(
     binding.specifier.startsWith(".")
       ? resolve(dirname(entry), binding.specifier)
       : (() => {
-          const resolved = ts.resolveModuleName(binding.specifier, entry, { moduleResolution: ts.ModuleResolutionKind.Bundler }, ts.sys).resolvedModule;
+          const resolved = ts.resolveModuleName(
+            binding.specifier,
+            entry,
+            { moduleResolution: ts.ModuleResolutionKind.Bundler },
+            ts.sys,
+          ).resolvedModule;
           if (!resolved) throw Error(`${entry}: cannot resolve Work contract ${binding.specifier}`);
           return resolved.resolvedFileName;
         })(),

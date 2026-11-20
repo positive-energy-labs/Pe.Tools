@@ -200,7 +200,8 @@ export function Code({
                   invalid diagram
                 </span>
               </TooltipHint>
-              <Button kind="quiet"
+              <Button
+                kind="quiet"
                 label={sourceOpen ? "hide source" : "show source"}
                 onClick={() => setSourceOpen(!sourceOpen)}
               >
@@ -208,7 +209,8 @@ export function Code({
               </Button>
             </>
           ) : drawable && complete ? (
-            <Button kind="quiet"
+            <Button
+              kind="quiet"
               label={view === "diagram" ? "source" : "diagram"}
               onClick={() => setView(view === "diagram" ? "source" : "diagram")}
             >

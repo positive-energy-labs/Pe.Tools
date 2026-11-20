@@ -20,11 +20,11 @@ const schemaValue = /\\?"\$schema\\?"\s*:\s*\\?"((?:[^"\\]|\\[^"])*)/g;
  * Tracked files only: an untracked scratch file in a worktree is not a stored name.
  */
 test("every checked-in JSON file stores a library $schema as its path", () => {
-  const census = execFileSync(
-    "git",
-    ["ls-files", "--cached", "*.json"],
-    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  )
+  const census = execFileSync("git", ["ls-files", "--cached", "*.json"], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  })
     .trim()
     .split(/\r?\n/)
     .filter((file) => existsSync(resolve(root, file)))
@@ -42,10 +42,10 @@ test("every checked-in JSON file stores a library $schema as its path", () => {
   );
 });
 
-test.each([
-  "/Schemas/Settings/a/B.JSON",
-  String.raw`C:\\x\\schemas\\settings\\a\\b.json`,
-])("rejects a noncanonical stored library schema: %s", value => {
-  expect(isLibrary(value)).toBe(true);
-  expect(isStored(value)).toBe(false);
-});
+test.each(["/Schemas/Settings/a/B.JSON", String.raw`C:\\x\\schemas\\settings\\a\\b.json`])(
+  "rejects a noncanonical stored library schema: %s",
+  (value) => {
+    expect(isLibrary(value)).toBe(true);
+    expect(isStored(value)).toBe(false);
+  },
+);

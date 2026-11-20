@@ -2,11 +2,11 @@ import { useContext } from "react";
 import { DuctsOwner } from "../pane-context.tsx";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { fansLink } from "@pe/fans-contract/link";
-import { useRouteSearchSlice } from "@pe/web/route/activity";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 import { LeaderDiagram } from "@pe/kit/lang/leader-diagram";
 import { RevitTarget } from "@pe/kit/lang/revit-target";
-import { useNativeObservation } from "@pe/web/revit/observation";
+import { useNativeObservation } from "@pe/web-kernel/revit/observation";
 /**
  * A system's fans, in words: one line per fan calc that reaches one of the system's terminals, in
  * roster order, each with its own flow, TEL and required ESP. A calc that is not complete says so and

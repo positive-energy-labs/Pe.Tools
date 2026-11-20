@@ -8,15 +8,17 @@ export interface ValueHandle<Data> {
   readonly reason?: string;
 }
 
-type DrawingData<T> = T extends string | number | boolean | bigint | symbol | null | undefined ? T : T extends (...args: never[]) => unknown
+type DrawingData<T> = T extends string | number | boolean | bigint | symbol | null | undefined
   ? T
-  : T extends ReadonlyMap<infer K, infer V>
-    ? Map<K, DrawingData<V>>
-    : T extends ReadonlySet<infer V>
-      ? Set<DrawingData<V>>
-      : T extends object
-        ? { -readonly [K in keyof T]: DrawingData<T[K]> }
-        : T;
+  : T extends (...args: never[]) => unknown
+    ? T
+    : T extends ReadonlyMap<infer K, infer V>
+      ? Map<K, DrawingData<V>>
+      : T extends ReadonlySet<infer V>
+        ? Set<DrawingData<V>>
+        : T extends object
+          ? { -readonly [K in keyof T]: DrawingData<T[K]> }
+          : T;
 
 /** A drawing may use mutable view libraries without handing them the kernel's retained evidence. */
 export function useValue<Data>(value: ValueHandle<Data>): DrawingData<Data> | undefined {

@@ -12,10 +12,7 @@ export type Destination = {
   url: string | null;
   reason: string | null;
 };
-export function globalItems(
-  snapshot: NavigationSnapshot | null,
-  kind: ResultKind,
-): Destination[] {
+export function globalItems(snapshot: NavigationSnapshot | null, kind: ResultKind): Destination[] {
   return [
     ...(kind === "All" || kind === "Tools"
       ? ROUTE_DIRECTORY.filter((tool) => tool.directory).map((tool) => ({

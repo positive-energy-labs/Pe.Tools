@@ -1,7 +1,7 @@
 import { useMemo, useSyncExternalStore } from "react";
 import { sceneData, type SceneSource, type SourceSnapshot } from "./scene-data";
 import type { sceneRequest } from "./host";
-import type { SceneMeshes } from "./types";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { Psc1Metadata } from "./psc1";
 
 export type SceneRead = {

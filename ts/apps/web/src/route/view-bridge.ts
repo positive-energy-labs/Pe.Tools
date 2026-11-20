@@ -22,9 +22,11 @@ import { reportFault } from "#/host/diagnostics";
 import { followBeat, useHostEvents } from "#/host/resource-stream";
 import { causeRefusal, refuse, type Refusal } from "./refusal";
 import { applyPageIntent, type PageIntent } from "./view-owner";
-import { useRouteCurrent, useRouteSearchSlice } from "./activity";
+import { useRouteCurrent, useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 
-type ReadyViewCodec = ViewCodec & { subjectReady?: (patch: Record<string, string>) => Promise<void> };
+type ReadyViewCodec = ViewCodec & {
+  subjectReady?: (patch: Record<string, string>) => Promise<void>;
+};
 
 /**
  * Whether the host leases this typed route's view (`RouteViewStore.leasesView`), decided the host's
@@ -33,7 +35,12 @@ type ReadyViewCodec = ViewCodec & { subjectReady?: (patch: Record<string, string
  * fields. A route outside the channel never publishes, so it never PUTs to a door the host refuses.
  */
 export const leasesView = (data: Pick<RouteGraphJson, "key" | "address" | "name" | "fields">) =>
-  viewRoute(routeAt(data.address) ?? data.key, { key: data.key, title: data.name, address: data.address, fields: data.fields }) !== null;
+  viewRoute(routeAt(data.address) ?? data.key, {
+    key: data.key,
+    title: data.name,
+    address: data.address,
+    fields: data.fields,
+  }) !== null;
 
 type Intent = {
   type: "route-view-intent";
@@ -77,7 +84,8 @@ export function useRouteLease<R extends RouteViewRoute, P extends object>(
     surface: url ? "route" : "chat",
     visible: shown.visible ?? true,
     page: page as Partial<RoutePage<R>>,
-    apply: (patch) => applyPageIntent(page, () => setPage(patch as Partial<P>, { history: "push" })),
+    apply: (patch) =>
+      applyPageIntent(page, () => setPage(patch as Partial<P>, { history: "push" })),
     context: shown.context ?? {},
     facts: shown.facts ?? {},
     codec: shown.codec,
@@ -173,7 +181,9 @@ export function useRouteViewBridge({
       const owner = lifetime.current;
       if (!owner) return Promise.resolve();
       const next = publishing.current
-        .catch((error) => { console.error("view-bridge: asynchronous operation failed", error); })
+        .catch((error) => {
+          console.error("view-bridge: asynchronous operation failed", error);
+        })
         .then(async () => {
           if (lifetime.current !== owner || !routeCurrent() || current.current !== value) return;
           const accepted = (await peClient.call("view.publish", {
@@ -209,7 +219,9 @@ export function useRouteViewBridge({
       published.current = null;
       // Release only a lease the host really took; a view that never published has nothing to remove.
       publishing.current = publishing.current
-        .catch((error) => { console.error("view-bridge: asynchronous operation failed", error); })
+        .catch((error) => {
+          console.error("view-bridge: asynchronous operation failed", error);
+        })
         .then(async () => {
           if (lifetime.current || !leased.current) return;
           leased.current = false;
@@ -229,7 +241,10 @@ export function useRouteViewBridge({
     // The lease renews every 5 s, and backs off while the host does not answer (`followBeat`).
     return followBeat(
       () =>
-        (current.current ? publish(current.current) : Promise.resolve()).catch((error) => { console.error("view-bridge: asynchronous operation failed", error); throw error; }),
+        (current.current ? publish(current.current) : Promise.resolve()).catch((error) => {
+          console.error("view-bridge: asynchronous operation failed", error);
+          throw error;
+        }),
       5_000,
     );
   }, [view, publish]);
@@ -275,9 +290,13 @@ export function useRouteViewBridge({
       try {
         const owner = lifetime.current;
         await lease.subjectReady?.(event.patch);
-        if (lifetime.current !== owner || !routeCurrent() || !visible() ||
+        if (
+          lifetime.current !== owner ||
+          !routeCurrent() ||
+          !visible() ||
           JSON.stringify(current.current?.page) !== JSON.stringify(value.page) ||
-          JSON.stringify(current.current?.context) !== JSON.stringify(value.context))
+          JSON.stringify(current.current?.context) !== JSON.stringify(value.context)
+        )
           return refused(refuse("conflict", "The Page changed while reading the subject roster"));
         // `value` is the view this hook published, so its codec is this lease's.
         patch = lease.read(event.patch);
@@ -300,7 +319,11 @@ export function useRouteViewBridge({
       if (event.type !== "route-view-intent") return;
       // The host can deliver an intent before the publication's HTTP response reaches this
       // browser. Join that receipt first, then apply the unchanged instance/revision/context fences.
-      void publishing.current.catch((error) => { console.error("view-bridge: asynchronous operation failed", error); }).then(() => applyIntent(event));
+      void publishing.current
+        .catch((error) => {
+          console.error("view-bridge: asynchronous operation failed", error);
+        })
+        .then(() => applyIntent(event));
     },
     [applyIntent],
   );
@@ -343,7 +366,9 @@ export function useRouteViewBridge({
           });
         if (!canceled) setIntent(null);
       })
-      .catch((error) => { console.error("view-bridge: asynchronous operation failed", error); });
+      .catch((error) => {
+        console.error("view-bridge: asynchronous operation failed", error);
+      });
     return () => {
       canceled = true;
     };

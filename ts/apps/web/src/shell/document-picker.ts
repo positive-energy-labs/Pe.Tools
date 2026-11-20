@@ -39,25 +39,33 @@ export function DocumentPicker({
   // `data-bound-document` is the bound signal scripts wait on (tests/e2e/cdp.ts requireRevit): the
   // openId and companion session are present only while a connected Revit lists the target as open.
   const bound = chosen && target?.kind === "document" ? target.ref.openId : undefined;
-  return createElement("span", { className: "contents", "data-bound-document": bound, "data-bound-session": bound && target?.kind === "document" ? target.ref.session : undefined }, createElement(ListPopup<(typeof options)[number]>, {
-    anchor: "trigger",
-    face: "control",
-    // The name says what is chosen, and that pressing changes it.
-    triggerLabel: chosen ? `Document: ${chosen}; change` : "Choose a document",
-    trigger: chosen ?? "Choose a document",
-    "aria-label": "Document",
-    items: options,
-    keyOf: (option) => key(option.ref),
-    labelOf: (option) => option.label,
-    filter: "substring",
-    select: "single",
-    selected: selected ? [selected] : [],
-    empty: inventory.state === "loading" ? "Reading documents..." : "No open documents available",
-    row: (option) => ({ label: option.label, sub: option.session }),
-    onPick: (option) => {
-      const search = place.address.read();
-      search.set("target", JSON.stringify({ kind: "open", ref: option.ref }));
-      place.address.write(search, "push");
+  return createElement(
+    "span",
+    {
+      className: "contents",
+      "data-bound-document": bound,
+      "data-bound-session": bound && target?.kind === "document" ? target.ref.session : undefined,
     },
-  }));
+    createElement(ListPopup<(typeof options)[number]>, {
+      anchor: "trigger",
+      face: "control",
+      // The name says what is chosen, and that pressing changes it.
+      triggerLabel: chosen ? `Document: ${chosen}; change` : "Choose a document",
+      trigger: chosen ?? "Choose a document",
+      "aria-label": "Document",
+      items: options,
+      keyOf: (option) => key(option.ref),
+      labelOf: (option) => option.label,
+      filter: "substring",
+      select: "single",
+      selected: selected ? [selected] : [],
+      empty: inventory.state === "loading" ? "Reading documents..." : "No open documents available",
+      row: (option) => ({ label: option.label, sub: option.session }),
+      onPick: (option) => {
+        const search = place.address.read();
+        search.set("target", JSON.stringify({ kind: "open", ref: option.ref }));
+        place.address.write(search, "push");
+      },
+    }),
+  );
 }

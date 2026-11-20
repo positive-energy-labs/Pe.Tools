@@ -1,8 +1,8 @@
 import { expect, it } from "vite-plus/test";
 import { FIRM_COLOURS } from "@pe/ducts-web/colours";
-import { toOklch } from "./oklch";
-import { routeColour } from "./surfaces";
-import { kindHue, kindL } from "./kinds";
+import { toOklch } from "@pe/web-kernel/scene/oklch";
+import { routeColour } from "@pe/web-kernel/scene/surfaces";
+import { kindHue, kindL } from "@pe/web-kernel/scene/kinds";
 
 it("the kinds table drives the hue, and an unlisted or absent kind draws as unknown grey", () => {
   expect(kindHue(FIRM_COLOURS, "supply")?.getHexString()).toBe("0569a5");

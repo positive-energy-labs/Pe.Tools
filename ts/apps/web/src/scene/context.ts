@@ -1,5 +1,5 @@
-import type { Look } from "./grounds";
-import type { Tier } from "./types";
+import type { Look } from "@pe/web-kernel/scene/grounds";
+import type { Tier } from "@pe/web-kernel/scene/types";
 import { CATEGORY_IDS } from "./categories";
 
 const WALLS = new Set<number>([

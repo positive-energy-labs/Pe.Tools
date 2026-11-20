@@ -11,10 +11,11 @@ import { canonicalPlace, routeAddress, routeAt, routeOf } from "./route-address.
 import { oneName } from "./subject-ref.ts";
 
 test("an admitted Place retains its owner's JSON query bytes through thread context", () => {
-  const link = '/fans?inputSort=%22%22&context=%22glass%22&fan=%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%5D%7D';
+  const link =
+    "/fans?inputSort=%22%22&context=%22glass%22&fan=%7B%22kind%22%3A%22ids%22%2C%22ids%22%3A%5B%5D%7D";
   expect(routeAddress("fans").tab(link).ok).toBe(true);
   expect(canonicalPlace("fans", link)).toEqual({ ok: true, link });
-  expect(canonicalPlace("fans", `${link}&thread=another` ).ok).toBe(false);
+  expect(canonicalPlace("fans", `${link}&thread=another`).ok).toBe(false);
   expect(canonicalPlace("fans", "https://elsewhere.test/fans").ok).toBe(false);
 });
 
@@ -32,10 +33,9 @@ describe("a layers field", () => {
   test("every layer off is none, and reads back as none", () => {
     expect(routeAddress("duct-systems").link({ layers: [] })).toBe("/duct-systems?layers=%5B%5D");
     expect(routeAddress("duct-systems").read({ layers: "[]" }).page.layers).toEqual([]);
-    expect(routeAddress("rooms").read({ layers: JSON.stringify(["faces", "rails"]) }).page.layers).toEqual([
-      "faces",
-      "rails",
-    ]);
+    expect(
+      routeAddress("rooms").read({ layers: JSON.stringify(["faces", "rails"]) }).page.layers,
+    ).toEqual(["faces", "rails"]);
   });
 
   test("an unknown layer name falls to the default", () => {
@@ -45,7 +45,7 @@ describe("a layers field", () => {
     const ducts = routeAddress("duct-systems");
     for (const layer of ["system-colours", "stub-labels"] as const) {
       const url = ducts.link({ layers: [layer] });
-      expect(url).toBe(`/duct-systems?${new URLSearchParams({layers:JSON.stringify([layer])})}`);
+      expect(url).toBe(`/duct-systems?${new URLSearchParams({ layers: JSON.stringify([layer]) })}`);
       expect(ducts.read({ layers: JSON.stringify([layer]) }).page.layers).toEqual([layer]);
     }
     // One `context` key; no layer aliases it.
@@ -55,7 +55,6 @@ describe("a layers field", () => {
 });
 
 describe("the route address", () => {
-
   test("the thread sidebar query and sort round-trip on Pea and a docked route", () => {
     for (const key of ["chat", "duct-systems"] as const) {
       const at = routeAddress(key);
@@ -85,8 +84,6 @@ describe("the route address", () => {
     ).toBe(true);
   });
 
-
-
   test("is one object per route, found by key or path", () => {
     expect(routeAddress("chat")).toBe(routeAddress("chat"));
     expect(routeOf("duct-systems")).toBe("duct-systems");
@@ -97,14 +94,18 @@ describe("the route address", () => {
   test("a route known only as a key is any route's address, still typed", () => {
     const key = routeOf("duct-systems")!;
     const at = routeAddress(key);
-    const subject = {kind:"ids",ids:["system-name:SA"]};
+    const subject = { kind: "ids", ids: ["system-name:SA"] };
     const { page } = at.read({ system: JSON.stringify(subject) });
     // The old tuple spelling is refused at the URL door, never migrated.
-    const old = at.read({ system: JSON.stringify({kind:"ids",ids:[JSON.stringify(["ducts-system","SA"])]}) });
-    expect("system" in old.page ? old.page.system : null).toEqual({kind:"ids",ids:[]});
+    const old = at.read({
+      system: JSON.stringify({ kind: "ids", ids: [JSON.stringify(["ducts-system", "SA"])] }),
+    });
+    expect("system" in old.page ? old.page.system : null).toEqual({ kind: "ids", ids: [] });
     // The union of every route's page narrows by its keys; a page of no route is refused.
     expect("system" in page ? page.system : null).toEqual(subject);
-    expect(at.link(page)).toBe(`/duct-systems?${new URLSearchParams({system:JSON.stringify(subject)})}`);
+    expect(at.link(page)).toBe(
+      `/duct-systems?${new URLSearchParams({ system: JSON.stringify(subject) })}`,
+    );
     // @ts-expect-error no route links a `bogus` key
     expect(() => at.link({ bogus: true })).toThrow("duct-systems links carry no 'bogus'");
     // A union that mixes leasing and non-leasing routes may hold no lease.
@@ -183,7 +184,9 @@ describe("the thin routes adopt the contract", () => {
   });
   test("every navigable key round-trips through its link", () => {
     const captures = routeAddress("captures");
-    expect(captures.link({ focus: "ab", open: ["ab", "cd"] })).toBe(`/captures?${new URLSearchParams({ focus: JSON.stringify("ab"), open: JSON.stringify(["ab", "cd"]) })}`);
+    expect(captures.link({ focus: "ab", open: ["ab", "cd"] })).toBe(
+      `/captures?${new URLSearchParams({ focus: JSON.stringify("ab"), open: JSON.stringify(["ab", "cd"]) })}`,
+    );
     expect(captures.read({ open: JSON.stringify(["ab", "cd"]) }).page).toEqual({
       ...captures.defaults,
       open: ["ab", "cd"],
@@ -208,7 +211,9 @@ describe("the thin routes adopt the contract", () => {
 
   test("Pea sets what the page shows and nothing the person's press owns", () => {
     expect(routeAddress("duct-loss").agent.keys).toContain("cfm");
-    expect(routeAddress("settings").agent.read({ section: JSON.stringify("none") })).toEqual({ section: "none" });
+    expect(routeAddress("settings").agent.read({ section: JSON.stringify("none") })).toEqual({
+      section: "none",
+    });
     expect(routeAddress("settings").agent.patch.safeParse({ session: "s" }).success).toBe(false);
     // Binding is the person's door and Pea does not lease /pea: no lease at all.
     expect(routeAddress("bind").agent).toBeUndefined();

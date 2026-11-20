@@ -38,7 +38,14 @@ export type CloserAction =
   | { kind: "pathDrop"; key: string; value: number };
 
 /** The fixes whose Work is /duct-systems' (joins, ends, assignments, tables, proposed-path drops): /fans links to them. */
-export const DUCTS_FIXES: ReadonlySet<CloserAction["kind"]> = new Set(["encounter", "rule", "cap", "price", "table", "pathDrop"]);
+export const DUCTS_FIXES: ReadonlySet<CloserAction["kind"]> = new Set([
+  "encounter",
+  "rule",
+  "cap",
+  "price",
+  "table",
+  "pathDrop",
+]);
 
 /** One table a fitting may be priced with: the verb names the table, `detail` the rule it reads under. */
 export type PriceChoice = { verb: string; detail: string; action: CloserAction };
@@ -60,7 +67,12 @@ export type Closer = {
   input: CloserInput | null;
   action: CloserAction | null;
   /** A second, smaller verb beside the first (R-CAP: "rule capped" next to a heal); null when none. */
-  secondary: { verb: string; refusal: string | null; action: CloserAction | null; link?: CloserLink | null } | null;
+  secondary: {
+    verb: string;
+    refusal: string | null;
+    action: CloserAction | null;
+    link?: CloserLink | null;
+  } | null;
   /**
    * A vacant port of another air class the person may accept instead (a second framed verb);
    * `first` when it is nearer than the same-class candidate, so the row orders it ahead.
@@ -79,7 +91,7 @@ export type Closer = {
 
 export type CloserContext = {
   /** The resolved default terminal drop (firm or project), with its source; null until inputs land. */
-  terminalDrop: Pick<Stated<number>, "value" | "source"> & { ref?: string | null } | null;
+  terminalDrop: (Pick<Stated<number>, "value" | "source"> & { ref?: string | null }) | null;
   /** `elementLabeler`: total, never an id. */
   nameOf: (id: number) => string;
   /** The sheet-wide refusal (busy, inputs detail not yet read); null when verbs may run. */
@@ -181,12 +193,17 @@ function describeBase(blocker: CalcBlocker, typed: number | null, context: Close
     action,
   });
   const fix = context.fix?.(blocker) ?? null;
-  if (blocker.kind === "backflow" && fix?.kind === "none") return refuse("correct host pressure", fix.reason);
-  if (fix?.kind === "encounter") return live("rule encounter", {
-    kind: "encounter", key: `encounter:${fix.encounter.elementId}:${fix.encounter.connector}`,
-  });
+  if (blocker.kind === "backflow" && fix?.kind === "none")
+    return refuse("correct host pressure", fix.reason);
+  if (fix?.kind === "encounter")
+    return live("rule encounter", {
+      kind: "encounter",
+      key: `encounter:${fix.encounter.elementId}:${fix.encounter.connector}`,
+    });
   const cell = fix?.kind === "cell" ? fix : null;
-  const terminal = cell ? cell.target.segment === "terminalDrops" || cell.target.segment === "flows" : (context.terminal?.(blocker.elementId) ?? false);
+  const terminal = cell
+    ? cell.target.segment === "terminalDrops" || cell.target.segment === "flows"
+    : (context.terminal?.(blocker.elementId) ?? false);
   const pair = healPair(blocker);
   const to = candidateId(blocker);
   const toName = to == null ? null : context.nameOf(to);
@@ -287,7 +304,13 @@ function describeBase(blocker: CalcBlocker, typed: number | null, context: Close
         : live(
             `set drop ${fallback.value} in-wg (${fallback.source}${fallback.ref ? ` ${fallback.ref}` : ""})`,
             // The staged cell cites where the default came from; the host stamps who took it.
-            { kind: "drop", elementId: blocker.elementId, value: fallback.value, terminal, ref: [fallback.source, fallback.ref].filter(Boolean).join(" ") },
+            {
+              kind: "drop",
+              elementId: blocker.elementId,
+              value: fallback.value,
+              terminal,
+              ref: [fallback.source, fallback.ref].filter(Boolean).join(" "),
+            },
             input,
           );
     }

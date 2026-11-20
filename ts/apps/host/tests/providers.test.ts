@@ -126,23 +126,38 @@ test("a Codex endpoint home stubs the user's own MCP servers as disabled so the 
   // the Pea-owned endpoint home, and codex refused the config ("invalid transport").
   const home = join(root, "subscription-home-mcp");
   await mkdir(home, { recursive: true });
-  await writeFile(join(home, "config.toml"), '[mcp_servers.executor]\nurl = "http://x"\n\n[mcp_servers.node_repl.env]\nA = "1"\n');
+  await writeFile(
+    join(home, "config.toml"),
+    '[mcp_servers.executor]\nurl = "http://x"\n\n[mcp_servers.node_repl.env]\nA = "1"\n',
+  );
   vi.stubEnv("CODEX_HOME", home);
   vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
   const server = createServer((_req, res) =>
-    res.end(JSON.stringify({ data: [{ id: "gpt-6.1-sol" }], output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }] })),
+    res.end(
+      JSON.stringify({
+        data: [{ id: "gpt-6.1-sol" }],
+        output: [{ type: "message", content: [{ type: "output_text", text: "OK" }] }],
+      }),
+    ),
   );
   const baseUrl = await listen(server);
   const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   try {
     const response = await providers.fetch(
-      request("providers", "POST", { ...add, harness: "codex", name: "Stubs", auth: { ...add.auth, baseUrl } }),
+      request("providers", "POST", {
+        ...add,
+        harness: "codex",
+        name: "Stubs",
+        auth: { ...add.auth, baseUrl },
+      }),
     );
     expect(response.status).toBe(200);
     const env = await providers.env(providers.get((await response.json()).id)!);
     const startup = await readFile(join(env.CODEX_HOME!, "config.toml"), "utf8");
     for (const name of ["executor", "node_repl"])
-      expect(startup).toContain(`[mcp_servers."${name}"]\ncommand = "pea-disabled"\nenabled = false`);
+      expect(startup).toContain(
+        `[mcp_servers."${name}"]\ncommand = "pea-disabled"\nenabled = false`,
+      );
     expect(startup).not.toContain("http://x");
   } finally {
     await providers.close();
@@ -336,9 +351,13 @@ async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string
   const seen: string[] = [];
   const server = createServer((req, res) => {
     seen.push(String(req.headers["x-api-key"]));
-    if (req.url === "/v1/models") res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }] }));
+    if (req.url === "/v1/models")
+      res.writeHead(200).end(JSON.stringify({ data: [{ id: "claude-a" }] }));
     // The endpoint echoes the key it was sent: the refusal must still carry none of it.
-    else res.writeHead(403).end(JSON.stringify({ error: { message: `bad ${req.headers["x-api-key"]}` } }));
+    else
+      res
+        .writeHead(403)
+        .end(JSON.stringify({ error: { message: `bad ${req.headers["x-api-key"]}` } }));
   });
   const baseUrl = await listen(server);
   if (sharedKeys) {
@@ -355,10 +374,14 @@ async function sharedKeyProbe(userKey: string, sharedKeys: Record<string, string
     await writeFile(
       hostState().providers,
       JSON.stringify({
-        providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: userKey, baseUrl } }],
+        providers: [
+          { ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: userKey, baseUrl } },
+        ],
       }),
     );
-    const provider = await (await providers.fetch(request("providers/claude-synthetic/probe", "POST"))).json();
+    const provider = await (
+      await providers.fetch(request("providers/claude-synthetic/probe", "POST"))
+    ).json();
     return { seen, provider, logs: logged.mock.calls.flat().join("\n") };
   } finally {
     logged.mockRestore();
@@ -389,19 +412,27 @@ test("the user's own key overrides the shared one", async () => {
 test("no firm home and no user key refuses with the typed reason, before any request", async () => {
   const { seen, provider } = await sharedKeyProbe("", null);
   expect(seen).toEqual([]);
-  expect(provider.readiness).toMatchObject({ state: "refused", message: expect.stringContaining("Set your firm home in Settings") });
+  expect(provider.readiness).toMatchObject({
+    state: "refused",
+    message: expect.stringContaining("Set your firm home in Settings"),
+  });
 });
 
 test("witness: a thread event and meta echoing a shared key are written redacted", async () => {
   const shared = join(root, "shared");
   await mkdir(shared, { recursive: true });
   await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
-  await writeFile(join(shared, "keys.json"), JSON.stringify({ "anthropic.api-key": "shared-firm-key" }));
+  await writeFile(
+    join(shared, "keys.json"),
+    JSON.stringify({ "anthropic.api-key": "shared-firm-key" }),
+  );
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   await mkdir(dirname(hostState().providers), { recursive: true });
   await writeFile(
     hostState().providers,
-    JSON.stringify({ providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: "" } }] }),
+    JSON.stringify({
+      providers: [{ ...add, id: "claude-synthetic", auth: { ...add.auth, apiKey: "" } }],
+    }),
   );
   const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   const threadsRoot = join(root, "threads");
@@ -409,20 +440,37 @@ test("witness: a thread event and meta echoing a shared key are written redacted
   await writeFile(
     join(threadsRoot, "thread", "meta.json"),
     JSON.stringify({
-      id: "thread", harness: "claude", providerId: "claude", providerName: "Claude", title: "Original",
-      createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", modelId: null,
-      acpSessionId: null, models: [], traits: [], traitValues: {}, head: { targets: [], revision: 0 },
-      lifecycle: emptyThreadLifecycle(), forkOf: null,
+      id: "thread",
+      harness: "claude",
+      providerId: "claude",
+      providerName: "Claude",
+      title: "Original",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+      modelId: null,
+      acpSessionId: null,
+      models: [],
+      traits: [],
+      traitValues: {},
+      head: { targets: [], revision: 0 },
+      lifecycle: emptyThreadLifecycle(),
+      forkOf: null,
     }),
   );
   await writeFile(join(threadsRoot, "thread", "events.jsonl"), "");
   const threads = await harnessThreads({
-    root: stateFixture(threadsRoot), log: new HostLog(stateFixture(join(threadsRoot, ".log")), Date.now), worldRoot: threadsRoot,
-    mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }), providers,
+    root: stateFixture(threadsRoot),
+    log: new HostLog(stateFixture(join(threadsRoot, ".log")), Date.now),
+    worldRoot: threadsRoot,
+    mcpServer: () => ({ name: "unused", command: "unused", args: [], env: [] }),
+    providers,
     runs: registryService(),
   });
   try {
-    const put = await asCaller(human, threads.fetch)(
+    const put = await asCaller(
+      human,
+      threads.fetch,
+    )(
       new Request("http://host/pe/threads/thread", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -433,7 +481,9 @@ test("witness: a thread event and meta echoing a shared key are written redacted
     const events = await readFile(join(threadsRoot, "thread", "events.jsonl"), "utf8");
     expect(events).toContain("title_changed");
     expect(events).toContain("…-key");
-    expect(events + (await readFile(join(threadsRoot, "thread", "meta.json"), "utf8"))).not.toContain("shared-firm-key");
+    expect(
+      events + (await readFile(join(threadsRoot, "thread", "meta.json"), "utf8")),
+    ).not.toContain("shared-firm-key");
   } finally {
     await threads.close();
     vi.unstubAllEnvs();
@@ -445,7 +495,10 @@ test("a firm key makes a synthesized provider per harness, never stored, and it 
   const shared = join(root, "shared");
   await mkdir(shared, { recursive: true });
   await writeFile(join(shared, "pe-home.json"), `{"tier":"firm"}`);
-  await writeFile(join(shared, "keys.json"), JSON.stringify({ "openai.api-key": "firm-openai-key" }));
+  await writeFile(
+    join(shared, "keys.json"),
+    JSON.stringify({ "openai.api-key": "firm-openai-key" }),
+  );
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   const providers = createProviders({ spawner: testSpawner(), probeOnStart: false });
   try {

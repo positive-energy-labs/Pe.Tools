@@ -19,7 +19,10 @@ export interface Grid {
   /** The outer axis of a three-axis table (its first printed column); `grid` is then [z][y][x]. */
   zLabel?: string;
   z?: readonly number[];
-  grid: ReadonlyArray<readonly number[]> | readonly number[] | ReadonlyArray<ReadonlyArray<readonly number[] | null>>;
+  grid:
+    | ReadonlyArray<readonly number[]>
+    | readonly number[]
+    | ReadonlyArray<ReadonlyArray<readonly number[] | null>>;
 }
 
 /** TABLE (upper case, e.g. "CD3-2") -> result ("Co", "Cb", "Cs") -> grid. */
@@ -43,7 +46,12 @@ export interface Lookup {
 
 export class GridError extends Error {}
 
-function interp1(x: number, xs: readonly number[], ys: readonly number[], label: string): [number, string?] {
+function interp1(
+  x: number,
+  xs: readonly number[],
+  ys: readonly number[],
+  label: string,
+): [number, string?] {
   const last = xs.length - 1;
   if (x < xs[0]! || x > xs[last]!)
     throw new GridError(`${label} ${x} outside table range ${xs[0]}..${xs[last]}`);

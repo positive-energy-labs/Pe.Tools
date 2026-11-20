@@ -34,6 +34,8 @@ describe("a Space scene element key is a SubjectRef", () => {
   test("a linked key survives the address", () => {
     const selected = spaceElementKey({ ...element, linkInstanceUniqueId: "link/1:#~" });
     const link = space.link({ selected });
-    expect(space.read(Object.fromEntries(new URL(link, "http://x").searchParams)).page).toMatchObject({ selected });
+    expect(
+      space.read(Object.fromEntries(new URL(link, "http://x").searchParams)).page,
+    ).toMatchObject({ selected });
   });
 });

@@ -43,7 +43,9 @@ export interface RouteStateSpec<TSchema extends z.ZodType> {
 }
 
 /** Why the generic apply and start doors refuse this Work, or null when it takes generic writes. */
-export const hostAuthoredRefusal = (spec: Pick<RouteStateSpec<z.ZodType>, "title" | "authoredThrough"> | undefined) =>
+export const hostAuthoredRefusal = (
+  spec: Pick<RouteStateSpec<z.ZodType>, "title" | "authoredThrough"> | undefined,
+) =>
   spec?.authoredThrough
     ? `${spec.title} are written through the ${spec.authoredThrough} command, which stamps the author from the caller`
     : null;
@@ -283,7 +285,9 @@ export function message(error: unknown): string {
         const at = issue.path.length ? issue.path.join(".") : "(root)";
         // A schema's own refusal (a Work command naming its writeIntent cell) outranks the generic line.
         if (issue.code === "unrecognized_keys")
-          return /^Unrecognized keys?:/.test(issue.message) ? `${at} has unknown field ${issue.keys.join(", ")}` : issue.message;
+          return /^Unrecognized keys?:/.test(issue.message)
+            ? `${at} has unknown field ${issue.keys.join(", ")}`
+            : issue.message;
         return issue.code === "invalid_type" && /received undefined/.test(issue.message)
           ? `${at} is missing`
           : `${at}: ${issue.message}`;

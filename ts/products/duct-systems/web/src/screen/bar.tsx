@@ -1,10 +1,5 @@
-import {
-  AttentionDocument,
-  useMembers,
-  useMention,
-  type SubjectKey,
-} from "@pe/kit/lang/attention";
-import { useElementIndex } from "@pe/web/element-index";
+import { AttentionDocument, useMembers, useMention, type SubjectKey } from "@pe/kit/lang/attention";
+import { useElementIndex } from "@pe/web-kernel/element-index";
 import type { SystemNote } from "../system-list-search.ts";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList, ListView, listColumns } from "@pe/kit/lang/list-view";
@@ -46,7 +41,7 @@ import {
 import { revitTarget } from "@pe/kit/lang/revit-target";
 import type { ListRowParts } from "@pe/kit/lang/list-view";
 import { tokenRef } from "@pe/kit/lib/token";
-import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
+import { observedElements, useNativeObservation } from "@pe/web-kernel/revit/observation";
 
 import type { Split, SplitPart } from "../loss-split.ts";
 import type { systemList } from "../system-list.ts";
@@ -393,7 +388,11 @@ export function systemRowParts(
             <span className="relative block h-1.5 min-w-8 flex-1" aria-hidden data-e-minibar="" />
           )}
           <span className="face-mono shrink-0" data-tone={over ? "alarm" : undefined}>
-            {s.total == null && s.groups.length === 0 ? <span className="text-ink-2">not walked</span> : fmt(s.total)}
+            {s.total == null && s.groups.length === 0 ? (
+              <span className="text-ink-2">not walked</span>
+            ) : (
+              fmt(s.total)
+            )}
             {load.state === "rated" ? ` / ${fmt(load.available, 2)}` : ""}
           </span>
           <SystemMark issues={issues} total={total} open={open} />
@@ -422,7 +421,9 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
   // A picked row is its split place; a picked element selects the row holding it.
   const picked = entries.find((entry) => selected === splitKey(split, entry.key));
   const element = selected ? elements.idOf(selected) : NaN;
-  const current = picked ?? selectedBarRow(entries, Number.isFinite(element) ? { key: "", ids: [element] } : null);
+  const current =
+    picked ??
+    selectedBarRow(entries, Number.isFinite(element) ? { key: "", ids: [element] } : null);
   const small = entries.filter(
     (entry) => entry.dp > 0 && entry.share < 3 && entry.key !== current?.key,
   );
@@ -490,7 +491,8 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
       label: "loss group",
       cell: (row) => (
         <>
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label={row.key === "other" ? row.label : `Edit rule for ${row.label}`}
             onClick={() => choose(row)}
           >
@@ -583,7 +585,8 @@ function BreakdownList({ split, scale, barW }: { split: Split; scale: number; ba
           />
         </LeaderDiagram>
         {expanded && small.length > 1 ? (
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label="Collapse small loss groups"
             onClick={() => {
               setExpanded(false);
@@ -852,7 +855,9 @@ export function MetaBar({
           <TooltipHint content="own loss, in-wg">
             <span {...COL.wg} className="text-ink-2 t-small">
               {unpriced || self === "" || self == null ? "" : `+${fmt(self, LOSS_PLACES)}`}
-              {partial && typeof self === "number" && !unpriced && <span data-tone="caution"> partial</span>}
+              {partial && typeof self === "number" && !unpriced && (
+                <span data-tone="caution"> partial</span>
+              )}
             </span>
           </TooltipHint>
         </>

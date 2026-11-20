@@ -3,7 +3,12 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 
-import { WriteAction, PreviewAction, writeWord, type WriteHeld } from "../src/components/lang/write-action";
+import {
+  WriteAction,
+  PreviewAction,
+  writeWord,
+  type WriteHeld,
+} from "../src/components/lang/write-action";
 import { TooltipProvider } from "../src/components/lang/tooltip";
 
 afterEach(() => {
@@ -19,17 +24,28 @@ test("a plan handle is resampled after settling; an unsealed review never arms a
   let review: import("../src/components/lang/write-action").PlanReview | null = null;
   const handle = {
     read: () => review,
-    plan: vi.fn(async () => { review = { sentence: "1 change", rows: ["Inspect this change"], stale: false }; }),
-    apply: vi.fn(), cancel: vi.fn(),
+    plan: vi.fn(async () => {
+      review = { sentence: "1 change", rows: ["Inspect this change"], stale: false };
+    }),
+    apply: vi.fn(),
+    cancel: vi.fn(),
   };
-  const view = render(<TooltipProvider delay={0}><PreviewAction handle={handle} label="Write" /></TooltipProvider>);
+  const view = render(
+    <TooltipProvider delay={0}>
+      <PreviewAction handle={handle} label="Write" />
+    </TooltipProvider>,
+  );
   await act(async () => fireEvent.click(screen.getByRole("button", { name: "plan Write" })));
   expect(await screen.findByText("Inspect this change")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Write" }).getAttribute("aria-disabled")).toBe("true");
   fireEvent.click(screen.getByRole("button", { name: "Write" }));
   expect(handle.apply).not.toHaveBeenCalled();
   review = { sentence: null, rows: [], stale: true };
-  view.rerender(<TooltipProvider delay={0}><PreviewAction handle={handle} label="Write" /></TooltipProvider>);
+  view.rerender(
+    <TooltipProvider delay={0}>
+      <PreviewAction handle={handle} label="Write" />
+    </TooltipProvider>,
+  );
   expect(view.container.querySelector('[data-write-action="stale"]')).toBeTruthy();
   expect(handle.plan).toHaveBeenCalledOnce();
 });
@@ -134,9 +150,7 @@ test("a held plan reopens even while a fresh plan is refused", async () => {
       />
     </TooltipProvider>,
   );
-  await act(async () =>
-    fireEvent.click(screen.getByRole("button", { name: "heal · planned 3" })),
-  );
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "heal · planned 3" })));
   expect(screen.getByText("3 pass · 1 refused")).toBeTruthy();
 });
 
@@ -168,7 +182,9 @@ test("before, after and each author are drawn; apply is the one way on", async (
   expect(cell.textContent).toContain("12");
   expect(cell.textContent).toContain("10");
   expect(cell.querySelector("[data-write-author]")!.textContent).toBe("Pea");
-  expect(document.querySelector('[data-write-cell="b"] [data-write-author]')!.textContent).toBe("you");
+  expect(document.querySelector('[data-write-cell="b"] [data-write-author]')!.textContent).toBe(
+    "you",
+  );
   expect(document.querySelector('[data-write-cell="b"]')!.textContent).toContain("unavailable");
   expect(screen.getByRole("button", { name: "apply heal" })).toBeTruthy();
   expect(document.querySelector("[data-write-reject]")).toBeNull();
@@ -183,7 +199,13 @@ test("apply without a seal is refused at the button and never runs", async () =>
         says="Plan healing"
         held={HELD}
         plan={async () => null}
-        apply={{ label: "apply heal", says: "Heal", refusal: "Plan the current Work first", run, done: "healed" }}
+        apply={{
+          label: "apply heal",
+          says: "Heal",
+          refusal: "Plan the current Work first",
+          run,
+          done: "healed",
+        }}
       />
     </TooltipProvider>,
   );

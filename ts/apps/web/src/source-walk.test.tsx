@@ -9,7 +9,7 @@ import { SheetPane } from "./route/slots/sheet/pane.tsx";
 import { Ledger, Roster } from "@pe/fans-web/calc/view";
 import type { LedgerProps } from "@pe/fans-web/calc/types";
 
-vi.mock("./route/activity.tsx", () => ({ useRouteSearchSlice: () => ({}) }));
+vi.mock("@pe/web-kernel/route/activity", () => ({ useRouteSearchSlice: () => ({}) }));
 vi.mock("./host/resource-state.ts", () => ({
   useFieldOptionsReading: () => ({ state: "pending" }),
   previousOf: () => null,

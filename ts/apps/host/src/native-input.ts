@@ -2,7 +2,7 @@ import { nativeRequestSchema } from "@pe/host-contracts/decoders";
 import { Ajv, type ValidateFunction } from "ajv";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { workAdmissionSchema } from "@pe/agent-contracts";
-import { refused } from "./command-executor.ts";
+import { refused } from "@pe/host-internal/command-executor";
 import { z } from "zod";
 import type { HostOperationKey, OpRequestOf } from "@pe/host-contracts/operation-types";
 
@@ -14,7 +14,9 @@ const contracts = new Map<string, string | null | undefined>(
 
 /** Project admission context away once; native validation still rejects every other unknown key. */
 export const nativeRequestInput = (input: Record<string, unknown>): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(input).filter(([key]) => !Object.hasOwn(workAdmissionSchema.shape, key)));
+  Object.fromEntries(
+    Object.entries(input).filter(([key]) => !Object.hasOwn(workAdmissionSchema.shape, key)),
+  );
 /** C# request metadata validates captured execution again after persistence or recovery. */
 function nativeInputProblem(key: string, input: unknown, json = contracts.get(key)): string | null {
   if (!json) return null;

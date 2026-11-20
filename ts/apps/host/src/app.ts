@@ -1,6 +1,6 @@
+import { productHttpRoutes } from "./product-http.generated.ts";
 import {
   builtinFileLayer,
-  builtinFileRoutes,
   defaultReadOwner,
   historicalRoutes,
   ReadOwner,
@@ -24,11 +24,13 @@ import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { hostLoadedFamilies } from "../../../packages/mcps/src/pea/families-admission.ts";
-import { RevitBridge, RevitBridgeLive } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
+import { RevitBridgeLive } from "./bridge.ts";
 import { contentHomesFound } from "./content-roots.ts";
 import { makeCallRoute } from "./call-route.ts";
 import { capturesRoute, PictureCaptureStore } from "./captures-route.ts";
-import { bindControl, Refused } from "./control.ts";
+import { bindControl } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 
 import { demoRoutes } from "./demo-owner.ts";
 import { deviceRoutes } from "./device-routes.ts";
@@ -53,7 +55,7 @@ import { peApiErrorsLayer, peRoutesLayer } from "./pe-routes.ts";
 import { ReceiptExport, type ReceiptExporter } from "./receipt-export.ts";
 import { createDevices, devicesKind, type Devices } from "./remote-device.ts";
 import { requestIdentityLayer } from "./request-identity.ts";
-import { RequestIdentity } from "./request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { RunRegistry } from "./run-registry.ts";
 import { SdkDriverLive } from "./sdk-session.ts";
 import { instancesReadingsRoute } from "./session-route.ts";
@@ -130,7 +132,10 @@ export const hostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthP
 );
 
 const noRevitHostStatusRoute = HttpRouter.add("GET", hostProcessIdentity.healthPath, () =>
-  Effect.flatMap(getHostStatus({ connected: false }, { revit: false }, null, contentHomesFound()), Response.json),
+  Effect.flatMap(
+    getHostStatus({ connected: false }, { revit: false }, null, contentHomesFound()),
+    Response.json,
+  ),
 );
 
 const emptyNotFound = Effect.succeed(Response.empty({ status: 404 }));
@@ -324,8 +329,7 @@ function liveHttpLive(options: HttpLiveOptions) {
       ...shareIntentFile(hostState()),
     });
   const devices =
-    options.devices ??
-    createDevices(devicesKind.in(hostState(), hostOwnership.serviceName));
+    options.devices ?? createDevices(devicesKind.in(hostState(), hostOwnership.serviceName));
   bindControl({ deviceThread: (device) => devices.active(device).thread });
   const identity = requestIdentityLayer({
     devices,
@@ -391,7 +395,7 @@ function liveHttpLive(options: HttpLiveOptions) {
         mcpRoute(() => `http://127.0.0.1:${port()}`),
         capturesRoute(spa),
         pagesRoute(),
-        builtinFileRoutes,
+        productHttpRoutes,
         historyRoutes(reads.history),
         adminShutdownRoute,
         adminWindowRoute,

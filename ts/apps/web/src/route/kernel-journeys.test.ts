@@ -1,4 +1,4 @@
-import { valueOf } from "./typed-route";
+import { valueOf } from "@pe/web-kernel/route/typed-route";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { expect, test, vi } from "vite-plus/test";
 import { observeResources } from "@pe/runtime";
@@ -9,7 +9,7 @@ import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.te
 import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 
 // Reuse the existing host HTTP fixture. Only native input and the address bar are recorded adapters.
 async function journey() {
@@ -170,20 +170,42 @@ test("JM B01 move a typed Page while URL custody waits for the router, then shar
   try {
     await j.ready();
     let current = true;
-    const address = { ...j.input.address, write(next: URLSearchParams, intent?: "push" | "replace") {
-      j.input.address.write(next, intent); current = false;
-    } };
-    const mount = mountTypedRoute(fans, { ...j.input, address, custody: { current: () => current } }, j.fingerprint,
-      { work: j.work, sources: { "fans.calc": j.source } });
+    const address = {
+      ...j.input.address,
+      write(next: URLSearchParams, intent?: "push" | "replace") {
+        j.input.address.write(next, intent);
+        current = false;
+      },
+    };
+    const mount = mountTypedRoute(
+      fans,
+      { ...j.input, address, custody: { current: () => current } },
+      j.fingerprint,
+      { work: j.work, sources: { "fans.calc": j.source } },
+    );
     try {
       mount.subscribe(() => {});
       mount.page.subject(j.fan("MUAS-1"));
-      expect(mount.page.read().fan, "B01: its own URL write cannot suppress the visible move").toEqual(j.fan("MUAS-1"));
+      expect(
+        mount.page.read().fan,
+        "B01: its own URL write cannot suppress the visible move",
+      ).toEqual(j.fan("MUAS-1"));
       current = true;
-      const restored = mountTypedRoute(fans, j.input, j.fingerprint, { work: j.work, sources: { "fans.calc": j.source } });
-      try { expect(restored.page.read().fan).toEqual(mount.page.read().fan); } finally { restored.dispose(); }
-    } finally { mount.dispose(); }
-  } finally { await j.close(); }
+      const restored = mountTypedRoute(fans, j.input, j.fingerprint, {
+        work: j.work,
+        sources: { "fans.calc": j.source },
+      });
+      try {
+        expect(restored.page.read().fan).toEqual(mount.page.read().fan);
+      } finally {
+        restored.dispose();
+      }
+    } finally {
+      mount.dispose();
+    }
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("JM H18 open core and roster together, switch fan and retain both host publications", async () => {
@@ -191,16 +213,32 @@ test("JM H18 open core and roster together, switch fan and retain both host publ
   try {
     await j.ready();
     const roster = fans.spec.reads!.roster;
-    await vi.waitFor(() => expect(j.mount.value(roster).state === "ready", "H18: roster survives concurrent core demand").toBe(true));
+    await vi.waitFor(() =>
+      expect(
+        j.mount.value(roster).state === "ready",
+        "H18: roster survives concurrent core demand",
+      ).toBe(true),
+    );
     j.mount.page.subject(j.fan("MUAS-1"));
     await j.ready();
-    expect(j.mount.value(roster).state === "ready", "H18: selected core cannot supersede the roster").toBe(true);
+    expect(
+      j.mount.value(roster).state === "ready",
+      "H18: selected core cannot supersede the roster",
+    ).toBe(true);
     expect(valueOf(j.mount.value(roster)).rows.length).toBeGreaterThan(1);
-    expect(valueOf(j.mount.value()).opened.length, "H18: core retains its own selected scope").toBe(1);
-    const point = historyPointSchema.parse(await j.host.history("", { kind: "captured", document: path }));
-    expect(point.history.publications.filter(p => p.read === "fans.calc").length,
-      "H18: shared operation records both distinct argument publications").toBeGreaterThanOrEqual(2);
-  } finally { await j.close(); }
+    expect(valueOf(j.mount.value()).opened.length, "H18: core retains its own selected scope").toBe(
+      1,
+    );
+    const point = historyPointSchema.parse(
+      await j.host.history("", { kind: "captured", document: path }),
+    );
+    expect(
+      point.history.publications.filter((p) => p.read === "fans.calc").length,
+      "H18: shared operation records both distinct argument publications",
+    ).toBeGreaterThanOrEqual(2);
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 test("J2 switch a subject while its answer is delayed, then hide and return", async () => {
@@ -293,7 +331,9 @@ test("J4 refresh Fans while the document changes and inspect the retained answer
 }, 60_000);
 
 test("J5 open a document read then attempt host and malformed targets without widening access", async () => {
-  const unregister = registeredReads.reads.has(fansCalc.name) ? () => {} : registeredReads.register({ sheet: fansCalc });
+  const unregister = registeredReads.reads.has(fansCalc.name)
+    ? () => {}
+    : registeredReads.register({ sheet: fansCalc });
   const j = await journey();
   try {
     await j.ready();
@@ -314,7 +354,10 @@ test("J5 open a document read then attempt host and malformed targets without wi
       generation: 1,
       args: { target: ref, fan: [], calcPath: "" },
     });
-    expect(response.status, `H17: the selected document remains readable: ${await response.clone().text()}`).toBe(200);
+    expect(
+      response.status,
+      `H17: the selected document remains readable: ${await response.clone().text()}`,
+    ).toBe(200);
     expect(await response.json()).toMatchObject({ state: "current" });
   } finally {
     await j.close();

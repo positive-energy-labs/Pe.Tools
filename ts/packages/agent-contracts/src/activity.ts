@@ -50,7 +50,8 @@ function parseArgs(raw: unknown): Record<string, unknown> | null {
   if (typeof raw === "string") {
     try {
       raw = JSON.parse(raw);
-    } catch (error) { console.warn("ts/packages/agent-contracts/src/activity.ts: fallback after failure", error);
+    } catch (error) {
+      console.warn("ts/packages/agent-contracts/src/activity.ts: fallback after failure", error);
       return null;
     }
   }

@@ -1,22 +1,27 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf, Verbs } from "../route/defaults";
+import type { ContextOf, Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { read } from "../route/defaults";
-import { paneLayout } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
+import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
-import { route, field, subjectSchema, oneName } from "../route/defaults";
-import { hostRead } from "../route/host-read";
-import { draw } from "../route/draw";
+import { route, field, subjectSchema, oneName } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
 /** The op is the subject (keyKind `name`, tuple `[op key]`); the receipt in view is route-owned query. */
 export const fields = { op: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push") };
 export const query = { actionId: field(z.string(), "", "query", "push") };
-export const loaded = read(
-  hostRead(contracts.workspace),
-  (page: { actionId: string }) => ({ actionId: page.actionId }),
-);
+export const loaded = read(hostRead(contracts.workspace), (page: { actionId: string }) => ({
+  actionId: page.actionId,
+}));
 export const receiptControls = ["action.read", "action.cancel"] as const;
-export type OpsContext = ContextOf<typeof fields & typeof query, typeof loaded, never, never, Verbs<"run" | (typeof receiptControls)[number]>>;
+export type OpsContext = ContextOf<
+  typeof fields & typeof query,
+  typeof loaded,
+  never,
+  never,
+  Verbs<"run" | (typeof receiptControls)[number]>
+>;
 export const module = route({
   key: "ops",
   name: "Ops",
@@ -46,7 +51,10 @@ export const module = route({
     pane: "main",
     read: loaded,
     options: (data) =>
-      (data?.catalog?.operations ?? []).map((entry) => ({ id: oneName(entry.key).ids[0]!, label: entry.displayName ?? entry.key })),
+      (data?.catalog?.operations ?? []).map((entry) => ({
+        id: oneName(entry.key).ids[0]!,
+        label: entry.displayName ?? entry.key,
+      })),
   },
   core: loaded,
   panes: {

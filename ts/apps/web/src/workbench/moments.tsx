@@ -557,7 +557,8 @@ function ReasoningPart({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="hairline-l-faint pl-2">
-      <Button kind="quiet"
+      <Button
+        kind="quiet"
         label="Thought process"
         reason="Pea's chain of thought for this turn — collapsed so the spine stays calm"
         onClick={() => setOpen((value) => !value)}
@@ -586,13 +587,7 @@ const OPEN_TIP = "open this call's input and output";
 const CLOSE_TIP = "close this call";
 
 const ToolCallPart = memo(
-  function ToolCallPart({
-    call,
-    recordsOnly,
-  }: {
-    call: ToolCall;
-    recordsOnly: boolean;
-  }) {
+  function ToolCallPart({ call, recordsOnly }: { call: ToolCall; recordsOnly: boolean }) {
     const view = useCurrentThreadView();
     const openKey = useAtomValue(view.atoms.openCallKey);
     // One call is open at a time: clicking a marker opens its I/O in place, and opening another
@@ -657,11 +652,7 @@ const ToolCallPart = memo(
               ) : null}
 
               {record ? null : (
-                <ToolStatus
-                  state={
-                    failed ? "failed" : running ? "working" : "done"
-                  }
-                />
+                <ToolStatus state={failed ? "failed" : running ? "working" : "done"} />
               )}
             </div>
           </TooltipHint>

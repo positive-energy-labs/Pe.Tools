@@ -7,8 +7,7 @@ const cross = (a: Point, b: Point) => a[0] * b[1] - a[1] * b[0];
 // Translate before the area sum so large host coordinates do not erase a small area.
 const signedDoubleArea = (points: Point[]) =>
   points.reduce(
-    (sum, p, i) =>
-      sum + cross(sub(p, points[0]), sub(points[(i + 1) % points.length], points[0])),
+    (sum, p, i) => sum + cross(sub(p, points[0]), sub(points[(i + 1) % points.length], points[0])),
     0,
   );
 

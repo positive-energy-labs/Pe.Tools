@@ -10,7 +10,7 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { useRef } from "react";
 import { CalcPicture } from "./calc/picture.tsx";
-import type { PictureOverlayProps } from "@pe/web/route/slots/picture/overlay";
+import type { PictureOverlayProps } from "@pe/web-kernel/route/slots/picture/overlay";
 import { CalcEmpty, CalcFrame, calcSnapshot, useCalcData } from "./mount.tsx";
 import type { FansDrawContext } from "../route.ts";
 import type { FanEspValues } from "@pe/fans-contract/fans-inputs";
@@ -26,31 +26,62 @@ const inWg = (value: number) => `${value.toFixed(2)} in-wg`;
  */
 export function espWarnings({ rated, required }: Immutable<FanEspValues>): string[] {
   if (required.kind !== "complete")
-    return [`Required ESP is not known: ${required.kind === "to-boundary" ? `priced to ${required.boundaries.length} unruled boundar${required.boundaries.length === 1 ? "y" : "ies"}` : `${required.coverage.length} coverage gap${required.coverage.length === 1 ? "" : "s"}, ${required.blockingIds.length} blocking`}; ${inWg(required.knownInWg)} so far`];
+    return [
+      `Required ESP is not known: ${required.kind === "to-boundary" ? `priced to ${required.boundaries.length} unruled boundar${required.boundaries.length === 1 ? "y" : "ies"}` : `${required.coverage.length} coverage gap${required.coverage.length === 1 ? "" : "s"}, ${required.blockingIds.length} blocking`}; ${inWg(required.knownInWg)} so far`,
+    ];
   const need = required.requiredEspInWg;
   return [
-    ...(rated.status === "invalid" ? [`Rated ESP is unreadable (${rated.source} ${rated.ref})`] : []),
-    ...(rated.status === "valid" && rated.value < need ? [`Rated ESP ${inWg(rated.value)} (${rated.source} ${rated.ref}) is below the required ${inWg(need)} (${espWord(true)})`] : []),
+    ...(rated.status === "invalid"
+      ? [`Rated ESP is unreadable (${rated.source} ${rated.ref})`]
+      : []),
+    ...(rated.status === "valid" && rated.value < need
+      ? [
+          `Rated ESP ${inWg(rated.value)} (${rated.source} ${rated.ref}) is below the required ${inWg(need)} (${espWord(true)})`,
+        ]
+      : []),
   ];
 }
 
 export function FanPicture({ ctx, picture }: Props) {
   const snapshot = calcSnapshot(ctx.value.value?.calcSnapshot);
-  return "kind" in snapshot ? <CalcEmpty value={ctx.value} /> : <FanWalk ctx={ctx} snapshot={snapshot} picture={picture} />;
+  return "kind" in snapshot ? (
+    <CalcEmpty value={ctx.value} />
+  ) : (
+    <FanWalk ctx={ctx} snapshot={snapshot} picture={picture} />
+  );
 }
 
-function FanWalk({ ctx, snapshot, picture }: Pick<Props, "ctx" | "picture"> & { snapshot: DuctSnapshot & { sourceVersion?: string } }) {
-  const { authored, value, sheet, roster, nameOf, issue, state, fanKey } = useCalcData(ctx, snapshot);
+function FanWalk({
+  ctx,
+  snapshot,
+  picture,
+}: Pick<Props, "ctx" | "picture"> & { snapshot: DuctSnapshot & { sourceVersion?: string } }) {
+  const { authored, value, sheet, roster, nameOf, issue, state, fanKey } = useCalcData(
+    ctx,
+    snapshot,
+  );
   const picked = authored.fan.kind === "all" ? "all" : authored.fan.ids;
   const jump = useRef<((key: SubjectKey) => void) | null>(null);
-  const esp = sheet?.overview.espValues, direction = sheet?.overview.fan?.directionMismatch?.evidence;
+  const esp = sheet?.overview.espValues,
+    direction = sheet?.overview.fan?.directionMismatch?.evidence;
   return (
     <CalcFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf} jump={jump}>
-      {[...(direction ? [`Family direction differs from the network: ${direction}`] : []), ...(esp ? espWarnings(esp) : [])]
-        .map((warning) => <p key={warning} role="alert">{warning}</p>)}
+      {[
+        ...(direction ? [`Family direction differs from the network: ${direction}`] : []),
+        ...(esp ? espWarnings(esp) : []),
+      ].map((warning) => (
+        <p key={warning} role="alert">
+          {warning}
+        </p>
+      ))}
       <CalcPicture
         props={{
-          page: { layers: authored.layers, context: authored.context, encoding: authored.encoding, issue },
+          page: {
+            layers: authored.layers,
+            context: authored.context,
+            encoding: authored.encoding,
+            issue,
+          },
           pose: (patch) => void ctx.page.pose(patch, "named"),
           select: (key) => void ctx.selection.set([{ kind: "focus", id: key }]),
           work: { doc: ctx.value.value?.design ?? null },

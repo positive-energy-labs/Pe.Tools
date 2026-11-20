@@ -66,14 +66,17 @@ test("access-061/062: a disconnected Page reading immediately stops naming its d
   await renderChip();
   act(() => stream.send({ kind: "snapshot", key: "k", value: writes }));
   await screen.findByText("MEP");
-  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe(`/bind?page=${PAGE}`);
+  expect(screen.getByRole("link", { name: "Bind…" }).getAttribute("href")).toBe(
+    `/bind?page=${PAGE}`,
+  );
   act(() => stream.send({ kind: "stale", key: "k" }));
   await waitFor(() => expect(screen.queryByText("MEP")).toBeNull());
   expect(screen.getByText("unverified")).toBeTruthy();
 });
 test("W34: a discovery expiry shows the host's words, and the next served reading names the document again", async () => {
   await renderChip();
-  const words = "Pod discovery exceeded 5000 ms listing G:/Pods. Try again when the folder is available.";
+  const words =
+    "Pod discovery exceeded 5000 ms listing G:/Pods. Try again when the folder is available.";
   act(() => stream.send({ kind: "failure", key: "k", error: words }));
   expect((await screen.findByRole("status")).textContent).toBe(words);
   expect(screen.getByText("unverified")).toBeTruthy();

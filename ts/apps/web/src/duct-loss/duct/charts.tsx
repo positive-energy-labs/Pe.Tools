@@ -98,8 +98,16 @@ function LogLog({
   for (const s of series) {
     const e = endLabel(s);
     if (!e) continue;
-    const box = { key: s.key, label: s.label, x: sx(e[0]) + 3, y: sy(e[1]) - 2, w: s.label.length * LABEL * 0.6 };
-    if (labels.some((l) => box.x < l.x + l.w && l.x < box.x + box.w && Math.abs(l.y - box.y) < LABEL))
+    const box = {
+      key: s.key,
+      label: s.label,
+      x: sx(e[0]) + 3,
+      y: sy(e[1]) - 2,
+      w: s.label.length * LABEL * 0.6,
+    };
+    if (
+      labels.some((l) => box.x < l.x + l.w && l.x < box.x + box.w && Math.abs(l.y - box.y) < LABEL)
+    )
       continue;
     labels.push(box);
   }

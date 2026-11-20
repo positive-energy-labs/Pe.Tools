@@ -5,18 +5,32 @@ export function readableRefusal(error: unknown, fallback: string): string {
   const message = error instanceof Error ? error.message : String(error);
   let issues: unknown = error instanceof z.ZodError ? error.issues : null;
   if (!issues) {
-    try { issues = JSON.parse(message); } catch { /* Domain sentences remain readable. */ }
+    try {
+      issues = JSON.parse(message);
+    } catch {
+      /* Domain sentences remain readable. */
+    }
   }
-  return Array.isArray(issues) && issues.length > 0 && issues.every(issue =>
-    issue !== null && typeof issue === "object" && "code" in issue && "path" in issue)
-    ? fallback : message;
+  return Array.isArray(issues) &&
+    issues.length > 0 &&
+    issues.every(
+      (issue) => issue !== null && typeof issue === "object" && "code" in issue && "path" in issue,
+    )
+    ? fallback
+    : message;
 }
 
 export function podDiagnostic(issue: { code: string; message: string }): string {
   switch (issue.code) {
     case "InvalidEntrypoint":
-    case "MissingEntrypoint": return "Script unavailable: its declared entrypoint has no admitted source. Repair this Pod's script declaration.";
-    case "ShippedExampleUpdateKept": return readableRefusal(issue.message, "Example update kept: its provenance could not be verified. Your Pod was preserved.");
-    default: return `Pod member unavailable (${issue.code}): inspect and repair this Pod before using it.`;
+    case "MissingEntrypoint":
+      return "Script unavailable: its declared entrypoint has no admitted source. Repair this Pod's script declaration.";
+    case "ShippedExampleUpdateKept":
+      return readableRefusal(
+        issue.message,
+        "Example update kept: its provenance could not be verified. Your Pod was preserved.",
+      );
+    default:
+      return `Pod member unavailable (${issue.code}): inspect and repair this Pod before using it.`;
   }
 }

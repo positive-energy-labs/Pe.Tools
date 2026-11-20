@@ -1,4 +1,9 @@
-import { blobRefSchema, FAMILY_MEMBER_DIR, isFamilyMember, type Consumed } from "@pe/agent-contracts";
+import {
+  blobRefSchema,
+  FAMILY_MEMBER_DIR,
+  isFamilyMember,
+  type Consumed,
+} from "@pe/agent-contracts";
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { put, get } from "./action-blobs.ts";
@@ -10,8 +15,8 @@ import { Effect } from "effect";
 import { parsedDocViewSchema, type ActionStep } from "@pe/agent-contracts";
 import { commands, tools } from "@pe/mcps/product-actions";
 import { z } from "zod";
-import { command, io, refused, type CommandExecutor } from "./command-executor.ts";
-import { runPods, podContext, type PodDependencies } from "./family-actions.ts";
+import { command, io, refused, type CommandExecutor } from "@pe/host-internal/command-executor";
+import { podContext, runPods, type PodDependencies } from "./family-actions.ts";
 import { podFolder, podMemberKind } from "./settings.ts";
 import { reconcilePackageChanges } from "./package-lifecycle.ts";
 import { writeHome } from "@pe/host-contracts/kinds";
@@ -20,11 +25,13 @@ import { readDerivedJson } from "@pe/mcps/derived-parse";
 import { LLAMA_TIER } from "@pe/mcps/llama-parse";
 import { noteLlamaSend, requireLlamaCloudKey } from "@pe/mcps/llama-key";
 import { derivedFor } from "@pe/host-contracts/service-identity";
-import { derivedKey,
+import {
+  derivedKey,
   readDerivedIn,
-  writeDerivedIn, type DerivedDir,
+  writeDerivedIn,
+  type DerivedDir,
 } from "@pe/host-contracts/kinds";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { PodContext } from "./settings.ts";
 import { hostOwnership, hostState } from "./host-ownership.ts";
 
@@ -48,7 +55,10 @@ export async function familySpecAsset(
     // Normalized before the prefix test: `settings/family/../../x` names another Pod file.
     const path = posix.normalize((url.searchParams.get("path") ?? "").replaceAll("\\", "/"));
     if (!path.startsWith(FAMILY_MEMBER_DIR)) throw Error("Expected a family spec asset");
-    const file = safePath(await folderFor(url.searchParams.get("pod") ?? "", podsRoot, pointer), path);
+    const file = safePath(
+      await folderFor(url.searchParams.get("pod") ?? "", podsRoot, pointer),
+      path,
+    );
     const bytes = await readFile(file);
     const mime =
       (
@@ -105,10 +115,30 @@ async function readPdfPath(path: string): Promise<Uint8Array> {
 }
 /** Loopback, private, link-local, carrier-NAT and unspecified ranges: this machine and its network. */
 const LOCAL_NETWORKS = new BlockList();
-for (const [net, prefix] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 4], ["240.0.0.0", 4]] as const)
+for (const [net, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+] as const)
   LOCAL_NETWORKS.addSubnet(net, prefix, "ipv4");
 // `::/96` is loopback, unspecified and the IPv4-compatible form; `64:ff9b::/96` and `2002::/16` carry an IPv4 address inside.
-for (const [net, prefix] of [["::", 96], ["64:ff9b::", 96], ["2002::", 16], ["fc00::", 7], ["fe80::", 10], ["fec0::", 10], ["ff00::", 8]] as const)
+for (const [net, prefix] of [
+  ["::", 96],
+  ["64:ff9b::", 96],
+  ["2002::", 16],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["fec0::", 10],
+  ["ff00::", 8],
+] as const)
   LOCAL_NETWORKS.addSubnet(net, prefix, "ipv6");
 /**
  * Refuse a URL whose host is, or resolves to, this machine or its network: a page-supplied URL must
@@ -141,7 +171,12 @@ async function refuseLocalUrl(url: string): Promise<void> {
         );
       });
   // An IPv4 rule also matches the IPv4-mapped IPv6 form (`::ffff:127.0.0.1`).
-  if (!addresses.length || addresses.some(({ address, family }) => LOCAL_NETWORKS.check(address, family === 6 ? "ipv6" : "ipv4")))
+  if (
+    !addresses.length ||
+    addresses.some(({ address, family }) =>
+      LOCAL_NETWORKS.check(address, family === 6 ? "ipv6" : "ipv4"),
+    )
+  )
     throw sourceRefused(
       `${shown} is on this machine or its network, and only a public address is fetched here. Download the PDF and attach by { path }, or upload the file.`,
     );
@@ -213,7 +248,10 @@ type SpecSource = z.infer<typeof blobRefSchema> | { path: string } | { url: stri
  * ponytail: write-once, so a sheet the vendor revises at the same URL is not seen again; attach the
  * new one by { path } or upload. Add a refresh verb if that bites.
  */
-async function readSpecSource(source: SpecSource, store: DerivedDir): Promise<{ file: File; bytes: ArrayBuffer }> {
+async function readSpecSource(
+  source: SpecSource,
+  store: DerivedDir,
+): Promise<{ file: File; bytes: ArrayBuffer }> {
   if ("url" in source) await refuseLocalUrl(source.url);
   const fetched =
     "digest" in source
@@ -244,7 +282,12 @@ type ParsePdf = NonNullable<PodDependencies["parsePdf"]>;
  * The parse of `pdf`: the kept one, else one send to the hosted parser (it leaves the send notice,
  * ADR 0052) whose view and renders are then kept, so the same bytes are never sent twice.
  */
-async function familyParse(store: DerivedDir, pdf: Buffer, file: File, parsePdf: ParsePdf): Promise<KeptFamilyParse> {
+async function familyParse(
+  store: DerivedDir,
+  pdf: Buffer,
+  file: File,
+  parsePdf: ParsePdf,
+): Promise<KeptFamilyParse> {
   const kept = keptFamilyParse(store, pdf);
   if (kept) return kept;
   const doc = parsedDocViewSchema.parse(
@@ -278,7 +321,10 @@ const preparedSpecSchema = z.strictObject({
   assets: z.array(assetSchema),
 });
 
-export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBridge["Service"]): CommandExecutor {
+export function familySpecExecutor(
+  deps: PodDependencies = {},
+  bridge?: RevitBridge["Service"],
+): CommandExecutor {
   const parsePdf = deps.parsePdf ?? parseFamilyPdf;
   return command(commands["family.attach-spec"], preparedSpecSchema, {
     bind: async (ctx) => {
@@ -289,10 +335,20 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         facts: [["reading"], ["spec"]],
       }));
       // Attaching writes the spec and its assets into the Pod, in whichever home holds it.
-      const pods: PodContext = bridge ? await podContext(deps, bridge, ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined) : { podsRoot: deps.podsRoot };
+      const pods: PodContext = bridge
+        ? await podContext(
+            deps,
+            bridge,
+            ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined,
+          )
+        : { podsRoot: deps.podsRoot };
       const root = await runPods(deps, podFolder(member.pod, pods));
       // The parse and any vendor download are kept once for the project the Pod, or the PDF, sits in.
-      const store = derivedFor(hostOwnership.rootPath, root, ...("path" in source ? [source.path] : []));
+      const store = derivedFor(
+        hostOwnership.rootPath,
+        root,
+        ...("path" in source ? [source.path] : []),
+      );
       // Every refusal here names the next step: the caller is a person or Pea, neither reads this file.
       const save = `Save the open family first: stage writeIntent["family.capture"].edit = { "value": { "pod": "${member.pod}" } } in Family Work and run family.capture; it files the family under ${FAMILY_MEMBER_DIR} and returns the member to attach to.`;
       if (!isFamilyMember(member.path))
@@ -301,7 +357,10 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
           "family.spec.member",
         );
       const memberBytes = await readFile(safePath(root, member.path)).catch(() => {
-        throw refused(`Pod '${member.pod}' has no member '${member.path}'. ${save}`, "family.spec.member");
+        throw refused(
+          `Pod '${member.pod}' has no member '${member.path}'. ${save}`,
+          "family.spec.member",
+        );
       });
       const family = JSON.parse(memberBytes.toString("utf8"));
       if (!family.family?.name)
@@ -377,22 +436,28 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
         },
       };
     },
-    run: (ctx, execution) => Effect.gen(function* () {
-      const { member, doc, specPath, assets } = execution.prepared as z.infer<
-        typeof preparedSpecSchema
-      >;
+    run: (ctx, execution) =>
+      Effect.gen(function* () {
+        const { member, doc, specPath, assets } = execution.prepared as z.infer<
+          typeof preparedSpecSchema
+        >;
         const pods: PodContext = bridge
-          ? yield* io(() => podContext(deps, bridge, ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined),
+          ? yield* io(() =>
+              podContext(
+                deps,
+                bridge,
+                ctx.admission.target.kind === "document" ? ctx.admission.target.ref : undefined,
+              ),
             )
           : { podsRoot: deps.podsRoot };
         const directory = yield* io(() => runPods(deps, podFolder(member.pod, pods)));
         for (const asset of assets)
           yield* execution.step("file", "family.spec.asset", asset, () =>
             io(async () => {
-          // Through the one write door: a resumed step finds its own bytes and stops; any other
-          // bytes at the path are replaced only as read, and rest in the blob store first.
-          const current = await readFile(asset.path).catch(() => null);
-          const held = current && createHash("sha256").update(current).digest("hex");
+              // Through the one write door: a resumed step finds its own bytes and stops; any other
+              // bytes at the path are replaced only as read, and rest in the blob store first.
+              const current = await readFile(asset.path).catch(() => null);
+              const held = current && createHash("sha256").update(current).digest("hex");
               if (held !== asset.blob.digest) {
                 const wrote = writeHome(
                   podMemberKind.in(
@@ -406,23 +471,23 @@ export function familySpecExecutor(deps: PodDependencies = {}, bridge?: RevitBri
                   await get(asset.blob),
                   held,
                 );
-            if (!wrote.ok)
-              throw Error(`Spec asset '${asset.path}' changed while it was being written.`);
+                if (!wrote.ok)
+                  throw Error(`Spec asset '${asset.path}' changed while it was being written.`);
                 await reconcilePackageChanges();
               }
-          return { path: asset.path, sha256: asset.blob.digest };
+              return { path: asset.path, sha256: asset.blob.digest };
             }),
           );
-      yield* execution.publishWork(ctx.admission.input.work!.key, "family", [
-        { path: ["spec"], value: { member, doc } },
-      ]);
-      return {
-        member,
-        specPath,
-        pages: doc.pages.length,
-        blocks: doc.blocks.length,
-        images: doc.images.length,
-      };
+        yield* execution.publishWork(ctx.admission.input.work!.key, "family", [
+          { path: ["spec"], value: { member, doc } },
+        ]);
+        return {
+          member,
+          specPath,
+          pages: doc.pages.length,
+          blocks: doc.blocks.length,
+          images: doc.images.length,
+        };
       }),
     recover: async (step: ActionStep) => {
       if (step.kind !== "file" || step.key !== "family.spec.asset")

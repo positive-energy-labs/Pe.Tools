@@ -7,7 +7,7 @@ import {
   type FamilyCellValue,
   type MeasuredDisplayUnit,
 } from "@pe/agent-contracts";
-import {useCollectionCell,type CellCollection} from "@pe/kit/lang/cell";
+import { useCollectionCell, type CellCollection } from "@pe/kit/lang/cell";
 import { ReadCell } from "@pe/kit/table/cells";
 import { useCellNavigation } from "@pe/kit/table/cell-navigation";
 import { cellFromDraft, StateCell, type CellRefusal, type CellTransition } from "@pe/kit/lang/cell";
@@ -90,7 +90,7 @@ function cellReason(row: TypeRow, key: string, instance: boolean): string {
   return `Type "${row.typeName}" of ${row.familyName}: ${what}${observed} currently. Type to stage your value. Clear restores the model value. Plan generates the spec from staged values only.`;
 }
 
-export type LiveCells=CellCollection<FamilyCellState>;
+export type LiveCells = CellCollection<FamilyCellState>;
 
 /** One parameter cell: subscribed to its own key, so a Work change redraws it and nothing else. */
 export function ParamCell({
@@ -273,7 +273,8 @@ function YesNoCell({
           data-tone="caution"
           data-wash=""
         >
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label={refused}
             reason={`${refused} — click to dismiss`}
             onMouseDown={(event) => event.preventDefault()}

@@ -257,7 +257,10 @@ test("a share intent that does not decode is discarded on the request that meets
     const response = await app.handler(
       new Request("http://127.0.0.1:5180/pe/share", {
         method: "PUT",
-        headers: { "content-type": "application/json", host: "127.0.0.1:5180", ...contextHeaders(),
+        headers: {
+          "content-type": "application/json",
+          host: "127.0.0.1:5180",
+          ...contextHeaders(),
         },
         body: JSON.stringify({ on: false }),
       }),
@@ -266,7 +269,8 @@ test("a share intent that does not decode is discarded on the request that meets
     expect(await response.json()).toMatchObject({ desired: "off", refusal: null });
     expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ desired: "off" });
     expect(
-      storedNotices(stateMachine(storedParent(machine.notices))).filter((notice) => notice.path === path,
+      storedNotices(stateMachine(storedParent(machine.notices))).filter(
+        (notice) => notice.path === path,
       ),
     ).toMatchObject([{ class: "discard", place: "Sharing" }]);
   } finally {
@@ -296,7 +300,8 @@ test("a share intent whose bytes cannot be copied aside is kept, and no save lan
     ).toMatchObject([
       {
         class: "keep",
-        place: "Sharing", reason: expect.stringContaining("could not be copied aside"),
+        place: "Sharing",
+        reason: expect.stringContaining("could not be copied aside"),
       },
     ]);
     await expect(intent.save!({ desired: "on", mapping: null })).rejects.toThrow();

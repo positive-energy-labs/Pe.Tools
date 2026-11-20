@@ -1,7 +1,7 @@
 import { Demo } from "#/design-system/exhibit";
 import { LevelMarks, LevelReadout } from "#/scene/level-marks";
 import { levelExtents, type SceneLevels } from "#/scene/levels";
-import type { Project } from "#/scene/projection";
+import type { Project } from "@pe/web-kernel/scene/projection";
 
 const BOUNDS = { minX: 0, maxX: 40, minY: 0, maxY: 20, minZ: 2, maxZ: 12 };
 const LEVELS: SceneLevels = {

@@ -12,7 +12,7 @@ import {
   type SessionListResult,
 } from "@pe/host-contracts/pe-revit-contract";
 import type { ActionJournal } from "./action-journal.ts";
-import { command, refused } from "./command-executor.ts";
+import { command, refused } from "@pe/host-internal/command-executor";
 import { requireHuman } from "./control.ts";
 import type { SdkReceiptReader } from "./native-receipts.ts";
 import { readSdk, runSdk, sdkEnvelope } from "./sdk-dispatch.ts";
@@ -113,34 +113,35 @@ export const bootstrapExecutor = (read = readBootstrapSdk) =>
           prepare: async () => ({ year: input.year, sdkVersion: GENERATED_FROM, installation }),
         };
       },
-      run: (_context, execution) => Effect.gen(function* () {
-        const { year, sdkVersion } = execution.prepared;
-        const installed = yield* runSdk(
-          execution,
-          "machine.bootstrap.install",
-          { argv: bootstrapInstallArgv({ year }) },
-          read,
-        );
-        const verified = yield* runSdk(
-          execution,
-          "machine.bootstrap.verify",
-          { argv: bootstrapVerifyArgv({ year }) },
-          read,
-          {
-            check: (envelope) => {
-              const result = (envelope as { result: BootstrapResult }).result;
-              if (
-                result.years.length !== 1 ||
-                result.years[0] !== year ||
-                !result.actions.length ||
-                result.actions.some((action) => action.year !== year || action.status !== "ok")
-              )
-                throw refused("Bootstrap verification failed; inspect the SDK envelope.");
+      run: (_context, execution) =>
+        Effect.gen(function* () {
+          const { year, sdkVersion } = execution.prepared;
+          const installed = yield* runSdk(
+            execution,
+            "machine.bootstrap.install",
+            { argv: bootstrapInstallArgv({ year }) },
+            read,
+          );
+          const verified = yield* runSdk(
+            execution,
+            "machine.bootstrap.verify",
+            { argv: bootstrapVerifyArgv({ year }) },
+            read,
+            {
+              check: (envelope) => {
+                const result = (envelope as { result: BootstrapResult }).result;
+                if (
+                  result.years.length !== 1 ||
+                  result.years[0] !== year ||
+                  !result.actions.length ||
+                  result.actions.some((action) => action.year !== year || action.status !== "ok")
+                )
+                  throw refused("Bootstrap verification failed; inspect the SDK envelope.");
+              },
             },
-          },
-        );
-        return { year, sdkVersion, installed, verified };
-      }),
+          );
+          return { year, sdkVersion, installed, verified };
+        }),
     },
   );
 

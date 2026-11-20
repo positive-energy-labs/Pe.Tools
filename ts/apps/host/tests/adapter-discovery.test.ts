@@ -139,7 +139,10 @@ test("witness: a shared key in a console tail is redacted (kills B4)", async () 
   const shared = join(env.USERPROFILE, "shared");
   mkdirSync(shared, { recursive: true });
   writeFileSync(join(shared, "pe-home.json"), `{"tier":"firm"}`);
-  writeFileSync(join(shared, "keys.json"), JSON.stringify({ "openai.api-key": "shared-console-key" }));
+  writeFileSync(
+    join(shared, "keys.json"),
+    JSON.stringify({ "openai.api-key": "shared-console-key" }),
+  );
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", shared);
   vi.stubEnv("PE_HARNESS_ADAPTER_CODEX", join(import.meta.dirname, "fake-acp-agent.mjs"));
   vi.stubEnv("FAKE_ACP_AUTH", "none");

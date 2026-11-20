@@ -6,8 +6,8 @@ import {
   HOST_RPC_SDK_SESSION_HEADER,
   HOST_RPC_DOCUMENT_HEADER,
 } from "@pe/host-contracts/operation-types";
-import { RevitBridge, type HostBridgeEvent } from "../src/bridge.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RevitBridge, type HostBridgeEvent } from "@pe/host-internal/bridge";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { replay } from "./sdk-replay.ts";
 

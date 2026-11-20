@@ -1,6 +1,6 @@
 import type { Address, DocumentRef, ExecutionTarget } from "@pe/agent-contracts";
-import { fixtureName } from "./fixture-name";
-import type { RouteActivityScope } from "../route/activity";
+import { fixtureName } from "@pe/web-kernel/shell/fixture-name";
+import type { RouteActivityScope } from "@pe/web-kernel/route/activity";
 import type { AdmittedAddressPort } from "./typed-address";
 import { freezePage } from "./freeze-page";
 

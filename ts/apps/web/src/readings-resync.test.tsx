@@ -47,12 +47,25 @@ test("transport delivers when a visible tab's animation frame never runs", async
   const raf = vi.fn(() => 1);
   vi.stubGlobal("requestAnimationFrame", raf);
   const sources: Fake[] = [];
-  const readings = new PeReadings(() => "http://localhost/readings", url => {
-    const source: Fake = { url, onopen: null, onmessage: null, onerror: null,
-      closed: false, close() { this.closed = true; } };
-    sources.push(source);
-    return source;
-  }, undefined, async () => {});
+  const readings = new PeReadings(
+    () => "http://localhost/readings",
+    (url) => {
+      const source: Fake = {
+        url,
+        onopen: null,
+        onmessage: null,
+        onerror: null,
+        closed: false,
+        close() {
+          this.closed = true;
+        },
+      };
+      sources.push(source);
+      return source;
+    },
+    undefined,
+    async () => {},
+  );
   const received = vi.fn();
   try {
     readings.subscribe(head, received);
@@ -108,36 +121,49 @@ function owner(
   return { readings, sources, subscriptions, update };
 }
 
-test.each([400, 409])("a subscription %s reacquires every key and keeps delivering", async status => {
-  vi.useFakeTimers();
-  const { readings, sources, update, subscriptions } = owner();
-  const received = vi.fn();
-  update.mockRejectedValueOnce(Error(`Reading subscriptions: ${status}`));
-  try {
-    readings.subscribe(head, received);
-    await vi.advanceTimersByTimeAsync(0);
-    sources[0]!.onopen!();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(sources[0]!.closed).toBe(true);
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(sources).toHaveLength(2);
-    expect(sources[1]!.url).not.toBe(sources[0]!.url);
-    sources[1]!.onopen!();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(subscriptions.has(readingKey(head))).toBe(true);
-    for (const revision of [1, 2]) {
-      sources[1]!.onmessage!(snapshot({ revision }));
-      expect(received).toHaveBeenLastCalledWith(expect.objectContaining({ kind: "snapshot", value: { revision } }));
+test.each([400, 409])(
+  "a subscription %s reacquires every key and keeps delivering",
+  async (status) => {
+    vi.useFakeTimers();
+    const { readings, sources, update, subscriptions } = owner();
+    const received = vi.fn();
+    update.mockRejectedValueOnce(Error(`Reading subscriptions: ${status}`));
+    try {
+      readings.subscribe(head, received);
+      await vi.advanceTimersByTimeAsync(0);
+      sources[0]!.onopen!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sources[0]!.closed).toBe(true);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(sources).toHaveLength(2);
+      expect(sources[1]!.url).not.toBe(sources[0]!.url);
+      sources[1]!.onopen!();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(subscriptions.has(readingKey(head))).toBe(true);
+      for (const revision of [1, 2]) {
+        sources[1]!.onmessage!(snapshot({ revision }));
+        expect(received).toHaveBeenLastCalledWith(
+          expect.objectContaining({ kind: "snapshot", value: { revision } }),
+        );
+      }
+      expect(update).toHaveBeenCalledTimes(2);
+    } finally {
+      readings.close();
+      vi.useRealTimers();
     }
-    expect(update).toHaveBeenCalledTimes(2);
-  } finally { readings.close(); vi.useRealTimers(); }
-});
+  },
+);
 
 test("a pending initial subscription is not mistaken for a silent subscribed stream", async () => {
   vi.useFakeTimers();
   const { readings, sources, update } = owner();
   let admit!: () => void;
-  update.mockImplementationOnce(() => new Promise<void>(resolve => { admit = resolve; }));
+  update.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        admit = resolve;
+      }),
+  );
   const received = vi.fn();
   try {
     readings.subscribe(head, received);
@@ -154,7 +180,10 @@ test("a pending initial subscription is not mistaken for a silent subscribed str
     expect(received).toHaveBeenLastCalledWith(expect.objectContaining({ value: { revision: 2 } }));
     expect(sources).toHaveLength(1);
     expect(update).toHaveBeenCalledOnce();
-  } finally { readings.close(); vi.useRealTimers(); }
+  } finally {
+    readings.close();
+    vi.useRealTimers();
+  }
 });
 
 test("a never-resolving first admission faults once per deadline and backs off", async () => {
@@ -181,21 +210,38 @@ test("a never-resolving first admission faults once per deadline and backs off",
     await vi.advanceTimersByTimeAsync(1);
     expect(sources).toHaveLength(3);
     expect(update).toHaveBeenCalledTimes(2);
-  } finally { readings.close(); random.mockRestore(); vi.useRealTimers(); }
+  } finally {
+    readings.close();
+    random.mockRestore();
+    vi.useRealTimers();
+  }
 });
 
 test("a publication waits through a silent stream and acquires after the replacement's first frame", async () => {
   vi.useFakeTimers();
   const random = vi.spyOn(Math, "random").mockReturnValue(1);
   const { readings, sources } = owner();
-  const subscribe = vi.spyOn(peReadings, "subscribe").mockImplementation(readings.subscribe.bind(readings));
+  const subscribe = vi
+    .spyOn(peReadings, "subscribe")
+    .mockImplementation(readings.subscribe.bind(readings));
   const request = { kind: "publication", subscription: "silent-page", generation: 0 } as const;
-  const read = vi.fn(async () => ({ generation: 0, version: 1, state: "current", value: {
-    evaluation: "after-reconnect", coverage: { refused: [], unknown: [] },
-  } }));
+  const read = vi.fn(async () => ({
+    generation: 0,
+    version: 1,
+    state: "current",
+    value: {
+      evaluation: "after-reconnect",
+      coverage: { refused: [], unknown: [] },
+    },
+  }));
   const frames: string[] = [];
-  const stop = publicationSource({ read }).open({ signal: new AbortController().signal,
-    publication: { subscription: request.subscription, generation: 0 } } as never, frame => frames.push(frame.kind));
+  const stop = publicationSource({ read }).open(
+    {
+      signal: new AbortController().signal,
+      publication: { subscription: request.subscription, generation: 0 },
+    } as never,
+    (frame) => frames.push(frame.kind),
+  );
   try {
     await vi.advanceTimersByTimeAsync(0);
     sources[0]!.onopen!();
@@ -205,47 +251,71 @@ test("a publication waits through a silent stream and acquires after the replace
     expect(read).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1_000);
     sources[1]!.onopen!();
-    sources[1]!.onmessage!({ data: JSON.stringify({ kind: "snapshot", key: readingKey(request),
-      value: { generation: 0, version: 0, state: "absent" } }) });
+    sources[1]!.onmessage!({
+      data: JSON.stringify({
+        kind: "snapshot",
+        key: readingKey(request),
+        value: { generation: 0, version: 0, state: "absent" },
+      }),
+    });
     await vi.advanceTimersByTimeAsync(0);
     expect(read).toHaveBeenCalledOnce();
     expect(frames.at(-1)).toBe("complete");
   } finally {
     if (typeof stop === "function") stop();
-    readings.close(); subscribe.mockRestore(); random.mockRestore(); vi.useRealTimers();
+    readings.close();
+    subscribe.mockRestore();
+    random.mockRestore();
+    vi.useRealTimers();
   }
 });
 
-test.each(["ECONNREFUSED", "Reading subscriptions: 403"])("a failed POST (%s) fences even a delivered snapshot", async (failure) => {
-  vi.useFakeTimers();
-  const { readings, sources, update } = owner();
-  const frames: unknown[] = [];
-  let reject!: (error: Error) => void;
-  update.mockImplementationOnce(() => new Promise<void>((_resolve, fail) => { reject = fail; }));
-  try {
-    readings.subscribe(head, (frame) => frames.push(frame));
-    readings.subscribe({ kind: "machine" }, () => {});
-    await vi.advanceTimersByTimeAsync(0);
-    sources[0]!.onopen!();
-    expect(update.mock.calls[0]![1]).toEqual([head, { kind: "machine" }]);
-    sources[0]!.onmessage!(snapshot({ revision: 1 }));
-    expect(frames.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 1 } });
-    reject(Error(failure));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(sources[0]!.closed).toBe(true);
-    expect(frames.at(-1)).toEqual({ kind: "stale", key: readingKey(head) });
-    expect(update).toHaveBeenCalledTimes(1);
-    readings.close();
-    await vi.advanceTimersByTimeAsync(31_001);
-    expect(sources).toHaveLength(1);
-    expect(update).toHaveBeenCalledTimes(1);
-  } finally { readings.close(); vi.useRealTimers(); }
-});
+test.each(["ECONNREFUSED", "Reading subscriptions: 403"])(
+  "a failed POST (%s) fences even a delivered snapshot",
+  async (failure) => {
+    vi.useFakeTimers();
+    const { readings, sources, update } = owner();
+    const frames: unknown[] = [];
+    let reject!: (error: Error) => void;
+    update.mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    try {
+      readings.subscribe(head, (frame) => frames.push(frame));
+      readings.subscribe({ kind: "machine" }, () => {});
+      await vi.advanceTimersByTimeAsync(0);
+      sources[0]!.onopen!();
+      expect(update.mock.calls[0]![1]).toEqual([head, { kind: "machine" }]);
+      sources[0]!.onmessage!(snapshot({ revision: 1 }));
+      expect(frames.at(-1)).toMatchObject({ kind: "snapshot", value: { revision: 1 } });
+      reject(Error(failure));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sources[0]!.closed).toBe(true);
+      expect(frames.at(-1)).toEqual({ kind: "stale", key: readingKey(head) });
+      expect(update).toHaveBeenCalledTimes(1);
+      readings.close();
+      await vi.advanceTimersByTimeAsync(31_001);
+      expect(sources).toHaveLength(1);
+      expect(update).toHaveBeenCalledTimes(1);
+    } finally {
+      readings.close();
+      vi.useRealTimers();
+    }
+  },
+);
 
 test("an old bootstrap completion cannot mark a replacement's subscriptions sent", async () => {
   const { readings, sources, update } = owner();
   let finish!: () => void;
-  update.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+  update.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
   try {
     readings.subscribe(head, () => {});
     await Promise.resolve();
@@ -257,14 +327,18 @@ test("an old bootstrap completion cannot mark a replacement's subscriptions sent
     sources[1]!.onopen!();
     finish();
     await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(2));
-    expect(update.mock.calls.map(([id]) => id)).toEqual(sources.map(source => new URL(source.url).searchParams.get("connection")));
+    expect(update.mock.calls.map(([id]) => id)).toEqual(
+      sources.map((source) => new URL(source.url).searchParams.get("connection")),
+    );
     expect(update.mock.calls.map(([, add]) => add)).toEqual([[head], [head]]);
     readings.close();
-    expect(sources.every(source => source.closed)).toBe(true);
+    expect(sources.every((source) => source.closed)).toBe(true);
     sources[1]!.onopen!();
     await Promise.resolve();
     expect(update).toHaveBeenCalledTimes(2);
-  } finally { readings.close(); }
+  } finally {
+    readings.close();
+  }
   const unopened = owner();
   unopened.readings.subscribe(head, () => {});
   await Promise.resolve();
@@ -338,57 +412,82 @@ test("late readings join and leave without reopening the page stream", async () 
   readings.close();
 });
 
-test.each(["before Back", "after Back"])("D24: an identical pinned snapshot %s restores a remounted Page reading", async (arrival) => {
-  const { readings, sources, update } = owner();
-  const request = { kind: "page-target", slug: "pdrop--tour" } as const;
-  const key = readingKey(request);
-  const value = {
-    page: "page:@pdrop/pages/tour", slot: "default",
-    binding: { kind: "pinned", ref: { session: "S", openId: "A" } },
-    resolution: { kind: "resolved", target: { kind: "document", ref: { session: "S", openId: "A" } } },
-    document: { session: "S", openId: "A", title: "Chadds_detached" },
-    write: { kind: "human" },
-  };
-  let named: string | null = null;
-  const accept: Parameters<PeReadings["subscribe"]>[1] = frame => {
-    named = frame.kind === "snapshot" && !frame.stale
-      ? (frame.value as typeof value).document.title : null;
-  };
-  const send = () => sources[0]!.onmessage!({ data: JSON.stringify({ kind: "snapshot", key, value }) });
-  try {
-    // The bind form and Page chip share this key. page.bind sends a PUT, with no client dirty:
-    // the host's binding observer publishes its snapshot on the existing subscription.
-    const leave = readings.subscribe(request, accept);
-    await Promise.resolve();
-    sources[0]!.onopen!();
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    send();
-    expect(named).toBe("Chadds_detached");
-    const fetch = vi.fn(async () => Response.json({ bound: true }));
-    await sendCommand(handle("page.bind"), {
-      id: "pin-again", key: "page.bind", target: { kind: "document", ref: value.binding.ref },
-      input: { slug: request.slug, binding: value.binding },
-    }, {
-      fetch, submit: async () => { throw Error("Binding must use its PUT route"); },
-      decode: async (_key, answer) => answer,
-    });
-    expect(fetch).toHaveBeenCalledWith("/pe/pages/pdrop--tour/binding", expect.objectContaining({
-      method: "PUT", body: JSON.stringify(value.binding),
-    }));
-    if (arrival === "before Back") send();
-    leave();
-    readings.subscribe(request, accept);
-    expect(named).toBeNull(); // Retained evidence is not fresh consent.
-    if (arrival === "after Back") send();
-    // Stand in only for the host subscription endpoint: a renewed key gets a snapshot,
-    // while an unchanged subscription sends no more frames after the binding event.
-    update.mockImplementation(async (_connection, add) => {
-      if (add.some(r => readingKey(r) === key)) send();
-    });
-    await vi.waitFor(() => expect(named).toBe("Chadds_detached"));
-    expect(sources).toHaveLength(1);
-  } finally { readings.close(); }
-});
+test.each(["before Back", "after Back"])(
+  "D24: an identical pinned snapshot %s restores a remounted Page reading",
+  async (arrival) => {
+    const { readings, sources, update } = owner();
+    const request = { kind: "page-target", slug: "pdrop--tour" } as const;
+    const key = readingKey(request);
+    const value = {
+      page: "page:@pdrop/pages/tour",
+      slot: "default",
+      binding: { kind: "pinned", ref: { session: "S", openId: "A" } },
+      resolution: {
+        kind: "resolved",
+        target: { kind: "document", ref: { session: "S", openId: "A" } },
+      },
+      document: { session: "S", openId: "A", title: "Chadds_detached" },
+      write: { kind: "human" },
+    };
+    let named: string | null = null;
+    const accept: Parameters<PeReadings["subscribe"]>[1] = (frame) => {
+      named =
+        frame.kind === "snapshot" && !frame.stale
+          ? (frame.value as typeof value).document.title
+          : null;
+    };
+    const send = () =>
+      sources[0]!.onmessage!({ data: JSON.stringify({ kind: "snapshot", key, value }) });
+    try {
+      // The bind form and Page chip share this key. page.bind sends a PUT, with no client dirty:
+      // the host's binding observer publishes its snapshot on the existing subscription.
+      const leave = readings.subscribe(request, accept);
+      await Promise.resolve();
+      sources[0]!.onopen!();
+      await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+      send();
+      expect(named).toBe("Chadds_detached");
+      const fetch = vi.fn(async () => Response.json({ bound: true }));
+      await sendCommand(
+        handle("page.bind"),
+        {
+          id: "pin-again",
+          key: "page.bind",
+          target: { kind: "document", ref: value.binding.ref },
+          input: { slug: request.slug, binding: value.binding },
+        },
+        {
+          fetch,
+          submit: async () => {
+            throw Error("Binding must use its PUT route");
+          },
+          decode: async (_key, answer) => answer,
+        },
+      );
+      expect(fetch).toHaveBeenCalledWith(
+        "/pe/pages/pdrop--tour/binding",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify(value.binding),
+        }),
+      );
+      if (arrival === "before Back") send();
+      leave();
+      readings.subscribe(request, accept);
+      expect(named).toBeNull(); // Retained evidence is not fresh consent.
+      if (arrival === "after Back") send();
+      // Stand in only for the host subscription endpoint: a renewed key gets a snapshot,
+      // while an unchanged subscription sends no more frames after the binding event.
+      update.mockImplementation(async (_connection, add) => {
+        if (add.some((r) => readingKey(r) === key)) send();
+      });
+      await vi.waitFor(() => expect(named).toBe("Chadds_detached"));
+      expect(sources).toHaveLength(1);
+    } finally {
+      readings.close();
+    }
+  },
+);
 
 test("an overlapping handover delivers a route command once to each mounted follower", async () => {
   const listeners = new Set<Parameters<PeReadings["subscribe"]>[1]>();

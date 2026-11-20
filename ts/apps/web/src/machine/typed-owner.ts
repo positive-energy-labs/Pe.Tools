@@ -1,8 +1,8 @@
 import { useRef, useMemo } from "react";
 import type { ReadingState } from "@pe/agent-contracts";
-import { refusalOf } from "../route/typed-route";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import type { OpenContext } from "./open-fields";
-import type { RunVerb } from "../route/typed-route";
+import type { RunVerb } from "@pe/web-kernel/route/typed-route";
 type OpenVerb = "start" | "open" | "close" | "stop" | "restart";
 /** What the owner reads: a pane's draw context, or the mount itself where no pane is drawn (the companion
  *  controls), so the reading may be value-less. `/sessions` passes the three verbs it declares. */
@@ -10,12 +10,17 @@ export type OpenSource<V extends OpenVerb = OpenVerb> = {
   verb(id: NoInfer<V>): RunVerb;
   readonly value: ReadingState<OpenContext["value"]["value"]>;
   // A pane's typed Page port, or the mount's own.
-  readonly page: OpenContext["page"] | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
+  readonly page:
+    | OpenContext["page"]
+    | Pick<import("../shell/typed-mount").TypedMount["page"], "read" | "pose" | "query">;
 };
 import type { OpenOwner } from "./context";
 const openActions: readonly OpenVerb[] = ["start", "open", "close", "stop", "restart"];
 export function useOpenTypedOwner(ctx: OpenSource): OpenOwner;
-export function useOpenTypedOwner<V extends OpenVerb>(ctx: OpenSource<V>, actions: readonly V[]): OpenOwner;
+export function useOpenTypedOwner<V extends OpenVerb>(
+  ctx: OpenSource<V>,
+  actions: readonly V[],
+): OpenOwner;
 export function useOpenTypedOwner(
   ctx: OpenSource,
   actions: readonly OpenVerb[] = openActions,
@@ -28,7 +33,7 @@ export function useOpenTypedOwner(
         subscribe: () => () => {},
         version: () => 0,
         fixture: null,
-        busy: () => actions.find(id => current.current.verb(id).pending) ?? null,
+        busy: () => actions.find((id) => current.current.verb(id).pending) ?? null,
         view: {
           read: () => ({
             page: {
@@ -48,9 +53,15 @@ export function useOpenTypedOwner(
           get: (id: string) => {
             const { value } = current.current;
             return {
-              status: value.state === "ready" ? "complete" : value.state === "reading" || value.state === "refreshing" ? "pending" : "failed",
+              status:
+                value.state === "ready"
+                  ? "complete"
+                  : value.state === "reading" || value.state === "refreshing"
+                    ? "pending"
+                    : "failed",
               current: value.state === "ready",
-              value: "value" in value ? value.value[id as "machine" | "recents" | "threads"] : undefined,
+              value:
+                "value" in value ? value.value[id as "machine" | "recents" | "threads"] : undefined,
               error: refusalOf(value),
             };
           },

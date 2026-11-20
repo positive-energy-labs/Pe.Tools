@@ -1,19 +1,12 @@
 import { afterEach, expect, test } from "vite-plus/test";
-import { resetKnob } from "../../../../apps/web/src/knobs/knobs.ts";
+import { resetKnob } from "@pe/web-kernel/knobs/knobs";
 import { systemScope } from "@pe/ducts-domain/system-scope";
-import type { SceneInstance } from "../../../../apps/web/src/scene/types.ts";
-import { paintOf } from "../../../../apps/web/src/scene/grounds.ts";
+import type { SceneInstance } from "@pe/web-kernel/scene/types";
+import { paintOf } from "@pe/web-kernel/scene/grounds";
 import { NAVIGATION_FIXTURE } from "./navigation.fixture.ts";
 import { paintOfDucts } from "./selection.ts";
 
-
 afterEach(() => resetKnob());
-
-
-
-
-
-
 
 test("non-focus MEP paints as stub (kind from its snapshot system, pipes unknown); other context stays context", () => {
   const { snapshot } = NAVIGATION_FIXTURE;

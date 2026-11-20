@@ -36,11 +36,7 @@ export function Lens({ state }: { state: ChatState }) {
   let seenSeq = 0;
   for (let index = state.events.length - 1; index >= 0; index--) {
     const event = state.events[index]!;
-    if (
-      event.kind === "turn_end" ||
-      event.kind === "error" ||
-      event.kind === "question_request"
-    ) {
+    if (event.kind === "turn_end" || event.kind === "error" || event.kind === "question_request") {
       seenSeq = event.seq;
       break;
     }

@@ -1,9 +1,9 @@
 import * as THREE from "three";
-import { damageAppearance, damageColors } from "./damage";
+import { damageAppearance, damageColors } from "@pe/web-kernel/scene/damage";
 import { GLOW_LAYER } from "./glow";
-import { isLit } from "./grounds";
-import type { Layer3D, LayerFrame } from "./types";
-import { instancePositions } from "./primitives";
+import { isLit } from "@pe/web-kernel/scene/grounds";
+import type { Layer3D, LayerFrame } from "@pe/web-kernel/scene/types";
+import { instancePositions } from "@pe/web-kernel/scene/primitives";
 
 /** I2: the skin and glow mask share one bias so base-depth competition cannot punch holes. */
 const SURFACE_DEPTH = {

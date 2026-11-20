@@ -153,13 +153,19 @@ type BareSchema<S> = S extends {
   ? BareSchema<I>
   : S;
 type EntryPatch<K extends string, Key extends string, V extends z.core.SomeType> =
-  | { readonly path: readonly [K, Key]; readonly value: import("./draft.ts").CallerWorkValue<z.output<V>>; readonly op?: never }
+  | {
+      readonly path: readonly [K, Key];
+      readonly value: import("./draft.ts").CallerWorkValue<z.output<V>>;
+      readonly op?: never;
+    }
   | { readonly path: readonly [K, Key]; readonly op: "delete"; readonly value?: never }
   | (BareSchema<V> extends z.ZodObject<infer Shape>
       ? {
           [L in Exclude<keyof Shape & string, "invalid">]: {
             readonly path: readonly [K, Key, L];
-            readonly value: import("./draft.ts").CallerWorkValue<{ [P in L]: z.output<Shape[L]> }>[L];
+            readonly value: import("./draft.ts").CallerWorkValue<{
+              [P in L]: z.output<Shape[L]>;
+            }>[L];
             readonly op?: never;
           };
         }[Exclude<keyof Shape & string, "invalid">]
@@ -170,15 +176,20 @@ export type WorkPatch<S extends z.ZodType> =
   BareSchema<S> extends z.ZodObject<infer Shape>
     ? {
         [K in keyof Shape & string]:
-          | { readonly path: readonly [K]; readonly value: import("./draft.ts").CallerWorkValue<z.output<Shape[K]>>; readonly op?: never }
+          | {
+              readonly path: readonly [K];
+              readonly value: import("./draft.ts").CallerWorkValue<z.output<Shape[K]>>;
+              readonly op?: never;
+            }
           | (BareSchema<Shape[K]> extends z.ZodRecord<infer Key, infer Value>
               ? EntryPatch<K, Extract<z.output<Key>, string>, Value>
               : never);
       }[keyof Shape & string]
     : never;
-export type WorkPatches<G extends import("./route-kernel-data.ts").RouteStateGraph, S extends SchemaTable> = readonly WorkPatch<
-  WorkSchema<G, S>
->[];
+export type WorkPatches<
+  G extends import("./route-kernel-data.ts").RouteStateGraph,
+  S extends SchemaTable,
+> = readonly WorkPatch<WorkSchema<G, S>>[];
 
 /** A targeted Work verb patches its target reading's owner Work (ADR 0030 rule 9). */
 type TargetPatches<G extends RouteGraphJson, S extends SchemaTable, V> = V extends {
@@ -562,8 +573,7 @@ export type BodySlots<
         /** Only declared transitionDeps, immutable and current at acceptance. */
         ctx: BodyContext<G, S, E, { deps: At<G, "transitionDeps"> }>,
       ) => DecodeResult<PagePatch<G, S>>
-    >
-;
+    >;
 export type BodyBindings<
   G extends RouteGraphJson,
   S extends SchemaTable,

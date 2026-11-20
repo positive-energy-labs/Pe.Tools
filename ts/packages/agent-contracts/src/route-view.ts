@@ -19,7 +19,8 @@ export type AdmittedFields = RouteGraphJson["fields"];
 /** An admitted route's attention keys: the fields whose agent policy is not "none" (opt-in). */
 export const agentFields = (fields: AdmittedFields, policy?: "read" | "set") =>
   Object.entries(fields).filter(
-    ([, field]) => "agent" in field && field.agent !== "none" && (!policy || field.agent === policy),
+    ([, field]) =>
+      "agent" in field && field.agent !== "none" && (!policy || field.agent === policy),
   );
 
 /** A builtin address that declares an `agent` lease, or null. */
@@ -56,8 +57,12 @@ export function viewRoute(route: string, admitted: AdmittedView | null): ViewRou
 }
 /** Every leasing route once: builtin agent addresses, then registered opt-in admissions. */
 export const viewRoutes = (admitted: readonly AdmittedView[]): ViewRoute[] => [
-  ...routeViewRoutes.map((key) => viewRoute(key, admitted.find((each) => each.key === key) ?? null)!),
-  ...admitted.flatMap((each) => (builtinViewRoute(each.key) ? [] : (viewRoute(each.key, each) ?? []))),
+  ...routeViewRoutes.map(
+    (key) => viewRoute(key, admitted.find((each) => each.key === key) ?? null)!,
+  ),
+  ...admitted.flatMap((each) =>
+    builtinViewRoute(each.key) ? [] : (viewRoute(each.key, each) ?? []),
+  ),
 ];
 /** What an explicit open delivers: the registered address carrying the target. The browser owner decodes. */
 export const viewOpenLink = (view: ViewRoute, target?: string) =>

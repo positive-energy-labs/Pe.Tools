@@ -42,7 +42,12 @@ const thread = (
     lifecycle: { status: "active", explicitUnread: false, readSeq },
     events: log,
   }) as unknown as NoticeSources["threads"][number];
-const receipt = (id: string, state: "failed" | "unknown" | "succeeded", revision = 1, error?: string) => ({
+const receipt = (
+  id: string,
+  state: "failed" | "unknown" | "succeeded",
+  revision = 1,
+  error?: string,
+) => ({
   revision,
   action: actionReceiptSchema.parse({
     id,
@@ -50,75 +55,132 @@ const receipt = (id: string, state: "failed" | "unknown" | "succeeded", revision
     state,
     caller: { kind: "pea", context: "notice", thread: "t1" },
     startedAt: at,
-    basis: null, target: { kind: "host" }, input: {}, steps: [],
-    prepared: { state: "ready", value: null }, recovery: [],
-    ...(state === "succeeded" ? { result: null } : { error: error ?? "Outcome unknown", status: 503 }),
+    basis: null,
+    target: { kind: "host" },
+    input: {},
+    steps: [],
+    prepared: { state: "ready", value: null },
+    recovery: [],
+    ...(state === "succeeded"
+      ? { result: null }
+      : { error: error ?? "Outcome unknown", status: 503 }),
   }),
 });
 const none: NoticeSources = { threads: [], receipts: [], works: [], machine: null, stored: [] };
 
-test.each(["running", "succeeded", "failed"] as const)("a person's pinned Page %s receipt names the Page and pinner in its notice", (state) => {
-  const lifetime = { session: "S1", openId: "A" };
-  const succeeded = receipt("pin", "succeeded").action;
-  if (succeeded.state !== "succeeded") throw Error("fixture did not succeed");
-  const { result: _result, ...base } = succeeded;
-  const action = actionReceiptSchema.parse({
-    ...base,
-    state,
-    caller: { kind: "page", page: "page:@pages/todo" },
-    basis: { kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime },
-    target: { kind: "document", ref: lifetime },
-    ...(state === "succeeded" ? { result: null } : {}),
-    ...(state === "failed" ? { error: "Write failed", status: 500 } : {}),
-  });
-  expect(action.basis).toMatchObject({ kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime });
-  const rows = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, NOW);
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({ where: "Page page:@pages/todo, as the person who pinned it", verb: state });
-});
+test.each(["running", "succeeded", "failed"] as const)(
+  "a person's pinned Page %s receipt names the Page and pinner in its notice",
+  (state) => {
+    const lifetime = { session: "S1", openId: "A" };
+    const succeeded = receipt("pin", "succeeded").action;
+    if (succeeded.state !== "succeeded") throw Error("fixture did not succeed");
+    const { result: _result, ...base } = succeeded;
+    const action = actionReceiptSchema.parse({
+      ...base,
+      state,
+      caller: { kind: "page", page: "page:@pages/todo" },
+      basis: { kind: "person-pin", page: "page:@pages/todo", boundBy: "human", lifetime },
+      target: { kind: "document", ref: lifetime },
+      ...(state === "succeeded" ? { result: null } : {}),
+      ...(state === "failed" ? { error: "Write failed", status: 500 } : {}),
+    });
+    expect(action.basis).toMatchObject({
+      kind: "person-pin",
+      page: "page:@pages/todo",
+      boundBy: "human",
+      lifetime,
+    });
+    const rows = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, NOW);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      where: "Page page:@pages/todo, as the person who pinned it",
+      verb: state,
+    });
+  },
+);
 
 test("a succeeded script's held result is one notice, with nothing pending", async () => {
   const journal = testJournal();
   const result = { status: "Succeeded", held: "Held, not done: the person presses Save in Revit." };
-  const executor = gatewayExecutor("scripting.execute", detachedBridge(),
-    () => Effect.succeed(result), {} as PictureCaptures);
-  journal.bindCommands({ probe: async () => null, resolve: () => ({
-    ...executor,
-    definition: async () => ({ says: "Run script", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) }),
-    bind: async () => ({ effects: [], prepare: async () => ({ kind: "host-leaf" }) }),
-  }) });
-  await journal.invoke({
-    id: "script-held", key: "scripting.execute", target: { kind: "host" },
-    input: { scriptContent: "doc.Save();" },
-  }, { caller: approvedPea("script-held"), basis: null });
+  const executor = gatewayExecutor(
+    "scripting.execute",
+    detachedBridge(),
+    () => Effect.succeed(result),
+    {} as PictureCaptures,
+  );
+  journal.bindCommands({
+    probe: async () => null,
+    resolve: () => ({
+      ...executor,
+      definition: async () => ({
+        says: "Run script",
+        needs: "nothing",
+        effect: "command",
+        dirties: [],
+        input: z.record(z.string(), z.unknown()),
+      }),
+      bind: async () => ({ effects: [], prepare: async () => ({ kind: "host-leaf" }) }),
+    }),
+  });
+  await journal.invoke(
+    {
+      id: "script-held",
+      key: "scripting.execute",
+      target: { kind: "host" },
+      input: { scriptContent: "doc.Save();" },
+    },
+    { caller: approvedPea("script-held"), basis: null },
+  );
   const action = await journal.wait("script-held");
   expect(action).toMatchObject({ state: "succeeded", result });
   const now = Date.parse(action.startedAt);
   const rows = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, now);
-  expect(rows).toMatchObject([{
-    key: "action:script-held", group: "waits", verb: "held", says: result.held,
-  }]);
+  expect(rows).toMatchObject([
+    {
+      key: "action:script-held",
+      group: "waits",
+      verb: "held",
+      says: result.held,
+    },
+  ]);
   expect(rows).toHaveLength(1);
   expect(action.state).toBe("succeeded");
   expect(action.recovery).toEqual([]);
   expect(action.steps).toMatchObject([{ state: "succeeded" }]);
   expect(action.refusal).toBeUndefined();
   if (action.state !== "succeeded") throw Error("script did not settle");
-  expect(noticeRows({ ...none, receipts: [{ revision: 2, action: { ...action, result: { held: null } } }] }, now)).toEqual([]);
+  expect(
+    noticeRows(
+      { ...none, receipts: [{ revision: 2, action: { ...action, result: { held: null } } }] },
+      now,
+    ),
+  ).toEqual([]);
 });
 
-test.each(["stale", "invalid"] as const)("a %s tier-write refusal keeps its outcome verb in Failed", (kind) => {
-  const action = actionReceiptSchema.parse({
-    id: `tier-${kind}`, key: "settings.tiers.write", state: "failed",
-    caller: { kind: "human", via: "local" }, startedAt: at,
-    basis: null, target: { kind: "host" }, input: {}, steps: [],
-    prepared: { state: "unprepared" }, recovery: [],
-    error: "The setting changed since it was read.", status: 409, notDispatched: true,
-    refusal: kind === "stale" ? { kind, consumed: [] } : { kind },
-  });
-  const [row] = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, NOW);
-  expect(row).toMatchObject({ group: "failed", verb: kind === "stale" ? "stale" : "refused" });
-});
+test.each(["stale", "invalid"] as const)(
+  "a %s tier-write refusal keeps its outcome verb in Failed",
+  (kind) => {
+    const action = actionReceiptSchema.parse({
+      id: `tier-${kind}`,
+      key: "settings.tiers.write",
+      state: "failed",
+      caller: { kind: "human", via: "local" },
+      startedAt: at,
+      basis: null,
+      target: { kind: "host" },
+      input: {},
+      steps: [],
+      prepared: { state: "unprepared" },
+      recovery: [],
+      error: "The setting changed since it was read.",
+      status: 409,
+      notDispatched: true,
+      refusal: kind === "stale" ? { kind, consumed: [] } : { kind },
+    });
+    const [row] = noticeRows({ ...none, receipts: [{ revision: 1, action }] }, NOW);
+    expect(row).toMatchObject({ group: "failed", verb: kind === "stale" ? "stale" : "refused" });
+  },
+);
 
 test("every source speaks in its own words, grouped waits, working, interrupted, failed, unread", () => {
   const rows = noticeRows(
@@ -136,7 +198,11 @@ test("every source speaks in its own words, grouped waits, working, interrupted,
           }),
         ),
         thread("run", { state: "running" }, events({ kind: "prompt", text: "go" })),
-        thread("cut", { state: "failed", message: "host restarted during this turn" }, events({ kind: "prompt", text: "go" })),
+        thread(
+          "cut",
+          { state: "failed", message: "host restarted during this turn" },
+          events({ kind: "prompt", text: "go" }),
+        ),
         thread(
           "died",
           { state: "failed", message: "The claude harness exited (code 3)." },
@@ -145,7 +211,11 @@ test("every source speaks in its own words, grouped waits, working, interrupted,
             {
               kind: "error",
               message: "The claude harness exited (code 3).",
-              failure: { kind: "other", message: "The claude harness exited (code 3).", raw: "[session/create] durationMs=79" },
+              failure: {
+                kind: "other",
+                message: "The claude harness exited (code 3).",
+                raw: "[session/create] durationMs=79",
+              },
             },
           ),
         ),
@@ -154,7 +224,13 @@ test("every source speaks in its own words, grouped waits, working, interrupted,
           { state: "idle" },
           events(
             { kind: "prompt", text: "resize" },
-            { kind: "update", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Resized 41 of 43." } } },
+            {
+              kind: "update",
+              update: {
+                sessionUpdate: "agent_message_chunk",
+                content: { type: "text", text: "Resized 41 of 43." },
+              },
+            },
             { kind: "turn_end", stopReason: "end_turn" },
           ),
           0,
@@ -170,7 +246,13 @@ test("every source speaks in its own words, grouped waits, working, interrupted,
   );
   const by = Object.fromEntries(rows.map((row) => [row.key, row]));
   expect(rows.map((row) => row.group)).toEqual([
-    "waits", "waits", "working", "interrupted", "failed", "failed", "unread",
+    "waits",
+    "waits",
+    "working",
+    "interrupted",
+    "failed",
+    "failed",
+    "unread",
   ]);
   expect(by["thread:q"]).toMatchObject({
     verb: "asks",
@@ -179,7 +261,10 @@ test("every source speaks in its own words, grouped waits, working, interrupted,
   });
   expect(by["thread:cut"]?.act).toEqual({ kind: "resume", threadId: "cut" });
   // A harness death says one sentence; its stderr is the detail to copy.
-  expect(by["thread:died"]).toMatchObject({ verb: "failed", detail: "[session/create] durationMs=79" });
+  expect(by["thread:died"]).toMatchObject({
+    verb: "failed",
+    detail: "[session/create] durationMs=79",
+  });
   expect(by["thread:done"]).toMatchObject({
     verb: "done",
     says: "Resized 41 of 43.",
@@ -201,7 +286,12 @@ test("an answered ask is no longer one: the waiting thread asks in its own messa
           "t",
           { state: "waiting", message: "Waiting on a tool" },
           events(
-            { kind: "question_request", requestId: "q1", message: "Which level?", requestedSchema: {} },
+            {
+              kind: "question_request",
+              requestId: "q1",
+              message: "Which level?",
+              requestedSchema: {},
+            },
             { kind: "question_resolved", requestId: "q1", by: "user", action: "decline" },
           ),
         ),
@@ -214,12 +304,20 @@ test("an answered ask is no longer one: the waiting thread asks in its own messa
 });
 
 test("a held model act is one row that waits on the person, in held words", () => {
-  const refusal = held("overwrite-or-discard", "project document 'Office'", "The person presses Save in Revit.");
+  const refusal = held(
+    "overwrite-or-discard",
+    "project document 'Office'",
+    "The person presses Save in Revit.",
+  );
   const door = (id: string, startedAt: string) => ({
     revision: 4,
     action: actionReceiptSchema.parse({
-      basis: null, target: { kind: "host" }, input: {}, steps: [],
-      prepared: { state: "unprepared" }, recovery: [],
+      basis: null,
+      target: { kind: "host" },
+      input: {},
+      steps: [],
+      prepared: { state: "unprepared" },
+      recovery: [],
       id,
       key: "instances.save",
       state: "failed",
@@ -231,8 +329,13 @@ test("a held model act is one row that waits on the person, in held words", () =
       refusal,
     }),
   });
-  const rows = noticeRows({ ...none, receipts: [door("h1", at), door("old", "2026-11-09T11:00:00.000Z")] }, NOW);
-  expect(rows.map(row => [row.key, row.group, row.verb])).toEqual([["action:h1", "waits", "held"]]);
+  const rows = noticeRows(
+    { ...none, receipts: [door("h1", at), door("old", "2026-11-09T11:00:00.000Z")] },
+    NOW,
+  );
+  expect(rows.map((row) => [row.key, row.group, row.verb])).toEqual([
+    ["action:h1", "waits", "held"],
+  ]);
   expect(rows[0]!.says).toMatch(/^Held, not done/);
   // Held is never worded as the person saying no.
   for (const row of rows) expect(row.says).not.toMatch(/refus|reject|declin|denied/i);
@@ -241,8 +344,25 @@ test("a held model act is one row that waits on the person, in held words", () =
 });
 
 test("a direct send is an unread notice naming its file and destination", () => {
-  const rows = noticeRows({ ...none, stored: [{ class: "sent", place: "LlamaCloud", path: "spec.pdf", sha256: "a".repeat(64), reason: "Sent spec.pdf to LlamaCloud (1-5).", at }] }, NOW);
-  expect(rows).toMatchObject([{ group: "unread", verb: "sent", what: "spec.pdf", where: "LlamaCloud" }]);
+  const rows = noticeRows(
+    {
+      ...none,
+      stored: [
+        {
+          class: "sent",
+          place: "LlamaCloud",
+          path: "spec.pdf",
+          sha256: "a".repeat(64),
+          reason: "Sent spec.pdf to LlamaCloud (1-5).",
+          at,
+        },
+      ],
+    },
+    NOW,
+  );
+  expect(rows).toMatchObject([
+    { group: "unread", verb: "sent", what: "spec.pdf", where: "LlamaCloud" },
+  ]);
   expect(rows[0]!.act).toBeUndefined();
   noticeFeedSchema.parse({ id: 0, tray: false, rows });
 });
@@ -262,11 +382,19 @@ function reading(sources: () => NoticeSources) {
   });
   const follow = (as?: "tray") => {
     const frames: ReadingFrame[] = [];
-    const release = feed.observe({ kind: "notices", ...(as ? { as } : {}) }, (f) => frames.push(f))!;
+    const release = feed.observe({ kind: "notices", ...(as ? { as } : {}) }, (f) =>
+      frames.push(f),
+    )!;
     const feeds = () => frames.map((f) => (f as { value: NoticeFeed }).value);
     return { frames, feeds, release };
   };
-  return { feed, follow, change: () => changed?.(), watching: () => changed !== undefined, subscriptions: () => subscriptions };
+  return {
+    feed,
+    follow,
+    change: () => changed?.(),
+    watching: () => changed !== undefined,
+    subscriptions: () => subscriptions,
+  };
 }
 
 test("a burst of source changes is one frame; a rebuild that changes nothing sends none", () => {
@@ -275,9 +403,18 @@ test("a burst of source changes is one frame; a rebuild that changes nothing sen
   const h = reading(() => ({ ...none, threads: [now] }));
   const web = h.follow();
   expect(web.feeds()).toHaveLength(1);
-  expect(web.feeds()[0]).toMatchObject({ id: 41, tray: false, rows: [{ key: "thread:t", group: "working", revision: 1 }] });
+  expect(web.feeds()[0]).toMatchObject({
+    id: 41,
+    tray: false,
+    rows: [{ key: "thread:t", group: "working", revision: 1 }],
+  });
   // The turn ends: its events land, then the summary, then a receipt; one feed comes of them.
-  now = thread("t", { state: "idle" }, events({ kind: "prompt", text: "go" }, { kind: "turn_end", stopReason: "end_turn" }), 1);
+  now = thread(
+    "t",
+    { state: "idle" },
+    events({ kind: "prompt", text: "go" }, { kind: "turn_end", stopReason: "end_turn" }),
+    1,
+  );
   h.change();
   h.change();
   h.change();
@@ -292,15 +429,26 @@ test("a burst of source changes is one frame; a rebuild that changes nothing sen
 });
 
 test("revisions are the sources' own: a restarted host builds the same revisions", () => {
-  const sources = { ...none, threads: [thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }))], receipts: [receipt("a", "failed", 5, "x")] };
-  const first = reading(() => sources).follow().feeds()[0]!;
-  const again = reading(() => sources).follow().feeds()[0]!;
+  const sources = {
+    ...none,
+    threads: [thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }))],
+    receipts: [receipt("a", "failed", 5, "x")],
+  };
+  const first = reading(() => sources)
+    .follow()
+    .feeds()[0]!;
+  const again = reading(() => sources)
+    .follow()
+    .feeds()[0]!;
   expect(again.rows.map((r) => r.revision)).toEqual(first.rows.map((r) => r.revision));
   expect(first.rows.map((r) => r.revision)).toEqual([1, 5]);
 });
 
 test("a tray follower says tray to everyone, and only its rows carry attended", () => {
-  const h = reading(() => ({ ...none, threads: [thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }))] }));
+  const h = reading(() => ({
+    ...none,
+    threads: [thread("t", { state: "running" }, events({ kind: "prompt", text: "go" }))],
+  }));
   const web = h.follow();
   const tray = h.follow("tray");
   expect(web.feeds().at(-1)?.tray).toBe(true);

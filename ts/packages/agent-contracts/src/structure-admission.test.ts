@@ -2,8 +2,11 @@ import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { field, text, manyField } from "./route-field.ts";
 import { validateRouteGraph, type RouteGraph } from "./route-graph.ts";
+import { createPeCatalog } from "./pe-api.ts";
+import { builtinHostActions } from "./semantic-actions.ts";
 import { validateExecutableRouteModule } from "./route-module.ts";
 
+const catalog = createPeCatalog(builtinHostActions).linkedCatalog();
 const graph = (): RouteGraph<any, any> => ({
   key: "pod.test.items",
   name: "Items",
@@ -53,7 +56,6 @@ test("missing subject and duplicate selection refuse admission", () => {
   expect(messages({ ...good, fields: { ...good.fields, other: good.fields.selected! } })).toContain(
     "exactly one kernel-owned selection",
   );
-
 });
 test("Pod admission links axes and refuses missing declarations", () => {
   const axes = {
@@ -82,17 +84,30 @@ test("Pod admission links axes and refuses missing declarations", () => {
       },
     },
   };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash)).not.toThrow();
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).not.toThrow();
   const selected = module.graph.fields.selected;
-  module.graph.fields.selected = { schema: z.array(z.string()).default([]), codec: { encode: JSON.stringify, decode: JSON.parse }, role: "selection" };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow("kernel manyField");
+  module.graph.fields.selected = {
+    schema: z.array(z.string()).default([]),
+    codec: { encode: JSON.stringify, decode: JSON.parse },
+    role: "selection",
+  };
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
+    "kernel manyField",
+  );
   module.graph.fields.selected = { ...selected, schema: z.array(z.string()).default([]) };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow("kernel manyField");
-  module.graph.fields.selected = { ...selected, codec: { encode: JSON.stringify, decode: JSON.parse } };
-  expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow("kernel manyField");
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
+    "kernel manyField",
+  );
+  module.graph.fields.selected = {
+    ...selected,
+    codec: { encode: JSON.stringify, decode: JSON.parse },
+  };
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
+    "kernel manyField",
+  );
   module.graph.fields.selected = selected;
   delete module.entries["pod.test.read"].axes;
-  expect(() => validateExecutableRouteModule(module, module.moduleHash)).toThrow(
+  expect(() => validateExecutableRouteModule(module, module.moduleHash, catalog)).toThrow(
     "missing or invalid subject",
   );
 });

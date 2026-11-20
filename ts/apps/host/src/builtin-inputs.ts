@@ -1,12 +1,13 @@
+import { resourceReadingSchema } from "@pe/mcps/product-contracts";
 import { stateScope } from "@pe/host-contracts/service-identity";
 import { currentCaller, workAuthorOf } from "./control.ts";
 import { contentHomes, contentRootsReady, contentFirmHome } from "./content-roots.ts";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import { join } from "node:path";
-import { catalogsFor } from "@pe/ducts-host/ducts-files";
 import { z } from "zod";
 import { admitNativeCaller } from "./native-read-policy.ts";
-import { captureInput, replayInput, nativeInputIdentity, type RecordedInput } from "./native-recording.ts";
+import { captureInput, replayInput, type RecordedInput } from "@pe/host-internal/input-recording";
+import { nativeInputIdentity } from "@pe/host-internal/input-recording";
 import { CaptureStore } from "./takeoff-captures.ts";
 import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { projectTakeoffSnapshot } from "@pe/mcps/takeoff-ops";
@@ -20,19 +21,18 @@ import {
   executionTargetSchema,
   documentRefSchema,
   NATIVE_BODY_VERSION_HEADER,
-  readingRequestSchema,
 } from "@pe/agent-contracts";
 import { HostInputContext } from "./input-context.ts";
 import {
   CurrentInputConsumption,
-  HostInputReadSets,
-  type ConsumerRecipe,
   type InputConsumption,
   type ReadSetId,
-} from "./input-occurrence.ts";
-import type { TakingObserver } from "./native-recording.ts";
+} from "@pe/host-internal/input-occurrence";
+import { HostInputReadSets } from "./input-occurrence.ts";
+import { type ConsumerRecipe } from "@pe/host-internal/input-recording";
+import type { TakingObserver } from "@pe/host-internal/input-recording";
 import { inputPort, type ReadSources } from "./reads/inputs.ts";
-import { fingerprint } from "./reads/evaluator.ts";
+import { fingerprint } from "@pe/host-internal/reads/evaluator";
 import { Publications } from "./reads/publications.ts";
 import { History, localHistory } from "./reads/history.ts";
 import { historyRoutes } from "./reads/history-routes.ts";
@@ -40,8 +40,9 @@ import { historyPoseSchema, addressSchema, sameAddress } from "@pe/agent-contrac
 import { ActionJournalService } from "./receipt-services.ts";
 import { hostTimeline } from "./reads/work-timeline.ts";
 import { readInvalidations } from "./reads/invalidations.ts";
-import { settingsFile } from "./reads/door.ts";
-import { onSettingWritten, readSettingTiers, watchSettingTiers } from "./tiered-settings.ts";
+import { settingsFile } from "@pe/host-internal/read-graph";
+import { onSettingWritten, watchSettingTiers } from "./tiered-settings.ts";
+import { readSettingTiers } from "@pe/host-internal/settings-files";
 import { graphRoute, graphRouteIds, registeredReads } from "./reads/routes.ts";
 import { ResourceConnectionOwner } from "./request-services.ts";
 import {
@@ -52,7 +53,7 @@ import {
 } from "./work-inputs.ts";
 
 import { bindWork, readingKey } from "@pe/agent-contracts";
-import type { DuctsReadingEnvelope } from "./product-contracts.ts";
+import type { DuctsReadingEnvelope } from "@pe/ducts-contract/reading";
 import { matchPeRoute } from "@pe/mcps/product-catalog";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
@@ -69,16 +70,16 @@ import {
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { admittedBuiltinsLayer, constructorWorkRegistrations } from "./admitted-builtins.ts";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { nativeCallRouteFor, nativeReadResolveRoute, retainedDuctsRead } from "./call-route.ts";
 import { HostDocumentMarks } from "./document-marks.ts";
 import { createDuctsBodyBasis } from "@pe/ducts-host/ducts-body-basis";
-import { ductCatalogsRoute, DuctFiles } from "@pe/ducts-host/ducts-files";
+import { catalogsFor, DuctFiles } from "@pe/ducts-host/ducts-files";
 import { DuctsReadings, ductsReadings } from "@pe/ducts-host/ducts-readings";
 import { runPods } from "./family-actions.ts";
 import { httpProblems, isDoorFailure } from "./http-problems.ts";
-import { InvalidRead } from "./native-reads.ts";
-import { hostNativeReadFor } from "./native-recording.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { hostNativeReadFor } from "./recorded-native-read.ts";
 import {
   createPeRoutes,
   peCoreRoutes,
@@ -86,7 +87,7 @@ import {
   type PeInvocationFactory,
 } from "./pe-routes.ts";
 import { hostState } from "./host-ownership.ts";
-import { RequestIdentity } from "./request-services.ts";
+import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { markReadings } from "./resource-adapters.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
 import { HostSessionInventory } from "./session-inventory.ts";
@@ -220,8 +221,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             row.state === "succeeded" &&
             row.target.kind === "document" &&
             row.steps.some(
-              (s) => s.state === "succeeded" && (s.kind !== "native" || s.transport !== "bridge" || !s.touched ||
-                ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(s.touched.kind)),
+              (s) =>
+                s.state === "succeeded" &&
+                (s.kind !== "native" ||
+                  s.transport !== "bridge" ||
+                  !s.touched ||
+                  ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(s.touched.kind)),
             )
           )
             history.afterWrite(row.target.ref, row.id);
@@ -272,7 +277,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             input,
             "{}",
             Schema.String,
-            owned ? undefined : lane.recordingStore.candidates(canonicalJson(input)).find((t) => t.scope === "{}")?.id,
+            owned
+              ? undefined
+              : lane.recordingStore.candidates(canonicalJson(input)).find((t) => t.scope === "{}")
+                  ?.id,
           )
         : (() => {
             const value = Effect.tryPromise({
@@ -323,7 +331,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             ).pipe(
               Effect.catch(() => {
                 const at = writer.capture.begin();
-                return at === null ? Effect.void : writer.capture.stop(at, "observer", { site: "builtin", op: current.recipe.key });
+                return at === null
+                  ? Effect.void
+                  : writer.capture.stop(at, "observer", {
+                      site: "builtin",
+                      op: current.recipe.key,
+                    });
               }),
             );
         }),
@@ -370,12 +383,22 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     const admitted = Context.add(provided, RequestIdentity, identity);
     const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
       runPods({}, Effect.provide(effect, admitted));
-    const timeline = timelineJournal && !recorded ? hostTimeline(workspace, timelineJournal, async () => {
-      const result = await invoke(Context.get(services, HostSessionInventory).list());
-      return result.sessions.flatMap(session => session.connected
-        ? (session.openDocuments ?? []).map(document => ({ session: session.sessionId, openId: document.openId, address: addressSchema.nullable().parse(document.address ?? null), projectHome: document.projectHome }))
-        : []);
-    }) : undefined;
+    const timeline =
+      timelineJournal && !recorded
+        ? hostTimeline(workspace, timelineJournal, async () => {
+            const result = await invoke(Context.get(services, HostSessionInventory).list());
+            return result.sessions.flatMap((session) =>
+              session.connected
+                ? (session.openDocuments ?? []).map((document) => ({
+                    session: session.sessionId,
+                    openId: document.openId,
+                    address: addressSchema.nullable().parse(document.address ?? null),
+                    projectHome: document.projectHome,
+                  }))
+                : [],
+            );
+          })
+        : undefined;
     const url = new URL(web.url),
       declared = matchPeRoute(web.method, url.pathname)!;
     if (declared.id === "resources.subscriptions") return { resourceOwner: connectionOwner };
@@ -391,7 +414,11 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           declared.id,
           input.body,
           undefined,
-          identity.caller.kind === "pea" ? "pea" : identity.caller.kind === "human" ? "human" : null,
+          identity.caller.kind === "pea"
+            ? "pea"
+            : identity.caller.kind === "human"
+              ? "human"
+              : null,
         )
       : null;
     const graphRequest = graph?.publication;
@@ -447,297 +474,618 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           };
         },
       };
-    const admission = graphRequest ? publications.admission(
-      canonicalJson([identity.caller, graphRequest.subscription]), graphRequest.generation,
-    ) : undefined;
+    const admission = graphRequest
+      ? publications.admission(
+          canonicalJson([identity.caller, graphRequest.subscription]),
+          graphRequest.generation,
+        )
+      : undefined;
     if (admission) {
       if (web.signal.aborted) admission.close();
       else web.signal.addEventListener("abort", admission.close, { once: true });
     }
     try {
-    const recipe: ConsumerRecipe = {
-      key: declared.id,
-      input: json(graph ? { body: { read: graph.name, args: graph.args } } : input),
-      scope: canonicalJson(json(identity.scope)),
-    };
-    // Transport registration consumes no recording; POST-added keys admit their own frames.
-    const consumption =
-      recorded && stream
-        ? undefined
-        : await invoke(readSets.open(recipe, (graph?.readSet as ReadSetId) ?? null));
-    const scoped =
-      (current: InputConsumption): WorkInputRunner =>
-      (effect) =>
-        runPods(
-          {},
-          Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)),
-        );
-    const complete = (current: InputConsumption) => scoped(current)(sealed(current));
-    const activeFrames = new Map<InputConsumption, symbol>();
-    let closingResources = false;
-    const closeResources = () => {
-      if (consumption && closingResources && !activeFrames.size) void invoke(consumption.close);
-    };
-    const finishFrame = async (current: InputConsumption) => {
-      try {
-        await invoke(current.close);
-      } finally {
-        activeFrames.delete(current);
-        closeResources();
-      }
-    };
-    const inventory = Context.get(services, HostSessionInventory);
-    // Every host-only input starts a taking in the same evaluation as native and Work inputs.
-    const takeOwner = (
-      current: InputConsumption,
-      input: RecordedInput,
-      live: () => Promise<unknown>,
-    ) => {
-      const scope = "{}";
-      const codec = Schema.Json;
-      const effect = recorded
-        ? replayInput(lane.recordingStore, input, scope, codec)
-        : (() => {
-            const value = Effect.tryPromise({
-              try: async () => json(await live()),
-              catch: (error) =>
-                new InvalidRead({ message: String(error), status: 409, problem: "input.failed" }),
-            });
-            return writer
-              ? captureInput(writer, input, scope, codec, value, options.observed)
-              : value;
-          })();
-      return scoped(current)(effect);
-    };
-    const takeFile = (name: string, args: unknown, current: InputConsumption) =>
-      takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
-        name === "takeoff-capture"
-          ? (async () => {
-              if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
-              const { target, snapshot: body, views } = takeoffSnapshotInput.parse(args);
-              const row = await invoke(inventory.document(target));
-              if (!row.address || !sameAddress(row.address, addressSchema.parse(body.reading.at))) throw Error("Snapshot returned a different document");
-              const sessions = await invoke(inventory.list());
-              const title = sessions.sessions.find(session => session.sessionId === target.session)?.openDocuments?.find(doc => doc.openId === target.openId)?.title;
-              if (!title) throw Error("Snapshot document is no longer open");
-              return takeoffs.value.retain(projectTakeoffSnapshot(body, title, views), { kind: "live", target },
-                async () => { const current = await invoke(inventory.document(target));
-                  if (!current.address || !sameAddress(current.address, row.address!)) throw Error("Snapshot target changed before retention"); });
-            })()
-          : name === "settings"
-          ? (async () => {
-              // The project tier is the home the target model's pointer names (homes freeze shape 4).
-              const { owner, target } = settingsFile.input.parse(args);
-              const pointer = target ? (await invoke(inventory.document(target))).projectHome : null;
-              return settingWatches ? settingWatches.read(owner, pointer) : readSettingTiers(owner, pointer);
-            })()
-          : name.startsWith("local:")
-          ? readLocal(name.slice(6), args)
-          : name === "family-spec"
+      const recipe: ConsumerRecipe = {
+        key: declared.id,
+        input: json(graph ? { body: { read: graph.name, args: graph.args } } : input),
+        scope: canonicalJson(json(identity.scope)),
+      };
+      // Transport registration consumes no recording; POST-added keys admit their own frames.
+      const consumption =
+        recorded && stream
+          ? undefined
+          : await invoke(readSets.open(recipe, (graph?.readSet as ReadSetId) ?? null));
+      const scoped =
+        (current: InputConsumption): WorkInputRunner =>
+        (effect) =>
+          runPods(
+            {},
+            Effect.provide(effect, Context.add(admitted, CurrentInputConsumption, current)),
+          );
+      const complete = (current: InputConsumption) => scoped(current)(sealed(current));
+      const activeFrames = new Map<InputConsumption, symbol>();
+      let closingResources = false;
+      const closeResources = () => {
+        if (consumption && closingResources && !activeFrames.size) void invoke(consumption.close);
+      };
+      const finishFrame = async (current: InputConsumption) => {
+        try {
+          await invoke(current.close);
+        } finally {
+          activeFrames.delete(current);
+          closeResources();
+        }
+      };
+      const inventory = Context.get(services, HostSessionInventory);
+      // Every host-only input starts a taking in the same evaluation as native and Work inputs.
+      const takeOwner = (
+        current: InputConsumption,
+        input: RecordedInput,
+        live: () => Promise<unknown>,
+      ) => {
+        const scope = "{}";
+        const codec = Schema.Json;
+        const effect = recorded
+          ? replayInput(lane.recordingStore, input, scope, codec)
+          : (() => {
+              const value = Effect.tryPromise({
+                try: async () => json(await live()),
+                catch: (error) =>
+                  new InvalidRead({ message: String(error), status: 409, problem: "input.failed" }),
+              });
+              return writer
+                ? captureInput(writer, input, scope, codec, value, options.observed)
+                : value;
+            })();
+        return scoped(current)(effect);
+      };
+      const takeFile = (name: string, args: unknown, current: InputConsumption) =>
+        takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
+          name === "takeoff-capture"
             ? (async () => {
-                const { target } = z.object({ target: documentRefSchema.optional() }).parse(args);
-                const pointer = target ? (await invoke(inventory.document(target))).projectHome : null;
-                const { target: _target, ...member } = args as Record<string, unknown>;
-                return readFamilySpec(member, pointer);
-              })()
-            : Promise.reject(Error(`Unknown file input ${name}`)),
-      );
-    const sources = (current: InputConsumption): ReadSources => {
-      const context = Context.add(admitted, CurrentInputConsumption, current);
-      const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
-        runPods({}, Effect.provide(effect, context));
-      const documents = new Map<string, ReturnType<typeof inventory.document>>();
-      const documentRead: typeof inventory.document = (ref) =>
-        Effect.gen(function* () {
-          const key = JSON.stringify(ref);
-          let read = documents.get(key);
-          if (!read) {
-            read = yield* Effect.cached(inventory.document(ref));
-            documents.set(key, read);
-          }
-          return yield* read;
-        });
-      const document = (ref: import("@pe/agent-contracts").DocumentRef) =>
-        invoke(documentRead(ref));
-      return {
-        file: (name, args) =>
-          name === "firm"
-            ? invoke(files.firm(String(args)))
-            : name === "catalogs"
-              ? (async () => { const ref = args ? documentRefSchema.parse(args) : null; const pointer = ref ? (await document(ref)).projectHome : null; return invoke(catalogsFor(files, pointer)); })()
-              : name === "capture"
-                ? scoped(current)(asset(String(args), true)).then(() => String(args))
-                : takeFile(name, args, current),
-        workKey: async (ref) => bindWork("duct-systems", (await document(ref)).address, undefined, ref),
-        inputs: {
-          consumption: current,
-          run: scoped(current),
-          work: workReadContext(current, scoped(current)),
-        },
-        resource: (request) =>
-          // The session inventory is no resource adapter's (`fallback` refuses it). A graph read takes
-          // it from the owner the stream door uses (`retainedResource`), as that owner's own taking:
-          // inside `takeOwner` it would be one taking nested in another on the same consumption.
-          (request as { kind: string }).kind === "inventory"
-            ? invoke(inventory.list())
-            : takeOwner(
-            current,
-            { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
-            () => {
-              if ((request as { kind: string }).kind === "captures")
-                return (async () => {
-                  const captures = await pictures!.list();
-                  return { captures };
-                })();
-              const resource = readingRequestSchema.parse(request);
-              if (resource.kind === "takeoff-saved") return (async () => {
                 if (Option.isNone(takeoffs)) throw Error("Takeoff capture store is unavailable");
-                if (resource.id) return resource.text ? takeoffs.value.savedText(resource.id) : takeoffs.value.saved(resource.id);
-                return (await takeoffs.value.list(resource.document ? addressSchema.parse(resource.document) : undefined))
-                  .map(({ snapshot, ...capture }) => ({ ...capture, document: snapshot.reading.at, title: snapshot.world.docName }));
-              })();
-              return new Promise((resolve, reject) => {
-                let settled = false,
-                  stop = () => {};
-                stop = fallback(
-                  request as Parameters<ResourceObserver>[0],
-                  (frame) => {
-                    if (frame.kind === "snapshot") {
-                      settled = true;
-                      resolve(frame.value);
-                      stop();
-                    } else if (frame.kind === "failure") {
-                      settled = true;
-                      reject(Error(frame.error));
-                      stop();
-                    }
+                const { target, snapshot: body, views } = takeoffSnapshotInput.parse(args);
+                const row = await invoke(inventory.document(target));
+                if (!row.address || !sameAddress(row.address, addressSchema.parse(body.reading.at)))
+                  throw Error("Snapshot returned a different document");
+                const sessions = await invoke(inventory.list());
+                const title = sessions.sessions
+                  .find((session) => session.sessionId === target.session)
+                  ?.openDocuments?.find((doc) => doc.openId === target.openId)?.title;
+                if (!title) throw Error("Snapshot document is no longer open");
+                return takeoffs.value.retain(
+                  projectTakeoffSnapshot(body, title, views),
+                  { kind: "live", target },
+                  async () => {
+                    const current = await invoke(inventory.document(target));
+                    if (!current.address || !sameAddress(current.address, row.address!))
+                      throw Error("Snapshot target changed before retention");
                   },
-                  0,
                 );
-                if (settled) stop();
+              })()
+            : name === "settings"
+              ? (async () => {
+                  // The project tier is the home the target model's pointer names (homes freeze shape 4).
+                  const { owner, target } = settingsFile.input.parse(args);
+                  const pointer = target
+                    ? (await invoke(inventory.document(target))).projectHome
+                    : null;
+                  return settingWatches
+                    ? settingWatches.read(owner, pointer)
+                    : readSettingTiers(owner, pointer);
+                })()
+              : name.startsWith("local:")
+                ? readLocal(name.slice(6), args)
+                : name === "family-spec"
+                  ? (async () => {
+                      const { target } = z
+                        .object({ target: documentRefSchema.optional() })
+                        .parse(args);
+                      const pointer = target
+                        ? (await invoke(inventory.document(target))).projectHome
+                        : null;
+                      const { target: _target, ...member } = args as Record<string, unknown>;
+                      return readFamilySpec(member, pointer);
+                    })()
+                  : Promise.reject(Error(`Unknown file input ${name}`)),
+        );
+      const sources = (current: InputConsumption): ReadSources => {
+        const context = Context.add(admitted, CurrentInputConsumption, current);
+        const invoke = <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) =>
+          runPods({}, Effect.provide(effect, context));
+        const documents = new Map<string, ReturnType<typeof inventory.document>>();
+        const documentRead: typeof inventory.document = (ref) =>
+          Effect.gen(function* () {
+            const key = JSON.stringify(ref);
+            let read = documents.get(key);
+            if (!read) {
+              read = yield* Effect.cached(inventory.document(ref));
+              documents.set(key, read);
+            }
+            return yield* read;
+          });
+        const document = (ref: import("@pe/agent-contracts").DocumentRef) =>
+          invoke(documentRead(ref));
+        return {
+          file: (name, args) =>
+            name === "firm"
+              ? invoke(files.firm(String(args)))
+              : name === "catalogs"
+                ? (async () => {
+                    const ref = args ? documentRefSchema.parse(args) : null;
+                    const pointer = ref ? (await document(ref)).projectHome : null;
+                    return invoke(catalogsFor(files, pointer));
+                  })()
+                : name === "capture"
+                  ? scoped(current)(asset(String(args), true)).then(() => String(args))
+                  : takeFile(name, args, current),
+          workKey: async (ref) =>
+            bindWork("duct-systems", (await document(ref)).address, undefined, ref),
+          inputs: {
+            consumption: current,
+            run: scoped(current),
+            work: workReadContext(current, scoped(current)),
+          },
+          resource: (request) =>
+            // The session inventory is no resource adapter's (`fallback` refuses it). A graph read takes
+            // it from the owner the stream door uses (`retainedResource`), as that owner's own taking:
+            // inside `takeOwner` it would be one taking nested in another on the same consumption.
+            (request as { kind: string }).kind === "inventory"
+              ? invoke(inventory.list())
+              : takeOwner(
+                  current,
+                  { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
+                  () => {
+                    if ((request as { kind: string }).kind === "captures")
+                      return (async () => {
+                        const captures = await pictures!.list();
+                        return { captures };
+                      })();
+                    const resource = resourceReadingSchema.parse(request);
+                    if (resource.kind === "takeoff-saved")
+                      return (async () => {
+                        if (Option.isNone(takeoffs))
+                          throw Error("Takeoff capture store is unavailable");
+                        if (resource.id)
+                          return resource.text
+                            ? takeoffs.value.savedText(resource.id)
+                            : takeoffs.value.saved(resource.id);
+                        return (
+                          await takeoffs.value.list(
+                            resource.document ? addressSchema.parse(resource.document) : undefined,
+                          )
+                        ).map(({ snapshot, ...capture }) => ({
+                          ...capture,
+                          document: snapshot.reading.at,
+                          title: snapshot.world.docName,
+                        }));
+                      })();
+                    return new Promise((resolve, reject) => {
+                      let settled = false,
+                        stop = () => {};
+                      stop = fallback(
+                        request as Parameters<ResourceObserver>[0],
+                        (frame) => {
+                          if (frame.kind === "snapshot") {
+                            settled = true;
+                            resolve(frame.value);
+                            stop();
+                          } else if (frame.kind === "failure") {
+                            settled = true;
+                            reject(Error(frame.error));
+                            stop();
+                          }
+                        },
+                        0,
+                      );
+                      if (settled) stop();
+                    });
+                  },
+                ),
+          call: async (key, input, target, version, role, signal) => {
+            // Interrupt only this native read join. NativeReads retains restoration and terminal custody.
+            const take = async <A, E>(
+              effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>,
+            ) => {
+              const result = await runPods(
+                {},
+                Effect.provide(effect, context).pipe(Effect.result),
+                { signal },
+              );
+              if (result._tag === "Failure") throw result.failure;
+              return result.success;
+            };
+            const chosen = executionTargetSchema.parse(target);
+            const safety = hostOpSafety[key as keyof typeof hostOpSafety];
+            if (!safety || (safety.effect !== "Read" && safety.effect !== "TransactRead"))
+              throw Error(`Native leaf is not a catalog Read: ${key}`);
+            const ref = chosen.kind === "document" ? chosen.ref : null;
+            if (!["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].includes(key)) {
+              const native = Context.get(services, HostNativeRead);
+              const scope = ref
+                ? { bridgeSessionId: ref.session, openDocumentId: ref.openId }
+                : chosen.kind === "session"
+                  ? { bridgeSessionId: chosen.session }
+                  : {};
+              const answer = await take(native.read({ key, input, scope }));
+              return new Response(JSON.stringify(answer.value), {
+                // Admission generations fence native flights; sealed read versions describe content.
+                // Keep freshness evidence in the native taking, outside the Value's content identity.
+                headers: { [NATIVE_BODY_VERSION_HEADER]: fingerprint(answer.value) },
+              });
+            }
+            if (!ref) throw Error("Retained document read requires a document target");
+            const scope = {
+              bridgeSessionId: ref.session,
+              ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }),
+            };
+            return HttpServerResponse.toWeb(
+              await take(retained(current, { key, input, scope }, { version }, role, documentRead)),
+            );
+          },
+        };
+      };
+      const observeFrame = (
+        reading: Parameters<ResourceObserver>[0],
+        publish: Parameters<ResourceObserver>[1],
+        after: Parameters<ResourceObserver>[2],
+        recordedFrame?: InputConsumption,
+      ) => {
+        if (
+          !recorded &&
+          !["work", "work-acks", "ducts-snapshot", "ducts-tables", "inventory"].includes(
+            reading.kind,
+          )
+        )
+          return fallback(reading, publish, after);
+        class FrameCarriage extends WorkCarriage {
+          constructor(
+            readonly subscription?: ReadSetId,
+            readonly envelope?: DuctsReadingEnvelope,
+          ) {
+            super();
+          }
+        }
+        const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
+        const readyFrames = new Set<InputConsumption>();
+        const frameOwner = Symbol();
+        let released = false;
+        const frameRecipe: ConsumerRecipe = {
+          key: "resource.frame",
+          input: json(reading),
+          scope: recipe.scope,
+        };
+        const frame = (recipe = frameRecipe) => {
+          const current = recordedFrame ?? child(consumption!, recipe);
+          activeFrames.set(current, frameOwner);
+          return current;
+        };
+        const work: WorkReadContext = {
+          begin: (read) => {
+            try {
+              const current = frame();
+              const run: WorkInputRunner = (effect) =>
+                scoped(current)(effect).finally(() => {
+                  if (released) return finishFrame(current);
+                  readyFrames.add(current);
+                });
+              const begun = workReadContext(current, run).begin(read);
+              if (begun.ok && begun.carriage) frameRuns.set(begun.carriage, scoped(current));
+              else void finishFrame(current);
+              return begun;
+            } catch (error) {
+              return { ok: false, error };
+            }
+          },
+        };
+        const retainedResource: ResourceObserver = (reading, publish) => {
+          let closed = false,
+            release = () => {};
+          const key = readingKey(reading);
+          if (reading.kind === "inventory") {
+            let subscription: ReadSetId | undefined;
+            const read = async () => {
+              const current = subscription
+                ? await invoke(readSets.open(frameRecipe, null))
+                : frame();
+              activeFrames.set(current, frameOwner);
+              try {
+                if (subscription)
+                  await scoped(current)(current.linkReadSet("subscription", subscription));
+                const result = await scoped(current)(
+                  Effect.provideService(Effect.result(inventory.list()), RequestIdentity, identity),
+                );
+                if (!released) {
+                  await complete(current);
+                  subscription ??= current.id;
+                }
+                return result;
+              } finally {
+                await finishFrame(current);
+              }
+            };
+            const fail = (error: unknown) => {
+              const message = error instanceof Error ? error.message : String(error);
+              if (!released)
+                publish({
+                  kind: "failure",
+                  key,
+                  error: message,
+                  failure: {
+                    kind: "failed",
+                    code: isDoorFailure(error) ? error.problem : "ReadingFailed",
+                    message,
+                  },
+                });
+            };
+            const accept = (
+              result: import("@pe/runtime").OwnerValue<Awaited<ReturnType<typeof read>>>,
+            ) => {
+              if (released) return;
+              if ("error" in result) {
+                fail(Error(result.error));
+                return;
+              }
+              if (Result.isFailure(result.value)) fail(result.value.failure);
+              else publish(resourceSnapshot(key, { value: result.value.success }));
+            };
+            if (recorded) {
+              void read()
+                .then((value) => accept({ value }))
+                .catch(fail);
+              return () => {};
+            }
+            // ADR0029 shared native dispatch does not share metadata consumers: each keeps its own context.
+            return new OwnerReads().observe(key, read, inventory.subscribe, accept);
+          }
+          if (reading.kind !== "ducts-snapshot" && reading.kind !== "ducts-tables") {
+            publish({
+              kind: "failure",
+              key,
+              error: "Recording does not cover this reading owner",
+              failure: {
+                kind: "failed",
+                code: "recording.coverage",
+                message: "Recording does not cover this reading owner",
+              },
+            });
+            return () => {};
+          }
+          const input =
+            reading.kind === "ducts-snapshot"
+              ? (() => {
+                  const { kind, target, ...args } = reading;
+                  return {
+                    key:
+                      reading.selector.kind === "roster"
+                        ? "ducts.snapshot.roster"
+                        : "ducts.snapshot.walk",
+                    input: args,
+                    scope: { bridgeSessionId: target.session, openDocumentId: target.openId },
+                  };
+                })()
+              : (() => {
+                  const { kind, session, ...args } = reading;
+                  return { key: "ducts.tables", input: args, scope: { bridgeSessionId: session } };
+                })();
+          const current = frame();
+          void invoke(retained(current, input, {}, "acquire", inventory.document))
+            .then(async (response) => {
+              await HttpServerResponse.toWeb(response).body?.cancel();
+              if (closed) {
+                await finishFrame(current);
+                return;
+              }
+              readyFrames.add(current);
+              let first = true;
+              if (!closed)
+                release = owner.observe(reading, (value) => {
+                  try {
+                    // A notification observes an envelope, not another taking of the acquired native body.
+                    const carriage = new FrameCarriage(first ? undefined : current.id, value);
+                    first = false;
+                    frameRuns.set(carriage, scoped(current));
+                    publish(resourceSnapshot(key, { value }), carriage);
+                  } catch (error) {
+                    const failure = error as InvalidRead;
+                    publish({
+                      kind: "failure",
+                      key,
+                      error: failure.message,
+                      failure: {
+                        kind: "failed",
+                        code: failure.problem ?? "ReadingFailed",
+                        message: failure.message,
+                      },
+                    });
+                  }
+                });
+            })
+            .catch(async (error) => {
+              await finishFrame(current);
+              if (!closed)
+                publish({
+                  kind: "failure",
+                  key,
+                  error: error.message,
+                  failure: {
+                    kind: "failed",
+                    code: error.problem ?? "ReadingFailed",
+                    message: error.message,
+                  },
+                });
+            });
+          return () => {
+            closed = true;
+            release();
+          };
+        };
+        const release = markReadings(marks, async (ref, key, at, carriage, update) => {
+          const runFrame = carriage ? frameRuns.get(carriage) : undefined;
+          if (!runFrame) {
+            if (!ref) return null;
+            if (!recorded && (!writer || writer.capture.truncated()))
+              return invoke(marks.readFrame(ref, key, at));
+            throw new InvalidRead({
+              message: "Resource frame lost its consumption context",
+              status: 409,
+              problem: "recording.context",
+            });
+          }
+          return runFrame(
+            Effect.gen(function* () {
+              const active = yield* Effect.serviceOption(CurrentInputConsumption);
+              if (Option.isNone(active))
+                return yield* new InvalidRead({
+                  message: "Frame runner has no consumption",
+                  status: 409,
+                  problem: "recording.context",
+                });
+              const previous = active.value;
+              const independent =
+                !recorded &&
+                (update || (carriage instanceof FrameCarriage && !!carriage.subscription));
+              const current = independent
+                ? yield* readSets.open(
+                    carriage instanceof FrameCarriage && carriage.envelope
+                      ? {
+                          ...frameRecipe,
+                          key: "resource.notification",
+                          input: json({ reading, envelope: carriage.envelope }),
+                        }
+                      : previous.recipe,
+                    null,
+                  )
+                : previous;
+              if (independent) activeFrames.set(current, frameOwner);
+              readyFrames.delete(current);
+              if (!update && carriage) frameRuns.set(carriage, scoped(current));
+              return yield* Effect.tryPromise({
+                try: async () => {
+                  try {
+                    if (released)
+                      throw new InvalidRead({
+                        message: "Resource subscription is closed",
+                        status: 409,
+                        problem: "recording.context",
+                      });
+                    if (update) await scoped(current)(current.linkReadSet("value", previous.id));
+                    else if (carriage instanceof FrameCarriage && carriage.subscription)
+                      await scoped(current)(
+                        current.linkReadSet("subscription", carriage.subscription),
+                      );
+                    if (ref && writer && !writer.capture.truncated())
+                      await scoped(current)(
+                        inventory.document(ref).pipe(
+                          Effect.provideService(RequestIdentity, identity),
+                          Effect.catch(() => {
+                            const at = writer.capture.begin();
+                            return at === null
+                              ? Effect.void
+                              : writer.capture.stop(at, "unsupported", {
+                                  site: "builtin",
+                                  op: "inventory.document",
+                                });
+                          }),
+                        ),
+                      );
+                    const value = ref ? await scoped(current)(marks.readFrame(ref, key, at)) : null;
+                    if (!released) await complete(current);
+                    return value;
+                  } finally {
+                    await finishFrame(current);
+                  }
+                },
+                catch: (error) =>
+                  isDoorFailure(error)
+                    ? error
+                    : new InvalidRead({
+                        message: String(error),
+                        status: 409,
+                        problem: "recording.context",
+                      }),
+              });
+            }),
+          );
+        })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
+        return () => {
+          released = true;
+          release();
+          for (const current of readyFrames) void finishFrame(current);
+          readyFrames.clear();
+          if (writer?.capture.truncated())
+            for (const [current, owner] of activeFrames)
+              if (owner === frameOwner) void finishFrame(current);
+        };
+      };
+      const observe: ResourceObserver = (reading, publish, after) => {
+        // A read publication's invalidation rides the tab's one stream (HTTP/1.1 gives an origin 6
+        // sockets; a stream per read starved the rest). Metadata only, per caller: the value travels
+        // once in the read response. It is answered before the lanes part, so it opens no read set
+        // and consumes no recording, as the retired /pe/read-events did not.
+        if (reading.kind === "publication") {
+          const key = readingKey(reading);
+          const { generation } = reading;
+          let answered = false;
+          const stop = invalidations.observePublication(
+            canonicalJson([identity.caller, reading.subscription]),
+            generation,
+            (publication) => {
+              answered = true;
+              publish({
+                kind: "snapshot",
+                key,
+                value: { generation, version: publication.version, state: publication.state },
               });
             },
-          ),
-        call: async (key, input, target, version, role, signal) => {
-          // Interrupt only this native read join. NativeReads retains restoration and terminal custody.
-          const take = async <A, E>(effect: Effect.Effect<A, E, RequestIdentityKey | HostNativeRead>) => {
-            const result = await runPods(
-              {}, Effect.provide(effect, context).pipe(Effect.result), { signal },
-            );
-            if (result._tag === "Failure") throw result.failure;
-            return result.success;
-          };
-          const chosen = executionTargetSchema.parse(target);
-          const safety = hostOpSafety[key as keyof typeof hostOpSafety];
-          if (!safety || (safety.effect !== "Read" && safety.effect !== "TransactRead"))
-            throw Error(`Native leaf is not a catalog Read: ${key}`);
-          const ref = chosen.kind === "document" ? chosen.ref : null;
-          if (!["ducts.snapshot.roster", "ducts.snapshot.walk", "ducts.tables"].includes(key)) {
-            const native = Context.get(services, HostNativeRead);
-            const scope = ref
-              ? { bridgeSessionId: ref.session, openDocumentId: ref.openId }
-              : chosen.kind === "session"
-                ? { bridgeSessionId: chosen.session }
-                : {};
-            const answer = await take(native.read({ key, input, scope }));
-            return new Response(JSON.stringify(answer.value), {
-              // Admission generations fence native flights; sealed read versions describe content.
-              // Keep freshness evidence in the native taking, outside the Value's content identity.
-              headers: { [NATIVE_BODY_VERSION_HEADER]: fingerprint(answer.value) },
-            });
-          }
-          if (!ref) throw Error("Retained document read requires a document target");
-          const scope = {
-            bridgeSessionId: ref.session,
-            ...(key === "ducts.tables" ? {} : { openDocumentId: ref.openId }),
-          };
-          return HttpServerResponse.toWeb(
-            await take(retained(current, { key, input, scope }, { version }, role, documentRead)),
+            { recipe: "open.documents", observe: fallback },
           );
-        },
-      };
-    };
-    const observeFrame = (
-      reading: Parameters<ResourceObserver>[0],
-      publish: Parameters<ResourceObserver>[1],
-      after: Parameters<ResourceObserver>[2],
-      recordedFrame?: InputConsumption,
-    ) => {
-      if (
-        !recorded &&
-        !["work", "work-acks", "ducts-snapshot", "ducts-tables", "inventory"].includes(reading.kind)
-      )
-        return fallback(reading, publish, after);
-      class FrameCarriage extends WorkCarriage {
-        constructor(
-          readonly subscription?: ReadSetId,
-          readonly envelope?: DuctsReadingEnvelope,
-        ) {
-          super();
+          // Every key is answered once, so a stream that carries only this key is never silent.
+          if (!answered)
+            publish({ kind: "snapshot", key, value: { generation, version: 0, state: "absent" } });
+          return stop;
         }
-      }
-      const frameRuns = new WeakMap<WorkCarriage, WorkInputRunner>();
-      const readyFrames = new Set<InputConsumption>();
-      const frameOwner = Symbol();
-      let released = false;
-      const frameRecipe: ConsumerRecipe = {
-        key: "resource.frame",
-        input: json(reading),
-        scope: recipe.scope,
-      };
-      const frame = (recipe = frameRecipe) => {
-        const current = recordedFrame ?? child(consumption!, recipe);
-        activeFrames.set(current, frameOwner);
-        return current;
-      };
-      const work: WorkReadContext = {
-        begin: (read) => {
-          try {
-            const current = frame();
-            const run: WorkInputRunner = (effect) =>
-              scoped(current)(effect).finally(() => {
-                if (released) return finishFrame(current);
-                readyFrames.add(current);
-              });
-            const begun = workReadContext(current, run).begin(read);
-            if (begun.ok && begun.carriage) frameRuns.set(begun.carriage, scoped(current));
-            else void finishFrame(current);
-            return begun;
-          } catch (error) {
-            return { ok: false, error };
-          }
-        },
-      };
-      const retainedResource: ResourceObserver = (reading, publish) => {
-        let closed = false,
+        if (!recorded) return observeFrame(reading, publish, after);
+        let released = false,
           release = () => {};
-        const key = readingKey(reading);
-        if (reading.kind === "inventory") {
-          let subscription: ReadSetId | undefined;
-          const read = async () => {
-            const current = subscription ? await invoke(readSets.open(frameRecipe, null)) : frame();
-            activeFrames.set(current, frameOwner);
-            try {
-              if (subscription)
-                await scoped(current)(current.linkReadSet("subscription", subscription));
-              const result = await scoped(current)(
-                Effect.provideService(Effect.result(inventory.list()), RequestIdentity, identity),
-              );
-              if (!released) {
-                await complete(current);
-                subscription ??= current.id;
-              }
-              return result;
-            } finally {
-              await finishFrame(current);
+        void invoke(
+          readSets.open({ key: "resource.frame", input: json(reading), scope: recipe.scope }, null),
+        )
+          .then(async (current) => {
+            if (released) {
+              await invoke(current.close);
+              return;
             }
-          };
-          const fail = (error: unknown) => {
+            try {
+              const stop = observeFrame(
+                reading,
+                (frame, carriage) => {
+                  if (frame.kind !== "failure") {
+                    publish(frame, carriage);
+                    return;
+                  }
+                  void finishFrame(current).then(() => {
+                    if (!released) publish(frame, carriage);
+                  });
+                },
+                after,
+                current,
+              );
+              release = () => {
+                stop();
+                void finishFrame(current);
+              };
+            } catch (error) {
+              await finishFrame(current);
+              throw error;
+            }
+          })
+          .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             if (!released)
               publish({
                 kind: "failure",
-                key,
+                key: readingKey(reading),
                 error: message,
                 failure: {
                   kind: "failed",
@@ -745,385 +1093,120 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   message,
                 },
               });
-          };
-          const accept = (
-            result: import("@pe/runtime").OwnerValue<Awaited<ReturnType<typeof read>>>,
-          ) => {
-            if (released) return;
-            if ("error" in result) {
-              fail(Error(result.error));
-              return;
-            }
-            if (Result.isFailure(result.value)) fail(result.value.failure);
-            else publish(resourceSnapshot(key, { value: result.value.success }));
-          };
-          if (recorded) {
-            void read()
-              .then((value) => accept({ value }))
-              .catch(fail);
-            return () => {};
-          }
-          // ADR0029 shared native dispatch does not share metadata consumers: each keeps its own context.
-          return new OwnerReads().observe(key, read, inventory.subscribe, accept);
-        }
-        if (reading.kind !== "ducts-snapshot" && reading.kind !== "ducts-tables") {
-          publish({
-            kind: "failure",
-            key,
-            error: "Recording does not cover this reading owner",
-            failure: {
-              kind: "failed",
-              code: "recording.coverage",
-              message: "Recording does not cover this reading owner",
-            },
-          });
-          return () => {};
-        }
-        const input =
-          reading.kind === "ducts-snapshot"
-            ? (() => {
-                const { kind, target, ...args } = reading;
-                return {
-                  key:
-                    reading.selector.kind === "roster"
-                      ? "ducts.snapshot.roster"
-                      : "ducts.snapshot.walk",
-                  input: args,
-                  scope: { bridgeSessionId: target.session, openDocumentId: target.openId },
-                };
-              })()
-            : (() => {
-                const { kind, session, ...args } = reading;
-                return { key: "ducts.tables", input: args, scope: { bridgeSessionId: session } };
-              })();
-        const current = frame();
-        void invoke(retained(current, input, {}, "acquire", inventory.document))
-          .then(async (response) => {
-            await HttpServerResponse.toWeb(response).body?.cancel();
-            if (closed) {
-              await finishFrame(current);
-              return;
-            }
-            readyFrames.add(current);
-            let first = true;
-            if (!closed)
-              release = owner.observe(reading, (value) => {
-                try {
-                  // A notification observes an envelope, not another taking of the acquired native body.
-                  const carriage = new FrameCarriage(first ? undefined : current.id, value);
-                  first = false;
-                  frameRuns.set(carriage, scoped(current));
-                  publish(resourceSnapshot(key, { value }), carriage);
-                } catch (error) {
-                  const failure = error as InvalidRead;
-                  publish({
-                    kind: "failure",
-                    key,
-                    error: failure.message,
-                    failure: {
-                      kind: "failed",
-                      code: failure.problem ?? "ReadingFailed",
-                      message: failure.message,
-                    },
-                  });
-                }
-              });
-          })
-          .catch(async (error) => {
-            await finishFrame(current);
-            if (!closed)
-              publish({
-                kind: "failure",
-                key,
-                error: error.message,
-                failure: {
-                  kind: "failed",
-                  code: error.problem ?? "ReadingFailed",
-                  message: error.message,
-                },
-              });
           });
         return () => {
-          closed = true;
+          released = true;
           release();
         };
       };
-      const release = markReadings(marks, async (ref, key, at, carriage, update) => {
-        const runFrame = carriage ? frameRuns.get(carriage) : undefined;
-        if (!runFrame) {
-          if (!ref) return null;
-          if (!recorded && (!writer || writer.capture.truncated()))
-            return invoke(marks.readFrame(ref, key, at));
-          throw new InvalidRead({
-            message: "Resource frame lost its consumption context",
-            status: 409,
-            problem: "recording.context",
-          });
-        }
-        return runFrame(
-          Effect.gen(function* () {
-            const active = yield* Effect.serviceOption(CurrentInputConsumption);
-            if (Option.isNone(active))
-              return yield* new InvalidRead({
-                message: "Frame runner has no consumption",
-                status: 409,
-                problem: "recording.context",
-              });
-            const previous = active.value;
-            const independent =
-              !recorded &&
-              (update || (carriage instanceof FrameCarriage && !!carriage.subscription));
-            const current = independent
-              ? yield* readSets.open(
-                  carriage instanceof FrameCarriage && carriage.envelope
-                    ? {
-                        ...frameRecipe,
-                        key: "resource.notification",
-                        input: json({ reading, envelope: carriage.envelope }),
-                      }
-                    : previous.recipe,
-                  null,
-                )
-              : previous;
-            if (independent) activeFrames.set(current, frameOwner);
-            readyFrames.delete(current);
-            if (!update && carriage) frameRuns.set(carriage, scoped(current));
-            return yield* Effect.tryPromise({
-              try: async () => {
-                try {
-                  if (released)
-                    throw new InvalidRead({
-                      message: "Resource subscription is closed",
-                      status: 409,
-                      problem: "recording.context",
+      const source = consumption ? sources(consumption) : undefined;
+      return {
+        ...(graph && source
+          ? {
+              readGraph: async () => {
+                const port = inputPort({
+                  leaves: registeredReads.leaves,
+                  timeline,
+                  source,
+                  workspace,
+                  marks,
+                  run: scoped(consumption!),
+                  evaluation: consumption!.id,
+                  origin: () => inputs.source,
+                  revision: invalidations.revision,
+                });
+                return graph.publication
+                  ? graph.publish(
+                      publications,
+                      canonicalJson([identity.caller, graph.publication.subscription]),
+                      graph.publication.generation,
+                      port,
+                      history && writer && historyDocument.success
+                        ? async (publication) => {
+                            // Live inventory and seal stay awaited outside History.record (fail closed); only keep/append may fail open (K4).
+                            const row = await scoped(consumption!)(
+                              inventory
+                                .document(historyDocument.data)
+                                .pipe(Effect.provideService(RequestIdentity, identity)),
+                            );
+                            const address = addressSchema.parse(row.address);
+                            await complete(consumption!);
+                            const raw = web.headers.get("x-pe-history-page");
+                            const pose = raw
+                              ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw)))
+                              : {
+                                  instance: graph.name,
+                                  route: graph.name.split(".")[0]!,
+                                  page: {},
+                                  href: `/${graph.name.split(".")[0]}`,
+                                };
+                            return history.record(
+                              canonicalJson([identity.caller, graph.publication!.subscription]),
+                              graph.name,
+                              pose,
+                              address,
+                              row,
+                              publication,
+                            );
+                          }
+                        : undefined,
+                      admission,
+                    )
+                  : graph.evaluate(port).catch((error: unknown) => {
+                      if (isDoorFailure(error)) throw error;
+                      throw new InvalidRead({
+                        message: error instanceof Error ? error.message : String(error),
+                        status: 409,
+                        problem: "read.refresh-needed",
+                      });
                     });
-                  if (update) await scoped(current)(current.linkReadSet("value", previous.id));
-                  else if (carriage instanceof FrameCarriage && carriage.subscription)
-                    await scoped(current)(
-                      current.linkReadSet("subscription", carriage.subscription),
-                    );
-                  if (ref && writer && !writer.capture.truncated())
-                    await scoped(current)(
-                      inventory.document(ref).pipe(
-                        Effect.provideService(RequestIdentity, identity),
-                        Effect.catch(() => {
-                          const at = writer.capture.begin();
-                          return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op: "inventory.document" });
-                        }),
-                      ),
-                    );
-                  const value = ref ? await scoped(current)(marks.readFrame(ref, key, at)) : null;
-                  if (!released) await complete(current);
-                  return value;
-                } finally {
-                  await finishFrame(current);
-                }
               },
-              catch: (error) =>
-                isDoorFailure(error)
-                  ? error
-                  : new InvalidRead({
-                      message: String(error),
-                      status: 409,
-                      problem: "recording.context",
-                    }),
-            });
-          }),
-        );
-      })(observeResources(workspace, undefined, retainedResource, work))(reading, publish, after);
-      return () => {
-        released = true;
-        release();
-        for (const current of readyFrames) void finishFrame(current);
-        readyFrames.clear();
-        if (writer?.capture.truncated())
-          for (const [current, owner] of activeFrames)
-            if (owner === frameOwner) void finishFrame(current);
-      };
-    };
-    const observe: ResourceObserver = (reading, publish, after) => {
-      // A read publication's invalidation rides the tab's one stream (HTTP/1.1 gives an origin 6
-      // sockets; a stream per read starved the rest). Metadata only, per caller: the value travels
-      // once in the read response. It is answered before the lanes part, so it opens no read set
-      // and consumes no recording, as the retired /pe/read-events did not.
-      if (reading.kind === "publication") {
-        const key = readingKey(reading);
-        const { generation } = reading;
-        let answered = false;
-        const stop = invalidations.observePublication(
-          canonicalJson([identity.caller, reading.subscription]),
-          generation,
-          (publication) => {
-            answered = true;
-            publish({
-              kind: "snapshot",
-              key,
-              value: { generation, version: publication.version, state: publication.state },
-            });
-          },
-          { recipe: "open.documents", observe: fallback },
-        );
-        // Every key is answered once, so a stream that carries only this key is never silent.
-        if (!answered)
-          publish({ kind: "snapshot", key, value: { generation, version: 0, state: "absent" } });
-        return stop;
-      }
-      if (!recorded) return observeFrame(reading, publish, after);
-      let released = false,
-        release = () => {};
-      void invoke(
-        readSets.open({ key: "resource.frame", input: json(reading), scope: recipe.scope }, null),
-      )
-        .then(async (current) => {
-          if (released) {
-            await invoke(current.close);
+            }
+          : {}),
+        ...(source && {
+          work: source.inputs!.work,
+          document: (ref: import("@pe/agent-contracts").DocumentRef) =>
+            runPods(
+              {},
+              Effect.provide(
+                inventory.document(ref),
+                Context.add(admitted, CurrentInputConsumption, consumption!),
+              ),
+            ),
+        }),
+        observe,
+        closeResources: () => {
+          closingResources = true;
+          closeResources();
+        },
+        resourceOwner: connectionOwner,
+        finish: async (result) => {
+          if (stream) {
+            if (consumption && ("error" in result || !result.response.ok))
+              await invoke(consumption.close);
             return;
           }
           try {
-            const stop = observeFrame(
-              reading,
-              (frame, carriage) => {
-                if (frame.kind !== "failure") {
-                  publish(frame, carriage);
-                  return;
-                }
-                void finishFrame(current).then(() => {
-                  if (!released) publish(frame, carriage);
-                });
-              },
-              after,
-              current,
-            );
-            release = () => {
-              stop();
-              void finishFrame(current);
-            };
-          } catch (error) {
-            await finishFrame(current);
-            throw error;
+            if ("response" in result && result.response.ok) {
+              if (!graph?.publication || !history || !writer || !historyDocument.success)
+                await complete(consumption!);
+            }
+          } catch {
+            const at = writer?.capture.begin();
+            if (at != null)
+              await invoke(
+                writer!.capture.stop(at, "io", {
+                  site: "builtin",
+                  op: consumption?.recipe.key ?? "read.finish",
+                }),
+              );
+          } finally {
+            if (admission) web.signal.removeEventListener("abort", admission.close);
+            admission?.close();
+            if (consumption) await invoke(consumption.close);
           }
-        })
-        .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          if (!released)
-            publish({
-              kind: "failure",
-              key: readingKey(reading),
-              error: message,
-              failure: {
-                kind: "failed",
-                code: isDoorFailure(error) ? error.problem : "ReadingFailed",
-                message,
-              },
-            });
-        });
-      return () => {
-        released = true;
-        release();
+        },
       };
-    };
-    const source = consumption ? sources(consumption) : undefined;
-    return {
-      ...(graph && source
-        ? {
-            readGraph: async () => {
-              const port = inputPort({
-                leaves: registeredReads.leaves,
-                timeline,
-                source,
-                workspace,
-                marks,
-                run: scoped(consumption!),
-                evaluation: consumption!.id,
-                origin: () => inputs.source,
-                revision: invalidations.revision,
-              });
-              return graph.publication
-                ? graph.publish(
-                    publications,
-                    canonicalJson([identity.caller, graph.publication.subscription]),
-                    graph.publication.generation,
-                    port,
-                    history && writer && historyDocument.success
-                      ? async (publication) => {
-                          // Live inventory and seal stay awaited outside History.record (fail closed); only keep/append may fail open (K4).
-                          const row = await scoped(consumption!)(
-                            inventory
-                              .document(historyDocument.data)
-                              .pipe(Effect.provideService(RequestIdentity, identity)),
-                          );
-                          const address = addressSchema.parse(row.address);
-                          await complete(consumption!);
-                          const raw = web.headers.get("x-pe-history-page");
-                          const pose = raw
-                            ? historyPoseSchema.parse(JSON.parse(decodeURIComponent(raw)))
-                            : {
-                                instance: graph.name,
-                                route: graph.name.split(".")[0]!,
-                                page: {},
-                                href: `/${graph.name.split(".")[0]}`,
-                              };
-                          return history.record(
-                            canonicalJson([identity.caller, graph.publication!.subscription]),
-                            graph.name,
-                            pose,
-                            address,
-                            row,
-                            publication,
-                          );
-                        }
-                      : undefined,
-                    admission,
-                  )
-                : graph.evaluate(port).catch((error: unknown) => {
-                    if (isDoorFailure(error)) throw error;
-                    throw new InvalidRead({
-                      message: error instanceof Error ? error.message : String(error),
-                      status: 409,
-                      problem: "read.refresh-needed",
-                    });
-                  });
-            },
-          }
-        : {}),
-      ...(source && {
-        work: source.inputs!.work,
-        document: (ref: import("@pe/agent-contracts").DocumentRef) =>
-          runPods(
-            {},
-            Effect.provide(
-              inventory.document(ref),
-              Context.add(admitted, CurrentInputConsumption, consumption!),
-            ),
-          ),
-      }),
-      observe,
-      closeResources: () => {
-        closingResources = true;
-        closeResources();
-      },
-      resourceOwner: connectionOwner,
-      finish: async (result) => {
-        if (stream) {
-          if (consumption && ("error" in result || !result.response.ok))
-            await invoke(consumption.close);
-          return;
-        }
-        try {
-          if ("response" in result && result.response.ok) {
-            if (!graph?.publication || !history || !writer || !historyDocument.success)
-              await complete(consumption!);
-          }
-        } catch {
-          const at = writer?.capture.begin();
-          if (at != null) await invoke(writer!.capture.stop(at, "io", { site: "builtin", op: consumption?.recipe.key ?? "read.finish" }));
-        } finally {
-          if (admission) web.signal.removeEventListener("abort", admission.close);
-          admission?.close();
-          if (consumption) await invoke(consumption.close);
-        }
-      },
-    };
     } catch (error) {
       if (admission) web.signal.removeEventListener("abort", admission.close);
       admission?.close();
@@ -1178,7 +1261,12 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           yield* inventory.document({ session: session.sessionId, openId: openDocumentId }).pipe(
             Effect.catch(() => {
               const at = writer.capture.begin();
-              return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op: "inventory.document" });
+              return at === null
+                ? Effect.void
+                : writer.capture.stop(at, "unsupported", {
+                    site: "builtin",
+                    op: "inventory.document",
+                  });
             }),
           );
         return response;
@@ -1240,9 +1328,8 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
     >,
   ) {
     yield* admitNativeCaller(raw.key);
-    const takingId = lane.kind === "recording"
-      ? lane.bindings?.get(yield* nativeInputIdentity(raw))
-      : undefined;
+    const takingId =
+      lane.kind === "recording" ? lane.bindings?.get(yield* nativeInputIdentity(raw)) : undefined;
     const root = yield* readSets.open(
       { key: "native.call", input: json(raw), scope: canonicalJson(raw.scope) },
       takingId === undefined ? null : { takingId },
@@ -1260,7 +1347,9 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         }).pipe(
           Effect.catch(() => {
             const at = writer.capture.begin();
-            return at === null ? Effect.void : writer.capture.stop(at, "unsupported", { site: "builtin", op });
+            return at === null
+              ? Effect.void
+              : writer.capture.stop(at, "unsupported", { site: "builtin", op });
           }),
         );
       }
@@ -1344,17 +1433,19 @@ export const readInputRoutes = (
   ).pipe(Layer.provide(httpProblems));
 
 /** Built-in domain registration lives here; the HTTP kernel composes this module without route knowledge. */
-export const builtinFileLayer = () => Layer.unwrap(Effect.promise(async () => {
-  await contentRootsReady();
-  return DuctFiles.layer({
-    firm: () => {
-      const root = contentFirmHome().root;
-      return root && join(root, productPathNames.homeSettingsDirectoryName);
-    },
-    catalogs: contentHomes(),
-  });
-}));
-export const builtinFileRoutes = ductCatalogsRoute;
+export const builtinFileLayer = () =>
+  Layer.unwrap(
+    Effect.promise(async () => {
+      await contentRootsReady();
+      return DuctFiles.layer(hostState().home, {
+        firm: () => {
+          const root = contentFirmHome().root;
+          return root && join(root, productPathNames.homeSettingsDirectoryName);
+        },
+        catalogs: contentHomes(),
+      });
+    }),
+  );
 export const defaultReadOwner = (
   inputs: HostInputContext["Service"],
   options: Omit<ReadOwnerOptions, "live"> & {

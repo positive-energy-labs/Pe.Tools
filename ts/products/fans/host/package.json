@@ -8,8 +8,6 @@
     "./fan-calc": "./src/fan-calc.ts",
     "./host": "./src/host.ts",
     "./tests/closed-fan.fixture": "./src/tests/closed-fan.fixture.ts",
-    "./tests/fans-native.fixture": "./src/tests/fans-native.fixture.ts",
-    "./tests/fans-work-fixture": "./src/tests/fans-work-fixture.ts",
     "./tests/native-recordings/fans-accessory-initial.json": "./src/tests/native-recordings/fans-accessory-initial.json",
     "./tests/native-recordings/fans-accessory-missing.json": "./src/tests/native-recordings/fans-accessory-missing.json"
   },
@@ -18,32 +16,33 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
-    "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "@pe/fans-domain": "workspace:*",
-    "@pe/host": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "@pe/host-internal": "workspace:*",
+    "@pe/runtime": "workspace:*",
     "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
-    "@effect/platform-node": "4.0.2",
-    "@pe/ducts-web": "workspace:*",
-    "@pe/host-internal": "workspace:*",
-    "@pe/runtime": "workspace:*",
-    "effect": "4.0.2"
+    "vite-plus": "catalog:"
   },
   "pe": {
     "executors": {
       "module": "./actions",
       "factory": "fansExecutors",
-      "sheet": { "routes": ["fans"], "via": "losses" },
+      "sheet": {
+        "routes": [
+          "fans"
+        ],
+        "via": "losses"
+      },
       "arguments": [
         "bridge",
         "deps"

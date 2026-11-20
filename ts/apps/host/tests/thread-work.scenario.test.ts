@@ -45,19 +45,21 @@ test("explicit Pea opens travel live through world and cannot address another co
   };
   const open = (thread: string, route = "families") =>
     actAs({ kind: "pea", context: "test-context", thread: "selected-chat" }, () =>
-        app.fetch(
-          new Request(`http://host/pe/route-view/${route}/open`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ thread }),
-          }),
-        ),
+      app.fetch(
+        new Request(`http://host/pe/route-view/${route}/open`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ thread }),
+        }),
+      ),
     );
   try {
     expect((await next()).kind).toBe("gap");
     expect((await next()).kind).toBe("snapshot");
     expect((await open("other-chat")).status).toBe(403);
-    const foreignSet = await actAs({ kind: "pea", context: "test-context", thread: "selected-chat" }, () =>
+    const foreignSet = await actAs(
+      { kind: "pea", context: "test-context", thread: "selected-chat" },
+      () =>
         app.fetch(
           new Request("http://host/pe/route-view/families/set", {
             method: "POST",

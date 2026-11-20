@@ -16,7 +16,11 @@ import actual from "./fixtures/muas-correspondence.json" with { type: "json" };
 
 const document = "doc-a" as DocumentKey;
 const element = (uniqueId: string, doc?: string) =>
-  subjectCode({ keyKind: "UniqueId", key: uniqueId as UniqueId, ...(doc ? { source: doc as DocumentKey } : {}) });
+  subjectCode({
+    keyKind: "UniqueId",
+    key: uniqueId as UniqueId,
+    ...(doc ? { source: doc as DocumentKey } : {}),
+  });
 const key = (id: string): RecordingDiffKey => ({ kind: "element", id: element(id) });
 const entry = (
   key: RecordingDiffKey,
@@ -107,9 +111,9 @@ it("rejects duplicates, forged numeric aliases, conflicting documents and unsupp
     reason: "duplicate-key",
   });
   for (const id of ['["doc-a",null,"123"]', element("unique-a", "other-document")]) {
-    expect(
-      compare([entry({ kind: "element", id: id as SubjectRefCode })], []),
-    ).toMatchObject({ reason: "invalid-identity" });
+    expect(compare([entry({ kind: "element", id: id as SubjectRefCode })], [])).toMatchObject({
+      reason: "invalid-identity",
+    });
   }
   expect(compare([entry({ kind: "loop" })], [])).toMatchObject({ reason: "unsupported-loop" });
 });

@@ -8,9 +8,10 @@ import {
 } from "@pe/agent-contracts";
 import { hostOperationDefinitionSchema } from "@pe/host-contracts/contracts";
 import { isTsOnlyOperationKey, tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
-import { invokeBridge, type RevitBridge } from "./bridge.ts";
-import { refused } from "./command-executor.ts";
-import { Refused } from "./control.ts";
+import { invokeBridge } from "./bridge.ts";
+import { type RevitBridge } from "@pe/host-internal/bridge";
+import { refused } from "@pe/host-internal/command-executor";
+import { Refused } from "@pe/host-internal/refused";
 import type { SdkSession } from "./sdk-session.ts";
 
 type CatalogEntry = { fingerprint: string; rows: Promise<unknown[]> };

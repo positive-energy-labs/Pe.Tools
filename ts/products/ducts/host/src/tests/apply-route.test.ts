@@ -9,30 +9,75 @@ import { ductActionExecutors } from "../action-runtime.ts";
  * apply retired the /duct-systems `rules` and `assumptions` cells under "duct-systems".
  */
 const role = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000005";
-const answer = { previewOnly: false, writes: [
-  { kind: "verdict", key: "open-end:101:1", outcome: "written" },
-  { kind: "fitting", id: 7, outcome: "written" },
-  { kind: "role", id: 5, outcome: "written" },
-] };
-const input = { terminals: [], components: [], equipment: [], terminalFlows: [], equipmentFlows: [], fittings: [{ id: 7, ruleKey: "elbow" }] };
+const answer = {
+  previewOnly: false,
+  writes: [
+    { kind: "verdict", key: "open-end:101:1", outcome: "written" },
+    { kind: "fitting", id: 7, outcome: "written" },
+    { kind: "role", id: 5, outcome: "written" },
+  ],
+};
+const input = {
+  terminals: [],
+  components: [],
+  equipment: [],
+  terminalFlows: [],
+  equipmentFlows: [],
+  fittings: [{ id: 7, ruleKey: "elbow" }],
+};
 
-async function apply(executor: { run: (ctx: never, execution: never) => Effect.Effect<unknown, unknown> }, route: string) {
+async function apply(
+  executor: { run: (ctx: never, execution: never) => Effect.Effect<unknown, unknown> },
+  route: string,
+) {
   const key = { binding: "open", route, target: null, open: { session: "A", openId: "doc" } };
-  const retireWork = vi.fn((_key: unknown, _route: string, paths: readonly WorkPath[]) => Effect.succeed({ retired: [...paths], revision: 2 }));
-  const ctx = { admission: { target: { kind: "document", ref: { session: "A", openId: "doc" } }, input: { work: { key, revision: 1 } } } };
-  const execution = { prepared: { process: {}, input, dependencies: null, subjects: { [role]: "5" }, cells: [["roles", role]] },
-    step: () => Effect.succeed(answer), retireWork };
+  const retireWork = vi.fn((_key: unknown, _route: string, paths: readonly WorkPath[]) =>
+    Effect.succeed({ retired: [...paths], revision: 2 }),
+  );
+  const ctx = {
+    admission: {
+      target: { kind: "document", ref: { session: "A", openId: "doc" } },
+      input: { work: { key, revision: 1 } },
+    },
+  };
+  const execution = {
+    prepared: {
+      process: {},
+      input,
+      dependencies: null,
+      subjects: { [role]: "5" },
+      cells: [["roles", role]],
+    },
+    step: () => Effect.succeed(answer),
+    retireWork,
+  };
   await Effect.runPromise(executor.run(ctx as never, execution as never) as Effect.Effect<unknown>);
   return { key, calls: retireWork.mock.calls };
 }
 
 // A fake action that asks to retire one cell of each route, so the runtime's own filter is what is tested.
-const both = (bridge: never) => ductActionExecutors({
-  snapshot: async () => { throw Error("unused"); }, derive: async () => { throw Error("unused"); },
-  entry: { key: "ducts.heal", native: "ducts.heal.preview", refusePlan: null,
-    retires: () => [["assumptions", "open-end:101:1"], ["roles", role]] },
-  bindings: [["ducts.apply-heal", "heal", "apply"]],
-}, bridge)["ducts.apply-heal"] as never;
+const both = (bridge: never) =>
+  ductActionExecutors(
+    {
+      snapshot: async () => {
+        throw Error("unused");
+      },
+      derive: async () => {
+        throw Error("unused");
+      },
+      entry: {
+        key: "ducts.heal",
+        native: "ducts.heal.preview",
+        refusePlan: null,
+        retires: () => [
+          ["assumptions", "open-end:101:1"],
+          ["roles", role],
+        ],
+      },
+      bindings: [["ducts.apply-heal", "heal", "apply"]],
+    },
+    bridge,
+  )["ducts.apply-heal"] as never;
 
 test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
   const { key, calls } = await apply(both({} as never), "fans");
@@ -44,6 +89,11 @@ test("a /duct-systems apply still retires its own verdict, under its own route",
   expect(calls).toEqual([[key, "duct-systems", [["assumptions", "open-end:101:1"]]]]);
 });
 
-test.each(["unregistered", "__proto__", "constructor"])("refuses an apply from unknown route %s", async route => {
-  await expect(apply(both({} as never), route)).rejects.toThrow(`Duct actions are unavailable on route "${route}"`);
-});
+test.each(["unregistered", "__proto__", "constructor"])(
+  "refuses an apply from unknown route %s",
+  async (route) => {
+    await expect(apply(both({} as never), route)).rejects.toThrow(
+      `Duct actions are unavailable on route "${route}"`,
+    );
+  },
+);

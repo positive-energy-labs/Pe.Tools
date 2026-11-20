@@ -38,7 +38,13 @@ it("P-077 includes every suggested roster port, including two ports on one ERV",
   });
   const design = designOf();
   const base = publishedCalcExample();
-  const calcs = [0, 2].map(portIndex => ({ ...base, fan: { ...base.fan, unitId: 1, portIndex }, paths: [], legs: {}, walkedElementIds: [] }));
+  const calcs = [0, 2].map((portIndex) => ({
+    ...base,
+    fan: { ...base.fan, unitId: 1, portIndex },
+    paths: [],
+    legs: {},
+    walkedElementIds: [],
+  }));
   const value = pricingValue(snapshot, calcs, design);
   expect(value.calcs.map(({ fan }) => [fan.unitId, fan.portIndex])).toEqual([
     [1, 0],

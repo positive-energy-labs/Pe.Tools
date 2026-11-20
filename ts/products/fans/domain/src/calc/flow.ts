@@ -188,9 +188,8 @@ export function flowsOf(
     let cfm: number | null = null;
     let source: string | null = null;
     if (opts.only) {
-      [cfm, source] = i === opts.only.end
-        ? [opts.only.cfm, opts.only.source]
-        : [0, "outside chain"];
+      [cfm, source] =
+        i === opts.only.end ? [opts.only.cfm, opts.only.source] : [0, "outside chain"];
     } else if (e.end.kind === "sibling-fan") {
       [cfm, source] = [0, "sibling-fan"];
     } else if (isInflow(e)) {
@@ -247,7 +246,9 @@ export function flowsOf(
           closer: {
             kind: terminal ? "default" : "ruling",
             note: terminal
-              ? (terminalAt(e) == null && opts.terminalFlowNote ? opts.terminalFlowNote : "type the terminal's cfm, or confirm a better-covered airflow slot in settings")
+              ? terminalAt(e) == null && opts.terminalFlowNote
+                ? opts.terminalFlowNote
+                : "type the terminal's cfm, or confirm a better-covered airflow slot in settings"
               : "type the end shares, or set the unit design-flow parameter",
           },
         }),
@@ -321,7 +322,9 @@ export function flowsOf(
         at.cfm = null;
         at.missing.push(unknown.get(d.sibling)!);
       } else if (at.cfm != null) at.cfm += d.cfm;
-      at.sources.add(`sibling ${opts.name?.(s.end.fan!.unitId) ?? "unit"}: ${d.source ?? "unknown"}`);
+      at.sources.add(
+        `sibling ${opts.name?.(s.end.fan!.unitId) ?? "unit"}: ${d.source ?? "unknown"}`,
+      );
     });
   }
   return { end, endSource, leg, inflows, draws };

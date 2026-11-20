@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
-import { ORBIT_FOV, toCamera, type OrbitViewport } from "./orbit";
-import { newCamera, placeCamera, projectThrough, rayThrough, viewportProject } from "./projection";
+import { ORBIT_FOV, toCamera, type OrbitViewport } from "@pe/web-kernel/scene/orbit";
+import {
+  newCamera,
+  placeCamera,
+  projectThrough,
+  rayThrough,
+  viewportProject,
+} from "@pe/web-kernel/scene/projection";
 import { Vector3, OrthographicCamera } from "three";
-import { fromControls } from "./orbit";
+import { fromControls } from "@pe/web-kernel/scene/orbit";
 import { viewportCodec, orbitViewportSchema } from "@pe/agent-contracts";
 
 const bounds = { minX: 100, minY: 200, minZ: 0, maxX: 140, maxY: 230, maxZ: 12 };

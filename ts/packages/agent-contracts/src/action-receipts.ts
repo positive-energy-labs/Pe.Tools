@@ -409,12 +409,19 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
     ...(reason ? { reason } : {}),
     snapshots: row.snapshots?.map((snapshot) => snapshot.id) ?? [],
     ...(state === "refused" &&
-          row.state === "failed" &&
-          row.notDispatched &&
-          row.refusal?.kind !== "invalid" &&
-          row.refusal?.kind !== "held" &&
-          row.refusal?.kind !== "claimed"
-        ? { recovery: "retry" as const }
-        : {}),
+    row.state === "failed" &&
+    row.notDispatched &&
+    row.refusal?.kind !== "invalid" &&
+    row.refusal?.kind !== "held" &&
+    row.refusal?.kind !== "claimed"
+      ? { recovery: "retry" as const }
+      : {}),
   };
 }
+
+export type DetachedAction = {
+  state: "detached";
+  id: string;
+  key: string;
+  acceptance: "admitted" | "unknown";
+};

@@ -22,7 +22,7 @@ import {
 } from "./layers.ts";
 import { detailOf, type CalcBlocker } from "./tiers.ts";
 
-vi.mock("../../../../../apps/web/src/scene/ink.ts", () => ({ inkOf: () => new THREE.Color(0xffffff) }));
+vi.mock("@pe/web-kernel/scene/ink", () => ({ inkOf: () => new THREE.Color(0xffffff) }));
 
 const IN = 1 / 12;
 const conn = (
@@ -125,14 +125,81 @@ const EMPTY_INPUTS = {
   rulings: { joins: [], ends: [] },
   criteria: {
     velocityLimitFpm: {
-      supply: { value: 900, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"},
-      return: { value: 700, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"},
+      supply: {
+        value: 900,
+        source: "firm",
+        units: null,
+        version: null,
+        status: "valid",
+        author: null,
+        ref: "test",
+      },
+      return: {
+        value: 700,
+        source: "firm",
+        units: null,
+        version: null,
+        status: "valid",
+        author: null,
+        ref: "test",
+      },
     },
-    terminalDropInWg: { value: 0.03, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"},
-    autoJoinGapIn: { value: 3, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"},
-    healBoxIn: { value: 36, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"},
-    splitPolicy: { value: "even", source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"},
-    allowanceInWg: { supply: { value: 0, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"}, return: { value: 0, source: "firm" , units: null, version: null, status: "valid", author: null, ref: "test"} },
+    terminalDropInWg: {
+      value: 0.03,
+      source: "firm",
+      units: null,
+      version: null,
+      status: "valid",
+      author: null,
+      ref: "test",
+    },
+    autoJoinGapIn: {
+      value: 3,
+      source: "firm",
+      units: null,
+      version: null,
+      status: "valid",
+      author: null,
+      ref: "test",
+    },
+    healBoxIn: {
+      value: 36,
+      source: "firm",
+      units: null,
+      version: null,
+      status: "valid",
+      author: null,
+      ref: "test",
+    },
+    splitPolicy: {
+      value: "even",
+      source: "firm",
+      units: null,
+      version: null,
+      status: "valid",
+      author: null,
+      ref: "test",
+    },
+    allowanceInWg: {
+      supply: {
+        value: 0,
+        source: "firm",
+        units: null,
+        version: null,
+        status: "valid",
+        author: null,
+        ref: "test",
+      },
+      return: {
+        value: 0,
+        source: "firm",
+        units: null,
+        version: null,
+        status: "valid",
+        author: null,
+        ref: "test",
+      },
+    },
   },
   tables: {},
   assignments: {},

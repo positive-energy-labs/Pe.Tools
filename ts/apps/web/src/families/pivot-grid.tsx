@@ -33,7 +33,7 @@ const OVERSCAN = 3;
 import { ParameterMetadata, type ParameterMetadataRecord } from "./parameter-metadata";
 import type { OverlayCell, PatchOverlay } from "./patch-overlay";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
-import { revitFamily, type RevitObservationScope } from "#/revit/element-target";
+import { revitFamily, type RevitObservationScope } from "@pe/web-kernel/revit/element-target";
 
 const HOW = {
   type: "an explicit type cell",
@@ -314,7 +314,9 @@ export const TypeGrid = memo(function TypeGrid({
                 <TooltipHint content={`${type.familyName} · ${type.typeName}`} key={type.key}>
                   <div
                     role="columnheader"
-                    {...mention(subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] }))}
+                    {...mention(
+                      subjectCode({ keyKind: "name", key: [type.familyName, type.typeName] }),
+                    )}
                     aria-colindex={colStart + offset + 2}
                     aria-label={`${type.familyName} · ${type.typeName}`}
                     className="t-small flex items-center gap-1 border-b border-l px-1"

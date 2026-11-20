@@ -534,7 +534,7 @@ const snapshot: DuctSnapshot = {
       : [
           {
             id: row.id,
-    uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${row.id.toString(16).padStart(8, "0")}`,
+            uniqueId: `6d52156a-3876-4d76-b641-341454252f26-${row.id.toString(16).padStart(8, "0")}`,
             kind: row.k,
             category: row.k,
             type: NAMES[row.id] ?? null,

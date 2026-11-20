@@ -10,7 +10,13 @@ import {
   catalogWorkSpecs,
 } from "@pe/agent-contracts";
 
-import { actionPlace, actionRoute, capturedPlace, proposedRecord, receiptRoute } from "./chat-plugins";
+import {
+  actionPlace,
+  actionRoute,
+  capturedPlace,
+  proposedRecord,
+  receiptRoute,
+} from "./chat-plugins";
 
 const member = { pod: "mechanical", path: "settings/family.json" };
 /** The /pods Page a member opens on: the member as its one subject. */
@@ -87,7 +93,9 @@ describe("chat plugin records", () => {
     expect(actionRoute("instances.open")).toBe("open");
     // Route-free Work owns its commands without a Page (ADR 0030 rule 2).
     for (const [key, command] of Object.entries(catalogWorkCommands)) {
-      expect(Object.values(catalogWorkSpecs).some((spec) => spec.route === command.work.route)).toBe(true);
+      expect(
+        Object.values(catalogWorkSpecs).some((spec) => spec.route === command.work.route),
+      ).toBe(true);
       expect(actionRoute(key)).toBeNull();
     }
     // No pane declares these: the record keeps its receipt link instead of inventing an owner.
@@ -98,7 +106,17 @@ describe("chat plugin records", () => {
   });
 
   it("a findings.say names the route whose Work its receipt consumed, never the first route that declares findings (gate-1ebf1fb1: 'Pea ran write in Families' on a fan port)", () => {
-    const consumed = (route: string) => ({ consumes: [{ kind: "work", probe: { handle: { key: { binding: "address", route, target: "c:/model.rvt" }, revision: 1 } } }] }) as never;
+    const consumed = (route: string) =>
+      ({
+        consumes: [
+          {
+            kind: "work",
+            probe: {
+              handle: { key: { binding: "address", route, target: "c:/model.rvt" }, revision: 1 },
+            },
+          },
+        ],
+      }) as never;
     // No route declares the findings command (the mount adds it to each): the key alone names no route.
     expect(actionRoute("findings.say")).toBeNull();
     expect(receiptRoute("findings.say", consumed("fans"))).toBe("fans");
@@ -211,6 +229,9 @@ describe("chat plugin records", () => {
       },
       { ok: true, target: { session: "original-session", document: "C:/Models/Original.rvt" } },
     );
-    expect(record).toMatchObject({ changes: 2, place: { ok: true, page: { system: {kind:"ids",ids:["system-name:AHU-1"]} } } });
+    expect(record).toMatchObject({
+      changes: 2,
+      place: { ok: true, page: { system: { kind: "ids", ids: ["system-name:AHU-1"] } } },
+    });
   });
 });

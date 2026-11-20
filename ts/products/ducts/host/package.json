@@ -12,7 +12,6 @@
     "./ducts-files": "./src/ducts-files.ts",
     "./ducts-inputs": "./src/ducts-inputs.ts",
     "./ducts-readings": "./src/ducts-readings.ts",
-    "./tests/ducts-read.fixture": "./src/tests/ducts-read.fixture.ts",
     "./tests/fixtures/ducts-live-seal-20261102.json": "./src/tests/fixtures/ducts-live-seal-20261102.json",
     "./tests/native-recordings/driver-ducts.snapshot.roster.json": "./src/tests/native-recordings/driver-ducts.snapshot.roster.json",
     "./tests/native-recordings/driver-ducts.snapshot.walk.json": "./src/tests/native-recordings/driver-ducts.snapshot.walk.json",
@@ -28,12 +27,11 @@
     "test": "vp test"
   },
   "dependencies": {
+    "@pe/agent-contracts": "workspace:*",
     "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-contract": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
-    "@pe/agent-contracts": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
-    "@pe/host": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/host-internal": "workspace:*",
     "effect": "4.0.2",
@@ -42,9 +40,7 @@
   "devDependencies": {
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
-    "@pe/mcps": "workspace:*",
-    "@pe/runtime": "workspace:*"
+    "vite-plus": "catalog:"
   },
   "pe": {
     "executors": {
@@ -53,6 +49,10 @@
       "arguments": [
         "bridge"
       ]
+    },
+    "httpLayer": {
+      "module": "./ducts-files",
+      "export": "ductCatalogsRoute"
     }
   }
 }

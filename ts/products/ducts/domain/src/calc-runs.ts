@@ -12,7 +12,11 @@ import type { Leg, Calc as FanCalc } from "@pe/fans-contract/fan-calc";
 export type Calc = Omit<FanCalc, "claim"> & { claim: FanClaim };
 /** One priced line of a run: a leg of a fan calc, in the row shape the panes draw. */
 export type Row = DuctsPriceRow;
-export type Provisional = { worst: "near-miss" | "stretched" | "anomalous"; count: number; findingIds: string[] } | null;
+export type Provisional = {
+  worst: "near-miss" | "stretched" | "anomalous";
+  count: number;
+  findingIds: string[];
+} | null;
 
 export interface CalcRun {
   /** `<unit>:<port>/<side>/p<index>`: the path's identity on its calc. */
@@ -139,4 +143,6 @@ export const runTo = (calcs: readonly Calc[], terminal: number) =>
 
 /** The calcs whose walk reaches any of these elements. */
 export const calcsIn = (calcs: readonly Calc[], ids: ReadonlySet<number>) =>
-  calcs.filter((calc) => ids.has(calc.fan.unitId) || calc.walkedElementIds.some((id) => ids.has(id)));
+  calcs.filter(
+    (calc) => ids.has(calc.fan.unitId) || calc.walkedElementIds.some((id) => ids.has(id)),
+  );

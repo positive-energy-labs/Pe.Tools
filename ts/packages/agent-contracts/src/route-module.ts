@@ -1,6 +1,11 @@
 import type { z } from "zod";
 import { z as kernelZ } from "zod";
-import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
+import {
+  commandLink,
+  requireLinkedCatalog,
+  type CatalogAxes,
+  type LinkedCatalog,
+} from "./catalog.ts";
 import type { CatalogLink } from "./catalog.ts";
 import type { Command } from "./command.ts";
 import {
@@ -10,7 +15,6 @@ import {
   type HostRouteAdmissionPort,
   type HostAdmittedRoute,
 } from "./host-route-admission.ts";
-import { linkedCatalog } from "./pe-api.ts";
 import { bare, manyCodec } from "./route-field.ts";
 import type { RouteGraph } from "./route-graph.ts";
 import { validateRouteGraph } from "./route-graph.ts";
@@ -71,6 +75,7 @@ export interface ExecutableRouteModule<B> extends RouteModule<Record<string, B>>
 export function validateExecutableRouteModule<B>(
   module: ExecutableRouteModule<B>,
   actualHash: string,
+  catalog: LinkedCatalog,
 ) {
   validateRouteModule(module);
   if (module.moduleHash !== actualHash) throw Error("Route module hash mismatch");
@@ -78,7 +83,7 @@ export function validateExecutableRouteModule<B>(
     if (entry.needs !== "nothing" && entry.axes?.subject === "None")
       throw Error(`${key}: a document requirement cannot declare Subject None`);
   requireLinkedCatalog(
-    linkedCatalog().extend(
+    catalog.extend(
       Object.entries(module.entries).map(([key, entry]) => commandLink(key, entry, entry.axes)),
     ),
   );
@@ -441,7 +446,8 @@ export class AdmittedRoute<
         if (fingerprint !== owned.fingerprint) throw Error("Builtin closure fingerprint mismatch");
       } else {
         envelope = fingerprintEnvelope(evidence.artifact);
-        if (evidence.host) hostModule = captureHostModule(evidence.loadedBindings as HostRouteModule);
+        if (evidence.host)
+          hostModule = captureHostModule(evidence.loadedBindings as HostRouteModule);
         else loadedBindings = routeBindingSchema.parse(evidence.loadedBindings);
         // Copy all loader evidence before the first await; callers cannot race verification.
         const contracts = evidence.contracts.map((item) => ({
@@ -616,7 +622,13 @@ export class AdmittedRoute<
             ],
           };
         try {
-          return admitHostProjection(captureHostModule(module), hostModule, source ?? {data:envelope!.data}, fingerprint, source ? "builtin-closure" : "pod-bytes");
+          return admitHostProjection(
+            captureHostModule(module),
+            hostModule,
+            source ?? { data: envelope!.data },
+            fingerprint,
+            source ? "builtin-closure" : "pod-bytes",
+          );
         } catch (error) {
           return {
             ok: false,
@@ -786,12 +798,26 @@ const hostBindings = new WeakMap<HostAdmittedRoute, HostRouteModule>();
 function admitHostProjection(
   module: HostRouteModule,
   captured: HostRouteModule,
-  closure: Pick<BuiltinClosure,"data">,
+  closure: Pick<BuiltinClosure, "data">,
   fingerprint: RouteFingerprint,
   source: "builtin-closure" | "pod-bytes" = "builtin-closure",
 ): HostRouteAdmission {
   const wire = RouteGraphWire.safeParse(module.data);
-  const decoded = wire.success ? { ok: true as const, data: wire.data } : { ok: false as const, diagnostics: wire.error.issues.map(issue => routeDiagnostic(module.data, issue.path.join("."), "", "RouteGraphWire", issue.message, "schema")) };
+  const decoded = wire.success
+    ? { ok: true as const, data: wire.data }
+    : {
+        ok: false as const,
+        diagnostics: wire.error.issues.map((issue) =>
+          routeDiagnostic(
+            module.data,
+            issue.path.join("."),
+            "",
+            "RouteGraphWire",
+            issue.message,
+            "schema",
+          ),
+        ),
+      };
   if (!decoded.ok) return decoded;
   const data = decoded.data;
   const errors: RouteDiagnostic[] = [];
@@ -867,7 +893,6 @@ function admitHostProjection(
         (state.schemaVersion ?? 1) !== work.version
       )
         fail("workState", "Work spec differs from the declared owner/schema/version");
-
     }
   } else if (state) fail("workState", "Only a Work owner declares a Work spec");
   if (errors.length) return { ok: false, diagnostics: errors };

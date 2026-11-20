@@ -8,7 +8,7 @@
 import { expect, test } from "vite-plus/test";
 import { module as chat } from "../chat/route";
 import { DOCK_PANES } from "../workbench/dock-layout";
-import { fillBody, isBody, scrollBody, scrollTracks } from "./body";
+import { fillBody, isBody, scrollBody, scrollTracks } from "@pe/web-kernel/route/body";
 
 test("the brand is the only way to make a Body", () => {
   expect(isBody(scrollBody("a"))).toBe(true);
@@ -23,7 +23,9 @@ test("/pea declares two fill bodies, threads and chat, each owning its track", (
     threads: "fill",
     chat: "fill",
   });
-  expect(scrollTracks(panes), "the kernel draws no scroll track around a body that owns one").toBe(0);
+  expect(scrollTracks(panes), "the kernel draws no scroll track around a body that owns one").toBe(
+    0,
+  );
 });
 
 test("the dock hosts two route surfaces, so neither dock pane adds a track", () => {

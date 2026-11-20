@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { decode, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
-import { VALUE_SOURCES, validValueSchema, valueResolutionSchema, type ValueResolution } from "@pe/agent-contracts/work-value";
+import {
+  VALUE_SOURCES,
+  validValueSchema,
+  valueResolutionSchema,
+  type ValueResolution,
+} from "@pe/agent-contracts/work-value";
 import type { Author } from "@pe/agent-contracts/draft";
 import { settingWrittenSchema } from "@pe/agent-contracts/tiered-setting";
 import { schemaOf, type Domain } from "@pe/agent-contracts/slots/sheet";
@@ -8,15 +13,32 @@ import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 export type { DuctUnitKind } from "@pe/host-contracts/generated";
 export type DuctFlow = number;
-export const DUCT_PARAMETER_KEYS = ["requiredEsp", "ratedEsp", "fanFlow", "terminalFlow", "terminalDrop", "componentDrop", "fittingCoefficient"] as const;
-export const ductParameterNameSchema = (key: typeof DUCT_PARAMETER_KEYS[number]) => key === "requiredEsp" ? z.string().trim() : z.string().min(1);
+export const DUCT_PARAMETER_KEYS = [
+  "requiredEsp",
+  "ratedEsp",
+  "fanFlow",
+  "terminalFlow",
+  "terminalDrop",
+  "componentDrop",
+  "fittingCoefficient",
+] as const;
+export const ductParameterNameSchema = (key: (typeof DUCT_PARAMETER_KEYS)[number]) =>
+  key === "requiredEsp" ? z.string().trim() : z.string().min(1);
 const elementId = z.number().int().positive();
 const portIndex = z.number().int().nonnegative();
-const elementSubjectMessage = "keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused";
-export const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(code => {
-  const ref = decode(code); return ref.ok && ref.value.keyKind === "UniqueId";
-}, { message: elementSubjectMessage });
-export const elementSubjectRecord = <T extends z.ZodType>(value: T) => z.record(elementSubjectSchema, value, { error: issue => issue.code === "invalid_key" ? elementSubjectMessage : undefined });
+const elementSubjectMessage =
+  "keys are UniqueId SubjectRefs (UniqueId:<uid>); a raw element id is refused";
+export const elementSubjectSchema: z.ZodType<string> = subjectRefCodeSchema.refine(
+  (code) => {
+    const ref = decode(code);
+    return ref.ok && ref.value.keyKind === "UniqueId";
+  },
+  { message: elementSubjectMessage },
+);
+export const elementSubjectRecord = <T extends z.ZodType>(value: T) =>
+  z.record(elementSubjectSchema, value, {
+    error: (issue) => (issue.code === "invalid_key" ? elementSubjectMessage : undefined),
+  });
 
 /** Resolved engine inputs expose the winning Work layer and its revision (ADR 0028). */
 export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
@@ -49,13 +71,13 @@ export const ductsCriteriaValuesSchema = z.strictObject({
 export type DuctsCriteriaValues = z.infer<typeof ductsCriteriaValuesSchema>;
 /** Engine defaults used when no home states a criterion; shared by pricing and sheet cells. */
 export const DUCTS_DEFAULT_CRITERIA: DuctsCriteriaValues = {
-    velocityLimitFpm: { supply: 900, return: 700 },
-    terminalDropInWg: 0.03,
-    autoJoinGapIn: 3,
-    healBoxIn: 36,
-    splitPolicy: "even",
-    allowanceInWg: { supply: 0, return: 0 },
-  };
+  velocityLimitFpm: { supply: 900, return: 700 },
+  terminalDropInWg: 0.03,
+  autoJoinGapIn: 3,
+  healBoxIn: 36,
+  splitPolicy: "even",
+  allowanceInWg: { supply: 0, return: 0 },
+};
 
 /**
  * Work `criteria` over the served home tiers: every criterion, and
@@ -76,26 +98,65 @@ export type DuctsCriteriaLayer = z.infer<typeof ductsCriteriaLayerSchema>;
  * design sheet draws one row per cell). A sided criterion is a cell per side; `layer` is where the
  * cell's value sits in the criteria layer the engine resolves over the served home tiers.
  */
-const criterion = <const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?], const D extends Domain>(layer: L, domain: D) =>
-  ({ layer, domain, value: schemaOf(domain), unit: domain.kind === "number" ? domain.unit : undefined });
+const criterion = <
+  const L extends readonly [keyof DuctsCriteriaLayer, ("supply" | "return")?],
+  const D extends Domain,
+>(
+  layer: L,
+  domain: D,
+) => ({
+  layer,
+  domain,
+  value: schemaOf(domain),
+  unit: domain.kind === "number" ? domain.unit : undefined,
+});
 /** Criteria cell locators and domains feed the same input table as the fan cells. */
 export const DUCTS_CRITERIA_CELLS = {
-  velocitySupplyFpm: criterion(["velocityLimitFpm", "supply"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
-  velocityReturnFpm: criterion(["velocityLimitFpm", "return"], { kind: "number", exclusiveMin: 0, unit: "fpm" }),
+  velocitySupplyFpm: criterion(["velocityLimitFpm", "supply"], {
+    kind: "number",
+    exclusiveMin: 0,
+    unit: "fpm",
+  }),
+  velocityReturnFpm: criterion(["velocityLimitFpm", "return"], {
+    kind: "number",
+    exclusiveMin: 0,
+    unit: "fpm",
+  }),
   terminalDropInWg: criterion(["terminalDropInWg"], { kind: "number", min: 0, unit: "in-wg" }),
   autoJoinGapIn: criterion(["autoJoinGapIn"], { kind: "number", min: 0, unit: "in" }),
   healBoxIn: criterion(["healBoxIn"], { kind: "number", min: 0, unit: "in" }),
-  splitPolicy: criterion(["splitPolicy"], { kind: "enum", shape: splitPolicy, choices: ["even", "proportional"].map(value => ({ value, label: value })) }),
-  allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], { kind: "number", min: 0, unit: "in-wg" }),
-  allowanceReturnInWg: criterion(["allowanceInWg", "return"], { kind: "number", min: 0, unit: "in-wg" }),
+  splitPolicy: criterion(["splitPolicy"], {
+    kind: "enum",
+    shape: splitPolicy,
+    choices: ["even", "proportional"].map((value) => ({ value, label: value })),
+  }),
+  allowanceSupplyInWg: criterion(["allowanceInWg", "supply"], {
+    kind: "number",
+    min: 0,
+    unit: "in-wg",
+  }),
+  allowanceReturnInWg: criterion(["allowanceInWg", "return"], {
+    kind: "number",
+    min: 0,
+    unit: "in-wg",
+  }),
 };
 
 export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
 const isCriteriaCell = (cell: string): cell is DuctsCriteriaCell => cell in DUCTS_CRITERIA_CELLS;
 /** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
-export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>>): DuctsCriteriaLayer {
+export function criteriaLayer(
+  cells: Readonly<
+    Partial<Record<DuctsCriteriaCell, { readonly edit?: { readonly value?: unknown } | null }>>
+  >,
+): DuctsCriteriaLayer {
   const layer: Record<string, unknown> = {};
-  for (const [cell, { layer: [key, side] }] of Object.entries(DUCTS_CRITERIA_CELLS)) {
+  for (const [
+    cell,
+    {
+      layer: [key, side],
+    },
+  ] of Object.entries(DUCTS_CRITERIA_CELLS)) {
     const value = cells[cell as DuctsCriteriaCell]?.edit?.value;
     if (value === undefined) continue;
     if (side) layer[key] = { ...(layer[key] as object | undefined), [side]: value };
@@ -104,13 +165,31 @@ export function criteriaLayer(cells: Readonly<Partial<Record<DuctsCriteriaCell, 
   return layer as DuctsCriteriaLayer;
 }
 /** Who staged each criterion cell and its ref (contract amendment 2): the host-stamped `by`, and the cited ref or the cell's location. A cell with no `by` has no entry, so its criterion resolves invalid. */
-export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, { readonly invalid?: string; readonly edit?: { readonly by?: Author; readonly ref?: string } | null }>>>, work = "duct-systems") {
-  const meta: Partial<Record<DuctsCriteriaCell, { by: Author; ref: string } | { invalid: string; ref: string }>> = {};
+export function criteriaMeta(
+  cells: Readonly<
+    Partial<
+      Record<
+        DuctsCriteriaCell,
+        {
+          readonly invalid?: string;
+          readonly edit?: { readonly by?: Author; readonly ref?: string } | null;
+        }
+      >
+    >
+  >,
+  work = "duct-systems",
+) {
+  const meta: Partial<
+    Record<DuctsCriteriaCell, { by: Author; ref: string } | { invalid: string; ref: string }>
+  > = {};
   for (const cell of Object.keys(DUCTS_CRITERIA_CELLS)) {
     if (!isCriteriaCell(cell)) continue;
     // An unreadable stored criterion keeps its marker, so the resolver holds it invalid instead of falling to the firm value (P-040).
     const invalid = cells[cell]?.invalid;
-    if (invalid) { meta[cell] = { invalid, ref: `work:${work}/criteria/${cell}` }; continue; }
+    if (invalid) {
+      meta[cell] = { invalid, ref: `work:${work}/criteria/${cell}` };
+      continue;
+    }
     const edit = cells[cell]?.edit;
     if (edit?.by) meta[cell] = { by: edit.by, ref: edit.ref ?? `work:${work}/criteria/${cell}` };
   }
@@ -118,7 +197,9 @@ export function criteriaMeta(cells: Readonly<Partial<Record<DuctsCriteriaCell, {
 }
 /** The cell a criterion (and side) is staged in. */
 export const criteriaCellOf = (key: string, side?: string) =>
-  (Object.entries(DUCTS_CRITERIA_CELLS).find(([, c]) => c.layer[0] === key && c.layer[1] === side)?.[0] ?? null) as DuctsCriteriaCell | null;
+  (Object.entries(DUCTS_CRITERIA_CELLS).find(
+    ([, c]) => c.layer[0] === key && c.layer[1] === side,
+  )?.[0] ?? null) as DuctsCriteriaCell | null;
 /** A criteria edit: a value writes that criterion or side, null removes it from the project layer. */
 export const ductsCriteriaEditsSchema = z.strictObject({
   velocityLimitFpm: sided(num.positive().nullable().optional()).optional(),
@@ -188,10 +269,18 @@ export const ductsFirmSchema = z.strictObject({
   version: z.string().min(1).optional(),
   criteria: ductsCriteriaLayerSchema.optional(),
   designFriction: z.number().positive().optional(),
-  parameters: z.partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string()).superRefine((names, ctx) => {
-    for (const key of DUCT_PARAMETER_KEYS) if (names[key] !== undefined && !ductParameterNameSchema(key).safeParse(names[key]).success)
-      ctx.addIssue({ code: "custom", path: [key], message: "Parameter name must not be empty" });
-  }).optional(),
+  parameters: z
+    .partialRecord(z.enum(DUCT_PARAMETER_KEYS), z.string())
+    .superRefine((names, ctx) => {
+      for (const key of DUCT_PARAMETER_KEYS)
+        if (names[key] !== undefined && !ductParameterNameSchema(key).safeParse(names[key]).success)
+          ctx.addIssue({
+            code: "custom",
+            path: [key],
+            message: "Parameter name must not be empty",
+          });
+    })
+    .optional(),
   written: settingWrittenSchema.optional(),
 });
 export type DuctsFirmFile = z.infer<typeof ductsFirmSchema>;
@@ -249,7 +338,14 @@ export const calcEditsSchema = z.strictObject({
 });
 /** Every edit the shared sheet engine prices (`editPatches`); each route's door admits only its own Work's keys. */
 export type CalcEdits = z.infer<typeof calcEditsSchema>;
-const FANS_EDITS = { refs: true, flows: true, terminalDrops: true, componentDrops: true, equipmentFlows: true, roles: true } as const;
+const FANS_EDITS = {
+  refs: true,
+  flows: true,
+  terminalDrops: true,
+  componentDrops: true,
+  equipmentFlows: true,
+  roles: true,
+} as const;
 /** /ducts' edit door (ruling 2026-11-10, no cross-route write): Ducts Work only; the Fans inputs are /fans' door. */
 export const ductsCalcEditsSchema = calcEditsSchema.omit(FANS_EDITS);
 export type DuctsCalcEdits = z.infer<typeof ductsCalcEditsSchema>;

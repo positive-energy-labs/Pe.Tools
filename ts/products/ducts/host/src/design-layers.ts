@@ -1,11 +1,11 @@
-import { workRead } from "@pe/host/reads/inputs";
+import { workRead } from "@pe/host-internal/reads/work";
 import { z } from "zod";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { documentRefSchema, settingTiersSchema } from "@pe/agent-contracts";
 import { firmReading } from "./ducts-files.ts";
-import { read, workScope } from "@pe/host/read-graph";
+import { read, workScope } from "@pe/host-internal/read-graph";
 export const designLayers = read("ducts.design-layers", {
   input: documentRefSchema,
   output: z.object({

@@ -22,8 +22,12 @@ export const familyDraftSchema = z
     spec: z
       .object({ member: z.object({ pod: z.string(), path: z.string() }), doc: parsedDocViewSchema })
       .nullable()
-      .default(null).meta({ title: "Attached PDF" }),
-    cells: z.record(z.string(), settingsFieldStateSchema).default({}).meta({ title: "Family fields" }),
+      .default(null)
+      .meta({ title: "Attached PDF" }),
+    cells: z
+      .record(z.string(), settingsFieldStateSchema)
+      .default({})
+      .meta({ title: "Family fields" }),
     /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
     takenAt: z.string().nullable().default(null).meta({ title: "Captured at" }),
   })

@@ -180,7 +180,13 @@ it("mints fitting values without duct-systems rulings", () => {
   const { fittingRules } = mintWriteRequest(p.sheet.claim, p.sheet, p.input, p.context);
   expect([...fittingRules]).toEqual([[2, "elbow-1d-gt10"]]);
   expect(request).not.toHaveProperty("fittingRules");
-  const scoped = scopeApplyRequest(request, p.input.snapshot.store, [], p.input.snapshot, fittingRules);
+  const scoped = scopeApplyRequest(
+    request,
+    p.input.snapshot.store,
+    [],
+    p.input.snapshot,
+    fittingRules,
+  );
   expect(scoped.fittings).toEqual([]);
   expect(scoped.store?.instances).toEqual({});
 });
@@ -188,14 +194,30 @@ it("mints fitting values without duct-systems rulings", () => {
 it("writes exactly the scoped rule's mapped fittings and omits duct-systems rulings", () => {
   const snapshot = synthetic();
   const storedRules = { other: { table: "CD3-21" } };
-  snapshot.store = { version: 2, workRevision: 3, rules: storedRules, instances: {}, terminals: {}, terminalFlows: {}, equipmentFlows: {}, verdicts: {}, roles: {} };
+  snapshot.store = {
+    version: 2,
+    workRevision: 3,
+    rules: storedRules,
+    instances: {},
+    terminals: {},
+    terminalFlows: {},
+    equipmentFlows: {},
+    verdicts: {},
+    roles: {},
+  };
   const p = prepared(snapshot, { rules: { "elbow-1d-gt10": cell("CD3-21") } });
   if (p.sheet.claim.kind !== "complete") throw Error("complete fixture required");
   const { request, fittingRules } = mintWriteRequest(p.sheet.claim, p.sheet, p.input, p.context);
   // Other-rule and unmapped rows must not acquire permission from the selected rule.
   request.fittings.push({ ...request.fittings[0]!, id: 6 }, { ...request.fittings[0]!, id: 7 });
   const rules = new Map([...fittingRules, [6, "other"]]);
-  const scoped = scopeApplyRequest(request, snapshot.store, [["rules", "elbow-1d-gt10"]], snapshot, rules);
+  const scoped = scopeApplyRequest(
+    request,
+    snapshot.store,
+    [["rules", "elbow-1d-gt10"]],
+    snapshot,
+    rules,
+  );
   expect(scoped.fittings).toEqual([expect.objectContaining({ id: 2 })]);
   expect(Object.keys(scoped.store?.instances ?? {})).toEqual(["2"]);
   expect(scoped.store).not.toHaveProperty("rules");
@@ -573,11 +595,19 @@ it("is pure with an explicit plan timestamp and preserves native slot none on th
 // and authored-only flows versus the old group's derived terminal flows.
 it("mints computed ESP and authored-only flows on the recorded Manual D fan", () => {
   const recorded = JSON.parse(
-    readFileSync(new URL(import.meta.resolve("@pe/ducts-domain/fixtures/manual-d-20261102.json")), "utf8"),
+    readFileSync(
+      new URL(import.meta.resolve("@pe/ducts-domain/fixtures/manual-d-20261102.json")),
+      "utf8",
+    ),
   );
-  const snapshot = withFamilyFlipped(nativeResponseSchema("ducts.snapshot.walk").parse({
-    ...recorded, walk: { ...recorded.walk, unreadPeers: [] }, vocabulary: VOCABULARY,
-  }), 14577391);
+  const snapshot = withFamilyFlipped(
+    nativeResponseSchema("ducts.snapshot.walk").parse({
+      ...recorded,
+      walk: { ...recorded.walk, unreadPeers: [] },
+      vocabulary: VOCABULARY,
+    }),
+    14577391,
+  );
   const unit = snapshot.nodes.find((n) => n.id === 14577391)!;
   const parameter = snapshot.slots?.requiredEsp;
   if (!parameter) throw Error("Recorded fixture needs a required ESP slot");
@@ -592,7 +622,10 @@ it("mints computed ESP and authored-only flows on the recorded Manual D fan", ()
     },
   ];
   const tableData = JSON.parse(
-    readFileSync(new URL(import.meta.resolve("@pe/ducts-domain/fixtures/manual-d-tables.json")), "utf8"),
+    readFileSync(
+      new URL(import.meta.resolve("@pe/ducts-domain/fixtures/manual-d-tables.json")),
+      "utf8",
+    ),
   );
   const fixtureGrids = toGrids({ tables: tableData });
   const r = suggestRoster(recorded);

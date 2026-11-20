@@ -19,12 +19,11 @@
     "@pe/ducts-domain": "workspace:*",
     "@pe/ducts-host": "workspace:*",
     "@pe/fans-contract": "workspace:*",
-    "@pe/host": "workspace:*",
     "@pe/host-contracts": "workspace:*",
+    "@pe/host-internal": "workspace:*",
     "zod": "4.3.6"
   },
   "devDependencies": {
-    "@pe/ducts-web": "workspace:*",
     "@types/node": "^25.6.2",
     "typescript": "^6.0.3",
     "vite-plus": "catalog:"
@@ -33,7 +32,12 @@
     "executors": {
       "module": "./actions",
       "factory": "ductSystemsExecutors",
-      "sheet": { "routes": ["duct-systems"], "via": "losses" },
+      "sheet": {
+        "routes": [
+          "duct-systems"
+        ],
+        "via": "losses"
+      },
       "arguments": [
         "bridge",
         "deps"

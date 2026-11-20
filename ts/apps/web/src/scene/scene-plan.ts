@@ -1,5 +1,5 @@
-import { CONTEXT_CREASE_DEG, paintOf, type Look } from "./grounds";
-import type { Paint, PaintOf, SceneMeshes } from "./types";
+import { CONTEXT_CREASE_DEG, paintOf, type Look } from "@pe/web-kernel/scene/grounds";
+import type { Paint, PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
 
 /** Only these values can change prepared geometry or its render-pass partition. */
 type SceneStructure = Pick<Paint, "tier" | "neighbour">;

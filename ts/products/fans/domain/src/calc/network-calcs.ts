@@ -9,7 +9,14 @@ import { suggestRoster } from "@pe/ducts-domain/roster";
 import { resolveInputs } from "@pe/ducts-domain/calc/inputs";
 import { encounterRulings } from "@pe/ducts-domain/calc/inputs";
 import { buildCalc } from "./build.ts";
-export function networkCalcs(snapshot: DuctSnapshot, grids: Grids, catalogs: Catalogs, design: DuctsDesign, firm: DuctsFirm, revision: number) {
+export function networkCalcs(
+  snapshot: DuctSnapshot,
+  grids: Grids,
+  catalogs: Catalogs,
+  design: DuctsDesign,
+  firm: DuctsFirm,
+  revision: number,
+) {
   const work = workLayer(design);
   const inputs = resolveInputs({
     snapshot,

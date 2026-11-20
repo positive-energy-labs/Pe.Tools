@@ -1,17 +1,21 @@
 import * as THREE from "three";
 import { expect, test } from "vite-plus/test";
-import { SceneMeshes, type SceneInstance, type ScenePrimitive } from "./types";
-import { primitiveEdges, primitiveMatrix, primitiveTemplate } from "./primitives";
+import { SceneMeshes, type SceneInstance, type ScenePrimitive } from "@pe/web-kernel/scene/types";
+import {
+  primitiveEdges,
+  primitiveMatrix,
+  primitiveTemplate,
+} from "@pe/web-kernel/scene/primitives";
 import { prepareGeometry } from "./prepare-geometry";
 import { prepareFaceBatches } from "./face-batches";
 import { createFacePicker } from "./picking";
-import { instanceBounds } from "./geometry";
+import { instanceBounds } from "@pe/web-kernel/scene/geometry";
 import { clipMeshes } from "./clip";
 import { sectionCaps } from "./section-caps";
 import { bakeVeil, veilDistance } from "./veil-field";
 import { SceneGpuMemory } from "./scene-gpu";
 import { sceneMemory } from "./scene-memory";
-import { damageLayers } from "./damage";
+import { damageLayers } from "@pe/web-kernel/scene/damage";
 
 const bounds = { minX: 99, minY: 198, minZ: 0, maxX: 101, maxY: 202, maxZ: 10 };
 const box = (b = bounds): ScenePrimitive => ({

@@ -19,7 +19,10 @@ export function roomsGoal(
   view: string,
 ): Omit<Goal<string>, "inputs"> & { inputs: readonly never[] } {
   const labels = new Map(
-    roomRows(snapshot.regions, levelOrder(snapshot.levels)).map((row) => [row.region.guid, row.label]),
+    roomRows(snapshot.regions, levelOrder(snapshot.levels)).map((row) => [
+      row.region.guid,
+      row.label,
+    ]),
   );
   const rooms = snapshot.regions.filter((r) => r.view === view && r.role === "room").length;
   const closer = (card: Card): Closer => ({
@@ -35,7 +38,15 @@ export function roomsGoal(
   const unresolved: Closer[] = !view
     ? [{ id: "view", says: "Choose a level and a plan view", resolver: "person" }]
     : [
-        ...(rooms ? [] : [{ id: "partition", says: `No rooms on ${view} yet: partition it`, resolver: { op: "rooms.partition" } }]),
+        ...(rooms
+          ? []
+          : [
+              {
+                id: "partition",
+                says: `No rooms on ${view} yet: partition it`,
+                resolver: { op: "rooms.partition" },
+              },
+            ]),
         ...cards.filter((card) => WANTS_A_PERSON.has(card.state)).map(closer),
       ];
   return {
@@ -53,4 +64,5 @@ export function roomsGoal(
  * The one `rooms.trace` failure that means "nothing partitioned here yet" is a plain sentence in
  * the pane; the bridge's own words go to the host log. Every other failure keeps its words.
  */
-export const traceRefusal = (raw: string) => (/traced (no|a) zone on/.test(raw) ? "No zones traced yet" : raw);
+export const traceRefusal = (raw: string) =>
+  /traced (no|a) zone on/.test(raw) ? "No zones traced yet" : raw;

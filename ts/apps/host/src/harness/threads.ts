@@ -88,13 +88,13 @@ import {
   callerThread,
   emitRevoke,
   mintContext,
-  Refused,
   refusalHeaders,
   requireHuman,
   retireContext,
   documentAcquisition,
   sessionAcquisition,
 } from "../control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { Clock, Context, DateTime, Effect, Layer, Schema } from "effect";
 import type { RunRegistry } from "../run-registry.ts";
 import { z } from "zod";
@@ -471,7 +471,10 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       threads.set(id, fresh(meta, events));
       // Backfill only observed context. Work documents and native admission stay untouched.
       if (before !== JSON.stringify(meta.workContext))
-        writeJson(join(options.root.path, id, "meta.json"), redactKeys(meta, options.providers.keys()));
+        writeJson(
+          join(options.root.path, id, "meta.json"),
+          redactKeys(meta, options.providers.keys()),
+        );
     } catch (error) {
       startup.skipped.push(
         `harness thread ${join(options.root.path, id)} skipped: it does not parse (${String(error)})`,
@@ -571,7 +574,10 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
 
   // meta.json is a door too: a harness's session title can echo a key, so it takes the one redaction set.
   const writeMeta = (t: Thread) =>
-    writeJson(join(options.root.path, t.meta.id, "meta.json"), redactKeys(t.meta, options.providers.keys()));
+    writeJson(
+      join(options.root.path, t.meta.id, "meta.json"),
+      redactKeys(t.meta, options.providers.keys()),
+    );
 
   function append(t: Thread, event: Append): HarnessEvent {
     const keys = options.providers.keys();
@@ -840,13 +846,9 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
 
   function isActivity(event: HarnessEvent) {
     return (
-      [
-        "prompt",
-        "turn_end",
-        "error",
-        "question_request",
-        "question_resolved",
-      ].includes(event.kind) ||
+      ["prompt", "turn_end", "error", "question_request", "question_resolved"].includes(
+        event.kind,
+      ) ||
       (event.kind === "update" &&
         ["agent_message_chunk", "agent_thought_chunk", "tool_call", "tool_call_update"].includes(
           String(event.update.sessionUpdate),
@@ -872,8 +874,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
     if (event.kind === "question_resolved") t.asks.delete(event.requestId);
     value.pending = t.asks.size;
     if (value.pending) value.state = "waiting";
-    else if (event.kind === "question_resolved")
-      value.state = t.running ? "running" : "idle";
+    else if (event.kind === "question_resolved") value.state = t.running ? "running" : "idle";
   }
 
   const summary = (t: Thread): HarnessThreadSummary => ({
@@ -1016,7 +1017,10 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
       return () => void headListeners.delete(listener);
     },
     /** The `thread-head` Reading: the current head, then every set. */
-    observe(threadId: string, listener: (value: { value: ThreadHead & { pointers: readonly Pointer[] } }) => void) {
+    observe(
+      threadId: string,
+      listener: (value: { value: ThreadHead & { pointers: readonly Pointer[] } }) => void,
+    ) {
       const notify = (id: string, head: ThreadHead) => {
         if (id !== threadId) return;
         // Standalone heads have no harness metadata; pointer mutations still require a stored thread.
@@ -1322,7 +1326,8 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
               "The harness failed to start; probe again.",
             );
           const message =
-            expired ?? `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`;
+            expired ??
+            `${t.meta.harness} harness failed to start: ${String(error?.message ?? error)}`;
           // The harness's own words (e.g. codex "invalid transport") are in stderr; the ACP error alone
           // often reads "Internal error". Same last-whole-line cut as the exit path below.
           const tail = expired ? "" : (t.stderr?.() ?? "").trim();
@@ -1974,7 +1979,11 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
         if (caller.kind === "pea" && caller.thread !== t.meta.id)
           return json({ error: "A Pea context may only link Work to its own conversation" }, 403);
         const change = await input(threadPlaceRequestSchema);
-        const canonical = canonicalPlace(change.route, change.link, options.admittedRoutes?.().find((route) => route.key === change.route)?.address);
+        const canonical = canonicalPlace(
+          change.route,
+          change.link,
+          options.admittedRoutes?.().find((route) => route.key === change.route)?.address,
+        );
         if (!canonical.ok) return json({ error: canonical.error }, 400);
         const context = readWorkContext(t.meta.workContext);
         if (!context)
@@ -2250,9 +2259,7 @@ function createHarnessThreads(options: HarnessThreadsOptions, startup: Startup) 
   // and the turn ends in an error.
   for (const t of threads.values()) {
     const resolved = new Set(
-      t.events.flatMap((e) =>
-        e.kind === "question_resolved" ? [e.requestId] : [],
-      ),
+      t.events.flatMap((e) => (e.kind === "question_resolved" ? [e.requestId] : [])),
     );
     for (const e of t.events)
       if (e.kind === "question_request" && !resolved.has(e.requestId))

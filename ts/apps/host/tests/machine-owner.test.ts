@@ -1,7 +1,12 @@
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
-import { MachineOwner, MachineRetired, unavailableShare, type MachineSources } from "../src/machine.ts";
+import {
+  MachineOwner,
+  MachineRetired,
+  unavailableShare,
+  type MachineSources,
+} from "../src/machine.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 import { effectTest } from "./effect-test.ts";
 
@@ -56,15 +61,26 @@ effectTest("the years deadline releases a stalled check before a retry", () =>
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
     let starts = 0;
     let active = 0;
-    const years = () => Effect.suspend(() =>
-      ++starts === 1 ? Effect.succeed([2025]) : Effect.scoped(
-        Effect.acquireRelease(
-          Effect.sync(() => { active++; }),
-          () => Effect.sync(() => { active--; }),
-        ).pipe(Effect.andThen(Effect.never)),
-      ),
+    const years = () =>
+      Effect.suspend(() =>
+        ++starts === 1
+          ? Effect.succeed([2025])
+          : Effect.scoped(
+              Effect.acquireRelease(
+                Effect.sync(() => {
+                  active++;
+                }),
+                () =>
+                  Effect.sync(() => {
+                    active--;
+                  }),
+              ).pipe(Effect.andThen(Effect.never)),
+            ),
+      );
+    const context = yield* Layer.buildWithScope(
+      MachineOwner.layer({ ...sources, years }, { updatePeriodMs: 0 }),
+      scope,
     );
-    const context = yield* Layer.buildWithScope(MachineOwner.layer({ ...sources, years }, { updatePeriodMs: 0 }), scope);
     const owner = Context.get(context, MachineOwner);
     yield* owner.refresh;
     yield* owner.refresh;
@@ -86,7 +102,10 @@ effectTest("an observed owner polls once per period and closing its scope stops 
   Effect.gen(function* () {
     const { reads, sources } = counting();
     const scope = yield* Scope.make();
-    const context = yield* Layer.buildWithScope(MachineOwner.layer(sources, { periodMs: 5_000 }), scope);
+    const context = yield* Layer.buildWithScope(
+      MachineOwner.layer(sources, { periodMs: 5_000 }),
+      scope,
+    );
     const owner = Context.get(context, MachineOwner);
 
     // Nobody observes: time passes and nothing reads.
@@ -109,7 +128,9 @@ effectTest("an observed owner polls once per period and closing its scope stops 
     yield* TestClock.adjust("60 seconds");
     yield* settleFibers;
     expect(reads.sessions).toBe(4);
-    const refused = yield* Effect.flip(owner.sessionCensus({ pid: 42, processStartUtc: "2026-11-19T00:00:00Z" }));
+    const refused = yield* Effect.flip(
+      owner.sessionCensus({ pid: 42, processStartUtc: "2026-11-19T00:00:00Z" }),
+    );
     expect(refused).toBeInstanceOf(MachineRetired);
   }),
 );

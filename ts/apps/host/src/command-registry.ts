@@ -1,19 +1,24 @@
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
-import { commandResources, commandReadOwnership, type NativeReadTerminals } from "./command-reads.ts";
+import {
+  commandResources,
+  commandReadOwnership,
+  type NativeReadTerminals,
+} from "./command-reads.ts";
 import { workStartExecutor } from "./work-start.ts";
 import { findingsExecutors } from "./slots/findings.ts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";
 import { workIntentBoundary, workWriteBoundary } from "./work-write-boundary.ts";
-import { CatalogCommand, catalogCommandContext } from "./catalog-command-context.ts";
-import type { CommandExecutor, CommandRegistry } from "./command-executor.ts";
+import { CatalogCommand, catalogCommandContext } from "@pe/host-internal/catalog-command-context";
+import type { CommandExecutor, CommandRegistry } from "@pe/host-internal/command-executor";
 import type { GatewayLocal } from "./gateway-actions.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
-import { familyExecutors, type FamilyActionDependencies } from "./family-actions.ts";
+import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { scheduleExecutors } from "./schedule-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { takeoffExecutors } from "./takeoff-actions.ts";
+import { lifetime } from "./document-lifetime.ts";
 import { productExecutors } from "./product-executors.generated.ts";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
@@ -31,7 +36,8 @@ import { commands } from "@pe/mcps/product-actions";
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
-type CommandDependencies = FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
+type CommandDependencies = FamilyActionDependencies &
+  InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
@@ -56,9 +62,15 @@ export function commandRegistry(
     ),
   };
   // Product-owned sheet writes answer through the generic sheet dispatcher.
-  const products = productExecutors(bridge, deps);
+  const products = productExecutors(bridge, {
+    ...deps,
+    runPods: (effect, options) => runPods(deps, effect, options),
+    projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
+  });
   const productsWithoutSheet = Object.fromEntries(
-    Object.entries(products.executors).filter(([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key)),
+    Object.entries(products.executors).filter(
+      ([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key),
+    ),
   );
   for (const group of [
     familyExecutors(captures, bridge, deps),
@@ -88,14 +100,16 @@ export function commandRegistry(
   };
   // `cancelled: false` says only that Revit holds no in-flight request by this id (done, or not yet
   // sent); the saved Stop still fences the next step, so it is an answer, not a failure.
-  const cancel = (requestId: string) => Effect.map(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => value);
+  const cancel = (requestId: string) =>
+    Effect.map(bridge.invoke(CANCEL_OPERATION_KEY, { requestId }), ({ value }) => value);
   const complete = (entry: CommandExecutor, key?: string): CommandExecutor => {
     const definition = entry.definition;
     return {
       ...entry,
-      definition: key && typeof definition === "function"
-        ? context => catalogCommandContext.run(key, () => definition(context))
-        : definition,
+      definition:
+        key && typeof definition === "function"
+          ? (context) => catalogCommandContext.run(key, () => definition(context))
+          : definition,
       bind: (context) =>
         key ? catalogCommandContext.run(key, () => entry.bind(context)) : entry.bind(context),
       run: (context, execution) =>
@@ -156,7 +170,10 @@ export function commandRegistry(
   return (key) => {
     if (key.startsWith("pod.") && !isAnyOperationKey(key))
       throw Error(`Pod command unavailable: ${key}`);
-    return (implementations[key] ??= complete(gatewayExecutor(key, bridge, local, deps.pictures!, deps.sdk), key));
+    return (implementations[key] ??= complete(
+      gatewayExecutor(key, bridge, local, deps.pictures!, deps.sdk),
+      key,
+    ));
   };
 }
 
@@ -165,7 +182,11 @@ export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   captures: TakeoffCaptures,
-  deps: FamilyActionDependencies & InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"]; nativeReads?: NativeReadTerminals },
+  deps: FamilyActionDependencies &
+    InstancesActionDependencies & {
+      nativeRead?: HostNativeRead["Service"];
+      nativeReads?: NativeReadTerminals;
+    },
   local: GatewayLocal,
   origin?: () => string,
 ): void {
@@ -173,7 +194,13 @@ export function bindCommandRuntime(
   owner.bindCommands({
     ...commandResources(bridge, deps, async (id) => (await owner.list(undefined, id))[0]),
     readOwnership: owned.readOwnership,
-    resolve: commandRegistry(bridge, captures, { ...deps, nativeRead: owned.nativeRead }, local, origin),
+    resolve: commandRegistry(
+      bridge,
+      captures,
+      { ...deps, nativeRead: owned.nativeRead },
+      local,
+      origin,
+    ),
   });
   // K1b: recover has no door, so the journal calls it itself: once at boot, then on each connect.
   void owner.reconcile();

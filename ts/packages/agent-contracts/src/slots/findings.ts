@@ -50,8 +50,16 @@ const base = {
 /** A note has no `verdict` key at all; a claim or a check may carry one of its kind's values. */
 export const findingSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("note"), ...base }),
-  z.strictObject({ kind: z.literal("claim"), ...base, verdict: stampSchema.extend({ value: z.enum(FINDING_KINDS.claim) }).optional() }),
-  z.strictObject({ kind: z.literal("check"), ...base, verdict: stampSchema.extend({ value: z.enum(FINDING_KINDS.check) }).optional() }),
+  z.strictObject({
+    kind: z.literal("claim"),
+    ...base,
+    verdict: stampSchema.extend({ value: z.enum(FINDING_KINDS.claim) }).optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("check"),
+    ...base,
+    verdict: stampSchema.extend({ value: z.enum(FINDING_KINDS.check) }).optional(),
+  }),
 ]);
 export type Finding = z.output<typeof findingSchema>;
 
@@ -63,7 +71,8 @@ export const findingsWorkSchema = z.strictObject({
 export const findingsWork = {
   route: FINDINGS_OWNER,
   title: "Findings",
-  description: "What Pea and people said about this document's subjects, with a ruling where the kind admits one",
+  description:
+    "What Pea and people said about this document's subjects, with a ruling where the kind admits one",
   schema: findingsWorkSchema,
   // 2: a statement plus a ruling. Version 1 Work (flat `by`/`at`, `place`) is set aside, not migrated.
   schemaVersion: 2,
@@ -94,11 +103,17 @@ const sayInput = z
 export type FindingInput = z.output<typeof sayInput>;
 
 /** The route guide projects every findings door; the table cannot omit one. */
-export const findingsGuide: Readonly<Record<(typeof FINDINGS_DOORS)[keyof typeof FINDINGS_DOORS], string>> = {
-  [FINDINGS_DOORS.say]: "Say a note, claim or check on a SubjectRef. A verdict is optional. The host stamps author and time.",
-  [FINDINGS_DOORS.rule]: "Rule on a claim or check, or withdraw its ruling with null. The original statement and author stay.",
-  [FINDINGS_DOORS.retract]: "Retract a finding. Either author may retract it; Timeline can undo the step.",
-  [FINDINGS_DOORS.list]: "Read this document's findings, optionally on one subject. Notes live in findings Work, never rooms Work.",
+export const findingsGuide: Readonly<
+  Record<(typeof FINDINGS_DOORS)[keyof typeof FINDINGS_DOORS], string>
+> = {
+  [FINDINGS_DOORS.say]:
+    "Say a note, claim or check on a SubjectRef. A verdict is optional. The host stamps author and time.",
+  [FINDINGS_DOORS.rule]:
+    "Rule on a claim or check, or withdraw its ruling with null. The original statement and author stay.",
+  [FINDINGS_DOORS.retract]:
+    "Retract a finding. Either author may retract it; Timeline can undo the step.",
+  [FINDINGS_DOORS.list]:
+    "Read this document's findings, optionally on one subject. Notes live in findings Work, never rooms Work.",
 };
 
 /**

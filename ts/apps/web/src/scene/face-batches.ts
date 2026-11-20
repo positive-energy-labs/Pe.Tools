@@ -1,9 +1,9 @@
 import * as THREE from "three";
 import type { PreparedGeometry } from "./prepare-geometry";
-import type { Paint, SceneInstance, SceneMeshes } from "./types";
+import type { Paint, SceneInstance, SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { SceneGpuMemory } from "./scene-gpu";
-import { center } from "./orbit";
-import { primitiveKey, primitiveMatrix, primitiveTemplate } from "./primitives";
+import { center } from "@pe/web-kernel/scene/orbit";
+import { primitiveKey, primitiveMatrix, primitiveTemplate } from "@pe/web-kernel/scene/primitives";
 
 type Part = {
   mesh: THREE.BatchedMesh;

@@ -10,7 +10,10 @@ import { census, rises, type TestCasts } from "./test-casts-census.ts";
 describe("casts to production types in test files", () => {
   it("rise in no file, and a new file starts at 0", () => {
     const actual = census();
-    expect(rises(actual, baseline), `${actual.total} casts in ${actual.testFiles} test files; the baseline is ${baseline.total}`).toEqual([]);
+    expect(
+      rises(actual, baseline),
+      `${actual.total} casts in ${actual.testFiles} test files; the baseline is ${baseline.total}`,
+    ).toEqual([]);
     expect(actual.total).toBeLessThanOrEqual(baseline.total);
   }, 600_000);
 

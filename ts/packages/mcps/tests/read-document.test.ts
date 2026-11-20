@@ -246,7 +246,8 @@ test("parser llamaparse sends directly, posts one notice and reuses the kept res
           sentKey = new Headers(init?.headers).get("authorization") === `Bearer ${secret}`;
           return Response.json({ id: "job-1", project_id: "p", status: "PENDING" });
         }
-        if (url.pathname.startsWith("/api/v2/parse/job-") && ++polls === 1) return Response.json({ detail: "Transient poll failure" }, { status: 500 });
+        if (url.pathname.startsWith("/api/v2/parse/job-") && ++polls === 1)
+          return Response.json({ detail: "Transient poll failure" }, { status: 500 });
         return Response.json({
           job: { id: "job-1", project_id: "p", status: "COMPLETED" },
           markdown: {
@@ -268,7 +269,9 @@ test("parser llamaparse sends directly, posts one notice and reuses the kept res
 
     const direct = await read({ path: file, pages: "1", parser: "llamaparse" });
     expect(direct.text).not.toContain("Held");
-    expect(notices(stateTree(runtimeRoot()))).toMatchObject([{ class: "sent", path: "schedule.pdf", place: "LlamaCloud" }]);
+    expect(notices(stateTree(runtimeRoot()))).toMatchObject([
+      { class: "sent", path: "schedule.pdf", place: "LlamaCloud" },
+    ]);
     expect(JSON.stringify(notices(stateTree(runtimeRoot())))).not.toContain(secret);
     expect(uploads().some((call) => call.startsWith("POST /api/v2/parse/upload"))).toBe(true);
     expect(calls.some((call) => call.includes("expand=markdown"))).toBe(true);

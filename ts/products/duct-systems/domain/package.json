@@ -21,8 +21,8 @@
     "test": "vp test"
   },
   "dependencies": {
-    "@pe/duct-systems-contract": "workspace:*",
     "@pe/agent-contracts": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
     "@pe/ducts-domain": "workspace:*",
     "@pe/fans-contract": "workspace:*",
     "zod": "4.3.6"

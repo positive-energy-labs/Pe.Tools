@@ -51,7 +51,9 @@ export function sharedKeys(
 }
 
 /** The person's own key wins; else the firm key of that role; else a typed refusal. */
-export function resolveKey(user: string | null | undefined, role: KeyRole,
+export function resolveKey(
+  user: string | null | undefined,
+  role: KeyRole,
   machine: StateRoot,
 ): ResolvedKey {
   if (user?.trim()) return { value: user.trim(), from: "user" };

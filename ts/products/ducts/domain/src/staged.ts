@@ -12,20 +12,39 @@ import type { DuctSnapshot } from "./types.ts";
 
 type Segment = "terminalDrops" | "componentDrops" | "flows" | "equipmentFlows" | "roles";
 /** The Fans Work segments apply carries, from the one inputs table. Rated ESP is read only. */
-const WRITTEN_SEGMENTS: Record<Segment, true> = { terminalDrops: true, componentDrops: true, flows: true, equipmentFlows: true, roles: true };
-const isSegment = (segment: string | null): segment is Segment => segment != null && segment in WRITTEN_SEGMENTS;
-const SEGMENTS = fanBindingRows().flatMap(row => (row.owner === "fans" && isSegment(row.segment) ? [row.segment] : []));
+const WRITTEN_SEGMENTS: Record<Segment, true> = {
+  terminalDrops: true,
+  componentDrops: true,
+  flows: true,
+  equipmentFlows: true,
+  roles: true,
+};
+const isSegment = (segment: string | null): segment is Segment =>
+  segment != null && segment in WRITTEN_SEGMENTS;
+const SEGMENTS = fanBindingRows().flatMap((row) =>
+  row.owner === "fans" && isSegment(row.segment) ? [row.segment] : [],
+);
 
 /**
  * Fan targets are a projection of current edits, never a list frozen when scope was chosen. The walk
  * clips every segment. Required ESP has no Work cell; its native cohort belongs to the write mint.
  */
-export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnapshot, "nodes" | "segments">) {
-  const here = new Set([...snapshot.nodes, ...snapshot.segments].map(element => element.uniqueId));
-  return SEGMENTS.flatMap(segment =>
+export function fanWriteCells(
+  doc: FansDocument | null,
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
+) {
+  const here = new Set(
+    [...snapshot.nodes, ...snapshot.segments].map((element) => element.uniqueId),
+  );
+  return SEGMENTS.flatMap((segment) =>
     Object.entries(doc?.[segment] ?? {}).flatMap(([id, cell]) => {
       const ref = decode(id);
-      return cell.edit != null && ref.ok && ref.value.keyKind === "UniqueId" && here.has(ref.value.key) ? [[segment, id] as const] : [];
+      return cell.edit != null &&
+        ref.ok &&
+        ref.value.keyKind === "UniqueId" &&
+        here.has(ref.value.key)
+        ? [[segment, id] as const]
+        : [];
     }),
   );
 }
@@ -35,13 +54,7 @@ export function fanWriteCells(doc: FansDocument | null, snapshot: Pick<DuctSnaps
  * scoped rule's fitting coefficients to elements, and roles to the store; `rules` tables and `assumptions`
  * verdicts stay staged in /duct-systems Work until that route's own apply stores them (D9, `rulingsRequest`).
  */
-const WRITTEN = [
-  "rules",
-  "terminalDrops",
-  "componentDrops",
-  "flows",
-  "equipmentFlows",
-] as const;
+const WRITTEN = ["rules", "terminalDrops", "componentDrops", "flows", "equipmentFlows"] as const;
 
 const stagedCells = (doc: DuctsDesign | null) =>
   ([...WRITTEN, "catalogs", "ruleAssignments"] as const).flatMap((segment) =>
@@ -51,10 +64,11 @@ const stagedCells = (doc: DuctsDesign | null) =>
   );
 
 /** How many changes a write would carry: edit cells, and rulings that differ from the store's. */
-export const pendingCount = (doc: DuctsDesign | null, store: DuctSnapshot["store"], snapshot: Pick<DuctSnapshot, "nodes" | "segments">) =>
-  stagedCells(doc).length + pendingRulings(doc, store, snapshot).length;
-
-
+export const pendingCount = (
+  doc: DuctsDesign | null,
+  store: DuctSnapshot["store"],
+  snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
+) => stagedCells(doc).length + pendingRulings(doc, store, snapshot).length;
 
 /** Retire only Fans Work cells whose transmitted native writes succeeded; held and refused cells stay edit. No /duct-systems cell is retired here (D9). */
 export function appliedCellPaths(
@@ -76,9 +90,16 @@ export function appliedCellPaths(
     [input.terminalFlows, "terminal-flow", "flows"],
     [input.equipmentFlows, "equipment-flow", "equipmentFlows"],
   ] as const)
-    for (const row of rows) if (has(kind, row.id)) paths.push(...cells.filter(([s, key]) => s === segment && subjects[key] === String(row.id)));
+    for (const row of rows)
+      if (has(kind, row.id))
+        paths.push(
+          ...cells.filter(([s, key]) => s === segment && subjects[key] === String(row.id)),
+        );
   for (const write of succeeded)
-    if (write.kind === "role" && write.id != null) paths.push(...cells.filter(([s, key]) => s === "roles" && subjects[key] === String(write.id)));
+    if (write.kind === "role" && write.id != null)
+      paths.push(
+        ...cells.filter(([s, key]) => s === "roles" && subjects[key] === String(write.id)),
+      );
   return paths;
 }
 
@@ -90,25 +111,66 @@ export function scopeApplyRequest(
   snapshot: Pick<DuctSnapshot, "nodes" | "segments">,
   fittingRules: ReadonlyMap<number, string>,
 ): DuctsApplyInput {
-  const has = (segment: string, key: string | number) => cells.some(([s, k]) => s === segment && (s === "rules" ? k === key : workElementId(snapshot, k) === key));
-  const fittings = request.fittings.filter(row => { const rule = fittingRules.get(row.id); return rule != null && has("rules", rule); });
-  const terminals = request.terminals.filter(row => has("terminalDrops", row.id));
-  const components = request.components.filter(row => has("componentDrops", row.id));
-  const equipment = request.equipment;
-  const terminalFlows = request.terminalFlows.filter(row => has("flows", row.id));
-  const equipmentFlows = request.equipmentFlows.filter(row => has("equipmentFlows", row.id));
-  const merge = (key: "instances" | "terminals" | "terminalFlows" | "equipmentFlows", ids: readonly number[]) => ({
-    ...store?.[key],
-    ...Object.fromEntries(Object.entries(request.store?.[key] ?? {}).filter(([id]) => ids.includes(Number(id)))),
+  const has = (segment: string, key: string | number) =>
+    cells.some(
+      ([s, k]) => s === segment && (s === "rules" ? k === key : workElementId(snapshot, k) === key),
+    );
+  const fittings = request.fittings.filter((row) => {
+    const rule = fittingRules.get(row.id);
+    return rule != null && has("rules", rule);
   });
-  return { ...request, fittings, terminals, components, equipment, terminalFlows, equipmentFlows,
-    store: { version: 2, workRevision: store?.workRevision ?? 0, appliedAt: request.store?.appliedAt,
-      instances: merge("instances", fittings.map(row => row.id)),
-      terminals: merge("terminals", terminals.map(row => row.id)),
-      terminalFlows: merge("terminalFlows", terminalFlows.map(row => row.id)),
-      equipmentFlows: merge("equipmentFlows", equipmentFlows.map(row => row.id)),
-      roles: { ...store?.roles, ...Object.fromEntries(Object.entries(request.store?.roles ?? {}).filter(([id]) => has("roles", Number(id)))) },
+  const terminals = request.terminals.filter((row) => has("terminalDrops", row.id));
+  const components = request.components.filter((row) => has("componentDrops", row.id));
+  const equipment = request.equipment;
+  const terminalFlows = request.terminalFlows.filter((row) => has("flows", row.id));
+  const equipmentFlows = request.equipmentFlows.filter((row) => has("equipmentFlows", row.id));
+  const merge = (
+    key: "instances" | "terminals" | "terminalFlows" | "equipmentFlows",
+    ids: readonly number[],
+  ) => ({
+    ...store?.[key],
+    ...Object.fromEntries(
+      Object.entries(request.store?.[key] ?? {}).filter(([id]) => ids.includes(Number(id))),
+    ),
+  });
+  return {
+    ...request,
+    fittings,
+    terminals,
+    components,
+    equipment,
+    terminalFlows,
+    equipmentFlows,
+    store: {
+      version: 2,
+      workRevision: store?.workRevision ?? 0,
+      appliedAt: request.store?.appliedAt,
+      instances: merge(
+        "instances",
+        fittings.map((row) => row.id),
+      ),
+      terminals: merge(
+        "terminals",
+        terminals.map((row) => row.id),
+      ),
+      terminalFlows: merge(
+        "terminalFlows",
+        terminalFlows.map((row) => row.id),
+      ),
+      equipmentFlows: merge(
+        "equipmentFlows",
+        equipmentFlows.map((row) => row.id),
+      ),
+      roles: {
+        ...store?.roles,
+        ...Object.fromEntries(
+          Object.entries(request.store?.roles ?? {}).filter(([id]) => has("roles", Number(id))),
+        ),
+      },
     },
-    storeDeletes: { ...request.storeDeletes, roles: request.storeDeletes?.roles?.filter(id => has("roles", id)) },
+    storeDeletes: {
+      ...request.storeDeletes,
+      roles: request.storeDeletes?.roles?.filter((id) => has("roles", id)),
+    },
   };
 }

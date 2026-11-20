@@ -1,16 +1,16 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf } from "../route/defaults";
+import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
-import { read } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { roomsRouteState, routeStatePatchSchema } from "@pe/agent-contracts";
 import { roomsPageSchema } from "./page";
-import { route, field } from "../route/defaults";
-import { hostRead } from "../route/host-read";
-import { draw } from "../route/draw";
+import { route, field } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
-import { split, subjectSchema } from "../route/defaults";
+import { split, subjectSchema } from "@pe/web-kernel/route";
 import { levelOrder, regionCode, roomRows, type RoomsRegion } from "./rows.ts";
 const address = roomsPageSchema.shape;
 /** The rooms a person or Pea may hold open at once; "all" is the whole roster. */
@@ -29,12 +29,16 @@ export const fields = {
   card: field(z.string(), "", "pose"),
 };
 export const query = { view: field(address.view, "", "query", "push") };
-export const loaded = read(
-  hostRead(contracts.workspace),
-  (page: { view: string }) => ({ view: page.view }),
-);
+export const loaded = read(hostRead(contracts.workspace), (page: { view: string }) => ({
+  view: page.view,
+}));
 export const edits = z.array(routeStatePatchSchema);
-export type RoomsContext = ContextOf<typeof fields & typeof query, typeof loaded, typeof import("@pe/agent-contracts").roomsRouteState, typeof edits>;
+export type RoomsContext = ContextOf<
+  typeof fields & typeof query,
+  typeof loaded,
+  typeof import("@pe/agent-contracts").roomsRouteState,
+  typeof edits
+>;
 export const module = route({
   key: "rooms",
   name: "Rooms",
@@ -59,7 +63,10 @@ export const module = route({
     pane: "main",
     read: loaded,
     options: (data) =>
-      roomRows(data.snapshot.regions as readonly RoomsRegion[], levelOrder(data.snapshot.levels)).map((row) => ({
+      roomRows(
+        data.snapshot.regions as readonly RoomsRegion[],
+        levelOrder(data.snapshot.levels),
+      ).map((row) => ({
         id: regionCode(row.region.guid),
         label: `${row.label} · ${row.region.level}`,
       })),

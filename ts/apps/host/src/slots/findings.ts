@@ -25,11 +25,17 @@ import {
   type Stamp,
 } from "@pe/agent-contracts/slots";
 import type { RouteWorkspace } from "@pe/runtime";
-import { command, io, refused, StepFailure, type CommandContext, type CommandWorkReads } from "../command-executor.ts";
-import type { ActionExecution } from "../action-journal.ts";
-import type { RevitBridge } from "../bridge.ts";
+import {
+  command,
+  io,
+  refused,
+  StepFailure,
+  type CommandContext,
+  type CommandWorkReads,
+} from "@pe/host-internal/command-executor";
+import type { ActionExecution } from "@pe/host-internal/action-execution";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { currentDocument } from "../document-lifetime.ts";
-
 
 /*
  * The host side of findings (ADR 0035 rule 9, ADR 0042 rule 5): four catalog doors over one Work per
@@ -51,14 +57,20 @@ function author(caller: Caller): Stamp["by"] {
     case "page":
     case "service":
     case "anonymous":
-      throw refused(`Only a person or Pea writes a finding, not a ${caller.kind} caller`, "findings.caller");
+      throw refused(
+        `Only a person or Pea writes a finding, not a ${caller.kind} caller`,
+        "findings.caller",
+      );
     default:
       return caller satisfies never;
   }
 }
 
 /** `reads` is the invocation's own Work reader (`CommandContext.work`), which carries its read context. */
-async function held(reads: Pick<CommandWorkReads, "view">, key: WorkKey): Promise<Readonly<Record<string, Finding>>> {
+async function held(
+  reads: Pick<CommandWorkReads, "view">,
+  key: WorkKey,
+): Promise<Readonly<Record<string, Finding>>> {
   return findingsWorkSchema.parse((await reads.view(key, FINDINGS_OWNER))?.doc ?? {}).findings;
 }
 /**
@@ -66,7 +78,11 @@ async function held(reads: Pick<CommandWorkReads, "view">, key: WorkKey): Promis
  * leaves the action unknown, and an unknown action blocks the caller's next one.
  */
 const stepRefused = (message: string) => new StepFailure(message, 409, "refused");
-async function one(reads: Pick<CommandWorkReads, "view">, key: WorkKey, id: string): Promise<Finding> {
+async function one(
+  reads: Pick<CommandWorkReads, "view">,
+  key: WorkKey,
+  id: string,
+): Promise<Finding> {
   const finding = (await held(reads, key))[id];
   if (!finding) throw stepRefused(`No finding ${id} on this document`);
   return finding;
@@ -107,13 +123,24 @@ async function bound<I extends { work?: z.output<typeof workHandleSchema> }>(
   if (target.kind !== "document") throw refused("Findings are written on one open document");
   const session = await currentDocument(bridge, target.ref, "project");
   const doc = session.state!.openDocuments.find((d) => d.openId === target.ref.openId)!;
-  const key = bindWork(FINDINGS_OWNER, doc.address ? address(doc.address) : null, undefined, target.ref);
-  const revision = input.work?.key.route === FINDINGS_OWNER ? input.work.revision : ((await reads.view(key, FINDINGS_OWNER))?.revision ?? 0);
+  const key = bindWork(
+    FINDINGS_OWNER,
+    doc.address ? address(doc.address) : null,
+    undefined,
+    target.ref,
+  );
+  const revision =
+    input.work?.key.route === FINDINGS_OWNER
+      ? input.work.revision
+      : ((await reads.view(key, FINDINGS_OWNER))?.revision ?? 0);
   return { ...input, work: workHandle(key, revision) };
 }
 
 // What `bound` prepares always carries the findings handle, so each prepared schema requires it.
-export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge: RevitBridge["Service"]) => {
+export const findingsExecutors = (
+  workspace: RouteWorkspace | undefined,
+  bridge: RevitBridge["Service"],
+) => {
   /** A write door's binding: a caller that is neither author is refused before admission. */
   const binding = async <I extends { work?: z.output<typeof workHandleSchema> }>(
     ctx: Pick<CommandContext, "work" | "caller">,
@@ -122,12 +149,22 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
     if (!workspace) throw refused("Work storage is unavailable");
     author(ctx.caller);
     const input = await bound(ctx.work, bridge, admission);
-    return { effects: [{ kind: "directory" as const, path: hostState().work }], prepare: async () => input };
+    return {
+      effects: [{ kind: "directory" as const, path: hostState().work }],
+      prepare: async () => input,
+    };
   };
   /** A write door's one publication step. */
-  const step = (key: string, ctx: Pick<CommandContext, "caller">, execution: ActionExecution, run: (workspace: RouteWorkspace, by: Stamp["by"]) => Promise<unknown>) =>
+  const step = (
+    key: string,
+    ctx: Pick<CommandContext, "caller">,
+    execution: ActionExecution,
+    run: (workspace: RouteWorkspace, by: Stamp["by"]) => Promise<unknown>,
+  ) =>
     workspace
-      ? execution.step("publication", key, execution.prepared, () => io(() => run(workspace, author(ctx.caller))))
+      ? execution.step("publication", key, execution.prepared, () =>
+          io(() => run(workspace, author(ctx.caller))),
+        )
       : Effect.fail(refused("Work storage is unavailable"));
   const { list, say, rule, retract } = FINDINGS_DOORS;
   return {
@@ -140,7 +177,11 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
       run: (ctx, execution) =>
         io(async () => ({
           findings: Object.values(await held(ctx.work, execution.prepared.work.key))
-            .filter((f) => execution.prepared.subject === undefined || f.subject === execution.prepared.subject)
+            .filter(
+              (f) =>
+                execution.prepared.subject === undefined ||
+                f.subject === execution.prepared.subject,
+            )
             .sort((a, b) => a.said.at.localeCompare(b.said.at)),
         })),
     }),
@@ -159,7 +200,14 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
           });
           if (!parsed.success) throw stepRefused(z.prettifyError(parsed.error));
           const finding = parsed.data;
-          const { revision } = await write(workspace, work, by, ctx, `${finding.kind} on ${subjectName(finding.subject)}`, { path: ["findings", finding.id], value: finding });
+          const { revision } = await write(
+            workspace,
+            work,
+            by,
+            ctx,
+            `${finding.kind} on ${subjectName(finding.subject)}`,
+            { path: ["findings", finding.id], value: finding },
+          );
           return { id: finding.id, revision };
         }),
     }),
@@ -170,12 +218,23 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
           const { work, id, value } = execution.prepared;
           const finding = await one(ctx.work, work.key, id);
           if (value !== null && !admitsVerdict(finding.kind, value))
-            throw stepRefused(finding.kind === "note" ? "A note takes no ruling" : `A ${finding.kind} is ruled ${FINDING_KINDS[finding.kind].join(", ")}, not ${value}`);
+            throw stepRefused(
+              finding.kind === "note"
+                ? "A note takes no ruling"
+                : `A ${finding.kind} is ruled ${FINDING_KINDS[finding.kind].join(", ")}, not ${value}`,
+            );
           // The patch names `verdict` alone: `said` is out of a ruling's reach.
-          return write(workspace, work, by, ctx, `${value ?? "no ruling"} on ${finding.kind} ${id}`, {
-            path: ["findings", id, "verdict"],
-            ...(value === null ? {} : { value: { by, at: ctx.clock.now(), value } }),
-          });
+          return write(
+            workspace,
+            work,
+            by,
+            ctx,
+            `${value ?? "no ruling"} on ${finding.kind} ${id}`,
+            {
+              path: ["findings", id, "verdict"],
+              ...(value === null ? {} : { value: { by, at: ctx.clock.now(), value } }),
+            },
+          );
         }),
     }),
     [retract]: command(commands[retract], commands[retract].input.required({ work: true }), {
@@ -184,7 +243,9 @@ export const findingsExecutors = (workspace: RouteWorkspace | undefined, bridge:
         step(retract, ctx, execution, async (workspace, by) => {
           const { work, id } = execution.prepared;
           const finding = await one(ctx.work, work.key, id);
-          return write(workspace, work, by, ctx, `retract ${finding.kind} ${id}`, { path: ["findings", id] });
+          return write(workspace, work, by, ctx, `retract ${finding.kind} ${id}`, {
+            path: ["findings", id],
+          });
         }),
     }),
   };

@@ -2,7 +2,7 @@ import { watchFile, unwatchFile } from "node:fs";
 import { placesFileSchema, type PlacesFile } from "../../../packages/agent-contracts/src/places.ts";
 import { read, stateKind, writeState, type Kind, type StateRoot } from "@pe/host-contracts/kinds";
 import { hostState } from "./host-ownership.ts";
-import { leaf, read as graphRead } from "./reads/door.ts";
+import { leaf, read as graphRead } from "@pe/host-internal/read-graph";
 import { z } from "zod";
 
 export const placesKind: Kind<PlacesFile, "state", []> = stateKind({

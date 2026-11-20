@@ -78,7 +78,11 @@ test.each(fixture.stateRoots)("state root: $name", (row) => {
       ? []
       : [
           () =>
-            productRoot({ lane: row.lane, sourceRoot: row.ownerRoot, installedRoot: row.ownerRoot }),
+            productRoot({
+              lane: row.lane,
+              sourceRoot: row.ownerRoot,
+              installedRoot: row.ownerRoot,
+            }),
         ]),
   ];
   for (const resolve of resolvers) {
@@ -146,7 +150,6 @@ test.each(fixture.trayLaunches)("tray argv: $name", (row) => {
 
 let root: string;
 let installed: string;
-
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "pe-isofix-"));

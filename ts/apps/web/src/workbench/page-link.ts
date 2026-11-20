@@ -1,5 +1,5 @@
 import { pageKeyOf, routeAddress } from "@pe/agent-contracts";
-import { oneName } from "#/route/typed-route";
+import { oneName } from "@pe/web-kernel/route/typed-route";
 
 /** A Page on this runtime opens in the existing viewer. Foreign hosts and Page assets remain
  * ordinary links. This changes navigation only, never the Page's own binding or authority. */
@@ -26,7 +26,8 @@ export function pageLink(href: string, frontend: string) {
       fragment: url.hash.slice(1),
     };
     return { slug, page, href: routeAddress("bind").link(page) };
-  } catch (error) { console.warn("ts/apps/web/src/workbench/page-link.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/web/src/workbench/page-link.ts: fallback after failure", error);
     return null;
   }
 }

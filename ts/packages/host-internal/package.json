@@ -8,12 +8,33 @@
     "./native-read": "./src/native-read.ts",
     "./request-contracts": {
       "types": "./src/request-contracts.d.ts"
-    }
+    },
+    "./read-graph": "./src/reads/door.ts",
+    "./reads/evaluator": "./src/reads/evaluator.ts",
+    "./catalog-command-context": "./src/catalog-command-context.ts",
+    "./command-read-identity": "./src/command-read-identity.ts",
+    "./resource-content": "./src/resource-content.ts",
+    "./action-execution": "./src/action-execution.ts",
+    "./bridge": "./src/bridge.ts",
+    "./command-executor": "./src/command-executor.ts",
+    "./request-identity": "./src/request-identity.ts",
+    "./read-errors": "./src/read-errors.ts",
+    "./reads/work": "./src/reads/work.ts",
+    "./settings-files": "./src/settings-files.ts",
+    "./target-homes": "./src/target-homes.ts",
+    "./pod-runner": "./src/pod-runner.ts",
+    "./reads/local": "./src/reads/local.ts",
+    "./builtin-read-handles": "./src/builtin-read-handles.ts",
+    "./refused": "./src/refused.ts",
+    "./input-recording": "./src/input-recording.ts",
+    "./input-occurrence": "./src/input-occurrence.ts"
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
     "@pe/host-contracts": "workspace:*",
-    "effect": "4.0.2"
+    "@pe/runtime": "workspace:*",
+    "effect": "4.0.2",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

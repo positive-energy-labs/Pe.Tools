@@ -137,7 +137,10 @@ export type HostShellOpenData = Schema.Schema.Type<typeof hostShellOpenDataSchem
 
 // --- Pointers (ADR 0030 rule 10; agent-contracts pointers.ts): per-thread, kept until dismissed ---
 /** A SubjectRef code, or a route place in its attention codec text. */
-const pointerTargetSchema = Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.String)]);
+const pointerTargetSchema = Schema.Union([
+  Schema.String,
+  Schema.Record(Schema.String, Schema.String),
+]);
 const pointerSchema = Schema.Struct({
   id: Schema.String,
   route: Schema.String,
@@ -151,7 +154,9 @@ export const pointersPointRequestSchema = Schema.Struct({
   label: Schema.String,
 });
 /** A person names the thread; Pea's own thread comes from its caller context, never its input. */
-export const pointersThreadRequestSchema = Schema.Struct({ thread: Schema.optional(Schema.String) });
+export const pointersThreadRequestSchema = Schema.Struct({
+  thread: Schema.optional(Schema.String),
+});
 export const pointersDismissRequestSchema = Schema.Struct({
   thread: Schema.optional(Schema.String),
   id: Schema.String,
@@ -894,8 +899,14 @@ export const settingsTiersWrittenSchema = Schema.Struct({
 });
 
 export const tsOnlyOperationSchemas = {
-  "settings.tiers.read": { request: settingsTiersReadRequestSchema, response: settingsTiersDataSchema },
-  "settings.tiers.write": { request: settingsTiersWriteRequestSchema, response: settingsTiersWrittenSchema },
+  "settings.tiers.read": {
+    request: settingsTiersReadRequestSchema,
+    response: settingsTiersDataSchema,
+  },
+  "settings.tiers.write": {
+    request: settingsTiersWriteRequestSchema,
+    response: settingsTiersWrittenSchema,
+  },
   "takeoffs.saved": {
     request: Schema.Struct({
       captureId: Schema.optional(Schema.String),

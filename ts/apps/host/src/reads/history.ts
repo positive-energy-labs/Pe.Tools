@@ -18,18 +18,23 @@ import {
   documentKeyOf,
 } from "@pe/agent-contracts";
 import { canonicalRouteInput as canonicalJson } from "@pe/agent-contracts";
-import type { RecordingReader, RecordingWriter } from "../native-recording.ts";
+import type { RecordingReader, RecordingWriter } from "@pe/host-internal/input-recording";
 import { recordingReadSetReferences } from "../recording-points.ts";
 import { readSetRecords } from "../input-occurrence.ts";
-import { InvalidRead } from "../native-reads.ts";
-import { immutable } from "./evaluator.ts";
+import { InvalidRead } from "@pe/host-internal/read-errors";
+import { immutable } from "@pe/host-internal/reads/evaluator";
 import type { Publication, Publications } from "./publications.ts";
 
 const fail = (message: string) =>
   new InvalidRead({ message, status: 409, problem: "history.unavailable" });
 export function localHistory(caller: Caller) {
-  if (caller.kind === "pea" || (caller.kind === "human" && ["local", "cli"].includes(caller.via))) return;
-  throw new InvalidRead({ message: "History is local; sharing a recording needs explicit publication", status: 403, problem: "history.local-only" });
+  if (caller.kind === "pea" || (caller.kind === "human" && ["local", "cli"].includes(caller.via)))
+    return;
+  throw new InvalidRead({
+    message: "History is local; sharing a recording needs explicit publication",
+    status: 403,
+    problem: "history.local-only",
+  });
 }
 const json = (value: unknown) =>
   Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
@@ -68,14 +73,26 @@ export class History {
     } catch (error) {
       const at = this.writer.capture.begin();
       const problem = error instanceof InvalidRead ? error.problem : undefined;
-      if (at !== null) await this.run(this.writer.capture.stop(at,
-        problem === "recording.full" ? "full" : problem === "recording.unsupported" ? "unsupported" : "io", { site: "builtin", op: "history.record" }));
+      if (at !== null)
+        await this.run(
+          this.writer.capture.stop(
+            at,
+            problem === "recording.full"
+              ? "full"
+              : problem === "recording.unsupported"
+                ? "unsupported"
+                : "io",
+            { site: "builtin", op: "history.record" },
+          ),
+        );
       return () => {};
     }
   }
   private stopped() {
     const stop = this.reader.truncation;
-    return stop ? `History stopped at ${new Date(stop.stoppedAt).toISOString()}: ${stop.reason}` : null;
+    return stop
+      ? `History stopped at ${new Date(stop.stoppedAt).toISOString()}: ${stop.reason}`
+      : null;
   }
 
   private async keep(
@@ -137,9 +154,13 @@ export class History {
   private openPublications() {
     for (const [subscription, kept] of this.published) {
       const current = this.ledger?.publication(subscription);
-      if (!current?.value || current.generation !== kept.generation ||
-          current.key !== kept.binding.key || current.version !== kept.binding.version ||
-          current.value.evaluation !== kept.binding.evaluation)
+      if (
+        !current?.value ||
+        current.generation !== kept.generation ||
+        current.key !== kept.binding.key ||
+        current.version !== kept.binding.version ||
+        current.value.evaluation !== kept.binding.evaluation
+      )
         this.published.delete(subscription);
     }
     return [...this.published.values()];
@@ -162,7 +183,9 @@ export class History {
       throw fail("History storage is full or unavailable");
     const live = this.openPublications().filter((p) => sameAddress(p.address, address));
     // With no live pane, an explicit capture keeps the last recorded evidence; it runs no read.
-    const slots = live.length ? live : [...this.recorded.values()].filter((p) => sameAddress(p.address, address));
+    const slots = live.length
+      ? live
+      : [...this.recorded.values()].filter((p) => sameAddress(p.address, address));
     if (!slots.length) throw fail("No published Values for this document");
     const end = this.writer.takingCursor();
     return {
@@ -230,16 +253,30 @@ export class History {
         points.push(historyPointSchema.parse(point));
     }
     const unavailable: { point: string; instance: string; reason: string }[] = [];
-    for (const point of points) for (const pose of point.history.poses) {
-      try {
-        const bindings = new Map(point.history.publications.filter(b => b.instance === pose.instance).map(b => [canonicalJson([b.read, b.key]), b]));
-        if (!bindings.size) throw fail("This route was never published at this point");
-        for (const binding of bindings.values()) await this.publication(point.id, pose.instance, binding.read, binding.key);
-      } catch (error) {
-        unavailable.push({ point: point.id, instance: pose.instance, reason: error instanceof Error ? error.message : String(error) });
+    for (const point of points)
+      for (const pose of point.history.poses) {
+        try {
+          const bindings = new Map(
+            point.history.publications
+              .filter((b) => b.instance === pose.instance)
+              .map((b) => [canonicalJson([b.read, b.key]), b]),
+          );
+          if (!bindings.size) throw fail("This route was never published at this point");
+          for (const binding of bindings.values())
+            await this.publication(point.id, pose.instance, binding.read, binding.key);
+        } catch (error) {
+          unavailable.push({
+            point: point.id,
+            instance: pose.instance,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
-    }
-    return { points: points.sort((a, b) => b.at - a.at), unavailable, problem: this.stopped() ?? this.problem };
+    return {
+      points: points.sort((a, b) => b.at - a.at),
+      unavailable,
+      problem: this.stopped() ?? this.problem,
+    };
   }
   async get(id: string) {
     await this.pending;
@@ -280,11 +317,7 @@ export class History {
       if (!inRange) throw fail("Published Value lies outside this point's taking range");
     }
     const taking = this.reader.taking(binding.taking);
-    if (
-      !taking ||
-      taking.input.kind !== "publication" ||
-      taking.input.key !== binding.key
-    )
+    if (!taking || taking.input.kind !== "publication" || taking.input.key !== binding.key)
       throw fail("Missing published Value");
     const scope = z.tuple([addressSchema, z.string(), z.string()]).parse(JSON.parse(taking.scope));
     if (!sameAddress(scope[0], point.history.address) || scope[1] !== instance || scope[2] !== read)

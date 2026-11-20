@@ -1,7 +1,7 @@
 import { scopeOf } from "@pe/ducts-domain/system-scope";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import type { Members, SubjectKey } from "@pe/kit/lang/attention";
-import type { ElementIndex } from "@pe/web/element-index";
+import type { ElementIndex } from "@pe/web-kernel/element-index";
 import { z } from "zod";
 import type { CellRef } from "@pe/ducts-domain/stage-issue";
 
@@ -52,7 +52,8 @@ export function focusedElement(subject: string, elements: ElementIndex): number 
 
 /** A picked issue is the place `issue:<key>`; the marks and rows key on the bare key. */
 export const issueSubject = (key: string): SubjectKey => `issue:${key}`;
-export const issueOf = (selected: string) => (selected.startsWith("issue:") ? selected.slice(6) : "");
+export const issueOf = (selected: string) =>
+  selected.startsWith("issue:") ? selected.slice(6) : "";
 
 /** Each selected cell's one member: its element. */
 export const cellMembers = (selected: readonly SubjectKey[], elements: ElementIndex): Members =>

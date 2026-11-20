@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { observedElements } from "./observation";
+import { observedElements } from "@pe/web-kernel/revit/observation";
 
 it("indexes only captured references and never reuses identity across captures", () => {
   const first = { elementId: 7, uniqueId: "captured-first" };

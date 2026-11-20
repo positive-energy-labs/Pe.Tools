@@ -27,11 +27,15 @@ type View = Marks & {
   places: number;
 };
 // The marks are read first, so the drawing read after them is never older than the settledness it is paired with.
-const view = async (page: Page): Promise<View> => ({ ...(await marks(page)), ...(await drawn(page)) });
+const view = async (page: Page): Promise<View> => ({
+  ...(await marks(page)),
+  ...(await drawn(page)),
+});
 const drawn = (page: Page) =>
   page.evaluate((chooser: string): Omit<View, keyof Marks> => {
     const shown = (e: Element) =>
-      e.getClientRects().length > 0 && e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+      e.getClientRects().length > 0 &&
+      e.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
     const first = (sel: string) => [...document.querySelectorAll(sel)].find(shown) ?? null;
     const text = (e: Element | null) => ((e as HTMLElement | null)?.innerText ?? "").trim();
     const tools = first('[aria-label="tools"]');
@@ -52,7 +56,12 @@ const drawn = (page: Page) =>
     const zeros = [...document.querySelectorAll('[aria-label$="worksheet"] [role="row"]')]
       .filter(shown)
       .map((r) => [...r.children].map((c) => text(c)))
-      .filter((cells) => cells.some((c) => /incomplete/.test(c)) && cells.includes("—") && cells.some((c) => /^0(\.0+)?$/.test(c)))
+      .filter(
+        (cells) =>
+          cells.some((c) => /incomplete/.test(c)) &&
+          cells.includes("—") &&
+          cells.some((c) => /^0(\.0+)?$/.test(c)),
+      )
       .map((cells) => cells.join(" | "));
     // Every value cell (named "<label> <unit>") draws its unit beside the input and its source last.
     const cells = [...(first('[aria-label="Sheet inputs"]')?.querySelectorAll("input") ?? [])]
@@ -74,8 +83,9 @@ const drawn = (page: Page) =>
         .filter((c) => c.source === "none" && /^0(\.0+)?$/.test(c.value))
         .map((c) => `${c.name} = ${c.value} with source none`),
     );
-    const places = [...document.querySelectorAll('[aria-label="Places"] button')]
-      .filter((b) => !(b.getAttribute("aria-label") ?? "").startsWith("Close "));
+    const places = [...document.querySelectorAll('[aria-label="Places"] button')].filter(
+      (b) => !(b.getAttribute("aria-label") ?? "").startsWith("Close "),
+    );
     return {
       url: location.href,
       // The unbound picker is drawn outside the Situation and tools bands.
@@ -86,7 +96,9 @@ const drawn = (page: Page) =>
       fanIds,
       zeros,
       unitless,
-      alerts: [...(tools?.querySelectorAll('[role="alert"],[data-tone="caution"]') ?? [])].filter(shown).map((e) => text(e)),
+      alerts: [...(tools?.querySelectorAll('[role="alert"],[data-tone="caution"]') ?? [])]
+        .filter(shown)
+        .map((e) => text(e)),
       places: places.length,
     };
   }, DOCUMENT_CHOOSER);
@@ -102,12 +114,21 @@ const settledOn = (page: Page, label: string | null) => async () => {
   const v = await idle(page);
   if (!v) return false;
   const sel = picked(v).map((r) => r.label);
-  return label === null ? sel.length === 0 : sel.length === 1 && sel[0] === label && v.heading !== null;
+  return label === null
+    ? sel.length === 0
+    : sel.length === 1 && sel[0] === label && v.heading !== null;
 };
-const option = (label: string) => ({ role: "option", name: fanRosterLabel(label), within: R("fans") });
+const option = (label: string) => ({
+  role: "option",
+  name: fanRosterLabel(label),
+  within: R("fans"),
+});
 async function press(page: Page, target: Parameters<Page["gestures"]["click"]>[0]) {
   const r = await page.gestures.click(target);
-  if (r.outcome !== "done") throw new Error(`ASSERT press ${JSON.stringify(target, (_, v) => (v instanceof RegExp ? String(v) : v))}: ${JSON.stringify(r)}`);
+  if (r.outcome !== "done")
+    throw new Error(
+      `ASSERT press ${JSON.stringify(target, (_, v) => (v instanceof RegExp ? String(v) : v))}: ${JSON.stringify(r)}`,
+    );
 }
 async function history(page: Page, delta: number) {
   const h = await page.send("Page.getNavigationHistory");
@@ -131,22 +152,33 @@ const actions: Action[] = [
       const v = await idle(page);
       return !!v && !v.unbound;
     },
-    can: async ({ page }) => { const v = await idle(page); return !!v && v.unbound && !v.picker && (await page.has("Choose a document")); },
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && v.unbound && !v.picker && (await page.has("Choose a document"));
+    },
     async act(c) {
       const { page } = c;
       await press(page, { role: "button", name: "Choose a document" });
       const session = process.env.E2E_SESSION ?? "";
       // Only documents in this run's own session: the disposable copy, never the owner's.
       const docs = await page.until(async () => {
-        const all = await page.evaluate((layer: string) =>
-          [...document.querySelectorAll(`${layer} [role="option"]`)].map((o) => (o as HTMLElement).innerText.trim()),
-        LAYER);
+        const all = await page.evaluate(
+          (layer: string) =>
+            [...document.querySelectorAll(`${layer} [role="option"]`)].map((o) =>
+              (o as HTMLElement).innerText.trim(),
+            ),
+          LAYER,
+        );
         const own = all.filter((t) => session && t.split("\n").includes(session));
         return own.length ? own : null;
       }, `a document in session ${session}`);
       const doc = c.draw("document", docs, (d) => d.replace("\n", " · "));
-      await press(page, { role: "option", name: new RegExp(`^${esc(doc.split("\n")[0]!)}\\s+${esc(session)}$`) });
-      return async () => !!(await idle(page)) && new URL(await page.url()).searchParams.has("target");
+      await press(page, {
+        role: "option",
+        name: new RegExp(`^${esc(doc.split("\n")[0]!)}\\s+${esc(session)}$`),
+      });
+      return async () =>
+        !!(await idle(page)) && new URL(await page.url()).searchParams.has("target");
     },
     ms: 180_000,
   },
@@ -162,7 +194,11 @@ const actions: Action[] = [
       const v = await view(c.page);
       const marks = [...new Set(v.rows.map((r) => part(r.label).mark))];
       const mark = c.draw("fan", marks);
-      const port = c.draw("port", v.rows.filter((r) => part(r.label).mark === mark), (r) => r.label);
+      const port = c.draw(
+        "port",
+        v.rows.filter((r) => part(r.label).mark === mark),
+        (r) => r.label,
+      );
       await press(c.page, option(port.label));
       return settledOn(c.page, port.label);
     },
@@ -170,7 +206,10 @@ const actions: Action[] = [
   },
   {
     name: "switchFan",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1; },
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && picked(v).length === 1;
+    },
     async act(c) {
       const v = await view(c.page);
       const current = picked(v)[0]!.label;
@@ -186,7 +225,10 @@ const actions: Action[] = [
   },
   {
     name: "clearFans",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length > 0; },
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && picked(v).length > 0;
+    },
     async act({ page }) {
       await press(page, { role: "button", name: "Clear fans", within: R("fans") });
       return settledOn(page, null);
@@ -194,12 +236,20 @@ const actions: Action[] = [
   },
   {
     name: "readInputs",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && (await page.count(R("Inputs"))) > 0; },
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && picked(v).length === 1 && (await page.count(R("Inputs"))) > 0;
+    },
     async act(c) {
       // A read: what the Inputs pane names for this fan, journaled through the draw record.
       const counts = await c.page.evaluate(() => {
-        const s = [...document.querySelectorAll('[aria-label="Inputs"]')].find((e) => e.getClientRects().length);
-        return { inputs: s?.querySelectorAll("input").length ?? 0, sources: (s as HTMLElement | undefined)?.innerText.match(/· from \/\w+/g)?.length ?? 0 };
+        const s = [...document.querySelectorAll('[aria-label="Inputs"]')].find(
+          (e) => e.getClientRects().length,
+        );
+        return {
+          inputs: s?.querySelectorAll("input").length ?? 0,
+          sources: (s as HTMLElement | undefined)?.innerText.match(/· from \/\w+/g)?.length ?? 0,
+        };
       });
       c.draw("inputs", [`${counts.inputs} values, ${counts.sources} sourced`]);
       return async () => true;
@@ -207,11 +257,18 @@ const actions: Action[] = [
   },
   {
     name: "readLedger",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && v.heading !== null; },
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && picked(v).length === 1 && v.heading !== null;
+    },
     async act(c) {
       const ledger = await c.page.evaluate(() => {
-        const e = [...document.querySelectorAll('[aria-label="Required ESP"]')].find((n) => n.getClientRects().length) as HTMLElement | undefined;
-        const taken = [...document.querySelectorAll('[aria-label="Taken assumptions"]')].find((n) => n.getClientRects().length) as HTMLElement | undefined;
+        const e = [...document.querySelectorAll('[aria-label="Required ESP"]')].find(
+          (n) => n.getClientRects().length,
+        ) as HTMLElement | undefined;
+        const taken = [...document.querySelectorAll('[aria-label="Taken assumptions"]')].find(
+          (n) => n.getClientRects().length,
+        ) as HTMLElement | undefined;
         return `${(e?.innerText ?? "").replace(/\s+/g, " ").slice(0, 200)} | taken: ${(taken?.innerText ?? "").replace(/\s+/g, " ").slice(0, 80)}`;
       });
       c.draw("ledger", [ledger]);
@@ -220,14 +277,23 @@ const actions: Action[] = [
   },
   {
     name: "explainFitting",
-    can: async ({ page }) => { const v = await idle(page); return !!v && picked(v).length === 1 && (await page.has(/^(Show|Hide) the \d+ fittings$/, R("Fittings"))); },
-    async act(c) {
-      const names = await c.page.evaluate(() =>
-        [...new Set([...document.querySelectorAll('[aria-label="Fittings"] button')]
-          .filter((b) => b.getClientRects().length)
-          .map((b) => b.getAttribute("aria-label") ?? "")
-          .filter((n) => /^(Show|Hide) the \d+ fittings$/.test(n)))],
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return (
+        !!v &&
+        picked(v).length === 1 &&
+        (await page.has(/^(Show|Hide) the \d+ fittings$/, R("Fittings")))
       );
+    },
+    async act(c) {
+      const names = await c.page.evaluate(() => [
+        ...new Set(
+          [...document.querySelectorAll('[aria-label="Fittings"] button')]
+            .filter((b) => b.getClientRects().length)
+            .map((b) => b.getAttribute("aria-label") ?? "")
+            .filter((n) => /^(Show|Hide) the \d+ fittings$/.test(n)),
+        ),
+      ]);
       const name = c.draw("fitting", names);
       const after = name.replace(/^(Show|Hide)/, (w) => (w === "Show" ? "Hide" : "Show"));
       await press(c.page, { role: "button", name, within: R("Fittings") });
@@ -275,17 +341,28 @@ const actions: Action[] = [
   },
   {
     name: "reopenPlace",
-    can: async ({ page }) => { const v = await idle(page); return !!v && v.places === 1; },
+    can: async ({ page }) => {
+      const v = await idle(page);
+      return !!v && v.places === 1;
+    },
     async act({ page }) {
       const tab = (await view(page)).tab!;
-      await press(page, { role: "button", name: "Open another Place on this route", within: R("tools") });
+      await press(page, {
+        role: "button",
+        name: "Open another Place on this route",
+        within: R("tools"),
+      });
       await page.until(async () => (await view(page)).places === 2, "a second Place");
       // The close control shows on hover only; close the older Place (the one not pressed).
       const older = { role: "button", name: tab, within: R("Places") };
       const hovered = await page.gestures.hover(older);
-      if (hovered.outcome !== "done") throw new Error(`ASSERT hover ${tab}: ${JSON.stringify(hovered)}`);
+      if (hovered.outcome !== "done")
+        throw new Error(`ASSERT hover ${tab}: ${JSON.stringify(hovered)}`);
       await press(page, { role: "button", name: `Close ${tab}`, within: R("Places") });
-      return async () => { const v = await idle(page); return !!v && v.places === 1; };
+      return async () => {
+        const v = await idle(page);
+        return !!v && v.places === 1;
+      };
     },
     ms: 240_000,
   },
@@ -297,27 +374,33 @@ const rules: Rule[] = [
     async holds({ page }) {
       await quiet(page);
       return page.evaluate(() => {
-        const groups = [...document.querySelectorAll('[aria-label="Fittings"] [data-fitting-group]')]
-          .filter((e) => e.getClientRects().length);
+        const groups = [
+          ...document.querySelectorAll('[aria-label="Fittings"] [data-fitting-group]'),
+        ].filter((e) => e.getClientRects().length);
         for (const g of groups) {
           const button = g.querySelector("button");
           const name = button?.getAttribute("aria-label") ?? "";
           const count = /^(Show|Hide) the (\d+) fittings$/.exec(name);
           if (!count) return `fitting group has no named expansion control`;
           const members = g.querySelectorAll("[data-fitting]").length;
-          if (members !== (count[1] === "Hide" ? Number(count[2]) : 0)) return `${name}: ${members} members drawn`;
+          if (members !== (count[1] === "Hide" ? Number(count[2]) : 0))
+            return `${name}: ${members} members drawn`;
           if (g.getAttribute("data-fitting-source") === "not priced") {
-            const reason = [...g.querySelectorAll("span")]
-              .filter((e) => e.getClientRects().length)
-              .map((e) => e.innerText.trim())
-              .find((text) => /^not priced \/ .+/.test(text)) ?? "";
-            const warning = (g.querySelector('[data-tone="alarm"]') as HTMLElement | null)?.innerText ?? "";
-            if (!/^[1-9]\d* not priced$/.test(warning) || !/not priced \/ .+/.test(reason)) return `unpriced group: ${warning}, reason ${reason}`;
+            const reason =
+              [...g.querySelectorAll("span")]
+                .filter((e) => e.getClientRects().length)
+                .map((e) => e.innerText.trim())
+                .find((text) => /^not priced \/ .+/.test(text)) ?? "";
+            const warning =
+              (g.querySelector('[data-tone="alarm"]') as HTMLElement | null)?.innerText ?? "";
+            if (!/^[1-9]\d* not priced$/.test(warning) || !/not priced \/ .+/.test(reason))
+              return `unpriced group: ${warning}, reason ${reason}`;
           }
           for (const member of g.querySelectorAll("[data-fitting]")) {
             const note = (member.lastElementChild as HTMLElement | null)?.innerText ?? "";
             const loss = (member.children[1] as HTMLElement | undefined)?.innerText.trim();
-            if (/no rule matches/i.test(note) && loss !== "—") return `unmatched fitting shows loss ${loss}: ${note}`;
+            if (/no rule matches/i.test(note) && loss !== "—")
+              return `unmatched fitting shows loss ${loss}: ${note}`;
           }
         }
         return true;
@@ -329,9 +412,13 @@ const rules: Rule[] = [
     async holds({ page }) {
       const v = await quiet(page);
       const sel = picked(v);
-      if (sel.length !== 1) return v.heading === null || `heading "${v.heading}" with ${sel.length} rows selected`;
+      if (sel.length !== 1)
+        return v.heading === null || `heading "${v.heading}" with ${sel.length} rows selected`;
       const { mark, port } = part(sel[0]!.label);
-      return v.heading === `${mark} · port ${port}` || `selected "${sel[0]!.label}", heading "${v.heading}"`;
+      return (
+        v.heading === `${mark} · port ${port}` ||
+        `selected "${sel[0]!.label}", heading "${v.heading}"`
+      );
     },
   },
   {
@@ -349,7 +436,8 @@ const rules: Rule[] = [
         doc = "unparsable";
       }
       // The target names one document as an object; a string here is a target encoded twice.
-      if (target !== null && (typeof doc !== "object" || doc === null)) return `URL target is ${JSON.stringify(target).slice(0, 80)}`;
+      if (target !== null && (typeof doc !== "object" || doc === null))
+        return `URL target is ${JSON.stringify(target).slice(0, 80)}`;
       const tab = sel.length ? `Fans · ${sel.join(", ")}` : "Fans";
       return v.tab === tab || `tab "${v.tab}" vs selected [${sel}]`;
     },
@@ -373,7 +461,9 @@ const rules: Rule[] = [
     async holds({ page, net }) {
       if (!net.failed.length) return true;
       const v = await view(page);
-      return v.alerts.length > 0 || `failed: ${net.failed.slice(0, 2).join(" ;; ")}; page shows no alert`;
+      return (
+        v.alerts.length > 0 || `failed: ${net.failed.slice(0, 2).join(" ;; ")}; page shows no alert`
+      );
     },
   },
   {
@@ -401,5 +491,8 @@ const F1 = [
 const host = new URL(WEB).host;
 await run("F1-fans", actions, rules, F1, (url) => {
   const u = new URL(url);
-  return (u.host === host || u.hostname === "127.0.0.1") && !/\.(js|ts|tsx|css|svg|png|woff2?)$|^\/(@|node_modules|src)\//.test(u.pathname);
+  return (
+    (u.host === host || u.hostname === "127.0.0.1") &&
+    !/\.(js|ts|tsx|css|svg|png|woff2?)$|^\/(@|node_modules|src)\//.test(u.pathname)
+  );
 });

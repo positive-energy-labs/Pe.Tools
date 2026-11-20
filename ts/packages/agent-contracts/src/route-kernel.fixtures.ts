@@ -90,7 +90,15 @@ export const builtinData = {
       ...policy,
     },
     selected: { role: "selection", kinds: ["system", "element"] },
-    density: { role: "device", schema: "number", codec: "number", initial: 1, url: false, share: false, agent: "read" },
+    density: {
+      role: "device",
+      schema: "number",
+      codec: "number",
+      initial: 1,
+      url: false,
+      share: false,
+      agent: "read",
+    },
     viewport: {
       role: "pose",
       schema: "viewport",
@@ -101,7 +109,7 @@ export const builtinData = {
     search: text,
   },
   subject: { field: "system", noun: "system", roster: "roster", detail: "total", pane: "main" },
-  work: { schema: "work", route: "tiny", version: 1, },
+  work: { schema: "work", route: "tiny", version: 1 },
   readings: {
     roster: {
       kind: "use",
@@ -217,7 +225,7 @@ export const podData = {
     },
     selected: { role: "selection", kinds: ["manual", "circuit"] },
   },
-  work: { schema: "work", route: "pod.circuits", version: 2, },
+  work: { schema: "work", route: "pod.circuits", version: 2 },
   readings: {
     ...builtinData.readings,
     overview: {
@@ -281,10 +289,9 @@ export const podBodies = {
   calculate: {
     ...builtinBodies.calculate,
     run: ({ page, work, readings }) => ({
-      total:
-        isManual(page.system)
-          ? work.amount
-          : work.amount * (held(readings.roster)?.length ?? 1),
+      total: isManual(page.system)
+        ? work.amount
+        : work.amount * (held(readings.roster)?.length ?? 1),
     }),
   },
   edit: {
@@ -295,7 +302,10 @@ export const podBodies = {
     ...builtinBodies.apply,
     run: ({ work, captures }) => ({ amount: held(captures.total)?.total ?? work.amount }),
   },
-  main: { ...builtinBodies.main, run: ({ page }) => (isManual(page.read().system) ? "manual" : "none") },
+  main: {
+    ...builtinBodies.main,
+    run: ({ page }) => (isManual(page.read().system) ? "manual" : "none"),
+  },
   cellGroup: {
     slot: "cells.input.groupOf",
     kind: "group",

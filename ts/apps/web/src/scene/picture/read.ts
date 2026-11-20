@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useScene, type SceneRead } from "#/scene/use-scene";
 import { retainSceneMeshes } from "#/scene/scene-data";
 import { clipMeshes } from "#/scene/clip";
-import type { SceneMeshes } from "#/scene/types";
+import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { sceneRequest } from "#/scene/host";
 type CaptureRequest = ReturnType<typeof sceneRequest>;
 const EMPTY_CUTS: SceneMeshes["cuts"] = new Map();

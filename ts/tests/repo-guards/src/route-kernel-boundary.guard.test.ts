@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { additions, boundaryCensus } from "./unification-2-census.ts";
 
 it("generic receipt projections name no route or operation key", () => {
-  const source = readFileSync(new URL("../../../packages/agent-contracts/src/action-receipts.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("../../../packages/agent-contracts/src/action-receipts.ts", import.meta.url),
+    "utf8",
+  );
   expect(source).not.toMatch(/["'`][a-z][\w-]*(?:\.[\w-]+)+["'`]/);
 });
 
@@ -47,7 +50,7 @@ it("keeps admitted Place composition private without permitting body or re-expor
     "ts/apps/web/src/workbench/provider/view.tsx": `import { useWorkbench } from 'provider.ts'; export const WorkbenchOwner = () => null;`,
     "ts/apps/web/src/workbench/thread-view.tsx": `import { WorkbenchOwner } from '#/workbench/provider/view';`,
     "ts/apps/web/src/route/builtin-routes.tsx": `const WorkbenchRoute = () => import('#/workbench/thread-view');`,
-    "ts/apps/web/src/shell/typed-mount.ts": `const mode = place.fixture;`,
+    "../../../apps/web/src/shell/typed-mount.ts": `const mode = place.fixture;`,
     "provider.ts": `import { appAtomRegistry } from '#/shell/owner'; export const useWorkbench = () => appAtomRegistry;`,
     "ts/apps/web/src/example/body.ts": `import { useWorkbench } from 'provider.ts'; const mode = state.fixture;`,
   });
@@ -63,24 +66,25 @@ it("keeps admitted Place composition private without permitting body or re-expor
   expect(escape.rawPageImports).toHaveLength(3);
 });
 
-
-it("type-only route context imports do not import a colocated runtime owner",()=>{
- const actual=boundaryCensus({
-  "ts/apps/web/src/example/drawing.tsx":`import type {Context} from '#/example/route';`,
-  "ts/apps/web/src/example/route.ts":`import {appAtomRegistry} from '#/shell/owner'; export type Context={};`,
-  "ts/apps/web/src/example/direct.ts":`import type {PrivateOwner} from '#/shell/owner';`,
- });
- expect(actual.rawPageImports).toHaveLength(2);
- expect(actual.rawPageImports!.some(row=>row.includes("drawing.tsx"))).toBe(false);
+it("type-only route context imports do not import a colocated runtime owner", () => {
+  const actual = boundaryCensus({
+    "ts/apps/web/src/example/drawing.tsx": `import type {Context} from '#/example/route';`,
+    "ts/apps/web/src/example/route.ts": `import {appAtomRegistry} from '#/shell/owner'; export type Context={};`,
+    "ts/apps/web/src/example/direct.ts": `import type {PrivateOwner} from '#/shell/owner';`,
+  });
+  expect(actual.rawPageImports).toHaveLength(2);
+  expect(actual.rawPageImports!.some((row) => row.includes("drawing.tsx"))).toBe(false);
 });
-
 
 import { kernelRouteInventory, kernelRouteFloors } from "./kernel-route-names-census.ts";
 import kernelRoutes from "./kernel-route-names.baseline.json" with { type: "json" };
 
 it("ADR 0033 rule 7 inventories every kernel path and ratchets route sites", () => {
   const actual = kernelRouteInventory(kernelRoutes.paths);
-  expect(actual.paths, "Enroll every discovered kernel path; no missing or silently skipped files").toEqual(kernelRoutes.paths);
+  expect(
+    actual.paths,
+    "Enroll every discovered kernel path; no missing or silently skipped files",
+  ).toEqual(kernelRoutes.paths);
   expect(additions(actual.sites, kernelRoutes.sites)).toEqual([]);
 });
 

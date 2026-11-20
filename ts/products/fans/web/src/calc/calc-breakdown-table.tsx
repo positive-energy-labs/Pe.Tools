@@ -79,9 +79,7 @@ function CfmCell({ run, ws, editing }: { run: Run; ws: Ws; editing: CalcBreakdow
         refusal={editing.busy ? "Wait for the current read" : null}
         clearable={typed}
         className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-1"
-        onValue={(value) =>
-          editing.changeInputs({ flows: { [subject]: value ?? null } })
-        }
+        onValue={(value) => editing.changeInputs({ flows: { [subject]: value ?? null } })}
       />
       {carried && (
         <TooltipHint content={flowSource}>
@@ -202,7 +200,9 @@ function SectionRows({ ws, run, side, doc }: { ws: Ws; run: Run; side: Side; doc
             <span className={CFM}>{s.cfm ?? "—"}</span>
             <span className="face-mono text-right">{complete ? ft(s.telFt) : ""}</span>
             <span className="face-mono text-right">{complete ? pressure(s.knownInWg) : ""}</span>
-            <span className="face-mono text-right text-ink-2">{whole ? pressure(cumulative) : ""}</span>
+            <span className="face-mono text-right text-ink-2">
+              {whole ? pressure(cumulative) : ""}
+            </span>
             <span
               className="face-mono text-right"
               data-tone={s.overLegIds.length ? "alarm" : undefined}
@@ -251,8 +251,8 @@ function SideTable({
         <h3 className="t-head">{side}</h3>
         <span className="t-small face-mono text-ink-2" data-calc-breakdown-caption={side}>
           {sideCaption(runs)} · {branchesKnown(runs)}
-          {worstKnownInWg != null && ` · worst known ${pressure(worstKnownInWg)} in-wg`} · over {limit} fpm (
-          {side === "supply" ? ws.limits.supplySource : ws.limits.returnSource})
+          {worstKnownInWg != null && ` · worst known ${pressure(worstKnownInWg)} in-wg`} · over{" "}
+          {limit} fpm ({side === "supply" ? ws.limits.supplySource : ws.limits.returnSource})
         </span>
       </header>
       {/* The table is the size container its rows answer to; below its numbers' width it scrolls. */}
@@ -293,12 +293,17 @@ function SideTable({
                   <span className={NAME}>
                     <EndName run={run} />
                     {!run.complete && (
-                      <span className="t-small text-ink-2"> · {missing(ws, run.legIds) ?? "incomplete"}</span>
+                      <span className="t-small text-ink-2">
+                        {" "}
+                        · {missing(ws, run.legIds) ?? "incomplete"}
+                      </span>
                     )}
                   </span>
                   <CfmCell run={run} ws={ws} editing={editing} />
                   <span className="face-mono text-right">{run.complete ? ft(run.telFt) : ""}</span>
-                  <span className="face-mono text-right">{run.complete ? pressure(run.knownInWg) : ""}</span>
+                  <span className="face-mono text-right">
+                    {run.complete ? pressure(run.knownInWg) : ""}
+                  </span>
                   <span className="face-mono text-right">
                     {run.residualInWg == null ? "" : pressure(run.residualInWg)}
                   </span>

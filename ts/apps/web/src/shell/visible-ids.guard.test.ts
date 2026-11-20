@@ -1,6 +1,6 @@
 import { routeRegistry } from "../route/registry";
-import type { Page, Fields } from "../route/typed-route";
-import type { HostRead } from "../route/host-read";
+import type { Page, Fields } from "@pe/web-kernel/route/typed-route";
+import type { HostRead } from "@pe/web-kernel/host-read";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { leaks } from "./visible-text";
 import { fanLabel } from "@pe/ducts-web/calc/model";
@@ -13,17 +13,36 @@ import { inputsFor } from "@pe/ducts-domain/test-inputs";
 
 // Registry words and actual declared fixture publications must name things, never their keys.
 afterEach(() => vi.unstubAllGlobals());
-const routes = Object.keys(routeRegistry).sort().map((key) => routeRegistry[key]!.module);
+const routes = Object.keys(routeRegistry)
+  .sort()
+  .map((key) => routeRegistry[key]!.module);
 const fixtures = async (module: (typeof routes)[number]) => {
-  const page: Page<Fields> = { ...Object.fromEntries(Object.entries(module.spec.fields).map(([key, field]) => [key, field.initial])), selected: [] };
+  const page: Page<Fields> = {
+    ...Object.fromEntries(
+      Object.entries(module.spec.fields).map(([key, field]) => [key, field.initial]),
+    ),
+    selected: [],
+  };
   const reads = new Set<HostRead & { args?(page: Page<Fields>): unknown }>([
     ...Object.values(module.spec.reads ?? {}),
-    ...Object.values(module.spec.panes).flatMap((pane) => pane.read ? [pane.read] : []),
+    ...Object.values(module.spec.panes).flatMap((pane) => (pane.read ? [pane.read] : [])),
     ...(module.spec.core ? [module.spec.core] : []),
   ]);
-  return (await Promise.all([...reads].map(async read => Promise.all(Object.keys(
-    typeof read.fixtures === "function" ? await read.fixtures() : read.fixtures ?? {},
-  ).map(async name => ({ read, name, publication: await read.source.provide!(name, read.args?.(page) ?? {}) })))))).flat();
+  return (
+    await Promise.all(
+      [...reads].map(async (read) =>
+        Promise.all(
+          Object.keys(
+            typeof read.fixtures === "function" ? await read.fixtures() : (read.fixtures ?? {}),
+          ).map(async (name) => ({
+            read,
+            name,
+            publication: await read.source.provide!(name, read.args?.(page) ?? {}),
+          })),
+        ),
+      ),
+    )
+  ).flat();
 };
 
 // C746 Family runtime picker/roster/stage labels are also driven by the D G07 Family journey
@@ -31,15 +50,30 @@ const fixtures = async (module: (typeof routes)[number]) => {
 test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s renders no internal identity in its subject, verb, pane or stage words",
   async (_, module) => {
-    vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw Error("Real host called");
+      }),
+    );
     const data = module.data;
-    const internal = [...Object.keys(data.verbs), ...Object.keys(data.panes)].filter(id => id.includes("-"));
-    const words = [data.name, data.directory.label, ...(data.subject ? [data.subject.noun] : []),
-      ...Object.values(data.verbs).map(verb => verb.label),
-      ...Object.values(data.panes).flatMap(pane => [pane.label, pane.purpose])];
+    const internal = [...Object.keys(data.verbs), ...Object.keys(data.panes)].filter((id) =>
+      id.includes("-"),
+    );
+    const words = [
+      data.name,
+      data.directory.label,
+      ...(data.subject ? [data.subject.noun] : []),
+      ...Object.values(data.verbs).map((verb) => verb.label),
+      ...Object.values(data.panes).flatMap((pane) => [pane.label, pane.purpose]),
+    ];
     for (const fixture of await fixtures(module))
       if (module.spec.subject && fixture.read === (module.spec.subject.read ?? module.spec.core))
-        words.push(...module.spec.subject.options(fixture.publication.value!.data).map(option => option.label));
+        words.push(
+          ...module.spec.subject
+            .options(fixture.publication.value!.data)
+            .map((option) => option.label),
+        );
     for (const word of words) expect(leaks(word, internal), `${data.key}: ${word}`).toEqual([]);
   },
 );
@@ -61,7 +95,12 @@ function displayStrings(value: unknown, key = "", out: string[] = []): string[] 
 test.each(routes.map((module) => [module.data.address, module] as const))(
   "/%s fixture seeds carry no internal identity in any display text",
   async (_, module) => {
-    vi.stubGlobal("fetch", vi.fn(() => { throw Error("Real host called"); }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        throw Error("Real host called");
+      }),
+    );
     for (const { read, name, publication } of await fixtures(module))
       for (const text of displayStrings(publication.value?.data))
         expect(leaks(text), `${module.spec.key}/${read.key}/${name}: ${text}`).toEqual([]);
@@ -147,16 +186,29 @@ test("a duplicate fan mark is told apart by level, then system, then order; neve
 
 test("registered routes render declared subject and pane words without internal ids", () => {
   for (const route of routes) {
-    const words = [route.data.name, ...(route.data.subject ? [route.data.subject.noun] : []),
-      ...Object.values(route.data.panes).flatMap(pane => [pane.label, pane.purpose]),
-      ...Object.values(route.data.verbs).map(verb => verb.label)];
-    expect(words.flatMap(word => leaks(word)), route.data.key).toEqual([]);
+    const words = [
+      route.data.name,
+      ...(route.data.subject ? [route.data.subject.noun] : []),
+      ...Object.values(route.data.panes).flatMap((pane) => [pane.label, pane.purpose]),
+      ...Object.values(route.data.verbs).map((verb) => verb.label),
+    ];
+    expect(
+      words.flatMap((word) => leaks(word)),
+      route.data.key,
+    ).toEqual([]);
   }
 });
 
-test("typed modules publish display words without internal identities",async()=>{
- for(const module of routes) {
-   const words=[module.data.name,...Object.values(module.data.panes).flatMap(p=>[p.label,p.purpose]),...Object.values(module.data.verbs).map(v=>v.label)];
-   expect(words.flatMap(word=>leaks(word)),module.data.key).toEqual([]);
- }
+test("typed modules publish display words without internal identities", async () => {
+  for (const module of routes) {
+    const words = [
+      module.data.name,
+      ...Object.values(module.data.panes).flatMap((p) => [p.label, p.purpose]),
+      ...Object.values(module.data.verbs).map((v) => v.label),
+    ];
+    expect(
+      words.flatMap((word) => leaks(word)),
+      module.data.key,
+    ).toEqual([]);
+  }
 });

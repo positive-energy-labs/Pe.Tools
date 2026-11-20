@@ -11,7 +11,12 @@ import { projectMockModel } from "./proto/project-model";
 import { mockModel } from "./proto/mock";
 
 /** The page fields a takeoff seed sets, and the readings it can supply. */
-type TakeoffPage = { views: string[]; zones: string[]; stage: "adopt" | "audit" | "sync"; r10: string };
+type TakeoffPage = {
+  views: string[];
+  zones: string[];
+  stage: "adopt" | "audit" | "sync";
+  r10: string;
+};
 type TakeoffReadingKey = "snapshot" | "rhvacVersion" | "inventory" | "receipts";
 
 const FIXTURE_AT = address("C:\\Fixtures\\project-a Residence.rvt");

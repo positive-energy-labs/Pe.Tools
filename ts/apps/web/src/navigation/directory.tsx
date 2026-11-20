@@ -57,9 +57,7 @@ type DirectoryItem =
   | { kind: "tool"; tool: (typeof TOOLS)[number]; works: DirectoryItem[] }
   | { kind: "work"; work: NavigationWork };
 const itemKey = (item: DirectoryItem) =>
-  item.kind === "tool"
-    ? item.tool.to
-    : `work:${item.work.id}`;
+  item.kind === "tool" ? item.tool.to : `work:${item.work.id}`;
 const itemTitle = (item: DirectoryItem) =>
   item.kind === "tool" ? item.tool.title : item.work.label;
 
@@ -80,7 +78,8 @@ function NavigationStatus() {
               : `inventory · ${snapshot ? at(snapshot.observedAt) : "never"}`}
         </span>
       </TooltipHint>
-      <Button kind="quiet"
+      <Button
+        kind="quiet"
         label="Refresh navigation inventory"
         icon={RefreshCw}
         busy={loading}
@@ -142,12 +141,7 @@ export function Directory({
     }),
     sorts: { workflow: () => 0, name: itemTitle },
     groups: {
-      of: (item) =>
-        item.kind === "tool"
-            ? sort === "workflow"
-              ? item.tool.task
-              : "Tools"
-            : "",
+      of: (item) => (item.kind === "tool" ? (sort === "workflow" ? item.tool.task : "Tools") : ""),
       order: sort === "workflow" ? TASKS : ["Tools"],
     },
     tree: { childrenOf: (item) => (item.kind === "tool" ? item.works : []) },
@@ -155,9 +149,7 @@ export function Directory({
       ...local,
       search: { v: 1, keywords: query, pills: [] },
       sort,
-      open: tools
-        .filter((tool) => !(folded.includes(tool.to)))
-        .map((tool) => tool.to),
+      open: tools.filter((tool) => !folded.includes(tool.to)).map((tool) => tool.to),
     },
     onState: (next) => {
       setLocal(next);
@@ -165,9 +157,7 @@ export function Directory({
         query: next.search.keywords,
         sort: next.sort || "workflow",
         folded: [
-          ...folded.filter(
-            (path) => !tools.some((tool) => tool.to === path),
-          ),
+          ...folded.filter((path) => !tools.some((tool) => tool.to === path)),
           ...tools.filter((tool) => !next.open.includes(tool.to)).map((tool) => tool.to),
         ],
       });
@@ -175,10 +165,7 @@ export function Directory({
     refusalOf: (item) =>
       item.kind === "work" ? resumeRefusal(item.work, !!(loading || error)) : undefined,
     onPick: (item) => {
-      const url =
-        item.kind === "tool"
-          ? item.tool.to
-          : item.work.url;
+      const url = item.kind === "tool" ? item.tool.to : item.work.url;
       if (url) go(url);
     },
   });
@@ -222,7 +209,12 @@ export function Directory({
             selection and action readiness.
           </p>
           {tool.satellites?.map((satellite) => (
-            <Button kind="quiet" key={satellite.to} label={satellite.label} onClick={() => go(satellite.to)}>
+            <Button
+              kind="quiet"
+              key={satellite.to}
+              label={satellite.label}
+              onClick={() => go(satellite.to)}
+            >
               {satellite.label}
             </Button>
           ))}
@@ -245,7 +237,8 @@ export function Directory({
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <span className="text-ink-2">Exposure suggestion:</span>
           {(["All", "Main", "Preview", "Archive"] as const).map((value) => (
-            <Button kind="quiet"
+            <Button
+              kind="quiet"
               key={value}
               label={`Show ${value} exposure`}
               pressed={exposure === value}

@@ -31,7 +31,9 @@ test("workbench mounts the typed registration with exact caller bindings and hon
   );
   await waitFor(() => expect(screen.getByText("Typed hosted body")).toBeTruthy());
   expect(seen.props.module).toBe(publicRoutes.typed("families"));
-  expect(Object.fromEntries(hostedRouteAddress(seen.props.module, seen.props).read())).toMatchObject({
+  expect(
+    Object.fromEntries(hostedRouteAddress(seen.props.module, seen.props).read()),
+  ).toMatchObject({
     thread: props.thread,
     target: props.target,
     work: props.work,

@@ -46,7 +46,8 @@ export function useFamilyTypeColumn(core: FamilyWorkspaceCore) {
     width: "w-28",
     right: options.align === "right",
     header: options.header ? (
-      <Button kind="quiet"
+      <Button
+        kind="quiet"
         label={typeName}
         onClick={() => {
           setStageType(typeName);

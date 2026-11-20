@@ -19,7 +19,6 @@ import { LocalOpError } from "./local-error.ts";
 import { runHostChild } from "./host-child.ts";
 import { hostState } from "./host-ownership.ts";
 
-
 const APS_AUTH_BASE_URL = "https://developer.api.autodesk.com/authentication/v2";
 const tokensKind = stateKind({
   place: () => "Autodesk sign-in",
@@ -486,10 +485,7 @@ const loadPersistedTokenMap = Effect.fnUntraced(function* () {
     // refused on every call until someone deleted the file by hand.
     Effect.catch((error) =>
       Effect.sync(() => {
-        setAside(
-          tokensKind.in(hostState()),
-          errorMessage(error),
-        );
+        setAside(tokensKind.in(hostState()), errorMessage(error));
         return null;
       }),
     ),
@@ -513,7 +509,8 @@ function parsePersistedTokenRecord(value: string): PersistedTokenRecord | null {
       expiresAtUtc: parsed.expiresAtUtc,
       refreshToken: parsed.refreshToken ?? "",
     };
-  } catch (error) { console.warn("ts/apps/host/src/aps-auth.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/apps/host/src/aps-auth.ts: fallback after failure", error);
     return null;
   }
 }

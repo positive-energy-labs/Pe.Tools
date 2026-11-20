@@ -139,7 +139,8 @@ export function BindPicker({
               onClick={
                 onBack &&
                 ((event) => {
-                  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey) return;
+                  if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey)
+                    return;
                   event.preventDefault();
                   onBack();
                 })

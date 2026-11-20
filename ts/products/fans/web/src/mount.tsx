@@ -1,8 +1,8 @@
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { ductElements } from "@pe/ducts-web/identity";
-import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
-import { useRouteSearchSlice } from "@pe/web/route/activity";
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { useRevitSubjectProps } from "@pe/web-kernel/revit/element-menu";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 
 import type { FansCalcEdits } from "@pe/ducts-contract/duct-inputs";
 import type { SubjectRefCode } from "@pe/agent-contracts";
@@ -11,11 +11,17 @@ import type { SubjectKey } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { useMemo } from "react";
 import { calc as sheet, type FansDrawContext } from "../route.ts";
-import { valueOf } from "@pe/web/route/typed-route";
+import { valueOf } from "@pe/web-kernel/route/typed-route";
 import { issueOf, issueSubject } from "@pe/ducts-web/cell-focus";
 import { ductsLink } from "@pe/ducts-web/identity";
 import { subjectNamer } from "@pe/ducts-web/subject-text";
-import { describeCloser, DUCTS_FIXES, type Closer, type CloserAction, type CloserLink } from "./calc/closer.ts";
+import {
+  describeCloser,
+  DUCTS_FIXES,
+  type Closer,
+  type CloserAction,
+  type CloserLink,
+} from "./calc/closer.ts";
 import { fittingGroups } from "./calc/fitting-groups.ts";
 import { FittingReadouts } from "./calc/fitting-readouts.tsx";
 import { editLabel, type EditMeta } from "@pe/ducts-web/calc/input-history.neutral";
@@ -36,7 +42,7 @@ export function useCalcData(ctx: CalcContext, snapshot: DuctSnapshot) {
   const selected = authored.selected.map(({ id }) => id).join(",");
   const changeInputs = async (
     edits: FansCalcEdits,
-    history: EditMeta = { label: editLabel(edits, key => nameOf(workElementId(snapshot, key))) },
+    history: EditMeta = { label: editLabel(edits, (key) => nameOf(workElementId(snapshot, key))) },
   ) => {
     return ctx.cells.edit(edits, history).then((result) => result ?? undefined);
   };
@@ -61,7 +67,8 @@ export function useCalcData(ctx: CalcContext, snapshot: DuctSnapshot) {
 export function RosterBody({ ctx }: { ctx: CalcContext }) {
   const authored = ctx.page.read();
   // This pane's read is the roster; the open sheet is a second reading, and it wins where it is held.
-  const opened = ctx.read(sheet), held = valueOf(opened) ?? ctx.value.value;
+  const opened = ctx.read(sheet),
+    held = valueOf(opened) ?? ctx.value.value;
   const snapshot = calcSnapshot(held.calcSnapshot);
   const fans = held.fans;
   const roster = rosterOrder(held.rows ?? fans?.rows ?? []);
@@ -107,7 +114,11 @@ export function RosterBody({ ctx }: { ctx: CalcContext }) {
   );
 }
 export function CalcEmpty({ value }: { value: CalcContext["value"] }) {
-  return value.state === "refreshing" ? <p role="status">computing</p> : <p>Open a fan from the roster.</p>;
+  return value.state === "refreshing" ? (
+    <p role="status">computing</p>
+  ) : (
+    <p>Open a fan from the roster.</p>
+  );
 }
 export function LedgerBody({ ctx }: { ctx: CalcContext }) {
   const snapshot = calcSnapshot(ctx.value.value?.calcSnapshot);
@@ -119,7 +130,7 @@ export function LedgerBody({ ctx }: { ctx: CalcContext }) {
 }
 function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnapshot }) {
   const nativeElement = (id: number) => {
-    const e = [...snapshot.nodes, ...snapshot.segments].find(e => e.id === id);
+    const e = [...snapshot.nodes, ...snapshot.segments].find((e) => e.id === id);
     if (!e) throw Error(`Element ${id} is unavailable`);
     return e;
   };
@@ -131,7 +142,10 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
     ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
   const state = ctx.value.value?.calcView ?? EMPTY_CALC_STATE;
   const search = useRouteSearchSlice((search) => search);
-  const closerOf = (blocker: import("./calc/tiers.ts").CalcBlocker, typed: number | null): Closer => {
+  const closerOf = (
+    blocker: import("./calc/tiers.ts").CalcBlocker,
+    typed: number | null,
+  ): Closer => {
     const closer = describeCloser(blocker, typed, {
       terminalDrop: state.inputs?.criteria.terminalDropInWg ?? null,
       // A terminal of this walk is a row of the resolved inputs; the blocker's prose is never read.
@@ -170,13 +184,31 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
     const linkTo = (action: CloserAction | null | undefined): CloserLink | null => {
       if (!action || !DUCTS_FIXES.has(action.kind)) return null;
       const name = nameOf(blocker.elementId);
-      const what = action.kind === "encounter" ? `encounter ${name}` : action.kind === "rule" ? `join ${name}` : action.kind === "cap" ? `end ${name}`
-        : action.kind === "price" ? `assignment ${action.family}` : action.kind === "table" ? `table ${action.rule}` : `fitting ${name}`;
+      const what =
+        action.kind === "encounter"
+          ? `encounter ${name}`
+          : action.kind === "rule"
+            ? `join ${name}`
+            : action.kind === "cap"
+              ? `end ${name}`
+              : action.kind === "price"
+                ? `assignment ${action.family}`
+                : action.kind === "table"
+                  ? `table ${action.rule}`
+                  : `fitting ${name}`;
       // Never a fallback to a write or an ElementId (slice 5): the blocker's producer stamps its
       // UniqueId SubjectRef; /ducts resolves the open fan's port walk, not the model's whole roster.
-      return { says: `Fix in /duct-systems: ${what} ›`, href: ductsLink(sheet?.overview.fan ?? null, search,
-        // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
-        blocker.subject ? { kind: "subject", code: blocker.subject as SubjectRefCode } : { kind: "route" }) };
+      return {
+        says: `Fix in /duct-systems: ${what} ›`,
+        href: ductsLink(
+          sheet?.overview.fan ?? null,
+          search,
+          // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
+          blocker.subject
+            ? { kind: "subject", code: blocker.subject as SubjectRefCode }
+            : { kind: "route" },
+        ),
+      };
     };
     const own = (link: CloserLink | null, action: CloserAction | null) => (link ? null : action);
     const link = linkTo(closer.action) ?? linkTo(closer.choices?.[0]?.action);
@@ -187,20 +219,36 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
       input: link ? null : closer.input,
       refusal: link ? null : closer.refusal,
       verb: link ? link.says : labelled(closer.verb, closer.action),
-      secondary: closer.secondary && (() => {
-        const l = linkTo(closer.secondary.action);
-        return { ...closer.secondary, link: l, action: own(l, closer.secondary.action), refusal: l ? null : closer.secondary.refusal,
-          verb: l ? l.says : labelled(closer.secondary.verb, closer.secondary.action) };
-      })(),
-      crossing: closer.crossing && (() => {
-        const l = linkTo(closer.crossing.action);
-        return { ...closer.crossing, link: l, action: own(l, closer.crossing.action), refusal: l ? null : closer.crossing.refusal,
-          verb: l ? l.says : labelled(closer.crossing.verb, closer.crossing.action) };
-      })(),
-      choices: link ? null : closer.choices?.map((choice) => ({
-        ...choice,
-        verb: labelled(choice.verb, choice.action),
-      })),
+      secondary:
+        closer.secondary &&
+        (() => {
+          const l = linkTo(closer.secondary.action);
+          return {
+            ...closer.secondary,
+            link: l,
+            action: own(l, closer.secondary.action),
+            refusal: l ? null : closer.secondary.refusal,
+            verb: l ? l.says : labelled(closer.secondary.verb, closer.secondary.action),
+          };
+        })(),
+      crossing:
+        closer.crossing &&
+        (() => {
+          const l = linkTo(closer.crossing.action);
+          return {
+            ...closer.crossing,
+            link: l,
+            action: own(l, closer.crossing.action),
+            refusal: l ? null : closer.crossing.refusal,
+            verb: l ? l.says : labelled(closer.crossing.verb, closer.crossing.action),
+          };
+        })(),
+      choices: link
+        ? null
+        : closer.choices?.map((choice) => ({
+            ...choice,
+            verb: labelled(choice.verb, choice.action),
+          })),
     };
   };
   const editsFor = (closers: readonly Closer[]) =>
@@ -209,17 +257,37 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
       const action = closer.action;
       switch (action.kind) {
         case "drop": {
-          const segment = action.terminal ? "terminalDrops" : "componentDrops", key = elementSubject(nativeElement(action.elementId));
-          return { ...edits, [segment]: { ...edits[segment], [key]: { inWg: action.value } },
+          const segment = action.terminal ? "terminalDrops" : "componentDrops",
+            key = elementSubject(nativeElement(action.elementId));
+          return {
+            ...edits,
+            [segment]: { ...edits[segment], [key]: { inWg: action.value } },
             // An offered default cites where it came from on the cell's own ref; the host stamps who took it.
-            ...(action.ref ? { refs: { ...edits.refs, [segment]: { ...edits.refs?.[segment], [key]: action.ref } } } : {}) };
+            ...(action.ref
+              ? {
+                  refs: {
+                    ...edits.refs,
+                    [segment]: { ...edits.refs?.[segment], [key]: action.ref },
+                  },
+                }
+              : {}),
+          };
         }
         case "cfm":
-          return { ...edits, flows: { ...edits.flows, [elementSubject(nativeElement(action.elementId))]: action.value } };
+          return {
+            ...edits,
+            flows: {
+              ...edits.flows,
+              [elementSubject(nativeElement(action.elementId))]: action.value,
+            },
+          };
         case "unitCfm":
           return {
             ...edits,
-            equipmentFlows: { ...edits.equipmentFlows, [elementSubject(nativeElement(action.unitId))]: action.value },
+            equipmentFlows: {
+              ...edits.equipmentFlows,
+              [elementSubject(nativeElement(action.unitId))]: action.value,
+            },
           };
         // /ducts' fixes never reach here: `closerOf` made each a link (DUCTS_FIXES).
         default:
@@ -237,7 +305,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
         loading: ctx.value.state === "refreshing",
         error: null,
         changeInputs: changeInputs,
-        subjectFor: id => elementSubject(nativeElement(id)),
+        subjectFor: (id) => elementSubject(nativeElement(id)),
         closerOf: closerOf,
         close: (closer: Closer) => changeInputs(editsFor([closer]), { label: closer.verb }),
         closeMany: (closers: readonly Closer[]) => changeInputs(editsFor(closers)),
@@ -249,18 +317,29 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
     />
   );
   // The per-fitting loss readouts explain this fan's ESP; their tables are chosen on /ducts.
-  const groups = fittingGroups(sheet?.inputs?.fittings ?? [], state.inputs, sheet?.inputs?.tableTitles ?? {});
+  const groups = fittingGroups(
+    sheet?.inputs?.fittings ?? [],
+    state.inputs,
+    sheet?.inputs?.tableTitles ?? {},
+  );
   return (
     <CalcFrame ctx={ctx} snapshot={snapshot} nameOf={nameOf}>
       {ownPane}
-      <FittingReadouts groups={groups} ductsHref={ductsLink(sheet?.overview.fan ?? null, search)}
-        waiting={!sheet ? "Open a fan first" : state.inputs ? null : "Wait for inputs"} />
+      <FittingReadouts
+        groups={groups}
+        ductsHref={ductsLink(sheet?.overview.fan ?? null, search)}
+        waiting={!sheet ? "Open a fan first" : state.inputs ? null : "Wait for inputs"}
+      />
     </CalcFrame>
   );
 }
 /** Drawing consumers own a mutable clone; the kernel retains immutable evidence. */
-export function calcSnapshot(value: import("@pe/agent-contracts").Immutable<DuctSnapshot | { kind: "absent" }> | undefined): (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" } {
-  return structuredClone(value ?? { kind: "absent" }) as (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" };
+export function calcSnapshot(
+  value: import("@pe/agent-contracts").Immutable<DuctSnapshot | { kind: "absent" }> | undefined,
+): (DuctSnapshot & { sourceVersion?: string }) | { kind: "absent" } {
+  return structuredClone(value ?? { kind: "absent" }) as
+    | (DuctSnapshot & { sourceVersion?: string })
+    | { kind: "absent" };
 }
 export function CalcFrame({
   ctx,
@@ -287,9 +366,10 @@ export function CalcFrame({
   };
   return (
     <>
-      <SubjectTextContext.Provider value={{ doc: attentionDoc, nameOf, uniqueIdOf: elements.uniqueIdOf, go, refProps }}>
-          {children}
-
+      <SubjectTextContext.Provider
+        value={{ doc: attentionDoc, nameOf, uniqueIdOf: elements.uniqueIdOf, go, refProps }}
+      >
+        {children}
       </SubjectTextContext.Provider>
     </>
   );

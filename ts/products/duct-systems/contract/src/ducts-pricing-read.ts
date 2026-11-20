@@ -28,15 +28,73 @@ export const ductFindingSchema = z.strictObject({
   groupId: z.string().nullable().optional(),
 });
 export type DuctFinding = z.infer<typeof ductFindingSchema>;
-const n=z.number(),s=z.string(),ns=z.array(n);
-const record=<S extends z.ZodType>(schema:S)=>z.record(s,schema);
-const grade=z.enum(DUCT_INFERENCE_GRADES);
-export const inferenceReadSchema=z.object({
-  joints:z.array(z.object({id:s,a:s,b:s,kind:z.literal("joined-by-proximity"),gapIn:n,grade})),
-  taps:z.array(z.object({id:s,a:s,segment:n,kind:z.literal("tap-by-proximity"),gapIn:n,at:n,point:ns,grade})),
-  inline:z.array(z.object({id:s,node:n,segment:n,kind:z.literal("inline-by-inference"),ports:z.tuple([s,s]),grade})),
-  findings:z.array(z.object({id:s,kind:z.enum(["joined-by-proximity","tap-by-proximity","inline-by-inference","loop-by-inference","near-miss-across-classifications","missed-join","out-of-phase"]),elementIds:ns,note:s,grade:grade.nullable(),connectors:z.tuple([s,s]).optional(),gapIn:n.optional()})),
+const n = z.number(),
+  s = z.string(),
+  ns = z.array(n);
+const record = <S extends z.ZodType>(schema: S) => z.record(s, schema);
+const grade = z.enum(DUCT_INFERENCE_GRADES);
+export const inferenceReadSchema = z.object({
+  joints: z.array(
+    z.object({ id: s, a: s, b: s, kind: z.literal("joined-by-proximity"), gapIn: n, grade }),
+  ),
+  taps: z.array(
+    z.object({
+      id: s,
+      a: s,
+      segment: n,
+      kind: z.literal("tap-by-proximity"),
+      gapIn: n,
+      at: n,
+      point: ns,
+      grade,
+    }),
+  ),
+  inline: z.array(
+    z.object({
+      id: s,
+      node: n,
+      segment: n,
+      kind: z.literal("inline-by-inference"),
+      ports: z.tuple([s, s]),
+      grade,
+    }),
+  ),
+  findings: z.array(
+    z.object({
+      id: s,
+      kind: z.enum([
+        "joined-by-proximity",
+        "tap-by-proximity",
+        "inline-by-inference",
+        "loop-by-inference",
+        "near-miss-across-classifications",
+        "missed-join",
+        "out-of-phase",
+      ]),
+      elementIds: ns,
+      note: s,
+      grade: grade.nullable(),
+      connectors: z.tuple([s, s]).optional(),
+      gapIn: n.optional(),
+    }),
+  ),
 });
-const drop=z.object({inWg:n,source:s.optional()});
-export const effectiveDuctsReadSchema=z.object({rules:record(z.object({table:s})),criteria:ductsCriteriaLayerSchema,kinds:record(z.object({kind:z.enum(DUCT_UNIT_KINDS)})),assumptions:record(ductAssumptionSchema),catalogs:record(z.object({table:s})),ruleAssignments:record(z.object({rule:s})),terminalDrops:record(drop),componentDrops:record(drop),equipmentFlows:record(n),roles:record(z.object({role:z.enum(DUCT_UNIT_ROLES)})),flows:record(n),parameters:record(s),subject:record(ns),labelParameter:s.nullable(),workingPhase:s.nullable(),designFriction:n.nullable()});
-
+const drop = z.object({ inWg: n, source: s.optional() });
+export const effectiveDuctsReadSchema = z.object({
+  rules: record(z.object({ table: s })),
+  criteria: ductsCriteriaLayerSchema,
+  kinds: record(z.object({ kind: z.enum(DUCT_UNIT_KINDS) })),
+  assumptions: record(ductAssumptionSchema),
+  catalogs: record(z.object({ table: s })),
+  ruleAssignments: record(z.object({ rule: s })),
+  terminalDrops: record(drop),
+  componentDrops: record(drop),
+  equipmentFlows: record(n),
+  roles: record(z.object({ role: z.enum(DUCT_UNIT_ROLES) })),
+  flows: record(n),
+  parameters: record(s),
+  subject: record(ns),
+  labelParameter: s.nullable(),
+  workingPhase: s.nullable(),
+  designFriction: n.nullable(),
+});

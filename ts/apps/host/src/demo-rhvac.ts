@@ -6,8 +6,8 @@ import type {
   RhvacSyncRequest,
   RhvacSyncResult,
 } from "@pe/host-contracts/operation-types";
-import { BridgeError } from "./bridge.ts";
-import { StepFailure } from "./command-executor.ts";
+import { BridgeError } from "@pe/host-internal/bridge";
+import { StepFailure } from "@pe/host-internal/command-executor";
 import { assertDemoPath } from "./demo-settings.ts";
 
 const simulation = "Simulated RHVAC file effect; no file read or written, no application started";

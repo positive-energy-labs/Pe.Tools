@@ -1,4 +1,4 @@
-import { subjectState, useSubjects } from "../shell/subject";
+import { subjectState, useSubjects } from "@pe/web-kernel/shell/subject";
 import { useSyncExternalStore } from "react";
 import { Plus, X } from "lucide-react";
 import { appRouteByKey, type ThreadTab } from "@pe/agent-contracts";
@@ -52,7 +52,12 @@ export function RouteTabs({
                 against the 24ch cap; measure the span on reach if wide glyphs ever cut a
                 shorter name. */}
             <TooltipHint content={name.length > TAB_CH ? name : ""}>
-              <Button kind="quiet" label={name} pressed={active === tab.id} onClick={() => onSelect(tab)}>
+              <Button
+                kind="quiet"
+                label={name}
+                pressed={active === tab.id}
+                onClick={() => onSelect(tab)}
+              >
                 <span className="block min-w-0 truncate" style={{ maxWidth: `${TAB_CH}ch` }}>
                   {name}
                 </span>

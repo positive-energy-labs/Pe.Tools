@@ -24,9 +24,14 @@ import {
   type ActionAdmission,
   type DocumentRef,
   type ActionReceipt,
+  type DetachedAction,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.ts";
+import {
+  commands,
+  commandTarget,
+  type SemanticActionKey,
+} from "../pea/product-actions.generated.ts";
 
 /**
  * A refused admission. A door's typed refusal rides on the error (`refusal`) and its sentence is
@@ -64,7 +69,9 @@ function retain(slot: string, value?: InvocationRecord) {
 }
 const terminal = (row: ActionReceipt) => ["succeeded", "failed", "cancelled"].includes(row.state);
 function commandInput(key: string, input: Record<string, unknown>) {
-  return Object.hasOwn(commands, key) ? commands[key as SemanticActionKey].input.parse(input) : input;
+  return Object.hasOwn(commands, key)
+    ? commands[key as SemanticActionKey].input.parse(input)
+    : input;
 }
 
 async function assertIdentity(
@@ -74,11 +81,15 @@ async function assertIdentity(
   // A receipt already owns frozen input. Current admission schemas cannot reinterpret its old Work.
   const retained = "state" in admission;
   if (
-    row.id !== admission.id || row.key !== admission.key ||
+    row.id !== admission.id ||
+    row.key !== admission.key ||
     canonicalRouteInput(row.target) !== canonicalRouteInput(admission.target) ||
     canonicalRouteInput(retained ? row.input : await commandInput(row.key, row.input)) !==
-      canonicalRouteInput(retained ? admission.input : await commandInput(admission.key, admission.input))
-  ) throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
+      canonicalRouteInput(
+        retained ? admission.input : await commandInput(admission.key, admission.input),
+      )
+  )
+    throw Error(`Action '${admission.id}' returned a receipt for different intent or target`);
 }
 function transportLost(error: unknown) {
   if (error instanceof z.ZodError || (error as { receiptRejected?: boolean })?.receiptRejected)
@@ -259,9 +270,15 @@ export async function submitAction(
   slot = retentionKey(base, admission.id, null),
 ): Promise<ActionReceipt | DetachedAction> {
   admission = structuredClone(actionAdmissionSchema.parse(admission));
-  const retainedAdmission = {...admission, input: await commandInput(admission.key, admission.input)};
+  const retainedAdmission = {
+    ...admission,
+    input: await commandInput(admission.key, admission.input),
+  };
   const prior = getRetained(slot);
-  if (prior?.admission && canonicalRouteInput(prior.admission) !== canonicalRouteInput(retainedAdmission))
+  if (
+    prior?.admission &&
+    canonicalRouteInput(prior.admission) !== canonicalRouteInput(retainedAdmission)
+  )
     throw Error(`Action '${prior.id}' has an unacknowledged immutable request`);
   // Retained pre-ACK bytes mean an earlier send may have arrived; so does a transport lost below.
   let resent = prior?.admission !== undefined;
@@ -332,11 +349,7 @@ export async function waitForAction(
   if (!row) throw Error(`Action '${id}' has no retained receipt`);
   inFlight().set(id, base);
   try {
-    if (
-      actionObserver &&
-      row.state === "running" &&
-      Date.now() < deadline
-    ) {
+    if (actionObserver && row.state === "running" && Date.now() < deadline) {
       const original = row;
       const observer = actionObserver;
       const deadlineSignal = Number.isFinite(waitMs)
@@ -401,7 +414,8 @@ export async function waitForAction(
           return { state: "detached", id, key: row.key, acceptance: "admitted" };
         // A slice is a poll interval, not a budget: a host that answers late is asked again, so
         // `waitMs` is the only deadline (D35). The caller's own abort and a refusal still throw.
-        if (signal?.aborted || !(error instanceof Error) || error.name !== "TimeoutError") throw error;
+        if (signal?.aborted || !(error instanceof Error) || error.name !== "TimeoutError")
+          throw error;
       }
     }
     return row;
@@ -462,12 +476,6 @@ export function actionResult(row: ActionReceipt | DetachedAction): unknown {
   return row.result;
 }
 
-export type DetachedAction = {
-  state: "detached";
-  id: string;
-  key: string;
-  acceptance: "admitted" | "unknown";
-};
 export async function controlAction(
   key: ActionControlKey,
   input: unknown,

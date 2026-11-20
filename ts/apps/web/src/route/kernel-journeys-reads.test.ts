@@ -1,6 +1,6 @@
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
-import { refusalOf, valueOf } from "./typed-route";
+import { refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { systemCode } from "@pe/ducts-web/identity";
@@ -10,59 +10,122 @@ import retiredReads from "../../../../tests/repo-guards/src/retired-read-aliases
 
 test("JZ Ducts chooser search box does not move across recorded Reading settlement", async () => {
   const [{ createServer }, { default: tailwind }, { openBrowser }] = await Promise.all([
-    import("vite-plus"), import("@tailwindcss/vite"), import("@pe/browser"),
+    import("vite-plus"),
+    import("@tailwindcss/vite"),
+    import("@pe/browser"),
   ]);
   const root = fileURLToPath(new URL("../..", import.meta.url));
-  const server = await createServer({ configFile: false, root, plugins: [tailwind() as never],
-    define: { __PE_WEB_RECEIPT_BUILD__: JSON.stringify({ version: "fixture", build: "layout", commit: "source" }) },
+  const server = await createServer({
+    configFile: false,
+    root,
+    plugins: [tailwind() as never],
+    define: {
+      __PE_WEB_RECEIPT_BUILD__: JSON.stringify({
+        version: "fixture",
+        build: "layout",
+        commit: "source",
+      }),
+    },
     resolve: { alias: { "#": root + "/src" }, dedupe: ["react", "react-dom"] },
     server: { host: "127.0.0.1", port: 0 },
   });
   let browser: Awaited<ReturnType<typeof openBrowser>> | undefined;
   try {
     await server.listen();
-    browser = await openBrowser({ mode: "headless", args: ["--disable-background-timer-throttling", "--disable-renderer-backgrounding"] });
+    browser = await openBrowser({
+      mode: "headless",
+      args: ["--disable-background-timer-throttling", "--disable-renderer-backgrounding"],
+    });
     const page = await browser.page();
     const errors: unknown[] = [];
-    page.subscribe(event => { if (event.method === "Runtime.exceptionThrown") errors.push(event.params); });
+    page.subscribe((event) => {
+      if (event.method === "Runtime.exceptionThrown") errors.push(event.params);
+    });
     await page.send("Runtime.enable");
     await page.send("Network.enable");
-    await page.send("Network.setBlockedURLs", { urls: ["https://fonts.googleapis.com/*", "https://fonts.gstatic.com/*"] });
-    await page.send("Page.navigate", { url: server.resolvedUrls!.local[0] + "src/route/ducts-chooser-layout.fixture.html" });
-    await vi.waitFor(async () => {
-      expect(errors).toEqual([]);
-      expect(await page.evaluate(() => !!document.querySelector('input[aria-label="Search systems"]'))).toBe(true);
-    }, { timeout: 10_000 });
-    const measure = () => page.evaluate(async () => {
-      await document.fonts.ready;
-      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const input = document.querySelector<HTMLInputElement>('input[aria-label="Search systems"]')!;
-      const { x, y, width, height } = input.getBoundingClientRect();
-      return { x, y, width, height, reading: !!document.querySelector('[data-reading="reading"]'), connected: input.isConnected,
-        statuses: Array.from(document.querySelectorAll('[role="status"], [role="alert"]')).map(n => ({ text: n.textContent, y: n.getBoundingClientRect().y, height: n.getBoundingClientRect().height })) };
+    await page.send("Network.setBlockedURLs", {
+      urls: ["https://fonts.googleapis.com/*", "https://fonts.gstatic.com/*"],
     });
+    await page.send("Page.navigate", {
+      url: server.resolvedUrls!.local[0] + "src/route/ducts-chooser-layout.fixture.html",
+    });
+    await vi.waitFor(
+      async () => {
+        expect(errors).toEqual([]);
+        expect(
+          await page.evaluate(() => !!document.querySelector('input[aria-label="Search systems"]')),
+        ).toBe(true);
+      },
+      { timeout: 10_000 },
+    );
+    const measure = () =>
+      page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const input = document.querySelector<HTMLInputElement>(
+          'input[aria-label="Search systems"]',
+        )!;
+        const { x, y, width, height } = input.getBoundingClientRect();
+        return {
+          x,
+          y,
+          width,
+          height,
+          reading: !!document.querySelector('[data-reading="reading"]'),
+          connected: input.isConnected,
+          statuses: Array.from(document.querySelectorAll('[role="status"], [role="alert"]')).map(
+            (n) => ({
+              text: n.textContent,
+              y: n.getBoundingClientRect().y,
+              height: n.getBoundingClientRect().height,
+            }),
+          ),
+        };
+      });
     const before = await measure();
     expect(before).toMatchObject({ reading: true, connected: true });
     expect(before.width).toBeGreaterThan(0);
     expect(before.height).toBeGreaterThan(0);
-    await page.evaluate(() => { (window as any).settleChooser(); return null; });
+    await page.evaluate(() => {
+      (window as any).settleChooser();
+      return null;
+    });
     await vi.waitFor(async () => expect((await measure()).reading).toBe(false));
     const after = await measure();
     expect(errors).toEqual([]);
-    const shift = { x: after.x - before.x, y: after.y - before.y, width: after.width - before.width, height: after.height - before.height };
+    const shift = {
+      x: after.x - before.x,
+      y: after.y - before.y,
+      width: after.width - before.width,
+      height: after.height - before.height,
+    };
     console.log("Ducts chooser layout (CSS px)", JSON.stringify({ before, after, shift }));
-    if (process.env.PE_CHOOSER_LAYOUT_RECEIPT) await writeFile(process.env.PE_CHOOSER_LAYOUT_RECEIPT, JSON.stringify({ before, after, shift }, null, 2));
+    if (process.env.PE_CHOOSER_LAYOUT_RECEIPT)
+      await writeFile(
+        process.env.PE_CHOOSER_LAYOUT_RECEIPT,
+        JSON.stringify({ before, after, shift }, null, 2),
+      );
     expect(shift).toEqual({ x: 0, y: 0, width: 0, height: 0 });
-  } finally { await browser?.close(); await server.close(); }
+  } finally {
+    await browser?.close();
+    await server.close();
+  }
 });
 import { z } from "zod";
 import { observeResources } from "@pe/runtime";
 import { workFingerprintSchema, actionReceiptSchema } from "@pe/agent-contracts";
-import { fixture, ref, path, gate, snapshot, roster } from "../../../host/tests/host-read-graph.test-support";
+import {
+  fixture,
+  ref,
+  path,
+  gate,
+  snapshot,
+  roster,
+} from "../../../host/tests/host-read-graph.test-support";
 import { module as fans } from "@pe/fans-web/route";
 import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "../shell/source-contract";
+import type { UseSource } from "@pe/web-kernel/shell/source-contract";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
@@ -71,13 +134,13 @@ import {
   ductsRosterData,
 } from "@pe/duct-systems-contract/ducts-read";
 import { valueReadResponse } from "@pe/agent-contracts";
-import { InvalidRead } from "../../../host/src/native-reads";
+import { InvalidRead } from "@pe/host-internal/read-errors";
 import { registeredReads } from "../../../host/src/reads/routes";
 import { ductsPricing, ductsNetwork, ductsRoster } from "@pe/duct-systems-host/host";
 import { fansCalc } from "@pe/fans-host/host";
 import { module as ducts } from "@pe/duct-systems-web/route";
 import { module as families } from "../families/route";
-import type { TypedRoute } from "./typed-route";
+import type { TypedRoute } from "@pe/web-kernel/route/typed-route";
 import { handle } from "@pe/agent-contracts/handle";
 import { publicationSource } from "../host/publication-source";
 import { hostEventSource } from "../host/event-source.test-support";
@@ -98,62 +161,122 @@ import {
   detachedBridge,
   sessionView,
   familiesReader,
-  testHostInputs, journalAt, callRouteOver } from "../../../host/tests/effect-test";
+  testHostInputs,
+  journalAt,
+  callRouteOver,
+} from "../../../host/tests/effect-test";
 import { sdkSessions } from "../../../host/tests/native-receipt-fixture";
 import { fileRouteDocumentStore } from "../../../host/src/route-document-store";
 import { nativeReadRoot } from "../../../host/src/app";
-import { RevitBridge } from "../../../host/src/bridge";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { hostOwnership } from "../../../host/src/host-ownership";
-import { RequestIdentity, admittedRequestIdentity } from "../../../host/src/request-services";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { NodeServices, NodeHttpClient } from "../../../host/tests/family-attach-host.fixture";
 
 const trace = z.array(z.object({ name: z.string(), args: z.unknown() }));
 
-
 test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work stales review", async () => {
   let nativeGeneration = "incarnation:24";
   const systemRoster = { ...roster, systems: roster.systems.slice(0, 1) };
-  const j = await journey({ roster: systemRoster, snapshot: { ...snapshot, systems: systemRoster.systems }, freshness: () => nativeGeneration });
+  const j = await journey({
+    roster: systemRoster,
+    snapshot: { ...snapshot, systems: systemRoster.systems },
+    freshness: () => nativeGeneration,
+  });
   const { Stream, streams } = hostEventSource(j.host.request);
   // The read invalidations the tab's one stream is watching now, as the host was told.
   const watched = new Set<string>();
   let mounted: ReturnType<typeof mountTypedRoute> | undefined;
   let held: ReturnType<typeof gate> | undefined;
-  vi.stubGlobal("window", { location: { href: "http://host/", origin: "http://host", search: "" } });
+  vi.stubGlobal("window", {
+    location: { href: "http://host/", origin: "http://host", search: "" },
+  });
   vi.stubGlobal("EventSource", Stream);
   // The stream's keys travel by POST to the same host handler the stream reads.
   const realFetch = globalThis.fetch;
   vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
     if (new URL(url).pathname !== "/pe/resource-subscriptions") return realFetch(url, init);
     const body = JSON.parse(String(init!.body)) as { add: ReadingRequest[]; remove: string[] };
-    for (const request of body.add) if (request.kind === "publication") watched.add(readingKey(request));
+    for (const request of body.add)
+      if (request.kind === "publication") watched.add(readingKey(request));
     for (const key of body.remove) watched.delete(key);
     return j.host.request(new Request(url, init));
   });
   try {
     await j.ready();
-    const source = publicationSource({ read: (ctx, publication, release) => j.host.send(publication.generation,
-      (ctx.args as { fan: string[] }).fan, undefined, publication.subscription, release) });
-    const row = valueOf(j.mount.value(fans.spec.reads!.roster)).rows.find((row: { mark: string }) => row.mark === "MUAS-1")!;
+    const source = publicationSource({
+      read: (ctx, publication, release) =>
+        j.host.send(
+          publication.generation,
+          (ctx.args as { fan: string[] }).fan,
+          undefined,
+          publication.subscription,
+          release,
+        ),
+    });
+    const row = valueOf(j.mount.value(fans.spec.reads!.roster)).rows.find(
+      (row: { mark: string }) => row.mark === "MUAS-1",
+    )!;
     for (const route of ["fans", "duct-systems"])
-      expect((await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok).toBe(true);
+      expect(
+        (await j.host.workspace.start(bindWork(route, path, undefined, ref), {}, "human")).ok,
+      ).toBe(true);
     const work = createWorkFeedClient(
       { subscribe: observeResources(j.host.workspace, { observe: () => () => {} }), dirty() {} },
-      { write: (key, write) => j.host.workspace.write(key, key.route, "human", write, async () => []),
+      {
+        write: (key, write) =>
+          j.host.workspace.write(key, key.route, "human", write, async () => []),
         // Native preview is recorded; publications and Work use the real host graph.
-        submit: async command => actionReceiptSchema.parse({ ...command, state: "succeeded",
-          steps: [], prepared: { state: "unprepared" }, recovery: [],
-          caller: { kind: "human", via: "local" }, basis: null, startedAt: new Date().toISOString(),
-          result: { previewOnly: true, takenAt: "2026-11-07T00:00:00Z",
-            seal: { caller: { kind: "human", via: "local" }, requestHash: "sealed", work: { handle: command.input.work },
-              documentMark: { ...ref, observedSince: 1, changedAt: 10 }, incarnation: {}, dependencies: "exact" },
-            response: { writes: [{ id: row.unitId, kind: "equipment-flow", outcome: "planned", before: "880 cfm", after: "925 cfm" }],
-              counts: { planned: 1, written: 0, refused: 0, unchanged: 0 } } } }) });
-    const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "fans")!.closure.fingerprint}`);
-    mounted = mountTypedRoute(fans, { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) }, fingerprint,
-      { work, sources: { "fans.calc": source } });
+        submit: async (command) =>
+          actionReceiptSchema.parse({
+            ...command,
+            state: "succeeded",
+            steps: [],
+            prepared: { state: "unprepared" },
+            recovery: [],
+            caller: { kind: "human", via: "local" },
+            basis: null,
+            startedAt: new Date().toISOString(),
+            result: {
+              previewOnly: true,
+              takenAt: "2026-11-07T00:00:00Z",
+              seal: {
+                caller: { kind: "human", via: "local" },
+                requestHash: "sealed",
+                work: { handle: command.input.work },
+                documentMark: { ...ref, observedSince: 1, changedAt: 10 },
+                incarnation: {},
+                dependencies: "exact",
+              },
+              response: {
+                writes: [
+                  {
+                    id: row.unitId,
+                    kind: "equipment-flow",
+                    outcome: "planned",
+                    before: "880 cfm",
+                    after: "925 cfm",
+                  },
+                ],
+                counts: { planned: 1, written: 0, refused: 0, unchanged: 0 },
+              },
+            },
+          }),
+      },
+    );
+    const fingerprint = workFingerprintSchema.parse(
+      `builtin-closure:${builtinEnrollments.find((e) => e.routeKey === "fans")!.closure.fingerprint}`,
+    );
+    mounted = mountTypedRoute(
+      fans,
+      { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) },
+      fingerprint,
+      { work, sources: { "fans.calc": source } },
+    );
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
     // One stream for the tab, carrying each read's invalidation as a key.
     await vi.waitFor(() => expect(watched.size).toBeGreaterThan(0));
     expect(streams.size).toBe(1);
@@ -161,72 +284,153 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     held = j.host.holdNative();
     j.host.changed();
     await held.entered.promise;
-    expect(mounted.value(), "H05: a host dirty event immediately withdraws current authority").toMatchObject({ state: expect.stringMatching(/^(refreshing|stale)$/), value: before });
+    expect(
+      mounted.value(),
+      "H05: a host dirty event immediately withdraws current authority",
+    ).toMatchObject({ state: expect.stringMatching(/^(refreshing|stale)$/), value: before });
     held.release.resolve();
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
-    await vi.waitFor(() => expect(mounted!.work(), mounted!.problem() ?? "Work ready").not.toBeNull());
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
+    await vi.waitFor(() =>
+      expect(mounted!.work(), mounted!.problem() ?? "Work ready").not.toBeNull(),
+    );
     const key = mounted.work()!.handle.key;
-    const staged = await j.host.workspace.apply(key, "fans", "human", [
-      { path: ["writeIntent"], value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } } },
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 925, ref: "test" } },
-    ], mounted.work()!.revision);
+    const staged = await j.host.workspace.apply(
+      key,
+      "fans",
+      "human",
+      [
+        {
+          path: ["writeIntent"],
+          value: { edit: { value: { walk: { unitId: row.unitId, portIndex: row.portIndex } } } },
+        },
+        {
+          path: ["equipmentFlows", elementSubject(row), "edit"],
+          value: { value: 925, ref: "test" },
+        },
+      ],
+      mounted.work()!.revision,
+    );
     expect(staged.ok).toBe(true);
     mounted.refresh();
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
     await planned(mounted.verb("losses")).plan();
     expect(mounted.review("losses")).toMatchObject({ stale: false, preview: expect.anything() });
     const sealed = mounted.value().publication!;
     // Reopening a source creates a new subscription/consumption, as on page reload.
     mounted.refresh();
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
     expect(mounted.value().publication!.inputs).not.toBe(sealed.inputs);
     expect(mounted.value().publication!.data).toEqual(sealed.data);
-    expect(mounted.review("losses"), "identical sealed inputs remain Apply-eligible after reconnect").toMatchObject({ stale: false, preview: expect.anything() });
+    expect(
+      mounted.review("losses"),
+      "identical sealed inputs remain Apply-eligible after reconnect",
+    ).toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     mounted.release();
     await vi.waitFor(() => expect(watched.size, "B05: hiding releases the read's watch").toBe(0));
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
-    expect(mounted.review("losses"), "show reacquires identical inputs without retiring the Plan").toMatchObject({ stale: false, preview: expect.anything() });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
+    expect(
+      mounted.review("losses"),
+      "show reacquires identical inputs without retiring the Plan",
+    ).toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
     mounted.release();
     const definitions = { ductsPricing, ductsNetwork, ductsRoster };
-    const unregister = registeredReads.register(Object.fromEntries(Object.entries(definitions).filter(([, read]) => !registeredReads.reads.has(read.name))));
-    const sources = Object.fromEntries(Object.values(definitions).map(definition => [definition.name, publicationSource({
-      async read(ctx, publication, release) {
-        const response = await j.host.probe({ read: definition.name, ...publication, release, args: { target: ref, ...(ctx.args as object) } });
-        expect(response.ok, await response.clone().text()).toBe(true);
-        return valueReadResponse.parse(await response.json());
+    const unregister = registeredReads.register(
+      Object.fromEntries(
+        Object.entries(definitions).filter(([, read]) => !registeredReads.reads.has(read.name)),
+      ),
+    );
+    const sources = Object.fromEntries(
+      Object.values(definitions).map((definition) => [
+        definition.name,
+        publicationSource({
+          async read(ctx, publication, release) {
+            const response = await j.host.probe({
+              read: definition.name,
+              ...publication,
+              release,
+              args: { target: ref, ...(ctx.args as object) },
+            });
+            expect(response.ok, await response.clone().text()).toBe(true);
+            return valueReadResponse.parse(await response.json());
+          },
+        }),
+      ]),
+    );
+    const ductMount = mountTypedRoute(
+      ducts,
+      {
+        ...j.input,
+        address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
       },
-    })]));
-    const ductMount = mountTypedRoute(ducts, { ...j.input, address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} } },
-      workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(e => e.routeKey === "duct-systems")!.closure.fingerprint}`), { work, sources });
+      workFingerprintSchema.parse(
+        `builtin-closure:${builtinEnrollments.find((e) => e.routeKey === "duct-systems")!.closure.fingerprint}`,
+      ),
+      { work, sources },
+    );
     try {
       await ductMount.whenReady();
       const system = valueOf(ductMount.value(ducts.spec.reads!.roster)).systems[0]!.name;
       ductMount.page.subject({ kind: "ids", ids: [systemCode(system)] });
       await ductMount.whenReady();
-      expect(valueOf(ductMount.value()).network.systemReads.completed).toEqual([systemRoster.systems[0]!.id]);
-    } finally { ductMount.dispose(); unregister(); }
+      expect(valueOf(ductMount.value()).network.systemReads.completed).toEqual([
+        systemRoster.systems[0]!.id,
+      ]);
+    } finally {
+      ductMount.dispose();
+      unregister();
+    }
     // The Driver recording has identical native content at admission generations :24 and :31.
     nativeGeneration = "incarnation:31";
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
     expect(mounted.value().publication!.data).toEqual(sealed.data);
-    expect(mounted.review("losses"), "return from a Ducts read preserves the sealed Plan").toMatchObject({ stale: false, preview: expect.anything() });
+    expect(
+      mounted.review("losses"),
+      "return from a Ducts read preserves the sealed Plan",
+    ).toMatchObject({ stale: false, preview: expect.anything() });
     expect(mounted.writeRefusal()).toBeNull();
-    const changed = await j.host.workspace.apply(key, "fans", "human", [
-      { path: ["equipmentFlows", elementSubject(row), "edit"], value: { value: 950, ref: "test" } }, // amendment 1 item 4: airflow is a plain number, evidence rides on `ref`
-    ], mounted.work()!.revision);
+    const changed = await j.host.workspace.apply(
+      key,
+      "fans",
+      "human",
+      [
+        {
+          path: ["equipmentFlows", elementSubject(row), "edit"],
+          value: { value: 950, ref: "test" },
+        }, // amendment 1 item 4: airflow is a plain number, evidence rides on `ref`
+      ],
+      mounted.work()!.revision,
+    );
     expect(changed.ok).toBe(true);
     mounted.refresh();
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), { timeout: 20_000 });
+    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
+      timeout: 20_000,
+    });
     expect(mounted.review("losses")).toMatchObject({ stale: true, rows: [], cells: [] });
     await expect(planned(mounted.verb("losses")).apply()).rejects.toThrow(/stale/i);
     mounted.dispose();
     await vi.waitFor(() => expect(watched.size, "H05: disposal closes watched inputs").toBe(0));
     expect(streams.size, "a tab never holds more than its one stream").toBeLessThanOrEqual(1);
-  } finally { held?.release.resolve(); mounted?.dispose(); streams.forEach(stream => stream.close()); vi.unstubAllGlobals(); await j.close(); }
+  } finally {
+    held?.release.resolve();
+    mounted?.dispose();
+    streams.forEach((stream) => stream.close());
+    vi.unstubAllGlobals();
+    await j.close();
+  }
 }, 60_000);
 
 test("JM H02/B05 select a Fan whose native walk is malformed and inspect the refusal", async () => {
@@ -240,11 +444,21 @@ test("JM H02/B05 select a Fan whose native walk is malformed and inspect the ref
     const roster = valueOf(j.mount.value(fans.spec.reads!.roster)).rows;
     const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
     j.mount.page.subject({ kind: "ids", ids: [stableFanKey(row)] });
-    await vi.waitFor(() => expect(j.mount.value(), "H02: malformed native output cannot become current data").toMatchObject({ state: expect.stringMatching(/^(stale|refused)$/) }));
+    await vi.waitFor(() =>
+      expect(
+        j.mount.value(),
+        "H02: malformed native output cannot become current data",
+      ).toMatchObject({ state: expect.stringMatching(/^(stale|refused)$/) }),
+    );
     expect(valueOf(j.mount.value()), "B05: the last admitted Value survives").toEqual(before);
     const refused = j.mount.value();
-    expect((refused.state !== "ready") && refusalOf(refused), "B05: failure gives human recovery words").not.toMatch(/invalid_type|expected.*array|ZodError/);
-  } finally { await j.close(); }
+    expect(
+      refused.state !== "ready" && refusalOf(refused),
+      "B05: failure gives human recovery words",
+    ).not.toMatch(/invalid_type|expected.*array|ZodError/);
+  } finally {
+    await j.close();
+  }
 }, 60_000);
 
 // HTTP publications and file Work are real; only native inputs and the address port are recorded.
@@ -295,7 +509,9 @@ async function journey(recorded: Parameters<typeof fixture>[1] = {}) {
     custody: { current: () => true },
     memory: () => ({}),
   };
-  const fingerprint = workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(entry => entry.routeKey === "fans")!.closure.fingerprint}`);
+  const fingerprint = workFingerprintSchema.parse(
+    `builtin-closure:${builtinEnrollments.find((entry) => entry.routeKey === "fans")!.closure.fingerprint}`,
+  );
   const mount = mountTypedRoute(fans, input, fingerprint, {
     work,
     timeline: fixtureTimeline(host.workspace),
@@ -407,7 +623,10 @@ test("JX2 retain the pane through waiting, a refused subject, hiding and returni
     held.release.resolve();
     await j.ready();
     const retained = valueOf(j.mount.value());
-    j.mount.page.subject({ kind: "ids", ids: [stableFanKey({ uniqueId: "missing-fan", portIndex: 0 })] });
+    j.mount.page.subject({
+      kind: "ids",
+      ids: [stableFanKey({ uniqueId: "missing-fan", portIndex: 0 })],
+    });
     await vi.waitFor(() =>
       expect(j.mount.value(), "B05: refusal is honest and preserves the last answer").toMatchObject(
         {
@@ -446,10 +665,12 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
     });
     try {
       mounted.page.subject({ kind: "all" });
-      await vi.waitFor(() => expect(
-        mounted.value().publication?.origin,
-        "H09: fixture publication discloses its origin",
-      ).toMatchObject({ kind: "fixture", name: "layout" }));
+      await vi.waitFor(() =>
+        expect(
+          mounted.value().publication?.origin,
+          "H09: fixture publication discloses its origin",
+        ).toMatchObject({ kind: "fixture", name: "layout" }),
+      );
       expect(
         mounted.verb("losses").refusal,
         "H09: fixture discloses native action refusal",
@@ -459,8 +680,15 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
         "H09: even direct invocation cannot write native",
       ).rejects.toThrow(/Fixture/);
       mounted.page.subject({ kind: "ids", ids: [] });
-      await vi.waitFor(() => expect(mounted.value().publication, "H09: changed scope retains fixture provenance")
-        .toMatchObject({ origin: { kind: "fixture", name: "layout" }, coverage: { requested: [] } }));
+      await vi.waitFor(() =>
+        expect(
+          mounted.value().publication,
+          "H09: changed scope retains fixture provenance",
+        ).toMatchObject({
+          origin: { kind: "fixture", name: "layout" },
+          coverage: { requested: [] },
+        }),
+      );
       expect(
         j.host.nativeCalls,
         "H09: fixture selection and attempted write never call native",
@@ -473,9 +701,18 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
       sources: { "fans.calc": j.source },
     });
     try {
-      await vi.waitFor(() => expect(missing.value(), "H09: missing fixture refuses instead of using live inputs")
-        .toMatchObject({ state: "refused", reason: expect.stringContaining("No fixture 'not-a-fixture'") }));
-    } finally { missing.dispose(); }
+      await vi.waitFor(() =>
+        expect(
+          missing.value(),
+          "H09: missing fixture refuses instead of using live inputs",
+        ).toMatchObject({
+          state: "refused",
+          reason: expect.stringContaining("No fixture 'not-a-fixture'"),
+        }),
+      );
+    } finally {
+      missing.dispose();
+    }
     expect(j.host.nativeCalls, "H09: missing fixture never dispatches native").toBe(calls);
   } finally {
     await j.close();
@@ -484,7 +721,10 @@ test("JX3 open fixture Fans, change scope and attempt a native write without liv
 
 async function compareSystemAnswers() {
   // Existing native-shaped purpose capture, with the same shared-fan variant as system-list.test.ts.
-  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({ ...savedNetwork, vocabulary: VOCABULARY });
+  const snapshot = nativeResponseSchema("ducts.snapshot.walk").parse({
+    ...savedNetwork,
+    vocabulary: VOCABULARY,
+  });
   for (const element of [...snapshot.nodes, ...snapshot.segments])
     element.uniqueId ||= `jx-native-${element.id}`;
   // The saved capture's unit connector reads `bidirectional`, so the roster finds no fan port and both
@@ -565,12 +805,20 @@ async function compareSystemAnswers() {
       "human",
       [
         ...[30, 31].map((id, i) => ({
-          path: ["terminalDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
+          path: [
+            "terminalDrops",
+            elementSubject(snapshot.nodes.find((node) => node.id === id)!),
+            "edit",
+          ],
           value: { value: { inWg: i ? 0.35 : 0.05 } },
         })),
         // Stated drops price refused fitting losses; P-107 (A) preserves any rule-priced Cs.
         ...[21, 22].map((id) => ({
-          path: ["componentDrops", elementSubject(snapshot.nodes.find(node => node.id === id)!), "edit"],
+          path: [
+            "componentDrops",
+            elementSubject(snapshot.nodes.find((node) => node.id === id)!),
+            "edit",
+          ],
           value: { value: { inWg: 0.01 } },
         })),
       ],
@@ -589,18 +837,30 @@ async function compareSystemAnswers() {
     const result = ductsPricingData.parse(valueOf(mount.value()));
     const first = result.analysis.systems.find((row) => row.name === "SA 1")!;
     const second = result.analysis.systems.find((row) => row.name === "SA 2")!;
-    expect(result.calcs.map((calc) => calc.fan.unitId), "H23: the shared fan has one calc").toEqual([1]);
-    expect(second.total, "H23: the second system reads its own worst run on the fan's calc").toBeGreaterThan(0.35);
+    expect(
+      result.calcs.map((calc) => calc.fan.unitId),
+      "H23: the shared fan has one calc",
+    ).toEqual([1]);
+    expect(
+      second.total,
+      "H23: the second system reads its own worst run on the fan's calc",
+    ).toBeGreaterThan(0.35);
     // RULES.md P-107 (A): 822ca517 added the typed Cs fallback; eeb8ea21 restricted it to
     // refused legs and disclosed it. The refused straight Cs at 22 takes the typed drop,
     // with disclosure. SA 1 prices its own run through that tap, including its own terminal.
     expect(first.total, "H23: SA 1 prices its own run").toBeCloseTo(0.0778, 4);
-    expect(first.total, "H23: sharing a fan does not copy the other system's pressure").toBeLessThan(second.total!);
+    expect(
+      first.total,
+      "H23: sharing a fan does not copy the other system's pressure",
+    ).toBeLessThan(second.total!);
     expect(
       result.calcs[0]!.legs["10:1>2"]!.lossSource.ref,
       "H23: SA 1 discloses the typed substitution for the refused straight leg at 22",
     ).toContain("typed drop from 22 (Cs refused: SD5-9 Cs is not loaded); Work:0");
-    expect([first.fanless, second.fanless], "H23: both systems are reached by the fan's calc").toEqual([false, false]);
+    expect(
+      [first.fanless, second.fanless],
+      "H23: both systems are reached by the fan's calc",
+    ).toEqual([false, false]);
     expect(
       second.split!.rows.some((row) => row.id === 31),
       "H23: second system retains its own terminal",
@@ -618,13 +878,19 @@ async function compareSystemAnswers() {
       "H23: requested system coverage is explicit",
     ).toEqual([]);
     mount.page.subject({ kind: "ids", ids: [] });
-    await vi.waitFor(() => expect(mount.value(ducts.spec.reads!.network).state === "ready").toBe(true), { timeout: 20_000 });
+    await vi.waitFor(
+      () => expect(mount.value(ducts.spec.reads!.network).state === "ready").toBe(true),
+      { timeout: 20_000 },
+    );
     const unread = ductsNetworkData.parse(valueOf(mount.value(ducts.spec.reads!.network)));
     expect(unread.systemReads.completed, "H23: none reads no systems").toEqual([]);
     // SubjectRef Work outside this acquisition cannot become current pricing or complete zeros.
-    await vi.waitFor(() => expect(mount.value()).toMatchObject({
-      state: expect.stringMatching(/^(stale|refused)$/), reason: expect.stringContaining("Work subject is absent from the acquisition"),
-    }));
+    await vi.waitFor(() =>
+      expect(mount.value()).toMatchObject({
+        state: expect.stringMatching(/^(stale|refused)$/),
+        reason: expect.stringContaining("Work subject is absent from the acquisition"),
+      }),
+    );
     const unpriced = ductsRosterData.parse(valueOf(mount.value(ducts.spec.reads!.roster)));
     expect(
       unpriced.rows.every((row) => row.total === null),
@@ -825,20 +1091,26 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
               paused.entered.resolve();
               await paused.release.promise;
             }
-            value = malformedOutput ? { families: "malformed native result" } : broken
-              ? {
-                  ...observed,
-                  families: [
-                    {
-                      ...family,
-                      isPartial: true,
-                      issues: [
-                        { code: "CollectorError", severity: "Error", message: "values unreadable" },
-                      ],
-                    },
-                  ],
-                }
-              : observed;
+            value = malformedOutput
+              ? { families: "malformed native result" }
+              : broken
+                ? {
+                    ...observed,
+                    families: [
+                      {
+                        ...family,
+                        isPartial: true,
+                        issues: [
+                          {
+                            code: "CollectorError",
+                            severity: "Error",
+                            message: "values unreadable",
+                          },
+                        ],
+                      },
+                    ],
+                  }
+                : observed;
           }
         } else throw Error(`Unexpected native input ${operation}`);
         return { target: { session: target.session, document: null }, value };
@@ -957,39 +1229,91 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
       "H34: failed verification retains the completed result",
     ).toBe(latest!.id);
     broken = false;
-    const door = createWorkFeedClient({ subscribe: observeResources(workspace, { observe: () => () => {} }), dirty() {} }, {
-      write: (key, write) => workspace.write(key, key.route, "human", write, async () => []),
-      submit: async command => {
-        const response = await withInvocationContext({ caller }, () => web.handler(new Request("http://host/actions", {
-          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(command),
-        }), Context.make(RequestIdentity, admittedRequestIdentity(caller, {}))));
-        expect(response.ok, await response.clone().text()).toBe(true);
-        return journal.wait(command.id);
+    const door = createWorkFeedClient(
+      { subscribe: observeResources(workspace, { observe: () => () => {} }), dirty() {} },
+      {
+        write: (key, write) => workspace.write(key, key.route, "human", write, async () => []),
+        submit: async (command) => {
+          const response = await withInvocationContext({ caller }, () =>
+            web.handler(
+              new Request("http://host/actions", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify(command),
+              }),
+              Context.make(RequestIdentity, admittedRequestIdentity(caller, {})),
+            ),
+          );
+          expect(response.ok, await response.clone().text()).toBe(true);
+          return journal.wait(command.id);
+        },
       },
-    });
-    const module: TypedRoute = { ...families, spec: { ...families.spec, core: undefined, band: ["read"], verbs: {
-      read: { handle: handle("families.read"), label: "Read Families", input: ({ work }) => ({ work, readId: crypto.randomUUID() }) },
-    } } };
-    const mounted = mountTypedRoute(module, {
-      target: { kind: "document", ref: target }, fixture: null, work: { address: path, open: target },
-      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
-      memory: () => ({}), custody: { current: () => true },
-    }, workFingerprintSchema.parse(`builtin-closure:${builtinEnrollments.find(entry => entry.routeKey === "families")!.closure.fingerprint}`), { work: door });
+    );
+    const module: TypedRoute = {
+      ...families,
+      spec: {
+        ...families.spec,
+        core: undefined,
+        band: ["read"],
+        verbs: {
+          read: {
+            handle: handle("families.read"),
+            label: "Read Families",
+            input: ({ work }) => ({ work, readId: crypto.randomUUID() }),
+          },
+        },
+      },
+    };
+    const mounted = mountTypedRoute(
+      module,
+      {
+        target: { kind: "document", ref: target },
+        fixture: null,
+        work: { address: path, open: target },
+        address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+        memory: () => ({}),
+        custody: { current: () => true },
+      },
+      workFingerprintSchema.parse(
+        `builtin-closure:${builtinEnrollments.find((entry) => entry.routeKey === "families")!.closure.fingerprint}`,
+      ),
+      { work: door },
+    );
     try {
       mounted.subscribe(() => {});
-      await vi.waitFor(() => expect(mounted.owner()?.ready, mounted.problem() ?? "Families owner pending").toBe(true));
+      await vi.waitFor(() =>
+        expect(mounted.owner()?.ready, mounted.problem() ?? "Families owner pending").toBe(true),
+      );
       hold = paused = gate();
       const reading = direct(mounted.verb("read")).run();
-      await Promise.race([paused.entered.promise, reading.then(() => { throw Error("Families read never reached its held native boundary"); })]);
+      await Promise.race([
+        paused.entered.promise,
+        reading.then(() => {
+          throw Error("Families read never reached its held native boundary");
+        }),
+      ]);
       paused.release.resolve();
       // The browser holds no command schema (K2): the host decoded this result, and it arrives as sent.
-      expect(await reading, "H03: the submitted read answers with its own result").toMatchObject({ id: expect.any(String) });
+      expect(await reading, "H03: the submitted read answers with its own result").toMatchObject({
+        id: expect.any(String),
+      });
       const completed = await captures.latestFamilies(key);
       malformedOutput = true;
-      await expect(direct(mounted.verb("read")).run(), "H02/H03: malformed native output is a refused action, never a typed success").rejects.toThrow();
-      expect((await captures.latestFamilies(key))?.id, "H03: failed native decoding preserves the completed observation").toBe(completed!.id);
-      expect(mounted.verb("read").failure, "H03: the typed action exposes its durable refusal").toBeTruthy();
-    } finally { mounted.dispose(); }
+      await expect(
+        direct(mounted.verb("read")).run(),
+        "H02/H03: malformed native output is a refused action, never a typed success",
+      ).rejects.toThrow();
+      expect(
+        (await captures.latestFamilies(key))?.id,
+        "H03: failed native decoding preserves the completed observation",
+      ).toBe(completed!.id);
+      expect(
+        mounted.verb("read").failure,
+        "H03: the typed action exposes its durable refusal",
+      ).toBeTruthy();
+    } finally {
+      mounted.dispose();
+    }
   } finally {
     paused?.release.resolve();
     await journal.close();
@@ -1000,9 +1324,10 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
 }, 60_000);
 test("JZ H19 wait beyond the browser budget, then inspect queue and conflict refusals without retry", async () => {
   const { HOST_READ_WAIT_S, NATIVE_READ_WAIT_S } = await import("./waits");
-  const { nativeFixture } = await import("@pe/fans-host/tests/fans-native.fixture");
-  const { BridgeError } = await import("../../../host/src/bridge");
-  const { callRouteOver, detachedBridge, testHostInputs } = await import("../../../host/tests/effect-test");
+  const { nativeFixture } = await import("../../../host/tests/fans/fans-native.fixture.ts");
+  const { BridgeError } = await import("@pe/host-internal/bridge");
+  const { callRouteOver, detachedBridge, testHostInputs } =
+    await import("../../../host/tests/effect-test");
   const { serveRoutes } = await import("../../../host/tests/real-server");
   const { Effect, Layer } = await import("effect");
   const j = await journey();
@@ -1010,15 +1335,19 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
   try {
     await j.ready();
     const roster = await j.host.send(100, []);
-    const row = roster.value!.data.fans.rows.find(row => row.mark === "MUAS-1")!;
+    const row = roster.value!.data.fans.rows.find((row) => row.mark === "MUAS-1")!;
     held = j.host.holdNative();
     j.mount.page.subject({ kind: "ids", ids: [stableFanKey(row)] });
     await held.entered.promise;
     const calls = j.host.nativeCalls;
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await vi.advanceTimersByTimeAsync((Math.max(HOST_READ_WAIT_S, NATIVE_READ_WAIT_S) + 1) * 1000);
-    expect(j.host.nativeCalls, "H19: browser waiting does not duplicate native dispatch").toBe(calls);
-    expect(j.mount.value(), "H19: slow read is still pending").toMatchObject({ state: expect.stringMatching(/^(reading|refreshing)$/) });
+    expect(j.host.nativeCalls, "H19: browser waiting does not duplicate native dispatch").toBe(
+      calls,
+    );
+    expect(j.mount.value(), "H19: slow read is still pending").toMatchObject({
+      state: expect.stringMatching(/^(reading|refreshing)$/),
+    });
     vi.useRealTimers();
     held.release.resolve();
     await j.ready();
@@ -1027,30 +1356,74 @@ test("JZ H19 wait beyond the browser budget, then inspect queue and conflict ref
     try {
       let attempts = 0;
       const queueJournal = journalAt(`${j.host.dir}/queue.json`, Date.now);
-      const server = await serveRoutes(callRouteOver(queueJournal, undefined, {}, { dispatch: () => {
-        attempts++;
-        return Effect.fail(new BridgeError("queue refused before send", 423, { notDispatched: true, nativeOutcome: "RefusedQueueUnresponsive" }));
-      } }).pipe(Layer.provide(testHostInputs)), detachedBridge());
+      const server = await serveRoutes(
+        callRouteOver(
+          queueJournal,
+          undefined,
+          {},
+          {
+            dispatch: () => {
+              attempts++;
+              return Effect.fail(
+                new BridgeError("queue refused before send", 423, {
+                  notDispatched: true,
+                  nativeOutcome: "RefusedQueueUnresponsive",
+                }),
+              );
+            },
+          },
+        ).pipe(Layer.provide(testHostInputs)),
+        detachedBridge(),
+      );
       try {
-        const response = await fetch(`${server.base}/call`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key: "pod.list" }) });
+        const response = await fetch(`${server.base}/call`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ key: "pod.list" }),
+        });
         expect(response.status).toBe(423);
-        expect(await response.json()).toMatchObject({ nativeOutcome: "RefusedQueueUnresponsive", notDispatched: true });
-        expect(response.headers.get("retry-after"), "H19: no blind queue retry instruction").toBeNull();
+        expect(await response.json()).toMatchObject({
+          nativeOutcome: "RefusedQueueUnresponsive",
+          notDispatched: true,
+        });
+        expect(
+          response.headers.get("retry-after"),
+          "H19: no blind queue retry instruction",
+        ).toBeNull();
         expect(attempts).toBe(1);
-      } finally { await server.close(); await queueJournal.close(); }
+      } finally {
+        await server.close();
+        await queueJournal.close();
+      }
       const work = { key: f.key, revision: 0 };
-      const changed = await f.saved.apply(f.key, "duct-systems", "human", [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }], 0);
+      const changed = await f.saved.apply(
+        f.key,
+        "duct-systems",
+        "human",
+        [{ path: ["writeIntent", "edit"], value: { value: { groups: ["group:g1"] } } }],
+        0,
+      );
       expect(changed.ok).toBe(true);
-      const response = await f.post("/actions", { id: "jz-conflict", key: "sheet.apply", target: f.target, input: { work } });
+      const response = await f.post("/actions", {
+        id: "jz-conflict",
+        key: "sheet.apply",
+        target: f.target,
+        input: { work },
+      });
       expect(response.ok).toBe(true);
       const receipt = await f.journal.wait("jz-conflict");
       expect(receipt.state, "H19: original stale revision is refused").not.toBe("succeeded");
       expect(f.dispatched, "H19: conflict cannot retry native mutation").toEqual([]);
-      expect((await f.journal.list()).filter(row => row.key === "sheet.apply")).toHaveLength(1);
-    } finally { await f.close(); }
-  } finally { vi.useRealTimers(); held?.release.resolve(); await j.close(); }
+      expect((await f.journal.list()).filter((row) => row.key === "sheet.apply")).toHaveLength(1);
+    } finally {
+      await f.close();
+    }
+  } finally {
+    vi.useRealTimers();
+    held?.release.resolve();
+    await j.close();
+  }
 }, 60_000);
-
 
 test("JZ registry publishes fan roster and sheet through the shared read door only", async () => {
   const { fixture, ref } = await import("../../../host/tests/host-read-graph.test-support");
@@ -1058,22 +1431,39 @@ test("JZ registry publishes fan roster and sheet through the shared read door on
   try {
     let generation = 0;
     const read = async (name: string, args: object) => {
-      const response = await f.request(new Request("http://host/pe/reads/value", {
-        method: "POST", body: JSON.stringify({ read: name, args, subscription: "jz-registry", generation: ++generation }),
-      }));
+      const response = await f.request(
+        new Request("http://host/pe/reads/value", {
+          method: "POST",
+          body: JSON.stringify({
+            read: name,
+            args,
+            subscription: "jz-registry",
+            generation: ++generation,
+          }),
+        }),
+      );
       expect(response.status, await response.clone().text()).toBe(200);
       return response.json();
     };
     const roster = await read("fans.roster", { target: ref });
     const fan = roster.value.data.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
     expect(fan).toBeTruthy();
-    const sheet = await read("fans.calc-detail", { target: ref, mode: "fan", unitId: fan.unitId, portIndex: fan.portIndex });
+    const sheet = await read("fans.calc-detail", {
+      target: ref,
+      mode: "fan",
+      unitId: fan.unitId,
+      portIndex: fan.portIndex,
+    });
     expect(sheet.value.data).toHaveProperty("basis");
     const fans = await read("fans.calc", { target: ref, fan: [], calcPath: "" });
     expect(fans.value.data.rows.length).toBeGreaterThan(0);
     for (const path of retiredReads.paths) {
-      const response = await f.request(new Request(`http://host${path}`, { method: "POST", body: "{}" }));
+      const response = await f.request(
+        new Request(`http://host${path}`, { method: "POST", body: "{}" }),
+      );
       expect(response.status, path).toBe(404);
     }
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 }, 60_000);

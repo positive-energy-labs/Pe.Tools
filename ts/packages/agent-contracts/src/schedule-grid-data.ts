@@ -34,18 +34,25 @@ export type ScheduleCellValue = z.infer<typeof scheduleCellValueSchema>;
 const unitLabel = (unit: string): string => {
   const name = /^autodesk\.unit\.unit:([^-]+)-[\d.]+$/.exec(unit)?.[1];
   if (!name) return unit;
-  return name.replace(/([a-z\d])([A-Z])/g, "$1 $2").replace(/^./, c => c.toUpperCase());
+  return name.replace(/([a-z\d])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
 };
 
 /** The shared cell/review projection; formatted text never changes the stored value. */
 export const showCellValue = (value: unknown): string => {
   if (typeof value === "string") return value;
   if (value === undefined) return "(absent)";
-  if (value !== null && typeof value === "object" && "value" in value
-      && typeof value.value === "string") {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    "value" in value &&
+    typeof value.value === "string"
+  ) {
     const cell = value as { value: string; unit?: unknown; display?: unknown };
-    return typeof cell.display === "string" ? cell.display
-      : typeof cell.unit === "string" ? `${cell.value} ${unitLabel(cell.unit)}` : cell.value;
+    return typeof cell.display === "string"
+      ? cell.display
+      : typeof cell.unit === "string"
+        ? `${cell.value} ${unitLabel(cell.unit)}`
+        : cell.value;
   }
   return JSON.stringify(value);
 };
@@ -181,7 +188,8 @@ export const scheduleGridDocumentSchema = z.object({
        */
       stale: z.array(z.object({ key: z.string(), was: z.string().nullable() })).optional(),
     })
-    .nullish().meta({ title: "schedule reading", internal: true }),
+    .nullish()
+    .meta({ title: "schedule reading", internal: true }),
   cells: z.record(z.string(), scheduleGridCellSchema).default({}),
   /** When the Reading these staged rungs rest on was taken, on the host's clock. The change mark compares against this. */
   takenAt: z.string().nullable().default(null).meta({ title: "capture time", internal: true }),

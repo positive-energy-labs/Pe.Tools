@@ -1,5 +1,10 @@
 import { parseTarget } from "#/route/target-codec";
-import { machineInventory, resolveCallTarget, type DocumentRequest, type Machine } from "@pe/agent-contracts";
+import {
+  machineInventory,
+  resolveCallTarget,
+  type DocumentRequest,
+  type Machine,
+} from "@pe/agent-contracts";
 
 /**
  * A new thread's visible first target: the one user document when exactly one connected Revit has
@@ -25,7 +30,6 @@ export function soleUserDocument(machine: Machine | null): DocumentRequest | nul
     ? request
     : null;
 }
-
 
 /** Whether a `?target` names a document (an address or an exact request), not a session or nothing. */
 export const pinsDocument = (target?: string | null) =>
@@ -59,4 +63,3 @@ export function pinnedDocument(
   const [only, ...others] = refs;
   return only && !others.length ? { kind: "open", ref: only } : null;
 }
-

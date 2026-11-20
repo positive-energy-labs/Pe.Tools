@@ -1,4 +1,4 @@
-import { useNativeObservation } from "#/revit/observation";
+import { useNativeObservation } from "@pe/web-kernel/revit/observation";
 import type {
   RevitMatrixParameterCoverage,
   RevitMatrixScheduleCoverage,
@@ -9,7 +9,7 @@ import { Provenance, Section } from "@pe/kit/lang/section";
 import { FactChip } from "@pe/kit/lang/chip";
 import { SubjectText } from "@pe/kit/lang/subject-text";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
-import { useRevitSubjectProps } from "#/revit/element-menu";
+import { useRevitSubjectProps } from "@pe/web-kernel/revit/element-menu";
 import { type OpViewProps, UnrecognizedShape, asRecord } from "#/ops/registry";
 import { issueLine, pageNote } from "./schedules";
 
@@ -30,7 +30,14 @@ function Samples({
   const names = new Map(handles.map((h) => [h.elementId, h.displayName]));
   const uniqueIds = new Map(handles.map((h) => [h.elementId, h.uniqueId]));
   return (
-    <SubjectTextContext value={{ doc, nameOf: (id) => names.get(id) ?? null, uniqueIdOf: (id) => uniqueIds.get(id) ?? null, refProps }}>
+    <SubjectTextContext
+      value={{
+        doc,
+        nameOf: (id) => names.get(id) ?? null,
+        uniqueIdOf: (id) => uniqueIds.get(id) ?? null,
+        refProps,
+      }}
+    >
       <Provenance>
         {label}:{" "}
         <SubjectText

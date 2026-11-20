@@ -17,8 +17,8 @@
   ],
   "type": "module",
   "exports": {
-    "./product-catalog": "./src/pea/product-catalog.ts",
-    "./product-actions": "./src/pea/product-actions.ts",
+    "./product-catalog": "./src/pea/product-catalog.generated.ts",
+    "./product-actions": "./src/pea/product-actions.generated.ts",
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
@@ -30,7 +30,8 @@
     "./family-pdf": "./src/shared/family-pdf.ts",
     "./llama-parse": "./src/shared/llama-parse.ts",
     "./llama-key": "./src/shared/llama-key.ts",
-    "./derived-parse": "./src/shared/derived-parse.ts"
+    "./derived-parse": "./src/shared/derived-parse.ts",
+    "./product-contracts": "./src/pea/product-contracts.generated.ts"
   },
   "publishConfig": {
     "access": "public"
@@ -45,25 +46,22 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@pe/duct-systems-contract": "workspace:*",
     "@llamaindex/liteparse": "catalog:",
     "@llamaindex/llama-cloud": "^2.10.0",
     "@modelcontextprotocol/client": "catalog:",
     "@modelcontextprotocol/server": "catalog:",
     "@pe/agent-contracts": "workspace:*",
-    "@pe/ducts-contract": "workspace:*",
     "@pe/browser": "workspace:*",
-    "@pe/ducts-domain": "workspace:*",
+    "@pe/duct-systems-contract": "workspace:*",
+    "@pe/ducts-contract": "workspace:*",
+    "@pe/fans-contract": "workspace:*",
     "@pe/host-contracts": "workspace:*",
     "@pe/runtime": "workspace:*",
     "effect": "4.0.2",
     "gunshi": "^0.29.5",
     "parse5": "^8.0.1",
     "pngjs": "catalog:",
-    "zod": "4.3.6",
-    "@pe/ducts-host": "workspace:*",
-    "@pe/fans-contract": "workspace:*",
-    "@pe/fans-host": "workspace:*"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",
@@ -71,7 +69,13 @@
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
-    "vite-plus": "catalog:",
-    "@pe/host": "workspace:*"
+    "vite-plus": "catalog:"
+  },
+  "pe": {
+    "generatedProductDependencies": [
+      "@pe/duct-systems-contract",
+      "@pe/ducts-contract",
+      "@pe/fans-contract"
+    ]
   }
 }

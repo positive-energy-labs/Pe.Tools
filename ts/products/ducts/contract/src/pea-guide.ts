@@ -1,7 +1,9 @@
-export const peaGuide = { instructions: "", skills: [
-  {
-    name: "place-mep-ducts",
-    content: String.raw`---
+export const peaGuide = {
+  instructions: "",
+  skills: [
+    {
+      name: "place-mep-ducts",
+      content: String.raw`---
 name: place-mep-ducts
 description: Lay out ductwork in Revit - rough in a supply, return, or exhaust trunk on a level, branch to air terminals, draft a collision-free layout the user can refine, then commit real ducts and fittings. Use for lay out ductwork, run a duct, rough in supply on a level, route duct to these terminals, duct clash check.
 ---
@@ -109,5 +111,6 @@ For interactive nudging or diagnosing a single leg, use the fluent session (Star
 - read_image the exported plan ONCE after a commit to confirm before reporting success. Never read images during recon or between solve iterations - the report and MapProbe are the truth; images are the final visual check.
 - On a Revit-busy error: wait, retry a few times, never stack concurrent runs.
 `,
-  },
-] };
+    },
+  ],
+};

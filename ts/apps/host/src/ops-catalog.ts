@@ -1,16 +1,12 @@
 import { readSessionScope, SdkSession } from "./sdk-session.ts";
 import { Effect } from "effect";
-import {
-  HttpRouter,
-  type HttpServerRequest,
-  HttpServerResponse as Response,
-} from "effect/http";
+import { HttpRouter, type HttpServerRequest, HttpServerResponse as Response } from "effect/http";
 import {
   HOST_RPC_BRIDGE_SESSION_HEADER,
   isTsOnlyOperationKey,
   tsOnlyOperationCatalog,
 } from "@pe/host-contracts/operation-types";
-import { RevitBridge } from "./bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { NoRevitSession } from "@pe/host-internal/dispatch";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
@@ -40,13 +36,20 @@ export const opsCatalogRoute = (spa: SpaFallback) =>
           const scope = yield* Effect.try(() => readSessionScope(req.headers));
           // ADR 0029 rule 16 exception: bridge.list preserves the no-attachment metadata fallback.
           // Native content dispatch uses HostNativeRead; this observation never launches an op.
-          if (!scope.session && !scope.bridgeSessionId && !scope.openDocumentId && !sessionParam &&
-              (yield* (yield* RevitBridge).list).length === 0)
+          if (
+            !scope.session &&
+            !scope.bridgeSessionId &&
+            !scope.openDocumentId &&
+            !sessionParam &&
+            (yield* (yield* RevitBridge).list).length === 0
+          )
             return yield* Effect.fail(new NoRevitSession());
           const selected = { ...scope, bridgeSessionId: sessionHeader ?? sessionParam };
           const session = yield* (yield* SdkSession).resolve(selected);
           const result = yield* (yield* HostNativeRead).read({
-            key: "host.ops.catalog", input: {}, scope: { ...selected, bridgeSessionId: session.sessionId },
+            key: "host.ops.catalog",
+            input: {},
+            scope: { ...selected, bridgeSessionId: session.sessionId },
           });
           return { ...result, sessionId: session.sessionId };
         }),

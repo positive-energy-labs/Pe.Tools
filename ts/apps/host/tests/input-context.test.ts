@@ -7,14 +7,14 @@ import { Effect, Exit, Layer } from "effect";
 import { afterEach, expect, test } from "vite-plus/test";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { HostInputContext } from "../src/input-context.ts";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import {
-  hostNativeReadFor,
   nativeCatalogIdentity,
   openRecordingReader,
   openRecordingWriter,
-  type HostInputLane,
 } from "../src/native-recording.ts";
+import { hostNativeReadFor } from "../src/recorded-native-read.ts";
+import { type HostInputLane } from "@pe/host-internal/input-recording";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -55,7 +55,10 @@ test("live keeps its admission; a sourceless host fixture refuses and never buil
       return yield* (yield* HostNativeRead).read({ key: "host.ops.catalog", input: {}, scope: {} });
     }).pipe(
       Effect.provide(hostNativeReadFor(fixture, live)),
-      Effect.provideService(RequestIdentity, admittedRequestIdentity({ kind: "human", via: "local" }, {})),
+      Effect.provideService(
+        RequestIdentity,
+        admittedRequestIdentity({ kind: "human", via: "local" }, {}),
+      ),
     ),
   );
   expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain("recording.fixture");

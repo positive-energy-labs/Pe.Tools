@@ -39,9 +39,7 @@ test("borrowed host mode changes only web identity and permits Ducts reads, neve
 
 test("borrowed calls follow generated safety metadata, including rolled-back transaction refusals", () => {
   for (const [key, safety] of Object.entries(hostOpSafety))
-    expect(readHostRequest("POST", "/call", { key }), key).toBe(
-      safety.effect === "Read",
-    );
+    expect(readHostRequest("POST", "/call", { key }), key).toBe(safety.effect === "Read");
   for (const key of [
     "family.look",
     "family.loadTest",
@@ -78,10 +76,27 @@ test("borrowed calls follow generated safety metadata, including rolled-back tra
   expect(readHostRequest("GET", "/pe/resources?keys=[]&connection=owned")).toBe(false);
   const update = { add: [{ kind: "inventory" }], remove: [] };
   expect(readHostRequest("POST", "/pe/resource-subscriptions", update)).toBe(true);
-  for (const body of [undefined, {}, { add: [], remove: [1] }, { ...update, add: Array(33).fill(update.add[0]) },
-    { add: [{ kind: "families-matrix", target: { session: "x", openId: "y" },
-      filter: { categoryNames: ["Mechanical Equipment"], familyNames: [], placementScope: "AllLoaded" } }], remove: [] },
-    " ".repeat(16385) + JSON.stringify(update)])
+  for (const body of [
+    undefined,
+    {},
+    { add: [], remove: [1] },
+    { ...update, add: Array(33).fill(update.add[0]) },
+    {
+      add: [
+        {
+          kind: "families-matrix",
+          target: { session: "x", openId: "y" },
+          filter: {
+            categoryNames: ["Mechanical Equipment"],
+            familyNames: [],
+            placementScope: "AllLoaded",
+          },
+        },
+      ],
+      remove: [],
+    },
+    " ".repeat(16385) + JSON.stringify(update),
+  ])
     expect(readHostRequest("POST", "/pe/resource-subscriptions", body)).toBe(false);
 });
 
@@ -166,8 +181,19 @@ test("borrowed frontend forwards reads with host origin and refuses mutations be
       expect((await fetch(`${origin}${path}`, { method: "POST", headers })).status).toBe(403);
     expect(forwarded).toHaveLength(1);
     const body = JSON.stringify({ add: [{ kind: "inventory" }], remove: [] });
-    expect((await fetch(`${origin}/pe/resource-subscriptions?connection=owned`, { method: "POST", headers, body })).status).toBe(200);
-    expect(forwarded.at(-1)).toMatchObject({ url: "/pe/resource-subscriptions?connection=owned", body });
+    expect(
+      (
+        await fetch(`${origin}/pe/resource-subscriptions?connection=owned`, {
+          method: "POST",
+          headers,
+          body,
+        })
+      ).status,
+    ).toBe(200);
+    expect(forwarded.at(-1)).toMatchObject({
+      url: "/pe/resource-subscriptions?connection=owned",
+      body,
+    });
   } finally {
     await vite.close();
     backend.close();

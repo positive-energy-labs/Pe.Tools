@@ -180,7 +180,7 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
    */
   z.strictObject({ kind: z.literal("notices"), as: z.literal("tray").optional() }),
   z.strictObject({ kind: z.literal("takeoff-reading"), target: documentRefSchema }),
-  z.strictObject({kind:z.literal("families-reading"),work:workKeySchema}),
+  z.strictObject({ kind: z.literal("families-reading"), work: workKeySchema }),
   /**
    * The families matrix of one document over one filter, by ENVELOPE only
    * (`familiesMatrixEnvelopeSchema`): the stream says when the last matrix read completed and which
@@ -245,7 +245,9 @@ export const readingRequestSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export interface ProductReadings {}
-export type ReadingRequest = z.infer<typeof readingRequestSchema> | ProductReadings[keyof ProductReadings];
+export type ReadingRequest =
+  | z.infer<typeof readingRequestSchema>
+  | ProductReadings[keyof ProductReadings];
 
 /** One row of a History list: what one retained read produced, and when. */
 export const historyRowsSchema = z.array(

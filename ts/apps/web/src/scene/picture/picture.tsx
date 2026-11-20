@@ -22,52 +22,37 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { Button } from "@pe/kit/lang/button";
 import { land } from "@pe/kit/lang/land";
 import { useLiveOrbit } from "@pe/kit/lang/live-orbit";
-import type { Chord } from "@pe/kit/keys";
 import { Pane, PaneOverlay } from "@pe/kit/lang/pane";
 import { PictureReadout } from "@pe/kit/lang/readout";
 import { nameOrFallback } from "@pe/kit/lang/subject-text";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
 import { toggleLayer, type PicturePage } from "@pe/agent-contracts";
-import {
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-} from "react";
+import { useContext, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
-import { useElementIndex, type ElementIndex } from "#/element-index";
-import { useElementAttention, useHoveredIssue, useIssueHover } from "#/attention";
-import { SelectionBoxButton } from "#/revit/element-menu";
-import { observedElements, useNativeObservation } from "#/revit/observation";
-import { alarmLayers } from "#/scene/damage";
+import { useElementIndex, type ElementIndex } from "@pe/web-kernel/element-index";
+import { useElementAttention, useHoveredIssue, useIssueHover } from "@pe/web-kernel/attention";
+import { SelectionBoxButton } from "@pe/web-kernel/revit/element-menu";
+import { observedElements, useNativeObservation } from "@pe/web-kernel/revit/observation";
+import { alarmLayers } from "@pe/web-kernel/scene/damage";
 import { sceneRequest, type ContextRepresentation } from "#/scene/host";
-import type { OrbitViewport } from "#/scene/orbit";
-import { viewportProject } from "#/scene/projection";
-import type { ColourMode } from "#/scene/renderer";
+import type { OrbitViewport } from "@pe/web-kernel/scene/orbit";
+import { viewportProject } from "@pe/web-kernel/scene/projection";
 import { PictureStage, projectBounds, stageViewport, useStage } from "#/scene/stage-controller";
 import { pictureModes } from "#/scene/stage-teaching";
 import { strandLayers } from "#/scene/strands";
-import type { Bounds, IssueTarget, Kinds, PaintOf, SceneMeshes } from "#/scene/types";
+import type { Bounds, IssueTarget } from "@pe/web-kernel/scene/types";
 
 import { usePictureFloaters } from "./floaters";
+import { boundsOfIds, ModelPicture, poseOf, usePictureBounds } from "./model";
 import {
-  boundsOfIds,
-  ModelPicture,
-  poseOf,
-  usePictureBounds,
   type PictureLayer,
-  type PictureLine,
-  type PictureOverlayFrame,
+  type PictureContent,
   type PictureStrand,
-} from "./model";
+  layersOn,
+} from "@pe/web-kernel/scene/picture/content";
 import { useCapture, usePictureRead } from "./read";
 import { strandFixture, strandFixtureOn } from "./strand-fixture";
-
-export { type PictureLayer, type PictureLine, type PictureOverlayFrame, type PictureStrand };
 
 /** Preserve the picture's complete furniture when hosted by a kernel pane. */
 export const renderPicturePane: TeachingPaneRender = (body, furniture) => (
@@ -76,62 +61,6 @@ export const renderPicturePane: TeachingPaneRender = (body, furniture) => (
   </Pane>
 );
 
-/** Everything a surface says about its picture. Numeric ids stop at the renderer adapter. */
-export interface PictureContent<L extends string = string, F extends string = string> {
-  /** What is captured, as ElementIds: the capture request is addressed by them and they are payload, never identity. `walked` draws as ink, `near` joins the capture as stubs. Never implies reach. */
-  focus: { walked: readonly number[]; near: readonly number[] };
-  /** Group subjects (issue:, run:, leg:, system:) to their element keys; the core registers them. */
-  members?: Members;
-  /** Reverse hover: a hovered element also lights the smallest declared group this admits.
-   * Absent = the single element. */
-  hoverGroups?: (group: SubjectKey) => boolean;
-  /** A picked element's selection, widened (E: its leg). Absent = the single element. */
-  widen?: (key: SubjectKey) => readonly SubjectKey[];
-  /** Capture limits and clipping; `meshes` substitutes a dev fixture for the capture. */
-  capture?: { maxTriangles?: number; cuts?: SceneMeshes["cuts"]; meshes?: SceneMeshes | null };
-  /** Centrelines: bounds before meshes arrive, the jump fallback, and the globe's lines. */
-  lines: readonly PictureLine[];
-  /** Ordered paths drawn over the centrelines, side by side where they share an element. The
-   * heavy strand and any lit or selected strand animate their flow; the rest hold still. */
-  strands?: readonly PictureStrand[];
-  /** Subjects over a limit: the only alarm ink (look rule 2026-10-26). Absent = nothing alarms. */
-  over?: ReadonlySet<SubjectKey>;
-  /** A subject's name as the surface's rows read it. */
-  name: (key: SubjectKey) => string;
-  paint?: (meshes: SceneMeshes | null) => PaintOf | undefined;
-  kinds: Kinds;
-  colour: ColourMode;
-  layers?: readonly PictureLayer[];
-  /** The layer strip, in order; `off` layers are not in the picture's default set. Context is the pose's `context`, never a layer. */
-  layerOptions: readonly LayerOption<L>[];
-  /** DOM drawn over the picture at the released frame. */
-  overlay?: (frame: PictureOverlayFrame) => ReactNode;
-  readout: {
-    /** What the picture is of (a system name). */
-    subject?: string;
-    /** The idle line and body, while nothing is picked. */
-    summary: ReactNode;
-    idle?: ReactNode;
-    /** The picked element's facts. */
-    facts?: (key: SubjectKey) => ReactNode;
-  };
-  /** A second, flat picture (a schematic, a plan): its key is the page's `picture` value; `S`
-   * swaps it with the model and the other sits in the corner. Absent = model only. */
-  flat?: {
-    key: F;
-    label: string;
-    says?: string;
-    render: (size: "main" | "inset", readout?: ReactNode) => ReactNode;
-  };
-  /** The go-to popup; `jump` selects and flies to a subject with a landing. */
-  goTo?: (jump: (key: SubjectKey) => void) => ReactNode;
-  furniture?: { title?: ReactNode; actions?: ReactNode; legend?: ReactNode };
-  /** Replaces the default issue pick (select its element and the issue). */
-  onIssuePick?: (target: IssueTarget) => void;
-  /** Told of every pick and clear, before the page moves. */
-  onPick?: (key: SubjectKey | null) => void;
-}
-
 /** How context is drawn; `none` is the focus read's own and never a choice here. */
 export type PictureContext = Extract<ContextRepresentation, "overview" | "meshes">;
 /** Zero-native-geometry overview is the default; detail is an explicit read (kaitpw, 2026-11-02). */
@@ -139,12 +68,6 @@ export const CONTEXT_DEFAULT = "overview" satisfies PictureContext;
 
 type DocRef = { session: string; openId: string };
 type Move = { history: "push" | "replace" };
-export type LayerOption<L extends string = string> = { key: L; label: string; chord?: Chord; says?: string; off?: true };
-
-/** The layer keys on: the page's list, or the options' default set. */
-export const layersOn = <L extends string>(layers: PicturePage["layers"], options: readonly LayerOption<L>[]): L[] =>
-  options.filter((o) => (layers === "default" ? !o.off : layers.includes(o.key))).map((o) => o.key);
-
 /** The capture request a focus asks for; null when nothing is walked or near. */
 export function captureRequest(
   focus: PictureContent["focus"],
@@ -313,7 +236,9 @@ export function Picture<L extends string, F extends string>({
     ],
   );
   // The kernel builds every capture from the focus; a route authors no scene request (ADR 0035 rule 2).
-  const overviewRequest = request ? { ...request, contextRepresentation: "overview" as const } : null;
+  const overviewRequest = request
+    ? { ...request, contextRepresentation: "overview" as const }
+    : null;
   const captured = useCapture(
     pictureSize ? (contextRepresentation === "meshes" ? request : overviewRequest) : null,
     native,
@@ -421,11 +346,16 @@ export function Picture<L extends string, F extends string>({
   // The page's element pick; a claim or a row selects through `issue` and its members.
   const pickedElement = elements.idOf(page.selected);
   const pickedId = Number.isFinite(pickedElement) ? pickedElement : null;
-  const pickedKey: SubjectKey | null = page.selected.includes(":") ? (page.selected as SubjectKey) : null;
+  const pickedKey: SubjectKey | null = page.selected.includes(":")
+    ? (page.selected as SubjectKey)
+    : null;
   const widen = content.widen;
   const selectionOf = (id: number) => {
     const key = elements.keyOf(id);
-    return new Set([id, ...(key && widen ? widen(key) : []).map(elements.idOf).filter(Number.isFinite)]);
+    return new Set([
+      id,
+      ...(key && widen ? widen(key) : []).map(elements.idOf).filter(Number.isFinite),
+    ]);
   };
   // Attention is the one selection; keyed on its members so a hover elsewhere redraws nothing.
   const selectedSig = [...attentionSelected].join();

@@ -4,9 +4,9 @@ import { EmptyState } from "@pe/kit/lang/empty";
 import { Button } from "@pe/kit/lang/button";
 import { Code, stringify } from "@pe/kit/lang/code";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
-import { NativeObservationScope } from "#/revit/observation";
+import { NativeObservationScope } from "@pe/web-kernel/revit/observation";
 import type { DocumentRef } from "@pe/agent-contracts";
-import { nameOf, refusalOf } from "#/route/typed-route";
+import { nameOf, refusalOf } from "@pe/web-kernel/route/typed-route";
 import type { OpsContext } from "./route";
 import { requestOf } from "./form";
 import { OpForm, seedValues, type FormValues } from "./form";
@@ -68,7 +68,8 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
               <h2>Request</h2>
               <span className="flex gap-1">
                 {(selected.requestExamples ?? []).map((example) => (
-                  <Button kind="quiet"
+                  <Button
+                    kind="quiet"
                     key={example.name}
                     label={example.name}
                     reason={example.description}
@@ -101,7 +102,9 @@ export function Operation({ ctx }: { ctx: OpsContext }) {
                   setValue(result as Value);
                   setFailure(null);
                 })
-                .catch((error) => setFailure(error instanceof Error ? error.message : String(error)))
+                .catch((error) =>
+                  setFailure(error instanceof Error ? error.message : String(error)),
+                )
             }
           >
             Run read

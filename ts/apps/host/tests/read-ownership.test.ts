@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vite-plus/test";
 import { createReadOwnership, type ReadOwnershipPorts } from "../src/reads/read-ownership.ts";
-import { admittedRequestIdentity } from "../src/request-services.ts";
+import { admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import type { CausalTerminalState } from "@pe/host-internal/request-contracts";
 
 const deferred = <T>() => Promise.withResolvers<T>();

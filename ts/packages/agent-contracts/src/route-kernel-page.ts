@@ -1,7 +1,11 @@
 import type { z } from "zod";
 import type { ExecutionTarget } from "./target.ts";
 import type { WorkKey, WorkWriteAck } from "./route-state.ts";
-import type { Immutable, RouteStateGraph as RouteGraphJson, RouteGraphJson as BodyGraph } from "./route-kernel-data.ts";
+import type {
+  Immutable,
+  RouteStateGraph as RouteGraphJson,
+  RouteGraphJson as BodyGraph,
+} from "./route-kernel-data.ts";
 import type { SubjectRefCode } from "./subject-ref.ts";
 
 export type SchemaTable = Readonly<Record<string, z.ZodType>>;
@@ -18,7 +22,10 @@ export type DecodeResult<T> =
   | { readonly ok: false; readonly reason: string };
 /** A selection item names a route attention place by kind; subjects are SubjectRefs (ADR 0035 rule 2). */
 export type SelectionItem<G extends RouteGraphJson> = {
-  [K in keyof G["fields"]]: G["fields"][K] extends { role: "selection"; kinds: readonly (infer T)[] }
+  [K in keyof G["fields"]]: G["fields"][K] extends {
+    role: "selection";
+    kinds: readonly (infer T)[];
+  }
     ? { readonly kind: T & string; readonly id: string }
     : never;
 }[keyof G["fields"]];

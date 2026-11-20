@@ -11,31 +11,24 @@ import { z } from "zod";
 import { takeoffSnapshotInput } from "../../web/src/takeoff/host.ts";
 import { takeoffCaptureSchema } from "@pe/agent-contracts";
 
-
 import { canonicalJson, HostNativeRead } from "@pe/host-internal/native-read";
 import { historyPointSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { History } from "../src/reads/history.ts";
-import { nativeRead } from "../src/reads/evaluator.ts";
+import { nativeRead } from "@pe/host-internal/reads/evaluator";
 import { registeredReads } from "../src/reads/routes.ts";
 import { familiesViewArgs } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
-import { read, leaf, RefusedPartition } from "../src/reads/evaluator.ts";
+import { read, leaf, RefusedPartition } from "@pe/host-internal/reads/evaluator";
 import { Publications } from "../src/reads/publications.ts";
 import { FIRM_SEED } from "@pe/ducts-host/ducts-inputs";
 import { BridgeError } from "@pe/host-internal/dispatch";
-import { RequestIdentity, admittedRequestIdentity } from "../src/request-services.ts";
-import {
-  CurrentInputConsumption,
-  HostInputReadSets,
-  type ReadSetId,
-} from "../src/input-occurrence.ts";
-import {
-  hostNativeReadFor,
-  openRecordingWriter,
-  openRecordingReader,
-  type HostInputLane,
-} from "../src/native-recording.ts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
+import { CurrentInputConsumption, type ReadSetId } from "@pe/host-internal/input-occurrence";
+import { HostInputReadSets } from "../src/input-occurrence.ts";
+import { openRecordingWriter, openRecordingReader } from "../src/native-recording.ts";
+import { hostNativeReadFor } from "../src/recorded-native-read.ts";
+import { type HostInputLane } from "@pe/host-internal/input-recording";
 import { settle } from "./effect-test.ts";
 import {
   fixture,
@@ -70,7 +63,13 @@ test("JZ read subscriptions reclaim capacity through release and reject released
   const unregister = registeredReads.register({ capacity: definition });
   const f = await fixture();
   const send = async (subscription: string, generation: number, args: number, release = false) => {
-    const response = await f.probe({ read: definition.name, subscription, generation, args, release });
+    const response = await f.probe({
+      read: definition.name,
+      subscription,
+      generation,
+      args,
+      release,
+    });
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     return body;
@@ -109,9 +108,17 @@ test("JZ read subscriptions reclaim capacity through release and reject released
     await send("shared-right", 1, 1000, true);
     // The simultaneous slot cap remains a limit, rather than a churn counter.
     for (let i = 0; i < 128; i++) expect((await send(`live-${i}`, 0, i)).state).toBe("current");
-    const full = await f.probe({ read: "work.timeline", subscription: "overflow", generation: 0, args: { works: [] } });
+    const full = await f.probe({
+      read: "work.timeline",
+      subscription: "overflow",
+      generation: 0,
+      args: { works: [] },
+    });
     expect(full.status).toBe(429);
-    expect(await full.json()).toMatchObject({ problem: "read.subscription-capacity", message: "Read subscription capacity reached" });
+    expect(await full.json()).toMatchObject({
+      problem: "read.subscription-capacity",
+      message: "Read subscription capacity reached",
+    });
     await send("live-0", 0, 0, true);
     expect((await send("overflow", 0, 128)).state).toBe("current");
   } finally {
@@ -123,11 +130,14 @@ test("JZ read subscriptions reclaim capacity through release and reject released
 });
 
 test("JZ input-open admissions survive unrelated release churn", async () => {
-  const liveOpen = gate(), releasedOpen = gate(), flight = gate();
+  const liveOpen = gate(),
+    releasedOpen = gate(),
+    flight = gate();
   const lateFlight = Promise.withResolvers<void>();
   let starts = 0;
   const definition = read("test.exact-admission", {
-    input: z.number(), output: z.number(),
+    input: z.number(),
+    output: z.number(),
     async run(_ctx, value) {
       if (value === -1) {
         flight.entered.resolve();
@@ -140,7 +150,13 @@ test("JZ input-open admissions survive unrelated release churn", async () => {
   const unregister = registeredReads.register({ exact: definition });
   const f = await fixture();
   const send = async (subscription: string, args = 0, release = false) => {
-    const response = await f.probe({ read: definition.name, subscription, generation: 0, args, release });
+    const response = await f.probe({
+      read: definition.name,
+      subscription,
+      generation: 0,
+      args,
+      release,
+    });
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     return body;
@@ -153,12 +169,14 @@ test("JZ input-open admissions survive unrelated release churn", async () => {
     const open = sets.open;
     const spy = vi.spyOn(sets, "open");
     restore = () => spy.mockRestore();
-    const holdOpen = (hold: ReturnType<typeof gate>) => spy.mockImplementationOnce((...args) =>
-      Effect.gen(function* () {
-        hold.entered.resolve();
-        yield* Effect.promise(() => hold.release.promise);
-        return yield* open(...args);
-      }));
+    const holdOpen = (hold: ReturnType<typeof gate>) =>
+      spy.mockImplementationOnce((...args) =>
+        Effect.gen(function* () {
+          hold.entered.resolve();
+          yield* Effect.promise(() => hold.release.promise);
+          return yield* open(...args);
+        }),
+      );
     holdOpen(liveOpen);
     pending.push(send("live-opening"));
     await liveOpen.entered.promise;
@@ -185,9 +203,13 @@ test("JZ input-open admissions survive unrelated release churn", async () => {
     expect((await pending[3]).state).toBe("current");
     expect((await pending[3]).version).toBe(2);
   } finally {
-    liveOpen.release.resolve(); releasedOpen.release.resolve(); flight.release.resolve();
+    liveOpen.release.resolve();
+    releasedOpen.release.resolve();
+    flight.release.resolve();
     await Promise.allSettled(pending);
-    restore(); unregister(); await f.close();
+    restore();
+    unregister();
+    await f.close();
   }
 });
 
@@ -261,21 +283,33 @@ test("HTTP document targets normalize once before generated native handles and p
 test("History keeps its own recorded references after HTTP-only slots are reclaimed", async () => {
   const f = await fixture(true);
   const publish = async (subscription: string, fan: string[] = []) => {
-    const response = await f.request(new Request("http://host/pe/reads/value", {
-      method: "POST", body: JSON.stringify({ read: "fans.calc", args: { target: ref, fan, calcPath: "" }, subscription, generation: 0 }),
-    }));
+    const response = await f.request(
+      new Request("http://host/pe/reads/value", {
+        method: "POST",
+        body: JSON.stringify({
+          read: "fans.calc",
+          args: { target: ref, fan, calcPath: "" },
+          subscription,
+          generation: 0,
+        }),
+      }),
+    );
     expect(response.status, await response.clone().text()).toBe(200);
     return response.json();
   };
   try {
     const first = await publish("request-only");
     expect(f.reads.publications.history()).toEqual({});
-    const point = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
+    const point = historyPointSchema.parse(
+      await f.history("", { kind: "captured", document: path }),
+    );
     const fan = first.value.data.fans.rows.find((row: { mark: string }) => row.mark === "MUAS-1");
     const next = await publish("next-request", [fanCode(fan)]);
     expect(f.reads.publications.history()).toEqual({});
     expect(next.value.evaluation).not.toBe(first.value.evaluation);
-    const later = historyPointSchema.parse(await f.history("", { kind: "captured", document: path }));
+    const later = historyPointSchema.parse(
+      await f.history("", { kind: "captured", document: path }),
+    );
     expect(later.history.publications).toHaveLength(1);
     expect(later.history.publications[0]!.evaluation).toBe(next.value.evaluation);
     const reader = await settle(openRecordingReader(join(f.dir, "recording"), identity, bounds));
@@ -284,7 +318,9 @@ test("History keeps its own recorded references after HTTP-only slots are reclai
     expect(await cold.publication(point.id, "fans.calc", "fans.calc")).toEqual(first);
     expect(await cold.publication(later.id, "fans.calc", "fans.calc")).toEqual(next);
     expect(f.nativeCalls).toBe(calls);
-  } finally { await f.close(); }
+  } finally {
+    await f.close();
+  }
 });
 
 test("History reopens the host's exact publication after newer Values, with no live fill", async () => {
@@ -428,7 +464,16 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
           key("fans"),
           "fans",
           "human",
-          [{ path: ["flows", elementSubject(snapshot.nodes.find(node => node.kind === "terminal")!), "edit"], value: { value: 321 } }],
+          [
+            {
+              path: [
+                "flows",
+                elementSubject(snapshot.nodes.find((node) => node.kind === "terminal")!),
+                "edit",
+              ],
+              value: { value: 321 },
+            },
+          ],
           0,
         );
         expect(staged.ok).toBe(true);
@@ -457,7 +502,9 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
       }
       // The surface still holds the old Value and receives its exact version with a stale label.
       expect(await f.publicationEvent(2)).toEqual({
-        generation: 2, version: before.version, state: "refresh-needed",
+        generation: 2,
+        version: before.version,
+        state: "refresh-needed",
       });
     } finally {
       hold?.release.resolve();
@@ -468,7 +515,9 @@ test("F2 Work, same-version firm criteria and document mark changes during a mul
 
 test("F3 three native batches retain the middle refusal on offline replay; no live bridge is constructed", async () => {
   const dir = await mkdtemp(join(tmpdir(), "host-read-refused-"));
-  const writer = await settle(openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds));
+  const writer = await settle(
+    openRecordingWriter(stateFixture(join(dir, "recording")), identity, bounds),
+  );
   let liveCalls = 0,
     poison = 0;
   const batch = leaf("native-batch", z.array(z.number()), z.array(z.number()), false);
@@ -637,23 +686,58 @@ test("F3 three native batches retain the middle refusal on offline replay; no li
 test("HTTP retaining one capture twice with an open reader never rewrites it and refuses corruption", async () => {
   const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
   const definition = read("test.capture-retain", {
-    input: takeoffSnapshotInput, output: takeoffCaptureSchema,
+    input: takeoffSnapshotInput,
+    output: takeoffCaptureSchema,
     run: (ctx, args) => ctx.read(retained, args),
   });
   const unregister = registeredReads.register({ capture: definition });
   const f = await fixture(false, {
-    read: () => { throw Error("Retention requires no native dispatch"); },
-    inventory: { sessions: [{ sessionId: ref.session, connected: true, openDocumentCount: 1,
-      openDocuments: [{ openId: ref.openId, title: "Chadds", address: path, isFamilyDocument: false, isActive: true, projectHome: null }] }] },
+    read: () => {
+      throw Error("Retention requires no native dispatch");
+    },
+    inventory: {
+      sessions: [
+        {
+          sessionId: ref.session,
+          connected: true,
+          openDocumentCount: 1,
+          openDocuments: [
+            {
+              openId: ref.openId,
+              title: "Chadds",
+              address: path,
+              isFamilyDocument: false,
+              isActive: true,
+              projectHome: null,
+            },
+          ],
+        },
+      ],
+    },
   });
-  const args = { target: ref, views: [], snapshot: {
-    reading: { at: path, version: "same", observedAt: "2026-11-07T00:00:00.000Z" },
-    snapshot: { status: { systems: [], carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] } },
-      zoneFrs: [], regionsByZone: {} },
-  } };
+  const args = {
+    target: ref,
+    views: [],
+    snapshot: {
+      reading: { at: path, version: "same", observedAt: "2026-11-07T00:00:00.000Z" },
+      snapshot: {
+        status: {
+          systems: [],
+          carriers: { stage: "Adoption", status: "ready", missingCarrierGuids: [] },
+        },
+        zoneFrs: [],
+        regionsByZone: {},
+      },
+    },
+  };
   let reader: Awaited<ReturnType<typeof open>> | undefined;
   const retain = async (generation: number) => {
-    const response = await f.probe({ read: definition.name, subscription: `retain-${generation}`, generation, args });
+    const response = await f.probe({
+      read: definition.name,
+      subscription: `retain-${generation}`,
+      generation,
+      args,
+    });
     const body = await response.json();
     expect(response.status, JSON.stringify(body)).toBe(200);
     return body;
@@ -680,13 +764,16 @@ test("HTTP retaining one capture twice with an open reader never rewrites it and
     expect(after.mtimeNs).toBe(before.mtimeNs);
     expect(await readFile(file)).toEqual(bytes);
     expect(await reader.readFile()).toEqual(bytes);
-    await reader.close(); reader = undefined;
+    await reader.close();
+    reader = undefined;
     await writeFile(file, "corrupt");
     const refused = await retain(3);
     expect(refused.state).not.toBe("current");
     expect(JSON.stringify(refused)).toContain("ContentAddressCorruption");
     expect(await readFile(file, "utf8")).toBe("corrupt");
   } finally {
-    await reader?.close(); unregister(); await f.close();
+    await reader?.close();
+    unregister();
+    await f.close();
   }
 });

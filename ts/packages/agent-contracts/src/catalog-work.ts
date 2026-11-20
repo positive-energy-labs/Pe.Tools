@@ -38,7 +38,11 @@ export interface CatalogWork<S extends z.ZodType = z.ZodType, B = unknown> {
    * The native Read the plan takes, and apply retakes at preparation, for the stored state `derive` lays the
    * Work over. Required: an owner whose op omits keys must read them to resend them (K3).
    */
-  base: { op: string; input(doc: z.infer<S>): unknown; project(response: unknown, doc: z.infer<S>): B };
+  base: {
+    op: string;
+    input(doc: z.infer<S>): unknown;
+    project(response: unknown, doc: z.infer<S>): B;
+  };
   /**
    * Per top-level collection of the base: `replace` means the op drops a key it is not sent, so `derive` must resend
    * every stored key unchanged; `patch` means an omitted key is untouched, so a key sent must carry its stored value.
@@ -79,36 +83,61 @@ const tableName = (doc: DataTablesWork) => {
   if (!name) throw new CatalogWorkRefused("Stage the table name");
   return name;
 };
-const slotOrder = (key: string) => [key.startsWith("text") ? 0 : 1, Number(key.split(":")[1])] as const;
+const slotOrder = (key: string) =>
+  [key.startsWith("text") ? 0 : 1, Number(key.split(":")[1])] as const;
 
 function deriveDataTable(doc: DataTablesWork, base: DataTableBase) {
   const name = tableName(doc);
   const touched: CatalogTouch[] = [];
   const by = (edit: { by?: Author } | null | undefined) => authorSchema.parse(edit?.by);
-  if (doc.name.edit) touched.push({ path: ["name"], before: base?.name ?? null, after: name, by: by(doc.name.edit as StagedEdit) });
+  if (doc.name.edit)
+    touched.push({
+      path: ["name"],
+      before: base?.name ?? null,
+      after: name,
+      by: by(doc.name.edit as StagedEdit),
+    });
   const columns: Record<string, string> = { ...base?.columns };
   for (const [key, cell] of Object.entries(doc.columns)) {
     const edit = cell.edit as StagedEdit;
     if (!edit) continue;
     const before = base?.columns[key] ?? null;
-    if (edit.delete && before == null) throw new CatalogWorkRefused(`Column ${key} is not stored; nothing to delete`);
+    if (edit.delete && before == null)
+      throw new CatalogWorkRefused(`Column ${key} is not stored; nothing to delete`);
     if (edit.delete) delete columns[key];
     else columns[key] = edit.value as string;
-    touched.push({ path: ["columns", key], before, after: edit.delete ? null : edit.value, by: by(edit) });
-  }
-  const order = Object.keys(columns).sort((a, b) => slotOrder(a)[0] - slotOrder(b)[0] || slotOrder(a)[1] - slotOrder(b)[1]);
-  for (const kind of ["text", "number"])
-    order.filter((k) => k.startsWith(kind)).forEach((k, n) => {
-      if (k !== `${kind}:${n}`)
-        throw new CatalogWorkRefused(`${kind}:${n} would be empty: the engine binds ${kind} columns by ordinal, so ${k} would move onto another parameter`);
+    touched.push({
+      path: ["columns", key],
+      before,
+      after: edit.delete ? null : edit.value,
+      by: by(edit),
     });
+  }
+  const order = Object.keys(columns).sort(
+    (a, b) => slotOrder(a)[0] - slotOrder(b)[0] || slotOrder(a)[1] - slotOrder(b)[1],
+  );
+  for (const kind of ["text", "number"])
+    order
+      .filter((k) => k.startsWith(kind))
+      .forEach((k, n) => {
+        if (k !== `${kind}:${n}`)
+          throw new CatalogWorkRefused(
+            `${kind}:${n} would be empty: the engine binds ${kind} columns by ordinal, so ${k} would move onto another parameter`,
+          );
+      });
   if (!order.length) throw new CatalogWorkRefused("A data table needs at least one column");
   const rows = Object.entries(doc.rows).flatMap(([key, cells]) => {
     const staged = Object.entries(cells).filter(([, cell]) => cell.edit);
     if (!staged.length) return [];
     for (const [slotKey, cell] of staged) {
-      if (!(slotKey in columns)) throw new CatalogWorkRefused(`Row ${key}: ${slotKey} is not a column of ${name}`);
-      touched.push({ path: ["rows", key, slotKey], before: base?.rows[key]?.[slotKey] ?? null, after: (cell.edit as StagedEdit)!.value ?? null, by: by(cell.edit as StagedEdit) });
+      if (!(slotKey in columns))
+        throw new CatalogWorkRefused(`Row ${key}: ${slotKey} is not a column of ${name}`);
+      touched.push({
+        path: ["rows", key, slotKey],
+        before: base?.rows[key]?.[slotKey] ?? null,
+        after: (cell.edit as StagedEdit)!.value ?? null,
+        by: by(cell.edit as StagedEdit),
+      });
     }
     const values = order.map((k) => {
       const edit = cells[k]?.edit as StagedEdit;
@@ -116,28 +145,45 @@ function deriveDataTable(doc: DataTablesWork, base: DataTableBase) {
     });
     return [{ key, values }];
   });
-  if (!touched.some((t) => t.path[0] !== "name") && base) throw new CatalogWorkRefused(`Stage a column or cell of ${name} first`);
+  if (!touched.some((t) => t.path[0] !== "name") && base)
+    throw new CatalogWorkRefused(`Stage a column or cell of ${name} first`);
   const kindOf = (k: string) => (k.startsWith("text") ? "Text" : "Number");
   return {
-    request: { table: { name, columns: order.map((k) => ({ heading: columns[k]!, kind: kindOf(k) })), rows } },
+    request: {
+      table: { name, columns: order.map((k) => ({ heading: columns[k]!, kind: kindOf(k) })), rows },
+    },
     touched,
   };
 }
 
 /** The native detail read, by slot (`DataTableColumnHandle.slot`), for the one table the Work names. */
 function projectDataTable(response: unknown): DataTableBase {
-  type Native = { tables: { name: string; columns: { heading: string; kind: string; slot: number }[]; rows: { key: string; values: (string | null)[] }[] }[] };
+  type Native = {
+    tables: {
+      name: string;
+      columns: { heading: string; kind: string; slot: number }[];
+      rows: { key: string; values: (string | null)[] }[];
+    }[];
+  };
   // The native reader owns name matching (OrdinalIgnoreCase). Selecting again here can turn an
   // existing table into an absent base and drop its unstaged columns on the next reconcile.
   const { tables } = response as Native;
-  if (tables.length > 1) throw new CatalogWorkRefused("The data-table read matched multiple tables; choose an unambiguous name");
+  if (tables.length > 1)
+    throw new CatalogWorkRefused(
+      "The data-table read matched multiple tables; choose an unambiguous name",
+    );
   const table = tables[0];
   if (!table) return null;
   const keys = table.columns.map((c) => `${c.kind.toLowerCase()}:${c.slot}`);
   return {
     name: table.name,
     columns: Object.fromEntries(table.columns.map((c, i) => [keys[i], c.heading])),
-    rows: Object.fromEntries(table.rows.map((r) => [r.key, Object.fromEntries(keys.map((k, i) => [k, r.values[i] ?? null]))])),
+    rows: Object.fromEntries(
+      table.rows.map((r) => [
+        r.key,
+        Object.fromEntries(keys.map((k, i) => [k, r.values[i] ?? null])),
+      ]),
+    ),
   };
 }
 
@@ -146,15 +192,21 @@ type StagedEdit = { value?: unknown; delete?: true; by?: Author } | null | undef
  * ADR 0030 rule 8: staged ids lay over the stored profile by id. A set replaces its id, a delete removes only
  * its id, and every unstaged stored id is kept, because the native reconcile replaces the profile whole.
  */
-export function mergeParameterProfile(doc: ParameterLinksDocument, stored: ParameterLinkProfile | null) {
+export function mergeParameterProfile(
+  doc: ParameterLinksDocument,
+  stored: ParameterLinkProfile | null,
+) {
   const touched: CatalogTouch[] = [];
   const merged = (["definitions", "assignments"] as const).map((kind) => {
-    const byId = new Map<string, { id: string }>((stored?.[kind] ?? []).map((entry) => [entry.id, entry]));
+    const byId = new Map<string, { id: string }>(
+      (stored?.[kind] ?? []).map((entry) => [entry.id, entry]),
+    );
     for (const [id, cell] of Object.entries(doc[kind])) {
       const edit = cell.edit as StagedEdit;
       if (!edit) continue;
       const before = byId.get(id) ?? null;
-      if (edit.delete && !before) throw new CatalogWorkRefused(`${kind} ${id} is not stored; nothing to delete`);
+      if (edit.delete && !before)
+        throw new CatalogWorkRefused(`${kind} ${id} is not stored; nothing to delete`);
       const after = edit.delete ? null : { ...(edit.value as object), id };
       if (after) byId.set(id, after);
       else byId.delete(id);
@@ -162,9 +214,16 @@ export function mergeParameterProfile(doc: ParameterLinksDocument, stored: Param
     }
     return [kind, [...byId.values()]] as const;
   });
-  if (!touched.length) throw new CatalogWorkRefused("Stage a parameter-link definition or assignment first");
-  const profile = parameterLinkProfileSchema.safeParse({ formatVersion: stored?.formatVersion ?? 1, ...Object.fromEntries(merged) });
-  if (!profile.success) throw new CatalogWorkRefused(`The merged profile is invalid: ${profile.error.issues[0]?.message}`);
+  if (!touched.length)
+    throw new CatalogWorkRefused("Stage a parameter-link definition or assignment first");
+  const profile = parameterLinkProfileSchema.safeParse({
+    formatVersion: stored?.formatVersion ?? 1,
+    ...Object.fromEntries(merged),
+  });
+  if (!profile.success)
+    throw new CatalogWorkRefused(
+      `The merged profile is invalid: ${profile.error.issues[0]?.message}`,
+    );
   return { request: { profile: profile.data, reconcile: true }, touched };
 }
 
@@ -173,7 +232,11 @@ export const catalogWorks = {
     owner: "data-tables",
     op: "data-table.apply",
     schema: dataTablesWorkSchema,
-    base: { op: "revit.detail.data-tables", input: (doc) => ({ names: [tableName(doc)] }), project: projectDataTable },
+    base: {
+      op: "revit.detail.data-tables",
+      input: (doc) => ({ names: [tableName(doc)] }),
+      project: projectDataTable,
+    },
     mutation: { name: "replace", columns: "replace", rows: "patch" },
     derive: deriveDataTable,
   } satisfies CatalogWork<typeof dataTablesWorkSchema, DataTableBase>,
@@ -184,7 +247,9 @@ export const catalogWorks = {
     base: {
       op: "revit.detail.parameter-links",
       input: () => ({ includeEvaluation: false }),
-      project: (response) => parameterLinkProfileSchema.nullish().parse((response as { profile?: unknown }).profile) ?? null,
+      project: (response) =>
+        parameterLinkProfileSchema.nullish().parse((response as { profile?: unknown }).profile) ??
+        null,
     },
     mutation: { definitions: "replace", assignments: "replace" },
     derive: mergeParameterProfile,
@@ -202,7 +267,10 @@ const native = (op: string) => {
 /** The staged-cell paths each owner's Work lets a person or Pea write: one StateCell per path. */
 const editable: Record<Owner, readonly WorkPath[]> = {
   "data-tables": [["name"], ["columns", "*"], ["rows", "*", "*"]],
-  "parameter-links": [["definitions", "*"], ["assignments", "*"]],
+  "parameter-links": [
+    ["definitions", "*"],
+    ["assignments", "*"],
+  ],
 };
 export const catalogWorkSpecs = Object.fromEntries(
   Object.values(catalogWorks).map((work) => [
@@ -215,9 +283,17 @@ export const catalogWorkSpecs = Object.fromEntries(
       editable: editable[work.owner as Owner],
     },
   ]),
-) as { [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> & { editable: readonly WorkPath[] } };
+) as {
+  [O in Owner]: RouteStateSpec<(typeof catalogWorks)[O]["schema"]> & {
+    editable: readonly WorkPath[];
+  };
+};
 
-function catalogWorkCommand<const K extends string>(owner: Owner, key: K, dirties: readonly ActionReadingKey[]) {
+function catalogWorkCommand<const K extends string>(
+  owner: Owner,
+  key: K,
+  dirties: readonly ActionReadingKey[],
+) {
   const work: Pick<CatalogWork, "op" | "schema" | "base"> = catalogWorks[owner];
   const leaf = native(work.op);
   const definition = {

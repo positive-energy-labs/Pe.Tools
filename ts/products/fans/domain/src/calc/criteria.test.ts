@@ -13,11 +13,43 @@ it("resolves each side of a sided criterion through its own layers", () => {
   );
   // ba4fd56c: criteria use the shared resolver and retain units, status and version.
   expect(c.velocityLimitFpm).toEqual({
-    supply: { value: 850, source: "Work", author: "human", ref: "work:test", units: "fpm", status: "valid", version: null },
-    return: { value: TEST_FIRM.criteria.velocityLimitFpm.return, source: "firm", author: null, ref: expect.stringMatching(/^firm:/), units: "fpm", status: "valid", version: "test" },
+    supply: {
+      value: 850,
+      source: "Work",
+      author: "human",
+      ref: "work:test",
+      units: "fpm",
+      status: "valid",
+      version: null,
+    },
+    return: {
+      value: TEST_FIRM.criteria.velocityLimitFpm.return,
+      source: "firm",
+      author: null,
+      ref: expect.stringMatching(/^firm:/),
+      units: "fpm",
+      status: "valid",
+      version: "test",
+    },
   });
   expect(c.allowanceInWg).toEqual({
-    supply: { value: 0, source: "firm", author: null, ref: expect.stringMatching(/^firm:/), units: "in-wg", status: "valid", version: "test" },
-    return: { value: 0.1, source: "Work", author: "human", ref: "work:test", units: "in-wg", status: "valid", version: null },
+    supply: {
+      value: 0,
+      source: "firm",
+      author: null,
+      ref: expect.stringMatching(/^firm:/),
+      units: "in-wg",
+      status: "valid",
+      version: "test",
+    },
+    return: {
+      value: 0.1,
+      source: "Work",
+      author: "human",
+      ref: "work:test",
+      units: "in-wg",
+      status: "valid",
+      version: null,
+    },
   });
 });

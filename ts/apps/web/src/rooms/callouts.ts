@@ -4,7 +4,7 @@
  * 11r, 15r, 20r at eight compass offsets (scaled 0.8); the first box inside the viewport that
  * overlaps no earlier box wins. Earlier items win ties, so the caller's order is the priority.
  */
-import type { Point2, Viewport2 } from "#/lib/affine-frame";
+import type { Point2, Viewport2 } from "@pe/web-kernel/lib/affine-frame";
 
 export interface CalloutItem {
   label: string;

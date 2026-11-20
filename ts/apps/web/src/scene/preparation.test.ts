@@ -1,11 +1,11 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import * as THREE from "three";
-import { SceneMeshes } from "./types";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 import { prepareGeometry } from "./prepare-geometry";
 import { preparedCache } from "./prepared-cache";
 import { prepareScene } from "./preparation";
 import { scenePlan } from "./scene-plan";
-import { LOOK } from "./grounds";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
 
 const cube = new THREE.BoxGeometry(2, 2, 2).toNonIndexed();
 const positions = new Float32Array(cube.getAttribute("position").array);

@@ -83,7 +83,11 @@ test("every door refuses a document mark, a free-string sub, an unknown kind and
     code: "bad-source",
   });
   expect(
-    encode({ keyKind: "UniqueId", key: unique("aaaa-1"), placement: { host: row, links: [unique("l")] } }),
+    encode({
+      keyKind: "UniqueId",
+      key: unique("aaaa-1"),
+      placement: { host: row, links: [unique("l")] },
+    }),
   ).toMatchObject({ ok: false, code: "bad-placement" });
   expect(
     encode({ keyKind: "UniqueId", key: unique("aaaa-1"), sub: "port 2" } as never),

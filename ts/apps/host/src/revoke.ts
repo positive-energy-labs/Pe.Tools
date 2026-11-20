@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { ActionJournal } from "./action-journal.ts";
-import type { RevitBridge } from "./bridge.ts";
+import type { RevitBridge } from "@pe/host-internal/bridge";
 import { onRevoke, onPagePinRevoke } from "./control.ts";
 import type { DocumentRef } from "@pe/agent-contracts";
 
@@ -18,7 +18,8 @@ export function bindRevoke(owner: ActionJournal, bridge: RevitBridge["Service"])
       active
         ? rows.flatMap((row) => {
             const basis = row.basis;
-            const matches = basis?.kind === "grant" &&
+            const matches =
+              basis?.kind === "grant" &&
               basis.thread === ownerKey &&
               basis.lifetime.session === lifetime.session &&
               basis.lifetime.openId === lifetime.openId;

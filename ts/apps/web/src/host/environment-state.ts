@@ -1,8 +1,8 @@
 /** Chrome reads the same mounted seed as its route. No independent fixture maps. */
 import { useEffect, useMemo, useState } from "react";
 import type { Reading, ReadingRequest } from "@pe/agent-contracts";
-import { useRouteSearchSlice } from "../route/activity";
-import { fixtureName } from "../shell/fixture-name";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
+import { fixtureName } from "@pe/web-kernel/shell/fixture-name";
 import { useReadingSlice } from "./resource-state";
 
 export function useEnvironmentAccess() {
@@ -29,9 +29,9 @@ export function useEnvironmentReadingSlice<T, S>(
     if (name === null) return;
     let active = true;
     void (async () => {
-      const {environmentExample} = await import("../design-system/environment-examples");
+      const { environmentExample } = await import("../design-system/environment-examples");
       const reading = environmentExample(name, slot);
-      if (active) setSaved({key:identity, reading:reading as Reading<T>});
+      if (active) setSaved({ key: identity, reading: reading as Reading<T> });
     })().catch((error: unknown) => {
       if (active) setSaved({ key: identity, reading: { state: "failed", message: String(error) } });
     });

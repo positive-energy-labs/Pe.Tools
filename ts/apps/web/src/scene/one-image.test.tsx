@@ -1,10 +1,10 @@
 import { expect, it } from "vite-plus/test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { layoutCaptions, pathOf } from "@pe/ducts-web/subject-labels";
-import { frame } from "./orbit";
-import { sectionProject, viewportProject, type Project } from "./projection";
-import { ContinuationMarks } from "./continuations";
-import { SceneMeshes } from "./types";
+import { frame } from "@pe/web-kernel/scene/orbit";
+import { sectionProject, viewportProject, type Project } from "@pe/web-kernel/scene/projection";
+import { ContinuationMarks } from "@pe/web-kernel/scene/continuations";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 
 it("frames a long narrow subject in portrait and landscape with both camera projections", () => {
   const bounds = { minX: -40, maxX: 40, minY: -1, maxY: 1, minZ: 0, maxZ: 4 };

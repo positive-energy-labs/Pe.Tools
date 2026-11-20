@@ -10,7 +10,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { routeAddress } from "@pe/agent-contracts";
-import { RouteActivity, type RouteActivityScope } from "./activity";
+import { RouteActivity, type RouteActivityScope } from "@pe/web-kernel/route/activity";
 import { routeFile } from "./address-page";
 import { createRouteOwner, makeAtomRegistry, useOwned } from "#/shell/owner";
 import { routeUrlPage, useUrlPage } from "./url";

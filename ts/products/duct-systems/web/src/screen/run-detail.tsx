@@ -1,6 +1,6 @@
 import { useMention } from "@pe/kit/lang/attention";
-import { useElementIndex } from "@pe/web/element-index";
-import { useNativeObservation } from "@pe/web/revit/observation";
+import { useElementIndex } from "@pe/web-kernel/element-index";
+import { useNativeObservation } from "@pe/web-kernel/revit/observation";
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { useList } from "@pe/kit/lang/collection";
 import { PlainList } from "@pe/kit/lang/list-view";
@@ -74,13 +74,19 @@ export function runOf(priced: Priced, selected: number): RunData | null {
     }
     const lengthFt = own.reduce((a, r) => a + (r.lengthFt ?? 0), 0);
     // Unknown stays unknown: one unpriced interval makes the duct's friction unknown, never the priced ones' sum.
-    const frictionDp = own.reduce<number | null>((a, r) => (a == null || r.dp == null ? null : a + r.dp), 0);
+    const frictionDp = own.reduce<number | null>(
+      (a, r) => (a == null || r.dp == null ? null : a + r.dp),
+      0,
+    );
     const segment = priced.snapshot.segments.find((s) => s.id === ductId);
     return {
       ductId,
       terminal,
       lengthFt,
-      rate: lengthFt > 1e-9 && frictionDp != null && frictionDp > 0 ? (frictionDp / lengthFt) * 100 : null,
+      rate:
+        lengthFt > 1e-9 && frictionDp != null && frictionDp > 0
+          ? (frictionDp / lengthFt) * 100
+          : null,
       frictionDp,
       roughnessFt: own[0]!.roughnessFt ?? null,
       roughness: segment?.roughness.provenance ?? null,

@@ -1,7 +1,7 @@
 ﻿import { expect, it } from "vite-plus/test";
 import { CATEGORY_IDS as C } from "./categories";
 import { contextVisible } from "./context";
-import { LOOK } from "./grounds";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
 
 it("subjects and envelopes are visible under every context filter", () => {
   for (const context of ["all", "walls", "structural", "none"] as const) {

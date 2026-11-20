@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vite-plus/test";
 import KnobsFloater from "./floater";
-import { defineKnobs, num, resetKnob } from "./knobs";
+import { defineKnobs, num, resetKnob } from "@pe/web-kernel/knobs/knobs";
 
 afterEach(() => {
   cleanup();

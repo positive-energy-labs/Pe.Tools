@@ -30,7 +30,8 @@ export function writeTheme(next: ThemeMode) {
   mode = next;
   try {
     window.localStorage.setItem("theme", next);
-  } catch (error) { console.warn("ts/packages/kit/src/theme.ts: fallback after failure", error);
+  } catch (error) {
+    console.warn("ts/packages/kit/src/theme.ts: fallback after failure", error);
     /* Applies without storage. */
   }
   applyTheme();

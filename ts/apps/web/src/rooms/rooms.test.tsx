@@ -9,16 +9,24 @@ import { Pane } from "@pe/kit/lang/pane";
 import { RoomsTable } from "./table";
 import { roomRows } from "./rows";
 import { roomsGoal } from "./goal";
-import { scrollBody } from "../route/body";
+import { scrollBody } from "@pe/web-kernel/route/body";
 import { regionSubject } from "./subject";
 
 test("rooms attention decodes as a region with its stable carrier GUID", () => {
-  const region = DEMO_ROOMS.regions.find(region => region.role === "room")!;
-  const view = render(<RoomsTable rows={roomRows([region], ["Fixture level"])} onSelect={() => {}} empty={{ says: "empty", exit: "none" }} />);
+  const region = DEMO_ROOMS.regions.find((region) => region.role === "room")!;
+  const view = render(
+    <RoomsTable
+      rows={roomRows([region], ["Fixture level"])}
+      onSelect={() => {}}
+      empty={{ says: "empty", exit: "none" }}
+    />,
+  );
   try {
     const key = view.container.querySelector("tr[data-subject]")!.getAttribute("data-subject")!;
     expect(decode(key)).toEqual({ ok: true, value: { keyKind: "region", key: region.guid } });
-  } finally { cleanup(); }
+  } finally {
+    cleanup();
+  }
 });
 
 test("stagedRoomWrites sends both authors staged values per guid", () => {
@@ -107,15 +115,18 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   expect(path.getAttribute("stroke")).not.toBe(path.getAttribute("fill"));
   expect(path.getAttribute("fill")).toContain(
     view.container
-      .querySelector(`path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000002")}"]`)!
+      .querySelector(
+        `path[data-subject="${regionSubject("00000000-0000-4000-8000-000000000002")}"]`,
+      )!
       .getAttribute("stroke"),
   );
   const legend = view.container.querySelector('[aria-label="rooms legend"]')!.textContent!;
   expect(legend).toMatch(/locked\D*1/);
   expect(legend).toMatch(/stale\D*2/);
   expect(
-    view.container.querySelector(`tr[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`)!
-      .textContent,
+    view.container.querySelector(
+      `tr[data-subject="${regionSubject("00000000-0000-4000-8000-000000000001")}"]`,
+    )!.textContent,
   ).toContain("locked · stale");
   fireEvent.click(path);
   expect(onSelect).toHaveBeenCalledWith("00000000-0000-4000-8000-000000000001", false);
@@ -123,53 +134,137 @@ test("a locked stale region keeps both facts in the plan, legend and table, and 
   vi.unstubAllGlobals();
 });
 
-
-test("pending Values retain Rooms navigation while edits refuse, then reject late deliveries",async()=>{
-  const {act,screen}=await import("@testing-library/react");
-  const {useSyncExternalStore}=await import("react");
-  const {module}=await import("./route");
-  const {ScopeBody}=await import("./mount");
-  const {RoomsProvider}=await import("./workspace");
-  const {mountTypedRoute}=await import("../shell/typed-mount");
-  const {createFixtureWorkDoor}=await import("../shell/fixture-work-door");
-  const {retainedLine}=await import("../shell/reading-line");
-  const {workFingerprintSchema}=await import("@pe/agent-contracts");
-  const frames:Parameters<import("../shell/source-contract").UseSource["open"]>[1][]=[];
-  let search=new URLSearchParams();
-  const mount=mountTypedRoute({...module,spec:{...module.spec,panes:{main:{...module.spec.panes.main,body:"scroll" as const,draw:(ctx:any)=>scrollBody(ctx)}}}},
-    {address:{read:()=>search,write:next=>{search=next;},subscribe:()=>()=>{}},fixture:null,target:{kind:"document",ref:{session:"retained",openId:"rooms"}},
-      work:{address:null,open:{session:"retained",openId:"rooms"}},custody:{current:()=>true},memory:()=>({})},
-    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),{work:createFixtureWorkDoor(roomsRouteState,roomsRouteState.schema.parse({})),
-      sources:{"rooms.workspace":{kind:"use",open:(_context,deliver)=>{frames.push(deliver);return ()=>{};}}}});
-  const ctx=()=>mount.draw("main") as import("./route").RoomsContext;
-  const packet=(label:string)=>({key:"retained",generation:0,version:1,state:"current",value:{
-    data:{...roomsGoal(roomsRouteState.schema.parse({}),DEMO_ROOMS,""),roomsWork:roomsRouteState.schema.parse({}),handle:null,snapshot:{...DEMO_ROOMS,levels:[{name:label,elevation:0,views:["First view","Second view"]}]},trace:null,traceError:null,plan:null,planError:null},
-    evaluation:label,inputs:"retained",origin:{kind:"fixture"},works: [], trace: [],freshness:"current",coverage:{requested:[],covered:[],unknown:[],refused:[]}}});
-  const emit=(index:number,label:string)=>frames[index]!({kind:"complete",revision:1,value:packet(label)});
-  function Chooser(){useSyncExternalStore(mount.subscribe,mount.revision,mount.revision);const current=ctx();return <RoomsProvider ctx={current}>
-    <ScopeBody ctx={current} page={roomsPageSchema.parse({view:current.page.read().view})} verbs={()=>null}/>
-    <output>{retainedLine(current.value)}</output></RoomsProvider>;}
+test("pending Values retain Rooms navigation while edits refuse, then reject late deliveries", async () => {
+  const { act, screen } = await import("@testing-library/react");
+  const { useSyncExternalStore } = await import("react");
+  const { module } = await import("./route");
+  const { ScopeBody } = await import("./mount");
+  const { RoomsProvider } = await import("./workspace");
+  const { mountTypedRoute } = await import("../shell/typed-mount");
+  const { createFixtureWorkDoor } = await import("../shell/fixture-work-door");
+  const { retainedLine } = await import("../shell/reading-line");
+  const { workFingerprintSchema } = await import("@pe/agent-contracts");
+  const frames: Parameters<import("@pe/web-kernel/shell/source-contract").UseSource["open"]>[1][] =
+    [];
+  let search = new URLSearchParams();
+  const mount = mountTypedRoute(
+    {
+      ...module,
+      spec: {
+        ...module.spec,
+        panes: {
+          main: {
+            ...module.spec.panes.main,
+            body: "scroll" as const,
+            draw: (ctx: any) => scrollBody(ctx),
+          },
+        },
+      },
+    },
+    {
+      address: {
+        read: () => search,
+        write: (next) => {
+          search = next;
+        },
+        subscribe: () => () => {},
+      },
+      fixture: null,
+      target: { kind: "document", ref: { session: "retained", openId: "rooms" } },
+      work: { address: null, open: { session: "retained", openId: "rooms" } },
+      custody: { current: () => true },
+      memory: () => ({}),
+    },
+    workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
+    {
+      work: createFixtureWorkDoor(roomsRouteState, roomsRouteState.schema.parse({})),
+      sources: {
+        "rooms.workspace": {
+          kind: "use",
+          open: (_context, deliver) => {
+            frames.push(deliver);
+            return () => {};
+          },
+        },
+      },
+    },
+  );
+  const ctx = () => mount.draw("main") as import("./route").RoomsContext;
+  const packet = (label: string) => ({
+    key: "retained",
+    generation: 0,
+    version: 1,
+    state: "current",
+    value: {
+      data: {
+        ...roomsGoal(roomsRouteState.schema.parse({}), DEMO_ROOMS, ""),
+        roomsWork: roomsRouteState.schema.parse({}),
+        handle: null,
+        snapshot: {
+          ...DEMO_ROOMS,
+          levels: [{ name: label, elevation: 0, views: ["First view", "Second view"] }],
+        },
+        trace: null,
+        traceError: null,
+        plan: null,
+        planError: null,
+      },
+      evaluation: label,
+      inputs: "retained",
+      origin: { kind: "fixture" },
+      works: [],
+      trace: [],
+      freshness: "current",
+      coverage: { requested: [], covered: [], unknown: [], refused: [] },
+    },
+  });
+  const emit = (index: number, label: string) =>
+    frames[index]!({ kind: "complete", revision: 1, value: packet(label) });
+  function Chooser() {
+    useSyncExternalStore(mount.subscribe, mount.revision, mount.revision);
+    const current = ctx();
+    return (
+      <RoomsProvider ctx={current}>
+        <ScopeBody
+          ctx={current}
+          page={roomsPageSchema.parse({ view: current.page.read().view })}
+          verbs={() => null}
+        />
+        <output>{retainedLine(current.value)}</output>
+      </RoomsProvider>
+    );
+  }
   try {
-    emit(0,"Fixture level");
-    await vi.waitFor(()=>expect(ctx().cells.state.state).toBe("ready"));
-    render(<Chooser/>);
-    fireEvent.click(screen.getByRole("button",{name:"Choose level"}));
-    fireEvent.click(await screen.findByRole("option",{name:/Fixture level/}));
+    emit(0, "Fixture level");
+    await vi.waitFor(() => expect(ctx().cells.state.state).toBe("ready"));
+    render(<Chooser />);
+    fireEvent.click(screen.getByRole("button", { name: "Choose level" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Fixture level/ }));
     expect(mount.page.read().view).toBe("First view");
-    expect(ctx().value).toMatchObject({state: "refreshing", publication:{freshness:"refresh-needed"}});
+    expect(ctx().value).toMatchObject({
+      state: "refreshing",
+      publication: { freshness: "refresh-needed" },
+    });
     expect(screen.getByText("Showing previous Value; refreshing")).toBeTruthy();
     expect(ctx().cells.state.state).not.toBe("ready");
-    expect(await ctx().cells.at(["edits",roomEditKey(DEMO_ROOMS.regions[0]!.guid,"name")]).stage("Unsafe")).not.toBeNull();
-    fireEvent.click(await screen.findByRole("option",{name:"Second view"}));
+    expect(
+      await ctx()
+        .cells.at(["edits", roomEditKey(DEMO_ROOMS.regions[0]!.guid, "name")])
+        .stage("Unsafe"),
+    ).not.toBeNull();
+    fireEvent.click(await screen.findByRole("option", { name: "Second view" }));
     expect(mount.page.read().view).toBe("Second view");
-    await act(async()=>emit(frames.length-1,"Replacement floor"));
+    await act(async () => emit(frames.length - 1, "Replacement floor"));
     expect(ctx().value.state === "ready").toBe(true);
     expect(screen.queryByText("Showing previous Value; refreshing")).toBeNull();
-    await act(async()=>emit(0,"Late old floor"));
+    await act(async () => emit(0, "Late old floor"));
     expect(ctx().value.value?.snapshot.levels[0]!.name).toBe("Replacement floor");
-    await act(async()=>mount.refresh());
-    await act(async()=>frames.at(-1)!({kind:"failure",error:"Offline"}));
+    await act(async () => mount.refresh());
+    await act(async () => frames.at(-1)!({ kind: "failure", error: "Offline" }));
     expect(screen.getByText("Showing previous Value; refresh needed")).toBeTruthy();
     expect(ctx().cells.state.state).not.toBe("ready");
-  } finally {cleanup();mount.dispose();}
+  } finally {
+    cleanup();
+    mount.dispose();
+  }
 });

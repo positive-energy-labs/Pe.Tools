@@ -11,14 +11,14 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 
-import { showInRevit } from "@pe/web/revit/element-menu";
+import { useShowInRevit } from "@pe/web-kernel/revit/element-menu";
 import { SelectInRevitIcon } from "@pe/kit/lang/gesture-glyph";
 import {
   prepareElements,
   showElementsMessage,
   type ShowElementsResult,
-} from "@pe/web/revit/element-target";
-import { observedElements, useNativeObservation } from "@pe/web/revit/observation";
+} from "@pe/web-kernel/revit/element-target";
+import { observedElements, useNativeObservation } from "@pe/web-kernel/revit/observation";
 
 import { rulingPatches, verdictPatches } from "@pe/ducts-web/assumptions";
 import {
@@ -116,6 +116,7 @@ export function Inbox({
   address?: ListPersist<"name" | "status">;
   cells: (row: { segment: string; key: string }) => ReactNode;
 }) {
+  const showInRevit = useShowInRevit();
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const registry = useContext(RegistryContext);
@@ -157,8 +158,13 @@ export function Inbox({
       );
       switch (verb.kind) {
         case "encounter":
-          return make(`e${i}`, Link, verb.label, verb.label,
-            () => void work.write(encounterPatches(verb.issue, verb.choice, work.doc)));
+          return make(
+            `e${i}`,
+            Link,
+            verb.label,
+            verb.label,
+            () => void work.write(encounterPatches(verb.issue, verb.choice, work.doc)),
+          );
         case "price-as":
           return worded ? (
             <RuleAssignment key={`rule${i}`} family={verb.family} work={work} />
@@ -188,7 +194,11 @@ export function Inbox({
           );
         case "airflow":
           // The choice is the shared compact picker, in the open row only.
-          return worded ? <a key={`a${i}`} href="/fans">Choose {verb.of === "unit" ? "fanFlow" : "terminalFlow"} slot in Fans settings</a> : null;
+          return worded ? (
+            <a key={`a${i}`} href="/fans">
+              Choose {verb.of === "unit" ? "fanFlow" : "terminalFlow"} slot in Fans settings
+            </a>
+          ) : null;
         case "focus":
           return make(`f${i}`, Pencil, verb.label, verb.says, () => onFocusCell(verb.cell));
         case "command":
@@ -258,10 +268,7 @@ export function Inbox({
         cite(registry, {
           owner,
           focus: null,
-          refs:
-            lit?.owner === owner
-              ? lit.refs
-              : citedReferences(subjects, heading.references),
+          refs: lit?.owner === owner ? lit.refs : citedReferences(subjects, heading.references),
         });
       };
       return {

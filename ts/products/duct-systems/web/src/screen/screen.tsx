@@ -5,13 +5,13 @@ import {
   PopoverTrigger,
   SubjectPopoverContent as PopoverContent,
 } from "@pe/kit/lang/popover";
-import { useRouteSearchSlice } from "@pe/web/route/activity";
+import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 import { fansLink } from "@pe/fans-contract/link";
-import { useHoveredIssue } from "@pe/web/attention";
+import { useHoveredIssue } from "@pe/web-kernel/attention";
 import { ductElements } from "@pe/ducts-web/identity";
-import { subscribe as knobsChanged } from "@pe/web/knobs/knobs";
-import { useRevitSubjectProps } from "@pe/web/revit/element-menu";
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { subscribe as knobsChanged } from "@pe/web-kernel/knobs/knobs";
+import { useRevitSubjectProps } from "@pe/web-kernel/revit/element-menu";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { subjectCode, type RouteStatePatch } from "@pe/agent-contracts";
 import { DUCT_UNIT_KINDS } from "@pe/host-contracts/generated";
 import { neutralFansWork } from "@pe/fans-contract/fans";
@@ -31,7 +31,13 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { groupLabels } from "@pe/ducts-domain/words";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { Button } from "@pe/kit/lang/button";
-import { emptyListState, useList, useValue, type ValueHandle, type ListOptions } from "@pe/kit/lang/collection";
+import {
+  emptyListState,
+  useList,
+  useValue,
+  type ValueHandle,
+  type ListOptions,
+} from "@pe/kit/lang/collection";
 import { ListView } from "@pe/kit/lang/list-view";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Scroll } from "@pe/kit/lang/scroll";
@@ -48,10 +54,21 @@ import {
 } from "react";
 import { z } from "zod";
 import type { DuctsDrawContext, DuctsReads, DuctsSystemsContext } from "../../route.ts";
-import { roster as rosterRead, network as networkSource, pricing as pricingSource } from "../../route.ts";
-import { refusalOf } from "@pe/web/route/typed-route";
+import {
+  roster as rosterRead,
+  network as networkSource,
+  pricing as pricingSource,
+} from "../../route.ts";
+import { refusalOf } from "@pe/web-kernel/route/typed-route";
 import { airflowOptions } from "@pe/ducts-web/airflow";
-import { cellFocusOf, cellFocusSubject, focusedElement, issueOf, issueSubject, selectedKeys } from "@pe/ducts-web/cell-focus";
+import {
+  cellFocusOf,
+  cellFocusSubject,
+  focusedElement,
+  issueOf,
+  issueSubject,
+  selectedKeys,
+} from "@pe/ducts-web/cell-focus";
 import {
   annotatedFindings,
   focusRow,
@@ -77,7 +94,7 @@ import { FanFacts, fanFacts, type FanFact } from "./fan-sections.tsx";
 import { Inbox, type FanVerbs } from "./inbox.tsx";
 import { grilleLabels } from "./labels.ts";
 import { DuctsPicture } from "./picture.tsx";
-import type { PictureOverlayProps } from "@pe/web/route/slots/picture/overlay";
+import type { PictureOverlayProps } from "@pe/web-kernel/route/slots/picture/overlay";
 import { RulesTree, ruleOfIds } from "./rules-pane.tsx";
 import { SystemColours } from "./settings.tsx";
 import { SystemTree } from "./tree-sidebar.tsx";
@@ -101,7 +118,7 @@ function useNetworkData(ctx: NetworkContext) {
   );
   const selected = page.selected.map((item) => item.id).join(",");
   const doc = target?.kind === "document" ? target.ref : null;
-  const networkRead=ctx.read(networkSource);
+  const networkRead = ctx.read(networkSource);
   // The existing drawing views accept mutable arrays; decoded Values stay immutable.
   const snapshot = ("value" in networkRead ? networkRead.value : null) as
     | import("@pe/duct-systems-contract/ducts-read").DuctsNetworkData
@@ -110,14 +127,15 @@ function useNetworkData(ctx: NetworkContext) {
   const priced = pricing.state === "ready" ? pricingData : undefined;
   // One identity per pricing Value: the panes memoize on it.
   const calcView = useMemo<Priced | null>(
-    () => (priced ? ({ ...priced.survey, calcs: priced.calcs }) : null),
+    () => (priced ? { ...priced.survey, calcs: priced.calcs } : null),
     [priced],
   );
   const edit = useMemo(() => stagedValues(workDoc ?? null, workDoc ?? neutralFansWork), [workDoc]);
   const seen = held?.effectiveDesign ?? null;
   const attentionDoc = doc ? `${doc.session}/${doc.openId}` : "ducts:unbound";
   const selection = useMemo(
-    () => Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(page.selected.map(({ id }) => id)))),
+    () =>
+      Atom.make<ReadonlySet<SubjectKey>>(new Set(selectedKeys(page.selected.map(({ id }) => id)))),
     [page.selected],
   );
   const select = (selected: string) =>
@@ -189,7 +207,8 @@ function useNetworkData(ctx: NetworkContext) {
     active,
     selected,
     select,
-    selectElement: (id: number | null) => select(id === null ? "" : (ductElements(snapshot).keyOf(id) ?? "")),
+    selectElement: (id: number | null) =>
+      select(id === null ? "" : (ductElements(snapshot).keyOf(id) ?? "")),
     document: doc,
     attentionDoc,
     selection,
@@ -204,12 +223,17 @@ function useNetworkData(ctx: NetworkContext) {
       revision: ctx.cells.basis?.workRevision ?? null,
       write: (patches: RouteStatePatch[]) => write(patches),
     },
-    captureSource: networkRead.state === "ready" && doc && version ? { document: doc, version } : null,
+    captureSource:
+      networkRead.state === "ready" && doc && version ? { document: doc, version } : null,
     scopeCommand,
     fanRoster: held?.fanRows ?? [],
     edit: pendingCount(workDoc ?? null, snapshot?.store, snapshot ?? { nodes: [], segments: [] }),
     coverage: coverage
-      ? { ...coverage, reading: networkRead.state === "reading" || networkRead.state === "refreshing" ? systems : [] }
+      ? {
+          ...coverage,
+          reading:
+            networkRead.state === "reading" || networkRead.state === "refreshing" ? systems : [],
+        }
       : null,
   };
 }
@@ -252,25 +276,21 @@ function NetworkFrame({
         fanRoster: data.fanRoster,
       }}
     >
-
-
-          <SubjectTextContext.Provider
-            value={{
-              doc: data.attentionDoc,
-              nameOf,
-              uniqueIdOf: elements.uniqueIdOf,
-              go: (id: number) => {
-                const key = elements.keyOf(id);
-                return jump?.current && key ? jump.current(key) : data.selectElement(id);
-              },
-              refProps: subjectProps,
-            }}
-          >
-            {children}
-            {"value" in data.snapshotRead ? null : ctx.absent(data.snapshotRead)}
-          </SubjectTextContext.Provider>
-
-
+      <SubjectTextContext.Provider
+        value={{
+          doc: data.attentionDoc,
+          nameOf,
+          uniqueIdOf: elements.uniqueIdOf,
+          go: (id: number) => {
+            const key = elements.keyOf(id);
+            return jump?.current && key ? jump.current(key) : data.selectElement(id);
+          },
+          refProps: subjectProps,
+        }}
+      >
+        {children}
+        {"value" in data.snapshotRead ? null : ctx.absent(data.snapshotRead)}
+      </SubjectTextContext.Provider>
     </DuctsOwner>
   );
 }
@@ -278,7 +298,7 @@ const NO_GROUPS: readonly string[] = [];
 const NO_NEIGHBOURS: readonly Neighbour[] = [];
 /** The open list as one string: what a hold, a side and a list scope key on. */
 const openKey = (open: readonly string[]) => open.join(", ");
-const NO_NOTES: Readonly<Record<string,SystemNote>> = {};
+const NO_NOTES: Readonly<Record<string, SystemNote>> = {};
 const NO_SYSTEMS: ReturnType<typeof systemList> = [];
 /** "n of m systems read", or null when the snapshot holds every system. */
 const partialWord = (coverage: Coverage) =>
@@ -313,7 +333,7 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
   const { snapshot, priced, page, systems, active, work, analysis, captureSource, coverage } = data;
   const { drawn, nameOf } = useTreeProjection(snapshot, priced, work.doc, systems);
   const roster = useValue(ctx.value);
-  const systemRows = analysis?.systems ?? (roster?.rows ?? NO_SYSTEMS);
+  const systemRows = analysis?.systems ?? roster?.rows ?? NO_SYSTEMS;
   const notes = analysis?.notes ?? NO_NOTES;
   const { systemSearch, systemSort } = page;
   const system = systems;
@@ -461,14 +481,7 @@ export function InboxBody({ ctx }: { ctx: DuctsDrawContext }) {
     selectElement,
   } = data;
   const projection = useTreeProjection(snapshot, priced, work.doc, systems);
-  const { inbox } = useInboxProjection(
-    snapshot,
-    priced,
-    work.doc,
-    projection,
-    edit,
-    data.analysis,
-  );
+  const { inbox } = useInboxProjection(snapshot, priced, work.doc, projection, edit, data.analysis);
   const inboxWork = useMemo(
     () => ({ ...work, store: snapshot.store ?? null }),
     [work.doc, work.revision, work.write, snapshot],
@@ -561,7 +574,10 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
   );
   const encoded = useGroupEncoding(snapshot, priced, drawGroups, page.encoding);
   const activeCritical = runNodesOf(trees)
-    .filter((run) => run.scale != null && run.terminal != null && activeScope?.terminals.has(run.terminal))
+    .filter(
+      (run) =>
+        run.scale != null && run.terminal != null && activeScope?.terminals.has(run.terminal),
+    )
     .reduce<TreeNode | null>(
       (best, run) =>
         run.total != null && (best?.total == null || run.total > best.total) ? run : best,
@@ -588,7 +604,10 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
             snapshot={"value" in data.snapshotRead ? snapshot : null}
             priced={priced}
             analysis={analysis}
-            source={{ version: data.captureSource?.version ?? "", current: data.snapshotRead.state === "ready" }}
+            source={{
+              version: data.captureSource?.version ?? "",
+              current: data.snapshotRead.state === "ready",
+            }}
             subject={data.subject}
             work={work}
             picture={picture}
@@ -613,10 +632,7 @@ export function NetworkPicture({ ctx, picture }: PictureOverlayProps<DuctsDrawCo
                       split: activeCritical.split,
                       scale: activeCritical.total,
                       fans: () => (
-                        <FanFacts
-                          facts={fanFacts(priced, activeScope)}
-                          nameOf={nameOf}
-                        />
+                        <FanFacts facts={fanFacts(priced, activeScope)} nameOf={nameOf} />
                       ),
                     }
                   : null,
@@ -643,7 +659,9 @@ function useInboxProjection(
     const noRuns: InboxItem[] =
       priced && scope
         ? [
-            ...new Set(noRunBranches(priced.snapshot, runsOf(priced.calcs), scope, priced.flows).values()),
+            ...new Set(
+              noRunBranches(priced.snapshot, runsOf(priced.calcs), scope, priced.flows).values(),
+            ),
           ].map((branch) => ({
             key: `no-run:${branch.elements[0]}`,
             group: "diagnostics",
@@ -686,7 +704,14 @@ function useInboxProjection(
       roles: surveyed.roles,
       write: { edit, esp: 0 },
     });
-    return { heal, inbox: { ...base, fix: [...base.fix, ...encounterRows(priced.calcs.flatMap(c => c.issues))], diagnostics: [...base.diagnostics, ...noRuns] } };
+    return {
+      heal,
+      inbox: {
+        ...base,
+        fix: [...base.fix, ...encounterRows(priced.calcs.flatMap((c) => c.issues))],
+        diagnostics: [...base.diagnostics, ...noRuns],
+      },
+    };
   }, [snapshot, priced, doc, projection, edit, analysis]);
 }
 export function RulesBody({ ctx, wide = false }: { ctx: DuctsDrawContext; wide?: boolean }) {
@@ -749,7 +774,7 @@ const SystemsList = memo(function SystemsList({
   /** The system's fans: its hover hint and the head of its breakdown popover. */
   fansOf: (system: ReturnType<typeof systemList>[number]) => FanFact[];
   nameOf: (id: number) => string;
-  notes: Readonly<Record<string,SystemNote>>;
+  notes: Readonly<Record<string, SystemNote>>;
   drawn: DuctSnapshot | null;
   page: {
     system: readonly string[];
@@ -913,14 +938,12 @@ export function AllRulesBody({ ctx }: { ctx: DuctsDrawContext }) {
                   description: kindMeaning(node, kind),
                   disabled: kindDisabledReason(node, kind) ?? undefined,
                 }))}
-
               />
               {cell.value.edit && (
-                <Button kind="quiet"
+                <Button
+                  kind="quiet"
                   label="Clear unit kind"
-                  onClick={() =>
-                    void cell.clear({ label: `Clear unit kind ${label}` })
-                  }
+                  onClick={() => void cell.clear({ label: `Clear unit kind ${label}` })}
                 >
                   Clear unit kind
                 </Button>
@@ -951,10 +974,7 @@ function useTreeProjection(
     const trees = scope
       ? buildCalcTree(drawn, priced?.calcs ?? [], groups, scope.members, sectionOf)
       : [];
-    const labels = grilleLabels(
-      drawn,
-      runNodesOf(trees),
-    );
+    const labels = grilleLabels(drawn, runNodesOf(trees));
     const subjectName = subjectNamer(snapshot);
     const nameOf = (id: number) => labels.get(id) ?? subjectName(id) ?? "element not in snapshot";
     const names = groupLabels(drawn);

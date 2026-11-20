@@ -16,24 +16,52 @@ const files = (dir: string): string[] =>
   );
 // Let the owning compiler resolve imports; this guard only checks reachable runtime edges.
 const config = ts.readConfigFile(join(root, "apps/web/tsconfig.json"), ts.sys.readFile);
-const options = ts.parseJsonConfigFileContent(config.config, ts.sys, join(root, "apps/web")).options;
+const options = ts.parseJsonConfigFileContent(
+  config.config,
+  ts.sys,
+  join(root, "apps/web"),
+).options;
 const runtimeImports = (source: ts.SourceFile) => {
   const imports: string[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const clause = node.importClause;
       const names = clause?.namedBindings;
-      if (!clause?.isTypeOnly && !(!clause?.name && names && ts.isNamedImports(names) &&
-          names.elements.length && names.elements.every((name) => name.isTypeOnly)))
+      if (
+        !clause?.isTypeOnly &&
+        !(
+          !clause?.name &&
+          names &&
+          ts.isNamedImports(names) &&
+          names.elements.length &&
+          names.elements.every((name) => name.isTypeOnly)
+        )
+      )
         imports.push(node.moduleSpecifier.text);
-    } else if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier)) {
+    } else if (
+      ts.isExportDeclaration(node) &&
+      !node.isTypeOnly &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
       const names = node.exportClause;
-      if (!(names && ts.isNamedExports(names) && names.elements.length &&
-          names.elements.every((name) => name.isTypeOnly))) imports.push(node.moduleSpecifier.text);
-    } else if (ts.isCallExpression(node) &&
-        (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(source) === "require") &&
-        node.arguments[0] && ts.isStringLiteral(node.arguments[0])) imports.push(node.arguments[0].text);
+      if (
+        !(
+          names &&
+          ts.isNamedExports(names) &&
+          names.elements.length &&
+          names.elements.every((name) => name.isTypeOnly)
+        )
+      )
+        imports.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+        node.expression.getText(source) === "require") &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+    )
+      imports.push(node.arguments[0].text);
     ts.forEachChild(node, visit);
   };
   visit(source);
@@ -43,7 +71,12 @@ function forbidden(file: string, seen = new Set<string>()): string[] {
   file = ts.sys.realpath?.(file) ?? file;
   if (seen.has(file)) return [];
   seen.add(file);
-  const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(file, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
   const found: string[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node))
@@ -52,9 +85,12 @@ function forbidden(file: string, seen = new Set<string>()): string[] {
   };
   visit(source);
   for (const specifier of runtimeImports(source)) {
-    const target = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule?.resolvedFileName;
-    if (/^(?:react(?:-dom)?(?:\/|$)|@tanstack\/react-)|\.(?:css|scss|less)$/.test(specifier) ||
-        target?.replaceAll("\\", "/").endsWith("/apps/web/src/host/runtime.ts"))
+    const target = ts.resolveModuleName(specifier, file, options, ts.sys).resolvedModule
+      ?.resolvedFileName;
+    if (
+      /^(?:react(?:-dom)?(?:\/|$)|@tanstack\/react-)|\.(?:css|scss|less)$/.test(specifier) ||
+      target?.replaceAll("\\", "/").endsWith("/apps/web/src/host/runtime.ts")
+    )
       found.push(`${file}: ${specifier}`);
     else if (target && !/\.d\.[cm]?ts$/.test(target) && !target.endsWith(".json"))
       found.push(...forbidden(target, seen));
@@ -95,18 +131,24 @@ test.each([
 test("ordinary filenames are neutral until a transitive runtime edge reaches UI", () => {
   const dir = mkdtempSync(join(tmpdir(), "neutral-closure-"));
   try {
-    const entry = join(dir, "entry.neutral.ts"), middle = join(dir, "ordinary.ts");
+    const entry = join(dir, "entry.neutral.ts"),
+      middle = join(dir, "ordinary.ts");
     writeFileSync(entry, 'export { value } from "./ordinary.ts";');
     writeFileSync(middle, 'import type { ReactNode } from "react"; export const value = 1;');
     expect(forbidden(entry)).toEqual([]);
-    writeFileSync(middle, 'import React, { type ReactNode } from "react"; export const value = React;');
+    writeFileSync(
+      middle,
+      'import React, { type ReactNode } from "react"; export const value = React;',
+    );
     expect(forbidden(entry)).toEqual([expect.stringMatching(/ordinary\.ts: react$/)]);
     writeFileSync(middle, 'export { value } from "./leaf.ts";');
     writeFileSync(join(dir, "leaf.ts"), 'const value = import("react"); export { value };');
     expect(forbidden(entry)).toEqual([expect.stringMatching(/leaf\.ts: react$/)]);
     // JSX is syntax, independent of the module filename taxonomy.
     writeFileSync(middle, 'export { value } from "./leaf.tsx";');
-    writeFileSync(join(dir, "leaf.tsx"), 'export const value = <div />;');
+    writeFileSync(join(dir, "leaf.tsx"), "export const value = <div />;");
     expect(forbidden(entry)).toEqual([expect.stringMatching(/leaf\.tsx: JSX$/)]);
-  } finally { rmSync(dir, { recursive: true, force: true }); }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

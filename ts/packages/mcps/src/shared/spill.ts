@@ -36,7 +36,10 @@ export function capResultText(
             2,
           );
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const path = join(dir, `${toolId}-${stamp}-${Math.random().toString(36).slice(2, 8)}.${typeof result === "string" ? "txt" : "json"}`);
+    const path = join(
+      dir,
+      `${toolId}-${stamp}-${Math.random().toString(36).slice(2, 8)}.${typeof result === "string" ? "txt" : "json"}`,
+    );
     mkdirSync(dir, { recursive: true });
     writeFileSync(path, pretty, "utf8");
     prune(dir);

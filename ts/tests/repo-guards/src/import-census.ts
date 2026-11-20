@@ -8,21 +8,32 @@ export const WEB = "apps/web/src/";
 // Match kit-census's production boundary; tests and disposable specimens are not consumers.
 export function productionFiles(root: string): string[] {
   // Prune before descending: e2e is a workspace package, whose Windows dependency links cycle.
-  const files = (dir: string): string[] => readdirSync(resolve(ROOT, dir), { withFileTypes: true }).flatMap(entry => {
-    if (["node_modules", "dist", "dist-installed", "__tests__", "prototypes", "lab", "design-system"].includes(entry.name)) return [];
-    const path = `${dir}/${entry.name}`;
-    return entry.isDirectory() ? files(path) : [path];
-  });
-  return files(root)
-    .filter(
-      (path) =>
-        /\.[cm]?[jt]sx?$/.test(path) &&
-        !/\.(?:test|spec)\./.test(path) &&
-        !/\/(?:node_modules|dist|dist-installed|__tests__|prototypes|lab|design-system)\//.test(
-          path,
-        ) &&
-        !path.startsWith(WEB + "routes/design-system"),
-    );
+  const files = (dir: string): string[] =>
+    readdirSync(resolve(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
+      if (
+        [
+          "node_modules",
+          "dist",
+          "dist-installed",
+          "__tests__",
+          "prototypes",
+          "lab",
+          "design-system",
+        ].includes(entry.name)
+      )
+        return [];
+      const path = `${dir}/${entry.name}`;
+      return entry.isDirectory() ? files(path) : [path];
+    });
+  return files(root).filter(
+    (path) =>
+      /\.[cm]?[jt]sx?$/.test(path) &&
+      !/\.(?:test|spec)\./.test(path) &&
+      !/\/(?:node_modules|dist|dist-installed|__tests__|prototypes|lab|design-system)\//.test(
+        path,
+      ) &&
+      !path.startsWith(WEB + "routes/design-system"),
+  );
 }
 
 export type Import = { module: string; names: string[] | null };

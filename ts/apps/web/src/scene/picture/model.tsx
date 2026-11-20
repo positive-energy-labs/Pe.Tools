@@ -1,6 +1,11 @@
-import type { ElementIndex } from "#/element-index";
+import type {
+  PictureLayer,
+  PictureLine,
+  PictureOverlayFrame,
+} from "@pe/web-kernel/scene/picture/content";
+import type { ElementIndex } from "@pe/web-kernel/element-index";
 import { RegistryContext } from "@effect/atom-react";
-import { holdCitation, type SubjectKey } from "@pe/kit/lang/attention";
+import { holdCitation } from "@pe/kit/lang/attention";
 import { useWork } from "@pe/kit/lang/work";
 /** The subject's real meshes, section and completeness; a surface's marks arrive as layers and the
  * overlay. Camera policy belongs to useStage. */
@@ -15,24 +20,34 @@ import {
   type ReactNode,
 } from "react";
 
-import { subscribe as knobsChanged } from "#/knobs/knobs";
-import { ContinuationMarks } from "#/scene/continuations";
-import type { PictureBounds } from "#/scene/framing";
-import { framingPoints } from "#/scene/framing";
-import { LOOK } from "#/scene/grounds";
-import { boundsOfInstances, boundsOfPoints, frame, type OrbitViewport } from "#/scene/orbit";
+import { subscribe as knobsChanged } from "@pe/web-kernel/knobs/knobs";
+import { ContinuationMarks } from "@pe/web-kernel/scene/continuations";
+import type { PictureBounds } from "@pe/web-kernel/scene/framing";
+import { framingPoints } from "@pe/web-kernel/scene/framing";
+import { LOOK } from "@pe/web-kernel/scene/grounds";
+import {
+  boundsOfInstances,
+  boundsOfPoints,
+  frame,
+  type OrbitViewport,
+} from "@pe/web-kernel/scene/orbit";
 import { CONTEXT_DEFAULT, type PictureContext } from "#/scene/picture/picture";
-import { sectionProject, viewportProject, type Project, type Size } from "#/scene/projection";
-import type { ColourMode, ContextMode } from "#/scene/renderer";
+import {
+  sectionProject,
+  viewportProject,
+  type Project,
+  type Size,
+} from "@pe/web-kernel/scene/projection";
+import type { ColourMode, ContextMode } from "@pe/web-kernel/scene/types";
 import { Scene3D } from "#/scene/scene3d";
-import { fitSection, sectionVolume, type Section } from "#/scene/section";
+import { fitSection, sectionVolume, type Section } from "@pe/web-kernel/scene/section";
 import { SectionEditorController } from "#/scene/section-editor-controller";
 import { SectionEditor } from "#/scene/section-editor";
-import { fitPlane, type PlaneAxis } from "#/scene/plane";
-import { cutCurtain } from "#/scene/cuts";
+import { fitPlane, type PlaneAxis } from "@pe/web-kernel/scene/plane";
+import { cutCurtain } from "../cut-curtain.ts";
 import { SectionControls, SectionHandles } from "#/scene/section-controls";
 import { useStage } from "#/scene/stage-controller";
-import type { Bounds, IssueTarget, Kinds, Layer3D, PaintOf, SceneMeshes } from "#/scene/types";
+import type { Bounds, IssueTarget, Kinds, PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { SceneRead } from "#/scene/use-scene";
 import {
   sceneViewSchema,
@@ -56,19 +71,6 @@ const CONTEXT_LIMITS: Record<string, string> = {
   "element-acquisition-limit": "Some context elements exceed the geometry limit",
 };
 
-/** A drawn subject's centreline in world feet, where it sits before (or without) its meshes. One
- * point is a point subject (a fitting); two or more are a line the globe draws. */
-export type PictureLine = { key: SubjectKey; points: readonly (readonly number[])[] };
-/** One ordered path through the picture's elements: a terminal run, a home run, a circuit. Strands
- * that share an element ride side by side through it, and `path` order is the flow direction. */
-export type PictureStrand = {
-  /** The strand's own subject (`run:<id>`): a pick on its line selects it, a row lights it. */
-  key: SubjectKey;
-  /** Element keys in flow order; each needs a centreline in `lines`. */
-  path: readonly SubjectKey[];
-  /** The governing strand (the critical run): drawn heavy and always flowing. */
-  heavy?: boolean;
-};
 /** Numeric element ids stop at the renderer adapter, which speaks `revitId`; the picture's keys are UniqueId codes. */
 const centrelinePoints = (
   lines: readonly PictureLine[],
@@ -104,28 +106,6 @@ export function usePictureBounds(
     return own && { scene: own, subject: own };
   }, [meshes, lines]);
 }
-
-/** What a surface's overlay draws against: the released frame, never a mid-gesture one. */
-export type PictureOverlayFrame = {
-  /** World feet to overlay px, with the shown section applied. */
-  project: Project;
-  /** The same camera without the section: what occludes on screen. */
-  camera: Project;
-  size: Size;
-  meshes: SceneMeshes | null;
-  paintOf: PaintOf | undefined;
-  /** The picture's selection (widened), as element ids. */
-  selected: ReadonlySet<number>;
-  /** The picture's pick and frame (double-click) verbs. */
-  pick: (id: number, at: { x: number; y: number }) => void;
-  frame: (id: number) => void;
-};
-/** A surface's 3D marks. `toggle` names the page layer that gates it; absent = always drawn. */
-export type PictureLayer = {
-  key: string;
-  toggle?: string;
-  draw: (ctx: { meshes: SceneMeshes | null; paintOf: PaintOf | undefined }) => readonly Layer3D[];
-};
 
 /** The pose the picture shows: the page's, else the fit of the subject; null with nothing to fit. */
 export const poseOf = (
@@ -278,7 +258,15 @@ export function ModelPicture({
     } catch (error) {
       return { volume: null, refusal: error instanceof Error ? error.message : "Invalid section" };
     }
-  }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, draft, sectionDraft, bounds]);
+  }, [
+    section,
+    sectionSubject,
+    look.layers.preset,
+    look.section.paddingFt,
+    draft,
+    sectionDraft,
+    bounds,
+  ]);
   const clipVolume = clip.volume;
   const shownView = { preset, section: section ?? clipVolume?.section ?? null };
   const baseLayers = useMemo(

@@ -7,10 +7,7 @@ import type {
 } from "@pe/agent-contracts";
 import { parseWithLlamaCloud, type LlamaParseRequest } from "./llama-parse.ts";
 
-export type FamilyPdfRequest = Pick<
-  LlamaParseRequest,
-  "file" | "apiKey" | "sent"
->;
+export type FamilyPdfRequest = Pick<LlamaParseRequest, "file" | "apiKey" | "sent">;
 
 /** Parse directly; `sent` is the caller's send notice (ADR 0052). */
 export async function parseFamilyPdf(request: FamilyPdfRequest): Promise<ParsedDocView> {

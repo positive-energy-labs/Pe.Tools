@@ -1,8 +1,13 @@
-import base from "@pe/host/vite.config";
 import { defineConfig } from "vite-plus";
-import { fileURLToPath } from "node:url";
-export default defineConfig(async env => {
-  const config = await (typeof base === "function" ? base(env) : base);
-  return { ...config, root: fileURLToPath(new URL("../../../apps/host/", import.meta.url)),
-    test: { ...config.test, include: [fileURLToPath(new URL("./src/**/*.test.{ts,tsx}", import.meta.url)).replaceAll(String.fromCharCode(92), "/")] } };
+
+export default defineConfig({
+  test: {
+    include: ["src/**/*.test.{ts,tsx}"],
+    globalSetup: "../../../tests/isolated-home/global-setup.ts",
+    setupFiles: ["../../../tests/isolated-home/setup.ts"],
+    env: { PE_LANE: "dev" },
+    fileParallelism: false,
+    testTimeout: 15_000,
+    expect: { poll: { timeout: 10_000 } },
+  },
 });

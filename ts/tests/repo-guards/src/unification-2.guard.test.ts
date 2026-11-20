@@ -25,29 +25,47 @@ describe("unification 2 offender identities", () => {
     for (const floor of baselineFloors())
       expect(
         floorAdditions(
-          Object.fromEntries(Object.entries(offenderBaseline).filter(([rule]) => rule in floor.sites)),
+          Object.fromEntries(
+            Object.entries(offenderBaseline).filter(([rule]) => rule in floor.sites),
+          ),
           floor,
         ),
       ).toEqual([]);
   }, 120000);
   it("a moved file carries its allowance through the floors, and a planted allowance is still red", () => {
-    const old = "ts/a/bay.tsx#Body:BindingElement", moved = "ts/b/bay.tsx#Body:BindingElement";
-    const floor = carry({ fixtureMode: [old, "ts/a/other.tsx#X:BindingElement"] }, [{ "ts/a/bay.tsx": "ts/b/bay.tsx" }]);
+    const old = "ts/a/bay.tsx#Body:BindingElement",
+      moved = "ts/b/bay.tsx#Body:BindingElement";
+    const floor = carry({ fixtureMode: [old, "ts/a/other.tsx#X:BindingElement"] }, [
+      { "ts/a/bay.tsx": "ts/b/bay.tsx" },
+    ]);
     expect(floor.carried).toEqual({ [old]: moved });
     expect(floorAdditions({ fixtureMode: [moved] }, floor)).toEqual([]);
     // A stale old-name allowance still matches, but one floor entry never covers both names.
     expect(floorAdditions({ fixtureMode: [old] }, floor)).toEqual([]);
     expect(floorAdditions({ fixtureMode: [old, moved] }, floor)).toEqual([`fixtureMode: ${moved}`]);
-    expect(floorAdditions({ fixtureMode: [moved, moved] }, floor)).toEqual([`fixtureMode: ${moved}`]);
-    expect(floorAdditions({ fixtureMode: ["ts/b/bay.tsx#New:BindingElement"] }, floor)).toEqual(["fixtureMode: ts/b/bay.tsx#New:BindingElement"]);
+    expect(floorAdditions({ fixtureMode: [moved, moved] }, floor)).toEqual([
+      `fixtureMode: ${moved}`,
+    ]);
+    expect(floorAdditions({ fixtureMode: ["ts/b/bay.tsx#New:BindingElement"] }, floor)).toEqual([
+      "fixtureMode: ts/b/bay.tsx#New:BindingElement",
+    ]);
     // Without the move the new path is a new identity; a path that still exists carries nothing.
     expect(floorAdditions({ fixtureMode: [moved] }, carry(floor.sites, []))).toHaveLength(1);
-    expect(carry(floor.sites, [{ "ts/a/bay.tsx": "ts/b/bay.tsx" }], () => true).carried).toEqual({});
-    expect(carry(floor.sites, [{ "ts/a/bay.tsx": "ts/b/bay.tsx" }, { "ts/b/bay.tsx": "ts/c/bay.tsx" }]).carried[old])
-      .toBe("ts/c/bay.tsx#Body:BindingElement");
+    expect(carry(floor.sites, [{ "ts/a/bay.tsx": "ts/b/bay.tsx" }], () => true).carried).toEqual(
+      {},
+    );
+    expect(
+      carry(floor.sites, [{ "ts/a/bay.tsx": "ts/b/bay.tsx" }, { "ts/b/bay.tsx": "ts/c/bay.tsx" }])
+        .carried[old],
+    ).toBe("ts/c/bay.tsx#Body:BindingElement");
   });
   it("a geometry read names its subject, read from the catalog whatever the [Op] argument list says", () => {
-    const row = (key: string, subject: string, touches: string, effect: string) => ({ key, subject, touches, effect });
+    const row = (key: string, subject: string, touches: string, effect: string) => ({
+      key,
+      subject,
+      touches,
+      effect,
+    });
     const catalog = [
       row("a.scoped", "Element", "Metadata, Geometry", "Read"),
       row("a.unscoped", "Document", "Metadata, Geometry", "TransactRead"),

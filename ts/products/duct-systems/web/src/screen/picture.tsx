@@ -8,14 +8,14 @@ import type { DuctSnapshot } from "@pe/ducts-domain/types";
 import { ductElements } from "@pe/ducts-web/identity";
 import { useContext, useMemo, type ReactNode, type RefObject } from "react";
 
-import { VisibleRouteResource } from "@pe/web/route/activity";
-import { damageLayers } from "@pe/web/scene/damage";
+import { VisibleRouteResource } from "@pe/web-kernel/route/activity";
+import { damageLayers } from "@pe/web-kernel/scene/damage";
 import {
   layersOn,
   type PictureLayer,
   type PictureOverlayFrame,
-} from "@pe/web/scene/picture/picture";
-import type { Layer3D, SceneMeshes } from "@pe/web/scene/types";
+} from "@pe/web-kernel/scene/picture/content";
+import type { Layer3D, SceneMeshes } from "@pe/web-kernel/scene/types";
 import { emptyListSearch } from "@pe/agent-contracts";
 import { runsOf, worstRun } from "@pe/ducts-domain/calc-runs";
 import type { Neighbour } from "@pe/ducts-domain/neighbours";
@@ -24,10 +24,10 @@ import { snapshotById } from "@pe/ducts-domain/readiness";
 import { scopeOf, systemScope } from "@pe/ducts-domain/system-scope";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { SubjectText } from "@pe/kit/lang/subject-text";
-import type { PictureParts } from "@pe/web/route/slots/picture/overlay";
+import type { PictureParts } from "@pe/web-kernel/route/slots/picture/overlay";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
-import { useAdmittedSubject } from "@pe/web/shell/subject";
+import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 import { DEFAULT_DESIGN_FRICTION_RATE } from "@pe/duct-systems-domain/equivalent-length";
 import type { Priced } from "@pe/ducts-web/priced";
 import { fanFacts } from "./fan-sections.tsx";
@@ -62,7 +62,6 @@ import { RunDetail, runOf } from "./run-detail.tsx";
 
 export { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "@pe/ducts-web/picture-options";
 import { DUCTS_FLAT, DUCTS_LAYER_OPTIONS } from "@pe/ducts-web/picture-options";
-
 
 import { issueOf, issueSubject } from "@pe/ducts-web/cell-focus";
 
@@ -135,8 +134,7 @@ export const ductsFocus = (
 };
 
 function rulingIssue(r: Ruling, issues: readonly StageIssue[]) {
-  const finding =
-    r.kind === "issue" ? r.issue.id : r.finding.id;
+  const finding = r.kind === "issue" ? r.issue.id : r.finding.id;
   return issues.find((issue) => issue.findings.includes(finding))?.key ?? finding;
 }
 
@@ -546,60 +544,60 @@ function Content({
   );
 
   return picture({
-        source,
-        label: page.system.join(", "),
-        jump,
-        focus,
-        members: membership,
-        hoverGroups,
-        widen,
-        capture,
-        lines,
-        name: (key) => nameOf(elements.idOf(key)),
-        paint,
-        kinds,
-        colour,
-        layers,
-        layerOptions: DUCTS_LAYER_OPTIONS,
-        overlay,
-        readout: {
-          subject: systemName ?? undefined,
-          summary: <>{summary}</>,
-          idle,
-          facts,
-        },
-        flat: { ...DUCTS_FLAT, render: schematic },
-        goTo: (jumpTo) => (
-          <GoToSubject
-            snapshot={snapshot}
-            here={scope?.members ?? new Set()}
-            opens={(system) => !page.system.includes(system)}
-            nameOf={nameOf}
-            onGo={({ system, id }) => {
-              const key = id == null ? null : elements.keyOf(id);
-              if (id == null) door?.add([systemCode(system)]);
-              else if (key) jumpTo(key);
-            }}
-          />
-        ),
-        furniture: {
-          title: "Systems",
-          actions: (
-            <EncodingPicker
-              value={scale.encoding.key}
-              onPick={(key) => ctx.page.pose({ encoding: key }, "named")}
-            />
-          ),
-          legend: (
-            <ScaleLegend
-              encoding={scale.encoding}
-              counts={scale.counts}
-              nameOf={scale.nameOf}
-              // The max's element is named in text: the alias-click, not a picture pick.
-              onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
-            />
-          ),
-        },
-        onIssuePick: (target) => pickIssue(target.key),
+    source,
+    label: page.system.join(", "),
+    jump,
+    focus,
+    members: membership,
+    hoverGroups,
+    widen,
+    capture,
+    lines,
+    name: (key) => nameOf(elements.idOf(key)),
+    paint,
+    kinds,
+    colour,
+    layers,
+    layerOptions: DUCTS_LAYER_OPTIONS,
+    overlay,
+    readout: {
+      subject: systemName ?? undefined,
+      summary: <>{summary}</>,
+      idle,
+      facts,
+    },
+    flat: { ...DUCTS_FLAT, render: schematic },
+    goTo: (jumpTo) => (
+      <GoToSubject
+        snapshot={snapshot}
+        here={scope?.members ?? new Set()}
+        opens={(system) => !page.system.includes(system)}
+        nameOf={nameOf}
+        onGo={({ system, id }) => {
+          const key = id == null ? null : elements.keyOf(id);
+          if (id == null) door?.add([systemCode(system)]);
+          else if (key) jumpTo(key);
+        }}
+      />
+    ),
+    furniture: {
+      title: "Systems",
+      actions: (
+        <EncodingPicker
+          value={scale.encoding.key}
+          onPick={(key) => ctx.page.pose({ encoding: key }, "named")}
+        />
+      ),
+      legend: (
+        <ScaleLegend
+          encoding={scale.encoding}
+          counts={scale.counts}
+          nameOf={scale.nameOf}
+          // The max's element is named in text: the alias-click, not a picture pick.
+          onSelect={(id) => (subjects?.go ? subjects.go(id) : pick(id))}
+        />
+      ),
+    },
+    onIssuePick: (target) => pickIssue(target.key),
   });
 }

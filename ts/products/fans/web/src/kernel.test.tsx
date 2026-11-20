@@ -7,7 +7,16 @@ import sheet from "@pe/ducts-web/fixtures/fan-sheet.json";
 test("fan links carry the destination identity and binding without ducts Page fields", () => {
   const row = sheet.roster.rows[0];
   if (!row) throw Error("The captured roster has no fan");
-  const url = new URL(fansLink([stableFanKey(row)], { fixture: "scene", target: "document", thread: "t", system: "SA", selected: "duct" }), "https://fixture.invalid");
+  const url = new URL(
+    fansLink([stableFanKey(row)], {
+      fixture: "scene",
+      target: "document",
+      thread: "t",
+      system: "SA",
+      selected: "duct",
+    }),
+    "https://fixture.invalid",
+  );
   expect(url.pathname).toBe("/fans");
   expect([...url.searchParams.keys()].sort()).toEqual(["fan", "fixture", "target", "thread"]);
   const subject = JSON.parse(url.searchParams.get("fan") ?? "null");

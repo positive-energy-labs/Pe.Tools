@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { expect, test, vi } from "vite-plus/test";
-import { webBuildStamp } from "./build-stamp";
-import { hostFetch, runtimeStreamUrl } from "./runtime";
+import { webBuildStamp } from "@pe/web-kernel/host/build-stamp";
+import { hostFetch, runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
 
 test("HTTP and SSE retain the page's build owner across a changed destination", async () => {
   const fetcher = vi.fn().mockResolvedValue(new Response());
@@ -56,7 +56,9 @@ test("the browser contextFetch carries the runtime owner to its own origin and t
   }
 });
 
-const refusedBody = { error: { code: "context.missing", message: "anonymous callers are read-only" } };
+const refusedBody = {
+  error: { code: "context.missing", message: "anonymous callers are read-only" },
+};
 /** The navigation door as the page reaches it: the hidden frame, answered as loaded. */
 const answerNavigation = async () => {
   const frame = await vi.waitFor(() => {
@@ -193,7 +195,10 @@ test("the admission layer's { refusal } envelope re-admits as the { error } one 
   const fetcher = vi.fn(async () =>
     admitted
       ? Response.json({ revision: 1 })
-      : Response.json({ refusal: { code: "context.missing", detail: "anonymous" } }, { status: 403 }),
+      : Response.json(
+          { refusal: { code: "context.missing", detail: "anonymous" } },
+          { status: 403 },
+        ),
   );
   vi.stubGlobal("fetch", fetcher);
   sessionStorage.clear();

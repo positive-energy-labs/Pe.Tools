@@ -481,7 +481,8 @@ const CREDIT =
  * not a product fail.
  */
 export async function sendChat(page: Page, text: string, ms = 300_000) {
-  const observed = () => page.read<ReturnType<typeof composerTurn>>(`(${composerTurn.toString()})()`);
+  const observed = () =>
+    page.read<ReturnType<typeof composerTurn>>(`(${composerTurn.toString()})()`);
   const working = async () => (await observed()).state === "working";
   if (await working()) {
     await page

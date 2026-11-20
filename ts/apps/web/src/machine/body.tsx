@@ -112,7 +112,11 @@ export function SettingsBody({
           label: "Revit",
           state: revitState(machine).text,
           tone: revitState(machine).tone,
-          body: <OpenControlScope><RevitGroup machine={machine} refusal={refusal} session={session} /></OpenControlScope>,
+          body: (
+            <OpenControlScope>
+              <RevitGroup machine={machine} refusal={refusal} session={session} />
+            </OpenControlScope>
+          ),
         },
         {
           key: "update",
@@ -180,9 +184,7 @@ export function SettingsBody({
   // the first header that disagrees. The Page owns every subsequent choice.
   const automatic =
     autoOpen(machine) ??
-    (machine
-      ? (machineGroups.find((entry) => entry.tone === "caution")?.key ?? null)
-      : null);
+    (machine ? (machineGroups.find((entry) => entry.tone === "caution")?.key ?? null) : null);
   const open = group !== undefined ? group : automatic;
   return (
     <div className="flex min-w-0 flex-col gap-2" data-shell={shell} aria-label="settings">

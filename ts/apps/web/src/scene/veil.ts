@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CONTEXT_OPACITY_LIMIT, DEFAULT_CONTEXT_INK } from "./grounds";
+import { CONTEXT_OPACITY_LIMIT, DEFAULT_CONTEXT_INK } from "@pe/web-kernel/scene/grounds";
 import { VEIL_REACH_FT, type VeilField } from "./veil-field";
 export { bakeVeil, falloff, veilDistance, VEIL_REACH_FT, type VeilField } from "./veil-field";
 

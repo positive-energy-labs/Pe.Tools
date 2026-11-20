@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { SceneSection } from "@pe/agent-contracts";
 import { SectionEditor } from "./section-editor";
 import { SectionEditorController } from "./section-editor-controller";
-import { emptyCuts } from "./cuts";
+import { emptyCuts } from "@pe/web-kernel/scene/cuts";
 
 afterEach(cleanup);
 const bounds = { minX: 0, minY: 0, minZ: 0, maxX: 10, maxY: 10, maxZ: 10 };

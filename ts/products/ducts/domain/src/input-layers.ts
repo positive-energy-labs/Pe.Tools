@@ -14,7 +14,12 @@ export function workLayer(design: DuctsDesign): WorkLayer {
   const staged = stagedDucts(design, design);
   // An unreadable cell's marker passes through untouched, so the resolver holds its row invalid.
   const cells = <V, T>(segment: Record<string, StagedCell<V>>, value: (v: V) => T) =>
-    Object.fromEntries(Object.entries(segment).map(([key, cell]) => [key, "invalid" in cell ? cell : { ...cell, value: value(cell.value) }]));
+    Object.fromEntries(
+      Object.entries(segment).map(([key, cell]) => [
+        key,
+        "invalid" in cell ? cell : { ...cell, value: value(cell.value) },
+      ]),
+    );
   return {
     flows: staged.flows,
     terminalDrops: cells(staged.terminalDrops, (v) => v.inWg),
@@ -31,4 +36,3 @@ export function workLayer(design: DuctsDesign): WorkLayer {
     assumptions: staged.assumptions as WorkLayer["assumptions"],
   };
 }
-

@@ -1,8 +1,14 @@
+import type { DetachedAction } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
-import { documentRefSchema, type ActionReceipt, type DocumentRef, type Touched } from "@pe/agent-contracts";
-import { recoverAction, type DetachedAction } from "./takeoff-action-client.ts";
+import {
+  documentRefSchema,
+  type ActionReceipt,
+  type DocumentRef,
+  type Touched,
+} from "@pe/agent-contracts";
+import { recoverAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY, opWrites } from "./admission.ts";
 import { Effect } from "effect";
 import { resolveHostBaseUrl } from "./host-config.ts";
@@ -240,11 +246,24 @@ export class HostRpcCaller {
           },
           { door: "command", mutates: true, needs: operation?.needs ?? "document" },
         )) as ActionReceipt | DetachedAction);
-      const touched = "steps" in action ? action.steps.flatMap((step) =>
-        step.transport === "bridge" && step.touched && step.touched.kind !== "none" ? [step.touched] : []) : [];
+      const touched =
+        "steps" in action
+          ? action.steps.flatMap((step) =>
+              step.transport === "bridge" && step.touched && step.touched.kind !== "none"
+                ? [step.touched]
+                : [],
+            )
+          : [];
       const facts = touched.length ? { touched } : {};
       return action.state === "succeeded"
-        ? { ok: true, key, elapsedMs: Date.now() - started, response: action.result, action, ...facts }
+        ? {
+            ok: true,
+            key,
+            elapsedMs: Date.now() - started,
+            response: action.result,
+            action,
+            ...facts,
+          }
         : {
             ok: false,
             key,
@@ -418,7 +437,7 @@ export const runHostRpcEffect = Effect.fnUntraced(function* (
 function parseResolvedTarget(value: unknown): ResolvedTarget | undefined {
   if (!value || typeof value !== "object") return undefined;
   const { session, openId } = value as Record<string, unknown>;
-  return (typeof session === "string" || session === null)
+  return typeof session === "string" || session === null
     ? { session, ...(typeof openId === "string" ? { openId } : {}) }
     : undefined;
 }

@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition } from "react";
 import type { z } from "zod";
 import type { AppSurface, Machine } from "@pe/agent-contracts";
-import type { peRoutes } from "@pe/agent-contracts/pe-api";
+import type { httpRoutes } from "@pe/agent-contracts/pe-api";
 import { Button } from "@pe/kit/lang/button";
 import { Input, Label } from "@pe/kit/lang/input";
 import { peClient } from "#/host/pe-client";
@@ -83,7 +83,7 @@ export function HostGroup({
   );
 }
 
-type HomesStatus = z.output<(typeof peRoutes)["homes.get"]["output"]>;
+type HomesStatus = z.output<(typeof httpRoutes)["homes.get"]["output"]>;
 const foundWords: Record<HomesStatus["homes"][number]["found"], string> = {
   documents: "Documents folder",
   override: "environment override",
@@ -116,7 +116,10 @@ export function HomesSettings({ refusal }: { refusal: string | null }) {
     startTransition(async () => {
       setSaid(null);
       try {
-        const body = { ...(firm.trim() ? { firm: firm.trim() } : {}), ...(user.trim() ? { user: user.trim() } : {}) };
+        const body = {
+          ...(firm.trim() ? { firm: firm.trim() } : {}),
+          ...(user.trim() ? { user: user.trim() } : {}),
+        };
         show(await peClient.call("homes.put", { body }));
         setSaid("Homes saved.");
       } catch (error) {
@@ -153,9 +156,7 @@ export function HomesSettings({ refusal }: { refusal: string | null }) {
           onChange={(event) => setUser(event.target.value)}
         />
       </Label>
-      <p className="text-ink-2">
-        Absolute folders that exist. Blank uses the default.
-      </p>
+      <p className="text-ink-2">Absolute folders that exist. Blank uses the default.</p>
       <div className="flex flex-wrap gap-2">
         <Button
           label="save homes"

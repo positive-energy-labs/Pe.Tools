@@ -402,9 +402,7 @@ test("same-address owner replacement receives the original owner label and refus
   const headerOffset = runtimeOwners.length;
   changeOwnerAfterProviders = true;
   try {
-    await expect(runPeaPromptTurn({ prompt: "must not infer" })).rejects.toThrow(
-      /403/,
-    );
+    await expect(runPeaPromptTurn({ prompt: "must not infer" })).rejects.toThrow(/403/);
     expect(calls.slice(offset)).toEqual(["GET /pe/providers", "POST /pe/threads"]);
     expect(runtimeOwners.slice(headerOffset)).toEqual([owner, owner]);
   } finally {

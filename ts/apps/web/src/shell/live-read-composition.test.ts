@@ -9,12 +9,12 @@ import {
 import { HOST_RUNTIME_SERVICE_HEADER } from "@pe/host-contracts/contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import rosterCapture from "../../../../packages/host-contracts/src/fixtures/k2-roster.json";
-import { hostOwnership } from "../../../host/src/host-ownership.ts";
+import { hostOwnership, hostState } from "../../../host/src/host-ownership.ts";
 import { HostDocumentMarks } from "../../../host/src/document-marks.ts";
 import { HostSessionInventory } from "../../../host/src/session-inventory.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { Publications } from "../../../host/src/reads/publications.ts";
-import { RevitBridge } from "../../../host/src/bridge.ts";
+import { RevitBridge } from "@pe/host-internal/bridge";
 import { SdkSession } from "../../../host/src/sdk-session.ts";
 import { bootHost } from "../../../host/tests/real-server.ts";
 import { connectTestBridge } from "../../../host/tests/bridge-fixture.ts";
@@ -47,7 +47,10 @@ async function liveHost(
   await writeFile(join(firmHome, "pe-home.json"), `{"tier":"firm"}`);
   vi.stubEnv("PE_TOOLS_SHARED_ROOT", firmHome);
   const inputRoot = dirname(firmRootPath()!);
-  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({ ...rosterCapture, vocabulary: VOCABULARY });
+  const roster = nativeResponseSchema("ducts.snapshot.roster").parse({
+    ...rosterCapture,
+    vocabulary: VOCABULARY,
+  });
   const inputs =
     isolated ??
     (record
@@ -63,7 +66,7 @@ async function liveHost(
         inventory: HostSessionInventory.layer.pipe(
           Layer.provide(Layer.mergeAll(ambient(RevitBridge), ambient(SdkSession))),
         ),
-        files: DuctFiles.layer(),
+        files: DuctFiles.layer(hostState().home),
         native: Layer.effect(
           HostNativeRead,
           Effect.gen(function* () {
@@ -202,7 +205,11 @@ test("an empty ancestor directory cannot invalidate the missing firm input mid-r
     );
     await until("refresh-needed");
   } finally {
-    try { await closeStream?.(); } finally { await host.close(); }
+    try {
+      await closeStream?.();
+    } finally {
+      await host.close();
+    }
   }
 });
 

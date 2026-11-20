@@ -65,8 +65,14 @@ const header = (label: string) =>
   within(screen.getByRole("region", { name: label })).getAllByRole("button")[0]!;
 
 test("the addressed Revit settings group supplies its lifecycle scope", () => {
-  const owner = { subscribe: () => () => {}, version: () => 0, busy: () => null } as unknown as OpenOwner;
-  installOpenControls(({ children }) => <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>);
+  const owner = {
+    subscribe: () => () => {},
+    version: () => 0,
+    busy: () => null,
+  } as unknown as OpenOwner;
+  installOpenControls(({ children }) => (
+    <OpenOwnerContext value={owner}>{children}</OpenOwnerContext>
+  ));
   render(<SettingsBody reading={MACHINE_SEEDS["patch-bay"]} fixture shell="web" group="revit" />);
   expect(screen.getByLabelText("Revit runtime")).toBeTruthy();
 });

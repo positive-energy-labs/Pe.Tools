@@ -158,9 +158,16 @@ function structuralCensus() {
  * catalog row, and a catalog row nothing declares.
  */
 export function geometryCensus(
-  catalog: readonly { key: string; subject: string; touches: string; effect: string }[] = hostOpCatalog,
+  catalog: readonly {
+    key: string;
+    subject: string;
+    touches: string;
+    effect: string;
+  }[] = hostOpCatalog,
   sources: Record<string, string> = Object.fromEntries(
-    files("dotnet").filter((p) => p.endsWith(".cs") && !p.includes("Tests/")).map((p) => [p, read(p)]),
+    files("dotnet")
+      .filter((p) => p.endsWith(".cs") && !p.includes("Tests/"))
+      .map((p) => [p, read(p)]),
   ),
 ): string[] {
   const rows = new Map(catalog.map((row) => [row.key, row]));
@@ -178,7 +185,8 @@ export function geometryCensus(
       )
         result.push(`${p}#Op:${key}`);
     }
-  for (const row of catalog) if (!declared.has(row.key)) result.push(`${catalogPath}#Op:${row.key}`);
+  for (const row of catalog)
+    if (!declared.has(row.key)) result.push(`${catalogPath}#Op:${row.key}`);
   return [...new Set(result)].sort();
 }
 
@@ -196,12 +204,16 @@ export function census(): Record<string, string[]> {
 
 export type OffenderSets = Record<string, string[]>;
 const isOffenderSets = (value: unknown): value is OffenderSets =>
-  typeof value === "object" && value !== null &&
-  Object.values(value).every((sites) => Array.isArray(sites) && sites.every((site) => typeof site === "string"));
+  typeof value === "object" &&
+  value !== null &&
+  Object.values(value).every(
+    (sites) => Array.isArray(sites) && sites.every((site) => typeof site === "string"),
+  );
 /** The parser's own diagnostics (an internal of `ts.SourceFile`); its absence is a broken census, never clean. */
 function parseDiagnostics(source: ts.SourceFile): readonly ts.Diagnostic[] {
   const diagnostics: unknown = Reflect.get(source, "parseDiagnostics");
-  if (!Array.isArray(diagnostics)) throw Error(`${source.fileName}: the parser exposes no parseDiagnostics`);
+  if (!Array.isArray(diagnostics))
+    throw Error(`${source.fileName}: the parser exposes no parseDiagnostics`);
   return diagnostics;
 }
 export const baselinePath = "ts/tests/repo-guards/src/unification-2.baseline.json";
@@ -233,7 +245,9 @@ export function baselineFloors(): CarriedFloor[] {
     if (!git("ls-tree", sha, "--", baselinePath)) return []; // This law did not exist at that merge base.
     return floorAt(sha).map((floor) => {
       // Only a floor that names a path gone from the tree can need a move; the diff costs ~1 s.
-      const gone = Object.values(floor).flat().some((site) => !exists(site.split("#")[0]!));
+      const gone = Object.values(floor)
+        .flat()
+        .some((site) => !exists(site.split("#")[0]!));
       return carry(floor, gone ? [renamesSince(git, sha), NAMED_MOVES] : [NAMED_MOVES], exists);
     });
   });
@@ -242,8 +256,7 @@ export function baselineFloors(): CarriedFloor[] {
     if (!isOffenderSets(value)) return [];
     // RATCHET-GREEN explicitly re-baselines the legacy ordinal format with audited causes.
     // Incomparable old snapshots cannot cap the new buckets; later multiset floors still shrink.
-    if (Object.values(value).some((sites) => sites.some((site) => /@\d+$/.test(site))))
-      return [];
+    if (Object.values(value).some((sites) => sites.some((site) => /@\d+$/.test(site)))) return [];
     return [value];
   }
 }
@@ -259,7 +272,9 @@ export const NAMED_MOVES: Move = {};
 /** Net git renames from `sha` to the working tree, old path to new. */
 function renamesSince(git: (...args: string[]) => string, sha: string): Move {
   const moves: Move = {};
-  for (const line of git("diff", "-M", "--diff-filter=R", "--name-status", sha, "--", "ts").split("\n")) {
+  for (const line of git("diff", "-M", "--diff-filter=R", "--name-status", sha, "--", "ts").split(
+    "\n",
+  )) {
     const [status, from, to] = line.split("\t");
     if (status?.startsWith("R") && from && to) moves[from] = to;
   }
@@ -274,8 +289,13 @@ export type CarriedFloor = { sites: OffenderSets; carried: Record<string, string
  * path takes its allowances with it. A path that still exists was not moved away (git saw a
  * rename, then the path was used again), so it carries nothing.
  */
-export function carry(floor: OffenderSets, moves: readonly Move[], exists: (path: string) => boolean = () => false): CarriedFloor {
-  const follow = (path: string) => (exists(path) ? path : moves.reduce((at, move) => move[at] ?? at, path));
+export function carry(
+  floor: OffenderSets,
+  moves: readonly Move[],
+  exists: (path: string) => boolean = () => false,
+): CarriedFloor {
+  const follow = (path: string) =>
+    exists(path) ? path : moves.reduce((at, move) => move[at] ?? at, path);
   const carried: Record<string, string> = {};
   for (const site of Object.values(floor).flat()) {
     const hash = site.indexOf("#");
@@ -296,7 +316,8 @@ export function floorAdditions(actual: OffenderSets, floor: CarriedFloor): strin
     for (const site of floor.sites[law] ?? []) remaining.set(site, (remaining.get(site) ?? 0) + 1);
     const byCarried = new Map<string, string[]>();
     for (const site of remaining.keys())
-      if (floor.carried[site]) byCarried.set(floor.carried[site], [...(byCarried.get(floor.carried[site]) ?? []), site]);
+      if (floor.carried[site])
+        byCarried.set(floor.carried[site], [...(byCarried.get(floor.carried[site]) ?? []), site]);
     const take = (site: string) => {
       const count = remaining.get(site) ?? 0;
       if (count) remaining.set(site, count - 1);
@@ -304,7 +325,9 @@ export function floorAdditions(actual: OffenderSets, floor: CarriedFloor): strin
     };
     // Exact names first, so a carried name never takes an allowance its own old name needs.
     const unmatched = sites.filter((site) => !take(site));
-    return unmatched.filter((site) => !(byCarried.get(site) ?? []).some(take)).map((site) => `${law}: ${site}`);
+    return unmatched
+      .filter((site) => !(byCarried.get(site) ?? []).some(take))
+      .map((site) => `${law}: ${site}`);
   });
 }
 
@@ -327,7 +350,12 @@ const compositionRoots = new Set([
 ]);
 // Admitted Place composition may bind app capabilities and fixture inputs. Its implementation
 // is private like the shell; direct private-owner imports and re-exports still cross the fence.
-const admittedPlaceRoots = new Set([`${WEB}workbench/provider/view.tsx`, `${WEB}workbench/thread-view.tsx`, `${WEB}route/builtin-routes.tsx`, `${WEB}router.tsx`]);
+const admittedPlaceRoots = new Set([
+  `${WEB}workbench/provider/view.tsx`,
+  `${WEB}workbench/thread-view.tsx`,
+  `${WEB}route/builtin-routes.tsx`,
+  `${WEB}router.tsx`,
+]);
 /** A declared pane may display its public provenance; this grants no legacy-owner access. */
 function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
   if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return false;
@@ -335,9 +363,11 @@ function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
   const aliases = new Map<string, ts.TypeNode>();
   for (const statement of source.statements) {
     if (ts.isTypeAliasDeclaration(statement)) aliases.set(statement.name.text, statement.type);
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier))
+      continue;
     const module = statement.moduleSpecifier.text;
-    if (module !== "@pe/agent-contracts" && !/\/route-kernel-bodies(?:\.ts)?$/.test(module)) continue;
+    if (module !== "@pe/agent-contracts" && !/\/route-kernel-bodies(?:\.ts)?$/.test(module))
+      continue;
     const bindings = statement.importClause?.namedBindings;
     if (bindings && ts.isNamedImports(bindings))
       for (const name of bindings.elements)
@@ -347,14 +377,19 @@ function paneFixture(source: ts.SourceFile, node: ts.Node): boolean {
     if (!type || !ts.isTypeReferenceNode(type) || !ts.isIdentifier(type.typeName)) return false;
     const name = type.typeName.text;
     if (imports.has(name)) return true;
-    if (name === "Pick" && type.typeArguments?.[1]?.getText(source) === '"fixture"') return pane(type.typeArguments[0], seen);
+    if (name === "Pick" && type.typeArguments?.[1]?.getText(source) === '"fixture"')
+      return pane(type.typeArguments[0], seen);
     if (seen.has(name)) return false;
     seen.add(name);
     return pane(aliases.get(name), seen);
   };
   for (let parent = node.parent; parent; parent = parent.parent)
     if (ts.isFunctionLike(parent)) {
-      const parameter = parent.parameters.find((parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === node.expression.getText(source));
+      const parameter = parent.parameters.find(
+        (parameter) =>
+          ts.isIdentifier(parameter.name) &&
+          parameter.name.text === node.expression.getText(source),
+      );
       if (parameter) return pane(parameter.type);
     }
   return false;
@@ -418,7 +453,12 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
         if (ts.isStringLiteralLike(specifier)) {
           const name = specifier.text;
           const target =
-            [...sources.keys()].find((p) => p === name || (name.startsWith("#/") && [".ts",".tsx"].some(ext=>p === `${WEB}${name.slice(2)}${ext}`))) ??
+            [...sources.keys()].find(
+              (p) =>
+                p === name ||
+                (name.startsWith("#/") &&
+                  [".ts", ".tsx"].some((ext) => p === `${WEB}${name.slice(2)}${ext}`)),
+            ) ??
             resolveModule(file, name) ??
             (name.startsWith("#/") ? `${WEB}${name.slice(2)}.ts` : name);
           imports.push({ node, target });
@@ -460,10 +500,12 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
   }
   // A type import may name a declaration beside its runtime without importing that runtime.
   // Direct private-owner type access remains forbidden, as does every executable/re-export path.
-  const typeOnly=(node:ts.Node)=>
-    (ts.isImportDeclaration(node) && (node.importClause?.isTypeOnly ||
-      (node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings) &&
-       node.importClause.namedBindings.elements.every(binding=>binding.isTypeOnly)))) ||
+  const typeOnly = (node: ts.Node) =>
+    (ts.isImportDeclaration(node) &&
+      (node.importClause?.isTypeOnly ||
+        (node.importClause?.namedBindings &&
+          ts.isNamedImports(node.importClause.namedBindings) &&
+          node.importClause.namedBindings.elements.every((binding) => binding.isTypeOnly)))) ||
     (ts.isExportDeclaration(node) && node.isTypeOnly);
   function reaches(file: string, targets: Set<string>, seen = new Set<string>()): boolean {
     if (targets.has(file)) return true;
@@ -487,9 +529,16 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
       ) &&
       !privateModules.has(file);
     for (const edge of imports) {
-      const compositionImport = admittedPlaceRoots.has(file) &&
-        !privateModules.has(edge.target) && !ts.isExportDeclaration(edge.node);
-      if (route && !compositionImport && (!typeOnly(edge.node) || privateModules.has(edge.target)) && reaches(edge.target, privateModules))
+      const compositionImport =
+        admittedPlaceRoots.has(file) &&
+        !privateModules.has(edge.target) &&
+        !ts.isExportDeclaration(edge.node);
+      if (
+        route &&
+        !compositionImport &&
+        (!typeOnly(edge.node) || privateModules.has(edge.target)) &&
+        reaches(edge.target, privateModules)
+      )
         result.rawPageImports!.push(identity(edge.node));
       if (
         file.startsWith(WEB) &&

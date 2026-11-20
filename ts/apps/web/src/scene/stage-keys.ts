@@ -1,6 +1,6 @@
 /** Stage bindings teach the same keys the picture answers, never a second legend list. */
 import { chordLabel, useScopeKeys, type ScopeKey, type ScopeGesture } from "@pe/kit/keys";
-import { ORBIT_GESTURES } from "./gestures";
+import { ORBIT_GESTURES } from "@pe/web-kernel/scene/gestures";
 
 export function useStageKeys(
   keys: readonly ScopeKey[],

@@ -3,7 +3,7 @@ import { PreparedCache, preparedFootprint } from "./prepared-cache";
 import { SceneCache, sceneAdmissionBytes, type SceneData } from "./scene-cache";
 import { SceneMemory } from "./scene-memory";
 import type { PreparedGeometry } from "./prepare-geometry";
-import { SceneMeshes } from "./types";
+import { SceneMeshes } from "@pe/web-kernel/scene/types";
 
 const prepared = (buffer = new ArrayBuffer(100)): PreparedGeometry => ({
   positions: new Float32Array(buffer, 0, 3),

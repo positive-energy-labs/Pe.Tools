@@ -8,27 +8,39 @@ import { test, expect } from "vite-plus/test";
 
 // The no-legacy ruling retires import/archive, not current-epoch recovery authority.
 // Current-row interrupted recovery stays covered by the action/recording witnesses.
-test.each([4, 5, 6, 7])("journal epoch %s is discarded without conversion, archive or resumed authority", async version => {
-  const dir = await mkdtemp(join(tmpdir(), "pe-retired-journal-"));
-  try {
-    const path = join(dir, "journal.jsonl");
-    const oldAction = randomUUID();
-    await writeFile(path, [JSON.stringify({ version }),
-      JSON.stringify({ mapping: [JSON.stringify(["action", "old-action"]), oldAction] }),
-      "unsupported old row payload", ""].join("\n"), "utf8");
-    const owner = journalAt(path, Date.now);
-    expect(await owner.list()).toEqual([]);
-    // No archive or converted uncertain command survives: the folder holds only the fresh journal,
-    // which is one header line that records the discard for the replay guard.
-    expect(await readdir(dir)).toEqual(["journal.jsonl"]);
-    expect((await readFile(path, "utf8")).trim().split("\n")).toHaveLength(1);
-    const current = await owner.actionJoin("old-action");
-    expect(current.actionId).not.toBe(oldAction);
-    expect(JSON.parse((await readFile(path, "utf8")).split("\n")[0]!)).toEqual({
-      version: 8,
-      discarded: expect.any(String),
-    });
-    expect(await journalAt(path, Date.now).actionJoin("old-action")).toEqual(current);
-    expect(await journalAt(path, Date.now).list()).toEqual([]);
-  } finally { await rm(dir, { recursive: true, force: true }); }
-});
+test.each([4, 5, 6, 7])(
+  "journal epoch %s is discarded without conversion, archive or resumed authority",
+  async (version) => {
+    const dir = await mkdtemp(join(tmpdir(), "pe-retired-journal-"));
+    try {
+      const path = join(dir, "journal.jsonl");
+      const oldAction = randomUUID();
+      await writeFile(
+        path,
+        [
+          JSON.stringify({ version }),
+          JSON.stringify({ mapping: [JSON.stringify(["action", "old-action"]), oldAction] }),
+          "unsupported old row payload",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      const owner = journalAt(path, Date.now);
+      expect(await owner.list()).toEqual([]);
+      // No archive or converted uncertain command survives: the folder holds only the fresh journal,
+      // which is one header line that records the discard for the replay guard.
+      expect(await readdir(dir)).toEqual(["journal.jsonl"]);
+      expect((await readFile(path, "utf8")).trim().split("\n")).toHaveLength(1);
+      const current = await owner.actionJoin("old-action");
+      expect(current.actionId).not.toBe(oldAction);
+      expect(JSON.parse((await readFile(path, "utf8")).split("\n")[0]!)).toEqual({
+        version: 8,
+        discarded: expect.any(String),
+      });
+      expect(await journalAt(path, Date.now).actionJoin("old-action")).toEqual(current);
+      expect(await journalAt(path, Date.now).list()).toEqual([]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);

@@ -73,7 +73,7 @@ export function scratchPageKey(
 /** One Pages folder, or the product's Pages in every home, in list order (user, project, firm). */
 export type PagesRoots = string | readonly string[];
 export const productPagesRoots = (pointer?: string | null) =>
-  contentHomes(pointer).map(home => join(home.root, productPathNames.pagesDirectoryName));
+  contentHomes(pointer).map((home) => join(home.root, productPathNames.pagesDirectoryName));
 
 /**
  * Every scratch folder holding an `index.html`, in every home, with its key or why it has none.
@@ -123,13 +123,10 @@ async function scratchPages(pagesRoots: PagesRoots) {
  * The folder a scratch slug names, in whichever home holds it; else the user home's (the first
  * root), unwritten yet: a new Page starts in the user home. A slug with no key names no folder.
  */
-export async function scratchPageDirectory(
-  slug: string,
-  pagesRoots?: PagesRoots,
-) {
+export async function scratchPageDirectory(slug: string, pagesRoots?: PagesRoots) {
   if (pagesRoots === undefined) {
     await contentRootsReady();
-    if (!contentHomes().some(home => home.tier === "user")) throw new ContentHomeUnavailable();
+    if (!contentHomes().some((home) => home.tier === "user")) throw new ContentHomeUnavailable();
     pagesRoots = productPagesRoots();
   }
   const roots = [pagesRoots].flat();
@@ -146,10 +143,11 @@ export async function scratchPageDirectory(
 }
 
 /** Scratch Pages: every folder under a Pages root holding an `index.html`, newest first. */
-export async function scratchPageDescriptors(
-  pagesRoots?: PagesRoots,
-): Promise<PageDescriptor[]> {
-  if (pagesRoots === undefined) { await contentRootsReady(); pagesRoots = productPagesRoots(); }
+export async function scratchPageDescriptors(pagesRoots?: PagesRoots): Promise<PageDescriptor[]> {
+  if (pagesRoots === undefined) {
+    await contentRootsReady();
+    pagesRoots = productPagesRoots();
+  }
   const pages: PageDescriptor[] = [];
   for (const { directory, folder, modified, named } of await scratchPages(pagesRoots)) {
     const bytes = await readFile(join(directory, "index.html"));

@@ -11,23 +11,38 @@ import {
 import { RouteWorkspace } from "@pe/runtime";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { detachedBridge, sessionView } from "./effect-test.ts";
-import { readFamily, runPods } from "../src/family-actions.ts";
+import { readFamily } from "../src/family-actions.ts";
+import { runPods } from "../src/family-actions.ts";
 import type { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
 import { sdkSessions } from "./native-receipt-fixture.ts";
 
 test("concurrent Pod file reads do not acquire process terminal listeners", async () => {
   const before = process.stdin.listenerCount("end");
-  const entered = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
   let pending = 0;
-  const reads = Array.from({ length: 16 }, () => runPods({}, Effect.gen(function* () {
-    const files = yield* FileSystem.FileSystem;
-    const exists = yield* files.exists(import.meta.filename);
-    yield* Effect.promise(() => { if (++pending === 16) entered.resolve(); return release.promise; });
-    return exists;
-  })));
-  try { await entered.promise; expect(process.stdin.listenerCount("end")).toBe(before); }
-  finally { release.resolve(); expect(await Promise.all(reads)).toEqual(Array(16).fill(true)); }
+  const reads = Array.from({ length: 16 }, () =>
+    runPods(
+      {},
+      Effect.gen(function* () {
+        const files = yield* FileSystem.FileSystem;
+        const exists = yield* files.exists(import.meta.filename);
+        yield* Effect.promise(() => {
+          if (++pending === 16) entered.resolve();
+          return release.promise;
+        });
+        return exists;
+      }),
+    ),
+  );
+  try {
+    await entered.promise;
+    expect(process.stdin.listenerCount("end")).toBe(before);
+  } finally {
+    release.resolve();
+    expect(await Promise.all(reads)).toEqual(Array(16).fill(true));
+  }
   expect(process.stdin.listenerCount("end")).toBe(before);
 });
 
@@ -61,9 +76,16 @@ function fixture() {
     },
   });
   const invoke = vi.fn(
-    (key: string, _input: unknown, _session?: string, _openId?: string | null, _requestId?: string) =>
+    (
+      key: string,
+      _input: unknown,
+      _session?: string,
+      _openId?: string | null,
+      _requestId?: string,
+    ) =>
       Effect.promise(async () => {
-        if (key === CANCEL_OPERATION_KEY) return { target: { session: "bridge-a", document: null }, value: {} };
+        if (key === CANCEL_OPERATION_KEY)
+          return { target: { session: "bridge-a", document: null }, value: {} };
         await duringRead?.();
         return {
           target: { session: "bridge-a", document: null },

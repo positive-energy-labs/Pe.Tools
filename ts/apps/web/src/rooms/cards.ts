@@ -17,7 +17,13 @@ type MarkState = "accepted" | "pass" | "fail" | "stale" | "gone";
 export type CardState = MarkState;
 
 /** Inbox order: what wants a person first; passing last. */
-export const CARD_STATES = ["fail", "stale", "gone", "accepted", "pass"] as const satisfies readonly CardState[];
+export const CARD_STATES = [
+  "fail",
+  "stale",
+  "gone",
+  "accepted",
+  "pass",
+] as const satisfies readonly CardState[];
 const STATE_ORDER: readonly CardState[] = CARD_STATES;
 
 /** Each state's glyph, its tone (null = plain ink) and what it means, then its next move. */

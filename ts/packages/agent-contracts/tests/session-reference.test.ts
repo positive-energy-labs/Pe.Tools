@@ -19,9 +19,7 @@ it("the SDK id a result printed names its connected attachment", () => {
 
 it("an SDK id with no connected attachment is left for the resolver to refuse as session-gone", () => {
   expect(bridgeSessionFor("pe.app-99", sessions)).toBe("pe.app-99");
-  expect(
-    bridgeSessionFor("pe.app-25", [{ ...sessions[0]!, connected: false }]),
-  ).toBe("pe.app-25");
+  expect(bridgeSessionFor("pe.app-25", [{ ...sessions[0]!, connected: false }])).toBe("pe.app-25");
 });
 
 it("an SDK id shared by two attachments names neither", () => {
@@ -30,6 +28,9 @@ it("an SDK id shared by two attachments names neither", () => {
 });
 
 it("a bridge id wins over an SDK id spelled the same", () => {
-  const clash = [{ sessionId: "x", sdkSessionId: null, connected: true }, { sessionId: "y", sdkSessionId: "x", connected: true }];
+  const clash = [
+    { sessionId: "x", sdkSessionId: null, connected: true },
+    { sessionId: "y", sdkSessionId: "x", connected: true },
+  ];
   expect(bridgeSessionFor("x", clash)).toBe("x");
 });

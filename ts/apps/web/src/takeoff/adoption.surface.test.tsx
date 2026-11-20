@@ -1,4 +1,4 @@
-import { valueOf } from "../route/typed-route";
+import { valueOf } from "@pe/web-kernel/route/typed-route";
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
@@ -17,10 +17,19 @@ test("Initialize plan names the host reading's missing shared parameters before 
     const owner = j.mount.owner();
     if (!owner?.handle) throw Error("Expected initialized Takeoffs Work");
     const revision = owner.handle.revision;
-    await withInvocationContext({ caller: { kind: "human", via: "local" } }, () => j.host.workspace.publish(j.key, "takeoffs", [{
-      path: ["writeIntent", "takeoffs.initialize"],
-      value: { edit: { value: { stage: "Adoption" } } },
-    }], revision));
+    await withInvocationContext({ caller: { kind: "human", via: "local" } }, () =>
+      j.host.workspace.publish(
+        j.key,
+        "takeoffs",
+        [
+          {
+            path: ["writeIntent", "takeoffs.initialize"],
+            value: { edit: { value: { stage: "Adoption" } } },
+          },
+        ],
+        revision,
+      ),
+    );
     await j.ready();
     await planned(j.mount.verb("initialize")).plan();
     const review = planned(j.mount.verb("initialize")).read();
@@ -28,11 +37,14 @@ test("Initialize plan names the host reading's missing shared parameters before 
     expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000001");
     expect(review?.rows.join(" ")).toContain("00000000-0000-4000-8000-000000000002");
     expect(j.actions.map((row) => row.key)).not.toContain("takeoffs.initialize");
-  } finally { await j.close(); }
+  } finally {
+    await j.close();
+  }
 });
 
 test("view choices stay pending for a slow native catalogue, arrive before capture, retain named failures and only then report a completed empty catalogue", async () => {
-  const catalogue = gate(), snapshot = gate();
+  const catalogue = gate(),
+    snapshot = gate();
   const j = await journey({ catalogue, snapshot });
   try {
     render(<Drawing mount={j.mount} />);
@@ -45,17 +57,37 @@ test("view choices stay pending for a slow native catalogue, arrive before captu
     await new Promise((resolve) => setTimeout(resolve, 24000));
     expect(reading()).toBeTruthy();
     expect(screen.queryByText("no views")).toBeNull();
-    expect(new Set(j.nativeCalls.filter((call) => call.key === "revit.catalog.project-index").map((call) => JSON.stringify(call.input))).size).toBe(1);
+    expect(
+      new Set(
+        j.nativeCalls
+          .filter((call) => call.key === "revit.catalog.project-index")
+          .map((call) => JSON.stringify(call.input)),
+      ).size,
+    ).toBe(1);
     expect(j.nativeCalls.some((call) => call.key === "takeoffs.snapshot")).toBe(false);
-    await new Promise((resolve) => setTimeout(resolve, Math.max(0, 36000 - (Date.now() - started))));
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(0, 36000 - (Date.now() - started))),
+    );
     catalogue.release.resolve();
     await snapshot.entered.promise;
     // The catalogue arrived before the capture: the chooser draws while the adoption reading is still in flight.
     fireEvent.click(await screen.findByRole("button", { name: "Choose views" }));
     expect(await screen.findByRole("option", { name: "Zoning plan" })).toBeTruthy();
     expect(j.mount.value().state === "ready").toBe(false);
-    expect(new Set(j.nativeCalls.filter((call) => call.key === "revit.catalog.project-index").map((call) => JSON.stringify(call.input))).size).toBe(1);
-    expect(j.nativeScopes.every((scope) => JSON.stringify(scope) === JSON.stringify({ bridgeSessionId: ref.session, openDocumentId: ref.openId }))).toBe(true);
+    expect(
+      new Set(
+        j.nativeCalls
+          .filter((call) => call.key === "revit.catalog.project-index")
+          .map((call) => JSON.stringify(call.input)),
+      ).size,
+    ).toBe(1);
+    expect(
+      j.nativeScopes.every(
+        (scope) =>
+          JSON.stringify(scope) ===
+          JSON.stringify({ bridgeSessionId: ref.session, openDocumentId: ref.openId }),
+      ),
+    ).toBe(true);
     snapshot.release.resolve();
     await j.ready();
     const retained = gate();
@@ -67,7 +99,9 @@ test("view choices stay pending for a slow native catalogue, arrive before captu
     retained.release.resolve();
     await j.ready();
     j.rereadCatalogue("failed");
-    expect(await screen.findByText(/View catalogue unavailable:.*project index unavailable/)).toBeTruthy();
+    expect(
+      await screen.findByText(/View catalogue unavailable:.*project index unavailable/),
+    ).toBeTruthy();
     expect(screen.getByRole("option", { name: /Zoning plan/ })).toBeTruthy();
     expect(screen.queryByText("no views")).toBeNull();
     expect(j.actions).toHaveLength(0);
@@ -84,7 +118,7 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
   const j = await journey();
   try {
     await j.ready();
-    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    expect(j.host.inputs.source).toMatchObject({ capturing: true });
     render(<Drawing mount={j.mount} />);
     expect(screen.getByRole("button", { name: "Choose views" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Choose views" }));
@@ -128,7 +162,14 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
       stage: "Adoption",
     });
     fireEvent.click(screen.getByRole("button", { name: "adopt" }));
-    await waitFor(() => expect(j.actions.map((row) => row.key), j.mount.verb("adopt").failure ?? screen.queryByRole("alert")?.textContent ?? "").toContain("takeoffs.adopt"), { timeout: 20000 });
+    await waitFor(
+      () =>
+        expect(
+          j.actions.map((row) => row.key),
+          j.mount.verb("adopt").failure ?? screen.queryByRole("alert")?.textContent ?? "",
+        ).toContain("takeoffs.adopt"),
+      { timeout: 20000 },
+    );
     expect(j.actions.map((row) => row.key)).toContain(
       commands["takeoffs.adopt"].writeBoundary.previewKey,
     );
@@ -149,10 +190,10 @@ test("choose adoption views, edit the actual Work, initialize and adopt through 
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByRole("button", { name: "live" })).toBeTruthy();
     expect(j.mount.value(loaded).state === "ready").toBe(true);
-    expect(j.host.inputs.source).toMatchObject({capturing:true});
-    fireEvent.click(screen.getByRole("button", {name:"live"}));
+    expect(j.host.inputs.source).toMatchObject({ capturing: true });
+    fireEvent.click(screen.getByRole("button", { name: "live" }));
     await j.ready();
-    expect(j.host.inputs.source).toMatchObject({capturing:true});
+    expect(j.host.inputs.source).toMatchObject({ capturing: true });
   } finally {
     await j.close();
   }

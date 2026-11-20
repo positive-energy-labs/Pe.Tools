@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
-import type { CellWire } from "#/components/work/band";
+import type { CellWire } from "@pe/web-kernel/components/work/band";
 import { Button } from "@pe/kit/lang/button";
 import { staleAnswer } from "./columns";
 

@@ -8,17 +8,17 @@
  * The worst complete path draws heavy. Every layer carries `targets` and `findings`, so hover,
  * pick and pins work through the picture's one plumbing.
  */
-import { damageLayers } from "@pe/web/scene/damage";
-import { inkOf } from "@pe/web/scene/ink";
-import { markFrame,markLines } from "@pe/web/scene/marks";
-import type { Layer3D,SceneMeshes } from "@pe/web/scene/types";
+import { damageLayers } from "@pe/web-kernel/scene/damage";
+import { inkOf } from "@pe/web-kernel/scene/ink";
+import { markFrame, markLines } from "@pe/web-kernel/scene/marks";
+import type { Layer3D, SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { DuctsDesign } from "@pe/duct-systems-contract/ducts";
 import type { DuctsCalcOverview } from "@pe/fans-contract/calc-read";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
-import { findingLayers,findingShapes,type FindingShapes } from "@pe/ducts-web/finding-layers";
+import { findingLayers, findingShapes, type FindingShapes } from "@pe/ducts-web/finding-layers";
 import type { StageIssue } from "@pe/ducts-domain/stage-issue";
 import type { Detail } from "@pe/ducts-web/calc/model";
-import { isConsequence,presentIds,type CalcBlocker } from "./tiers.ts";
+import { isConsequence, presentIds, type CalcBlocker } from "./tiers.ts";
 
 type Kind = DuctsCalcOverview["blockers"][number]["kind"];
 /** Kinds whose door is the element's damage skin. */

@@ -66,7 +66,7 @@ test("the host-owned /pe surface answers without Revit", async () => {
       yield* Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
-          inputs: testInputContext(),
+            inputs: testInputContext(),
             capabilities: { revit: false },
             lifecycle: { handle, latch },
             nodeServer,

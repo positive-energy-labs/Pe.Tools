@@ -2,10 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { deepEqual, useNavigate, useSearch, useRouter } from "@tanstack/react-router";
 import { resolveWorkbenchConfig } from "../config";
-import {
-  selectRunStatus,
-  selectTurnFailure,
-} from "@pe/agent-contracts/chat-state";
+import { selectRunStatus, selectTurnFailure } from "@pe/agent-contracts/chat-state";
 import { previousOf, useHostStatusSlice } from "#/host/resource-state";
 import { appAtomRegistry, useRouteOwner } from "#/shell/owner";
 import { createChatPageStore } from "../store";
@@ -17,7 +14,12 @@ import * as Atom from "effect/reactivity/Atom";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { errorMessage } from "./use-workbench";
 import { EMPTY_HEAD, isReady, useProviders, type HeadDraft } from "./providers";
-import { machineInventory, routeAddress, targetKey, type DocumentRequest } from "@pe/agent-contracts";
+import {
+  machineInventory,
+  routeAddress,
+  targetKey,
+  type DocumentRequest,
+} from "@pe/agent-contracts";
 import { demoThreads } from "#/workbench/thread-navigation";
 import { useEnvironmentReading } from "#/host/environment-state";
 import type { HarnessThreadBody } from "@pe/agent-contracts";

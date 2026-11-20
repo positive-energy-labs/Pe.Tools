@@ -21,16 +21,23 @@ test("Q5: a join patch issued from the fans route does not land in Ducts Work", 
   const joins = [{ pair: ["1:1", "2:1"] as [string, string], verdict: "accept" as const }];
   const patches = editPatches({ joins });
   expect(patches).toEqual([
-    { path: ["assumptions", "join:1:1|2:1", "edit"], value: { value: { kind: "verdict", verdict: "connect" } } },
+    {
+      path: ["assumptions", "join:1:1|2:1", "edit"],
+      value: { value: { kind: "verdict", verdict: "connect" } },
+    },
   ]);
   // The same patch lands in Ducts Work, so the path is typed end to end on /ducts.
   const envelope = <D>(doc: D) => ({ version: 1 as const, revision: 0, doc });
-  expect(applyPatches(ductsRouteState, envelope(ductsRouteState.schema.parse({})), "human", patches, 0)).toMatchObject({ ok: true });
+  expect(
+    applyPatches(ductsRouteState, envelope(ductsRouteState.schema.parse({})), "human", patches, 0),
+  ).toMatchObject({ ok: true });
   // From /fans it has three doors, and each is shut.
   expect(edits.input.safeParse({ joins }).success).toBe(false);
   expect(Object.keys(edits.owners)).not.toContain("duct-systems");
   expect(edits.work).toBe(fansRouteState);
-  expect(applyPatches(fansRouteState, envelope(fansRouteState.schema.parse({})), "human", patches, 0)).toMatchObject({ ok: false });
+  expect(
+    applyPatches(fansRouteState, envelope(fansRouteState.schema.parse({})), "human", patches, 0),
+  ).toMatchObject({ ok: false });
   // So the closer's join action is one of /ducts' fixes, which /fans draws as a link.
   expect(DUCTS_FIXES.has("rule")).toBe(true);
 });

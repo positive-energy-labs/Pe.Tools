@@ -3,13 +3,19 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { basename, dirname } from "node:path";
 import { generatedKind, writeGenerated } from "@pe/host-contracts/kinds";
-import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "@pe/host-contracts/route-startup";
-import type { RouteStartupProjection } from "@pe/host-contracts/route-startup";
+import {
+  routeStartupOwner,
+  routeStartupSourceHash,
+  currentRouteStartupProjection,
+  readRouteStartupReceipt,
+} from "@pe/web/route-startup";
+import type { RouteStartupProjection } from "@pe/web/route-startup";
 
 declare const __PE_SOURCE_COMMIT__: string;
 const sourceClosure = generatedKind(["source-closure.generated.json"]);
 const mark = (phase: string) =>
-  process.env.PE_START_TIMING && console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
+  process.env.PE_START_TIMING &&
+  console.error(`PE_START_TIMING ${phase} ${Math.round(performance.now())}`);
 
 /** ADR 0029 rule 4 exception: this source bootstrap runs before the Effect graph has a process scope.
  * Builtin closures are untracked build output that the host graph imports from disk under jiti.
@@ -34,9 +40,11 @@ export async function prepareDevRouteProjection(): Promise<RouteStartupProjectio
   let current = !!receipt;
   if (!receipt) {
     const sourceHash = routeStartupSourceHash(root);
-    const { stdout } = await promisify(execFile)(process.execPath, [
-      fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)), "--runtime",
-    ], { maxBuffer: 16 * 1024 * 1024 });
+    const { stdout } = await promisify(execFile)(
+      process.execPath,
+      [fileURLToPath(new URL("../../web/scripts/route-graphs.ts", import.meta.url)), "--runtime"],
+      { maxBuffer: 16 * 1024 * 1024 },
+    );
     mark("receipt-produced");
     receipt = { checkout: routeStartupOwner(root), sourceHash, projections: JSON.parse(stdout) };
     current = currentRouteStartupProjection(root, receipt);

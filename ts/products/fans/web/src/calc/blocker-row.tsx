@@ -68,31 +68,42 @@ export function BlockerRow({
   }, [focused]);
   // A fix /ducts owns is a link that opens /ducts on the blocker's element (ruling 2026-11-10).
   const fixLink = (link: { says: string; href: string }) => (
-    <a href={link.href} className="t-small" data-ducts-fix="" onClick={(event) => event.stopPropagation()}>{link.says}</a>
+    <a
+      href={link.href}
+      className="t-small"
+      data-ducts-fix=""
+      onClick={(event) => event.stopPropagation()}
+    >
+      {link.says}
+    </a>
   );
-  const crossingVerb = closer.crossing && (closer.crossing.link ? fixLink(closer.crossing.link) : (
-    <>
-      <Button
-        label={`${closer.crossing.verb} for ${blocker.kind}`}
-        refusal={closer.crossing.refusal}
-        onClick={() =>
-          onClose({
-            ...closer,
-            verb: closer.crossing!.verb,
-            refusal: closer.crossing!.refusal,
-            action: closer.crossing!.action,
-            secondary: null,
-            crossing: null,
-          })
-        }
-      >
-        {closer.crossing.verb}
-      </Button>
-      <span className="t-small text-ink-2" data-crossing-distance="">
-        {closer.crossing.distanceIn.toFixed(3)} in
-      </span>
-    </>
-  ));
+  const crossingVerb =
+    closer.crossing &&
+    (closer.crossing.link ? (
+      fixLink(closer.crossing.link)
+    ) : (
+      <>
+        <Button
+          label={`${closer.crossing.verb} for ${blocker.kind}`}
+          refusal={closer.crossing.refusal}
+          onClick={() =>
+            onClose({
+              ...closer,
+              verb: closer.crossing!.verb,
+              refusal: closer.crossing!.refusal,
+              action: closer.crossing!.action,
+              secondary: null,
+              crossing: null,
+            })
+          }
+        >
+          {closer.crossing.verb}
+        </Button>
+        <span className="t-small text-ink-2" data-crossing-distance="">
+          {closer.crossing.distanceIn.toFixed(3)} in
+        </span>
+      </>
+    ));
   return (
     <div
       ref={row}
@@ -173,7 +184,9 @@ export function BlockerRow({
               />
             )}
             {closer.crossing?.first && crossingVerb}
-            {closer.link ? fixLink(closer.link) : closer.choices?.length ? (
+            {closer.link ? (
+              fixLink(closer.link)
+            ) : closer.choices?.length ? (
               // "price with…": each table the fitting may read, named with the rule it reads under.
               <ListPopup<PriceChoice>
                 key={`${blocker.id}:${closer.refusal}`}
@@ -204,24 +217,26 @@ export function BlockerRow({
               </Button>
             )}
             {closer.crossing && !closer.crossing.first && crossingVerb}
-            {closer.secondary?.link ? fixLink(closer.secondary.link) : closer.secondary && (
-              <Button
-                kind="quiet"
-                label={`${closer.secondary.verb} for ${blocker.kind}`}
-                refusal={closer.secondary.refusal}
-                onClick={() =>
-                  onClose({
-                    ...closer,
-                    verb: closer.secondary!.verb,
-                    refusal: closer.secondary!.refusal,
-                    action: closer.secondary!.action,
-                    secondary: null,
-                  })
-                }
-              >
-                {closer.secondary.verb}
-              </Button>
-            )}
+            {closer.secondary?.link
+              ? fixLink(closer.secondary.link)
+              : closer.secondary && (
+                  <Button
+                    kind="quiet"
+                    label={`${closer.secondary.verb} for ${blocker.kind}`}
+                    refusal={closer.secondary.refusal}
+                    onClick={() =>
+                      onClose({
+                        ...closer,
+                        verb: closer.secondary!.verb,
+                        refusal: closer.secondary!.refusal,
+                        action: closer.secondary!.action,
+                        secondary: null,
+                      })
+                    }
+                  >
+                    {closer.secondary.verb}
+                  </Button>
+                )}
           </span>
           {closer.refusal && (
             <span className="t-small col-span-2 col-start-2 truncate text-ink-2" data-refusal="">

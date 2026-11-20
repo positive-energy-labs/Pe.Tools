@@ -119,15 +119,23 @@ test("one allowlist rejects unclosed labels, stamp spoofing, null identity and a
   ).toBeNull();
 });
 
-test.each(["reading.timeout", "reading.failed"] as const)("machine diagnostic %s exports the step name only", (code) => {
-  const body = { kind: "diagnostic", code, readingKind: "machine", readingLeg: "years" } as const;
-  expect(receiptBodySchema.safeParse(body).success).toBe(true);
-  expect(projectReceipt(r(body))?.properties).toMatchObject({ reading_leg: "years" });
-  expect(receiptBodySchema.safeParse({ ...body, readingLeg: "holdings:C:/private/model.rvt" }).success).toBe(false);
-  expect(receiptBodySchema.safeParse({ ...body, error: "C:/private/model.rvt" }).success).toBe(false);
-  expect(projectReceipt(r({ ...body, localRef: { path: "C:/private/model.rvt" } })))
-    .not.toHaveProperty("properties.localRef");
-});
+test.each(["reading.timeout", "reading.failed"] as const)(
+  "machine diagnostic %s exports the step name only",
+  (code) => {
+    const body = { kind: "diagnostic", code, readingKind: "machine", readingLeg: "years" } as const;
+    expect(receiptBodySchema.safeParse(body).success).toBe(true);
+    expect(projectReceipt(r(body))?.properties).toMatchObject({ reading_leg: "years" });
+    expect(
+      receiptBodySchema.safeParse({ ...body, readingLeg: "holdings:C:/private/model.rvt" }).success,
+    ).toBe(false);
+    expect(receiptBodySchema.safeParse({ ...body, error: "C:/private/model.rvt" }).success).toBe(
+      false,
+    );
+    expect(
+      projectReceipt(r({ ...body, localRef: { path: "C:/private/model.rvt" } })),
+    ).not.toHaveProperty("properties.localRef");
+  },
+);
 
 test("the actual PostHog client wire carries the original receipt timestamp and only safe diagnostic fields", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pe-posthog-wire-"));

@@ -54,9 +54,11 @@ const changed = (root: URL) => (event: string, file: string | null) => {
 const watchRoots = devWatchRoots(hostDirectory);
 const watchers = watchRoots.map((root) => watch(root, { recursive: true }, changed(root)));
 const workspaceChanged = changed(workspace);
-watchers.push(watch(workspace, (event, file) => {
-  if (file === "pnpm-lock.yaml") workspaceChanged(event, file);
-}));
+watchers.push(
+  watch(workspace, (event, file) => {
+    if (file === "pnpm-lock.yaml") workspaceChanged(event, file);
+  }),
+);
 const stop = () => {
   stopped = true;
   for (const watcher of watchers) watcher.close();

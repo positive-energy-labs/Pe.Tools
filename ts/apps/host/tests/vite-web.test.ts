@@ -56,7 +56,7 @@ test("Vite owns HMR, proxies the claimed backend, and restarts without replacing
       Effect.raceFirst(
         Layer.launch(
           makeHttpLive({
-          inputs: testInputContext(),
+            inputs: testInputContext(),
             capabilities: { revit: true },
             lifecycle: { handle, latch },
             port: 0,

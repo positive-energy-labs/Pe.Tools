@@ -1,6 +1,6 @@
 import { FAN_CALC_GUIDE, ductsRosterRequestSchema, ductsCalcRequestSchema } from "../calc-read.ts";
 import { createPeCatalog } from "@pe/agent-contracts/pe-api";
-import { hostActions } from "@pe/agent-contracts/semantic-actions";
+import { builtinHostActions as hostActions } from "@pe/agent-contracts/semantic-actions";
 import { fansReadDiscovery } from "../read-discovery.ts";
 import { renderDuctsSkill } from "../pea/ducts-skill.ts";
 import { expect, test } from "vite-plus/test";
@@ -42,8 +42,19 @@ test("the ducts skill triggers on airflow and connectivity questions, not only p
     "the project cut sheet or submittal first, then a schedule, then the vendor's site",
   );
   expect(text).toContain("read_document, image: true and a crop");
-  expect(text).toContain("fill it yourself through the owning Fans or Duct Systems tool's Work with the source cited");
-  for (const step of ["Locate the project folder", "Inventory the project folder", "Rank the sources", "Find the design basis", "fetch the manufacturer's published data yourself", "the text layer reports a struck row as live", "Report one row per component on the walked path", "A cell may stay blank only after you ran a WebSearch"]) {
+  expect(text).toContain(
+    "fill it yourself through the owning Fans or Duct Systems tool's Work with the source cited",
+  );
+  for (const step of [
+    "Locate the project folder",
+    "Inventory the project folder",
+    "Rank the sources",
+    "Find the design basis",
+    "fetch the manufacturer's published data yourself",
+    "the text layer reports a struck row as live",
+    "Report one row per component on the walked path",
+    "A cell may stay blank only after you ran a WebSearch",
+  ]) {
     expect(text).toContain(step);
   }
 });

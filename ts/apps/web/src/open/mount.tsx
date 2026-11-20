@@ -1,4 +1,4 @@
-import type { ReadingState } from "#/shell/source-contract";
+import type { ReadingState } from "@pe/web-kernel/shell/source-contract";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { HarnessThreadSummary, Machine } from "@pe/agent-contracts";
 import type { OpenContext } from "../machine/open-fields";
@@ -52,18 +52,20 @@ export function OpenBody({ ctx }: { ctx: OpenContext }) {
           : "Documents on the left, Revits on the right."}{" "}
         Pick a document, patch it into a Revit, and press the one verb that names what happens.
       </p>
-      {machine && <OpenOwnerContext value={owner}>
-        <PatchBay
-          administration={false}
-          machine={machine}
-          loading={!machine && ["absent", "pending"].includes(reading.status)}
-          refusal={reading.current ? null : "Refresh the machine reading before changing Revit"}
-          rows={rows}
-          threads={threads}
-          fixture={false}
-          layout={layout}
-        />
-      </OpenOwnerContext>}
+      {machine && (
+        <OpenOwnerContext value={owner}>
+          <PatchBay
+            administration={false}
+            machine={machine}
+            loading={!machine && ["absent", "pending"].includes(reading.status)}
+            refusal={reading.current ? null : "Refresh the machine reading before changing Revit"}
+            rows={rows}
+            threads={threads}
+            fixture={false}
+            layout={layout}
+          />
+        </OpenOwnerContext>
+      )}
     </Scroll>
   );
 }

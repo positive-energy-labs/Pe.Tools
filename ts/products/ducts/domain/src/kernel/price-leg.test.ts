@@ -37,13 +37,8 @@ const conn = (
 ) => connOf(index, to, { kind, point, direction: "out", ...size });
 const node = (id: number, kind: Node["kind"], extra: Partial<Node>) =>
   nodeOf(id, kind, { category: "", point: [0, 0, 0], groupId: "g1", ...extra });
-const duct = (
-  id: number,
-  lengthFt: number,
-  size: Size,
-  polyline: number[][],
-  connectors: Conn[],
-) => ductOf(id, { ...size, lengthFt, polyline, groupId: "g1", connectors });
+const duct = (id: number, lengthFt: number, size: Size, polyline: number[][], connectors: Conn[]) =>
+  ductOf(id, { ...size, lengthFt, polyline, groupId: "g1", connectors });
 
 const elbow = node(2, "fitting", {
   partType: "Elbow",
@@ -144,16 +139,28 @@ it("splits a tapped duct into Cs legs (passed) and a Cb leg (left by)", () => {
   ).toEqual(["friction", "friction"]);
 });
 
-it.each([0, 1])("signed branch flow changes only after the tap from end %s", end => {
+it.each([0, 1])("signed branch flow changes only after the tap from end %s", (end) => {
   for (const branchCfm of [-100, 100]) {
-    const split = splitTappedDuct({ duct: duct3, upstream: duct3.connectors[end],
-      upstreamCfm: 300, taps: [{ tap, branchCfm }] });
+    const split = splitTappedDuct({
+      duct: duct3,
+      upstream: duct3.connectors[end],
+      upstreamCfm: 300,
+      taps: [{ tap, branchCfm }],
+    });
     expect(split[0]).toMatchObject({ kind: "friction", lengthFt: end === 0 ? 5 : 7, cfm: 300 });
-    expect(split[2]).toMatchObject({ kind: "friction", lengthFt: end === 0 ? 7 : 5, cfm: 300 - branchCfm });
-    expect(split[1]).toMatchObject({ kind: "tap-straight", flows: {
-      branch: 100, upstreamMain: branchCfm > 0 ? 300 : 400,
-      downstreamMain: branchCfm > 0 ? 200 : 300,
-    } });
+    expect(split[2]).toMatchObject({
+      kind: "friction",
+      lengthFt: end === 0 ? 7 : 5,
+      cfm: 300 - branchCfm,
+    });
+    expect(split[1]).toMatchObject({
+      kind: "tap-straight",
+      flows: {
+        branch: 100,
+        upstreamMain: branchCfm > 0 ? 300 : 400,
+        downstreamMain: branchCfm > 0 ? 200 : 300,
+      },
+    });
   }
 });
 
@@ -335,7 +342,16 @@ it("names why a leg is unpriced: a table not loaded, a tap with no branch flow, 
     ),
   ).toMatchObject({ lossInWg: 0.02, source: { kind: "drop", source: "typed" } });
   expect(
-    priceLeg({ kind: "drop", element: grille, cfm: 200, inWg: null, source: "firm default", isDefault: true }, grids)
-      .unpriced,
+    priceLeg(
+      {
+        kind: "drop",
+        element: grille,
+        cfm: 200,
+        inWg: null,
+        source: "firm default",
+        isDefault: true,
+      },
+      grids,
+    ).unpriced,
   ).toMatch(/no drop/);
 });

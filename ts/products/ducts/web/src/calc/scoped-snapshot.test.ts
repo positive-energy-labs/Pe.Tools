@@ -9,8 +9,12 @@ import { EMPTY_SNAPSHOT, CALC_GROUP, calcSnapshot, calcSystems } from "./scoped-
 it("a raw ids read draws every element under the one sheet group", () => {
   const raw = {
     ...networkSnapshot,
-    nodes: networkSnapshot.nodes.slice(0, 2).map((node, i) => ({ ...node, id: i + 1, groupId: null })),
-    segments: networkSnapshot.segments.slice(0, 1).map(segment => ({ ...segment, id: 3, groupId: null })),
+    nodes: networkSnapshot.nodes
+      .slice(0, 2)
+      .map((node, i) => ({ ...node, id: i + 1, groupId: null })),
+    segments: networkSnapshot.segments
+      .slice(0, 1)
+      .map((segment) => ({ ...segment, id: 3, groupId: null })),
   };
   const snapshot = calcSnapshot(raw);
   expect(snapshot.groups.map((g) => g.id)).toEqual([CALC_GROUP]);
@@ -22,14 +26,21 @@ it("a raw ids read draws every element under the one sheet group", () => {
 it("decodes absence separately and keeps native timestamp validation strict", () => {
   expect(fansCalcData.shape.calcSnapshot.parse({ kind: "absent" })).toEqual({ kind: "absent" });
   expect(fansCalcData.shape.calcSnapshot.safeParse(EMPTY_SNAPSHOT).success).toBe(false);
-  const native = { ...networkSnapshot, document: { ...networkSnapshot.document, readAt: "2026-11-04T13:25:39.031595+00:00" } };
+  const native = {
+    ...networkSnapshot,
+    document: { ...networkSnapshot.document, readAt: "2026-11-04T13:25:39.031595+00:00" },
+  };
   expect(nativeResponseSchema("ducts.snapshot.walk").safeParse(native).success).toBe(true);
   expect(fansCalcData.shape.calcSnapshot.safeParse(native).success).toBe(true);
 });
 
 it("owner links scope only canonical roster entries and omit scope for bounded ids snapshots", () => {
-  const bounded = { ...networkSnapshot, systems: [], nodes: networkSnapshot.nodes.map(node => ({ ...node, systemName: "SA 20,RA 37" })) };
+  const bounded = {
+    ...networkSnapshot,
+    systems: [],
+    nodes: networkSnapshot.nodes.map((node) => ({ ...node, systemName: "SA 20,RA 37" })),
+  };
   expect(calcSystems(bounded)).toEqual([]);
   const canonical = { ...bounded, systems: networkSnapshot.systems };
-  expect(calcSystems(canonical)).toEqual(networkSnapshot.systems.map(system => system.name));
+  expect(calcSystems(canonical)).toEqual(networkSnapshot.systems.map((system) => system.name));
 });

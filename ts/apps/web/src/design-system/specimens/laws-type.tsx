@@ -90,9 +90,7 @@ export function TypeLaws({ owner }: { owner: (name: string) => string }) {
           <span className="w-48">
             <Input placeholder="Search threads" aria-label="family field" />
           </span>
-          <Button label="fork">
-            fork
-          </Button>
+          <Button label="fork">fork</Button>
           <Button icon={Plus} label="New thread" kind="framed" />
           <Button icon={Paperclip} label="Attach a file" />
           <Button icon={GitFork} label="Fork" refusal="Nothing to fork yet: the thread is empty" />

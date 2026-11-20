@@ -9,26 +9,64 @@ import { createTimelineClient, createWorkFeedClient } from "./work-feed-client";
 
 test("Timeline reads host order, releases its publication, and sends the offered step with every Work", async () => {
   const stop = vi.fn();
-  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => { accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } }); return stop; });
+  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => {
+    accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } });
+    return stop;
+  });
   const works = [key, { ...key, route: "second" }];
   const expected = { work: works[1]!, revision: 1, label: "Second" };
   const rows = [
     { kind: "edit", work: key, revision: 1, by: "human", state: "applied", label: "First", at: 20 },
-    { kind: "edit", work: works[1], revision: 1, by: "human", state: "applied", label: "Second", at: 10 },
+    {
+      kind: "edit",
+      work: works[1],
+      revision: 1,
+      by: "human",
+      state: "applied",
+      label: "Second",
+      at: 10,
+    },
   ];
-  const response = vi.fn(async (name: string, _input: unknown) => Response.json(name === "reads.value"
-    ? { generation: 0, version: 1, state: "current", value: { evaluation: "test", coverage: { refused: [], unknown: [] }, data: { rows, undo: expected, redo: null, refusal: { undo: null, redo: null } } } }
-    : { ok: true }));
+  const response = vi.fn(async (name: string, _input: unknown) =>
+    Response.json(
+      name === "reads.value"
+        ? {
+            generation: 0,
+            version: 1,
+            state: "current",
+            value: {
+              evaluation: "test",
+              coverage: { refused: [], unknown: [] },
+              data: { rows, undo: expected, redo: null, refusal: { undo: null, redo: null } },
+            },
+          }
+        : { ok: true },
+    ),
+  );
   const client = createTimelineClient({ response });
   const deliver = vi.fn();
   const close = client.open(works, deliver);
   try {
-    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ rows, undo: expected }), undefined));
+    await vi.waitFor(() =>
+      expect(deliver).toHaveBeenCalledWith(
+        expect.objectContaining({ rows, undo: expected }),
+        undefined,
+      ),
+    );
     expect(await client.step({ direction: "undo", works, expected })).toBeNull();
-    expect(response).toHaveBeenCalledWith("work.history", expect.objectContaining({ body: { direction: "undo", works, expected } }));
-  } finally { close(); vi.restoreAllMocks(); }
+    expect(response).toHaveBeenCalledWith(
+      "work.history",
+      expect.objectContaining({ body: { direction: "undo", works, expected } }),
+    );
+  } finally {
+    close();
+    vi.restoreAllMocks();
+  }
   expect(stop).toHaveBeenCalledOnce();
-  expect(response).toHaveBeenCalledWith("reads.value", expect.objectContaining({ body: expect.objectContaining({ release: true, args: { works } }) }));
+  expect(response).toHaveBeenCalledWith(
+    "reads.value",
+    expect.objectContaining({ body: expect.objectContaining({ release: true, args: { works } }) }),
+  );
 });
 const key = { binding: "host", route: "note", target: null } as const;
 
@@ -37,31 +75,82 @@ test("Timeline displays the named capacity refusal", async () => {
     accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } });
     return () => {};
   });
-  const client = createTimelineClient({ response: async () => Response.json({
-    message: "Read subscription capacity reached", problem: "read.subscription-capacity",
-  }, { status: 429 }) });
-  const deliver = vi.fn(), close = client.open([], deliver);
+  const client = createTimelineClient({
+    response: async () =>
+      Response.json(
+        {
+          message: "Read subscription capacity reached",
+          problem: "read.subscription-capacity",
+        },
+        { status: 429 },
+      ),
+  });
+  const deliver = vi.fn(),
+    close = client.open([], deliver);
   try {
-    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(null,
-      "Error: Read subscription capacity reached [read.subscription-capacity]"));
-  } finally { close(); vi.restoreAllMocks(); }
+    await vi.waitFor(() =>
+      expect(deliver).toHaveBeenCalledWith(
+        null,
+        "Error: Read subscription capacity reached [read.subscription-capacity]",
+      ),
+    );
+  } finally {
+    close();
+    vi.restoreAllMocks();
+  }
 });
 
 test("the no-owner document head reads and steps the same host document scope", async () => {
   const stop = vi.fn();
-  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => { accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } }); return stop; });
-  const document = { binding: "open", route: "chat", target: null, open: { session: "proof", openId: "document" } } as const;
+  vi.spyOn(peReadings, "subscribe").mockImplementation((_request, accept) => {
+    accept({ kind: "snapshot", key: "publication", value: { generation: 0, state: "absent" } });
+    return stop;
+  });
+  const document = {
+    binding: "open",
+    route: "chat",
+    target: null,
+    open: { session: "proof", openId: "document" },
+  } as const;
   const expected = { work: { ...document, route: "fans" }, revision: 1, label: "Fans" };
-  const response = vi.fn(async (name: string, _input: unknown) => Response.json(name === "reads.value"
-    ? { generation: 0, version: 1, state: "current", value: { evaluation: "test", coverage: { refused: [], unknown: [] }, data: { rows: [], undo: expected, redo: null, refusal: { undo: null, redo: null } } } } : { ok: true }));
-  const client = createTimelineClient({ response }), deliver = vi.fn();
+  const response = vi.fn(async (name: string, _input: unknown) =>
+    Response.json(
+      name === "reads.value"
+        ? {
+            generation: 0,
+            version: 1,
+            state: "current",
+            value: {
+              evaluation: "test",
+              coverage: { refused: [], unknown: [] },
+              data: { rows: [], undo: expected, redo: null, refusal: { undo: null, redo: null } },
+            },
+          }
+        : { ok: true },
+    ),
+  );
+  const client = createTimelineClient({ response }),
+    deliver = vi.fn();
   const close = client.open([], deliver, document);
   try {
-    await vi.waitFor(() => expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ undo: expected }), undefined));
+    await vi.waitFor(() =>
+      expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ undo: expected }), undefined),
+    );
     expect(await client.step({ direction: "undo", works: [], document, expected })).toBeNull();
-    expect(response).toHaveBeenCalledWith("work.history", expect.objectContaining({ body: { direction: "undo", works: [], document, expected } }));
-  } finally { close(); vi.restoreAllMocks(); }
-  expect(response).toHaveBeenCalledWith("reads.value", expect.objectContaining({ body: expect.objectContaining({ release: true, args: { works: [], document } }) }));
+    expect(response).toHaveBeenCalledWith(
+      "work.history",
+      expect.objectContaining({ body: { direction: "undo", works: [], document, expected } }),
+    );
+  } finally {
+    close();
+    vi.restoreAllMocks();
+  }
+  expect(response).toHaveBeenCalledWith(
+    "reads.value",
+    expect.objectContaining({
+      body: expect.objectContaining({ release: true, args: { works: [], document } }),
+    }),
+  );
 });
 const scope: WorkScope = {
   route: "note",
@@ -135,7 +224,10 @@ test("absent Work stays absent without failing or releasing feeds, then accepts 
   expect(h.end).not.toHaveBeenCalled();
   expect(h.stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
   h.emit("work", snapshot(0));
-  expect(h.values.at(-1)).toMatchObject({ kind: "ready", snapshot: { revision: 0, value: { amount: 0 } } });
+  expect(h.values.at(-1)).toMatchObject({
+    kind: "ready",
+    snapshot: { revision: 0, value: { amount: 0 } },
+  });
   h.unsubscribe();
   expect(h.stops.every((stop) => stop.mock.calls.length === 1)).toBe(true);
 });
@@ -286,7 +378,9 @@ test.each([
     received: scope.fingerprint,
   },
   {
-    kind: "failed", code: "WorkReadFailed", message: "read failed",
+    kind: "failed",
+    code: "WorkReadFailed",
+    message: "read failed",
   },
   { kind: "failed", code: "HostUnavailable", message: "offline" },
 ] as const)(

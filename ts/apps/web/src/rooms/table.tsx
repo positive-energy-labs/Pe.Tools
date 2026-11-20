@@ -17,11 +17,7 @@ import type { RoomsContext } from "./route";
 import { EmptyState } from "@pe/kit/lang/empty";
 import type { Column, Verdict } from "@pe/kit/table/model";
 import { Table } from "@pe/kit/table/table";
-import {
-  REGION_INK,
-  lockedStale,
-  regionState,
-} from "./plan";
+import { REGION_INK, lockedStale, regionState } from "./plan";
 import type { RoomRow, RoomsRegion } from "./rows";
 
 const ROOM_TYPES = roomEditSchema.shape.type.unwrap().options;
@@ -69,8 +65,7 @@ export function RoomsTable({
       .map((row) => row.region.guid),
   );
   const hovered =
-    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.guid ??
-    null;
+    rows.find((row) => attention.hovered.has(elementKey(row.region.uniqueId)))?.region.guid ?? null;
   const columns = useMemo<Column<RoomRow>[]>(() => {
     const zoneLabels = new Map(
       // A zone that flipped to a room is its own zone.
@@ -89,11 +84,14 @@ export function RoomsTable({
     ): StateCellProps | HandleCellProps => {
       const held = shown(row.region[field]);
       if (!cells) return { value: held, cap: "locked", capReason: "No writable owner" };
-      const baseline=field === "role" && row.region.designation !== "person"?undefined:row.region[field];
-      const owned=cells.at(["edits",roomEditKey(row.region.guid,field)],undefined,{
-        model:row.region[field],...(baseline == null || baseline === "" ? {}:{baseline})});
+      const baseline =
+        field === "role" && row.region.designation !== "person" ? undefined : row.region[field];
+      const owned = cells.at(["edits", roomEditKey(row.region.guid, field)], undefined, {
+        model: row.region[field],
+        ...(baseline == null || baseline === "" ? {} : { baseline }),
+      });
       return {
-        cell:owned,
+        cell: owned,
         value,
         label: `Edit ${row.label} ${field}`,
         model: row.region[field],

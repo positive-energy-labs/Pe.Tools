@@ -101,26 +101,55 @@ const flatten = (nodes: readonly CalcTreeNode[]): CalcTreeNode[] =>
 test("shared trunk renders partial known loss and withholds ESP bars on two incomplete claims", () => {
   const { snapshot, sheets } = example(true);
   for (const incomplete of [false, true]) {
-    if (incomplete) for (const sheet of sheets) {
-      sheet.claim = { kind: "incomplete", basis: "test", knownInWg: 0, coverage: [], blockingIds: ["missing"] };
-      sheet.totals.requiredEspInWg = null;
-    }
+    if (incomplete)
+      for (const sheet of sheets) {
+        sheet.claim = {
+          kind: "incomplete",
+          basis: "test",
+          knownInWg: 0,
+          coverage: [],
+          blockingIds: ["missing"],
+        };
+        sheet.totals.requiredEspInWg = null;
+      }
     const all = flatten(buildCalcTree(snapshot, sheets));
     const shared = all.filter((n) => n.kind === "element" && n.id === 13);
-    const fans = all.filter((n) => n.name.includes("full fan sheet")).map((n) => ({ ...n, children: [] }));
+    const fans = all
+      .filter((n) => n.name.includes("full fan sheet"))
+      .map((n) => ({ ...n, children: [] }));
     expect(shared).toHaveLength(2);
-    expect(all.filter((n) => n.name.includes("full fan sheet")).every((n) => incomplete ? n.total === null : n.total! > 0)).toBe(true);
-    const { container } = render(createElement(SystemTree, { ctx: {
-      trees: [...shared, ...fans], scale: 1, criticalKey: null, selected: null,
-      grilleName: (n) => n.name, ruleOf: new Map(), select: () => {},
-      jumpToRule: () => {}, reading: null, designRate: 1,
-    } }));
+    expect(
+      all
+        .filter((n) => n.name.includes("full fan sheet"))
+        .every((n) => (incomplete ? n.total === null : n.total! > 0)),
+    ).toBe(true);
+    const { container } = render(
+      createElement(SystemTree, {
+        ctx: {
+          trees: [...shared, ...fans],
+          scale: 1,
+          criticalKey: null,
+          selected: null,
+          grilleName: (n) => n.name,
+          ruleOf: new Map(),
+          select: () => {},
+          jumpToRule: () => {},
+          reading: null,
+          designRate: 1,
+        },
+      }),
+    );
     const bars = [...container.querySelectorAll("[data-e-bar]")];
     expect(bars).toHaveLength(4);
     for (const [i, bar] of bars.slice(0, 2).entries()) {
       expect(bar.textContent).toContain(shared[i]!.self!.toFixed(4));
-      expect(bar.querySelector('[data-tone="caution"]')?.textContent.includes("partial") ?? false).toBe(incomplete);
-      if (incomplete) expect(bar.querySelector('[data-tone="caution"]')!.parentElement!.textContent).toContain(shared[i]!.total!.toFixed(4));
+      expect(
+        bar.querySelector('[data-tone="caution"]')?.textContent.includes("partial") ?? false,
+      ).toBe(incomplete);
+      if (incomplete)
+        expect(bar.querySelector('[data-tone="caution"]')!.parentElement!.textContent).toContain(
+          shared[i]!.total!.toFixed(4),
+        );
       expect(bar.getAttribute("data-e-bar") !== "").toBe(!incomplete);
     }
     for (const [i, bar] of bars.slice(2).entries()) {
@@ -198,7 +227,9 @@ test("fanless: snapshot elements and native health survive with no number and on
       .sort((a, b) => a! - b!),
   ).toEqual([11, 12, 13, 20, 30, 99]);
   const heal = healPlan(snapshot);
-  expect(heal.groups.flatMap(group => group.items).some(item => item.end === "99:0")).toBe(false);
+  expect(heal.groups.flatMap((group) => group.items).some((item) => item.end === "99:0")).toBe(
+    false,
+  );
   expect(heal.hard.get("open:99:0")?.note).toContain("flow unknown");
 });
 
@@ -235,9 +266,14 @@ test("retained Manual D geometry: fan boundaries and a sibling's shared intake s
   // navigation group, while the legs, connectivity and native health remain captured evidence.
   // Q4 (2026-11-16): MUAS-1's family reads against its network, so the capture states the roles it was certified under (`manual-d.test.ts`).
   const snapshot = calcSnapshot(
-    withFamilyFlipped(nativeResponseSchema("ducts.snapshot.walk").parse({
-      ...retained, walk: { ...retained.walk, unreadPeers: [] }, vocabulary: VOCABULARY,
-    }), 14577391),
+    withFamilyFlipped(
+      nativeResponseSchema("ducts.snapshot.walk").parse({
+        ...retained,
+        walk: { ...retained.walk, unreadPeers: [] },
+        vocabulary: VOCABULARY,
+      }),
+      14577391,
+    ),
   );
   const suggested = suggestRoster(snapshot);
   const roster = [...suggested.fans, ...suggested.suggestions];
@@ -256,7 +292,10 @@ test("retained Manual D geometry: fan boundaries and a sibling's shared intake s
     }),
   );
   const trees = buildCalcTree(snapshot, sheets);
-  for (const [id, length] of [["13760945:0>4", 0.8408], ["13890846:1>0", 7.5165]] as const) {
+  for (const [id, length] of [
+    ["13760945:0>4", 0.8408],
+    ["13890846:1>0", 7.5165],
+  ] as const) {
     const evidence = sheets[1]!.legs[id]!.evidence;
     expect(evidence.kind).toBe("friction");
     if (evidence.kind === "friction") expect(evidence.lengthFt).toBeCloseTo(length, 4);

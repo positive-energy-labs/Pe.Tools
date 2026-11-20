@@ -2,7 +2,14 @@ import { expect, test } from "vite-plus/test";
 import { withComputed, type FanPort } from "@pe/ducts-web/calc/model";
 
 const fan = (unitId: number, extra: Partial<FanPort> = {}) =>
-  ({ unitId, portIndex: 2, uniqueId: `u${unitId}`, mark: `M${unitId}`, kind: "muas", ...extra }) as FanPort;
+  ({
+    unitId,
+    portIndex: 2,
+    uniqueId: `u${unitId}`,
+    mark: `M${unitId}`,
+    kind: "muas",
+    ...extra,
+  }) as FanPort;
 
 test("a fan the ledger computed never reads 'not computed' on the roster", () => {
   const roster = [fan(1), fan(2)];

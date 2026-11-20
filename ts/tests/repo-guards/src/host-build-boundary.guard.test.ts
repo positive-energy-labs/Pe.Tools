@@ -24,20 +24,48 @@ const runtimeImports = (source: ts.SourceFile) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
       const clause = node.importClause;
       const names = clause?.namedBindings;
-      if (!clause?.isTypeOnly && !(!clause?.name && names && ts.isNamedImports(names) &&
-          names.elements.length && names.elements.every((name) => name.isTypeOnly)))
+      if (
+        !clause?.isTypeOnly &&
+        !(
+          !clause?.name &&
+          names &&
+          ts.isNamedImports(names) &&
+          names.elements.length &&
+          names.elements.every((name) => name.isTypeOnly)
+        )
+      )
         imports.push(node.moduleSpecifier.text);
-    } else if (ts.isExportDeclaration(node) && !node.isTypeOnly && node.moduleSpecifier &&
-        ts.isStringLiteral(node.moduleSpecifier)) {
+    } else if (
+      ts.isExportDeclaration(node) &&
+      !node.isTypeOnly &&
+      node.moduleSpecifier &&
+      ts.isStringLiteral(node.moduleSpecifier)
+    ) {
       const names = node.exportClause;
-      if (!(names && ts.isNamedExports(names) && names.elements.length &&
-          names.elements.every((name) => name.isTypeOnly))) imports.push(node.moduleSpecifier.text);
-    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword &&
-        node.arguments[0] && ts.isStringLiteral(node.arguments[0])) imports.push(node.arguments[0].text);
+      if (
+        !(
+          names &&
+          ts.isNamedExports(names) &&
+          names.elements.length &&
+          names.elements.every((name) => name.isTypeOnly)
+        )
+      )
+        imports.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+    )
+      imports.push(node.arguments[0].text);
     // Vite's `import.meta.glob` is an edge too (route/registry.ts reaches every route.ts this way):
     // each match is imported by its relative path.
-    else if (ts.isCallExpression(node) && node.expression.getText(source) === "import.meta.glob" &&
-        node.arguments[0] && ts.isStringLiteral(node.arguments[0]))
+    else if (
+      ts.isCallExpression(node) &&
+      node.expression.getText(source) === "import.meta.glob" &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+    )
       for (const match of globSync(node.arguments[0].text, { cwd: dirname(source.fileName) }))
         imports.push(`./${slash(match)}`);
     ts.forEachChild(node, visit);
@@ -47,23 +75,42 @@ const runtimeImports = (source: ts.SourceFile) => {
 };
 
 /** Every repo module the build reaches from `entries`, with each forbidden edge `file: specifier`. */
-function closure(entries: string[], compiler: ts.CompilerOptions, forbid: (specifier: string, target: string | undefined) => boolean) {
-  const seen = new Set<string>(), offenders: string[] = [];
+function closure(
+  entries: string[],
+  compiler: ts.CompilerOptions,
+  forbid: (specifier: string, target: string | undefined) => boolean,
+) {
+  const seen = new Set<string>(),
+    offenders: string[] = [];
   const walk = (file: string) => {
     file = slash(ts.sys.realpath?.(file) ?? file);
     if (seen.has(file) || !existsSync(file)) return;
     seen.add(file);
-    const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+    const source = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
     for (const specifier of runtimeImports(source)) {
-      const target = ts.resolveModuleName(specifier, file, compiler, ts.sys).resolvedModule?.resolvedFileName;
+      const target = ts.resolveModuleName(specifier, file, compiler, ts.sys).resolvedModule
+        ?.resolvedFileName;
       const resolved = target && slash(target);
-      if (forbid(specifier, resolved)) offenders.push(`${slash(file).slice(root.length + 1)}: ${specifier}`);
-      else if (resolved && !resolved.includes("/node_modules/") && !/\.d\.[cm]?ts$/.test(resolved) && !resolved.endsWith(".json")) walk(resolved);
+      if (forbid(specifier, resolved))
+        offenders.push(`${slash(file).slice(root.length + 1)}: ${specifier}`);
+      else if (
+        resolved &&
+        !resolved.includes("/node_modules/") &&
+        !/\.d\.[cm]?ts$/.test(resolved) &&
+        !resolved.endsWith(".json")
+      )
+        walk(resolved);
     }
   };
   // A renamed entry must fail here: walking nothing would report a clean build.
   for (const entry of entries) {
-    if (!existsSync(entry)) throw Error(`Build entry is missing: ${slash(entry).slice(root.length + 1)}`);
+    if (!existsSync(entry))
+      throw Error(`Build entry is missing: ${slash(entry).slice(root.length + 1)}`);
     walk(entry);
   }
   return { seen, offenders };
@@ -72,39 +119,78 @@ function closure(entries: string[], compiler: ts.CompilerOptions, forbid: (speci
 /** A route directory holds a `route.ts`; `route/host.ts` and `scene/host.ts` are kernel browser modules, not reads. */
 const routeDirectories = () =>
   readdirSync(join(root, "apps/web/src"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(root, "apps/web/src", entry.name, "route.ts")))
+    .filter(
+      (entry) =>
+        entry.isDirectory() && existsSync(join(root, "apps/web/src", entry.name, "route.ts")),
+    )
     .map((entry) => entry.name);
 const routeHostReads = () =>
   routeDirectories()
     .filter((folder) => existsSync(join(root, "apps/web/src", folder, "host.ts")))
     .map((folder) => slash(join(root, "apps/web/src", folder, "host.ts")));
 
-test("the host build reaches every route directory's host.ts and no browser-only module", { timeout: 120_000 }, () => {
-  const { seen, offenders } = closure([join(root, "apps/host/src/index.ts")], options("apps/host"), (specifier, target) =>
-    /^(?:react(?:-dom)?(?:\/|$)|@tanstack\/react-|lucide-react)|\.(?:css|scss|less)$/.test(specifier) ||
-    !!target?.endsWith("/apps/web/src/host/runtime.ts") || /\/apps\/web\/src\/[^/]+\/route\.tsx?$/.test(target ?? ""));
-  const hostReads = routeHostReads();
-  expect({
-    browserEdges: offenders,
-    routeHostReadsOutsideTheBuild: hostReads.filter((file) => !seen.has(file)).map((file) => file.slice(root.length + 1)),
-    routeDirectoriesWithAHostRead: hostReads.length,
-  }, "no route directory holds a host.ts yet: host reads still live under apps/host/src/reads").toEqual({
-    browserEdges: [], routeHostReadsOutsideTheBuild: [], routeDirectoriesWithAHostRead: expect.any(Number),
-  });
-  expect(hostReads.length, "no route directory holds a host.ts: the host build registers no route-directory read").toBeGreaterThan(0);
-});
+test(
+  "the host build reaches every route directory's host.ts and no browser-only module",
+  { timeout: 120_000 },
+  () => {
+    const { seen, offenders } = closure(
+      [join(root, "apps/host/src/index.ts")],
+      options("apps/host"),
+      (specifier, target) =>
+        /^(?:react(?:-dom)?(?:\/|$)|@tanstack\/react-|lucide-react)|\.(?:css|scss|less)$/.test(
+          specifier,
+        ) ||
+        !!target?.endsWith("/apps/web/src/host/runtime.ts") ||
+        /\/apps\/web\/src\/[^/]+\/route\.tsx?$/.test(target ?? ""),
+    );
+    const hostReads = routeHostReads();
+    expect(
+      {
+        browserEdges: offenders,
+        routeHostReadsOutsideTheBuild: hostReads
+          .filter((file) => !seen.has(file))
+          .map((file) => file.slice(root.length + 1)),
+        routeDirectoriesWithAHostRead: hostReads.length,
+      },
+      "no route directory holds a host.ts yet: host reads still live under apps/host/src/reads",
+    ).toEqual({
+      browserEdges: [],
+      routeHostReadsOutsideTheBuild: [],
+      routeDirectoriesWithAHostRead: expect.any(Number),
+    });
+    expect(
+      hostReads.length,
+      "no route directory holds a host.ts: the host build registers no route-directory read",
+    ).toBeGreaterThan(0);
+  },
+);
 
-test("the web build reaches builtins through route/registry.ts and no host module", { timeout: 120_000 }, () => {
-  // router.tsx reaches the TanStack file routes (routes/$route.tsx, design-system_.*, api/*) through routeTree.gen.ts,
-  // and the builtin registry through them. Neither is an entry, so each must be reached to count as covered.
-  const entries = [join(root, "apps/web/src/router.tsx"), join(root, "apps/web/src/routes/__root.tsx")];
-  const reached = ["apps/web/src/route/registry.ts", "apps/web/src/routes/$route.tsx"];
-  const reads = new Set(routeHostReads());
-  // Vite resolves a client build under the `browser` export condition (@pe/runtime/context's browser twin).
-  const { seen, offenders } = closure(entries, { ...options("apps/web"), customConditions: ["browser"] }, (specifier, target) =>
-    specifier.startsWith("node:") || (!!target && (target.includes("/apps/host/src/") || reads.has(target))));
-  expect({
-    hostEdges: offenders,
-    unreached: reached.filter((file) => !seen.has(slash(join(root, file)))),
-  }, "the web build no longer reaches its file routes or its builtin registry from router.tsx").toEqual({ hostEdges: [], unreached: [] });
-});
+test(
+  "the web build reaches builtins through route/registry.ts and no host module",
+  { timeout: 120_000 },
+  () => {
+    // router.tsx reaches the TanStack file routes (routes/$route.tsx, design-system_.*, api/*) through routeTree.gen.ts,
+    // and the builtin registry through them. Neither is an entry, so each must be reached to count as covered.
+    const entries = [
+      join(root, "apps/web/src/router.tsx"),
+      join(root, "apps/web/src/routes/__root.tsx"),
+    ];
+    const reached = ["apps/web/src/route/registry.ts", "apps/web/src/routes/$route.tsx"];
+    const reads = new Set(routeHostReads());
+    // Vite resolves a client build under the `browser` export condition (@pe/runtime/context's browser twin).
+    const { seen, offenders } = closure(
+      entries,
+      { ...options("apps/web"), customConditions: ["browser"] },
+      (specifier, target) =>
+        specifier.startsWith("node:") ||
+        (!!target && (target.includes("/apps/host/src/") || reads.has(target))),
+    );
+    expect(
+      {
+        hostEdges: offenders,
+        unreached: reached.filter((file) => !seen.has(slash(join(root, file)))),
+      },
+      "the web build no longer reaches its file routes or its builtin registry from router.tsx",
+    ).toEqual({ hostEdges: [], unreached: [] });
+  },
+);

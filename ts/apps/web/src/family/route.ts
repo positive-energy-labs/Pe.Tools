@@ -1,17 +1,17 @@
 import * as contracts from "./contract.ts";
-import type { ContextOf, Verbs } from "../route/defaults";
+import type { ContextOf, Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { read } from "../route/defaults";
+import { read } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { familyDraftRouteState, routeStatePatchSchema } from "@pe/agent-contracts";
 import { familyPageSchema } from "./page";
-import { route, field } from "../route/defaults";
-import { hostRead } from "../route/host-read";
-import { draw } from "../route/draw";
+import { route, field } from "@pe/web-kernel/route";
+import { hostRead } from "@pe/web-kernel/host-read";
+import { draw } from "@pe/web-kernel/route/draw";
 
 import { presentFamilyPlan } from "./review";
 import { podMemberCode, podMemberOfCode, type Immutable } from "@pe/agent-contracts";
-import { split, subjectSchema } from "../route/defaults";
+import { split, subjectSchema } from "@pe/web-kernel/route";
 import { isSpecOf } from "../route/workflow.ts";
 import { FAMILY_MODEL_SCHEMA } from "./page";
 const address = familyPageSchema.shape;
@@ -39,12 +39,17 @@ export const query = {
   sort: field(address.sort, { columns: [] }, "query"),
   hidden: field(address.hidden, {}, "query"),
 };
-export const loaded = read(
-  hostRead(contracts.workspace),
-  (page: Parameters<typeof member>[0]) => ({ member: member(page) }),
-);
+export const loaded = read(hostRead(contracts.workspace), (page: Parameters<typeof member>[0]) => ({
+  member: member(page),
+}));
 export const edits = z.array(routeStatePatchSchema);
-export type FamilyContext = ContextOf<typeof fields & typeof query, typeof loaded, typeof import("@pe/agent-contracts").familyDraftRouteState, typeof edits, Verbs<"attach">>;
+export type FamilyContext = ContextOf<
+  typeof fields & typeof query,
+  typeof loaded,
+  typeof import("@pe/agent-contracts").familyDraftRouteState,
+  typeof edits,
+  Verbs<"attach">
+>;
 export const module = route({
   key: "family",
   name: "Family",
@@ -74,7 +79,10 @@ export const module = route({
       data.pods.flatMap((pod) =>
         pod.members
           .filter((entry) => isSpecOf(entry.schema ?? null, FAMILY_MODEL_SCHEMA))
-          .map((entry) => ({ id: podMemberCode({ pod: pod.id, path: entry.path }), label: `${pod.name} · ${entry.path}` })),
+          .map((entry) => ({
+            id: podMemberCode({ pod: pod.id, path: entry.path }),
+            label: `${pod.name} · ${entry.path}`,
+          })),
       ),
   },
   core: loaded,
@@ -119,7 +127,9 @@ export const module = route({
       // The subject names the member; the roster names the exact bytes it adopts.
       input: ({ page, value }) => {
         const ref = member(page);
-        const sha256 = value?.pods.find((pod) => pod.id === ref?.pod)?.members.find((entry) => entry.path === ref?.path)?.sha256;
+        const sha256 = value?.pods
+          .find((pod) => pod.id === ref?.pod)
+          ?.members.find((entry) => entry.path === ref?.path)?.sha256;
         return ref && sha256 ? { source: { ...ref, sha256 } } : {};
       },
     },

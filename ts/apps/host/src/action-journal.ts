@@ -1,11 +1,12 @@
+import type { ActionExecution, AttemptHost } from "@pe/host-internal/action-execution";
 import type { HostInputContext } from "./input-context.ts";
 import type {
   CommandContext,
-  CommandEnvironment,
   CommandBinding,
   CommandExecutor,
-} from "./command-executor.ts";
-import { claimRejected, CommandRejected, StepFailure, io, refused } from "./command-executor.ts";
+} from "@pe/host-internal/command-executor";
+import { claimRejected, type CommandEnvironment } from "./command-executor.ts";
+import { CommandRejected, StepFailure, io, refused } from "@pe/host-internal/command-executor";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { validateNativeInput } from "./native-input.ts";
 import type { ReadOwner } from "./reads/read-ownership.ts";
@@ -13,11 +14,26 @@ import { bindActionDispatch, type DispatchRefusal } from "./action-dispatch.ts";
 import { appendFile, mkdir, readdir, readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { stateDirectory } from "@pe/host-contracts/service-identity";
-import { stateKind, read as readStoredFile, setAside, writeState, type StoredFile } from "@pe/host-contracts/kinds";
-export const journalKind = stateKind({ schema: z.unknown(), place: (_name: string) => "Action journal", segments: (name: string) => [name] });
+import {
+  stateKind,
+  read as readStoredFile,
+  setAside,
+  writeState,
+  type StoredFile,
+} from "@pe/host-contracts/kinds";
+export const journalKind = stateKind({
+  schema: z.unknown(),
+  place: (_name: string) => "Action journal",
+  segments: (name: string) => [name],
+});
 const outputKind = stateKind({
-  schema: z.unknown(), place: (_id: string, ..._parts: string[]) => "Action outputs",
-  segments: (id: string, ...parts: string[]) => ["action-outputs", createHash("sha256").update(id).digest("hex"), ...parts],
+  schema: z.unknown(),
+  place: (_id: string, ..._parts: string[]) => "Action outputs",
+  segments: (id: string, ...parts: string[]) => [
+    "action-outputs",
+    createHash("sha256").update(id).digest("hex"),
+    ...parts,
+  ],
 });
 /**
  * K2: a captured `sourceBundle` is stored once, as `bundles/<sha256>.json` in the action's output
@@ -26,12 +42,18 @@ const outputKind = stateKind({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const swapBundles = (value: unknown, swap: (bundle: Record<string, unknown>) => unknown): unknown =>
-  Array.isArray(value) ? value.map((item) => swapBundles(item, swap))
-  : value !== null && typeof value === "object"
-    ? Object.fromEntries(Object.entries(value).map(([key, item]) => [key,
-        key === "sourceBundle" && isRecord(item) ? swap(item) : swapBundles(item, swap)]))
-    : value;
-const bundleHash = (bundle: unknown) => createHash("sha256").update(canonicalRouteInput(bundle)).digest("hex");
+  Array.isArray(value)
+    ? value.map((item) => swapBundles(item, swap))
+    : value !== null && typeof value === "object"
+      ? Object.fromEntries(
+          Object.entries(value).map(([key, item]) => [
+            key,
+            key === "sourceBundle" && isRecord(item) ? swap(item) : swapBundles(item, swap),
+          ]),
+        )
+      : value;
+const bundleHash = (bundle: unknown) =>
+  createHash("sha256").update(canonicalRouteInput(bundle)).digest("hex");
 /** Compaction runs once the file holds twice what its last compaction wrote, and at least this. */
 const COMPACT_BYTES = 1 << 20;
 import { dirname, join, relative, win32 } from "node:path";
@@ -39,15 +61,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { OwnerReads, type OwnerValue } from "@pe/runtime";
 import { withInvocationContext } from "@pe/runtime/context";
 import { Cause, Effect, Exit, FiberMap, type Fiber } from "effect";
-import type { HttpClient } from "effect/http";
-import type { FileSystem, Path } from "effect";
 import type { CausalParentId } from "../../../packages/agent-contracts/src/route-kernel-page.ts";
-import type {
-  RequestIdentity as IdentityKey,
-  RequestIdentityData,
-  ValidatedOwner,
-} from "@pe/host-internal/request-contracts";
-import { RequestIdentity, admittedRequestIdentity } from "./request-services.ts";
+import type { RequestIdentityData, ValidatedOwner } from "@pe/host-internal/request-contracts";
+import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -63,11 +79,8 @@ import {
   type ActionAdmission,
   type Consumed,
   type Claim,
-  type NativeProcess,
-  type Effect as RouteEffect,
   type WorkKey,
   type RouteStatePatch,
-  type RouteStateWriteResult,
   editableCells,
   type Command,
   workKey,
@@ -101,9 +114,9 @@ import {
   commandCheckpoint,
   subscribeRunChanges,
   validateFootprintCaller,
-  Refused,
   retainActionCaller,
 } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 
 /** Who crossed and why it was admitted: host-minted, stamped on the receipt beside the admission. */
 export type Crossing = {
@@ -134,19 +147,27 @@ const undispatched = (steps: readonly ActionStep[]) =>
 const unanswered = (step: ActionStep) =>
   step.state === "unknown" || (step.transport === "bridge" && step.bridgeReply !== "touched");
 const targetSession = (target: ActionReceipt["target"]) =>
-  target.kind === "document" ? target.ref.session : target.kind === "session" ? target.session : undefined;
+  target.kind === "document"
+    ? target.ref.session
+    : target.kind === "session"
+      ? target.session
+      : undefined;
 /** Only native terminal evidence can clear a possible document write. */
 const effected = (step: ActionStep) =>
   step.kind !== "publication" &&
   (step.kind === "native"
-    ? (!("touched" in step) || !step.touched || ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
+    ? (!("touched" in step) ||
+        !step.touched ||
+        ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)) &&
       !("notDispatched" in step && step.notDispatched)
     : step.state === "succeeded");
 // K3: a cancel settles incomplete only on evidence of a write. Unlike `effected`, a step with no touched
 // report (an SDK step, a 499 before a runner saw it) is not evidence; `touched` decides when present.
 const wroteBefore = (step: ActionStep) =>
   step.kind !== "publication" &&
-  ("touched" in step && step.touched ? ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind) : step.state === "succeeded");
+  ("touched" in step && step.touched
+    ? ["wrote", "unauthorized", "unknown", "restoreFailed"].includes(step.touched.kind)
+    : step.state === "succeeded");
 // Only a running action holds a claim (K1a, K1c): every terminal state ends it, except a plan's
 // `receipt` (claimsOf). A live Revit's year is guarded by the SDK, which refuses a start beside a
 // live session row before it dispatches.
@@ -253,39 +274,6 @@ const effectsOverlap = (a: ActionReceipt["effects"], b: ActionReceipt["effects"]
     }),
   );
 
-export type StepOptions<A> = {
-  process?: NativeProcess;
-  /** Domain postcondition, evaluated only after the operation returned a concrete outcome. */
-  check?(result: A): void;
-};
-/** The services the journal Layer holds once for every attempt it owns. */
-export type AttemptHost = FileSystem.FileSystem | Path.Path | HttpClient.HttpClient;
-/** An attempt reads its journal-owned identity, never its submitter's request context. */
-export type AttemptServices = AttemptHost | IdentityKey;
-/** A step of an owned attempt: the error channel carries what the step threw, typed or not. */
-export type Step<A> = Effect.Effect<A, unknown, AttemptServices>;
-export type ActionExecution = {
-  step<A>(
-    kind: ActionStep["kind"],
-    key: string,
-    input: unknown,
-    execute: (requestId: string) => Step<A>,
-    options?: StepOptions<A>,
-  ): Step<A>;
-  effect(effect: RouteEffect): Step<void>;
-  publishWork(
-    key: WorkKey,
-    route: string,
-    patches: readonly RouteStatePatch[],
-  ): Step<Extract<RouteStateWriteResult, { ok: true }>>;
-  retireWork(
-    key: WorkKey,
-    route: string,
-    paths: readonly WorkPath[],
-  ): Step<{ retired: WorkPath[]; revision: number }>;
-  readonly prepared: unknown;
-  recorded(kind: ActionStep["kind"], key: string): ActionStep | undefined;
-};
 /** Fibers by key in the journal Layer's scope; a fork under a running key joins it, never replaces it. */
 export type FiberOwner = {
   readonly map: FiberMap.FiberMap<string, unknown, unknown>;
@@ -321,7 +309,12 @@ const ownerIdentity = (row: ActionReceipt, parent?: string): RequestIdentityData
 export const checkFailure = (error: unknown, result: unknown): DispatchFailure =>
   error instanceof StepFailure && error.outcome !== "refused"
     ? failure(error)
-    : { state: "failed", error: messageOf(error), status: 409, evidence: { result: structuredClone(result) } };
+    : {
+        state: "failed",
+        error: messageOf(error),
+        status: 409,
+        evidence: { result: structuredClone(result) },
+      };
 /** The bridge answers a cancelled request 499 (BridgeOperationExceptions.CancelledStatusCode). */
 const CANCELLED_STATUS = 499;
 type DispatchFailure =
@@ -404,10 +397,7 @@ type SettleCause =
   | { kind: "recovered" }
   | { kind: "interrupted" };
 /** A terminal state and its fields; every caller parses the whole receipt against the schema. */
-type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<
-  string,
-  unknown
->;
+type Settled = { state: Exclude<ActionReceipt["state"], "running"> } & Record<string, unknown>;
 
 /**
  * The one terminal decision for an attempt, from its preparation, its recorded steps, and what ended
@@ -449,7 +439,8 @@ function settle(
     return { ...detail, state: "unknown" };
   }
   if (thrown?.state === "cancelled") {
-    if (steps.some(wroteBefore)) return { state: "incomplete", error: thrown.error, status: thrown.status, result: null };
+    if (steps.some(wroteBefore))
+      return { state: "incomplete", error: thrown.error, status: thrown.status, result: null };
     const { notDispatched: _notDispatched, ...cancelled } = thrown;
     return {
       ...cancelled,
@@ -468,7 +459,11 @@ function settle(
   const cancelled =
     cause.kind !== "threw" ? steps.find((step) => step.state === "cancelled") : undefined;
   if (cancelled?.state === "cancelled")
-    return { state: steps.some(wroteBefore) ? "incomplete" : "cancelled", error: cancelled.error, status: cancelled.status };
+    return {
+      state: steps.some(wroteBefore) ? "incomplete" : "cancelled",
+      error: cancelled.error,
+      status: cancelled.status,
+    };
   const failedStep = [...steps].reverse().find((step) => step.state === "failed");
   const why = reason ?? (failedStep?.state === "failed" ? failedStep : undefined);
   if (steps.some(effected)) {
@@ -582,8 +577,17 @@ export class ActionJournal implements ReceiptReader {
     /** Absent only on a read-side journal (a restart reader); such a journal admits nothing. */
     private readonly owners?: Owners,
   ) {}
-  private get path() { return this.file.path; }
-  private get storage() { return stateDirectory(this.file.machine, ...relative(this.file.machine.state, dirname(this.path)).split(/[\\\\/]/).filter(Boolean)); }
+  private get path() {
+    return this.file.path;
+  }
+  private get storage() {
+    return stateDirectory(
+      this.file.machine,
+      ...relative(this.file.machine.state, dirname(this.path))
+        .split(/[\\\\/]/)
+        .filter(Boolean),
+    );
+  }
   /** Bound once when the host/demo/test runtime acquires its exact bridge and Work owner. */
   bindCommands(environment: CommandEnvironment): void {
     if (this.environment) throw Error("This journal already has its command environment");
@@ -758,7 +762,11 @@ export class ActionJournal implements ReceiptReader {
             if (step.id !== requestId) return step;
             if (step.transport && step.transport !== transport)
               throw Error("Dispatch cannot change a step's recorded transport");
-            return actionStepSchema.parse({ ...step, transport, dispatchedAt: new Date(this.now()).toISOString() });
+            return actionStepSchema.parse({
+              ...step,
+              transport,
+              dispatchedAt: new Date(this.now()).toISOString(),
+            });
           }),
         },
       ]);
@@ -771,7 +779,7 @@ export class ActionJournal implements ReceiptReader {
     if (!retained) return null;
     const executable = executableActionReceiptSchema.safeParse(retained);
     if (!executable.success)
-      return {kind:"refused",message:"Original execution identity is unavailable"};
+      return { kind: "refused", message: "Original execution identity is unavailable" };
     const row = executable.data;
     const inputRefusal = this.inputContext?.check({ kind: "command", key: row.key });
     if (inputRefusal) return { kind: "refused", message: inputRefusal.message };
@@ -875,8 +883,11 @@ export class ActionJournal implements ReceiptReader {
         const path = join(entry.parentPath, entry.name);
         // A file that does not decode is discarded with a notice and left out (ADR 0039 `discard`);
         // a discarded bundle leaves its receipts holding the bare hash, which the script door refuses.
-        const read = readStoredFile(outputKind.in(this.storage, id, ...path.slice(home.length + 1).split(/[\\\\/]/)));
-        if (read.kind === "ok") files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
+        const read = readStoredFile(
+          outputKind.in(this.storage, id, ...path.slice(home.length + 1).split(/[\\\\/]/)),
+        );
+        if (read.kind === "ok")
+          files[path.slice(home.length + 1).replaceAll("\\", "/")] = read.value;
       }
     return { id, home, files };
   }
@@ -889,7 +900,10 @@ export class ActionJournal implements ReceiptReader {
     );
   }
   private async export(id: string, name: string, value: unknown) {
-    writeState(outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)), JSON.stringify(this.seal(id, value), null, 2));
+    writeState(
+      outputKind.in(this.storage, id, ...name.split(/[\\\\/]/)),
+      JSON.stringify(this.seal(id, value), null, 2),
+    );
   }
   private seal(id: string, value: unknown) {
     return swapBundles(value, (bundle) => {
@@ -905,15 +919,24 @@ export class ActionJournal implements ReceiptReader {
     return swapBundles(value, (bundle) => {
       // Only a hash this journal could have written is looked up. Anything else is the caller's own
       // data and stays as given, because a throw here would discard the whole journal at load.
-      if (Array.isArray(bundle.files) || typeof bundle.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(bundle.sha256)) return bundle;
-      const read = readStoredFile(outputKind.in(this.storage, id, "bundles", `${bundle.sha256}.json`));
+      if (
+        Array.isArray(bundle.files) ||
+        typeof bundle.sha256 !== "string" ||
+        !/^[0-9a-f]{64}$/.test(bundle.sha256)
+      )
+        return bundle;
+      const read = readStoredFile(
+        outputKind.in(this.storage, id, "bundles", `${bundle.sha256}.json`),
+      );
       // Missing or altered bytes keep the bare hash, so the script's own decode refuses it loudly.
       return read.kind === "ok" && bundleHash(read.value) === bundle.sha256 ? read.value : bundle;
     });
   }
   private line(receipt: Receipt) {
     const stored = persistReceipt(receipt);
-    return { receipt: stored.body.kind === "action" ? this.seal(stored.body.value.id, stored) : stored };
+    return {
+      receipt: stored.body.kind === "action" ? this.seal(stored.body.value.id, stored) : stored,
+    };
   }
   private async waitForTurn(id: string, retirementOnly = false) {
     for (;;) {
@@ -943,7 +966,9 @@ export class ActionJournal implements ReceiptReader {
     // move is the only other refusal of a second apply of that plan. It blocks one plan id, never a
     // later plan.
     const spent = !(
-      (row.state === "failed" || row.state === "cancelled") && row.notDispatched === true && undispatched(row.steps)
+      (row.state === "failed" || row.state === "cancelled") &&
+      row.notDispatched === true &&
+      undispatched(row.steps)
     );
     return row.claims.filter((claim) => (claim.kind === "receipt" ? spent : holdsClaims(row)));
   }
@@ -997,27 +1022,39 @@ export class ActionJournal implements ReceiptReader {
   }
   private workReads(row: Pick<ActionReceipt, "id" | "key" | "target" | "input">) {
     const admission = actionAdmissionSchema.parse({
-      id: row.id, key: row.key, target: row.target, input: row.input,
+      id: row.id,
+      key: row.key,
+      target: row.target,
+      input: row.input,
     });
     const owner = this.environment?.work;
     // Standalone inspection compositions use uncaptured reads. Production supplies workReads.
-    return this.environment?.workReads?.(admission) ?? (owner && {
-      read: owner.readUncaptured.bind(owner), view: owner.viewUncaptured.bind(owner),
-    });
+    return (
+      this.environment?.workReads?.(admission) ??
+      (owner && {
+        read: owner.readUncaptured.bind(owner),
+        view: owner.viewUncaptured.bind(owner),
+      })
+    );
   }
   private context(
     admission: ActionAdmission,
     crossing: Crossing,
     consumed: Consumed[],
   ): CommandContext {
-    const workspace = this.workReads(admission), owner = this.environment?.work;
+    const workspace = this.workReads(admission),
+      owner = this.environment?.work;
     const cached = new Map<string, { doc: unknown; revision: number }>();
     const context: CommandContext = {
       admission,
       ...crossing,
       get work() {
         if (!workspace || !owner) throw refused("Work is unavailable", "work.unavailable");
-        return { read: workspace.read.bind(workspace), view: workspace.view.bind(workspace), publish: owner.publish.bind(owner) };
+        return {
+          read: workspace.read.bind(workspace),
+          view: workspace.view.bind(workspace),
+          publish: owner.publish.bind(owner),
+        };
       },
       consumed,
       clock: { now: () => new Date(this.now()).toISOString() },
@@ -1247,7 +1284,12 @@ export class ActionJournal implements ReceiptReader {
       if (!sameCaller(retained.caller, crossing.caller))
         throw refused("Original command belongs to another caller", "context.foreign-caller");
       const original = persistActionReceipt(retained);
-      const identity = { id: original.id, key: original.key, target: original.target, input: original.input };
+      const identity = {
+        id: original.id,
+        key: original.key,
+        target: original.target,
+        input: original.input,
+      };
       if (canonicalRouteInput(identity) !== canonicalRouteInput(raw))
         throw refused("Request conflicts with its original retained intent", "id-conflict");
       return structuredClone(retained);
@@ -1262,14 +1304,23 @@ export class ActionJournal implements ReceiptReader {
     // A retry predating the discard may already have run. Missing or malformed first-send times
     // cannot establish that it is new, so they refuse on the safe side; so does a discard time that does not parse (NaN).
     const sentAt = z.iso.datetime().safeParse(crossing.sentAt);
-    if (!prior && crossing.resent && this.discarded && sentAt.success &&
-      Date.parse(sentAt.data) > this.now() + 5 * 60_000)
+    if (
+      !prior &&
+      crossing.resent &&
+      this.discarded &&
+      sentAt.success &&
+      Date.parse(sentAt.data) > this.now() + 5 * 60_000
+    )
       throw refused(
         `Action '${admission.id}' has a first-send time more than five minutes ahead of the host clock. Nothing was run. Check the sending device's clock, then submit it as a new action if it is still wanted.`,
         "journal.future-send",
       );
-    if (!prior && crossing.resent && this.discarded &&
-      (!sentAt.success || !(Date.parse(sentAt.data) > Date.parse(this.discarded))))
+    if (
+      !prior &&
+      crossing.resent &&
+      this.discarded &&
+      (!sentAt.success || !(Date.parse(sentAt.data) > Date.parse(this.discarded)))
+    )
       throw refused(
         `Action '${admission.id}' was sent before, and the action journal that knew whether it ran could not be read and was discarded. It is not run again. Check its result, then submit it as a new action if it is still wanted.`,
         "journal.discarded",
@@ -1470,10 +1521,12 @@ export class ActionJournal implements ReceiptReader {
         this.notify();
         return structuredClone(failed);
       }
-      row = executableActionReceiptSchema.parse(actionReceiptSchema.parse({
-        ...row,
-        state: "running",
-      }));
+      row = executableActionReceiptSchema.parse(
+        actionReceiptSchema.parse({
+          ...row,
+          state: "running",
+        }),
+      );
       try {
         await this.commit([row]);
       } catch (error) {
@@ -1499,222 +1552,253 @@ export class ActionJournal implements ReceiptReader {
         recorded: (kind, key) =>
           structuredClone(row.steps.findLast((step) => step.kind === kind && step.key === key)),
         effect: (effect) =>
-          io(() => save((current) => ({
-            ...current,
-            effects: current.effects.some(
-              (held) => canonicalRouteInput(held) === canonicalRouteInput(effect),
-            )
-              ? current.effects
-              : [...current.effects, structuredClone(effect)],
-          }))),
+          io(() =>
+            save((current) => ({
+              ...current,
+              effects: current.effects.some(
+                (held) => canonicalRouteInput(held) === canonicalRouteInput(effect),
+              )
+                ? current.effects
+                : [...current.effects, structuredClone(effect)],
+            })),
+          ),
         publishWork: (key, route, patches) =>
-          execution.step("publication", "work.publish", { work: key, route, patches }, () => io(async () => {
-            const work = this.environment?.work;
-            const current = await this.workReads(row)?.view(key, route);
-            if (!work || !current) throw Error("Work publication is unavailable");
-            const result = await work.publish(key, route, [...patches], current.revision);
-            if (!result.ok) throw new ActionIncomplete("Work publication did not land", result);
-            return result;
-          })),
-        retireWork: (key, route, paths) => Effect.suspend(() => {
-          const priorPublications = row.steps.filter(
-            (step) =>
-              step.state === "succeeded" &&
-              step.kind === "publication" &&
-              step.key === "work.retire" &&
-              workKey((step.input as { work: WorkKey }).work) === workKey(key),
-          );
-          const priorResults = priorPublications.map(
-            (step) =>
-              (step as Extract<ActionStep, { state: "succeeded" }>).result as {
-                fulfilled: WorkPath[];
-                retired: WorkPath[];
-                revision: number;
-              },
-          );
-          const completed = new Set(
-            priorResults.flatMap((result) => result.fulfilled.map(canonicalRouteInput)),
-          );
-          const outstanding = paths.filter((path) => !completed.has(canonicalRouteInput(path)));
-          const alreadyRetired = priorResults
-            .flatMap((result) => result.retired)
-            .filter((path) =>
-              paths.some(
-                (requested) => canonicalRouteInput(requested) === canonicalRouteInput(path),
-              ),
-            );
-          if (!outstanding.length)
-            return io(async () => {
+          execution.step("publication", "work.publish", { work: key, route, patches }, () =>
+            io(async () => {
+              const work = this.environment?.work;
               const current = await this.workReads(row)?.view(key, route);
-              if (!current) throw Error("Work retirement is unavailable");
-              return { retired: alreadyRetired, revision: current.revision };
-            });
-          const continuation = cursor;
-          cursor = row.steps.length;
-          return execution
-            .step(
-              "publication",
-              "work.retire",
-              { work: key, route, paths: outstanding },
-              () => io(async () => {
-                if (
-                  !row.steps.some(
-                    (step) =>
-                      step.state === "succeeded" &&
-                      (step.kind === "file" || (step.kind === "native" && step.dispatchedAt)),
-                  )
-                )
-                  throw new StepFailure(
-                    "Retirement requires a proven external outcome",
-                    409,
-                    "refused",
-                  );
-                const work = this.environment?.work;
-                const current = await this.workReads(row)?.view(key, route);
-                const original = row.consumes.find(
-                  (dependency) =>
-                    dependency.kind === "work" &&
-                    workKey(dependency.probe.handle.key) === workKey(key),
-                );
-                if (!work || !current || original?.kind !== "work")
-                  throw Error("Consumed Work is unavailable for retirement");
-                const patches: RouteStatePatch[] = [];
-                const retired: WorkPath[] = [];
-                for (const path of outstanding) {
-                  const before = valueAt(original.expected, path) as CellLike | undefined;
-                  const now = valueAt(current.doc, path) as CellLike | undefined;
-                  if (!before?.edit || !now) continue;
-                  const next = cellPatches(
-                    path.slice(0, -1).map(String),
-                    String(path.at(-1)),
-                    now,
-                    { kind: "retire", consumed: before.edit },
-                  );
-                  if (next.length) retired.push([...path]);
-                  patches.push(...next);
-                }
-                if (patches.length) {
-                  const publication = await work.publish(
-                    key,
-                    route,
-                    patches,
-                    current.revision,
-                    row.id,
-                  );
-                  if (!publication.ok)
-                    throw new ActionIncomplete("Work retirement did not land", publication);
-                  return {
-                    retired,
-                    revision: publication.revision,
-                    patches,
-                    fulfilled: outstanding,
-                  };
-                }
-                return { retired, revision: current.revision, patches, fulfilled: outstanding };
-              }),
-            )
-            .pipe(
-              Effect.map((result) => ({
-                retired: [...alreadyRetired, ...result.retired],
-                revision: result.revision,
-              })),
-              Effect.ensuring(Effect.sync(() => void (cursor = continuation))),
+              if (!work || !current) throw Error("Work publication is unavailable");
+              const result = await work.publish(key, route, [...patches], current.revision);
+              if (!result.ok) throw new ActionIncomplete("Work publication did not land", result);
+              return result;
+            }),
+          ),
+        retireWork: (key, route, paths) =>
+          Effect.suspend(() => {
+            const priorPublications = row.steps.filter(
+              (step) =>
+                step.state === "succeeded" &&
+                step.kind === "publication" &&
+                step.key === "work.retire" &&
+                workKey((step.input as { work: WorkKey }).work) === workKey(key),
             );
-        }),
+            const priorResults = priorPublications.map(
+              (step) =>
+                (step as Extract<ActionStep, { state: "succeeded" }>).result as {
+                  fulfilled: WorkPath[];
+                  retired: WorkPath[];
+                  revision: number;
+                },
+            );
+            const completed = new Set(
+              priorResults.flatMap((result) => result.fulfilled.map(canonicalRouteInput)),
+            );
+            const outstanding = paths.filter((path) => !completed.has(canonicalRouteInput(path)));
+            const alreadyRetired = priorResults
+              .flatMap((result) => result.retired)
+              .filter((path) =>
+                paths.some(
+                  (requested) => canonicalRouteInput(requested) === canonicalRouteInput(path),
+                ),
+              );
+            if (!outstanding.length)
+              return io(async () => {
+                const current = await this.workReads(row)?.view(key, route);
+                if (!current) throw Error("Work retirement is unavailable");
+                return { retired: alreadyRetired, revision: current.revision };
+              });
+            const continuation = cursor;
+            cursor = row.steps.length;
+            return execution
+              .step("publication", "work.retire", { work: key, route, paths: outstanding }, () =>
+                io(async () => {
+                  if (
+                    !row.steps.some(
+                      (step) =>
+                        step.state === "succeeded" &&
+                        (step.kind === "file" || (step.kind === "native" && step.dispatchedAt)),
+                    )
+                  )
+                    throw new StepFailure(
+                      "Retirement requires a proven external outcome",
+                      409,
+                      "refused",
+                    );
+                  const work = this.environment?.work;
+                  const current = await this.workReads(row)?.view(key, route);
+                  const original = row.consumes.find(
+                    (dependency) =>
+                      dependency.kind === "work" &&
+                      workKey(dependency.probe.handle.key) === workKey(key),
+                  );
+                  if (!work || !current || original?.kind !== "work")
+                    throw Error("Consumed Work is unavailable for retirement");
+                  const patches: RouteStatePatch[] = [];
+                  const retired: WorkPath[] = [];
+                  for (const path of outstanding) {
+                    const before = valueAt(original.expected, path) as CellLike | undefined;
+                    const now = valueAt(current.doc, path) as CellLike | undefined;
+                    if (!before?.edit || !now) continue;
+                    const next = cellPatches(
+                      path.slice(0, -1).map(String),
+                      String(path.at(-1)),
+                      now,
+                      { kind: "retire", consumed: before.edit },
+                    );
+                    if (next.length) retired.push([...path]);
+                    patches.push(...next);
+                  }
+                  if (patches.length) {
+                    const publication = await work.publish(
+                      key,
+                      route,
+                      patches,
+                      current.revision,
+                      row.id,
+                    );
+                    if (!publication.ok)
+                      throw new ActionIncomplete("Work retirement did not land", publication);
+                    return {
+                      retired,
+                      revision: publication.revision,
+                      patches,
+                      fulfilled: outstanding,
+                    };
+                  }
+                  return { retired, revision: current.revision, patches, fulfilled: outstanding };
+                }),
+              )
+              .pipe(
+                Effect.map((result) => ({
+                  retired: [...alreadyRetired, ...result.retired],
+                  revision: result.revision,
+                })),
+                Effect.ensuring(Effect.sync(() => void (cursor = continuation))),
+              );
+          }),
         step: (kind, key, input, effect, options) =>
           Effect.gen(function* () {
-            const begun = yield* io(async (): Promise<{ replayed: unknown } | { step: ActionStep }> => {
-              const process = options?.process;
-              if (kind === "native") validateNativeInput(key, input);
-              while (cursor < row.steps.length) {
-                const previous = row.steps[cursor++]!;
-                if (
-                  previous.state === "succeeded" &&
-                  previous.kind === "publication" &&
-                  previous.key === "work.retire" &&
-                  key !== "work.retire"
-                )
-                  continue;
-                if (retirementOnly && previous.state === "failed") {
-                  if (previous.notDispatched || previous.retired) continue;
-                  throw Error(
-                    "A dispatched failed effect needs explicit reconciliation before it can repeat",
-                  );
+            const begun = yield* io(
+              async (): Promise<{ replayed: unknown } | { step: ActionStep }> => {
+                const process = options?.process;
+                if (kind === "native") validateNativeInput(key, input);
+                while (cursor < row.steps.length) {
+                  const previous = row.steps[cursor++]!;
+                  if (
+                    previous.state === "succeeded" &&
+                    previous.kind === "publication" &&
+                    previous.key === "work.retire" &&
+                    key !== "work.retire"
+                  )
+                    continue;
+                  if (retirementOnly && previous.state === "failed") {
+                    if (previous.notDispatched || previous.retired) continue;
+                    throw Error(
+                      "A dispatched failed effect needs explicit reconciliation before it can repeat",
+                    );
+                  }
+                  if (
+                    previous.kind !== kind ||
+                    previous.key !== key ||
+                    canonicalRouteInput(previous.input) !== canonicalRouteInput(input) ||
+                    (process &&
+                      canonicalRouteInput(previous.process) !== canonicalRouteInput(process))
+                  )
+                    throw Error(
+                      "Original continuation differs from its recorded effect input or process",
+                    );
+                  if (previous.state === "succeeded") {
+                    const result = structuredClone(previous.result) as never;
+                    options?.check?.(result);
+                    return { replayed: result };
+                  }
+                  throw Error("An uncertain effect cannot be replayed");
                 }
-                if (
-                  previous.kind !== kind ||
-                  previous.key !== key ||
-                  canonicalRouteInput(previous.input) !== canonicalRouteInput(input) ||
-                  (process && canonicalRouteInput(previous.process) !== canonicalRouteInput(process))
-                )
-                  throw Error(
-                    "Original continuation differs from its recorded effect input or process",
+                if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
+                  throw new ActionIncomplete(
+                    "A recovered action only retires its Work; submit a new action for the rest",
+                    null,
                   );
-                if (previous.state === "succeeded") {
-                  const result = structuredClone(previous.result) as never;
-                  options?.check?.(result);
-                  return { replayed: result };
-                }
-                throw Error("An uncertain effect cannot be replayed");
-              }
-              if (retirementOnly && (kind !== "publication" || key !== "work.retire"))
-                throw new ActionIncomplete(
-                  "A recovered action only retires its Work; submit a new action for the rest",
-                  null,
+                const incarnation = row.consumes.find(
+                  (dependency) =>
+                    dependency.kind === "incarnation" &&
+                    canonicalRouteInput(dependency.probe.target) ===
+                      canonicalRouteInput(row.target),
                 );
-              const incarnation = row.consumes.find(
-                (dependency) =>
-                  dependency.kind === "incarnation" &&
-                  canonicalRouteInput(dependency.probe.target) === canonicalRouteInput(row.target),
-              );
-              const exactProcess =
-                process ??
-                (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
-              const step: ActionStep = {
-                // Step ids are their own namespace, never a caller-chosen action id: a native
-                // request id is one step's, and two steps never share one.
-                id: randomUUID(),
-                kind,
-                key,
-                input: structuredClone(input),
-                ...(kind === "native" && exactProcess
-                  ? { process: structuredClone(exactProcess) }
-                  : {}),
-                state: "running",
-              };
-              await save((current) => ({ ...current, steps: [...current.steps, step] }));
-              cursor = row.steps.length;
-              if (kind === "native")
-                releaseDispatch.push(
-                  bindActionDispatch(step.id, {
-                    refusal: () => journal.dispatchRefusal(step.id),
-                    validate: () => journal.validateDispatch(step.id),
-                    dispatched: (transport) => journal.markDispatched(step.id, transport),
-                    terminal: async (touched, evidenceJson) => {
-                      const parsed = touchedSchema.safeParse(touched);
-                      let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;
-                      try { nativeEvidence = observedSchema.safeParse(JSON.parse(evidenceJson ?? "null")).data; }
-                      catch { /* Malformed evidence cannot establish an observation. */ }
-                      await save((current) => ({ ...current, steps: current.steps.map((held): ActionStep => {
-                        if (held.id !== step.id || held.transport !== "bridge" || (!parsed.success && held.bridgeReply === "touched")) return held;
-                        const base = { ...held };
-                        delete base.touched;
-                        const bridgeReply: typeof held.bridgeReply = parsed.success ? "touched" : touched == null ? "missing-touched" : "invalid-touched";
-                        return { ...base,
-                          bridgeReply,
-                          ...(parsed.success ? { touched: parsed.data } : {}),
-                          ...(nativeEvidence ? { nativeEvidence } : {}),
-                        };
-                      }) }));
-                    },
-                    uncertain: async (reason) => save((current) => ({ ...current, steps: current.steps.map((held) =>
-                      held.id !== step.id || held.transport !== "bridge" || held.bridgeReply === "touched" ? held
-                        : { ...held, touched: { kind: "unknown", reason } },
-                    ) })),
-                  }),
-                );
-              return { step };
-            });
+                const exactProcess =
+                  process ??
+                  (incarnation?.kind === "incarnation" ? incarnation.probe.process : undefined);
+                const step: ActionStep = {
+                  // Step ids are their own namespace, never a caller-chosen action id: a native
+                  // request id is one step's, and two steps never share one.
+                  id: randomUUID(),
+                  kind,
+                  key,
+                  input: structuredClone(input),
+                  ...(kind === "native" && exactProcess
+                    ? { process: structuredClone(exactProcess) }
+                    : {}),
+                  state: "running",
+                };
+                await save((current) => ({ ...current, steps: [...current.steps, step] }));
+                cursor = row.steps.length;
+                if (kind === "native")
+                  releaseDispatch.push(
+                    bindActionDispatch(step.id, {
+                      refusal: () => journal.dispatchRefusal(step.id),
+                      validate: () => journal.validateDispatch(step.id),
+                      dispatched: (transport) => journal.markDispatched(step.id, transport),
+                      terminal: async (touched, evidenceJson) => {
+                        const parsed = touchedSchema.safeParse(touched);
+                        let nativeEvidence: import("@pe/agent-contracts").Observed | undefined;
+                        try {
+                          nativeEvidence = observedSchema.safeParse(
+                            JSON.parse(evidenceJson ?? "null"),
+                          ).data;
+                        } catch {
+                          /* Malformed evidence cannot establish an observation. */
+                        }
+                        await save((current) => ({
+                          ...current,
+                          steps: current.steps.map((held): ActionStep => {
+                            if (
+                              held.id !== step.id ||
+                              held.transport !== "bridge" ||
+                              (!parsed.success && held.bridgeReply === "touched")
+                            )
+                              return held;
+                            const base = { ...held };
+                            delete base.touched;
+                            const bridgeReply: typeof held.bridgeReply = parsed.success
+                              ? "touched"
+                              : touched == null
+                                ? "missing-touched"
+                                : "invalid-touched";
+                            return {
+                              ...base,
+                              bridgeReply,
+                              ...(parsed.success ? { touched: parsed.data } : {}),
+                              ...(nativeEvidence ? { nativeEvidence } : {}),
+                            };
+                          }),
+                        }));
+                      },
+                      uncertain: async (reason) =>
+                        save((current) => ({
+                          ...current,
+                          steps: current.steps.map((held) =>
+                            held.id !== step.id ||
+                            held.transport !== "bridge" ||
+                            held.bridgeReply === "touched"
+                              ? held
+                              : { ...held, touched: { kind: "unknown", reason } },
+                          ),
+                        })),
+                    }),
+                  );
+                return { step };
+              },
+            );
             if ("replayed" in begun) return begun.replayed as never;
             const { step } = begun;
             let result: unknown;
@@ -1820,25 +1904,25 @@ export class ActionJournal implements ReceiptReader {
         }
       });
       const authorized = async () => {
-          if (!prior)
-            await this.export(row.id, "admission.json", {
-              ...admission,
-              consumes: row.consumes,
-              claims: row.claims,
-              effects: row.effects,
-            });
-          await gate(row, "authorize");
-          if (!retirementOnly) await binding?.preflight?.();
-          await this.waitForTurn(row.id, retirementOnly);
-          if (row.prepared.state !== "ready") {
-            const value = structuredClone(
-              executor.prepared.parse((await binding?.prepare?.()) ?? null),
-            );
-            await this.export(row.id, "preparation.json", value);
-            await save((current) => ({ ...current, prepared: { state: "ready", value } }));
-          }
-          validated = true;
-          await gate(row, "prepared");
+        if (!prior)
+          await this.export(row.id, "admission.json", {
+            ...admission,
+            consumes: row.consumes,
+            claims: row.claims,
+            effects: row.effects,
+          });
+        await gate(row, "authorize");
+        if (!retirementOnly) await binding?.preflight?.();
+        await this.waitForTurn(row.id, retirementOnly);
+        if (row.prepared.state !== "ready") {
+          const value = structuredClone(
+            executor.prepared.parse((await binding?.prepare?.()) ?? null),
+          );
+          await this.export(row.id, "preparation.json", value);
+          await save((current) => ({ ...current, prepared: { state: "ready", value } }));
+        }
+        validated = true;
+        await gate(row, "prepared");
       };
       // Rule 2g: settle inside the Exit, so every exit (interruption included) commits once.
       const identity = ownerIdentity(row, crossing.parent);
@@ -1856,35 +1940,39 @@ export class ActionJournal implements ReceiptReader {
                 ...(error instanceof CommandRejected ? { refusal: error.refusal } : {}),
               }),
         } as ActionReceipt;
-        if (descendants?.kind === "unsettled") finished = { ...unsettled(finished),
-          state: "unknown", error: "Required native reads have no terminal evidence", status: 503,
-        };
+        if (descendants?.kind === "unsettled")
+          finished = {
+            ...unsettled(finished),
+            state: "unknown",
+            error: "Required native reads have no terminal evidence",
+            status: 503,
+          };
         return this.serial(async () => {
-            const next = actionReceiptSchema.parse({
-              ...finished,
-              steps: interruptedSteps(finished.steps),
-            });
-            try {
-              await this.commit([next]);
-            } catch (error) {
-              this.index({
-                ...row,
-                state: "unknown",
-                error: `Completion could not be persisted: ${String(error)}`,
-                steps: interruptedSteps(row.steps),
-                status: 503,
-              });
-              this.notify();
-              throw error;
-            } finally {
-              this.activeCallers.delete(row.id);
-              this.readOwners.delete(row.id);
-              releaseRun();
-              releaseDispatch.forEach((release) => release());
-            }
-            this.notify();
-            return structuredClone(next);
+          const next = actionReceiptSchema.parse({
+            ...finished,
+            steps: interruptedSteps(finished.steps),
           });
+          try {
+            await this.commit([next]);
+          } catch (error) {
+            this.index({
+              ...row,
+              state: "unknown",
+              error: `Completion could not be persisted: ${String(error)}`,
+              steps: interruptedSteps(row.steps),
+              status: 503,
+            });
+            this.notify();
+            throw error;
+          } finally {
+            this.activeCallers.delete(row.id);
+            this.readOwners.delete(row.id);
+            releaseRun();
+            releaseDispatch.forEach((release) => release());
+          }
+          this.notify();
+          return structuredClone(next);
+        });
       };
       // Rule 10, durable command: the attempt is forked into the journal's scope under the
       // journal's identity. The submitting request is its causal parent and cannot reach it.
@@ -1894,13 +1982,17 @@ export class ActionJournal implements ReceiptReader {
           restore(
             io(authorized).pipe(
               Effect.andThen(() => executor.run(context, execution)),
-              Effect.map((result) => (definition.result ? definition.result.parse(result) : result)),
+              Effect.map((result) =>
+                definition.result ? definition.result.parse(result) : result,
+              ),
             ),
           ).pipe(
             Effect.exit,
             Effect.flatMap((exit) => io(() => settleExit(exit))),
             Effect.tapCause((cause) =>
-              Effect.sync(() => console.error("action-journal: completion failed", Cause.pretty(cause))),
+              Effect.sync(() =>
+                console.error("action-journal: completion failed", Cause.pretty(cause)),
+              ),
             ),
           ),
         ).pipe(Effect.provideService(RequestIdentity, identity)),
@@ -1936,7 +2028,12 @@ export class ActionJournal implements ReceiptReader {
       const exit = await joined(this.owners.cancels.fork(step.id, cancel(step.id)));
       if (Exit.isFailure(exit)) throw Cause.squash(exit.cause);
       const answer: unknown = exit.value;
-      signalled = !(typeof answer === "object" && answer !== null && "cancelled" in answer && answer.cancelled === false);
+      signalled = !(
+        typeof answer === "object" &&
+        answer !== null &&
+        "cancelled" in answer &&
+        answer.cancelled === false
+      );
     }
     return { receipt: (await this.list(undefined, id))[0] ?? row, signalled };
   }
@@ -1992,10 +2089,15 @@ export class ActionJournal implements ReceiptReader {
           throw Error("Recovery cannot change a step's immutable intent or process");
         // Recovery supplies a new outcome. Obsolete fields from the previous state are not
         // part of that outcome; the journal retains immutable intent and dispatch evidence.
-        const variant = actionStepSchema.options.map((option) => option.options).flat().find(
-          (schema) => schema.shape.state.value === update.step.state && schema.shape.transport.safeParse(update.step.transport).success &&
-            ("opReceipt" in schema.shape) === ("opReceipt" in update.step),
-        )!;
+        const variant = actionStepSchema.options
+          .map((option) => option.options)
+          .flat()
+          .find(
+            (schema) =>
+              schema.shape.state.value === update.step.state &&
+              schema.shape.transport.safeParse(update.step.transport).success &&
+              "opReceipt" in schema.shape === "opReceipt" in update.step,
+          )!;
         update.step = actionStepSchema.parse({
           ...variant.strip().parse(update.step),
           ...(step.process ? { process: step.process } : {}),
@@ -2014,8 +2116,11 @@ export class ActionJournal implements ReceiptReader {
     const recovered = await this.serial(async () => {
       const current = this.rows.get(id)!;
       // A read that changed no step proves nothing new and writes no revision.
-      const changed = updates.some(({ step }) =>
-        canonicalRouteInput(step) !== canonicalRouteInput(original.steps.find((held) => held.id === step.id)));
+      const changed = updates.some(
+        ({ step }) =>
+          canonicalRouteInput(step) !==
+          canonicalRouteInput(original.steps.find((held) => held.id === step.id)),
+      );
       if (canonicalRouteInput(current) !== canonicalRouteInput(original))
         return structuredClone(current);
       let nextRow: ActionReceipt = {
@@ -2038,12 +2143,24 @@ export class ActionJournal implements ReceiptReader {
       // (b3b3c878). A re-entry, where it can still run, upgrades it.
       // Only an answer read now (or this boot's interruption) settles it: a row the live path left
       // unknown for unproven native reads keeps that verdict.
-      const finished = (changed || interrupted) && nextRow.state === "unknown" && nextRow.steps.length > 0 && !nextRow.steps.some(unanswered);
+      const finished =
+        (changed || interrupted) &&
+        nextRow.state === "unknown" &&
+        nextRow.steps.length > 0 &&
+        !nextRow.steps.some(unanswered);
       if (!changed && !finished) return structuredClone(current);
       answered = changed;
-      const settled = settle(true, nextRow.steps, { kind: "recovered" }) ?? (finished
-        ? { state: "incomplete" as const, error: "Revit answered every step in that session, and each step's report says what it did there; the host restarted before this action's follow-up (such as retiring its Work) ran, and nothing here says whether that session's changes were saved", status: 503, result: null }
-        : null);
+      const settled =
+        settle(true, nextRow.steps, { kind: "recovered" }) ??
+        (finished
+          ? {
+              state: "incomplete" as const,
+              error:
+                "Revit answered every step in that session, and each step's report says what it did there; the host restarted before this action's follow-up (such as retiring its Work) ran, and nothing here says whether that session's changes were saved",
+              status: 503,
+              result: null,
+            }
+          : null);
       if (settled) nextRow = { ...unsettled(nextRow), ...settled } as ActionReceipt;
       nextRow = actionReceiptSchema.parse(nextRow);
       const native = updates.flatMap((update) => {
@@ -2086,11 +2203,18 @@ export class ActionJournal implements ReceiptReader {
       // Boot and connect run outside any request, so Work would read an anonymous author. The
       // re-entry carries the row's own caller, as the live request did (drive 3 case 1).
       // effect-edge: als-crossing
-      await withInvocationContext({ caller: recovered.caller }, () => this.invoke(
-        { id: recovered.id, key: recovered.key, target: recovered.target, input: recovered.input },
-        { caller: recovered.caller, basis: executable.data.basis },
-        true,
-      )).catch((error) => {
+      await withInvocationContext({ caller: recovered.caller }, () =>
+        this.invoke(
+          {
+            id: recovered.id,
+            key: recovered.key,
+            target: recovered.target,
+            input: recovered.input,
+          },
+          { caller: recovered.caller, basis: executable.data.basis },
+          true,
+        ),
+      ).catch((error) => {
         // Refused before it ran (no attachment yet, a claim, a stopping host): try again later.
         this.interrupted.add(id);
         throw error;
@@ -2107,13 +2231,20 @@ export class ActionJournal implements ReceiptReader {
    */
   async reconcile(session?: string): Promise<void> {
     // This boot's interrupted rows first, so old rows the SDK cannot settle never queue ahead.
-    const rows = (await this.list()).sort((a, b) => +this.interrupted.has(b.id) - +this.interrupted.has(a.id));
+    const rows = (await this.list()).sort(
+      (a, b) => +this.interrupted.has(b.id) - +this.interrupted.has(a.id),
+    );
     for (const row of rows)
-      if (session === undefined
-        ? row.state === "unknown" || this.interrupted.has(row.id)
-        : targetSession(row.target) === session &&
-          (this.interrupted.has(row.id) || (row.state === "unknown" && row.steps.some(unanswered))))
-        await this.recover(row.id).catch((error) => console.error(`action-journal: reconcile ${row.id} failed`, error));
+      if (
+        session === undefined
+          ? row.state === "unknown" || this.interrupted.has(row.id)
+          : targetSession(row.target) === session &&
+            (this.interrupted.has(row.id) ||
+              (row.state === "unknown" && row.steps.some(unanswered)))
+      )
+        await this.recover(row.id).catch((error) =>
+          console.error(`action-journal: reconcile ${row.id} failed`, error),
+        );
   }
   /**
    * Host shutdown, last of the host's finalizers: refuse admission, join every admitted command
@@ -2125,7 +2256,8 @@ export class ActionJournal implements ReceiptReader {
     if (this.flushed) return;
     this.closing = true;
     // Join, never interrupt: an admitted command settles from its own evidence (rule 10).
-    const open = () => this.owners ? [...this.owners.attempts.map, ...this.owners.cancels.map] : [];
+    const open = () =>
+      this.owners ? [...this.owners.attempts.map, ...this.owners.cancels.map] : [];
     for (let fibers = open(); fibers.length; fibers = open())
       await Promise.all(fibers.map(([, fiber]) => joined(fiber)));
     await this.serial(async () => {

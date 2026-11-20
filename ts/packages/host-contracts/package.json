@@ -83,7 +83,6 @@
       "default": "./src/pe-api.ts"
     },
     "./settings-schema": "./src/settings-schema.ts",
-    "./route-startup": "./src/route-startup.ts",
     "./native-adapter": "./src/native-adapter.ts",
     "./host-descriptor": "./src/host-descriptor.ts",
     "./decoders": "./src/decoders.ts",
@@ -107,8 +106,8 @@
   },
   "dependencies": {
     "effect": "4.0.2",
-    "zod": "4.3.6",
-    "json-schema-to-typescript": "catalog:"
+    "json-schema-to-typescript": "catalog:",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

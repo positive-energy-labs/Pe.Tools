@@ -8,7 +8,7 @@ import {
   type Pairing,
 } from "@pe/host-contracts/pe-api";
 import { read as readFile, writeState, stateKind, type StoredFile } from "@pe/host-contracts/kinds";
-import { Refused } from "./control.ts";
+import { Refused } from "@pe/host-internal/refused";
 import { hostOwnership } from "./host-ownership.ts";
 
 const persistedSchema = z.strictObject({
@@ -32,12 +32,13 @@ const denied = (code: "device.unpaired" | "device.revoked" | "device.pairing", r
   });
 
 /** One host identity and one credential per device, independent of the connection address. */
-export function createDevices(file?: StoredFile<z.infer<typeof persistedSchema>, "state">, now = () => Date.now()) {
+export function createDevices(
+  file?: StoredFile<z.infer<typeof persistedSchema>, "state">,
+  now = () => Date.now(),
+) {
   // Machine state (ADR 0039): a store that does not decode is discarded with a notice, the host
   // starts as a new environment, and every device pairs once more.
-  const read = file
-    ? readFile(file)
-    : null;
+  const read = file ? readFile(file) : null;
   let state =
     read?.kind === "ok"
       ? read.value

@@ -16,23 +16,39 @@ import { freezeScript } from "../src/operation-script.ts";
 import { readMemberPod } from "../src/settings.ts";
 import { Effect } from "effect";
 
-const reinstall = vi.hoisted((): { hold: { entered: () => void; wait: Promise<void> } | undefined } => ({ hold: undefined }));
-vi.mock("@pe/agent-contracts", async original => {
+const reinstall = vi.hoisted(
+  (): { hold: { entered: () => void; wait: Promise<void> } | undefined } => ({ hold: undefined }),
+);
+vi.mock("@pe/agent-contracts", async (original) => {
   const actual = await original<typeof import("@pe/agent-contracts")>();
-  return { ...actual, createPluginRuntime: (...args: Parameters<typeof actual.createPluginRuntime>) => {
-    const runtime = actual.createPluginRuntime(...args);
-    return { ...runtime, install: (plugin: Parameters<typeof runtime.install>[0], enabled?: boolean) =>
-      runtime.install({ ...plugin, setup: async context => {
-        if (plugin.id === "pod:requested" && reinstall.hold) {
-          reinstall.hold.entered();
-          await reinstall.hold.wait;
-        }
-        return plugin.setup(context);
-      } }, enabled) };
-  } };
+  return {
+    ...actual,
+    createPluginRuntime: (...args: Parameters<typeof actual.createPluginRuntime>) => {
+      const runtime = actual.createPluginRuntime(...args);
+      return {
+        ...runtime,
+        install: (plugin: Parameters<typeof runtime.install>[0], enabled?: boolean) =>
+          runtime.install(
+            {
+              ...plugin,
+              setup: async (context) => {
+                if (plugin.id === "pod:requested" && reinstall.hold) {
+                  reinstall.hold.entered();
+                  await reinstall.hold.wait;
+                }
+                return plugin.setup(context);
+              },
+            },
+            enabled,
+          ),
+      };
+    },
+  };
 });
 
-vi.mock("node:fs/promises", async original => ({ ...(await original<typeof import("node:fs/promises")>()) }));
+vi.mock("node:fs/promises", async (original) => ({
+  ...(await original<typeof import("node:fs/promises")>()),
+}));
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -40,7 +56,7 @@ afterEach(async () => {
   stopPackageDiscovery();
   bindPackageLifecycle(undefined);
   reinstall.hold = undefined;
-  await Promise.all(roots.splice(0).map(root => fs.rm(root, { recursive: true, force: true })));
+  await Promise.all(roots.splice(0).map((root) => fs.rm(root, { recursive: true, force: true })));
 });
 async function fixture() {
   const root = await fs.mkdtemp(join(tmpdir(), "pe-request-cost-"));
@@ -56,7 +72,13 @@ async function fixture() {
     await fs.utimes(join(pods, id, "pod.json"), old, old);
     await fs.utimes(page(id), old, old);
   }
-  const handler = createPagesHandler([], pods, undefined, undefined, stateFixture(join(root, "state")));
+  const handler = createPagesHandler(
+    [],
+    pods,
+    undefined,
+    undefined,
+    stateFixture(join(root, "state")),
+  );
   const request = (id = "requested") => handler(new Request(`http://host/pages/${id}--hello/`));
   expect((await request()).status).toBe(200);
   return { root, pods, page, request };
@@ -67,34 +89,62 @@ test("a recent equal-metadata overwrite is re-hashed before witness reuse", asyn
   const path = page("requested");
   await fs.writeFile(path, "<title>requested</title>");
   await readPackage("requested", { podsRoots: pods });
-  const frozen = await fs.lstat(path), original = fs.lstat;
-  vi.spyOn(fs, "lstat").mockImplementation(async (...args) => String(args[0]) === path ? frozen : original(...args));
+  const frozen = await fs.lstat(path),
+    original = fs.lstat;
+  vi.spyOn(fs, "lstat").mockImplementation(async (...args) =>
+    String(args[0]) === path ? frozen : original(...args),
+  );
   await fs.writeFile(path, "<title>changed!!</title>");
   const pod = await readPackage("requested", { podsRoots: pods });
-  expect(Buffer.from(pod.members.find(member => member.path === "pages/hello/index.html")?.bytes ?? []).toString()).toContain("changed!!");
+  expect(
+    Buffer.from(
+      pod.members.find((member) => member.path === "pages/hello/index.html")?.bytes ?? [],
+    ).toString(),
+  ).toContain("changed!!");
 });
 
 test("an older unchanged member reuses its witness without reading bytes", async () => {
   const { pods } = await fixture();
-  const opened = vi.spyOn(fs, "open"), read = vi.spyOn(fs, "readFile");
+  const opened = vi.spyOn(fs, "open"),
+    read = vi.spyOn(fs, "readFile");
   expect((await readPackage("requested", { podsRoots: pods })).id).toBe("requested");
   for (const calls of [opened.mock.calls, read.mock.calls])
-    expect(calls.map(([path]) => String(path)).filter(path => path.startsWith(pods))).toEqual([]);
+    expect(calls.map(([path]) => String(path)).filter((path) => path.startsWith(pods))).toEqual([]);
 });
 
 // REVIEW-d76b3324-ev/review-fe.test.ts: a young witness cannot age into trust.
-test.each(["package", "settings", "indexed-settings"])("recent witness stays safe after its window elapses: %s", async door => {
-  const { pods, page } = await fixture(), path = page("requested");
-  const frozen = await fs.lstat(path), original = fs.lstat;
-  vi.spyOn(fs, "lstat").mockImplementation(async (...args) => String(args[0]) === path ? frozen : original(...args));
-  const clock = vi.spyOn(Date, "now").mockReturnValue(frozen.mtimeMs + 1999);
-  const read = () => door === "package" ? readPackage("requested", { podsRoots: pods })
-    : Effect.runPromise(readMemberPod("requested", { podsRoot: pods }, door === "indexed-settings"));
-  await read(); await fs.writeFile(path, "<title>changed!!</title>"); clock.mockReturnValue(frozen.mtimeMs + 2001);
-  expect(Buffer.from((await read()).members.find(member => member.path === "pages/hello/index.html")?.bytes ?? []).toString()).toContain("changed!!");
-  const reads = vi.spyOn(fs, "readFile"); clock.mockReturnValue(frozen.mtimeMs + 10000); await read();
-  expect(reads.mock.calls.map(([path]) => String(path))).not.toContain(path);
-});
+test.each(["package", "settings", "indexed-settings"])(
+  "recent witness stays safe after its window elapses: %s",
+  async (door) => {
+    const { pods, page } = await fixture(),
+      path = page("requested");
+    const frozen = await fs.lstat(path),
+      original = fs.lstat;
+    vi.spyOn(fs, "lstat").mockImplementation(async (...args) =>
+      String(args[0]) === path ? frozen : original(...args),
+    );
+    const clock = vi.spyOn(Date, "now").mockReturnValue(frozen.mtimeMs + 1999);
+    const read = () =>
+      door === "package"
+        ? readPackage("requested", { podsRoots: pods })
+        : Effect.runPromise(
+            readMemberPod("requested", { podsRoot: pods }, door === "indexed-settings"),
+          );
+    await read();
+    await fs.writeFile(path, "<title>changed!!</title>");
+    clock.mockReturnValue(frozen.mtimeMs + 2001);
+    expect(
+      Buffer.from(
+        (await read()).members.find((member) => member.path === "pages/hello/index.html")?.bytes ??
+          [],
+      ).toString(),
+    ).toContain("changed!!");
+    const reads = vi.spyOn(fs, "readFile");
+    clock.mockReturnValue(frozen.mtimeMs + 10000);
+    await read();
+    expect(reads.mock.calls.map(([path]) => String(path))).not.toContain(path);
+  },
+);
 
 // Mutant: a Page asks for a whole-home member witness instead of its own Pod and every identity.
 test("a Page validates its own members and every manifest, never unrelated members", async () => {
@@ -108,7 +158,9 @@ test("a Page validates its own members and every manifest, never unrelated membe
   expect(paths).not.toContain(page("untouched"));
   await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(3);");
   const fresh = await readPackage("requested", { podsRoots: pods });
-  expect(Buffer.from(fresh.members.find(member => member.path === "Run.csx")!.bytes).toString()).toBe("Result(3);");
+  expect(
+    Buffer.from(fresh.members.find((member) => member.path === "Run.csx")!.bytes).toString(),
+  ).toBe("Result(3);");
   // An in-place identity edit elsewhere still revokes the requested id's unique claim.
   await fs.writeFile(join(pods, "other", "pod.json"), '{"id":"requested"}');
   expect((await request()).status).toBe(404);
@@ -127,8 +179,12 @@ test("simultaneous Page edits and alternating requests each see their own fresh 
 
 test("an existing Page never becomes not-found during its lifecycle reinstall", async () => {
   const { root, pods, page } = await fixture();
-  const lifecycle = createPackageLifecycle({ machine: stateTree(join(root, "machine")), packages: () => listPackages({ podsRoots: pods }) });
-  const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+  const lifecycle = createPackageLifecycle({
+    machine: stateTree(join(root, "machine")),
+    packages: () => listPackages({ podsRoots: pods }),
+  });
+  const gate = Promise.withResolvers<void>(),
+    entered = Promise.withResolvers<void>();
   try {
     await lifecycle.ready;
     bindPackageLifecycle(lifecycle);
@@ -136,9 +192,15 @@ test("an existing Page never becomes not-found during its lifecycle reinstall", 
     reinstall.hold = { entered: () => entered.resolve(), wait: gate.promise };
     const refreshing = lifecycle.refresh();
     await entered.promise;
-    const handler = createPagesHandler([], [pods], undefined, undefined, stateFixture(join(root, "state")));
+    const handler = createPagesHandler(
+      [],
+      [pods],
+      undefined,
+      undefined,
+      stateFixture(join(root, "state")),
+    );
     const response = handler(new Request("http://host/pages/requested--hello/target"));
-    await new Promise(ok => setTimeout(ok, 100));
+    await new Promise((ok) => setTimeout(ok, 100));
     gate.resolve();
     expect((await response).status).toBe(200);
     await refreshing;
@@ -151,7 +213,10 @@ test("an existing Page never becomes not-found during its lifecycle reinstall", 
 
 test("a new Pod requested before the inventory cadence is discovered immediately", async () => {
   const { root, pods, page } = await fixture();
-  const lifecycle = createPackageLifecycle({ machine: stateTree(root), packages: options => listPackages({ ...options, podsRoots: pods }) });
+  const lifecycle = createPackageLifecycle({
+    machine: stateTree(root),
+    packages: (options) => listPackages({ ...options, podsRoots: pods }),
+  });
   try {
     await lifecycle.ready;
     bindPackageLifecycle(lifecycle);
@@ -159,22 +224,44 @@ test("a new Pod requested before the inventory cadence is discovered immediately
     await fs.writeFile(join(pods, "new", "pod.json"), '{"id":"new"}');
     await fs.writeFile(page("new"), "<title>dropped on drive</title>");
     await fs.writeFile(join(pods, "new", "Run.csx"), "Result(1);");
-    expect(Buffer.from((await capturePackage("new", pods)).members.find(member => member.path === "Run.csx")!.bytes).toString()).toBe("Result(1);");
+    expect(
+      Buffer.from(
+        (await capturePackage("new", pods)).members.find((member) => member.path === "Run.csx")!
+          .bytes,
+      ).toString(),
+    ).toBe("Result(1);");
     const stats = vi.spyOn(fs, "lstat");
-    const handler = createPagesHandler([], [pods], undefined, undefined, stateFixture(join(root, "state")));
-    expect(await (await handler(new Request("http://host/pages/new--hello/"))).text()).toContain("dropped on drive");
+    const handler = createPagesHandler(
+      [],
+      [pods],
+      undefined,
+      undefined,
+      stateFixture(join(root, "state")),
+    );
+    expect(await (await handler(new Request("http://host/pages/new--hello/"))).text()).toContain(
+      "dropped on drive",
+    );
     expect(stats.mock.calls.map(([path]) => String(path))).not.toContain(page("other"));
     await fs.writeFile(join(pods, "new", "Run.csx"), "Result(2);");
-    expect(Buffer.from((await capturePackage("new", pods)).members.find(member => member.path === "Run.csx")!.bytes).toString()).toBe("Result(2);");
-  } finally { await lifecycle.close(); }
+    expect(
+      Buffer.from(
+        (await capturePackage("new", pods)).members.find((member) => member.path === "Run.csx")!
+          .bytes,
+      ).toString(),
+    ).toBe("Result(2);");
+  } finally {
+    await lifecycle.close();
+  }
 });
 
 test("whole inventory reads use the cadence and explicit refresh sees a newly dropped Pod", async () => {
   const { root, pods, page } = await fixture();
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  const content = createContributionContent({ worldRoot: stateTree(root).directory("agent"),
+  const content = createContributionContent({
+    worldRoot: stateTree(root).directory("agent"),
     decisionsMachine: stateTree(join(root, "machine")),
-    packages: options => listPackages({ ...options, podsRoots: pods }) });
+    packages: (options) => listPackages({ ...options, podsRoots: pods }),
+  });
   try {
     await content.lifecycle.ready;
     bindPackageLifecycle(content.lifecycle);
@@ -191,11 +278,27 @@ test("whole inventory reads use the cadence and explicit refresh sees a newly dr
     expect(await (await inventory()).text()).toContain("pod:dropped");
     await fs.writeFile(page("dropped"), "<title>timer refresh after explicit refresh</title>");
     await vi.advanceTimersByTimeAsync(contentRootsRefreshMs);
-    await expect.poll(() => Buffer.from(content.lifecycle.packages().find(pod => pod.id === "dropped")!
-      .members.find(member => member.path === "pages/hello/index.html")!.bytes).toString()).toContain("timer refresh");
-    const handler = createPagesHandler([], [pods], undefined, undefined, stateTree(root).directory("page-state"));
+    await expect
+      .poll(() =>
+        Buffer.from(
+          content.lifecycle
+            .packages()
+            .find((pod) => pod.id === "dropped")!
+            .members.find((member) => member.path === "pages/hello/index.html")!.bytes,
+        ).toString(),
+      )
+      .toContain("timer refresh");
+    const handler = createPagesHandler(
+      [],
+      [pods],
+      undefined,
+      undefined,
+      stateTree(root).directory("page-state"),
+    );
     expect((await handler(new Request("http://host/pages"))).status).toBe(200);
-  } finally { await content.close(); }
+  } finally {
+    await content.close();
+  }
 });
 
 test("a recovered first admission is retried by an unknown key before the cadence", async () => {
@@ -208,7 +311,9 @@ test("a recovered first admission is retried by an unknown key before the cadenc
     if (String(args[0]) === page("new")) throw Object.assign(Error("temporary"), { code: "EBUSY" });
     return original(...args);
   });
-  expect((await listPackages({ podsRoots: pods })).unreadable).toEqual([expect.objectContaining({ folder: "new" })]);
+  expect((await listPackages({ podsRoots: pods })).unreadable).toEqual([
+    expect.objectContaining({ folder: "new" }),
+  ]);
   opened.mockClear();
   expect((await request()).status).toBe(200);
   expect(opened).not.toHaveBeenCalled();
@@ -221,12 +326,13 @@ test("one failed member metadata walk loses reuse only for that Pod", async () =
   const { pods, page } = await fixture();
   const original = fs.lstat;
   vi.spyOn(fs, "lstat").mockImplementation(async (...args) => {
-    if (String(args[0]) === page("other")) throw Object.assign(Error("placeholder"), { code: "EIO" });
+    if (String(args[0]) === page("other"))
+      throw Object.assign(Error("placeholder"), { code: "EIO" });
     return original(...args);
   });
   const opened = vi.spyOn(fs, "open");
   const listing = await listPackages({ podsRoots: pods });
-  expect(listing.packages.find(pod => pod.id === "other")?.discoveryFailure).toBeTruthy();
+  expect(listing.packages.find((pod) => pod.id === "other")?.discoveryFailure).toBeTruthy();
   expect(opened.mock.calls.map(([path]) => String(path))).not.toContain(page("untouched"));
 });
 
@@ -238,7 +344,10 @@ test("an unavailable neighbour's capture is retried only when that Pod is used",
     if (String(args[0]) === page("other")) throw Object.assign(Error("locked"), { code: "EBUSY" });
     return original(...args);
   });
-  expect((await listPackages({ podsRoots: pods })).packages.find(pod => pod.id === "other")?.discoveryFailure).toBeTruthy();
+  expect(
+    (await listPackages({ podsRoots: pods })).packages.find((pod) => pod.id === "other")
+      ?.discoveryFailure,
+  ).toBeTruthy();
   opened.mockClear();
   await fs.writeFile(page("requested"), "<title>healthy edit beside locked Pod</title>");
   expect(await (await request()).text()).toContain("healthy edit beside locked Pod");
@@ -252,63 +361,80 @@ test("an unavailable neighbour's capture is retried only when that Pod is used",
   expect(opened.mock.calls.map(([path]) => String(path))).toContain(page("other"));
 });
 
-test.each(["before", "after"])("a failed Pod keeps its marker when its capture ends %s a peer's capture", async order => {
-  const { pods, page, request } = await fixture();
-  await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(1);");
-  await fs.writeFile(join(pods, "requested", "pod.json"), '{"id":"requested","entrypoints":[{"sourcePath":"Run.csx"}]}');
-  await listPackages({ podsRoots: pods });
-  rememberCaptureRoots(pods);
-  const sealed = await capturePackage("requested", pods);
-  const failedGate = Promise.withResolvers<void>(), failedEntered = Promise.withResolvers<void>();
-  const peerGate = Promise.withResolvers<void>(), peerEntered = Promise.withResolvers<void>();
-  const original = fs.open;
-  let heldFailed = false, heldPeer = false;
-  const opened = vi.spyOn(fs, "open").mockImplementation(async (...args) => {
-    if (String(args[0]) === page("requested") && !heldFailed) {
-      heldFailed = true;
-      failedEntered.resolve();
-      await failedGate.promise;
-      throw Object.assign(Error("busy"), { code: "EBUSY" });
-    }
-    if (order === "before" && String(args[0]) === page("other") && !heldPeer) {
-      heldPeer = true;
-      peerEntered.resolve();
-      await peerGate.promise;
-    }
-    return original(...args);
-  });
-  try {
-    await fs.writeFile(page("requested"), "<title>failing changed Page</title>");
-    const failing = request();
-    await failedEntered.promise;
-    await fs.writeFile(page("other"), "<title>fresh peer</title>");
-    const peer = request("other");
-    if (order === "before") {
-      await peerEntered.promise;
-      failedGate.resolve();
-      expect((await failing).status).toBe(503);
-      peerGate.resolve();
-      expect(await (await peer).text()).toContain("fresh peer");
-    } else {
-      expect(await (await peer).text()).toContain("fresh peer");
-      failedGate.resolve();
-      expect((await failing).status).toBe(503);
-    }
-    opened.mockImplementation(async (...args) => {
-      if (String(args[0]) === page("requested")) throw Object.assign(Error("still busy"), { code: "EBUSY" });
+test.each(["before", "after"])(
+  "a failed Pod keeps its marker when its capture ends %s a peer's capture",
+  async (order) => {
+    const { pods, page, request } = await fixture();
+    await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(1);");
+    await fs.writeFile(
+      join(pods, "requested", "pod.json"),
+      '{"id":"requested","entrypoints":[{"sourcePath":"Run.csx"}]}',
+    );
+    await listPackages({ podsRoots: pods });
+    rememberCaptureRoots(pods);
+    const sealed = await capturePackage("requested", pods);
+    const failedGate = Promise.withResolvers<void>(),
+      failedEntered = Promise.withResolvers<void>();
+    const peerGate = Promise.withResolvers<void>(),
+      peerEntered = Promise.withResolvers<void>();
+    const original = fs.open;
+    let heldFailed = false,
+      heldPeer = false;
+    const opened = vi.spyOn(fs, "open").mockImplementation(async (...args) => {
+      if (String(args[0]) === page("requested") && !heldFailed) {
+        heldFailed = true;
+        failedEntered.resolve();
+        await failedGate.promise;
+        throw Object.assign(Error("busy"), { code: "EBUSY" });
+      }
+      if (order === "before" && String(args[0]) === page("other") && !heldPeer) {
+        heldPeer = true;
+        peerEntered.resolve();
+        await peerGate.promise;
+      }
       return original(...args);
     });
-    await expect(capturePackage("requested", pods)).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
-    await expect(freezeScript({ sourcePath: "Run.csx", sourceBundle: sealed.sourceBundle }))
-      .rejects.toMatchObject({ status: 503, refusal: { code: "pod.discovery.exceeded" } });
-    opened.mockRestore();
-    expect(await (await request()).text()).toContain("failing changed Page");
-  } finally { failedGate.resolve(); peerGate.resolve(); }
-});
+    try {
+      await fs.writeFile(page("requested"), "<title>failing changed Page</title>");
+      const failing = request();
+      await failedEntered.promise;
+      await fs.writeFile(page("other"), "<title>fresh peer</title>");
+      const peer = request("other");
+      if (order === "before") {
+        await peerEntered.promise;
+        failedGate.resolve();
+        expect((await failing).status).toBe(503);
+        peerGate.resolve();
+        expect(await (await peer).text()).toContain("fresh peer");
+      } else {
+        expect(await (await peer).text()).toContain("fresh peer");
+        failedGate.resolve();
+        expect((await failing).status).toBe(503);
+      }
+      opened.mockImplementation(async (...args) => {
+        if (String(args[0]) === page("requested"))
+          throw Object.assign(Error("still busy"), { code: "EBUSY" });
+        return original(...args);
+      });
+      await expect(capturePackage("requested", pods)).rejects.toMatchObject({
+        code: "pod.discovery.exceeded",
+      });
+      await expect(
+        freezeScript({ sourcePath: "Run.csx", sourceBundle: sealed.sourceBundle }),
+      ).rejects.toMatchObject({ status: 503, refusal: { code: "pod.discovery.exceeded" } });
+      opened.mockRestore();
+      expect(await (await request()).text()).toContain("failing changed Page");
+    } finally {
+      failedGate.resolve();
+      peerGate.resolve();
+    }
+  },
+);
 
 test("an older failed capture cannot replace a newer successful capture of that Pod", async () => {
   const { pods, page, request } = await fixture();
-  const gate = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>(),
+    entered = Promise.withResolvers<void>();
   const original = fs.open;
   let held = false;
   const opened = vi.spyOn(fs, "open").mockImplementation(async (...args) => {
@@ -330,26 +456,45 @@ test("an older failed capture cannot replace a newer successful capture of that 
     expect((await older).status).toBe(503);
     opened.mockRestore();
     const pod = await capturePackage("requested", pods);
-    expect(Buffer.from(pod.members.find(member => member.path === "pages/hello/index.html")!.bytes).toString())
-      .toContain("newer successful observation wins");
-  } finally { gate.resolve(); }
+    expect(
+      Buffer.from(
+        pod.members.find((member) => member.path === "pages/hello/index.html")!.bytes,
+      ).toString(),
+    ).toContain("newer successful observation wins");
+  } finally {
+    gate.resolve();
+  }
 });
 
 test("a named contribution read sees edited script bytes before the inventory cadence", async () => {
   const { root, pods } = await fixture();
   await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(1);");
-  await fs.writeFile(join(pods, "requested", "pod.json"), '{"id":"requested","entrypoints":[{"sourcePath":"Run.csx"}]}');
-  const content = createContributionContent({ worldRoot: stateTree(root).directory("agent"), homeRoot: root,
-    decisionsMachine: stateTree(join(root, "machine")), packages: options => listPackages({ ...options, podsRoots: pods }) });
+  await fs.writeFile(
+    join(pods, "requested", "pod.json"),
+    '{"id":"requested","entrypoints":[{"sourcePath":"Run.csx"}]}',
+  );
+  const content = createContributionContent({
+    worldRoot: stateTree(root).directory("agent"),
+    homeRoot: root,
+    decisionsMachine: stateTree(join(root, "machine")),
+    packages: (options) => listPackages({ ...options, podsRoots: pods }),
+  });
   try {
     await content.read();
-    const app = createPeRoutes({ registrations: [], store: { getState: async () => null, setState: async () => {} },
-      heads: { observe: () => () => {} }, contributionRead: content.member });
-    const read = () => app.fetch(new Request("http://host/pe/contributions?key=script%3A%40requested%2FRun.csx"));
+    const app = createPeRoutes({
+      registrations: [],
+      store: { getState: async () => null, setState: async () => {} },
+      heads: { observe: () => () => {} },
+      contributionRead: content.member,
+    });
+    const read = () =>
+      app.fetch(new Request("http://host/pe/contributions?key=script%3A%40requested%2FRun.csx"));
     expect(await (await read()).json()).toMatchObject({ content: "Result(1);" });
     await fs.writeFile(join(pods, "requested", "Run.csx"), "Result(2);");
     expect(await (await read()).json()).toMatchObject({ content: "Result(2);" });
-  } finally { await content.close(); }
+  } finally {
+    await content.close();
+  }
 });
 
 test("an incomplete root listing cannot remove an admitted Pod that still has its manifest", async () => {
@@ -358,11 +503,14 @@ test("an incomplete root listing cannot remove an admitted Pod that still has it
   const listing = vi.spyOn(fs, "readdir").mockImplementation(async (...args) => {
     const entries = await original(...args);
     return String(args[0]) === pods && typeof args[1] === "object" && args[1]?.withFileTypes
-      ? entries.filter(entry => String(entry.name) !== "requested") : entries;
+      ? entries.filter((entry) => String(entry.name) !== "requested")
+      : entries;
   });
   await fs.writeFile(page("other"), "<title>fresh beside incomplete enumeration</title>");
   expect(await (await request("other")).text()).toContain("fresh beside incomplete enumeration");
-  await expect(capturePackage("requested", pods)).rejects.toMatchObject({ code: "pod.discovery.exceeded" });
+  await expect(capturePackage("requested", pods)).rejects.toMatchObject({
+    code: "pod.discovery.exceeded",
+  });
   const refused = await request();
   expect(refused.status).toBe(503);
   expect(await refused.text()).toContain("pod.discovery.exceeded");

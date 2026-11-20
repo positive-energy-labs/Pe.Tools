@@ -55,16 +55,21 @@ export const fansCalcData = fanCalcSchema.extend({
   ductSystemsRevision: z.number().int().nonnegative(),
   fansWork: fansDocumentSchema,
   calcSnapshot: z.union([
-    nativeResponseSchema("ducts.snapshot.walk").and(
-      z.object({ sourceVersion: z.string().optional(), slotSources: ductSlotSourcesSchema.optional() }),
-    ).refine(
-      snapshot => !snapshot.groups.some(group => group.id === "sheet") &&
-        !snapshot.nodes.some(node => node.groupId === "sheet") &&
-        !snapshot.segments.some(segment => segment.groupId === "sheet"),
-      "Retired calc group; capture this calculation again. Recording bytes were not changed.",
-    ),
+    nativeResponseSchema("ducts.snapshot.walk")
+      .and(
+        z.object({
+          sourceVersion: z.string().optional(),
+          slotSources: ductSlotSourcesSchema.optional(),
+        }),
+      )
+      .refine(
+        (snapshot) =>
+          !snapshot.groups.some((group) => group.id === "sheet") &&
+          !snapshot.nodes.some((node) => node.groupId === "sheet") &&
+          !snapshot.segments.some((segment) => segment.groupId === "sheet"),
+        "Retired calc group; capture this calculation again. Recording bytes were not changed.",
+      ),
     z.object({ kind: z.literal("absent") }),
   ]),
 });
 export const fansReadResponse = publicationSchema(fansCalcData);
-

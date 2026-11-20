@@ -31,7 +31,8 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
   if (host.shell.icons.some((icon) => icon.route === "settings")) return null;
   if (host.shell.settings === "route")
     return (
-      <Button kind="quiet"
+      <Button
+        kind="quiet"
         label="Settings"
         icon={Settings2}
         pressed={pathname === "/settings"}
@@ -72,7 +73,8 @@ export function ChromeSettings({ word = false }: { word?: boolean }) {
           </Button>
         </span>
         <span className="pe-settings-row">
-          <Button kind="quiet"
+          <Button
+            kind="quiet"
             label="Providers and agent approvals"
             onClick={() => {
               close();

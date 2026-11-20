@@ -3,7 +3,7 @@ import { TestAttention, eKey, uid } from "#/test-attention";
 import { hovered } from "@pe/kit/lang/attention";
 import { SubjectTextContext } from "@pe/kit/lang/reach";
 import { Row } from "@pe/kit/lang/row";
-import { useElementAttention } from "#/attention";
+import { useElementAttention } from "@pe/web-kernel/attention";
 import { createLiveOrbit } from "@pe/kit/lang/live-orbit";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
