@@ -1,3 +1,4 @@
+import { hostOwnership } from "./host-ownership.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import {
@@ -16,7 +17,7 @@ import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { familyExecutors, runPods, type FamilyActionDependencies } from "./family-actions.ts";
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
-import { applyStaged, buildRhvacInsert, rhvacOpen, rhvacSync } from "./rhvac-ops.ts";
+import { applyStaged, buildRhvacInsert, rhvacOpen, rhvacSync } from "@pe/rooms-host/rhvac";
 import { io } from "@pe/host-internal/command-executor";
 import { lifetime } from "./document-lifetime.ts";
 import { productExecutors } from "./product-executors.generated.ts";
@@ -67,11 +68,11 @@ export function commandRegistry(
     captures,
     // The RHVAC file lane, with the test seams a recorded journey supplies.
     rhvac: {
-      open: (path) => (openFile ? io(() => openFile(path)) : rhvacOpen({ path })),
+      open: (path) => (openFile ? io(() => openFile(path)) : rhvacOpen(hostOwnership, { path })),
       sync: (request, expectedVersion) =>
         syncFile
           ? io(() => syncFile(request, expectedVersion))
-          : rhvacSync(request, expectedVersion),
+          : rhvacSync(hostOwnership, request, expectedVersion),
       applyStaged,
       buildInsert: buildRhvacInsert,
     },

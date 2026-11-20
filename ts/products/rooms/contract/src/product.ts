@@ -4,7 +4,7 @@
  * value with `implement()` (`@pe/rooms-host/product`); each route's screen is under `web/routes/`.
  */
 import { z } from "zod";
-import { takeoffCaptureSchema, takeoffCaptureSummarySchema } from "@pe/agent-contracts";
+import { takeoffCaptureSchema, takeoffCaptureSummarySchema } from "./takeoffs.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
   cell,
@@ -301,7 +301,7 @@ export const product = define({
       ),
       "name",
     ),
-    // Takeoffs. Keys are the kernel's (`takeoffEditKey`, `takeoffDecisionKey`, `takeoffFlagKey`).
+    // Takeoffs. Work keys use takeoffEditKey and takeoffDecisionKey.
     /** A room field's next value in RHVAC, keyed `[roomId, field]`. */
     edits: cell(value(z.union([z.string(), z.number()])), "name", { label: "Room edits" }),
     /** A designer region's adoption choice, keyed `<view UniqueId>:<elementId>`. */

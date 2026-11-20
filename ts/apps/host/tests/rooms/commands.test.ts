@@ -8,19 +8,19 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { expect, test } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
+import { address } from "@pe/agent-contracts";
 import {
-  address,
-  demoSeedCodec,
   stagedTakeoffEdits,
   takeoffEditKey,
   takeoffObservationSchema,
-} from "@pe/agent-contracts";
+} from "@pe/rooms-contract/takeoffs";
+import { demoSeedCodec } from "./demo-seed.ts";
 import { landings } from "@pe/agent-contracts/product";
 import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract/product";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
 import { bindCommandRuntime } from "../../src/command-registry.ts";
 import { bindControl } from "../../src/control.ts";
-import { fileVersion } from "../../src/rhvac-ops.ts";
+import { fileVersion } from "@pe/rooms-host/rhvac";
 import {
   captureStore,
   settle,

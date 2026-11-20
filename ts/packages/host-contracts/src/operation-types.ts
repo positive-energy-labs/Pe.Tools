@@ -928,7 +928,7 @@ export const tsOnlyOperationSchemas = {
       /** With a captureId: return that file's exact stored text and path instead of its data. */
       text: Schema.optional(Schema.Boolean),
     }),
-    // Portable capture validation belongs to agent-contracts, beside TakeoffSnapshot.
+    // The Rooms product contract validates its portable capture.
     response: Schema.Unknown,
   },
   "aps.auth.login": {

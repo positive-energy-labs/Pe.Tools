@@ -121,7 +121,9 @@ const FS_SCOPE =
   /^ts\/(apps\/host|packages\/(host-contracts|host-internal|runtime))\/(?!src\/vendor\/)|^ts\/packages\/mcps\/src\//;
 // Payload staging writes build output, not runtime product state; keep the runtime budget intact.
 const BUILD_SCRIPTS = new Set(["ts/apps/host/scripts/stage-web.ts"]);
-const inStoreScope = (file: string) => FS_SCOPE.test(file) && !BUILD_SCRIPTS.has(file);
+const inStoreScope = (file: string) =>
+  file === "ts/products/rooms/host/src/rhvac-ops.ts" ||
+  (FS_SCOPE.test(file) && !BUILD_SCRIPTS.has(file));
 const FS_MODULES = new Set(["fs", "node:fs", "fs/promises", "node:fs/promises"]);
 const NODE_MUTATORS = new Set(
   [

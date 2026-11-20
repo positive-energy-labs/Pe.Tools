@@ -44,7 +44,7 @@ import {
   reconcilePackageChanges,
 } from "./package-lifecycle.ts";
 import { shippedPodsSettled } from "./installed-pods.ts";
-import { LocalOpError } from "./local-error.ts";
+import { LocalOpError } from "@pe/host-internal/local-error";
 import { PackageDiscoveryExceeded } from "./pod-capture.ts";
 import { contentRootsReady, contentHomes, ContentHomeUnavailable } from "./content-roots.ts";
 import { hostState } from "./host-ownership.ts";
@@ -64,7 +64,11 @@ export const podMemberKind = homeKind({
 });
 import { runFileKind } from "./run-files.ts";
 import { z } from "zod";
-import { localOpFileError, makeDirectory, readDirectoryEntriesOrEmpty } from "./files/index.ts";
+import {
+  localOpFileError,
+  makeDirectory,
+  readDirectoryEntriesOrEmpty,
+} from "@pe/host-internal/local-files";
 
 /**
  * Pod members are host-native file I/O under `Pods/<folder>/` in the home that holds the pod; a pod

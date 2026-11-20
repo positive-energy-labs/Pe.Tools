@@ -177,7 +177,6 @@ export type PeApiSchemas = Record<
   | "familiesObservationSummarySchema"
   | "familiesPartsSchema"
   | "familyRecordSchema"
-  | "takeoffCaptureSchema"
   | "captureListSchema"
   | "pageTargetReadingSchema"
   | "parsedDocViewSchema",
@@ -307,10 +306,8 @@ export function peRouteTable<S extends PeApiSchemas>(schemas: S) {
       "GET",
       "/takeoffs/observations",
       none,
-      z.union([
-        (schemas.takeoffCaptureSchema as S["takeoffCaptureSchema"]).nullable(),
-        z.object({ path: z.string(), text: z.string() }),
-      ]),
+      // The query selects the product's capture, text, list, or status shape.
+      z.unknown(),
       "read",
       "gateway",
       "read",

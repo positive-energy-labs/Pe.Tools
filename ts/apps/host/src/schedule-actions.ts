@@ -20,8 +20,11 @@ import {
 import { invokeBridge as invoke } from "./bridge.ts";
 import { type RevitBridge } from "@pe/host-internal/bridge";
 import { refused } from "@pe/host-internal/command-executor";
-import type { TakeoffActionDependencies } from "./rhvac-ops.ts";
-import { readOriginalProcess, type NativeProcess } from "./native-receipts.ts";
+import {
+  readOriginalProcess,
+  type NativeProcess,
+  type SdkReceiptReader,
+} from "./native-receipts.ts";
 import { type TakeoffCaptures } from "./takeoff-captures.ts";
 
 const scheduleWorkId = (document: Address, scheduleUniqueId: string) =>
@@ -55,7 +58,7 @@ export async function readSchedule(
   raw: { key: string; input?: unknown; target?: unknown },
   captures: TakeoffCaptures,
   bridge: RevitBridge["Service"],
-  deps: TakeoffActionDependencies = {},
+  deps: { sdk?: SdkReceiptReader } = {},
 ) {
   if (!Object.hasOwn(scheduleReads, raw.key)) throw refused("Unknown schedule read");
   const key = raw.key as ScheduleReadKey;

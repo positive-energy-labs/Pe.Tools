@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { LocalOpError } from "../local-error.ts";
+import { LocalOpError } from "./local-error.ts";
 
 export type DirectoryEntryInfo = { name: string; info: FileSystem.File.Info };
 

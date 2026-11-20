@@ -1,8 +1,8 @@
+import { observationSchema } from "@pe/agent-contracts";
 import {
-  observationSchema,
   takeoffCarrierPreflightSchema,
   takeoffRegionAnalysisSchema,
-} from "@pe/agent-contracts";
+} from "@pe/rooms-contract/takeoffs";
 import type {
   LiveRegion,
   PartitionReviewData,
@@ -11,7 +11,7 @@ import type {
   TakeoffModel,
   ModelRoom,
   ModelZone,
-} from "@pe/agent-contracts";
+} from "@pe/rooms-contract/takeoffs";
 import type { RevitCatalogProjectIndex, TakeoffsSnapshot } from "@pe/host-contracts/generated";
 import { Schema, SchemaGetter } from "effect";
 

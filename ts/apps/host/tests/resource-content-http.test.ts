@@ -24,8 +24,8 @@ const sdk = vi.hoisted(() => ({
   },
 }));
 // Only process I/O is recorded. SDK argv, envelope validation and reading owner stay real.
-vi.mock("../src/host-child.ts", async (original) => {
-  const real = await original<typeof import("../src/host-child.ts")>();
+vi.mock("@pe/host-internal/host-child", async (original) => {
+  const real = await original<typeof import("@pe/host-internal/host-child")>();
   const { Effect } = await import("effect");
   return {
     ...real,

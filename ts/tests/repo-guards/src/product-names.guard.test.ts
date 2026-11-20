@@ -1,7 +1,6 @@
 /**
  * ADR 0046: generic code names no product outside declared composition sites.
  * FANS-P4-NAMES-25 freezes existing mentions; counts must fall to zero and never rise.
- * B3 permits 111 mentions after S9. S12 brings the baseline back to the pre-S2b count of 101.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -49,6 +48,20 @@ const PRODUCT = new RegExp(
     .join("|"),
   "g",
 );
+// The transitional consumers import the relocated modules directly. Count every other
+// product mention in those files, and reject the same imports from new generic consumers.
+const TAKEOFF_IMPORTS: Record<string, readonly string[]> = {
+  "apps/host/src/builtin-inputs.ts": [
+    "@pe/rooms-host/takeoff-projection",
+    "@pe/rooms-contract/takeoffs",
+  ],
+  "apps/host/src/call-route.ts": ["@pe/rooms-host/rhvac", "@pe/rooms-host/takeoff-projection"],
+  "apps/host/src/family-actions.ts": ["@pe/rooms-host/rhvac"],
+  "apps/host/src/product-runtime.ts": ["@pe/rooms-host/product"],
+  "apps/host/src/takeoff-captures.ts": ["@pe/rooms-contract/takeoffs"],
+  "apps/web/src/shell/graph-history.tsx": ["@pe/rooms-contract/progress"],
+};
+
 const allowed = (path: string) =>
   ALLOWED.has(path) ||
   /^tests\/e2e\/(?:fans?[^/]*|j6-fans-write[^/]*|f1-fans[^/]*)$/.test(path) ||
@@ -60,7 +73,16 @@ export const productNames = (sources: Record<string, string>): Record<string, nu
   Object.fromEntries(
     Object.entries(sources)
       .filter(([path]) => !allowed(path))
-      .map(([path, text]) => [path, `${path}\n${text}`.match(PRODUCT)?.length ?? 0] as const)
+      .map(
+        ([path, text]) =>
+          [
+            path,
+            `${path}\n${(TAKEOFF_IMPORTS[path] ?? []).reduce(
+              (source, specifier) => source.replaceAll('from "' + specifier + '"', "from"),
+              text,
+            )}`.match(PRODUCT)?.length ?? 0,
+          ] as const,
+      )
       .filter(([, count]) => count > 0),
   );
 
@@ -123,6 +145,13 @@ test("the guard counts a planted product name and passes generic text and the al
       "apps/host/src/command-registry.ts": `import { ductsExecutors } from "./ducts-actions.ts";`,
     }),
   ).toEqual({ "apps/host/src/ducts-actions.ts": 1, "apps/host/src/a.ts": 3 });
+  expect(
+    productNames({
+      "apps/host/src/call-route.ts":
+        'import { read } from "@pe/rooms-host/rhvac"; const kind = "rooms";',
+      "apps/host/src/a.ts": 'import { read } from "@pe/rooms-host/rhvac"; const kind = "rooms";',
+    }),
+  ).toEqual({ "apps/host/src/call-route.ts": 1, "apps/host/src/a.ts": 2 });
   for (const name of ids) {
     expect(productNames({ "apps/host/src/planted.ts": `const name = '${name}';` })).toEqual({
       "apps/host/src/planted.ts": 1,

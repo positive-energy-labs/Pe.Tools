@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./product": "./src/product.ts"
+    "./product": "./src/product.ts",
+    "./takeoffs": "./src/takeoffs.ts",
+    "./progress": "./src/progress.ts"
   },
   "scripts": {
     "check": "vp exec tsc --noEmit",
@@ -12,6 +14,7 @@
   },
   "dependencies": {
     "@pe/agent-contracts": "workspace:*",
+    "@pe/host-contracts": "workspace:*",
     "zod": "4.3.6"
   },
   "devDependencies": {
