@@ -30,6 +30,7 @@ import {
   testRegistry,
 } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
+import type { RhvacOverrides } from "@pe/rooms-host/rhvac";
 import { withRoomsSheet } from "@pe/rooms-host/tests/rooms-sheet";
 import { sdkSessions } from "../native-receipt-fixture.ts";
 import { nativeRecordingRequest } from "../native-recordings.ts";
@@ -187,7 +188,7 @@ test.each([
       stamp: "recorded",
     };
     let synced = false;
-    const deps: Parameters<typeof bindCommandRuntime>[3] = {
+    const deps: Parameters<typeof bindCommandRuntime>[3] & RhvacOverrides = {
       workspace,
       sdk: sdkSessions,
       files: testDuctFiles(),

@@ -1,9 +1,9 @@
+import type { HostOffers } from "@pe/host-internal/product";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import {
   productEmitters,
   productHttp,
   productLocal,
-  type ProductDependencies,
 } from "./product-executors.generated.ts";
 import { fileVersion } from "@pe/host-internal/local-files";
 import { HomeFiles } from "@pe/host-internal/home-files";
@@ -152,7 +152,7 @@ function callRoutes(
   operations: ActionJournal,
   captures?: ObservationFiles,
   actionDeps: FamilyActionDependencies &
-    Partial<ProductDependencies> &
+    HostOffers &
     InstancesActionDependencies & {
       launchShell?: (path: string) => Promise<void>;
     } = {},

@@ -1,7 +1,7 @@
 import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { CommandExecutor } from "@pe/host-internal/command-executor";
-import type { implement } from "@pe/host-internal/product";
+import type { HostOffers, implement } from "@pe/host-internal/product";
 import type { ProductDeclaration } from "@pe/agent-contracts/product";
 type SheetOwner = Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], CommandExecutor>;
 export type SheetExecutors = ReadonlyMap<string, SheetOwner>;
@@ -17,9 +17,9 @@ function merged<T>(what: string, tables: readonly Readonly<Record<string, T>>[])
 }
 
 /** Work selects the admitted product's sheet body. */
-export function bindProducts<Deps>(
-  hosts: readonly ReturnType<typeof implement<ProductDeclaration, Deps>>[],
-  defaults: Deps,
+export function bindProducts(
+  // Each product's bodies take what they need from the offer; one that needs more fails `tsc` here.
+  hosts: readonly ReturnType<typeof implement<ProductDeclaration, HostOffers>>[],
 ) {
   return {
     productReads: hosts.map(({ reads }) => ({ reads })),
@@ -53,7 +53,7 @@ export function bindProducts<Deps>(
       "emitting call",
       hosts.map(({ emitters }) => emitters),
     ),
-    productExecutors(bridge: RevitBridge["Service"], deps: Deps = defaults) {
+    productExecutors(bridge: RevitBridge["Service"], deps: HostOffers = {}) {
       const executors: Record<string, CommandExecutor> = Object.create(null);
       const sheets = new Map<string, SheetOwner>();
       for (const { product, executors: make } of hosts) {

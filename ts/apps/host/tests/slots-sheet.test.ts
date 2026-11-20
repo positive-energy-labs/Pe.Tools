@@ -121,7 +121,6 @@ test("Rooms dispatches by Work route even when the product id differs", async ()
         executors: () => ({ "sheet.plan": { bind } as never, "sheet.apply": { bind } as never }),
       },
     ],
-    {},
   ).productExecutors({} as never);
   const executors = sheetExecutors(
     {} as never,

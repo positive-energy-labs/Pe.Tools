@@ -12,16 +12,29 @@ import type {
 import type { AttemptHost } from "./action-execution.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
-import { declareHome, type HomeReader } from "./home-files.ts";
+import { declareHome, type HomeFiles, type HomeReader } from "./home-files.ts";
+import type { CaptureKinds } from "./kept-captures.ts";
+import type { RunPods } from "./pod-runner.ts";
 import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
 import type { RequestIdentity } from "./request-contracts.d.ts";
 import { body, type Read, type ReadContext } from "./reads/door.ts";
 
-type Dependencies = {
+/**
+ * What a host offers every product body. The host states it once here; a product's dependency type
+ * takes the members it needs, so no host line depends on which products are registered.
+ */
+export type HostOffers = {
   nativeRead?: HostNativeRead["Service"];
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
+  /** The kernel capture store: a product reads its declared kinds through `captured`. */
+  captures?: { readonly kept: CaptureKinds };
+  /** Where this host keeps its checkout and its state. */
+  roots?: { readonly sourceRoot: string | null; readonly rootPath: string };
+  runPods?: RunPods;
+  files?: HomeFiles["Service"];
 };
+type Dependencies = Pick<HostOffers, "nativeRead" | "projectLifetime">;
 
 /** A command's host body. The command registry calls it once with the services it owns. */
 export type CommandBody<D = Dependencies> = (

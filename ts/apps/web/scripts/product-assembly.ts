@@ -174,8 +174,7 @@ export function renderProductAssembly(checkout: string) {
       [productAssemblyPaths.executors]: source(
         ...imports("host", "host"),
         'import { bindProducts } from "./product-runtime.ts";',
-        `export type ProductDependencies = ${hosts.map((host) => `Parameters<typeof ${host}.executors>[1]`).join(" & ") || "object"};`,
-        `export const { productExecutors, productReads, productHttp, productLocal, productFiles, productEmitters } = bindProducts<ProductDependencies>([${hosts.join(", ")}], {});`,
+        `export const { productExecutors, productReads, productHttp, productLocal, productFiles, productEmitters } = bindProducts([${hosts.join(", ")}]);`,
       ),
     },
     dependencies: {
