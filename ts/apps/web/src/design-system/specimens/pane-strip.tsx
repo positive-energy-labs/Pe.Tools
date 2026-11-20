@@ -34,13 +34,13 @@ function MountedTutorial() {
 const EXTENT = { width: 4000, height: 3000 };
 const WINDOW = { width: 800, height: 600 };
 
-const ROOMS = [
+const PLAN_AREAS = [
   ["A", 500, 500, 1000, 500],
   ["B", 2000, 1000, 1500, 1000],
   ["C", 500, 2000, 500, 500],
 ] as const;
 
-/** Stand-in rooms on a 500-unit grid, drawn per layer; a consumer paints its own field. */
+/** Stand-in areas on a 500-unit grid, drawn per layer; a consumer paints its own field. */
 const paintField = (ctx: CanvasRenderingContext2D, k: number, layers: readonly string[]) => {
   if (layers.includes("grid")) {
     ctx.strokeStyle = canvasColor(ctx, "line-2");
@@ -48,8 +48,8 @@ const paintField = (ctx: CanvasRenderingContext2D, k: number, layers: readonly s
       for (let y = 0; y < EXTENT.height; y += 500) ctx.strokeRect(x * k, y * k, 500 * k, 500 * k);
   }
   ctx.fillStyle = canvasColor(ctx, "ink-2");
-  for (const [name, x, y, w, h] of ROOMS) {
-    if (layers.includes("rooms")) ctx.fillRect(x * k, y * k, w * k, h * k);
+  for (const [name, x, y, w, h] of PLAN_AREAS) {
+    if (layers.includes("areas")) ctx.fillRect(x * k, y * k, w * k, h * k);
     if (layers.includes("labels")) ctx.fillText(name, x * k, y * k - 2);
   }
 };
@@ -84,7 +84,7 @@ const unbound = <T extends { chord?: unknown }>(options: readonly T[]) =>
   options.map(({ chord: _, ...option }) => option);
 const LAYERS = [
   { key: "grid", label: "grid", chord: "1" as const, says: "The 500-unit grid." },
-  { key: "rooms", label: "rooms", chord: "2" as const, says: "The stand-in rooms." },
+  { key: "areas", label: "areas", chord: "2" as const, says: "The stand-in areas." },
   { key: "labels", label: "labels", chord: "3" as const, says: "Room labels." },
 ];
 
@@ -182,7 +182,7 @@ export function PaneStripSpecimen() {
   const camera = useLiveOrbit(orbit, setOrbit, "specimen");
   const [mapOpen, setMapOpen] = useState(true);
   const [globeOpen, setGlobeOpen] = useState(false);
-  const [layers, setLayers] = useState<readonly string[]>(["grid", "rooms"]);
+  const [layers, setLayers] = useState<readonly string[]>(["grid", "areas"]);
   const viewport = mode === "plane" ? plane : scroll;
   // A new paint identity per layer set: the thumbnail repaints only when a layer turns.
   const paint = useCallback(
@@ -282,8 +282,8 @@ export function PaneStripSpecimen() {
       <SpecimenFrame name="Mounted tutorial" importPath="@pe/kit/lang/teach">
         <MountedTutorial />
       </SpecimenFrame>
-      <SpecimenFrame name="Tutorial foldout · declared Ducts" importPath="@pe/kit/lang/page-map">
-        <HelpWorld facts={referenceTeaching("/duct-systems")} />
+      <SpecimenFrame name="Tutorial foldout · declared Families" importPath="@pe/kit/lang/page-map">
+        <HelpWorld facts={referenceTeaching("/families")} />
       </SpecimenFrame>
     </>
   );

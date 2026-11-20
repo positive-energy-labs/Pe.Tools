@@ -1,45 +1,37 @@
-/**
- * ADR 0046: generic code names no product outside declared composition sites.
- * FANS-P4-NAMES-25 freezes existing mentions; counts must fall to zero and never rise.
- */
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "vite-plus/test";
-import { productionFiles, ROOT } from "./import-census.ts";
+import { ROOT } from "./import-census.ts";
+import { importsWorkspace, workspaceFiles, workspaceReferences } from "./workspace-boundary.ts";
 import { productAssemblyPaths } from "../../../apps/web/scripts/product-assembly.ts";
+import { routeDirectory } from "../../../packages/agent-contracts/src/generated/route-directory.ts";
 
-const frozen: Record<string, number> = JSON.parse(
-  readFileSync(new URL("./product-names.baseline.json", import.meta.url), "utf8"),
-);
-
-const GENERIC = [
-  "apps/host/src",
-  "apps/web/src/route",
-  "apps/web/src/shell",
-  "packages/runtime/src",
-  "packages/mcps/src",
-  "packages/agent-contracts/src",
-  "tests/e2e",
-];
-/** Registration sites: the only generic files that may name a product. */
-const ALLOWED = new Set([
-  "apps/host/src/command-registry.ts",
-  "apps/host/src/routes.generated.ts",
-  ...Object.values(productAssemblyPaths).map((file) => file.slice("ts/".length)),
-  "packages/host-contracts/src/product-paths.ts",
-  "packages/agent-contracts/src/routes/table.generated.ts",
-  "packages/agent-contracts/src/generated/route-directory.ts",
-  "packages/agent-contracts/src/generated/command-axes.generated.ts",
+const folders = (root: string) =>
+  readdirSync(resolve(ROOT, root), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name);
+const products = folders("products");
+const ids = new Set([
+  ...products,
+  ...routeDirectory.flatMap(({ key, product }) => (product ? [key] : [])),
 ]);
-// Names of installed product folders, in path, type and constant spelling.
-const ids = readdirSync(resolve(ROOT, "products"), { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => entry.name)
-  .sort((a, b) => b.length - a.length);
-const PRODUCT = new RegExp(
-  ids
+const packages = new Set(
+  products.flatMap((id) =>
+    ["contract", "domain", "host", "web"].map((layer) => `@pe/${id}-${layer}`),
+  ),
+);
+const names = new RegExp(
+  [...ids]
+    .sort((a, b) => b.length - a.length)
     .flatMap((id) => [
       "(?<![a-z])" + RegExp.escape(id) + "(?![a-z])",
+      ...(id.includes("-")
+        ? [
+            "(?<![a-z])" +
+              id.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase()) +
+              "(?![a-z])",
+          ]
+        : []),
       RegExp.escape(
         id.replace(/(^|-)([a-z])/g, (_, _dash, letter: string) => letter.toUpperCase()),
       ) + "(?![a-z])",
@@ -48,127 +40,49 @@ const PRODUCT = new RegExp(
     .join("|"),
   "g",
 );
-// The transitional consumers import the relocated modules directly. Count every other
-// product mention in those files, and reject the same imports from new generic consumers.
-const TAKEOFF_IMPORTS: Record<string, readonly string[]> = {
-  "apps/host/src/builtin-inputs.ts": [
-    "@pe/rooms-host/takeoff-projection",
-    "@pe/rooms-contract/takeoffs",
-  ],
-  "apps/host/src/call-route.ts": ["@pe/rooms-host/rhvac", "@pe/rooms-host/takeoff-projection"],
-  "apps/host/src/family-actions.ts": ["@pe/rooms-host/rhvac"],
-  "apps/host/src/product-runtime.ts": ["@pe/rooms-host/product"],
-  "apps/host/src/takeoff-captures.ts": ["@pe/rooms-contract/takeoffs"],
-  "apps/web/src/shell/graph-history.tsx": ["@pe/rooms-contract/progress"],
-};
 
-const allowed = (path: string) =>
-  ALLOWED.has(path) ||
-  /^tests\/e2e\/(?:fans?[^/]*|j6-fans-write[^/]*|f1-fans[^/]*)$/.test(path) ||
-  path === "packages/host-contracts/src/fixtures/k2-four-fan-walk.json" ||
-  path.startsWith("apps/web/src/duct-loss/");
+const registration = new Set([
+  "apps/host/src/command-registry.ts",
+  "apps/host/src/routes.generated.ts",
+  ...Object.values(productAssemblyPaths).map((file) => file.slice("ts/".length)),
+  "packages/host-contracts/src/product-paths.ts",
+  ...["host-catalog", "host-ops", "native-effect", "native-homes"].map(
+    (file) => `packages/host-contracts/src/generated/${file}.generated.ts`,
+  ),
+  "packages/agent-contracts/src/routes/table.generated.ts",
+  "packages/agent-contracts/src/generated/route-directory.ts",
+  "packages/agent-contracts/src/generated/command-axes.generated.ts",
+]);
+// TODO: Move these three Family contracts when Family gets its own product slice.
+const family = new Set(
+  ["family.ts", "family-actions.ts", "family-param-spec.ts"].map(
+    (file) => "packages/agent-contracts/src/" + file,
+  ),
+);
 
-/** Files (path -> text) that name a product in their path or text, with the number of mentions. */
-export const productNames = (sources: Record<string, string>): Record<string, number> =>
-  Object.fromEntries(
-    Object.entries(sources)
-      .filter(([path]) => !allowed(path))
-      .map(
-        ([path, text]) =>
-          [
-            path,
-            `${path}\n${(TAKEOFF_IMPORTS[path] ?? []).reduce(
-              (source, specifier) => source.replaceAll('from "' + specifier + '"', "from"),
-              text,
-            )}`.match(PRODUCT)?.length ?? 0,
-          ] as const,
-      )
-      .filter(([, count]) => count > 0),
-  );
-
-const changes = (actual: Record<string, number>, baseline: Record<string, number>) => ({
-  added: Object.entries(actual).filter(([path, count]) => count > (baseline[path] ?? 0)),
-  reduced: Object.entries(baseline).filter(([path, count]) => (actual[path] ?? 0) < count),
-});
-
-test("generic product mentions never grow and the baseline shrinks with removals", () => {
-  const found = productNames(
-    Object.fromEntries(
-      GENERIC.flatMap(productionFiles).map((path) => [
-        path,
-        readFileSync(resolve(ROOT, path), "utf8"),
-      ]),
-    ),
-  );
-  const rows = Object.entries(found).sort(([, a], [, b]) => b - a);
-  const by = (root: string) => rows.filter(([path]) => path.startsWith(`${root}/`));
-  console.log(
-    [
-      `product names: ${rows.length} generic files, ${rows.reduce((sum, [, n]) => sum + n, 0)} mentions`,
-      ...GENERIC.map(
-        (root) =>
-          `  ${root}: ${by(root).length} files, ${by(root).reduce((sum, [, n]) => sum + n, 0)} mentions`,
-      ),
-      ...rows.map(([path, n]) => `  ${n}\t${path}`),
-    ].join("\n"),
-  );
-  const delta = changes(found, frozen);
-  expect(
-    delta.added,
-    "New or increased product mentions: move rules to their product, never raise the baseline",
-  ).toEqual([]);
-  expect(
-    delta.reduced,
-    "Product mentions fell: lower these counts in product-names.baseline.json; remove zero-count files",
-  ).toEqual([]);
-});
-
-test("the ratchet refuses a new file and one extra mention in an existing file", () => {
-  const path = "apps/host/src/builtin-inputs.ts";
-  const count = frozen[path] ?? 0;
-  expect(changes({ ...frozen, "apps/host/src/planted.ts": 1 }, frozen).added).toEqual([
-    ["apps/host/src/planted.ts", 1],
-  ]);
-  expect(changes({ ...frozen, [path]: count + 1 }, frozen).added).toEqual([[path, count + 1]]);
-  expect(changes({ ...frozen, [path]: count - 1 }, frozen).reduced).toEqual([[path, count]]);
-  const removed = { ...frozen };
-  delete removed[path];
-  expect(changes(removed, frozen).reduced).toEqual([[path, count]]);
-});
-
-test("the guard counts a planted product name and passes generic text and the allowlist", () => {
-  expect(
-    productNames({
-      "apps/host/src/ducts-actions.ts": `export const x = 1;`,
-      "apps/host/src/a.ts": `import { fanIdentity } from "x"; const ductsFans = DUCTS_DEFAULT; type F = FanRow;`,
-      "apps/host/src/b.ts": `const fanout = infant + defang; const product = conduct;`,
-      "apps/host/src/command-registry.ts": `import { ductsExecutors } from "./ducts-actions.ts";`,
-    }),
-  ).toEqual({ "apps/host/src/ducts-actions.ts": 1, "apps/host/src/a.ts": 3 });
-  expect(
-    productNames({
-      "apps/host/src/call-route.ts":
-        'import { read } from "@pe/rooms-host/rhvac"; const kind = "rooms";',
-      "apps/host/src/a.ts": 'import { read } from "@pe/rooms-host/rhvac"; const kind = "rooms";',
-    }),
-  ).toEqual({ "apps/host/src/call-route.ts": 1, "apps/host/src/a.ts": 2 });
-  for (const name of ids) {
-    expect(productNames({ "apps/host/src/planted.ts": `const name = '${name}';` })).toEqual({
-      "apps/host/src/planted.ts": 1,
+test("generic code leaves product names and imports to product homes", () => {
+  const roots = [
+    "apps/host/src",
+    "apps/web/src",
+    "tests/e2e",
+    ...folders("packages").map((name) => `packages/${name}`),
+  ];
+  const violations = roots
+    .flatMap((root) => workspaceFiles(ROOT, root))
+    .flatMap((file) => {
+      if (!/\.[cm]?[jt]sx?$/.test(file) || /\.(?:test|spec)\.|\/__tests__\//.test(file)) return [];
+      if (/^packages\/[^/]+\/(?:tests?|fixtures)\//.test(file)) return [];
+      if (registration.has(file) || family.has(file)) return [];
+      const source = readFileSync(resolve(ROOT, file), "utf8");
+      const matches = new Set([
+        ...(`${file}\n${source}`.match(names) ?? []),
+        ...workspaceReferences(file, source).filter(
+          (specifier) =>
+            (!specifier.includes("*") && importsWorkspace(file, specifier, "products", packages)) ||
+            products.some((id) => specifier.startsWith(`@pe/${id}-`)),
+        ),
+      ]);
+      return [...matches].map((match) => `${file}: ${match}`);
     });
-  }
-  expect(
-    productNames({
-      "tests/e2e/fan-roster.ts": "fans",
-      "tests/e2e/fans-state.ts": "fans",
-      "tests/e2e/j6-fans-write.ts": "fans",
-      "tests/e2e/f1-fans.ts": "fans",
-      "packages/host-contracts/src/fixtures/k2-four-fan-walk.json": "fans",
-      "packages/host-contracts/src/product-paths.ts": "ducts",
-      "packages/mcps/src/pea/guides.generated.ts":
-        'import { admissionPreflight } from "@pe/fans-contract/admission";',
-      "apps/web/src/duct-loss/host.ts": "ducts",
-    }),
-  ).toEqual({});
-  expect(productNames({ "tests/e2e/other.ts": "fans" })).toEqual({ "tests/e2e/other.ts": 1 });
+  expect(violations, "Move product vocabulary and dependencies to the owning product").toEqual([]);
 });

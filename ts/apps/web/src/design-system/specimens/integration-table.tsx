@@ -86,8 +86,8 @@ export function RealTable() {
         artifact head
       </Provenance>
       <p className="max-w-[80ch] pt-3 t-prose text-ink-2">
-        the actual Table — the primitive atlas, takeoffs and families run on — with StateCell as its
-        cell renderer
+        the actual Table — the primitive atlas, shared by tool routes — with StateCell as its cell
+        renderer
       </p>
       <p className="max-w-[80ch] t-prose text-ink-2">
         The design-lang round hand-rolled its table, so the grammar was only ever proven against

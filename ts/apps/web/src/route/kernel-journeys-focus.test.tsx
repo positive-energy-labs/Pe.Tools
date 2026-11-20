@@ -608,8 +608,8 @@ test("JZ numeric cells refuse bounds and fractional integers without changing Wo
 });
 
 test("JZ DuctLoss numeric drafts refuse negatives without changing the URL and recover by keyboard", async () => {
-  const { module: ductLoss } = await import("../duct-loss/route");
-  const { InputsBody } = await import("../duct-loss/route.tsx");
+  const { module: ductLoss } = await import("@pe/ducts-web/duct-loss/route");
+  const { InputsBody } = await import("@pe/ducts-web/duct-loss/panes");
   const { solve } = await import("@pe/ducts-domain/duct-loss-math");
   let search = new URLSearchParams({ cfm: "0", length: "100" });
   const mount = mounts.mountTypedRoute(
@@ -1131,7 +1131,7 @@ import rawMuas from "@pe/fans-domain/calc/fixtures/muas-local-20261102.json";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 // The saved capture predates the required `vocabulary` and the P2-B coverage field `walk.unreadPeers`.
 const realMuas = { ...rawMuas, vocabulary: VOCABULARY, walk: { ...rawMuas.walk, unreadPeers: [] } };
-import { createWitness } from "../../../../tests/e2e/fans-witness.test-support.ts";
+import { createWitness } from "../../../../tests/journey-fixtures/fans-witness.test-support.ts";
 import type { ReceiptFeedState } from "../../../../packages/agent-contracts/src/work-journal-door";
 import { TypedWrite } from "../shell/typed-shell";
 import type { ReadingDelivery } from "@pe/agent-contracts/route";

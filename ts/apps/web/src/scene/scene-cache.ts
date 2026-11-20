@@ -1,5 +1,5 @@
 /**
- * Decoded PSC1 scenes resident in the browser, shared by every route that draws one (space, ducts).
+ * Decoded PSC1 scenes resident in the browser, shared by every route that draws one.
  * A scene is content-addressed by its artifact id; observed revisions invalidate older captures.
  */
 import type { Psc1Metadata } from "./psc1";

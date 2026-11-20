@@ -22,15 +22,18 @@ it("preset none hides a proximity pipe stub but keeps a neighbour duct stub", ()
   const none = { ...LOOK.defaults.layers, context: "none" as const };
   expect(contextVisible(C.pipes, "stub", none)).toBe(false);
   expect(contextVisible(C.pipes, "stub", none, false)).toBe(false);
-  expect(contextVisible(C.ducts, "stub", none, true)).toBe(true);
-  expect(contextVisible(C.ducts, "stub", none, false)).toBe(false);
-  expect(contextVisible(C.ducts, "context", none)).toBe(false);
+  expect(contextVisible(C.rigidDuct, "stub", none, true)).toBe(true);
+  expect(contextVisible(C.rigidDuct, "stub", none, false)).toBe(false);
+  expect(contextVisible(C.rigidDuct, "context", none)).toBe(false);
 });
 
 it("a hidden category hides both proximity and neighbour stubs, and never a subject", () => {
-  const hidden = { ...LOOK.defaults.layers, hiddenCategories: [String(C.pipes), String(C.ducts)] };
+  const hidden = {
+    ...LOOK.defaults.layers,
+    hiddenCategories: [String(C.pipes), String(C.rigidDuct)],
+  };
   expect(contextVisible(C.pipes, "stub", hidden, false)).toBe(false);
-  expect(contextVisible(C.ducts, "stub", hidden, true)).toBe(false);
+  expect(contextVisible(C.rigidDuct, "stub", hidden, true)).toBe(false);
   expect(contextVisible(C.pipes, "subject", hidden)).toBe(true);
   expect(contextVisible(C.pipes, "stub", LOOK.defaults.layers)).toBe(true);
 });

@@ -1,6 +1,5 @@
 /**
- * The plane viewport (a Page key): one pose math for the Space axis pictures and the Rooms and
- * Takeoffs plans (`use-plane-viewport.ts` is its gesture hook). A viewport puts content point
+ * The plane viewport (a Page key): one pose math for axis pictures and floor plans (`use-plane-viewport.ts` is its gesture hook). A viewport puts content point
  * (u, v) at canvas px (u * scale + tx, ty -+ v * scale): Space's frames are v up, a plan's
  * content is y down.
  *

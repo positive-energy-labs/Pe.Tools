@@ -5,3 +5,4 @@ import { product as product1 } from "@pe/ducts-contract/product";
 import { product as product2 } from "@pe/fans-contract/product";
 import { product as product3 } from "@pe/rooms-contract/product";
 export const tutorialProducts: readonly ProductDeclaration[] = [product0, product1, product2, product3];
+export { phaseLabel } from "@pe/rooms-contract/progress";

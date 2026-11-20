@@ -1,5 +1,5 @@
 import { FIRM_SEED } from "@pe/ducts-domain/input-layers";
-import { fixtureTimeline } from "../../../shell/fixture-work-door.ts";
+import { fixtureTimeline } from "../../../../src/shell/fixture-work-door.ts";
 import * as ductsReads from "@pe/duct-systems-contract/contract";
 import { createHash } from "node:crypto";
 import { withStoredRulings } from "@pe/ducts-domain/rulings";
@@ -10,11 +10,11 @@ import { fansCalcData, openFanCalcSchema } from "@pe/fans-contract/fans-read";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import sheet from "../../../../../../products/ducts/web/src/fixtures/fan-sheet.json";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
-import { placeInput } from "../../../shell/typed-place.test-support.ts";
+import { placeInput } from "../../../../src/shell/typed-place.test-support.ts";
 import type { UseSource } from "@pe/agent-contracts/route";
-import { browserWorkPorts, createWorkFeedClient } from "../../../shell/work-feed-client.ts";
+import { browserWorkPorts, createWorkFeedClient } from "../../../../src/shell/work-feed-client.ts";
 
-import { mountTypedRoute } from "../../../shell/typed-mount.ts";
+import { mountTypedRoute } from "../../../../src/shell/typed-mount.ts";
 import { nativeTestAdapter } from "./native.test-support.ts";
 import { admitModules } from "../../../../../../products/ducts/web/src/admission.test-support.ts";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
@@ -53,17 +53,17 @@ export function witnessFactory(dependencies: FixtureDependencies) {
     closes: (() => void)[],
     saved = new Map<string, unknown>(),
     overrides: Readonly<Record<string, UseSource>> = {},
-    work?: import("../../../shell/typed-place.ts").PlaceInput["work"],
+    work?: import("../../../../src/shell/typed-place.ts").PlaceInput["work"],
     receipts?: import("@pe/agent-contracts").WorkJournalDoor["receipts"],
     /** The action door; absent, the browser's own. A witness hands in a real host journal here. */
     submit: typeof browserWorkPorts.submit = browserWorkPorts.submit,
     /** The Pe HTTP client the findings history door goes through; absent, the browser's own. */
     findings?: Parameters<
-      typeof import("../../../shell/work-feed-client.ts").createTimelineClient
+      typeof import("../../../../src/shell/work-feed-client.ts").createTimelineClient
     >[0],
     /** The Readings stream the mount reads the findings Work from; absent, the browser's own. */
-    readings?: Pick<import("../../../host/resource-stream.ts").Readings, "subscribe">,
-    timeline?: import("../../../shell/work-feed-client.ts").TimelineClient,
+    readings?: Pick<import("../../../../src/host/resource-stream.ts").Readings, "subscribe">,
+    timeline?: import("../../../../src/shell/work-feed-client.ts").TimelineClient,
   ) {
     const admitted = await admit();
     const ws = new RouteWorkspace({

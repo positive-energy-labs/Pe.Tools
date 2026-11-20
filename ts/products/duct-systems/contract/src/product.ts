@@ -10,7 +10,7 @@ import {
   ductSystemCells,
   type DuctsRouteDocument,
 } from "@pe/ducts-contract/system-work";
-import { losses, product as base } from "@pe/ducts-contract/product";
+import { losses, lossSheetNative, product as base } from "@pe/ducts-contract/product";
 import { fanScopeSchema, type FanScope } from "@pe/ducts-contract/fan-scope.neutral";
 import { DUCTS_SYSTEM_MAX } from "./ducts-read.ts";
 import * as reads from "./contract.ts";
@@ -118,7 +118,11 @@ export const product = define({
   },
   homes: { settings: base.homes.settings, catalogs: base.homes.catalogs, losses },
   cells: ductSystemCells,
-  sheetWrites: { route: "duct-systems", writes: { losses: ["rules", "assumptions"] } },
+  sheetWrites: {
+    route: "duct-systems",
+    writes: { losses: ["rules", "assumptions"] },
+    native: lossSheetNative,
+  },
   readings: {
     overview: {
       handle: reads.overview,
@@ -173,6 +177,11 @@ export const product = define({
   routes: {
     [DUCT_SYSTEMS_ROUTE]: {
       name: "Ducts",
+      captureSubject: "system",
+      demoPlace: {
+        id: "demo-tab-ducts",
+        link: "/duct-systems?fixture=scene&system=Office%20retained%20page",
+      },
       directory: {
         group: "Calculate loads & airflow",
         summary: "Review duct systems, stage inputs and rulings, and plan writes to Revit",

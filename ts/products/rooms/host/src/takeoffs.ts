@@ -1,8 +1,4 @@
-/**
- * The model writes of both routes behind one carrier pattern: read the record replacements at the
- * plan, seal them, and pass them to the native leaf at apply. Moved from the host app's takeoff
- * actions; the Rooms commands are in `rooms.ts`.
- */
+/** Plan seals record replacements for the native apply. */
 import { z } from "zod";
 import { createHash } from "node:crypto";
 import { win32 } from "node:path";
@@ -27,12 +23,12 @@ import {
   type TakeoffCapture,
 } from "@pe/rooms-contract/takeoffs";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
+import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type {
-  HostOperationKey,
   RhvacExtractData,
   RhvacSyncRequest,
   RhvacSyncResult,
-} from "@pe/host-contracts/operation-types";
+} from "@pe/rooms-contract/local-operations";
 import type { ActionExecution, Step } from "@pe/host-internal/action-execution";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import {

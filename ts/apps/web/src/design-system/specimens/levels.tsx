@@ -69,7 +69,7 @@ export function LevelsSpecimen() {
   return (
     <Demo
       label="Measured level datums"
-      consumers="/ducts · scene/levels.ts, scene/level-marks.tsx"
+      consumers="scene/levels.ts, scene/level-marks.tsx"
       spec="Fixture geometry. One quiet perimeter per measured plane; coincident names share a tick. The root inventory keeps every level and discloses unavailable source instances."
     >
       <svg viewBox="0 0 440 210" className="w-full text-ink-2" aria-label="Fixture level datums">

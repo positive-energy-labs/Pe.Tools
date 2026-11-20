@@ -97,6 +97,7 @@
       "@pe/duct-systems-contract",
       "@pe/duct-systems-web",
       "@pe/ducts-contract",
+      "@pe/ducts-web",
       "@pe/fans-contract",
       "@pe/fans-web",
       "@pe/rooms-contract",

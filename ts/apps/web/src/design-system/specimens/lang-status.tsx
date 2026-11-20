@@ -46,7 +46,7 @@ export function LangStatusSpecimens() {
             story={props.state as "scope" | "filter"}
             exit={props.state === "scope" ? "run capture on this level" : "clear the filter"}
           >
-            {props.state === "scope" ? "no zones on this level" : "0 of 124 rooms match"}
+            {props.state === "scope" ? "no zones on this level" : "0 of 124 areas match"}
           </EmptyState>
         )}
       />

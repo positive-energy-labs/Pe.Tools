@@ -17,7 +17,7 @@ import type {
   RhvacSyncRequest,
   RhvacSyncResult,
   RhvacTakeoffData,
-} from "@pe/host-contracts/operation-types";
+} from "@pe/rooms-contract/local-operations";
 import { checkoutLayout } from "@pe/host-contracts/service-identity";
 import {
   readDirectoryEntriesOrEmpty,

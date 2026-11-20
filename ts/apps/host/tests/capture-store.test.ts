@@ -7,7 +7,7 @@ import { Context, Effect, Exit, Layer, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { expect } from "vite-plus/test";
 import { address, bindWork } from "@pe/agent-contracts";
-import { CaptureStore, CaptureStoreClosed } from "../src/takeoff-captures.ts";
+import { CaptureStore, CaptureStoreClosed } from "../src/observation-store.ts";
 import { effectTest } from "./effect-test.ts";
 
 const document = { session: "s", openId: "o" };

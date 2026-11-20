@@ -11,7 +11,7 @@ import {
 import { KeyScopeHost } from "@pe/kit/keys";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 import { SPLIT_FLOOR } from "../../../../packages/kit/src/components/lang/pane-resize";
-import { module as ductLoss } from "../duct-loss/route";
+import { module as ductLoss } from "@pe/ducts-web/duct-loss/route";
 import { TypedChrome } from "./typed-shell";
 import { mountTypedRoute } from "./typed-mount";
 import { createWorkFeedClient } from "./work-feed-client";

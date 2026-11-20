@@ -1,4 +1,4 @@
-import * as contracts from "./contract.ts";
+import { result } from "@pe/ducts-contract/duct-loss-read";
 import type { ContextOf } from "@pe/web-kernel/route";
 import { read, field, hostRead } from "@pe/agent-contracts/route";
 import { z } from "zod";
@@ -17,7 +17,7 @@ export const fields = {
   face: field(z.enum(["commercial", "residential"]), "commercial", "pose", "push"),
 };
 export const loaded = read(
-  hostRead(contracts.result),
+  hostRead(result),
   (page: { [K in keyof typeof fields]: z.output<(typeof fields)[K]["schema"]> }) =>
     ductLossArgs.parse(page),
 );
@@ -26,7 +26,7 @@ export const module = route({
   key: "duct-loss",
   name: "Duct Loss",
   needs: "host",
-  host: "./host.ts",
+  host: "@pe/ducts-host/product",
   directory: {
     label: "Duct friction",
     exposure: "Main",
@@ -46,19 +46,19 @@ export const module = route({
       title: "Wheel",
       purpose: "Drag diameter or airflow",
       body: "scroll",
-      draw: draw("scroll", () => import("./route.tsx"), "WheelBody"),
+      draw: draw("scroll", () => import("../../src/duct-loss/panes.tsx"), "WheelBody"),
     },
     inputs: {
       title: "Inputs",
       purpose: "Type a duct and read its loss",
       body: "scroll",
-      draw: draw("scroll", () => import("./route.tsx"), "InputsBody"),
+      draw: draw("scroll", () => import("../../src/duct-loss/panes.tsx"), "InputsBody"),
     },
     charts: {
       title: "Charts",
       purpose: "Inspect the friction law",
       body: "scroll",
-      draw: draw("scroll", () => import("./route.tsx"), "ChartsBody"),
+      draw: draw("scroll", () => import("../../src/duct-loss/panes.tsx"), "ChartsBody"),
     },
   },
   layout: {

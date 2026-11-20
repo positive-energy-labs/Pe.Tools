@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { memberWork, settingsRouteState } from "@pe/agent-contracts";
 import { RouteWorkspace } from "../../../packages/runtime/src/route-workspace.ts";
-import { TakeoffCaptures } from "../src/takeoff-captures.ts";
+import { TakeoffCaptures } from "../src/observation-store.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import {
   composeMember,

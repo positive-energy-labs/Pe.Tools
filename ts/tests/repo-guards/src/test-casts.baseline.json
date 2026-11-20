@@ -87,6 +87,7 @@
     "apps/web/src/shell/work-feed-client.test.ts": 4,
     "apps/web/src/shell/work-journal-client.test.ts": 2,
     "apps/web/src/workbench/route-panes.test.tsx": 1,
+    "apps/web/tests/integration/products/ducts/native.test-support.ts": 1,
     "packages/agent-contracts/src/catalog-admission.test.ts": 2,
     "packages/agent-contracts/src/catalog-work.test.ts": 1,
     "packages/agent-contracts/src/catalog.test.ts": 1,
@@ -102,7 +103,6 @@
     "packages/kit/tests/legend.test.tsx": 1,
     "packages/kit/tests/live-orbit.test.ts": 2,
     "packages/kit/tests/query-workbench.test.tsx": 1,
-    "products/rooms/host/src/takeoffs-commands.test.ts": 2,
     "packages/runtime/src/recording-diff.test.ts": 5,
     "packages/runtime/tests/work-handle.test.ts": 1,
     "packages/runtime/tests/work-journal.test.ts": 1,
@@ -131,6 +131,7 @@
     "products/fans/web/src/calc/inputs-trust.test.ts": 1,
     "products/fans/web/src/calc/layers.test.ts": 1,
     "products/fans/web/src/calc/roster-computed.test.ts": 1,
+    "products/rooms/host/src/takeoffs-commands.test.ts": 2,
     "tests/e2e/products/one-lifecycle.test.tsx": 3,
     "tests/e2e/route-chaos-launch.ts": 1
   }

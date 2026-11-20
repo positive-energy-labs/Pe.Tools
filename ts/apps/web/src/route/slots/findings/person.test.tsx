@@ -25,7 +25,7 @@ import { TimelineButtons } from "../../../shell/situation-band";
 import { createTimelineClient, type TimelineClient } from "../../../shell/work-feed-client";
 import { GraphHistory } from "../../../shell/graph-history";
 import { observeWorkReceipts } from "../../../../../host/src/work-receipt-feed";
-import { createWitness } from "../../../../../../tests/e2e/fans-witness.test-support.ts";
+import { createWitness } from "../../../../../../tests/journey-fixtures/fans-witness.test-support.ts";
 import { Notes } from "./notes.tsx";
 import { subjectCode } from "@pe/agent-contracts/subject-ref";
 import { workReadings } from "./readings.test-support";

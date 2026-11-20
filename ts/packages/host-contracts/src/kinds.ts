@@ -76,7 +76,6 @@ export type StateRoot = {
   readonly apsCredentials: StatePath;
   readonly apsTokens: StatePath;
   readonly harnessThreads: StatePath;
-  readonly ductsAnalyses: StatePath;
   readonly peaWork: StatePath;
   readonly providers: StatePath;
   readonly homesConfig: StatePath;
@@ -94,7 +93,7 @@ type RootAt<A extends At> = {
 }[A];
 
 type KindSpec<T, Args extends readonly unknown[]> = {
-  /** Words a person knows: "Work for /ducts". */
+  /** The location in words a person knows. */
   readonly place: (...args: Args) => string;
   readonly schema: z.ZodType<T>;
   /** Path segments under the root. Each is one name: no separator, no `.` or `..`. */

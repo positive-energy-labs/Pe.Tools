@@ -10,7 +10,7 @@ import {
 import { schemaOf, type Domain, type DomainValue } from "@pe/agent-contracts/slots/sheet";
 import type { Immutable, RouteStatePatch } from "@pe/agent-contracts";
 import { DUCT_UNIT_ROLES, elementSubjectRecord } from "@pe/ducts-contract/duct-inputs";
-import { lossWrites, product as ducts } from "@pe/ducts-contract/product";
+import { lossWrites, lossSheetNative, product as ducts } from "@pe/ducts-contract/product";
 import { admissionPreflight } from "./admission.ts";
 import { peaGuide } from "./pea/ducts-skill.ts";
 import { contract } from "@pe/agent-contracts/handle";
@@ -230,7 +230,7 @@ const declaration = declare({
   homes: ducts.homes,
   cells: fanCells,
   commands: {},
-  sheetWrites: { route: "fans", writes },
+  sheetWrites: { route: "fans", writes, native: lossSheetNative },
   readings: {
     calc: {
       handle: calc,
@@ -240,6 +240,7 @@ const declaration = declare({
     },
     roster: {
       handle: fanRoster,
+      timelineRoute: "fans",
       sources: ["losses", "settings"],
       load: { slow: "Reading fan ports", freshBy: ["document-mark"] },
       says: "Use fans.roster with args {target, mark} to find a fan port by its mark.",

@@ -193,8 +193,8 @@ function ReviewLandingSpecimen() {
       <Button
         kind="nav"
         direction="forward"
-        label="review Round Elbow in Ducts"
-        reason="Open Round Elbow in Ducts, on its row"
+        label="review Round Elbow in Families"
+        reason="Open Round Elbow in Families, on its row"
         onClick={() => setLanding((n) => n + 1)}
       >
         review

@@ -1,5 +1,10 @@
 {
   "extends": "../../packages/browser/tsconfig.json",
   "compilerOptions": { "declaration": false, "lib": ["ES2024", "DOM"] },
-  "include": ["typed-page.ts", "product-selection*.ts", "fans-reds*.ts", "route-chaos-launch.ts"]
+  "include": [
+    "typed-page.ts",
+    "product-selection*.ts",
+    "../journey-fixtures/fans-reds*.ts",
+    "route-chaos-launch.ts"
+  ]
 }

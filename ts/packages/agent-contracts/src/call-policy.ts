@@ -15,8 +15,6 @@ export const callPolicies: Readonly<Record<string, CallPolicy>> = {
   "host.ops.catalog": { hostOnly: true, admission: "intrinsic" },
   "op.cancel": { cancel: true, admission: "intrinsic" },
   "scripting.execute": { script: true },
-  "takeoffs.saved": { saved: true },
-  "takeoffs.snapshot": { snapshot: true, admission: "intrinsic" },
   "revit.context.view-image": { capture: true },
   "revit.context.view-image.focus": { capture: true },
   "host.shell.open": { shell: true },

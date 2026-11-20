@@ -59,14 +59,14 @@ import {
   podEntries,
   builtinModule,
   podModule,
-  ductsData,
+  multiSubjectData,
   schemas,
   entries,
 } from "./route-kernel.fixtures.ts";
 
 type Builtin = BodyBindings<typeof builtinData, typeof schemas, typeof entries, string>;
 type Pod = BodyBindings<typeof podData, typeof schemas, typeof podEntries, string>;
-type Ducts = BodyBindings<typeof ductsData, typeof schemas, typeof entries, string>;
+type Ducts = BodyBindings<typeof multiSubjectData, typeof schemas, typeof entries, string>;
 
 /** Never executed. tsc checks every refusal with declarations ON; Vitest checks the data. */
 export function typeRefusals(
@@ -395,9 +395,12 @@ export function criticRefusals(
 }
 
 describe("S0 signature witnesses", () => {
-  it.each([builtinData, podData, ductsData])("decodes $key with the same data schema", (data) => {
-    expect(RouteGraphJson.parse(JSON.parse(JSON.stringify(data)))).toEqual(data);
-  });
+  it.each([builtinData, podData, multiSubjectData])(
+    "decodes $key with the same data schema",
+    (data) => {
+      expect(RouteGraphJson.parse(JSON.parse(JSON.stringify(data)))).toEqual(data);
+    },
+  );
   it("keeps detail explicit and validates its minimum reach without a cost cap", () => {
     const parse = (detail: unknown) =>
       RouteGraphJson.safeParse({ ...podData, readings: { ...podData.readings, detail } }).success;

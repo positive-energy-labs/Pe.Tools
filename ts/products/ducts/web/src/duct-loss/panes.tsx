@@ -1,14 +1,14 @@
 import { reasonOf } from "@pe/web-kernel/route/typed-route";
 /** The graph owns state, acquisition, layout and keys; these adapters supply pane content. */
 import { useEffect, useId, useState, type ReactNode } from "react";
-import type { DuctLossContext } from "./route";
+import type { DuctLossContext } from "../../routes/duct-loss/route.ts";
 import { FactChip } from "@pe/kit/lang/chip";
 import { Input } from "@pe/kit/lang/input";
 import { StateCell } from "@pe/kit/lang/cell";
 import { Switcher } from "@pe/kit/lang/switcher";
-import { DuctCharts } from "#/duct-loss/duct/charts";
-import { FACES, type FaceKey } from "#/duct-loss/duct/ductulator";
-import { Ductulator } from "#/duct-loss/duct/wheel";
+import { DuctCharts } from "./duct/charts";
+import { FACES, type FaceKey } from "./duct/ductulator";
+import { Ductulator } from "./duct/wheel";
 import { type DuctInput, type DuctResult, materials } from "@pe/ducts-domain/duct-loss-math";
 
 const fmt = (n: number, d = 2) => n.toLocaleString("en-US", { maximumFractionDigits: d });

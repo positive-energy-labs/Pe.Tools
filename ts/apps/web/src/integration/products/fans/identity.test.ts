@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { createWitness } from "./cutover.test-support.ts";
+import { createWitness } from "../../../../tests/integration/products/fans/cutover.test-support.ts";
 import { admit } from "@pe/fans-web/admission.fixture";
 import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { decode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";

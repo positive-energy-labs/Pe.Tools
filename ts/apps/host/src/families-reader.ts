@@ -29,7 +29,7 @@ import { assertFresh, HostDocumentMarks, type DocumentMarks } from "./document-m
 import { hostOwnership } from "./host-ownership.ts";
 import { parsePeRevitEnvelope, peRevitLauncher } from "./pe-revit-launch.ts";
 import { resolveStartProject, runPeRevitCli } from "./session-route.ts";
-import { type FamiliesObservation, type TakeoffCaptures } from "./takeoff-captures.ts";
+import { type FamiliesObservation, type TakeoffCaptures } from "./observation-store.ts";
 
 type Matrix = RevitMatrixLoadedFamilies.Res.Response;
 type Family = Matrix["families"][number];

@@ -52,7 +52,7 @@ test("two open documents: the route settles on the picker, with no busy mark", a
   };
   // The machine census never answers here: no census can make one of two documents the sole one.
   world.machine = { state: "pending" };
-  const { admit } = await import("../../../../tests/e2e/fans-witness.test-support.ts");
+  const { admit } = await import("../../../../tests/journey-fixtures/fans-witness.test-support.ts");
   const fans = (await admit()).presenter;
   const root = createRootRoute({
     component: () => <TypedShell module={fans.typed} fingerprint={fans.workFingerprint} />,

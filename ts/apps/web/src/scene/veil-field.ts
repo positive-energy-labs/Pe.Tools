@@ -7,7 +7,7 @@
  *
  * d is a baked 3D distance field (one byte per cell, about 2 M cells at most), sampled
  * per fragment by world position. Chosen over a per-vertex attribute because a wall is a few huge
- * triangles whose corners are all far from the ducts, so vertex grain cannot light its middle;
+ * triangles whose corners are all far from the segments, so vertex grain cannot light its middle;
  * and over a uniform array of subject boxes because 4 systems plus stubs are thousands of elements
  * and a duct's box is not the duct. Cost: triangle surface rasterization + 3-pass EDT once per
  * subject change, one texture fetch per fragment. Distance is approximate within two cells

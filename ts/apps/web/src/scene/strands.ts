@@ -209,7 +209,7 @@ function laneRaycast(this: LineSegments2, raycaster: THREE.Raycaster, hits: THRE
 const noRaycast = () => {};
 const luminance = (c: THREE.Color) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 
-/** One layer per strand: casing, ink and its occluded twin (strands live inside their ducts, so
+/** One layer per strand: casing, ink and its occluded twin (strands live inside their segments, so
  * the twin is always drawn), plus a dashed flow stroke on top while it flows. `over` element
  * segments take the one alarm ink (`damageColors.core`, the scene's damage hue). Each target is
  * the strand's own subject, so a pick selects `run:<id>` and a hover lights it. */

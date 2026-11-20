@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { openBrowser } from "@pe/browser";
 import type { ServiceFile } from "../../packages/host-contracts/src/vendor/pe-service.ts";
-import { seedConversationWork, CONVERSATION_THREADS } from "../e2e/conversation-work.fixture.ts";
+import { seedConversationWork, CONVERSATION_THREADS } from "./conversation-work.fixture.ts";
 
 const root = resolve(
   execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim(),

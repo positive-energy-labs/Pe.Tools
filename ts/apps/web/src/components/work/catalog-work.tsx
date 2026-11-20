@@ -1,6 +1,6 @@
 /**
  * The shared review for a Page-less catalog owner (ADR 0030 rule 2): its staged cells with their authors, and
- * the one write button over the generated plan/apply pair. A person on /ducts sees the same Work, handle and
+ * the one write button over the generated plan/apply pair. The person sees the same Work, handle and
  * sealed plan Pea plans through; no per-op component and no Page. A held plan draws its cells from the plan
  * response itself (`evidence.touched`: the model's before it read, the after, the author), so an absent
  * before says "(none)". Every owner reads its stored base at plan (K3), so a plan that discloses no touched

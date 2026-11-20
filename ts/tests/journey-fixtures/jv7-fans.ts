@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { journey, WEB } from "../e2e/cdp.ts";
 import { marks, settled } from "../e2e/marks.ts";
-import { fanRosterLabel } from "../e2e/fan-roster.ts";
+import { fanRosterLabel } from "./fan-roster.ts";
 
 const missing = "UniqueId:f2f7a0d6-placeholder";
 await journey("J-V7", async (page, step, dir) => {

@@ -9,6 +9,7 @@ export const productAssemblyPaths = {
   contracts: "ts/packages/mcps/src/pea/product-contracts.generated.ts",
   guides: "ts/packages/mcps/src/pea/guides.generated.ts",
   executors: "ts/apps/host/src/product-executors.generated.ts",
+  operations: "ts/packages/host-contracts/src/generated/product-operations.generated.ts",
   tutorial: "ts/apps/web/src/route/tutorial-products.generated.ts",
 };
 
@@ -57,18 +58,52 @@ export function renderProductAssembly(checkout: string) {
   const tools = ["builtinTools", ...members("tools")];
   const contractImports = imports("contract", "product");
   const hosts = declared.map((_, index) => `host${index}`);
+  const gateways = rows.flatMap(({ host }) =>
+    host && Object.hasOwn(host.exports ?? {}, "./gateway") ? [host.name] : [],
+  );
+  // Each product contributes a self-contained schema module. Project source into the protocol
+  // package so it keeps key and codec types without a workspace dependency back on a product.
+  const operations = rows.flatMap(({ id, contract }) => {
+    if (!contract || !Object.hasOwn(contract.exports ?? {}, "./local-operations")) return [];
+    const file = join(root, id, "contract/src/local-operations.ts");
+    return [
+      readFileSync(file, "utf8")
+        .replaceAll("\r\n", "\n")
+        .split("\n")
+        .filter((line) => !line.startsWith("import ") && !line.startsWith("export type "))
+        .map((line) => line.replace(/^export /, ""))
+        .join("\n"),
+    ];
+  });
+  const local = operations.map((_, index) => `local${index}`);
   const names = (values: (string | undefined)[]) =>
     [...new Set(values.filter((name) => name !== undefined))].sort();
   return {
     outputs: {
+      [productAssemblyPaths.operations]: source(
+        'import { Schema } from "effect";',
+        'import type { HostLocalCatalogEntry } from "../operation-types.ts";',
+        ...operations.map(
+          (body, index) =>
+            `const local${index} = (() => {\n${body}\nreturn { localOperationSchemas, localOperationCatalog };\n})();`,
+        ),
+        `export const productOperationCatalog = [${spread(local.map((name) => name + ".localOperationCatalog"))}];`,
+        `export const productOperationSchemas = { ${spread(local.map((name) => name + ".localOperationSchemas"))} };`,
+      ),
       [productAssemblyPaths.tutorial]: source(
         'import type { ProductDeclaration } from "@pe/agent-contracts/product";',
         ...contractImports,
         `export const tutorialProducts: readonly ProductDeclaration[] = [${products.join(", ")}];`,
+        ...rows.flatMap(({ contract }) =>
+          contract && Object.hasOwn(contract.exports ?? {}, "./progress")
+            ? [`export { phaseLabel } from "${contract.name}/progress";`]
+            : [],
+        ),
       ),
       [productAssemblyPaths.actions]: source(
         'import { builtinCommands, builtinTools, targetForCommand, withHostActions } from "@pe/agent-contracts/semantic-actions";',
         'import { assertProductCatalogKeys } from "@pe/agent-contracts/pe-api";',
+        'import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";',
         'import type { DocumentRef, Tool } from "@pe/agent-contracts";',
         'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
         ...contractImports,
@@ -79,7 +114,12 @@ export function renderProductAssembly(checkout: string) {
         `assertUniqueProductKeys("tool", [${tools.join(", ")}]);`,
         `assertUniqueProductKeys("command", [${commands.join(", ")}]);`,
         `export const tools: ${tools.map((table) => "typeof " + table).join(" & ")} = { ${spread(tools)} };`,
-        `export const commands = { ${spread(commands)} };`,
+        `const products = [${products.join(", ")}] as readonly import("@pe/agent-contracts/product").ProductDeclaration[];`,
+        "const sheet = (phase: keyof typeof SHEET_COMMANDS) => {",
+        "  const action = builtinCommands[SHEET_COMMANDS[phase]];",
+        "  return { ...action, native: [...new Set([...action.native, ...products.flatMap(product => product.sheetWrites?.native?.[phase] ?? [])])] };",
+        "};",
+        `export const commands = { ${spread(commands)}, [SHEET_COMMANDS.plan]: sheet("plan"), [SHEET_COMMANDS.apply]: sheet("apply") };`,
         "export const hostActions = withHostActions(commands);",
         "export type SemanticActionKey = keyof typeof commands;",
         "export type HostActionKey = keyof typeof hostActions;",
@@ -90,7 +130,7 @@ export function renderProductAssembly(checkout: string) {
         "}",
       ),
       [productAssemblyPaths.catalog]: source(
-        'import { createPeCatalog } from "@pe/agent-contracts/pe-api";',
+        'import { createPeCatalog, type PeCatalog } from "@pe/agent-contracts/pe-api";',
         'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
         'import { hostActions } from "./product-actions.generated.ts";',
         ...contractImports,
@@ -99,10 +139,12 @@ export function renderProductAssembly(checkout: string) {
         ),
         'assertUniqueProductKeys("call policy", callPolicies);',
         'assertUniqueProductKeys("named read", reads.map(read => read.inputs));',
+        `assertUniqueProductKeys("HTTP read", [${members("http").join(", ")}]);`,
+        `const http = { ${spread(members("http"))} };`,
         "const catalog = createPeCatalog(hostActions, {",
         "  inputs: Object.assign({}, ...reads.map(read => read.inputs)),",
         '  help: reads.map(read => read.help).filter(Boolean).join(" "),',
-        "}, Object.assign({}, ...callPolicies));",
+        "}, Object.assign({}, ...callPolicies), http);",
         ...[
           "peRoutes",
           "linkedCatalog",
@@ -112,8 +154,7 @@ export function renderProductAssembly(checkout: string) {
           "isPeRouteId",
           "createPeClient",
         ].map(
-          (name) =>
-            `export const ${name}: ReturnType<typeof createPeCatalog>["${name}"] = catalog.${name};`,
+          (name) => `export const ${name}: PeCatalog<typeof http>["${name}"] = catalog.${name};`,
         ),
       ),
       [productAssemblyPaths.contracts]: source(
@@ -123,6 +164,7 @@ export function renderProductAssembly(checkout: string) {
         'import { assertUniqueProductKeys } from "./assembly-checks.ts";',
         ...contractImports,
         `const products = [${products.join(", ")}] as const;`,
+        "export const timelineReads: Readonly<Record<string, string>> = Object.assign({}, ...products.map(product => product.timelineReads));",
         "export const resourceReadingSchema = z.union([readingRequestSchema, ...products.flatMap(product => [...product.resourceInputs])]);",
         "const owners = products.map(product => product.settingOwners);",
         'assertUniqueProductKeys("settings owner", owners);',
@@ -142,8 +184,13 @@ export function renderProductAssembly(checkout: string) {
       ),
       [productAssemblyPaths.executors]: source(
         ...imports("host", "host"),
+        ...gateways.map(
+          (name, index) => `import { gateway as gateway${index} } from "${name}/gateway";`,
+        ),
         'import { bindProducts } from "./product-runtime.ts";',
-        `export const { productExecutors, productReads } = bindProducts([${hosts.join(", ")}]);`,
+        `type Dependencies = ${hosts.map((host) => `Parameters<typeof ${host}.executors>[1]`).join(" & ") || "object"};`,
+        `export const { productExecutors, productReads } = bindProducts<Dependencies>([${hosts.join(", ")}], {});`,
+        `export const productGateway = { ${spread(gateways.map((_, index) => `gateway${index}`))} };`,
       ),
     },
     dependencies: {

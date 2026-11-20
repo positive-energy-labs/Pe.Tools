@@ -4,14 +4,20 @@ import { serviceHeaders, contextHeaders } from "./callers.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, bindWork } from "@pe/agent-contracts";
-import { takeoffsWork } from "@pe/rooms-contract/product";
+import { product, takeoffsWork } from "@pe/rooms-contract/product";
+import { createPeClient } from "@pe/mcps/product-catalog";
+import {
+  HOST_RPC_BRIDGE_SESSION_HEADER,
+  HOST_RPC_DOCUMENT_HEADER,
+} from "@pe/host-contracts/operation-types";
+import type { z } from "zod";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { Layer } from "effect";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
+import { afterEach, beforeEach, expect, expectTypeOf, test, vi } from "vite-plus/test";
 import { ActionJournal } from "../src/action-journal.ts";
 import { serveRoutes } from "./real-server.ts";
 import * as receipts from "../src/receipt-export.ts";
@@ -123,6 +129,28 @@ test("a successful /call records a succeeded host operation", async () => {
   } finally {
     record.mockRestore();
   }
+});
+test("the catalog client reads saved and live observations with the declared product type", async () => {
+  const client = createPeClient(server.base, (url, init) => {
+    const headers = new Headers(init?.headers);
+    for (const [key, value] of Object.entries(contextHeaders())) headers.set(key, value);
+    return fetch(url, { ...init, headers });
+  });
+  const saved = await client.call("takeoffs.observations", { query: { saved: true } });
+  expectTypeOf(saved).toEqualTypeOf<z.output<typeof product.readings.observations.handle.data>>();
+  expect(saved).toEqual([]);
+  const target = { session: "observed-session", openId: "observed-document" };
+  const live = await client.call(
+    "takeoffs.observations",
+    {},
+    {
+      headers: {
+        [HOST_RPC_BRIDGE_SESSION_HEADER]: target.session,
+        [HOST_RPC_DOCUMENT_HEADER]: target.openId,
+      },
+    },
+  );
+  expect(live).toEqual({ kind: "empty", target });
 });
 test("action controls cannot borrow a human receipt across caller threads", async () => {
   for (const verb of ["cancel"]) {

@@ -319,8 +319,8 @@ const RULES: Rule[] = [
     roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}", WK + "**/*.{ts,tsx}"], asOf: "2026-10-23",
     exclude: [W + "{doc,docs,guide,tutorial,help,chat}/**"],
     allow: allow({
-      "duct-loss/route.tsx": "Input labels, measured values, headings and equations name the calculation.",
-      "duct-loss/duct/charts.tsx": "Caption labels the plotted law.",
+      "products/ducts/web/src/duct-loss/panes.tsx": "Input labels, measured values, headings and equations name the calculation.",
+      "products/ducts/web/src/duct-loss/duct/charts.tsx": "Caption labels the plotted law.",
       [WK + "components/work/band.tsx"]: "Recovery receipts, write conflicts and staged tallies support a decision.",
       "route/situation-verbs.tsx": "Outcomes and refusals disclose effects before a write.",
       "route/schedules/stale-resolve.tsx": "Readback failure explains recovery before overwrite.",
@@ -330,8 +330,8 @@ const RULES: Rule[] = [
       // Moved out of the excluded chat/ folder (k2 chat-route) so machine/notice.tsx can import it; same 3 uses.
       "workbench/question-form.tsx": "The question card asks the person a question the harness waits on.",
     }), max: {
-      [W + "duct-loss/route.tsx"]: 7,
-      [W + "duct-loss/duct/charts.tsx"]: 1,
+      ["products/ducts/web/src/duct-loss/panes.tsx"]: 7,
+      ["products/ducts/web/src/duct-loss/duct/charts.tsx"]: 1,
       [WK + "components/work/band.tsx"]: 3,
       [W + "route/situation-verbs.tsx"]: 2,
       [W + "route/schedules/stale-resolve.tsx"]: 2,

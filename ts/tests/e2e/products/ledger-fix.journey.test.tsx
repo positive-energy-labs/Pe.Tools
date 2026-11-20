@@ -8,7 +8,7 @@ import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 import sheetFixture from "@pe/ducts-web/fixtures/fan-sheet.json";
 import { makeAtomRegistry } from "../../../apps/web/src/shell/owner.ts";
-import { createWitness } from "../fans-witness.test-support.ts";
+import { createWitness } from "../../journey-fixtures/fans-witness.test-support.ts";
 import { ductsLink, namesOf, fanSystems } from "@pe/ducts-web/identity";
 import { fields } from "@pe/duct-systems-web/route";
 
