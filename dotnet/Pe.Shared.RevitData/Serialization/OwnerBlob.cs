@@ -36,14 +36,9 @@ public sealed record OwnerBlobRead(OwnerDescriptor Owner, OwnerBlobStatus Status
     /// <summary>Whether a write can proceed without recovery.</summary>
     public bool MayOverwrite => this.Status is OwnerBlobStatus.Absent or OwnerBlobStatus.Ok;
 
-    public OwnerBlobReplacement? Replacement {
-        get {
-            if (this.Status is not (OwnerBlobStatus.Invalid or OwnerBlobStatus.UnknownVersion)) return null;
-            using var sha = SHA256.Create();
-            var hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(this.Raw!))).Replace("-", "").ToLowerInvariant();
-            return new OwnerBlobReplacement(this.Owner.Owner, this.Status, this.Error!, hash);
-        }
-    }
+    public OwnerBlobReplacement? Replacement => this.Status is OwnerBlobStatus.Invalid or OwnerBlobStatus.UnknownVersion
+        ? new OwnerBlobReplacement(this.Owner.Owner, this.Status, this.Error!, OwnerBlob.HashRaw(this.Raw!))
+        : null;
 }
 
 /// <summary>
@@ -109,11 +104,27 @@ public static class OwnerBlob {
         return text;
     }
 
+    /// <summary>Seals an envelope whose data the owner refused without changing the read or the model.</summary>
+    public static OwnerBlobReplacement DataRefused(this OwnerBlobRead read, string reason) {
+        if (read.Status != OwnerBlobStatus.Ok || read.Raw is null)
+            throw new InvalidOperationException("A data refusal requires a readable envelope.");
+        return new OwnerBlobReplacement(read.Owner.Owner, OwnerBlobStatus.Invalid, reason, HashRaw(read.Raw));
+    }
+
+    internal static string HashRaw(string raw) {
+        using var sha = SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(raw))).Replace("-", "").ToLowerInvariant();
+    }
+
     /// <summary>Validates the next envelope and completes recovery before returning replacement text.</summary>
-    public static string? Replace(OwnerBlobRead stored, JObject data, Action<OwnerBlobReplacement, string> recover) {
+    public static string? Replace(OwnerBlobRead stored, JObject data, Action<OwnerBlobReplacement, string> recover,
+        OwnerBlobReplacement? replacing = null) {
+        if (replacing is not null && (stored.Raw is null || replacing.Owner != stored.Owner.Owner ||
+            !string.Equals(HashRaw(stored.Raw), replacing.RawUtf8Sha256, StringComparison.Ordinal)))
+            throw new InvalidOperationException($"The stored '{stored.Owner.Name}' changed since replacement was planned.");
         var text = Encode(stored.Owner, data);
-        if (string.Equals(stored.Raw, text, StringComparison.Ordinal)) return null;
-        if (stored.Replacement is { } replacement) recover(replacement, stored.Raw!);
+        if (replacing is null && string.Equals(stored.Raw, text, StringComparison.Ordinal)) return null;
+        if ((replacing ?? stored.Replacement) is { } replacement) recover(replacement, stored.Raw!);
         return text;
     }
 

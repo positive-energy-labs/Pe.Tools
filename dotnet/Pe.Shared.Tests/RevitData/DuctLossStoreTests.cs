@@ -1,4 +1,8 @@
 using NUnit.Framework;
+using Pe.Shared.Product;
+using Pe.Shared.StorageRuntime;
+using System.Security.Cryptography;
+using System.Text;
 using Pe.Shared.RevitData.Ducts;
 using Pe.Shared.RevitData.Serialization;
 
@@ -107,6 +111,59 @@ public sealed class DuctLossStoreTests {
         Assert.That(blob.Replacement?.Status, Is.EqualTo(expected));
         Assert.That(blob.Raw, Is.EqualTo(raw));
         Assert.That(DuctLossStore.Read(blob).Value, Is.Null);
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void Data_refused_preview_is_pure_and_apply_requires_the_same_bytes(bool stale) {
+        var root = Directory.CreateTempSubdirectory("pe-duct-replacement-").FullName;
+        try {
+            var owner = DuctLossStore.Owner;
+            var raw = Stored("{\"roles\":{\"42\":{\"role\":\"fan\"}},\"note\":\"donn\u00e9e\"}");
+            var bytes = Encoding.UTF8.GetBytes(raw);
+            var envelope = owner with { ValidateData = null };
+            var blob = OwnerBlob.Decode(envelope, raw);
+            var refused = DuctLossStore.Read(blob);
+            Assert.That(blob.Status, Is.EqualTo(OwnerBlobStatus.Ok));
+            Assert.That(blob.Replacement, Is.Null);
+            Assert.That(refused.Value, Is.Null);
+
+            var replacement = blob.DataRefused(refused.Refusal!);
+            var sha = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            Assert.That(replacement, Is.EqualTo(new OwnerBlobReplacement(owner.Owner, OwnerBlobStatus.Invalid, refused.Refusal!, sha)));
+            Assert.That(Encoding.UTF8.GetBytes(blob.Raw!), Is.EqualTo(bytes));
+            Assert.That(Directory.GetFileSystemEntries(root), Is.Empty, "preview has no disk effects");
+
+            var modelText = stale ? raw + " " : raw;
+            var before = Encoding.UTF8.GetBytes(modelText);
+            var next = new DuctLossStore { Roles = new() { [Unit] = new DuctRoleRecord("fan", At) } };
+            void Apply() => modelText = OwnerBlob.Replace(OwnerBlob.Decode(envelope, modelText), next.ToData(),
+                (evidence, kept) => StoredFile.KeepModelRecord(root, evidence.Owner, "Fixture model", kept, evidence.Reason),
+                replacement) ?? modelText;
+
+            if (stale) {
+                Assert.That(Apply, Throws.InvalidOperationException.With.Message.Contains("changed since replacement"));
+                Assert.That(Encoding.UTF8.GetBytes(modelText), Is.EqualTo(before));
+                Assert.That(Directory.GetFileSystemEntries(root), Is.Empty);
+                return;
+            }
+
+            Apply();
+            Assert.That(Read(modelText).Value?.Roles[Unit].Role, Is.EqualTo("fan"));
+            var recovery = Path.Combine(root, "model-recovery", "owner-duct-losses");
+            var backup = Path.Combine(recovery, sha + ".txt");
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(bytes));
+            var notices = Path.Combine(root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+
+            modelText = raw; // Simulate retry after the model transaction rolled back.
+            Apply();
+            Assert.That(modelText, Is.EqualTo(next.ToJson()));
+            Assert.That(Directory.GetFiles(recovery), Is.EqualTo(new[] { backup }));
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [TestCase(null)]
