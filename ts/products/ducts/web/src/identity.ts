@@ -23,10 +23,13 @@ export function ductsLink(
   const params = new URLSearchParams();
   for (const key of ["target", "fixture", "thread"])
     if (typeof search[key] === "string") params.set(key, search[key]);
-  if (ids && "unitId" in ids)
-    params.set("fan", JSON.stringify({ unitId: ids.unitId, portIndex: ids.portIndex }));
-  else if (Array.isArray(ids) && ids.length)
-    params.set("system", JSON.stringify({ kind: "ids", ids: ids.map(systemCode) }));
+  // A link owns both scope fields. An omitted field would reopen the remembered scope.
+  const fan = ids && "unitId" in ids ? { unitId: ids.unitId, portIndex: ids.portIndex } : null;
+  params.set("fan", JSON.stringify(fan));
+  params.set(
+    "system",
+    JSON.stringify({ kind: "ids", ids: Array.isArray(ids) ? ids.map(systemCode) : [] }),
+  );
   // A rule is a route attention place, never a SubjectRef (ADR 0035 rule 9).
   if (destination.kind === "rule")
     params.set("selected", JSON.stringify([{ kind: "focus", id: `rule:${destination.key}` }]));

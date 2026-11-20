@@ -10975,7 +10975,7 @@ export namespace RevitResolveUnitValue {
   }
 }
 
-/** Draw one room or zone region from loops on a plan view; a person's designation, so a room is locked. */
+/** Draw one room or zone region from loops on a plan view by numeric Revit view id; a person's designation, so a room is locked. */
 export namespace RoomsDraw {
   export namespace Req {
     export interface Request {
@@ -10993,7 +10993,7 @@ export namespace RoomsDraw {
   }
 }
 
-/** Combine two or more rooms or held regions of one zone on one plan view into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
+/** Combine two or more rooms or held regions of one zone on one plan view by numeric Revit view id into one locked Room Region, keeping the largest member's fields and RHVAC link and deleting the sources. */
 export namespace RoomsMerge {
   export namespace Req {
     export interface Request {
@@ -11012,7 +11012,7 @@ export namespace RoomsMerge {
   }
 }
 
-/** Partition each zone drawn on one plan view into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. */
+/** Partition each zone drawn on one plan view by numeric Revit view id into rooms, adopting role-less Filled Regions as zones or rooms by wall evidence and keeping locked and matched Room Regions, in one transaction. Binds missing project-wide Room carrier parameters in that transaction. */
 export namespace RoomsPartition {
   export namespace Req {
     export interface Request {
@@ -11164,7 +11164,7 @@ export namespace RoomsSnapshot {
   }
 }
 
-/** Read the solver's layer 1 for each zone on one plan view from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
+/** Read the solver's layer 1 for each zone on one plan view by numeric Revit view id from a rooms.partition run, the newest when runId is absent: rails, network segments by kind, openings with their evidence, per-face facts before judgment, and accounting. */
 export namespace RoomsTrace {
   export namespace Req {
     export interface Request {
@@ -12431,7 +12431,7 @@ export const hostOpSafety = {
   "revit.resolve.unit-value": {"costTier":"Bounded","subject":"None","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
   "rooms.draw": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "rooms.merge": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
-  "rooms.partition": {"costTier":"Mutation","subject":"View","touches":"Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
+  "rooms.partition": {"costTier":"Mutation","subject":"View","touches":"Metadata, Geometry","effect":"ModelWrite","cardinality":"One","internal":true},
   "rooms.roster": {"costTier":"Cheap","subject":"Document","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},
   "rooms.snapshot": {"costTier":"Bounded","subject":"View","touches":"Geometry","effect":"Read","cardinality":"One","internal":false},
   "rooms.trace": {"costTier":"Bounded","subject":"View","touches":"Metadata","effect":"Read","cardinality":"One","internal":false},

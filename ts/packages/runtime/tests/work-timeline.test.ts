@@ -85,6 +85,21 @@ const revitWrite = (key: WorkKey, revision: number, expected: unknown) =>
     consumes: [{ kind: "work", probe: { handle: { key, revision }, paths: [["a"]] }, expected }],
   });
 
+test("the Timeline shows a Stop request before the action settles", async () => {
+  const f = place();
+  const edit = await f.edit(f.ducts, "human", "friction", "a", 5);
+  const written = revitWrite(f.ducts, edit.revision, { a: 5 });
+  const readState = async (receipt: ActionStatus) =>
+    (await f.read("human", [receipt])).rows.find((row) => row.kind === "receipt")?.state;
+  const running = actionStatusSchema.parse({ ...written, state: "running" });
+  const stopping = actionStatusSchema.parse({ ...running, cancellationRequested: true });
+  expect(await readState(running)).toBe("running");
+  expect(await readState(stopping)).toBe("stopping");
+  expect(
+    await readState(actionStatusSchema.parse({ ...written, cancellationRequested: true })),
+  ).toBe("succeeded");
+});
+
 test("two Works: two undos then one redo through the door, and the read names each step the door takes", async () => {
   const f = place();
   await f.edit(f.ducts, "human", "ducts edit", "a", 1);

@@ -16,7 +16,11 @@ import { HostLog } from "../src/host-log.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { settle } from "./effect-test.ts";
 import type { ReadOwnership } from "../src/reads/read-ownership.ts";
-import { markDispatched, recordNativeTerminal } from "../src/action-dispatch.ts";
+import {
+  markDispatched,
+  recordNativeProgress,
+  recordNativeTerminal,
+} from "../src/action-dispatch.ts";
 import { bindControl, callerOf, mintPageDoor } from "../src/control.ts";
 
 test("unpinning mid-action refuses the next journal step", async () => {
@@ -144,6 +148,7 @@ async function fixture(
   readOwnership?: ReadOwnership,
   failAfter = false,
   environment?: Parameters<ActionJournal["bindCommands"]>[0],
+  stepRequest: { key: string; input: Record<string, unknown> } = { key: "test.hold", input: {} },
 ) {
   const dir = await mkdtemp(join(tmpdir(), "pe-attempt-"));
   const host = Scope.makeUnsafe();
@@ -175,11 +180,11 @@ async function fixture(
             bind: async () => ({ effects: [] }),
             run: (_ctx, execution) =>
               execution
-                .step("native", "test.hold", {}, (requestId) =>
+                .step("native", stepRequest.key, stepRequest.input, (requestId) =>
                   Effect.gen(function* () {
                     seen.identity = yield* RequestIdentity;
                     yield* Effect.promise(() => markDispatched(requestId, "bridge"));
-                    calls.push({ key: "test.hold", requestId });
+                    calls.push({ key: stepRequest.key, requestId });
                     return yield* Deferred.await(native);
                   }).pipe(
                     Effect.onInterrupt(() => Effect.sync(() => void (seen.interrupted = true))),
@@ -204,21 +209,25 @@ async function fixture(
     },
   );
   const submitter = admittedRequestIdentity(human, {});
-  const holds = () => calls.filter((call) => call.key === "test.hold");
+  const holds = () => calls.filter((call) => call.key === stepRequest.key);
   // The /actions admission fiber: it journals the row, then is aborted with its request once the
   // attempt's native step has entered. Returns that step's id.
   const submit = async (id: string) => {
     const before = holds().length;
-    const admission = Effect.runFork(
-      Effect.tryPromise(() =>
-        journal.invoke(
-          { id, key: "test.hold", target: { kind: "host" }, input: {} },
-          { caller: human, basis: null, parent: submitter.requestId },
-        ),
-      ).pipe(Effect.andThen(Effect.never), Effect.provideService(RequestIdentity, submitter)),
+    await settle(
+      Effect.gen(function* () {
+        const admission = yield* Effect.forkChild(
+          Effect.tryPromise(() =>
+            journal.invoke(
+              { id, key: "test.hold", target: { kind: "host" }, input: {} },
+              { caller: human, basis: null, parent: submitter.requestId },
+            ),
+          ).pipe(Effect.andThen(Effect.never), Effect.provideService(RequestIdentity, submitter)),
+        );
+        yield* Effect.promise(() => vi.waitFor(() => expect(holds()).toHaveLength(before + 1)));
+        yield* Fiber.interrupt(admission);
+      }),
     );
-    await vi.waitFor(() => expect(holds()).toHaveLength(before + 1));
-    await settle(Fiber.interrupt(admission));
     return holds()[before]!.requestId;
   };
   return {
@@ -322,6 +331,34 @@ test("live native terminal facts survive the step write and journal reopen", asy
     });
     expect(row.steps[0]).not.toHaveProperty("effect");
     expect((await f.reopen().list(undefined, "facts"))[0]?.steps).toEqual(row.steps);
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("only the dispatched rooms request updates its journal receipt with native progress", async () => {
+  const f = await fixture(undefined, false, undefined, {
+    key: "rooms.partition",
+    input: { view: 9948 },
+  });
+  try {
+    const id = await f.submit("rooms-progress");
+    const progress = { phase: "Solve", zonesDone: 1, zonesTotal: 2 };
+    const report = (operationKey: string, phase: string, zonesDone = 1) =>
+      recordNativeProgress(
+        JSON.stringify({ requestId: id, progress: { ...progress, zonesDone } }),
+        (requestId) => (requestId === id ? { operationKey, phase } : undefined),
+      );
+    await report("rooms.partition", "queued");
+    await report("other.operation", "dispatched");
+    expect((await f.journal.list(undefined, "rooms-progress"))[0]?.progress).toBeUndefined();
+
+    await report("rooms.partition", "dispatched");
+    expect((await f.journal.list(undefined, "rooms-progress"))[0]?.progress).toEqual(progress);
+    f.answer(Effect.succeed({ ok: true }));
+    expect((await f.journal.wait("rooms-progress")).state).toBe("succeeded");
+    await report("rooms.partition", "dispatched", 2);
+    expect((await f.reopen().list(undefined, "rooms-progress"))[0]?.progress).toEqual(progress);
   } finally {
     await f.dispose();
   }

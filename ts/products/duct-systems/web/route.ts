@@ -103,6 +103,7 @@ export const module = route({
   },
   subject: {
     field: "system",
+    resetQuery: ["fan"],
     noun: "system",
     pane: "e-systems",
     read: roster,

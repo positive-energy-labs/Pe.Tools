@@ -17,6 +17,7 @@ using Pe.Shared.StorageRuntime.Modules;
 using Pe.Revit.Loader;
 using Pe.Revit.Loader.Documents;
 using Pe.Revit.Operations;
+using Pe.Revit.Takeoff;
 using Pe.Revit.Tasks;
 using Pe.Revit.Global.Services.Document;
 using Serilog;
@@ -139,7 +140,7 @@ internal sealed class BridgeAgent : IDisposable {
         Log.Information("Host bridge agent queued initial document state publish.");
 
         this.IsConnected = true;
-        RevitReceiptTransport.Sender = this.ForwardReceiptAsync;
+        RevitReceiptTransport.Sender = this.ForwardEventAsync;
         this.RuntimeFramework = RuntimeInformation.FrameworkDescription;
         this.RevitVersion = uiapp.Application.VersionNumber;
         Log.Information(
@@ -168,7 +169,7 @@ internal sealed class BridgeAgent : IDisposable {
         this._disposed = true;
         this.IsConnected = false;
         RequestEvidence.Detach(this.SendTerminalAsync);
-        if (RevitReceiptTransport.Sender == this.ForwardReceiptAsync)
+        if (RevitReceiptTransport.Sender == this.ForwardEventAsync)
             RevitReceiptTransport.Sender = null;
         Log.Information("Host bridge disconnecting: BridgeUri={BridgeUri}", this._bridgeOptions.BridgeUri);
 
@@ -248,6 +249,9 @@ internal sealed class BridgeAgent : IDisposable {
 
     private async Task HandleRequestAsync(BridgeRequest request, CancellationToken cancellationToken) {
         using var requestScope = RevitReceiptTransport.EnterRequest(request.RequestId);
+        // Rooms owns the decision to stop at a checkpoint or finish its transaction. Wait for the
+        // runner's actual result and send it even if Stop signalled the request during materialization.
+        var settlementToken = request.OperationKey == "rooms.partition" ? CancellationToken.None : cancellationToken;
         Log.Information("Host bridge received request: OperationKey={OperationKey}, RequestId={RequestId}",
             request.OperationKey, request.RequestId);
         var startedAt = Stopwatch.GetTimestamp();
@@ -287,13 +291,16 @@ internal sealed class BridgeAgent : IDisposable {
                     // that per-run link when the delegate returns, and an async op (scripting.execute)
                     // returns at its first await, so op.cancel would fire a token nothing links anymore.
                     var run = await this._revitTaskQueue.RunForResult(
-                        context => OpRunner.RunAsync(
-                            op,
-                            request.PayloadJson,
-                            ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
-                            cancellationToken, request.DerivedCommand),
+                        context => {
+                            using var revitThreadRequest = RevitReceiptTransport.EnterRequest(request.RequestId);
+                            return OpRunner.RunAsync(
+                                op,
+                                request.PayloadJson,
+                                ResolveDocument(op, request.OpenDocumentId, context.Cancellation),
+                                cancellationToken, request.DerivedCommand);
+                        },
                         new RevitRunOptions { Label = op.Key },
-                        cancellationToken,
+                        settlementToken,
                         onLateCompletion: result => late.TrySetResult(result)
                     ).ConfigureAwait(false);
                     if (run.Outcome == RevitTaskOutcome.Faulted)
@@ -309,7 +316,7 @@ internal sealed class BridgeAgent : IDisposable {
                             run.Detail,
                             startedAt,
                             requestBytes,
-                            cancellationToken
+                            settlementToken
                         ).ConfigureAwait(false);
                         return;
                     } else
@@ -377,7 +384,7 @@ internal sealed class BridgeAgent : IDisposable {
             );
             await this.RespondAsync(request, receipt, BridgeWire.Verdicts.Ok, OpReceiptResponse.Ok(
                 new JRaw(payloadJson), touched, ran.EvidenceJson is null ? null : new JRaw(ran.EvidenceJson)),
-                frame, cancellationToken).ConfigureAwait(false);
+                frame, settlementToken).ConfigureAwait(false);
             Log.Information(
                 "Host bridge wrote response frame: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -386,7 +393,9 @@ internal sealed class BridgeAgent : IDisposable {
         } catch (OperationCanceledException cancelled) {
             // The pump owns the token, so the pump answers the cancelled frame. Here we only
             // stamp the verdict `op result` reads, then hand the pump the same touched.
-            var message = $"Operation '{request.OperationKey}' was cancelled.";
+            var message = request.OperationKey == "rooms.partition" && touched is Touched.None
+                ? "Stopped. Nothing was written to the model."
+                : $"Operation '{request.OperationKey}' was cancelled.";
             Log.Information(
                 "Host bridge request cancelled: OperationKey={OperationKey}, RequestId={RequestId}",
                 request.OperationKey,
@@ -396,7 +405,7 @@ internal sealed class BridgeAgent : IDisposable {
             this.Settle(request, receipt, BridgeWire.Verdicts.Cancelled, OpReceiptResponse.Failed(
                 message, BridgeOperationExceptions.CancelledStatusCode, touched),
                 Refusal(request, BridgeOperationExceptions.CancelledStatusCode, "Cancelled", message, touched).Response!);
-            throw new OpCancelledException(touched, cancelled);
+            throw new OpCancelledException(touched, cancelled, message);
         } catch (BridgeOperationException ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(
@@ -429,7 +438,7 @@ internal sealed class BridgeAgent : IDisposable {
             // op broke when it was simply refused.
             var verdict = ex.StatusCode == 423 ? BridgeWire.Verdicts.Refused : BridgeWire.Verdicts.Failed;
             await this.RespondAsync(request, receipt, verdict, OpReceiptResponse.Failed(ex.Message, ex.StatusCode, touched),
-                errorFrame, cancellationToken).ConfigureAwait(false);
+                errorFrame, settlementToken).ConfigureAwait(false);
         } catch (Exception ex) {
             var totalMs = GetElapsedMilliseconds(startedAt);
             var errorFrame = new BridgeFrame(
@@ -458,7 +467,7 @@ internal sealed class BridgeAgent : IDisposable {
                 request.RequestId
             );
             await this.RespondAsync(request, receipt, BridgeWire.Verdicts.Failed, OpReceiptResponse.Failed(
-                ex.Message, BridgeOperationExceptions.UnexpectedStatusCode, touched), errorFrame, cancellationToken).ConfigureAwait(false);
+                ex.Message, BridgeOperationExceptions.UnexpectedStatusCode, touched), errorFrame, settlementToken).ConfigureAwait(false);
         } finally {
             if (deferred)
                 _ = RequestEvidence.CompleteWhenFinishedAsync(request.RequestId, AwaitDeferredAsync(late.Task),
@@ -871,10 +880,10 @@ internal sealed class BridgeAgent : IDisposable {
     private Task WriteFrameAsync(BridgeFrame frame, CancellationToken cancellationToken) =>
         this._transportSession.WriteAsync(frame, cancellationToken);
 
-    private async Task<bool> ForwardReceiptAsync(string payloadJson, CancellationToken cancellationToken) {
+    private async Task<bool> ForwardEventAsync(string eventName, string payloadJson, CancellationToken cancellationToken) {
         if (!this.IsConnected || Encoding.UTF8.GetByteCount(payloadJson) > 8192) return false;
         await this.WriteFrameAsync(new BridgeFrame(BridgeFrameKind.Event,
-            Event: new BridgeEvent(RevitReceiptTransport.EventName, payloadJson)), cancellationToken).ConfigureAwait(false);
+            Event: new BridgeEvent(eventName, payloadJson)), cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -910,11 +919,21 @@ internal sealed class BridgeAgent : IDisposable {
 public static class RevitReceiptTransport {
     public const string EventName = "receipt.producer";
     private static readonly AsyncLocal<string?> Request = new();
-    internal static Func<string, CancellationToken, Task<bool>>? Sender { get; set; }
+    internal static Func<string, string, CancellationToken, Task<bool>>? Sender { get; set; }
     public static string? CurrentRequestId => Request.Value;
 
     public static Task<bool> ForwardAsync(string payloadJson, CancellationToken cancellationToken) =>
-        Sender?.Invoke(payloadJson, cancellationToken) ?? Task.FromResult(false);
+        Sender?.Invoke(EventName, payloadJson, cancellationToken) ?? Task.FromResult(false);
+
+    internal static async Task ReportRoomsProgressAsync(RoomsPartitionProgress progress) {
+        if (CurrentRequestId is not { } requestId || Sender is not { } sender) return;
+        try {
+            var payload = JsonConvert.SerializeObject(new { requestId, progress }, SdkOperations.Json);
+            await sender("rooms.partition.progress", payload, CancellationToken.None).ConfigureAwait(false);
+        } catch (Exception ex) {
+            Log.Debug(ex, "Could not deliver rooms partition progress for {RequestId}", requestId);
+        }
+    }
 
     internal static IDisposable EnterRequest(string requestId) {
         var previous = Request.Value;
