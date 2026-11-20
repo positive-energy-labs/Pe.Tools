@@ -50,14 +50,9 @@ function rhvacScriptDirectory(sourceRoot: string | null): string | null {
     : resolve(sourceRoot, checkoutLayout.dotnet, "Pe.Revit.Takeoff", "Rhvac");
 }
 
-export const fileVersion = async (path: string) =>
-  createHash("sha256")
-    .update(await readFile(path))
-    .digest("hex");
 /** Test seams of the RHVAC file lane and the Work reads every command family shares. */
-type RhvacRoots = { sourceRoot: string | null; rootPath: string };
+export type RhvacRoots = { sourceRoot: string | null; rootPath: string };
 export type RhvacOverrides = {
-  fileVersion?: typeof fileVersion;
   openFile?: (path: string) => Promise<RhvacExtractData>;
   syncFile?: (input: RhvacSyncRequest, expectedVersion: string) => Promise<RhvacSyncResult>;
 };

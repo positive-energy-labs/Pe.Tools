@@ -583,7 +583,14 @@ type LocalInput<O> = O extends { readonly request: infer S extends Schema.Top }
  * `Deps` is what the host hands every body of the product, and `Run` what a local body answers with
  * (the runtime names its own effect).
  */
-export type HostBodies<P extends ProductDeclaration, Context, Executor, Deps = never, Run = never> = {
+export type HostBodies<
+  P extends ProductDeclaration,
+  Context,
+  Executor,
+  Deps = never,
+  Run = never,
+  Call = never,
+> = {
   readonly readings: {
     readonly [K in keyof P["readings"]]:
       | ReadingBody<P, K, Context>
@@ -606,6 +613,8 @@ export type HostBodies<P extends ProductDeclaration, Context, Executor, Deps = n
    * body may read host state a `ReadContext` cannot. `document` resolves an open document's address.
    */
   readonly files?: Readonly<Record<string, FileBody<Deps>>>;
+  /** A native call the product answers itself, by operation key; its `snapshot` call policy names it. */
+  readonly calls?: Readonly<Record<string, Call>>;
   readonly http?: {
     readonly [K in keyof P["http"]]: (
       request: HttpRequest<z.output<P["http"][K]["input"]>["body"]>,
