@@ -18,11 +18,12 @@ import { settingsFile } from "@pe/host-internal/read-graph";
 
 const sessionEvidence = machineSessionSchema
   .unwrap()
-  .pick({ row: true, whose: true })
+  .pick({ row: true, whose: true, documentsLeg: true, holdingsLeg: true })
   .extend({
     attachment: z.object({ session: z.string() }).nullable(),
   });
 const machineEvidence = z.object({
+  observedAtUtc: z.string(),
   revit: machineSchema
     .unwrap()
     .shape.revit.unwrap()
@@ -33,7 +34,13 @@ const machineEvidence = z.object({
   legs: z.object({ years: machineLegSchema.optional(), sessions: machineLegSchema.optional() }),
 });
 const publishedMachine = z.object({ machine: machineEvidence });
-const sessionKey = ({ row, whose, attachment }: z.infer<typeof sessionEvidence>) => {
+const sessionKey = ({
+  row,
+  whose,
+  attachment,
+  documentsLeg,
+  holdingsLeg,
+}: z.infer<typeof sessionEvidence>) => {
   const process =
     row.case === "controlled-pending" && row.attempt.attempt === "launched"
       ? row.attempt.process
@@ -50,6 +57,8 @@ const sessionKey = ({ row, whose, attachment }: z.infer<typeof sessionEvidence>)
     "bridge" in row ? row.bridge.bridge : null,
     row.case === "controlled-active" && row.bridge.bridge === "ready" && row.bridge.unresponsive,
     attachment?.session ?? null,
+    documentsLeg.error,
+    holdingsLeg.error,
   ]);
 };
 // Follow changes people can act on, without invalidating for SDK sampling time or bridge ticks.
@@ -163,10 +172,12 @@ export function readInvalidations(
   const observePublication = (
     subscription: string,
     generation: number,
-    publish: (publication: Publication<unknown>) => void,
+    publish: (publication: Publication<unknown>, retry?: number) => void,
     machineRead: { recipe: string; observe: ResourceObserver },
   ) => {
     let published: string | undefined, observed: string | undefined;
+    let sampledAt: string | undefined;
+    let retries = 0;
     let stopMachine: (() => void) | undefined;
     const compare = () => {
       const current = publications.publication(subscription);
@@ -192,8 +203,18 @@ export function readInvalidations(
         stopMachine ??= machineRead.observe({ kind: "machine" }, (frame) => {
           if (frame.kind !== "snapshot") return;
           const evidence = machineEvidence.safeParse(frame.value);
-          if (evidence.success) observed = machineKey(evidence.data);
+          if (!evidence.success) return;
+          const nextSample = evidence.data.observedAtUtc;
+          const newSample = nextSample !== sampledAt;
+          sampledAt = nextSample;
+          observed = machineKey(evidence.data);
           compare();
+          // A refresh refused because inputs moved is already stale. A later sample gives it
+          // another chance even when that sample confirms the same session state.
+          if (newSample && published !== undefined) {
+            const retry = publications.takeRacedRead(subscription, generation);
+            if (retry) publish(retry, ++retries);
+          }
         });
       // The poll can get ahead of an in-flight read.
       compare();
