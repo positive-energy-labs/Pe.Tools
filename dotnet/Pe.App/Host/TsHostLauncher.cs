@@ -1,4 +1,6 @@
+using Newtonsoft.Json;
 using Pe.Revit.Loader;
+using Pe.Revit.ServiceClient;
 using Pe.Shared.HostContracts.Transport;
 using Pe.Shared.Product;
 using System.Diagnostics;
@@ -45,6 +47,12 @@ internal static class TsHostLauncher {
 
     public static TsHostLaunchResult EnsureRunning() {
         try {
+            if (DevWatcherOwnsHost(Runtime)) {
+                // A host-launched Revit inherits the parent's URL, which only names that incarnation.
+                // The watcher owns replacement; the endpoint still verifies the receipt and listener.
+                Environment.SetEnvironmentVariable(HostEndpoint.HostBaseUrlVariable, null);
+                return new TsHostLaunchResult(false, false, false, "The checkout's dev watcher is responsible for starting its host.", WatcherOwnsStartup: true);
+            }
             var result = Runtime.Lane == ProductLane.Installed ? EnsureInstalled() : EnsureDev();
             return result.State switch {
                 ServiceRunState.Running => new TsHostLaunchResult(true, true, false, $"Sharing the running host: {Describe(result.File!)}"),
@@ -72,6 +80,28 @@ internal static class TsHostLauncher {
             ?? throw new InvalidOperationException($"No product manifest at '{Runtime.OwnerRoot}'; reinstall Pe.Tools.");
         return product.EnsureRunning(HostEndpoint.ServiceName);
     }
+
+    private static bool DevWatcherOwnsHost(ProductRuntimeLayout runtime) {
+        if (runtime.Lane != ProductLane.Dev) return false;
+
+        // dev-tray-supervisor.ts only records WatchedHostRoot when launched by dev-watch.ts.
+        // Both roots and the process incarnation must match before we defer to it.
+        var path = Path.Combine(runtime.OwnerRoot, ".artifacts", "dev-tray", "supervisor.json");
+        try {
+            var watcher = JsonConvert.DeserializeObject<DevWatcherReceipt>(File.ReadAllText(path));
+            if (watcher is not { SchemaVersion: 1, Pid: > 0 }
+                || !PathsEqual(watcher.SourceRoot, runtime.OwnerRoot)
+                || !PathsEqual(watcher.WatchedHostRoot, runtime.RootPath))
+                return false;
+            using var process = Process.GetProcessById(watcher.Pid);
+            return Math.Abs((process.StartTime.ToUniversalTime() - watcher.ProcessStartUtc.UtcDateTime).TotalSeconds) <= 2;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException
+                                      or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) {
+            return false;
+        }
+    }
+
+    private sealed record DevWatcherReceipt(int SchemaVersion, string? SourceRoot, string? WatchedHostRoot, int Pid, DateTimeOffset ProcessStartUtc);
 
     private static ServiceResult EnsureDev() {
         var sourceRoot = Runtime.OwnerRoot;
@@ -108,7 +138,7 @@ internal static class TsHostLauncher {
 
     private static bool PathsEqual(string? left, string right) =>
         !string.IsNullOrWhiteSpace(left)
-        && string.Equals(Path.GetFullPath(left!).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
+        && PeServiceDiscovery.NormalizeSourceRoot(left!) == PeServiceDiscovery.NormalizeSourceRoot(right);
 }
 
-internal sealed record TsHostLaunchResult(bool Success, bool AlreadyRunning, bool StartedProcess, string Message);
+internal sealed record TsHostLaunchResult(bool Success, bool AlreadyRunning, bool StartedProcess, string Message, bool WatcherOwnsStartup = false);

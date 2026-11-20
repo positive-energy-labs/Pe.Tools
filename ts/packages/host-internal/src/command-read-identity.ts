@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { actionAdmissionSchema } from "@pe/agent-contracts";
 import type { RequestIdentityData } from "@pe/host-internal/request-contracts";
-import type { CausalParentId } from "../../agent-contracts/src/route-kernel-page.ts";
+import type { CausalParentId } from "@pe/agent-contracts/route-kernel-page";
 import type { CommandContext } from "./command-executor.ts";
 import { InvalidRead } from "./read-errors.ts";
 import { admittedRequestIdentity } from "./request-identity.ts";

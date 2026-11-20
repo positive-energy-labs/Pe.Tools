@@ -62,7 +62,10 @@
     "./slots/sheet": "./src/slots/sheet.ts",
     "./route-kernel-data": "./src/route-kernel-data.ts",
     "./route-kernel-bodies": "./src/route-kernel-bodies.ts",
-    "./route-kernel-page": "./src/route-kernel-page.ts"
+    "./route-kernel-page": "./src/route-kernel-page.ts",
+    "./command-handle": "./src/command-handle.ts",
+    "./list-search": "./src/list-search.ts",
+    "./page-keys": "./src/page-keys.ts"
   },
   "publishConfig": {
     "access": "public"

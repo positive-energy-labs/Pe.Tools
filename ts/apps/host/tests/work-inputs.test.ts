@@ -649,7 +649,7 @@ test("command Work reads carry context through binding and revalidation", async 
   const { dir, writer } = await bundle();
   const commandWorkKey = { ...key, route: "duct-systems" };
   const { ActionJournal } = await import("../src/action-journal.ts");
-  const { commands, tools } = await import("../../../packages/mcps/src/pea/product-actions.generated.ts");
+  const { commands, tools } = await import("@pe/mcps/product-actions");
   const { z } = await import("zod");
   const { crossingOf } = await import("./callers.ts");
   const workspace = new RouteWorkspace({

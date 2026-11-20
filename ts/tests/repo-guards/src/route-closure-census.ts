@@ -18,7 +18,7 @@ import ts from "typescript";
 const TS = resolve(import.meta.dirname, "../../..");
 const WEB_KEY = "apps/web/src/";
 const WEB = join(TS, WEB_KEY);
-import { routeFolderCandidates } from "../../../scripts/route-startup.ts";
+import { routeFolderCandidates } from "@pe/web/route-startup";
 const EXEMPT = "design-system";
 const HOST_DOORS = new Set(["peClient", "callOp", "callCompose", "callHostRpc", "hostFetch"]);
 // Exemption (closure rules): a product's `journeys/` is driver-run journey tooling like `.test.`/`.fixture.`,

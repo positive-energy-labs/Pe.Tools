@@ -3,7 +3,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { address, bindWork } from "@pe/agent-contracts";
-import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { tools } from "@pe/mcps/product-actions";
 import { RouteWorkspace } from "@pe/runtime";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordings } from "./native-recordings.ts";

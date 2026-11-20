@@ -3,7 +3,7 @@ import { READING_MAX_KEYS } from "@pe/agent-contracts";
 import { request, type IncomingMessage } from "node:http";
 import { pipeline } from "node:stream/promises";
 import { resolve } from "node:path";
-import { matchPeRoute } from "../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
 import { hostOpSafety } from "@pe/host-contracts/generated";
 import { familyReads, scheduleReads, type ReadingRequest } from "@pe/agent-contracts";
 // Vite config loads this transport subpath with Node's TypeScript stripper.

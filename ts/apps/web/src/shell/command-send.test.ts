@@ -1,7 +1,7 @@
 import { expect, test, vi } from "vite-plus/test";
 import { handle } from "@pe/agent-contracts/handle";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { hostActions } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { hostActions } from "@pe/mcps/product-actions";
 import { isMutation } from "../ops/manifest";
 import { HOST_RPC_BRIDGE_SESSION_HEADER, HOST_RPC_DOCUMENT_HEADER } from "@pe/host-contracts/operation-types";
 import { sendCommand, createWorkFeedClient, browserWorkPorts } from "./work-feed-client";

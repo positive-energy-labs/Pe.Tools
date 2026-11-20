@@ -33,7 +33,7 @@ import {
   type Footprint,
   canonicalRouteInput,
 } from "@pe/agent-contracts";
-import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import { admitScript, consentedRead } from "./control.ts";
 import { guards } from "./guards.ts";
 import {

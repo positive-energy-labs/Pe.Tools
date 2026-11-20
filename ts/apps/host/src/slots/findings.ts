@@ -13,7 +13,7 @@ import {
   type RouteStatePatch,
   type WorkKey,
 } from "@pe/agent-contracts";
-import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import {
   FINDING_KINDS,
   FINDINGS_DOORS,

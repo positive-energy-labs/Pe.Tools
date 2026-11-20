@@ -7,6 +7,7 @@ import { useWork } from "@pe/kit/lang/work";
  * overlay. Camera policy belongs to useStage. */
 import {
   useContext,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -26,11 +27,21 @@ import { sectionProject, viewportProject, type Project, type Size } from "@pe/we
 import type { ColourMode, ContextMode } from "@pe/web-kernel/scene/types";
 import { Scene3D } from "#/scene/scene3d";
 import { fitSection, sectionVolume, type Section } from "@pe/web-kernel/scene/section";
+import { SectionEditorController } from "#/scene/section-editor-controller";
+import { SectionEditor } from "#/scene/section-editor";
+import { fitPlane, type PlaneAxis } from "@pe/web-kernel/scene/plane";
+import { cutCurtain } from "../cut-curtain.ts";
 import { SectionControls, SectionHandles } from "#/scene/section-controls";
 import { useStage } from "#/scene/stage-controller";
 import type { Bounds, IssueTarget, Kinds, PaintOf, SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { SceneRead } from "#/scene/use-scene";
-import type { PicturePage, SceneView } from "@pe/agent-contracts";
+import {
+  sceneViewSchema,
+  type PicturePage,
+  type SceneView,
+  type Immutable,
+  type PlaneViewport,
+} from "@pe/agent-contracts";
 import { type LiveOrbit } from "@pe/kit/lang/live-orbit";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
 import { PaneOverlay } from "@pe/kit/lang/pane";
@@ -97,6 +108,7 @@ export const poseOf = (
 
 export function ModelPicture({
   readout,
+  documentKey,
   read,
   capturing,
   bounds,
@@ -114,7 +126,7 @@ export function ModelPicture({
   detailRefusal,
   kinds,
   colour,
-  sceneView,
+  sceneView: pageSceneView,
   drawn,
   overlay: drawOverlay,
   hoveredIssue,
@@ -126,6 +138,7 @@ export function ModelPicture({
   onClear,
 }: {
   readout: ReactNode;
+  documentKey: string | null;
   read: SceneRead;
   capturing: boolean;
   bounds: PictureBounds | null;
@@ -147,7 +160,7 @@ export function ModelPicture({
   /** Kind to hue and the Colour dial: the two inputs of the paint seam. */
   kinds: Kinds;
   colour: ColourMode;
-  sceneView: SceneView;
+  sceneView: Immutable<SceneView>;
   /** The surface's layers, already gated by their toggles. */
   drawn: readonly PictureLayer[];
   /** DOM the surface draws over the picture at the released frame (labels, pins, callouts). */
@@ -165,6 +178,8 @@ export function ModelPicture({
   /** A click on empty picture: the page's selection goes, as Escape clears it. */
   onClear: () => void;
 }) {
+  // The editor owns mutable point arrays; the canonical Page stays immutable.
+  const sceneView = useMemo(() => sceneViewSchema.parse(pageSceneView), [pageSceneView]);
   const stage = useStage();
   const meshes = read.meshes;
   const paintOf = useMemo(() => paint?.(meshes), [paint, meshes]);
@@ -179,21 +194,71 @@ export function ModelPicture({
   );
   const look = useSyncExternalStore(knobsChanged, LOOK.read, LOOK.read);
   const preset = look.layers.preset === "page" ? sceneView.preset : look.layers.preset;
+  const latest = useRef({ sceneView, documentKey, bounds, setPage });
+  latest.current = { sceneView, documentKey, bounds, setPage };
+  const [editor] = useState(
+    () =>
+      new SectionEditorController(
+        () => ({ document: latest.current.documentKey, section: latest.current.sceneView.section }),
+        () => latest.current.bounds?.scene ?? null,
+        (section) =>
+          latest.current.setPage(
+            { sceneView: { ...latest.current.sceneView, section } },
+            { history: "push" },
+          ),
+      ),
+  );
+  const draft = useSyncExternalStore(editor.subscribe, editor.read);
+  useEffect(() => {
+    editor.reconcile();
+  }, [editor, sceneView.section, documentKey]);
+  useEffect(() => () => editor.cancel(), [editor]);
   const [sectionDraft, setSectionDraft] = useState<Section | undefined>();
-  const section = sectionDraft ?? sceneView.section;
-  const clipVolume = useMemo(() => {
+  const section = draft && !draft.refusal ? draft.section : (sectionDraft ?? sceneView.section);
+  const [editing, setEditing] = useState(false);
+  const [axis, setAxis] = useState<PlaneAxis | null>(null);
+  const [axisPose, setAxisPose] = useState<{ axis: PlaneAxis; viewport: PlaneViewport } | null>(
+    null,
+  );
+  const [thumbs, setThumbs] = useState<Partial<Record<PlaneAxis, HTMLCanvasElement | null>>>({});
+  const thumbnail = useCallback((axis: PlaneAxis, canvas: HTMLCanvasElement | null) => {
+    setThumbs((before) => (before[axis] === canvas ? before : { ...before, [axis]: canvas }));
+  }, []);
+  useEffect(() => {
+    setEditing(false);
+    setAxis(null);
+    setAxisPose(null);
+  }, [documentKey]);
+  const clip = useMemo(() => {
     const cut =
       section ??
       (look.layers.preset === "nearby-structure" && sectionSubject
         ? fitSection(sectionSubject, look.section.paddingFt)
         : null);
-    const volume = sectionVolume(cut);
-    return volume && { ...volume, preview: sectionDraft !== undefined };
-  }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, sectionDraft]);
-  const shownView = { preset, section: clipVolume?.section ?? null };
-  const pictureLayers = useMemo(
+    try {
+      const volume = sectionVolume(cut, bounds?.scene);
+      return {
+        volume: volume && { ...volume, preview: draft !== null || sectionDraft !== undefined },
+        refusal: null,
+      };
+    } catch (error) {
+      return { volume: null, refusal: error instanceof Error ? error.message : "Invalid section" };
+    }
+  }, [section, sectionSubject, look.layers.preset, look.section.paddingFt, draft, sectionDraft, bounds]);
+  const clipVolume = clip.volume;
+  const shownView = { preset, section: section ?? clipVolume?.section ?? null };
+  const baseLayers = useMemo(
     () => drawn.flatMap((layer) => layer.draw({ meshes, paintOf })),
     [drawn, meshes, paintOf],
+  );
+  const pictureLayers = useMemo(
+    () => [
+      ...baseLayers,
+      ...(editing && section?.kind === "cuts" && bounds && !draft?.refusal && !clip.refusal
+        ? [cutCurtain(section.cuts, bounds.scene)]
+        : []),
+    ],
+    [baseLayers, editing, section, bounds, draft?.refusal, clip.refusal],
   );
   const commitSection = (next: Section) => {
     setSectionDraft(undefined);
@@ -237,7 +302,20 @@ export function ModelPicture({
     : pose && bounds && size
       ? { project: viewportProject(pose, bounds.scene, size), size }
       : null;
-  const annotationProject = overlay && sectionProject(overlay.project, shownView.section);
+  const annotationProject =
+    overlay &&
+    sectionProject(overlay.project, clip.refusal ? null : shownView.section, bounds?.scene);
+  const plane = useMemo(
+    () =>
+      axis && bounds && size
+        ? {
+            axis,
+            viewport:
+              axisPose?.axis === axis ? axisPose.viewport : fitPlane(axis, bounds.scene, size),
+          }
+        : null,
+    [axis, axisPose, bounds, size],
+  );
 
   const keysOf = useMemo(() => {
     const out = new Map<number, string[]>();
@@ -254,6 +332,9 @@ export function ModelPicture({
     stage.frameOn(key && meshes ? boundsOfInstances(meshes, (i) => i.key === key) : null);
 
   const status =
+    (clip.refusal
+      ? `Section refused: ${clip.refusal}. Clear or edit the cut; showing the unsectioned scene.`
+      : null) ??
     said ??
     (read.error
       ? `scene: ${read.error instanceof Error ? read.error.message : JSON.stringify(read.error)}`
@@ -293,6 +374,11 @@ export function ModelPicture({
         contextRadiusFt={contextRadiusFt}
         preset={preset}
         clipVolume={clipVolume}
+        plane={plane}
+        onPlane={(viewport) => {
+          if (axis) setAxisPose({ axis, viewport });
+        }}
+        thumbs={thumbs}
         isolated={layers.has("meshes") ? null : NONE}
         layers={pictureLayers}
         hoveredIssue={hoveredIssue}
@@ -334,8 +420,15 @@ export function ModelPicture({
                     }
               }
               onChange={(next) => {
+                editor.cancel();
                 setSectionDraft(undefined);
                 setPage({ sceneView: next }, { history: "push" });
+              }}
+              onEdit={() => {
+                editor.cancel();
+                setSectionDraft(undefined);
+                setEditing(!editing);
+                setAxis(editing ? null : "top");
               }}
             />
           )}
@@ -414,17 +507,32 @@ export function ModelPicture({
             pick: onPick,
             frame: (id) => frameAt(meshes?.instances.find((i) => i.revitId === id)?.key ?? null),
           })}
-          {meshes && sectionSubject && shownView.section && (
-            <SectionHandles
-              section={shownView.section}
-              subject={sectionSubject}
-              project={overlay.project}
-              onPreview={setSectionDraft}
-              onCommit={commitSection}
-            />
-          )}
+          {meshes &&
+            sectionSubject &&
+            shownView.section &&
+            shownView.section.kind !== "cuts" &&
+            !axis && (
+              <SectionHandles
+                section={shownView.section}
+                subject={sectionSubject}
+                project={overlay.project}
+                onPreview={setSectionDraft}
+                onCommit={commitSection}
+              />
+            )}
         </div>
       ) : null}
+      {editing && bounds && (
+        <SectionEditor
+          controller={editor}
+          section={sceneView.section}
+          bounds={bounds.scene}
+          axis={axis}
+          viewport={plane?.viewport ?? null}
+          onAxis={setAxis}
+          thumbnail={thumbnail}
+        />
+      )}
     </div>
   );
 }

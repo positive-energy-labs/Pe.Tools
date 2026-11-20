@@ -38,7 +38,7 @@ import {
 import { receiptQuerySchema } from "@pe/agent-contracts";
 
 import { httpRoutes as peRoutes, peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { servePeRoute, matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { servePeRoute, matchPeRoute } from "@pe/mcps/product-catalog";
 import { hostDescriptor } from "@pe/host-contracts/host-descriptor";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import { normalizePeError } from "@pe/host-contracts/pe-api";
@@ -1396,6 +1396,7 @@ function* hostPeRoutes(
             kind: "diagnostic",
             code: fault.kind === "deadline" ? "reading.timeout" : "reading.failed",
             readingKind: "machine",
+            readingLeg: fault.leg,
             elapsedMs: fault.elapsedMs,
           }),
         ),

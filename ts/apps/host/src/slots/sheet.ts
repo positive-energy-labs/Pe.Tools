@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { z } from "zod";
 import { nativeProcessSchema } from "@pe/agent-contracts";
-import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import { SHEET_COMMANDS, schemaOfData, type SheetSlotData } from "@pe/agent-contracts/slots";
 import { subjectOf, type SubjectRefCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
 import type { RevitApplyParameterValues, RevitDetailParameterValues } from "@pe/host-contracts/generated";

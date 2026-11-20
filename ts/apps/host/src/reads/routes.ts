@@ -8,7 +8,7 @@ import { withTimelineCaller, workTimelineRead } from "./work-timeline.ts";
 import { WORK_TIMELINE_READ, admittedRouteEntries, type WorkAuthor } from "@pe/agent-contracts";
 import { z } from "zod";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
-import { linkedCatalog } from "../../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { read } from "@pe/host-internal/read-graph";
 import { FINDINGS_DOORS, findingsGuide, findingsCommands } from "@pe/agent-contracts/slots";
 

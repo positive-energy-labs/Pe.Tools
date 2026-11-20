@@ -1,5 +1,5 @@
-import { matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
-import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import type { createContributionContent } from "./pe-routes.ts";
 
 /** Served behind `servePeRoute`: the route matched and its input parsed before this runs. */

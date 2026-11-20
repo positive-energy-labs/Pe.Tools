@@ -1,5 +1,5 @@
 import type { Mark, PictureScope, PictureSlot, Vec3 } from "@pe/agent-contracts/slots";
-import { subjectCode, subjectOf, type SubjectRefCode } from "../../../../../agent-contracts/src/subject-ref.ts";
+import { subjectCode, subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 
 /*
  * The kernel seam for the picture slot (ADR 0035 rules 1 and 2). The slot resolves every

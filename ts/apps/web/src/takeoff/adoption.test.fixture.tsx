@@ -5,7 +5,7 @@ import { expect } from "vite-plus/test";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import type { Readings } from "../host/resource-stream";
 import { bindWork, actionReceiptSchema } from "@pe/agent-contracts";
-import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import type {
   WorkJournalDoor,
   AcceptedResult,

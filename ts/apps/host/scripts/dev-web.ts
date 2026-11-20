@@ -9,7 +9,7 @@ import {
   productScratchPath,
 } from "@pe/host-contracts/service-identity";
 
-import type { RouteStartupProjection } from "../../../scripts/route-startup.ts";
+import type { RouteStartupProjection } from "@pe/web/route-startup";
 
 if (!process.send) throw new Error("Run vp run dev from the host or workspace package.");
 const disconnected = once(process, "disconnect");

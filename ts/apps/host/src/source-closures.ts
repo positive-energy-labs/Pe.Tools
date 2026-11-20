@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { basename, dirname } from "node:path";
 import { generatedKind, writeGenerated } from "@pe/host-contracts/kinds";
-import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "../../../scripts/route-startup.ts";
-import type { RouteStartupProjection } from "../../../scripts/route-startup.ts";
+import { routeStartupOwner, routeStartupSourceHash, currentRouteStartupProjection, readRouteStartupReceipt } from "@pe/web/route-startup";
+import type { RouteStartupProjection } from "@pe/web/route-startup";
 
 declare const __PE_SOURCE_COMMIT__: string;
 const sourceClosure = generatedKind(["source-closure.generated.json"]);

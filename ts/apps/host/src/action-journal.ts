@@ -1,7 +1,7 @@
 import type { ActionExecution, AttemptHost } from "@pe/host-internal/action-execution";
 import type { HostInputContext } from "./input-context.ts";
 import type { CommandContext, CommandBinding, CommandExecutor } from "@pe/host-internal/command-executor";
-import type { CommandEnvironment } from "./command-executor.ts";
+import { claimRejected, type CommandEnvironment } from "./command-executor.ts";
 import { CommandRejected, StepFailure, io, refused } from "@pe/host-internal/command-executor";
 import { readJournalSnapshot } from "./journal-snapshot.ts";
 import { validateNativeInput } from "./native-input.ts";
@@ -84,7 +84,7 @@ import {
   type ReceiptReader,
   type ReceiptStamp,
 } from "@pe/agent-contracts";
-import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import { live, originOf, assertRunAdmission, commandCheckpoint, subscribeRunChanges, validateFootprintCaller, retainActionCaller } from "./control.ts";
 import { Refused } from "@pe/host-internal/refused";
 
@@ -1371,11 +1371,7 @@ export class ActionJournal implements ReceiptReader {
               ),
           );
         if (prior && reconciliation)
-          throw new CommandRejected({
-            kind: "claimed",
-            claim: { kind: "reconciliation", id: prior.id },
-            by: reconciliation.id,
-          });
+          throw claimRejected({ kind: "reconciliation", id: prior.id }, reconciliation);
         for (const claim of row.claims) {
           if (claim.kind !== "reconciliation") continue;
           const original = this.rows.get(claim.id);
@@ -1406,7 +1402,7 @@ export class ActionJournal implements ReceiptReader {
               (held) => canonicalRouteInput(held) === canonicalRouteInput(candidate),
             ),
           )!;
-          throw new CommandRejected({ kind: "claimed", claim, by: claimed.id });
+          throw claimRejected(claim, claimed);
         }
       } catch (error) {
         this.activeCallers.delete(row.id);

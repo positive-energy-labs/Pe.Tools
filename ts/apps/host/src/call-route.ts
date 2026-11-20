@@ -6,7 +6,7 @@ import { runPodScript, scriptNeedsDocument } from "./operation-script.ts";
 import { NATIVE_BODY_VERSION_HEADER } from "@pe/agent-contracts";
 import { readingBasisHeaders } from "@pe/mcps/product-contracts";
 import { receiptsForWork } from "@pe/agent-contracts";
-import { commandTool } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commandTool } from "@pe/mcps/product-actions";
 import type { Caller } from "@pe/agent-contracts";
 import { ADMISSION_RESEND_HEADER, actionAdmissionSchema, workKeySchema } from "@pe/agent-contracts";
 import {
@@ -16,7 +16,7 @@ import {
   actionStatusSchema,
 } from "@pe/agent-contracts";
 
-import { peRoutes, linkedCatalog } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { peRoutes, linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { HostErrorKind } from "@pe/host-contracts/contracts";
 import { isAnyOperationKey } from "@pe/host-contracts/operation-types";

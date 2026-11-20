@@ -13,7 +13,7 @@ import {
   canonicalRouteInput,
   type Basis,
 } from "@pe/agent-contracts";
-import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import type { ActionStep } from "@pe/agent-contracts";
 import { createHash } from "node:crypto";
 import { z } from "zod";

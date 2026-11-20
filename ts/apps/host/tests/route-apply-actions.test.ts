@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
-import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandExecutor, CommandContext } from "@pe/host-internal/command-executor";
 import { detachedBridge } from "./effect-test.ts";

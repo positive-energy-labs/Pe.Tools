@@ -16,6 +16,9 @@ const document = { kind: "document" as const, ref: { session: "S", openId: "D" }
 const slot: Claim = { kind: "session-slot", selector: { year: "2025" } };
 const human = { kind: "human" as const, via: "cli" as const };
 const uuid = (n: number) => `20000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const start = { year: "2025", owner: "you", addins: "on" };
+type Controls = { write?: boolean; claim?: Claim; hold?: boolean };
+const reconciliation: Claim = { kind: "reconciliation", id: "field-incomplete" };
 
 const terminal = {
   incomplete: {
@@ -48,25 +51,31 @@ async function journalWith(rows: object[]) {
   const journal = Context.get(await settle(Layer.buildWithScope(ActionJournalService.live(null, stateFixture(dir)), host)), ActionJournalService);
   const hold = Deferred.makeUnsafe<void>();
   const entered: string[] = [];
+  const controls = new Map<string, Controls>();
   journal.bindCommands({
     probe: async () => null,
     resolve: () => command(
       { says: "Write or claim as the input says", needs: "nothing", effect: "command", dirties: [], input: z.record(z.string(), z.unknown()) },
       z.null(),
       {
-        bind: async (ctx) => ({
-          effects: ctx.admission.input.write ? [document] : [],
-          claims: ctx.admission.input.claim ? [slot] : [],
-        }),
+        bind: async ({ admission }) => {
+          const { write, claim } = controls.get(admission.id) ?? {};
+          return {
+            effects: write ? [document] : [],
+            claims: claim ? [claim] : [],
+          };
+        },
         run: (ctx) => Effect.sync(() => entered.push(ctx.admission.id)).pipe(
-          Effect.andThen(ctx.admission.input.hold ? Deferred.await(hold) : Effect.void),
+          Effect.andThen(controls.get(ctx.admission.id)?.hold ? Deferred.await(hold) : Effect.void),
           Effect.as(null),
         ),
       },
     ),
   });
-  const invoke = (id: string, input: Record<string, unknown>) =>
-    journal.invoke({ id, key: "scripting.execute", target: { kind: "host" }, input }, { caller: human, basis: null });
+  const invoke = (id: string, flags: Controls, key = "scripting.execute", input: Record<string, unknown> = {}) => {
+    controls.set(id, flags);
+    return journal.invoke({ id, key, target: { kind: "host" }, input }, { caller: human, basis: null });
+  };
   return {
     journal, entered, invoke,
     release: () => Deferred.doneUnsafe(hold, Effect.void),
@@ -87,7 +96,7 @@ test("A: an incomplete write script no longer blocks a later write on the same d
 test("B: an unknown open no longer holds its session-slot claim", async () => {
   const f = await journalWith([terminal.unknown]);
   try {
-    await f.invoke("later-open", { claim: true });
+    await f.invoke("later-open", { claim: slot });
     const row = await f.journal.wait("later-open");
     expect(row, JSON.stringify(row)).toMatchObject({ state: "succeeded" });
     expect(row).not.toHaveProperty("refusal");
@@ -97,15 +106,70 @@ test("B: an unknown open no longer holds its session-slot claim", async () => {
 test("a running action still blocks an overlapping write and still holds its claim", async () => {
   const f = await journalWith([]);
   try {
-    await f.invoke("running", { write: true, claim: true, hold: true });
+    await f.invoke("running", { write: true, claim: slot, hold: true }, "instances.start", start);
     await vi.waitFor(() => expect(f.entered).toEqual(["running"]));
-    expect(await f.invoke("rival-claim", { claim: true }).catch((error) => error))
-      .toMatchObject({ refusal: { kind: "claimed", claim: slot, by: "running" } });
+    expect(await f.invoke("rival-claim", { claim: slot }, "instances.start", start))
+      .toMatchObject({
+        status: 409,
+        notDispatched: true,
+        error: "Revit 2025 is already being started. Try again when that action finishes.",
+        refusal: { kind: "claimed", claim: slot, by: "running" },
+      });
     await f.invoke("queued-write", { write: true });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(f.entered).toEqual(["running"]);
     f.release();
     expect(await f.journal.wait("queued-write")).toMatchObject({ state: "succeeded" });
     expect(f.entered).toEqual(["running", "queued-write"]);
+  } finally { await f.dispose(); }
+});
+
+test.each([
+  ["instances.open", "opened", { source: "C:/witness.rvt", into: { start } }],
+  ["instances.stop", "stopped", {
+    session: {
+      selection: { pid: 42 },
+      process: { pid: 42, processStartUtc: "2026-11-19T00:00:00Z", executable: "C:/Revit/Revit.exe" },
+    },
+    unsaved: "keep",
+  }],
+] as const)("the year refusal describes the holding action %s", async (key, verb, input) => {
+  const f = await journalWith([]);
+  try {
+    await f.invoke("holding", { claim: slot, hold: true }, key, input);
+    expect(await f.invoke("rival", { claim: slot }, "instances.start", start)).toMatchObject({
+      status: 409,
+      notDispatched: true,
+      error: `Revit 2025 is already being ${verb}. Try again when that action finishes.`,
+      refusal: { kind: "claimed", claim: slot, by: "holding" },
+    });
+  } finally { await f.dispose(); }
+});
+
+test("a second cleanup names the action being reconciled and explains when to check again", async () => {
+  const f = await journalWith([{ ...terminal.incomplete, prepared: { state: "ready", value: null } }]);
+  const input = { acquisition: reconciliation.id, unsaved: "keep" };
+  try {
+    await f.invoke("cleanup", { claim: reconciliation, hold: true }, "instances.cleanup", input);
+    expect(await f.invoke("rival-cleanup", { claim: reconciliation }, "instances.cleanup", input)).toMatchObject({
+      status: 409,
+      notDispatched: true,
+      error: "Pe is already cleaning up after this action. Wait for cleanup to finish, then check the action’s outcome.",
+      refusal: { kind: "claimed", claim: reconciliation, by: "cleanup" },
+    });
+  } finally { await f.dispose(); }
+});
+
+test("a plan already being applied calls for a fresh plan after the apply", async () => {
+  const f = await journalWith([]);
+  const claim: Claim = { kind: "receipt", id: "preview" };
+  try {
+    await f.invoke("apply", { claim, hold: true });
+    expect(await f.invoke("rival-apply", { claim })).toMatchObject({
+      status: 409,
+      notDispatched: true,
+      error: "Another action is applying this plan. Wait for it to finish, then generate a fresh plan.",
+      refusal: { kind: "claimed", claim, by: "apply" },
+    });
   } finally { await f.dispose(); }
 });

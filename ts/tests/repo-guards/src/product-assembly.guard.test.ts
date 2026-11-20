@@ -8,7 +8,7 @@ import type { Layer } from "effect";
 import type { HttpRouter as Http } from "effect/http";
 import { expect, test } from "vite-plus/test";
 import { productAssemblyPaths, productDependencyChanges, renderProductAssembly } from "../../../apps/web/scripts/product-assembly.ts";
-import { routeFolderCandidates } from "../../../scripts/route-startup.ts";
+import { routeFolderCandidates } from "@pe/web/route-startup";
 import { ROOT } from "./import-census.ts";
 
 const checkout = resolve(ROOT, "..");

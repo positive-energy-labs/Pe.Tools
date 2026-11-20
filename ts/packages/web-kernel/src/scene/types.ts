@@ -147,7 +147,7 @@ export type ClipVolume = {
   data: Float32Array;
   counts: number[];
   keepInside: boolean[];
-  section?: import("@pe/agent-contracts").SceneSection;
+  section?: import("./section.ts").Section;
   preview?: boolean;
 };
 export type ContextMode = "off" | "lines" | "glass";

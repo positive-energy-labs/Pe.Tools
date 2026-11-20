@@ -1,6 +1,6 @@
 import { expect, test } from "vite-plus/test";
 import { bindWork } from "@pe/agent-contracts";
-import { commands } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 const key = bindWork("family", null, "contract");
 test("optional Family observation accepts exact source evidence", () => {
   const source = { pod: "p", path: "settings/x.json", sha256: "a".repeat(64) };

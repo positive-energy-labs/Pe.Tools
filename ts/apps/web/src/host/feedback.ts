@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import { peRoutes } from "../../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { peClient } from "./pe-client";
 export type Feedback = z.input<(typeof peRoutes)["feedback.submit"]["body"]>;
 export type FeedbackReceipt = z.output<(typeof peRoutes)["feedback.submit"]["output"]>;

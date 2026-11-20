@@ -50,7 +50,7 @@ import {
 
 import { bindWork, readingKey } from "@pe/agent-contracts";
 import type { DuctsReadingEnvelope } from "@pe/ducts-contract/reading";
-import { matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { matchPeRoute } from "@pe/mcps/product-catalog";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { RequestIdentity as RequestIdentityKey } from "@pe/host-internal/request-contracts";
 import { createRouteRegistrations } from "@pe/mcps";
@@ -947,10 +947,10 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
         const key = readingKey(reading);
         const { generation } = reading;
         let answered = false;
-        const stop = publications.observe(
+        const stop = invalidations.observePublication(
           canonicalJson([identity.caller, reading.subscription]),
+          generation,
           (publication) => {
-            if (publication.generation !== generation) return;
             answered = true;
             publish({
               kind: "snapshot",
@@ -958,6 +958,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
               value: { generation, version: publication.version, state: publication.state },
             });
           },
+          { recipe: "open.documents", observe: fallback },
         );
         // Every key is answered once, so a stream that carries only this key is never silent.
         if (!answered)

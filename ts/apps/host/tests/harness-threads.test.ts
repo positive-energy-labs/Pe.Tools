@@ -23,7 +23,7 @@ import { SdkDriver } from "../src/sdk-session.ts";
 import { DuctFiles } from "@pe/ducts-host/ducts-files";
 import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
-import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { servePeRoute } from "@pe/mcps/product-catalog";
 import { afterAll, afterEach, beforeAll, expect, onTestFinished, test, vi } from "vite-plus/test";
 import { HostLog } from "../src/host-log.ts";
 import { createServer, type Server } from "node:http";
@@ -47,7 +47,7 @@ import {
   workKey,
   address as documentAddress,
 } from "@pe/agent-contracts";
-import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { tools } from "@pe/mcps/product-actions";
 import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { withInvocationContext } from "@pe/runtime/context";
 import { human, actAs } from "./callers.ts";

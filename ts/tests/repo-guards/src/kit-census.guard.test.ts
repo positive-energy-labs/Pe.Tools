@@ -9,6 +9,7 @@ import { REACH_BLOCK } from "./reach-pattern.ts";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const W = "apps/web/src/";
 const K = "packages/kit/src/";
+const WK = "packages/web-kernel/src/";
 type Allow = { glob: string; reason: string; selector?: string };
 type Rule = {
   id: string;
@@ -30,7 +31,7 @@ type Rule = {
   cannotSee: string;
 };
 const allow = (entries: Record<string, string>): Allow[] =>
-  Object.entries(entries).map(([glob, reason]) => ({ glob: glob.startsWith("products/") ? glob : W + glob, reason }));
+  Object.entries(entries).map(([glob, reason]) => ({ glob: /^(?:products|packages)\//.test(glob) ? glob : W + glob, reason }));
 
 // prettier-ignore
 const RULES: Rule[] = [
@@ -246,8 +247,8 @@ const RULES: Rule[] = [
     cannotSee: "Arbitrary expression aliases between the textarea and controls, and computed grid placement." },
   { id: "scene-ground-presets", doctrine: "L4",
     pattern: /\b(?:opacity|color)\s*[:=]\s*(?:0x[\da-f]+|\d+(?:\.\d+)?|["'])|new THREE\.Color\(\s*(?:\d|["'])|setClearColor\(\s*(?:\d|["'])|\b0x[\da-f]{6}\b|\.color\.set(?:Hex|RGB|HSL)?\(\s*(?:\d|["'])/gi,
-    roots: [W + "scene/**/*.ts"],
-    allow: [{ glob: W + "scene/grounds.ts", reason: "One owner for subject/context materials, marker alpha and mask channel values." }],
+    roots: [W + "scene/**/*.ts", WK + "scene/**/*.ts"],
+    allow: [{ glob: WK + "scene/grounds.ts", reason: "One owner for subject/context materials, marker alpha and mask channel values." }],
     cannotSee: "Computed literals, GLSL expressions, token values or rendered contrast/occlusion." },
   { id: "label-placement-owner", doctrine: "L3", pattern: /while\s*\(|taken\.some|clear\(box\)/g,
     roots: ["products/ducts/web/src/{annotations,subject-labels}.tsx"], allow: [],
@@ -268,9 +269,9 @@ const RULES: Rule[] = [
       { glob: W + "grounded-doc/view/page-pane.tsx", selector: ".absolute.left-0.5.top-0.5", reason: "Block-kind glyph marks its document rectangle." },
     ], cannotSee: "Computed classes or browser geometry." },
   { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,
-    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: allow({
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx", WK + "**/*.tsx"], allow: allow({
       "components/lang/conversation.tsx": "MessageBubble owns the theme-aware user-message plane; document is light-only paper.",
-      "revit/element-menu.tsx": "Native action portal has no pane ancestor from which to infer its plane.",
+      [WK + "revit/element-menu.tsx"]: "Native action portal has no pane ancestor from which to infer its plane.",
       "machine/notice.tsx": "Detached notification portal has no pane ancestor.",
       "machine/notice-preview.tsx": "Notification specimen renders the same detached plane.",
     }), cannotSee: "Runtime-set surfaces and computed contrast." },
@@ -278,10 +279,10 @@ const RULES: Rule[] = [
     pattern: /(?:^|;)\s*(?:(?:min-|max-)?(?:width|height)|margin(?:-[\w-]+)?|padding(?:-[\w-]+)?|border(?:-[\w-]+)?-width)\s*:/g,
     roots: [K + "**/*.css"], select: "hover-css", allow: [], cannotSee: "Nested CSS, inherited dimensions and media-query interactions." },
   { id: "web-hover-handler", doctrine: "N7", pattern: /onMouseEnter|onPointerEnter|onMouseOver/g,
-    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], allow: [
+    roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx", WK + "**/*.tsx"], allow: [
       { glob: "{products/ducts/web/src/schematic,apps/web/src/family/anatomy-model-views,apps/web/src/rooms/plan,apps/web/src/takeoff/level-plan}.tsx", reason: "SVG hit-testing projects geometry to domain identity; it does not paint hover locally." },
       ...allow({
-        "scene/footnotes.tsx": "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
+        [WK + "scene/footnotes.tsx"]: "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
         "products/duct-systems/web/src/screen/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
         "family/anatomy.tsx": "Part geometry focus differs from native element identity.",
         "family/doc-pane.tsx": "Evidence engine owns document hover.",
@@ -318,12 +319,12 @@ const RULES: Rule[] = [
   { id: "kit-reach-block", doctrine: "N7", pattern: /:hover/g,
     roots: [K + "**/*.css"], select: "reach", allow: [], cannotSee: "Cascade precedence and runtime reach transitions." },
   { id: "t-prose-ratchet", doctrine: "I6", pattern: /\bt-prose\b/g,
-    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}"], asOf: "2026-10-23",
+    roots: ["{apps/web/src,products/*/web/src}/**/*.{ts,tsx}", WK + "**/*.{ts,tsx}"], asOf: "2026-10-23",
     exclude: [W + "{doc,docs,guide,tutorial,help,chat}/**"],
     allow: allow({
       "duct-loss/route.tsx": "Input labels, measured values, headings and equations name the calculation.",
       "duct-loss/duct/charts.tsx": "Caption labels the plotted law.",
-      "components/work/band.tsx": "Recovery receipts, write conflicts and staged tallies support a decision.",
+      [WK + "components/work/band.tsx"]: "Recovery receipts, write conflicts and staged tallies support a decision.",
       "route/situation-verbs.tsx": "Outcomes and refusals disclose effects before a write.",
       "route/schedules/stale-resolve.tsx": "Readback failure explains recovery before overwrite.",
       "workbench/moments.tsx": "Reader opens reasoning or a chat rendering failure.",
@@ -335,7 +336,7 @@ const RULES: Rule[] = [
     }), max: {
       [W + "duct-loss/route.tsx"]: 7,
       [W + "duct-loss/duct/charts.tsx"]: 1,
-      [W + "components/work/band.tsx"]: 3,
+      [WK + "components/work/band.tsx"]: 3,
       [W + "route/situation-verbs.tsx"]: 2,
       [W + "route/schedules/stale-resolve.tsx"]: 2,
       [W + "workbench/moments.tsx"]: 2,

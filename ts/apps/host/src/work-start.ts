@@ -1,7 +1,7 @@
 import { hostState } from "./host-ownership.ts";
 import { workAuthorOf } from "./control.ts";
 import { hostAuthoredRefusal, refusalText } from "@pe/agent-contracts";
-import { commands } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 
 import { command, io, refused, StepFailure } from "@pe/host-internal/command-executor";
 import { Effect } from "effect";

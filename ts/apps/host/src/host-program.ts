@@ -6,7 +6,7 @@ import { nativeCatalogIdentity, openRecordingReader, openRecordingWriter } from 
 import { type HostInputLane } from "@pe/host-internal/input-recording";
 import { InvalidRead } from "@pe/host-internal/read-errors";
 
-import { linkedCatalog } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { execFile, spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";

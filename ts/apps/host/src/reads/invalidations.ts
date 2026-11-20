@@ -1,10 +1,19 @@
-import { canonicalRouteInput, documentRefSchema, workKey, workKeySchema } from "@pe/agent-contracts";
+import { canonicalRouteInput, documentRefSchema, machineLegSchema, machineSchema, workKey, workKeySchema } from "@pe/agent-contracts";
 import { subscribePlaces } from "../places.ts";
-import type { RouteWorkspace } from "@pe/runtime";
+import type { ResourceObserver, RouteWorkspace } from "@pe/runtime";
+import { z } from "zod";
 import type { HostMarks } from "../document-marks.ts";
 import { workInput } from "@pe/host-internal/reads/evaluator";
-import type { Publications } from "./publications.ts";
+import type { Publication, Publications } from "./publications.ts";
 import { settingsFile } from "@pe/host-internal/read-graph";
+
+const yearEvidence = z.object({
+  revit: machineSchema.unwrap().shape.revit.unwrap().pick({ years: true }),
+  legs: z.object({ years: machineLegSchema.unwrap().pick({ error: true }).optional() }),
+});
+const publishedMachine = z.object({ machine: yearEvidence });
+const yearsKey = ({ revit, legs }: z.infer<typeof yearEvidence>) =>
+  canonicalRouteInput([revit.years?.slice().sort((a, b) => a - b) ?? null, legs.years?.error != null]);
 
 export function readInvalidations(
   workspace: RouteWorkspace,
@@ -90,8 +99,47 @@ export function readInvalidations(
     ? undefined
     : subscribeFiles?.((name) => changed((input) => input === `file:${name}` || (`file:${name}` === settingsFile.name && input === "work-timeline")));
   const stopPlaces = recorded ? undefined : subscribePlaces(() => changed((name) => name === "places"));
+  const observePublication = (
+    subscription: string,
+    generation: number,
+    publish: (publication: Publication<unknown>) => void,
+    machineYears: { recipe: string; observe: ResourceObserver },
+  ) => {
+    let publishedYears: string | undefined, observedYears: string | undefined;
+    let stopMachine: (() => void) | undefined;
+    const compare = () => {
+      const current = publications.publication(subscription);
+      if (publishedYears !== undefined && observedYears !== undefined && publishedYears !== observedYears &&
+          current?.generation === generation && current.state === "current")
+        publications.invalidate((trace) => trace.name === machineYears.recipe, subscription);
+    };
+    const stop = publications.observe(subscription, (publication) => {
+      if (publication.generation !== generation) return;
+      publish(publication);
+      if (recorded || publication.state !== "current") return;
+      // Keep the existing machine poll observed for the lifetime of the subscription.
+      const data = publication.value?.trace.some((trace) => trace.name === machineYears.recipe)
+        ? publishedMachine.safeParse(publication.value.data)
+        : undefined;
+      publishedYears = data?.success ? yearsKey(data.data.machine) : undefined;
+      if (publishedYears !== undefined)
+        stopMachine ??= machineYears.observe({ kind: "machine" }, (frame) => {
+          if (frame.kind !== "snapshot") return;
+          const evidence = yearEvidence.safeParse(frame.value);
+          if (evidence.success) observedYears = yearsKey(evidence.data);
+          compare();
+        });
+      // The poll can get ahead of an in-flight read.
+      compare();
+    });
+    return () => {
+      stopMachine?.();
+      stop();
+    };
+  };
   return {
     revision: readRevision,
+    observePublication,
     close: () => {
       stopFiles?.();
       stopPlaces?.();

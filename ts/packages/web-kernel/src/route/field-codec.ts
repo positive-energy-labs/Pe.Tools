@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Codec } from "../../../agent-contracts/src/page-keys.ts";
+import type { Codec } from "@pe/agent-contracts/page-keys";
 
 export type FieldCodec = Codec<unknown>;
 type Field = { schema: z.ZodType; initial: unknown; codec?: FieldCodec };

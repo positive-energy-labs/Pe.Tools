@@ -4,7 +4,7 @@ import { serviceHeaders, contextHeaders } from "./callers.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, bindWork } from "@pe/agent-contracts";
-import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { tools } from "@pe/mcps/product-actions";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { testHostInputs, callRouteOver } from "./effect-test.ts";
 import { Layer } from "effect";

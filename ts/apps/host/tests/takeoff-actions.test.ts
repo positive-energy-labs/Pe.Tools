@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect, test, vi } from "vite-plus/test";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, roomEditKey } from "@pe/agent-contracts";
-import { tools } from "../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { tools } from "@pe/mcps/product-actions";
 import { captureStore, testRegistry, testDocumentMarks } from "./effect-test.ts";
 import { fixtureNative } from "./fixture-native.ts";
 import { nativeRecordingRequest } from "./native-recordings.ts";

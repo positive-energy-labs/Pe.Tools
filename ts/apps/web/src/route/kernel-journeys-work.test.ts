@@ -15,7 +15,7 @@ import { rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { RouteWorkspace } from "@pe/runtime";
 import { address, roomEditKey, takeoffObservationSchema } from "@pe/agent-contracts";
-import { commands, tools } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands, tools } from "@pe/mcps/product-actions";
 import { takeoffSeeds } from "../takeoff/seeds";
 import { fileVersion } from "../../../host/src/takeoff-actions";
 import { captureStore, testDuctFiles, testDocumentMarks, journalAt, callRouteOver, settle } from "../../../host/tests/effect-test";

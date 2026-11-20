@@ -11,7 +11,7 @@ import { BridgeError, NoRevitSession, RevitBridge, type BridgeSessionView, type 
 import type { BridgeStateSnapshot } from "@pe/host-contracts/contracts";
 
 import { admittedRouteEntries, addressSchema } from "@pe/agent-contracts";
-import { linkedCatalog } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { catalogCommandContext } from "@pe/host-internal/catalog-command-context";
 import { StepFailure } from "@pe/host-internal/command-executor";
 import { Deferred, Effect, Layer, Option, PubSub, Ref, Schema } from "effect";

@@ -1,5 +1,5 @@
 import { inputKinds, type InputKind, type SourceProvenance } from "@pe/agent-contracts";
-import { linkedCatalog } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { Context, Layer } from "effect";
 import { InvalidRead } from "@pe/host-internal/read-errors";

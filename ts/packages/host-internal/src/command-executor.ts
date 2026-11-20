@@ -23,18 +23,19 @@ import { Effect } from "effect";
 import { catalogCommandContext } from "./catalog-command-context.ts";
 
 export class CommandRejected extends Error {
-  constructor(readonly refusal: CommandRefusal, readonly status = 409) {
+  constructor(readonly refusal: CommandRefusal, readonly status = 409, explanation?: string) {
     super(
-      "message" in refusal
+      explanation ?? ("message" in refusal
         ? refusal.message
         : refusal.kind === "stale_revision"
           ? `Work changed to r${refusal.live}`
           : refusal.kind === "claimed"
-            ? `Resource is reserved by ${refusal.by}`
-            : "Consumed input changed",
+            ? "Another action has reserved this resource."
+            : "Consumed input changed"),
     );
   }
 }
+
 /** Domain rejection says why. Only the engine and transport boundary know dispatch facts. */
 export const refused = (message: string, code = "domain.refused") =>
   new CommandRejected({ kind: "domain", code, message });

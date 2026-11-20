@@ -1,5 +1,5 @@
-import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
-import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { servePeRoute } from "@pe/mcps/product-catalog";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { execFile } from "node:child_process";
 import { HttpRouter, HttpEffect } from "effect/http";
 import { z } from "zod";

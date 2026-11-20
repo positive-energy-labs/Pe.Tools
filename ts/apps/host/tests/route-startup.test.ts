@@ -12,7 +12,7 @@ import {
   routeStartupReceiptPath,
   routeStartupSourceHash,
   writeRouteStartupReceipt,
-} from "../../../scripts/route-startup.ts";
+} from "@pe/web/route-startup";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -97,7 +97,7 @@ test("concurrent producers publish a complete receipt and leave no temporary fil
   const payload = join(f.root, "receipt.json");
   writeFileSync(payload, JSON.stringify(f.receipt));
   const script = `import { readFileSync } from 'node:fs';
-    import { writeRouteStartupReceipt } from ${JSON.stringify(new URL("../../../scripts/route-startup.ts", import.meta.url).href)};
+    import { writeRouteStartupReceipt } from ${JSON.stringify(import.meta.resolve("@pe/web/route-startup"))};
     const receipt = JSON.parse(readFileSync(process.argv[1], 'utf8'));
     writeRouteStartupReceipt(process.argv[2], receipt.sourceHash, receipt.projections);`;
   await Promise.all([1, 2].map(() => promisify(execFile)(process.execPath,

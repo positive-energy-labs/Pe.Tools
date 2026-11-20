@@ -1,4 +1,4 @@
-import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { peRoutes } from "@pe/mcps/product-catalog";
 import { Context, Effect, Layer } from "effect";
 import { randomUUID } from "node:crypto";
 import { isSea } from "node:sea";
@@ -54,8 +54,8 @@ const eventFields = {
   ribbon_click: ["command_code"],
   palette_action: ["palette", "tab", "item_kind", "mode", "outcome"],
   pea_turn: ["phase", "outcome", "fault_code", "duration_ms", "tool_count"],
-  reading_timeout: ["reading_kind", "elapsed_ms"],
-  reading_failure: ["reading_kind", "fault_code"],
+  reading_timeout: ["reading_kind", "reading_leg", "elapsed_ms"],
+  reading_failure: ["reading_kind", "reading_leg", "fault_code"],
   stream_fault: ["stream_kind", "fault_code", "elapsed_ms"],
   host_fault: ["route_code", "fault_code", "status"],
   telemetry_dropped: ["producer", "count"],
@@ -270,6 +270,7 @@ export function projectReceipt(
           : {
               fault_code: body.code,
               reading_kind: body.readingKind,
+              reading_leg: body.readingLeg,
               stream_kind: body.streamKind,
               route_code: body.routeCode,
               elapsed_ms: body.elapsedMs,

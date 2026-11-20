@@ -12,7 +12,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { routeStartupReceiptPath } from "../../../scripts/route-startup.ts";
+import { routeStartupReceiptPath } from "@pe/web/route-startup";
 
 const { values } = parseArgs({
   options: {

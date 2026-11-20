@@ -3,8 +3,8 @@ import { acquireContentRoots, contentRootsReady, contentHomes, ContentHomeUnavai
 import { targetHomes } from "@pe/host-internal/target-homes";
 import { readSessionScope } from "./sdk-session.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
-import { servePeRoute, peClientScript, matchPeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
-import { peRoutes } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { servePeRoute, peClientScript, matchPeRoute } from "@pe/mcps/product-catalog";
+import { peRoutes } from "@pe/mcps/product-catalog";
 /** Scratch Pages and admitted Pod Pages share serving, binding and event state. See pe.js for the author API. */
 import { readFileSync, watch } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";

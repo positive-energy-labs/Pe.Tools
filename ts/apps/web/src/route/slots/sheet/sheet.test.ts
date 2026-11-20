@@ -1,7 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { z } from "zod";
 import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
-import { commands } from "../../../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands } from "@pe/mcps/product-actions";
 import type { CatalogAxes } from "../../../../../../packages/agent-contracts/src/catalog.ts";
 import { SHEET_COMMANDS, local, parameter, setting, settingLayer, sheetSlotDataSchema } from "@pe/agent-contracts/slots";
 import { subjectCode, uniqueIdSchema } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";

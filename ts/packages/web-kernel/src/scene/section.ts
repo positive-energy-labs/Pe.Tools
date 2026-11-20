@@ -1,7 +1,18 @@
 import type { SceneSection } from "@pe/agent-contracts";
 import type { Bounds, ClipVolume } from "./types.ts";
+import {
+  axisBounds,
+  axisPoint,
+  CUT_AXES,
+  cutPolygon,
+  packCuts,
+  polygonContains,
+  type Point,
+} from "./cuts.ts";
+import { center } from "./orbit.ts";
 
-export type Section = SceneSection;
+/** Planar renderer sections can make caps; authored polygon cuts deliberately cannot. */
+export type Section = Exclude<SceneSection, { kind: "cuts" }>;
 export type SectionAxis = "x" | "y" | "z";
 export const SECTION_AXES = ["x", "y", "z"] as const;
 export const limitsOf = (bounds: Bounds, axis: SectionAxis) =>
@@ -43,34 +54,51 @@ export function sectionPlanes(section: Section | null): number[][] {
   });
 }
 
-export const sectionContains = (section: Section | null, point: readonly number[]) =>
-  sectionPlanes(section).every(
-    (p) => p[0]! * point[0]! + p[1]! * point[1]! + p[2]! * point[2]! + p[3]! >= -1e-6,
-  );
+export const sectionContains = (
+  section: SceneSection | null,
+  point: readonly number[],
+  bounds?: Bounds,
+) =>
+  section?.kind === "cuts"
+    ? CUT_AXES.every((axis) => {
+        const p = axisPoint(axis, point),
+          cut = section.cuts[axis];
+        const extent: [Point, Point] = bounds ? axisBounds(bounds, axis) : [p, p];
+        return (
+          !cut.polyline.length || polygonContains(cutPolygon(cut, extent), p) === cut.keepInside
+        );
+      })
+    : sectionPlanes(section).every(
+        (p) => p[0] * point[0] + p[1] * point[1] + p[2] * point[2] + p[3] >= -1e-6,
+      );
 
 /** Preserve the exact cut face when converting world float32 cap vertices to batch-local feet. */
 export function rebaseCaps(positions: Float32Array, section: Section, origin: readonly number[]) {
   const cuts: number[][] = [[], [], []];
   for (const plane of sectionPlanes(section)) {
     const axis = plane.slice(0, 3).findIndex((n) => n !== 0);
-    cuts[axis]!.push(-plane[3]! / plane[axis]!);
+    cuts[axis].push(-plane[3] / plane[axis]);
   }
   for (let i = 0; i < positions.length; i++) {
     const axis = i % 3;
-    const face = cuts[axis]!.find((n) => Math.fround(n) === positions[i]);
-    positions[i] = (face ?? positions[i]!) - origin[axis]!;
+    const face = cuts[axis].find((n) => Math.fround(n) === positions[i]);
+    positions[i] = (face ?? positions[i]) - origin[axis];
   }
   return positions;
 }
 
 /** Typed authoring enters the existing clip seam; polygon cuts can coexist with these planes. */
-export const sectionVolume = (section: Section | null): ClipVolume | null =>
-  section && {
-    data: new Float32Array(0),
-    counts: [0, 0, 0],
-    keepInside: [true, true, true],
-    section,
-  };
+export const sectionVolume = (section: SceneSection | null, bounds?: Bounds): ClipVolume | null =>
+  section?.kind === "cuts"
+    ? bounds
+      ? packCuts(section.cuts, bounds, center(bounds))
+      : null
+    : section && {
+        data: new Float32Array(0),
+        counts: [0, 0, 0],
+        keepInside: [true, true, true],
+        section,
+      };
 
 /** Shader parity for existing extruded polygon cuts as well as authored sections. */
 export function clipContains(
@@ -80,24 +108,24 @@ export function clipContains(
 ): boolean {
   if (!volume) return true;
   if (!sectionContains(volume.section ?? null, point)) return false;
-  const p = point.map((n, i) => n - origin[i]!);
+  const p = point.map((n, i) => n - origin[i]);
   const frames = [
-    [p[0]!, p[1]!],
-    [-p[0]!, p[2]!],
-    [p[1]!, p[2]!],
+    [p[0], p[1]],
+    [-p[0], p[2]],
+    [p[1], p[2]],
   ];
   for (let a = 0; a < 3; a++) {
     const count = volume.counts[a] ?? 0;
     if (count < 3) continue;
-    const [x, y] = frames[a]!;
+    const [x, y] = frames[a];
     let inside = false;
     for (let i = 0, j = count - 1; i < count; j = i++) {
       const at = a * (volume.data.length / 3);
-      const ax = volume.data[at + i * 2]!,
-        ay = volume.data[at + i * 2 + 1]!;
-      const bx = volume.data[at + j * 2]!,
-        by = volume.data[at + j * 2 + 1]!;
-      if (ay > y! !== by > y! && x! < ((bx - ax) * (y! - ay)) / (by - ay) + ax) inside = !inside;
+      const ax = volume.data[at + i * 2],
+        ay = volume.data[at + i * 2 + 1];
+      const bx = volume.data[at + j * 2],
+        by = volume.data[at + j * 2 + 1];
+      if (ay > y !== by > y && x < ((bx - ax) * (y - ay)) / (by - ay) + ax) inside = !inside;
     }
     if (inside !== volume.keepInside[a]) return false;
   }
@@ -111,18 +139,18 @@ export function rebaseClip(
   to: readonly number[],
 ) {
   if (!volume?.data.length || from.every((n, i) => n === to[i])) return volume;
-  const [x, y, z] = from.map((n, i) => n - to[i]!);
+  const [x, y, z] = from.map((n, i) => n - to[i]);
   const shifts = [
-    [x!, y!],
-    [-x!, z!],
-    [y!, z!],
+    [x, y],
+    [-x, z],
+    [y, z],
   ];
   const data = volume.data.slice(),
     stride = data.length / 3;
   for (let axis = 0; axis < 3; axis++)
     for (let n = 0; n < (volume.counts[axis] ?? 0); n++) {
-      data[axis * stride + n * 2]! += shifts[axis]![0]!;
-      data[axis * stride + n * 2 + 1]! += shifts[axis]![1]!;
+      data[axis * stride + n * 2] += shifts[axis][0];
+      data[axis * stride + n * 2 + 1] += shifts[axis][1];
     }
   return { ...volume, data };
 }

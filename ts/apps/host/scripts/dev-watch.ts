@@ -1,13 +1,20 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { statSync, watch } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { checkoutRootFrom } from "@pe/host-contracts/service-identity";
+import { checkoutRootFrom, productRoot } from "@pe/host-contracts/service-identity";
 import { createDevTraySupervisor } from "./dev-tray-supervisor.ts";
-import { devWatchRoots } from "./dev-watch-roots.ts";
+import { createDevDependencyRepair, devWatchRoots } from "./dev-watch-roots.ts";
 
 const sourceRoot = checkoutRootFrom(import.meta.dirname);
 if (!sourceRoot) throw new Error("Dev watcher must start from a Pe.Tools checkout");
-const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"));
+const hostDirectory = new URL("../", import.meta.url);
+const workspace = new URL("../../", hostDirectory);
+const repairDevDependencies = createDevDependencyRepair(workspace);
+await repairDevDependencies();
+const hostRoot = process.argv.includes("--no-revit")
+  ? undefined
+  : productRoot({ lane: "dev", sourceRoot, installedRoot: null });
+const tray = await createDevTraySupervisor(sourceRoot, process.argv.includes("--show"), hostRoot);
 
 let child: ChildProcess | undefined;
 let restart = false;
@@ -44,8 +51,12 @@ const changed = (root: URL) => (event: string, file: string | null) => {
     disconnect();
   }, 150);
 };
-const watchRoots = devWatchRoots(new URL("../", import.meta.url));
+const watchRoots = devWatchRoots(hostDirectory);
 const watchers = watchRoots.map((root) => watch(root, { recursive: true }, changed(root)));
+const workspaceChanged = changed(workspace);
+watchers.push(watch(workspace, (event, file) => {
+  if (file === "pnpm-lock.yaml") workspaceChanged(event, file);
+}));
 const stop = () => {
   stopped = true;
   for (const watcher of watchers) watcher.close();
@@ -59,6 +70,11 @@ process.once("SIGINT", interrupt);
 process.once("SIGTERM", interrupt);
 try {
   do {
+    if (restart) {
+      // The previous host has exited. Its shutdown also waits for the frontend child.
+      await repairDevDependencies();
+      if (stopped) break;
+    }
     restart = false;
     // src/dev.ts prepares builtin closures itself, so attach and the supervisor share one path.
     child = spawn(

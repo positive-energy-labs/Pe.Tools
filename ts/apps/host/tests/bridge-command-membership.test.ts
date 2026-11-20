@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { linkedCatalog } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { linkedCatalog } from "@pe/mcps/product-catalog";
 import { commandLeafRefusal } from "../src/bridge.ts";
 
 test("nonempty provenance cannot authorize another command's Internal leaf", () => {

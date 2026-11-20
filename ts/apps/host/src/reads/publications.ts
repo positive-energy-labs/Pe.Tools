@@ -104,8 +104,10 @@ export class Publications {
     if (!slot?.key || !published || published.generation !== slot.generation || published.key !== slot.key) return undefined;
     return published;
   }
-  invalidate(matches: (trace: Dependency) => boolean) {
-    for (const [id, slot] of this.slots) {
+  invalidate(matches: (trace: Dependency) => boolean, subscription?: string) {
+    const slots = subscription === undefined ? this.slots : [[subscription, this.slots.get(subscription)] as const];
+    for (const [id, slot] of slots) {
+      if (!slot) continue;
       const previous = slot.published;
       const pending = slot.pending?.inputs.some((input) => input.name === "work" && matches(input));
       if (pending || previous?.value?.trace.some(matches)) {

@@ -11,7 +11,7 @@ import { HostDocumentMarks, hostMarks } from "../src/document-marks.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { detachedBridge, sessionView, captureStore } from "./effect-test.ts";
 import { createPeClient, httpRoutes } from "@pe/agent-contracts/pe-api";
-import { servePeRoute } from "../../../packages/mcps/src/pea/product-catalog.generated.ts";
+import { servePeRoute } from "@pe/mcps/product-catalog";
 import { afterEach, expect, vi } from "vite-plus/test";
 import { Effect, Layer } from "effect";
 import { HttpEffect, HttpRouter } from "effect/http";

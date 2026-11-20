@@ -87,7 +87,8 @@
     ]
   },
   "exports": {
-    "./vite.config": "./vite.config.ts"
+    "./vite.config": "./vite.config.ts",
+    "./route-startup": "./route-startup.ts"
   },
   "pe": {
     "generatedProductDependencies": [

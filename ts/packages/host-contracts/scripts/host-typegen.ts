@@ -18,11 +18,16 @@
  *   [--host http://127.0.0.1:5180] [--session <bridgeSessionId>] [--out <path>]
  */
 import { compile } from "json-schema-to-typescript";
+import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { regenerateCommandTable } from "../../../scripts/refresh-command-table.ts";
+import { fileURLToPath } from "node:url";
 import { HOST_RPC_BRIDGE_SESSION_HEADER } from "../src/contracts/bridge-protocol.ts";
 import { generateNativeEffect } from "./native-effect-generator.ts";
+
+const regenerateCommandTable = (check: boolean) => execFileSync(process.execPath,
+  [fileURLToPath(new URL("../../../scripts/refresh-command-table.ts", import.meta.url)), ...(check ? ["--check"] : [])],
+  { stdio: "inherit" });
 
 type CatalogEntry = {
   key: string;

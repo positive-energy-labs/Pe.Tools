@@ -35,7 +35,7 @@ import {
   type RouteFingerprint,
   type InvocationToken,
 } from "@pe/agent-contracts";
-import { commands, hostActions, commandTarget } from "../../../../packages/mcps/src/pea/product-actions.generated.ts";
+import { commands, hostActions, commandTarget } from "@pe/mcps/product-actions";
 import { ANY_ROUTE, writeSettingTier } from "@pe/agent-contracts";
 import { createRouteScopeGate } from "@pe/runtime/route-scope-gate";
 import { applicationWorkRegistry, createApplicationWorkRegistry } from "./application-work-registry";

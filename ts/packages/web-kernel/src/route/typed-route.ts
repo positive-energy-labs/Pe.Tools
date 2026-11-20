@@ -11,18 +11,18 @@ import type {
   EntryContract,
   Many,
 } from "@pe/agent-contracts";
-import { subjectOf, type SubjectRefCode } from "../../../agent-contracts/src/subject-ref.ts";
-export { oneName, nameOf } from "../../../agent-contracts/src/subject-ref.ts";
+import { subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
+export { oneName, nameOf } from "@pe/agent-contracts/subject-ref";
 import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "@pe/agent-contracts/value";
 // The command half of the handles only: `handle.ts` also holds the native catalog, which no Pod bundle may reach.
-import { handle, type CommandHandle, type Effect, type InputOf } from "../../../agent-contracts/src/command-handle.ts";
+import { handle, type CommandHandle, type Effect, type InputOf } from "@pe/agent-contracts/command-handle";
 /** A Pod declares its verbs with this: the same mint the builtin routes take from the contracts package. */
 export { handle };
 import type { KernelVerbKey } from "./slots/findings/index.ts";
-import { linkRouteGates } from "../../../agent-contracts/src/route-kernel-data.ts";
+import { linkRouteGates } from "@pe/agent-contracts/route-kernel-data";
 import { picturePoseSchemas, pictureSlotData, sheetSlotData, writesRevit, SHEET_COMMANDS, type Goal, type PictureScope, type PictureSlot, type SheetSlot } from "@pe/agent-contracts/slots";
 
 // The generated table is data only: no command schema reaches the browser or a Pod bundle. The host decodes inputs.

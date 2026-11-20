@@ -9,8 +9,8 @@ const execFile = vi.hoisted(() =>
 vi.mock("node:child_process", async (original) => ({
   ...(await original<typeof import("node:child_process")>()), execFile,
 }));
-vi.mock("../../../scripts/route-startup.ts", async (original) => ({
-  ...(await original<typeof import("../../../scripts/route-startup.ts")>()),
+vi.mock("@pe/web/route-startup", async (original) => ({
+  ...(await original<typeof import("@pe/web/route-startup")>()),
   readRouteStartupReceipt: () => undefined,
   currentRouteStartupProjection: () => true,
 }));
@@ -37,8 +37,8 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s p
   const path = join(root, "route", "source-closure.generated.json");
   const receipt = { checkout: "c", sourceHash: "h", projections: { [path]: "cached closure\n" } };
   vi.resetModules();
-  vi.doMock("../../../scripts/route-startup.ts", async (original) => ({
-    ...(await original<typeof import("../../../scripts/route-startup.ts")>()),
+  vi.doMock("@pe/web/route-startup", async (original) => ({
+    ...(await original<typeof import("@pe/web/route-startup")>()),
     readRouteStartupReceipt: () => receipt,
     currentRouteStartupProjection: () => true,
   }));
@@ -55,7 +55,7 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s p
     expect(execFile).not.toHaveBeenCalled();
   } finally {
     await rm(root, { recursive: true, force: true });
-    vi.doUnmock("../../../scripts/route-startup.ts");
+    vi.doUnmock("@pe/web/route-startup");
     vi.resetModules();
   }
 });
@@ -64,8 +64,8 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s r
   const root = await mkdtemp(join(tmpdir(), "stale-closure-"));
   const path = join(root, "source-closure.generated.json");
   vi.resetModules();
-  vi.doMock("../../../scripts/route-startup.ts", async (original) => ({
-    ...(await original<typeof import("../../../scripts/route-startup.ts")>()),
+  vi.doMock("@pe/web/route-startup", async (original) => ({
+    ...(await original<typeof import("@pe/web/route-startup")>()),
     readRouteStartupReceipt: () => undefined,
     currentRouteStartupProjection: () => false,
   }));
@@ -77,7 +77,7 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s r
     await expect(readFile(path)).rejects.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
-    vi.doUnmock("../../../scripts/route-startup.ts");
+    vi.doUnmock("@pe/web/route-startup");
     vi.resetModules();
   }
 });
@@ -86,8 +86,8 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s r
   const root = await mkdtemp(join(tmpdir(), "racing-closure-"));
   const path = join(root, "source-closure.generated.json");
   vi.resetModules();
-  vi.doMock("../../../scripts/route-startup.ts", async (original) => ({
-    ...(await original<typeof import("../../../scripts/route-startup.ts")>()),
+  vi.doMock("@pe/web/route-startup", async (original) => ({
+    ...(await original<typeof import("@pe/web/route-startup")>()),
     readRouteStartupReceipt: () => ({ checkout: "c", sourceHash: "h", projections: { [path]: "whole closure" } }),
     currentRouteStartupProjection: () => false,
   }));
@@ -97,7 +97,7 @@ test.each(["prepareDevRouteProjection", "prepareSourceClosures"] as const)("%s r
     expect(await readFile(path, "utf8")).toBe("whole closure");
   } finally {
     await rm(root, { recursive: true, force: true });
-    vi.doUnmock("../../../scripts/route-startup.ts");
+    vi.doUnmock("@pe/web/route-startup");
     vi.resetModules();
   }
 });

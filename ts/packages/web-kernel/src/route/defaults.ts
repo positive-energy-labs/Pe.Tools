@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { listSearchSchema } from "../../../agent-contracts/src/list-search.ts";
+import { listSearchSchema } from "@pe/agent-contracts/list-search";
 import {
   field,
   route as declareRoute,

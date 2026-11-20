@@ -1,5 +1,5 @@
 import { productDependencyChanges, renderProductAssembly } from "./product-assembly.ts";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import { icons } from "lucide-react";
 import { projectWork } from "./host-projection.ts";
@@ -25,8 +25,7 @@ import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { familyFixturesDir } from "../checkout-paths.ts";
-import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "../../../scripts/route-startup.ts";
-import { regenerateCommandTable } from "../../../scripts/refresh-command-table.ts";
+import { routeFolderCandidates, routeStartupSourceHash, writeRouteStartupReceipt } from "../route-startup.ts";
 import { buildBuiltinClosures, writeBuiltinClosurePin } from "../route-source-hash.ts";
 const check = process.argv.includes("--check");
 // Write every builtin closure (untracked build output) without rewriting tracked projections.
@@ -116,7 +115,10 @@ if (!closureOnly) {
   }
 }
 if (productsOnly) process.exit(0);
-if (!closureOnly && !runtime && stale.length === 0) regenerateCommandTable(check);
+if (!closureOnly && !runtime && stale.length === 0)
+  execFileSync(process.execPath,
+    [fileURLToPath(new URL("../../../scripts/refresh-command-table.ts", import.meta.url)), ...(check ? ["--check"] : [])],
+    { stdio: "inherit" });
 const jiti = createJiti(import.meta.url, {
   fsCache: false,
   jsx: { runtime: "automatic" },
@@ -185,9 +187,13 @@ for (const key of keys) {
     const agent = typed.spec.agent !== false;
     const fields = Object.entries(typed.spec.fields).map(([key, field]) => {
       const json = z.toJSONSchema(field.schema, { io: "input" });
-      const schema = field.role === "subject"
-        ? `subjectSchema(${(json.oneOf as {properties?:{ids?:{maxItems?:number}}}[]).find(part=>part.properties?.ids)?.properties!.ids!.maxItems})`
-        : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
+      // A scene pose's geometric refinements cannot survive JSON Schema projection.
+      const schema =
+        key === "sceneView"
+          ? "sceneViewSchema"
+          : field.role === "subject"
+            ? `subjectSchema(${(json.oneOf as { properties?: { ids?: { maxItems?: number } } }[]).find((part) => part.properties?.ids)?.properties!.ids!.maxItems})`
+            : `(z.fromJSONSchema(${JSON.stringify(json)}) as z.ZodType<Immutable<${schemaType(json)}>>)`;
       const codecName = field.codec === listSearchCodec ? "listSearchCodec" : field.codec === textCodec ? "textCodec" : null;
       if (field.codec && !codecName) throw Error(`${key}: the declared field codec has no address projection`);
       const codec = codecName ? `, codec: ${codecName}` : "";
