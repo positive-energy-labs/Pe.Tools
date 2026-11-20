@@ -4,13 +4,13 @@ import { fansTool } from "@pe/fans-contract/semantic-actions";
 import {
   builtinCommandHead,
   targetForCommand,
-  tools as sharedTools,
+  builtinTools,
   withHostActions,
 } from "@pe/agent-contracts/semantic-actions";
 import type { DocumentRef, Tool } from "@pe/agent-contracts";
 
-const { findings, instances, ...routeTools } = sharedTools;
-type ProductTools = typeof sharedTools & { fans: typeof fansTool; ducts: typeof ductSystemsTool };
+const { findings, instances, ...routeTools } = builtinTools;
+type ProductTools = typeof builtinTools & { fans: typeof fansTool; ducts: typeof ductSystemsTool };
 export const tools: ProductTools = {
   ...routeTools,
   fans: fansTool,

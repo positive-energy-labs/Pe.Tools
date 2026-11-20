@@ -5,10 +5,9 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   createPeClient,
   httpRoutes as peRoutes,
-  matchPeRoute,
-  servePeRoute,
-  peClientScript,
 } from "./pe-api.ts";
+import { definePeRouteApi } from "@pe/host-contracts/pe-api";
+const { matchPeRoute, servePeRoute, peClientScript } = definePeRouteApi(peRoutes);
 
 describe("the declared host door", () => {
   it("refuses an undeclared method/path before a handler can run", async () => {

@@ -1,6 +1,6 @@
 import { FAN_CALC_GUIDE, ductsRosterRequestSchema, ductsCalcRequestSchema } from "../calc-read.ts";
 import { createPeCatalog } from "@pe/agent-contracts/pe-api";
-import { hostActions } from "@pe/agent-contracts/semantic-actions";
+import { builtinHostActions as hostActions } from "@pe/agent-contracts/semantic-actions";
 import { fansReadDiscovery } from "../read-discovery.ts";
 import { renderDuctsSkill } from "../pea/ducts-skill.ts";
 import { expect, test } from "vite-plus/test";

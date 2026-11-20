@@ -1,5 +1,5 @@
 import { expect, it } from "vite-plus/test";
-import { commands } from "../src/semantic-actions.ts";
+import { builtinCommands as commands } from "../src/semantic-actions.ts";
 import { bindWork, message } from "../src/route-state.ts";
 import { address } from "../src/target.ts";
 

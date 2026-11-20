@@ -4,7 +4,9 @@ const errorsOf = (entries: readonly CatalogLink[]) => {
   const result = link(entries);
   return result.ok ? [] : [...result.errors];
 };
-import { httpRoutes, linkedCatalog, peRoutes } from "./pe-api.ts";
+import { httpRoutes, createPeCatalog } from "./pe-api.ts";
+import { builtinHostActions } from "./semantic-actions.ts";
+const { linkedCatalog, peRoutes } = createPeCatalog(builtinHostActions);
 const catalogEntries = [...linkedCatalog().entries.values()];
 const leaf = (key: string, uses: CatalogLink["uses"] = []): CatalogLink => ({
   key,

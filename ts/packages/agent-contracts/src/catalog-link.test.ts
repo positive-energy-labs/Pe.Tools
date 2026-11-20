@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 import { commandLink, link, type CatalogLink } from "./catalog.ts";
 import { commandCatalogAxes } from "./command-axes.ts";
-import { linkedCatalog } from "./pe-api.ts";
+import { createPeCatalog } from "./pe-api.ts";
+import { builtinHostActions } from "./semantic-actions.ts";
+const { linkedCatalog } = createPeCatalog(builtinHostActions);
 const catalogEntries = [...linkedCatalog().entries.values()];
 
 const leaf = (key: string, uses: string[] = []): CatalogLink => ({

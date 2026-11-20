@@ -2,7 +2,7 @@ import { expect, expectTypeOf, test } from "vite-plus/test";
 import { z } from "zod";
 import type { OpRequestOf } from "@pe/host-contracts/operation-types";
 import { contract, handle, native, type CommandHandle, type InputOf } from "./handle.ts";
-import { commands } from "./semantic-actions.ts";
+import { builtinCommands as commands } from "./semantic-actions.ts";
 import { minted } from "./command-handle.ts";
 
 test("handle() mints a command from the generated table, with its plan when it is a sealed write", () => {

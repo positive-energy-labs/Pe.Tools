@@ -2,7 +2,7 @@
 import { useEffect, useState, useTransition } from "react";
 import type { z } from "zod";
 import type { AppSurface, Machine } from "@pe/agent-contracts";
-import type { peRoutes } from "@pe/agent-contracts/pe-api";
+import type { httpRoutes } from "@pe/agent-contracts/pe-api";
 import { Button } from "@pe/kit/lang/button";
 import { Input, Label } from "@pe/kit/lang/input";
 import { peClient } from "#/host/pe-client";
@@ -83,7 +83,7 @@ export function HostGroup({
   );
 }
 
-type HomesStatus = z.output<(typeof peRoutes)["homes.get"]["output"]>;
+type HomesStatus = z.output<(typeof httpRoutes)["homes.get"]["output"]>;
 const foundWords: Record<HomesStatus["homes"][number]["found"], string> = {
   documents: "Documents folder",
   override: "environment override",

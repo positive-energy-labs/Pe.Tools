@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vite-plus/test";
 import { z } from "zod";
-import { tools } from "./semantic-actions.ts";
+import { builtinTools as tools } from "./semantic-actions.ts";
 import { consumedSchema, type Command, type Consumed, type WorkHandle } from "./command.ts";
 import { retainedConsumedSchema } from "./receipt-evidence.ts";
 import { bindWork } from "./route-state.ts";

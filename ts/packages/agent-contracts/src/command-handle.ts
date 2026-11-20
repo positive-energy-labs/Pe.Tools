@@ -8,7 +8,7 @@ import type { OpKey, OpRequestOf, OpResponseOf } from "@pe/host-contracts/operat
 import type { PeRouteInput, PeRouteOutput } from "@pe/host-contracts/pe-api";
 import { commandTable, type CommandKey } from "./command-axes.ts";
 import type { httpRoutes } from "./pe-api.ts";
-import type { hostActions } from "./semantic-actions.ts";
+import type { builtinHostActions } from "./semantic-actions.ts";
 
 export type Effect = "Read" | "TransactRead" | "SessionWrite" | "WorkWrite" | "ModelWrite";
 export const minted: unique symbol = Symbol("handle");
@@ -32,7 +32,7 @@ export type InputOf<H> = H extends CommandHandle<string, infer I> ? I : never;
 
 /** Product contracts contribute their command types through their own registration modules. */
 export interface ProductCommands {}
-type Commands = typeof hostActions & ProductCommands;
+type Commands = typeof builtinHostActions & ProductCommands;
 type Routes = typeof httpRoutes;
 type Row<K extends CommandKey> = (typeof commandTable)[K];
 /** The generated table (K1) names every key: semantic commands, raw native commands, pe-api routes. */

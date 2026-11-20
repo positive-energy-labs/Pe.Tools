@@ -1,6 +1,8 @@
 import { expect, test } from "vite-plus/test";
 import { commandTable } from "../src/command-axes.ts";
-import { httpRoutes, peRoutes } from "../src/pe-api.ts";
+import { httpRoutes, createPeCatalog } from "../src/pe-api.ts";
+import { builtinHostActions } from "../src/semantic-actions.ts";
+const { peRoutes } = createPeCatalog(builtinHostActions);
 
 const axisNames = new Set(["subject", "touches", "effect", "cost", "cardinality", "cap", "internal", "rollsBack"]);
 test("every key shared by the HTTP doors and command table has exactly one policy", () => {

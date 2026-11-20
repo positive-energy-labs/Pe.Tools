@@ -3,7 +3,6 @@ import { commandCatalogAxes, commandTable, type CommandKey } from "./command-axe
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { tsOnlyOperationCatalog } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
-import { hostActions } from "./semantic-actions.ts";
 import type { Command } from "./command.ts";
 import { capabilityPrincipals } from "./capability.ts";
 import {
@@ -185,10 +184,6 @@ export function createPeCatalog<const Extras extends Record<string, ReturnType<t
   return { ...transport, peRoutes, linkedCatalog };
 }
 
-const sharedCatalog: PeCatalog<Routes> = createPeCatalog(hostActions);
-export const peRoutes: PeCatalog<Routes>["peRoutes"] = sharedCatalog.peRoutes;
-export const linkedCatalog: PeCatalog<Routes>["linkedCatalog"] = sharedCatalog.linkedCatalog;
-
 export interface CatalogRow extends CatalogLink {
   call?: CallPolicy;
   discovery?: {
@@ -221,12 +216,8 @@ function commandAxes(key: string, action: Command): CatalogLink {
   if (!axes) throw Error(`Command ${key} has no declared catalog axes`);
   return commandLink(key, action, axes);
 }
-export const isPeRouteId: PeApi<Routes>["isPeRouteId"] = api.isPeRouteId;
 export const peRouteUrl: PeApi<Routes>["peRouteUrl"] = api.peRouteUrl;
-export const matchPeRoute: PeApi<Routes>["matchPeRoute"] = api.matchPeRoute;
-export const servePeRoute: PeApi<Routes>["servePeRoute"] = api.servePeRoute;
 export const createPeClient: PeApi<Routes>["createPeClient"] = api.createPeClient;
-export const peClientScript: PeApi<Routes>["peClientScript"] = api.peClientScript;
 export type PeRouteId = keyof Routes;
 
 /** Dispatch a discoverable HTTP entry through its declared method and schema. */

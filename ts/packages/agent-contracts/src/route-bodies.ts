@@ -11,7 +11,7 @@ import {
 } from "./route-kernel-data.ts";
 import type { SchemaTable } from "./route-kernel-page.ts";
 import { routeWorkSubject } from "./route-work-subject.ts";
-import { commands, isWritePreviewKey } from "./semantic-actions.ts";
+import { builtinCommands, isWritePreviewKey } from "./semantic-actions.ts";
 
 const fn = z.custom<(...args: unknown[]) => unknown>((value) => typeof value === "function");
 const schema = z.custom<z.ZodType>((value) => value instanceof z.ZodType);
@@ -497,9 +497,10 @@ export function linkRouteBodies(
   if (data.work?.adopt) {
     const id = data.work.adopt;
     const verb = data.verbs[id];
+    // Automatic adoption is a built-in privilege: extension entries cannot grant it to themselves.
     const command: Command | undefined =
-      verb?.kind === "command" && Object.hasOwn(commands, verb.entry)
-        ? commands[verb.entry as keyof typeof commands]
+      verb?.kind === "command" && Object.hasOwn(builtinCommands, verb.entry)
+        ? builtinCommands[verb.entry as keyof typeof builtinCommands]
         : undefined;
     const reachesModelWrite = (key: string, seen = new Set<string>()): boolean => {
       if (seen.has(key)) return false;

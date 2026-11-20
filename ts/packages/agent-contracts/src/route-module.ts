@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { z as kernelZ } from "zod";
-import { commandLink, requireLinkedCatalog, type CatalogAxes } from "./catalog.ts";
+import { commandLink, requireLinkedCatalog, type CatalogAxes, type LinkedCatalog } from "./catalog.ts";
 import type { CatalogLink } from "./catalog.ts";
 import type { Command } from "./command.ts";
 import {
@@ -10,7 +10,6 @@ import {
   type HostRouteAdmissionPort,
   type HostAdmittedRoute,
 } from "./host-route-admission.ts";
-import { linkedCatalog } from "./pe-api.ts";
 import { bare, manyCodec } from "./route-field.ts";
 import type { RouteGraph } from "./route-graph.ts";
 import { validateRouteGraph } from "./route-graph.ts";
@@ -71,6 +70,7 @@ export interface ExecutableRouteModule<B> extends RouteModule<Record<string, B>>
 export function validateExecutableRouteModule<B>(
   module: ExecutableRouteModule<B>,
   actualHash: string,
+  catalog: LinkedCatalog,
 ) {
   validateRouteModule(module);
   if (module.moduleHash !== actualHash) throw Error("Route module hash mismatch");
@@ -78,7 +78,7 @@ export function validateExecutableRouteModule<B>(
     if (entry.needs !== "nothing" && entry.axes?.subject === "None")
       throw Error(`${key}: a document requirement cannot declare Subject None`);
   requireLinkedCatalog(
-    linkedCatalog().extend(
+    catalog.extend(
       Object.entries(module.entries).map(([key, entry]) => commandLink(key, entry, entry.axes)),
     ),
   );
