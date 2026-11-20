@@ -204,7 +204,7 @@ export const module = screen(
         sized: "start",
         minSize: 280,
         maxSize: 760,
-        minOtherSize: 360,
+        minOtherSize: 400,
         rails: { start: { title: "Systems" } },
       },
     ),

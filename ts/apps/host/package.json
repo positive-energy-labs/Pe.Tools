@@ -50,7 +50,6 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/client": "catalog:",
-    "@pe/web-kernel": "workspace:*",
     "@types/node": "^25.6.2",
     "gunshi": "^0.29.5",
     "playwright-core": "1.60.0",

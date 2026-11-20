@@ -8,8 +8,7 @@
     "ratchets:tighten": "node src/unification-2-census.ts --tighten && node src/tighten-effect-islands.ts && node src/test-casts-census.ts --tighten && node src/health-census.ts --tighten && node src/route-closure-census.ts --tighten"
   },
   "dependencies": {
-    "@pe/agent-contracts": "workspace:*",
-    "effect": "4.0.2"
+    "@pe/agent-contracts": "workspace:*"
   },
   "devDependencies": {
     "@pe/host-contracts": "workspace:*",

@@ -124,7 +124,6 @@ export const commandCodes = new Set([
   "CmdPeTools",
   "CmdPeToolsHome",
   "CmdPea",
-  ,
   "CmdFamilyAudit",
   "CmdTakeoffsWeb",
   "CmdPodsWeb",

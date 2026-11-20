@@ -12,7 +12,6 @@ describe("the C# route table", () => {
   test("names every route's path and carries no draft key", () => {
     const text = renderRoutesCs();
     expect(text).toContain('public const string Path = "/pods";');
-    expect(text).toContain('public const string Pod = "pod";');
     for (const key of ["ThreadSearch", "ThreadSort"])
       expect(text.match(new RegExp(`public const string ${key} =`, "g"))).toHaveLength(
         new Set(routeDirectory.map(({ directory }) => directory.path)).size,

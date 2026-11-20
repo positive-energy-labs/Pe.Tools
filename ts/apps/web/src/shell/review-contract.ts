@@ -25,11 +25,3 @@ export const worksharingOf = (evidence: unknown): Worksharing | null => {
   );
   return parsed.success ? parsed.data : null;
 };
-export interface VerbPresentation {
-  readonly sentence: string;
-  readonly rows: readonly string[];
-  /** Set by the kernel from the preview evidence; a presenter never computes it. */
-  readonly worksharing?: Worksharing | null;
-  /** Admitted Page state for a picture or other route view of the review. */
-  readonly page?: Record<string, unknown>;
-}

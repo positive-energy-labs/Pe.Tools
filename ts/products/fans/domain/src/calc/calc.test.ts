@@ -928,7 +928,9 @@ it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053:
     snapshot: {
       ...retired,
       store: storeOf({
-        equipmentFlows: { "200": { cfm: 0, appliedAt: "t", parameter: retired.slots.fanFlow } },
+        equipmentFlows: {
+          [uniqueIdOf(200)]: { cfm: 0, appliedAt: "t", parameter: retired.slots.fanFlow },
+        },
       }),
     },
     firm: TEST_FIRM,
@@ -939,7 +941,9 @@ it("P24: a typed 0 unit flow keeps its share once applied and retired (ADR 0053:
   const zero = build([]);
   zero.nodes.find((n) => n.id === 100)!.facts = fact(0);
   zero.store = storeOf({
-    equipmentFlows: { "100": { cfm: 0, appliedAt: "t", parameter: zero.slots.fanFlow } },
+    equipmentFlows: {
+      [uniqueIdOf(100)]: { cfm: 0, appliedAt: "t", parameter: zero.slots.fanFlow },
+    },
   });
   const own = inputsFor(zero, { roles: { 100: "fan" }, drops: { 2: 0 } });
   expect(own.units["100"]!.cfm).toMatchObject({ value: 0, source: "model" });

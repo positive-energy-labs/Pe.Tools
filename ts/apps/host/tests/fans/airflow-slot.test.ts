@@ -78,7 +78,11 @@ test("empty named default chooses one Revit Flow slot by coverage and prices the
     store: storeOf({
       ...snapshot.store,
       terminalFlows: {
-        "3": { cfm: 150, parameter: "revit:Flow", appliedAt: "2026-11-19T00:00:00Z" },
+        [snapshot.nodes.find((node) => node.id === 3)!.uniqueId]: {
+          cfm: 150,
+          parameter: "revit:Flow",
+          appliedAt: "2026-11-19T00:00:00Z",
+        },
       },
     }),
   };

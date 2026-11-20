@@ -140,7 +140,7 @@ export const runPods = <A, E>(
       Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)), options);
 
 /** A conditional member write that refused wrote nothing: a clean refusal, never an unknown effect. */
-export const writeMemberOnce = (
+const writeMemberOnce = (
   deps: PodDependencies,
   request: PodMemberWriteRequest | PodMemberSaveRequest,
   pods: PodContext,
@@ -188,7 +188,7 @@ const familyMember = (modelJson: string) => {
 };
 
 /** A draft saved as a member says what it is, whatever `$schema` it carried. */
-export const podContext = async (
+const podContext = async (
   deps: PodDependencies,
   bridge: RevitBridge["Service"],
   target?: DocumentRef,
@@ -214,7 +214,7 @@ const diagnosticLine = (d: { code: string; path: string; message: string }) =>
  * Revit (origin Operation), so they are null. The member it wrote is its product: the run lists it
  * as `written-member.json` beside its other outputs.
  */
-export const writeCaptureRun = (
+const writeCaptureRun = (
   deps: PodDependencies,
   pods: PodContext,
   at: string,

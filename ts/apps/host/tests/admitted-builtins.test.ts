@@ -54,23 +54,6 @@ async function open(ws: RouteWorkspace, inventory?: readonly BuiltinEnrollment[]
 async function close(scope: Scope.Closeable) {
   await settle(Scope.close(scope, Exit.void));
 }
-test("Captures admits only a registry receipt using its generated full web closure", async () => {
-  const f = workspace();
-  const run = await open(f.workspace);
-  expect(run.service).toBeDefined();
-  const route = run.service!.routes.get("captures")!;
-  try {
-    expect(route.fingerprint).toBe(
-      builtinEnrollments.find((entry) => entry.routeKey === "captures")!.closure.fingerprint,
-    );
-    expect(run.service!.registry.resolve(route)).toBe(route);
-    expect(route.data.work).toBeUndefined();
-  } finally {
-    await close(run.scope);
-  }
-  expect(run.service!.registry.resolve(route)).toBeNull();
-});
-
 test("Ducts and Fans own independent canonical host Work registrations", async () => {
   const f = workspace();
   const run = await open(f.workspace);

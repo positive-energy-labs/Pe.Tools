@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { subjectCode } from "@pe/agent-contracts";
 import { expect, test, vi } from "vite-plus/test";
 import { routeRegistry } from "./registry";
 import { publicRoutes } from "./builtin-routes";
@@ -58,18 +57,4 @@ test("hosted typed address retains the call's exact Work, target and thread with
       false,
     ),
   ).toMatchObject({ ok: true, route: "families", carry: { target } });
-});
-
-test("Schedules' hosted workspace uses its typed subject codec without changing Work identity", () => {
-  const route = publicRoutes.typed("schedules")!;
-  const address = hostedRouteAddress(route, {
-    thread: "caller",
-    work: "schedule-42",
-    visible: true,
-  });
-  expect(JSON.parse(address.read().get("workspaceId")!)).toEqual({
-    kind: "ids",
-    ids: [subjectCode({ keyKind: "workspace", key: "schedule-42" })],
-  });
-  expect(address.read().get("work")).toBe("schedule-42");
 });

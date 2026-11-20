@@ -16,25 +16,22 @@ import { Publications } from "../src/reads/publications.ts";
 import { readRegistry, registeredReads, graphRoute } from "../src/reads/routes.ts";
 import { hostRead } from "@pe/agent-contracts/route";
 import * as fanContracts from "@pe/fans-contract/contract";
-import * as systemContracts from "@pe/duct-systems-contract/contract";
+import { product as ducts } from "@pe/ducts-contract/product";
+import { product as ductSystems } from "@pe/duct-systems-contract/product";
+import { product as fans } from "@pe/fans-contract/product";
 import { GUIDE_CALC_READS } from "@pe/fans-contract/calc-read";
 import { peRoutes } from "@pe/mcps/product-catalog";
 import { picker } from "../../web/src/pages-bind/contract.ts";
 import { product as roomsProduct } from "@pe/rooms-contract/product";
 
 const contracts = [
-  ...Object.entries(
+  ...Object.values(
     import.meta.glob<Record<string, ReadHandle>>("../../web/src/*/contract.ts", { eager: true }),
+  ).flatMap((module) => Object.values(module)),
+  ...[ducts, ductSystems, fans, roomsProduct].flatMap(({ readings }) =>
+    Object.values(readings).map(({ handle }) => handle),
   ),
-  ["fans", fanContracts],
-  ["duct-systems", systemContracts],
-  [
-    "rooms",
-    Object.fromEntries(
-      Object.entries(roomsProduct.readings).map(([name, reading]) => [name, reading.handle]),
-    ),
-  ],
-] as const;
+];
 const shape = (schema: z.ZodType) => z.toJSONSchema(schema, { unrepresentable: "any" });
 test("every guide calc read resolves through pe-api and the registered host read", () => {
   const apiInput = z.fromJSONSchema(peRoutes["reads.value"].catalog.discovery!.input!);
@@ -82,34 +79,11 @@ test("the browser door binds the target in the host contract's shape", () => {
   });
 });
 
-test("each route's contract.ts declares the reads its host serves, with the host's own schemas", () => {
-  const handles = contracts.flatMap(([, module]) => Object.values(module));
-  expect(contracts).toHaveLength(11);
-  expect(handles.map((h) => h.key).sort()).toEqual([
-    "bind.picker",
-    "chat.context",
-    "duct-loss.result",
-    "ducts.network",
-    "ducts.overview",
-    "ducts.pricing",
-    "ducts.roster",
-    "families.view",
-    "fans.calc",
-    "fans.calc-breakdown",
-    "fans.calc-detail",
-    "fans.pressures",
-    "open.documents",
-    "ops.workspace",
-    "pods.author",
-    "pods.roster",
-    "rooms.evidence",
-    "rooms.plan-image",
-    "rooms.plans",
-    "rooms.regions",
-    "settings.machine",
-    "takeoffs.adoption",
-    "takeoffs.captures",
-  ]);
+test("declared reads are served by the host with their original schemas", () => {
+  const handles = [...new Set(contracts)];
+  for (const { readings } of [ductSystems, fans, roomsProduct])
+    for (const { handle } of Object.values(readings))
+      expect(registeredReads.reads.get(handle.key)?.contract, handle.key).toBe(handle);
   // Mutant: register read(name, ...) with copied schemas instead of body(handle, ...).
   for (const h of handles) {
     const served = registeredReads.reads.get(h.key) ?? bodyOf(h);

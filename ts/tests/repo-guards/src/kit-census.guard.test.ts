@@ -268,7 +268,6 @@ const RULES: Rule[] = [
     roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx"], select: "classes",
     allow: [
       { glob: "products/ducts/web/src/annotations.tsx", selector: ".absolute.left-0.top-0", reason: "SVG marks stay registered to the picture origin." },
-      { glob: W + "grounded-doc/view/page-pane.tsx", selector: ".absolute.left-0.5.top-0.5", reason: "Block-kind glyph marks its document rectangle." },
     ], cannotSee: "Computed classes or browser geometry." },
   { id: "surface-plane-inferred", doctrine: "L4", pattern: /data-surface=["'](?:recess|artifact)["']/g,
     roots: ["products/*/web/{src/**/*.tsx,route.ts}", "{apps/web/src,products/*/web/src}/**/*.tsx", WK + "**/*.tsx"], allow: allow({
@@ -285,7 +284,6 @@ const RULES: Rule[] = [
       ...allow({
         [WK + "scene/footnotes.tsx"]: "The reusable footnote layer writes citation focus and travel grace; delegated Subject markup owns hover.",
         "products/duct-systems/web/src/screen/inbox.tsx": "Issue dwell and subject-numbering ownership include expanded detail.",
-        "grounded-doc/view/page-pane.tsx": "Page geometry synchronizes evidence blocks.",
         "machine/notice.tsx": "Reading a notice pauses expiry.",
         "machine/bay.tsx": "Pointer chooses the file preview.",
         "workbench/lens/peek.tsx": "Travel funnel and linger timing keep the popover reachable.",
