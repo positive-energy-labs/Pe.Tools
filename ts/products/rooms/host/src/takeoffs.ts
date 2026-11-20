@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { createHash } from "node:crypto";
+import { win32 } from "node:path";
 import { Effect } from "effect";
 import {
   nativeProcessSchema,
@@ -32,7 +33,7 @@ import {
   type CommandContext,
 } from "@pe/host-internal/command-executor";
 import type { CommandBody } from "@pe/host-internal/product";
-import { product } from "@pe/rooms-contract/product";
+import { product, takeoffsWork } from "@pe/rooms-contract/product";
 
 const { commands } = product;
 export type Deps = Parameters<CommandBody>[1];
@@ -250,22 +251,14 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
               .filter((zone) => !input.zones.length || input.zones.includes(zone.zone.guid))
               .flatMap((zone) => zone.rooms.map((room) => room.guid)),
           );
-          const doc = await ctx.selectWork(product.works.takeoffs, base, (_doc, cells) => {
+          const doc = await ctx.selectWork(takeoffsWork, base, (_doc, cells) => {
             const selected = cells.filter(({ path }) =>
               path[0] === "edits"
                 ? rooms.has(takeoffEditAddress(String(path[1])).roomId)
                 : path[0] === "decisions" &&
                   rooms.has(takeoffDecisionAddress(String(path[1])).roomGuid),
             );
-            const edited = new Set(
-              selected
-                .filter(({ path }) => path[0] === "edits")
-                .map(({ path }) => takeoffEditAddress(String(path[1])).roomId),
-            );
-            return {
-              cells: selected.map(({ path }) => path),
-              facts: [...edited].map((room) => ["bases", room] as const),
-            };
+            return { cells: selected.map(({ path }) => path), facts: [] };
           });
           edits = Object.fromEntries(
             Object.entries(stagedTakeoffEdits(doc)).filter(([room]) => rooms.has(room)),
@@ -337,7 +330,10 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
           if (inserts.some(({ zone }) => !zone.tags[0]))
             throw refused("Every inserted room requires a system tag");
           const replacement = replacing(execution.prepared);
-          if (inserts.length && replacement) throw refused(replacement.reason);
+          if (inserts.length && replacement)
+            throw refused(
+              `${replacement.reason}. Preview and apply rooms.draw, rooms.partition, or takeoffs.adopt to recover it.`,
+            );
           const recordedFile = execution.recorded("file", "rhvac.sync");
           const request: RhvacSyncRequest = recordedFile
             ? (recordedFile.input as { request: RhvacSyncRequest }).request
@@ -404,6 +400,22 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
                   deleteUntouchedSeedRoom: inserts.length > 0,
                 } satisfies RhvacSyncRequest;
               });
+          const syncedAt = new Date().toISOString();
+          if (inserts.length && !recordedFile) {
+            // Jet assigns a signed int and the file identity is the input basename plus a 16-digit hex stamp.
+            yield* nativeStep(bridge, target, "takeoffs.rhvac-links.preflight", {
+              writes: inserts.map(({ room }) => ({
+                elementId: room.elementId!,
+                uniqueId: room.guid,
+                link: {
+                  identifier: -2147483648,
+                  fileIdentity: `${win32.basename(input.path)}#${"0".repeat(16)}`,
+                  syncedAt,
+                  lastSyncedSqft: room.sqft,
+                },
+              })),
+            }).pipe(Effect.mapError((error) => refused(error.message)));
+          }
           const expectedVersion = input.fileVersion as string;
           const result = yield* execution.step(
             "file",
@@ -421,10 +433,11 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
               throw Error("RHVAC insertion result omitted a room identity");
             return {
               elementId: room.elementId!,
+              uniqueId: room.guid,
               link: {
                 identifier,
                 fileIdentity,
-                syncedAt: new Date().toISOString(),
+                syncedAt,
                 lastSyncedSqft: room.sqft,
               },
             };

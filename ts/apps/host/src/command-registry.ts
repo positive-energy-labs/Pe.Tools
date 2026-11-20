@@ -33,7 +33,6 @@ import { CANCEL_OPERATION_KEY } from "./bridge.ts";
 import { commandCatalogAxes } from "../../../packages/agent-contracts/src/command-axes.ts";
 import { catalogWorkSpecs, type WriteBoundaryBinding } from "@pe/agent-contracts";
 import { commands } from "@pe/mcps/product-actions";
-import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies &
@@ -46,7 +45,6 @@ export function commandRegistry(
   local: GatewayLocal,
   origin?: () => string,
 ): CommandRegistry {
-  const { openFile, syncFile } = deps;
   const implementations: Record<string, CommandExecutor> = {
     "work.start": workStartExecutor(deps.workspace),
     "machine.bootstrap": bootstrapExecutor(deps.sdk),
@@ -63,15 +61,13 @@ export function commandRegistry(
     ),
   };
   // Product-owned sheet writes answer through the generic sheet dispatcher.
+  const { openFile, syncFile } = deps;
   const products = productExecutors(bridge, {
     ...deps,
-    runPods: (effect, options) => runPods(deps, effect, options),
-    projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
     captures,
     // The RHVAC file lane, with the test seams a recorded journey supplies.
     rhvac: {
-      open: (path) =>
-        openFile ? io(() => openFile(path)) : rhvacOpen({ path }),
+      open: (path) => (openFile ? io(() => openFile(path)) : rhvacOpen({ path })),
       sync: (request, expectedVersion) =>
         syncFile
           ? io(() => syncFile(request, expectedVersion))
@@ -79,17 +75,14 @@ export function commandRegistry(
       applyStaged,
       buildInsert: buildRhvacInsert,
     },
+    runPods: (effect, options) => runPods(deps, effect, options),
+    projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
-  const productsWithoutSheet = Object.fromEntries(
-    Object.entries(products.executors).filter(
-      ([key]) => !(Object.values(SHEET_COMMANDS) as string[]).includes(key),
-    ),
-  );
   for (const group of [
     familyExecutors(captures, bridge, deps),
     instancesExecutors(deps),
-    productsWithoutSheet,
-    sheetExecutors(bridge, deps, products.executors, products.sheetRoutes),
+    products.executors,
+    sheetExecutors(bridge, deps, products.sheets),
     catalogWorkExecutors(bridge, deps),
     findingsExecutors(deps.workspace, bridge),
   ]) {

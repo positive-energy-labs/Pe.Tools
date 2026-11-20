@@ -33,6 +33,7 @@ const fetchRecorded = globalThis.fetch;
 /** Socket adaptation only: all native replies and checks belong to the one fixture transport. */
 export async function fixtureNative(directory: string, ...recordings: string[]) {
   let selected = nativeRecordings(...recordings);
+  let linkCapacityRefusal: string | undefined;
   let replacementEvidence: HostOpResponse<"takeoffs.record-replacements"> = {
     regions: null,
     registry: null,
@@ -102,6 +103,9 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
     bridge,
     journal,
     calls,
+    reportLinkCapacityRefusal(reason: string) {
+      linkCapacityRefusal = reason;
+    },
     reportTakeoffReplacements(evidence: HostOpResponse<"takeoffs.record-replacements">) {
       replacementEvidence = evidence;
     },
@@ -309,9 +313,16 @@ export async function fixtureNative(directory: string, ...recordings: string[]) 
                   throw Error("Fixture cannot attribute this native read to one admitted action");
                 const action = req.derivedCommand ?? owners[0] ?? `native:${req.operationKey}`;
                 // This read models fixture state rather than a replay of a native mutation.
+                const linkCapacity = req.operationKey === "takeoffs.rhvac-links.preflight";
+                if (linkCapacity) {
+                  transport.admit(action, req.operationKey, input);
+                  if (linkCapacityRefusal) throw Error(linkCapacityRefusal);
+                }
                 const value = takeoffReplacementRead
                   ? nativeResponseSchema("takeoffs.record-replacements").parse(replacementEvidence)
-                  : transport.reply(action, req.operationKey, input);
+                  : linkCapacity
+                    ? { writes: [] }
+                    : transport.reply(action, req.operationKey, input);
                 if (loseReply === req.operationKey || refuseDeliveredReply === req.operationKey) {
                   // Drop a validated recorded answer only after production persisted delivery evidence.
                   yield* Effect.promise(async () => {

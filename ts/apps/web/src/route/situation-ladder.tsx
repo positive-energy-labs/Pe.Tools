@@ -17,7 +17,7 @@ import type { RouteHandle } from "./handle";
  * True inside Chat's plugin pane. The pane's target is the thread head's, and Chat's composer head
  * is the one place to change it, so a hosted ladder offers no session or document levels.
  */
-export const ChatHosted = createContext(false);
+const ChatHosted = createContext(false);
 
 /** Chat's captured plan request, shared with its hosted surface. */
 export const ChatPlanIntent = createContext<{

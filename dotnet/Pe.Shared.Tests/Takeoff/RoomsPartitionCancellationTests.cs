@@ -22,6 +22,27 @@ public sealed class RoomsPartitionCancellationTests
     }
 
     [Test]
+    public void Pending_creation_counts_toward_the_same_limit_as_live_rows()
+    {
+        var record = new RoomsRegionRecord();
+        var row = new RegionRow(TakeoffCarriers.RoleRoomRegion, new RoomFields(Name: new string('x', 140_000)),
+            RegionProvenance.Default);
+        record.Regions["live-room"] = row;
+        Assert.That(record.BeforeMutation(() => true), Is.True);
+        Assert.That(() => record.BeforeMutation<bool>(() => throw new AssertionException("Mutation ran"), [row]),
+            Throws.InvalidOperationException.With.Message.Contains("the cap is"));
+        Assert.That(record.Regions.Keys, Is.EqualTo(new[] { "live-room" }));
+    }
+
+    [Test]
+    public void A_reused_numeric_target_must_match_the_captured_unique_id()
+    {
+        Assert.DoesNotThrow(() => TakeoffAtlas.RequireRegionIdentity(42, "captured", "captured"));
+        Assert.That(() => TakeoffAtlas.RequireRegionIdentity(42, "captured", "reused"),
+            Throws.InvalidOperationException.With.Message.Contains("42").And.Message.Contains("captured"));
+    }
+
+    [Test]
     public void Pruning_releases_deleted_region_rows_and_retains_their_merge_ancestry()
     {
         var record = new RoomsRegionRecord();

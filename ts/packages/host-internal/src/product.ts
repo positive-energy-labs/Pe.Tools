@@ -43,21 +43,35 @@ export type CommandBody = (
   },
 ) => CommandExecutor;
 
-/**
- * The host half of a product: one body per declared reading and command, or `tsc` fails. Each
- * reading body is registered under its handle, so `reads` is what a route's host module exports.
- */
-export const implement = <P extends ProductDeclaration>(
+/** The host half of a product: one body per declared reading and command, or `tsc` fails. */
+export function implement<P extends ProductDeclaration>(
   product: P,
   bodies: HostBodies<P, ReadContext, CommandBody>,
-) => ({
-  product,
-  ...bodies,
-  reads: Object.fromEntries(
-    Object.entries(product.readings).map(([name, reading]) => [
-      name,
-      // Type erasure occurs here: `HostBodies` already tied each body to its handle's input and data.
-      body(reading.handle, (bodies.readings as Record<string, Read<unknown, unknown>["run"]>)[name]!),
-    ]),
-  ) as { readonly [K in keyof P["readings"]]: Read<unknown, unknown> },
-});
+): {
+  product: P;
+  reads: Record<string, Read<unknown, unknown>>;
+  executors: (...args: Parameters<CommandBody>) => Record<string, CommandExecutor>;
+};
+export function implement(
+  product: ProductDeclaration,
+  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody>,
+) {
+  const reads = Object.fromEntries(
+    Object.entries(product.readings).map(([key, { handle }]) => {
+      const run = bodies.readings[key];
+      if (!run) throw Error(`No host body for ${handle.key}`);
+      if (typeof run === "function") return [key, body(handle, run)];
+      if (run.contract && (run.contract !== handle || run.name !== handle.key))
+        throw Error(`Wrong host body for ${handle.key}`);
+      return [key, run.contract ? run : body(handle, run.run)];
+    }),
+  );
+  return {
+    product,
+    reads,
+    executors: (...args: Parameters<CommandBody>) =>
+      Object.fromEntries(
+        Object.entries(bodies.commands).map(([key, make]) => [key, make(...args)]),
+      ),
+  };
+}

@@ -11,21 +11,29 @@ internal sealed record RoomsTraceRun(string View, string RunId, string Attempt, 
 internal static class RoomsRunTraces
 {
     private const string PendingPrefix = ".pending-";
+    [Pe.Shared.Product.NativeHome("runTraces", "machine-file")]
+    private const string TraceDirectory = "rooms";
 
-    internal static string Root => new ModuleStorage("rooms").State().DirectoryPath;
+    internal const string OriginalUnavailable = "original not on this machine";
+    internal static readonly AsyncLocal<string?> RootOverride = new();
+    internal static string Root => RootOverride.Value ?? new ModuleStorage(TraceDirectory).State().DirectoryPath;
 
     // Create-only evidence. Its digest in a committed region row is the authority to read it.
     internal static string KeepOriginal(string root, string document, string json)
     {
+        var bytes = new UTF8Encoding(false, true).GetBytes(json);
         var digest = Hash(json);
         var path = OriginalPath(root, document, digest);
-        if (!File.Exists(path))
+        if (File.Exists(path))
         {
-            try { StoredFile.WriteAtomic(path, Encoding.UTF8.GetBytes(json)); }
-            catch (IOException) when (File.Exists(path)) { }
+            if (File.ReadAllText(path) == json) return digest;
+            try { File.Move(path, path + ".damaged-" + Guid.NewGuid().ToString("N")); }
+            catch (FileNotFoundException) { }
         }
+        try { StoredFile.WriteAtomic(path, bytes); }
+        catch (IOException) when (File.Exists(path)) { }
         if (File.ReadAllText(path) != json)
-            throw new IOException("The stored Rooms solver original does not match its digest.");
+            throw new IOException("The saved Rooms solver original does not match its digest.");
         return digest;
     }
 

@@ -3,7 +3,7 @@ import { expect, test } from "vite-plus/test";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { stagedDucts } from "@pe/duct-systems-contract/ducts";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
-import { editPatches } from "./calc/edits.ts";
+import { fanEditPatches } from "@pe/fans-contract/product";
 import { resolveCriteria } from "./calc/inputs.ts";
 import { TEST_FIRM } from "./test-inputs.ts";
 import { elementSubject } from "./work-subject.ts";
@@ -78,7 +78,7 @@ test("a sheet edit's cited ref lands on the cell it cites, and airflow is a plai
   const key = elementSubject(onWalk!),
     other = elementSubject(peer!);
   expect(
-    editPatches({
+    fanEditPatches({
       flows: { [key]: 250 },
       terminalDrops: { [key]: { inWg: 0.03 }, [other]: { inWg: 0.1 } },
       refs: { terminalDrops: { [key]: "firm ducts.json#terminalDrop" } },

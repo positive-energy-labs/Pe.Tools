@@ -42,7 +42,7 @@ export interface CatalogWorkClient {
 }
 
 /** Staged cells as the write popover draws them: path, staged value, author; before is unknown here. */
-export function catalogWorkCells(owner: Owner, doc: unknown) {
+function catalogWorkCells(owner: Owner, doc: unknown) {
   return editableCells(doc, catalogWorkSpecs[owner].editable)
     .filter(({ cell }) => cell.edit != null)
     .map(({ path: storedPath, cell }) => {
@@ -70,7 +70,7 @@ export function catalogWorkCells(owner: Owner, doc: unknown) {
 const shown = (value: unknown, absent: string) =>
   value == null ? absent : typeof value === "string" ? value : JSON.stringify(value);
 /** The plan's own before/after per touched id (ADR 0030 rule 8); null when the plan reports none. */
-export function touchedCells(evidence: unknown): WriteCell[] | null {
+function touchedCells(evidence: unknown): WriteCell[] | null {
   const touched = (evidence as { touched?: readonly CatalogTouch[] } | undefined)?.touched;
   if (!touched?.length) return null;
   return touched.map(({ path, before, after, by }) => ({

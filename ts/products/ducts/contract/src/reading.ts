@@ -1,3 +1,5 @@
+import { contract } from "@pe/agent-contracts/handle";
+import { nativeReadValue } from "@pe/agent-contracts/native-output-read";
 import { documentRefSchema } from "@pe/agent-contracts/target";
 import { z } from "zod";
 import { DUCT_PARAMETER_KEYS } from "./duct-inputs.ts";
@@ -31,7 +33,7 @@ export const ductsSnapshotSelectorSchema = z.discriminatedUnion("kind", [
 export type DuctsSnapshotSelector = z.infer<typeof ductsSnapshotSelectorSchema>;
 
 /** Acquisition inputs, independent of a route's local selection and staged calculations. */
-export const ductsSnapshotReadingSchema = z.strictObject({
+const snapshotInput = z.strictObject({
   kind: z.literal("ducts-snapshot"),
   target: documentRefSchema,
   slots: z
@@ -47,23 +49,27 @@ export const ductsSnapshotReadingSchema = z.strictObject({
   /** Explicit roster or bounded geometry subject. */
   selector: ductsSnapshotSelectorSchema,
 });
+export const snapshotReading = contract("ducts.snapshot", {
+  input: snapshotInput,
+  data: z.union([nativeReadValue("ducts.snapshot.roster"), nativeReadValue("ducts.snapshot.walk")]),
+  uses: ["ducts.snapshot.roster", "ducts.snapshot.walk"],
+});
+export const ductsSnapshotReadingSchema = snapshotReading.input;
 export type DuctsSnapshotReading = z.infer<typeof ductsSnapshotReadingSchema>;
-export const ductsTablesReadingSchema = z.strictObject({
+const tablesInput = z.strictObject({
   kind: z.literal("ducts-tables"),
   session: z.string().min(1),
   ids: z.array(z.string()).max(256),
 });
+export const tablesReading = contract("ducts.table-grids", {
+  input: tablesInput,
+  data: nativeReadValue("ducts.tables"),
+  subject: "None",
+  uses: ["ducts.tables"],
+});
+export const ductsTablesReadingSchema = tablesReading.input;
 export type DuctsTablesReading = z.infer<typeof ductsTablesReadingSchema>;
-export const ductsReadingSchema = z.discriminatedUnion("kind", [
-  ductsSnapshotReadingSchema,
-  ductsTablesReadingSchema,
-]);
-export type DuctsReadingRequest = z.infer<typeof ductsReadingSchema>;
-export const ductsReadingCallPolicies = {
-  "ducts.snapshot.roster": { canonicalSession: true, reading: "roster" },
-  "ducts.snapshot.walk": { canonicalSession: true, reading: "walk" },
-  "ducts.tables": { canonicalSession: true, reading: "tables" },
-} as const;
+export type DuctsReadingRequest = DuctsSnapshotReading | DuctsTablesReading;
 export const ductsReadingEnvelopeSchema = z.strictObject({
   revision: z.string(),
   state: z.enum(["idle", "loading", "ready", "stale", "failed", "closed"]),

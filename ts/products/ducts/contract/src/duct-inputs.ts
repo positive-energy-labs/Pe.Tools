@@ -3,7 +3,7 @@ import { decode, subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
 import {
   VALUE_SOURCES,
   validValueSchema,
-  valueResolutionSchema,
+  sourcedValueSchema as resolved,
   type ValueResolution,
 } from "@pe/agent-contracts/work-value";
 import type { Author } from "@pe/agent-contracts/draft";
@@ -46,7 +46,6 @@ export const DUCT_INPUT_SOURCES = [...VALUE_SOURCES, "none"] as const;
  * A resolved input is the kernel resolution itself (`ValueResolution`, work-value.ts): the wire schema
  * is the kernel's schema, so neither can admit a shape the other refuses (P-041).
  */
-const resolved = valueResolutionSchema;
 export type Resolved<T> = ValueResolution<T>;
 /** A value some tier always states (a criterion, a typed table): only the kernel's valid member. */
 const stated = validValueSchema;
@@ -143,7 +142,8 @@ export const DUCTS_CRITERIA_CELLS = {
 };
 
 export type DuctsCriteriaCell = keyof typeof DUCTS_CRITERIA_CELLS;
-const isCriteriaCell = (cell: string): cell is DuctsCriteriaCell => cell in DUCTS_CRITERIA_CELLS;
+export const isCriteriaCell = (cell: string): cell is DuctsCriteriaCell =>
+  cell in DUCTS_CRITERIA_CELLS;
 /** The criteria layer the cells' staged values make; an unstaged cell leaves its criterion (or side) out. */
 export function criteriaLayer(
   cells: Readonly<
@@ -294,22 +294,8 @@ export const ductsBaseSchema = z.strictObject({
   served: z.record(z.string(), z.enum(["project", "firm", "default"])).optional(),
 });
 export type DuctsFirm = z.infer<typeof ductsBaseSchema>;
-/**
- * What a cell or Pea writes: Work's own keys, one record per key, `null` deleting the pending edit.
- * The host applies them to document Work and recomputes; nothing here reaches Revit until apply.
- */
-const edits = <T extends z.ZodType>(value: T) => elementSubjectRecord(value.nullable());
-export const calcEditsSchema = z.strictObject({
-  /**
-   * The evidence a caller cites for a value in this same edit, by segment and key; it lands on the
-   * cell's `ref` (`CHANGE_META.ref`). The host still stamps who wrote it.
-   */
-  refs: z.record(z.string(), elementSubjectRecord(z.string().trim().min(1))).optional(),
-  flows: edits(nonneg).optional(),
-  terminalDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
-  componentDrops: edits(z.strictObject({ inWg: nonneg })).optional(),
-  equipmentFlows: edits(nonneg).optional(),
-  roles: edits(z.strictObject({ role: unitRole })).optional(),
+/** /duct-systems' edit door admits that route's own Work cells. */
+export const ductsCalcEditsSchema = z.strictObject({
   /** Keyed by JSON.stringify([family, type]); one ruling fixes every instance of the type. */
   kinds: z
     .record(z.string(), z.strictObject({ kind: z.enum(DUCT_UNIT_KINDS) }).nullable())
@@ -336,22 +322,7 @@ export const calcEditsSchema = z.strictObject({
     .array(z.strictObject({ end: endRulingSchema.shape.end, verdict: z.enum(["capped", "clear"]) }))
     .optional(),
 });
-/** Every edit the shared sheet engine prices (`editPatches`); each route's door admits only its own Work's keys. */
-export type CalcEdits = z.infer<typeof calcEditsSchema>;
-const FANS_EDITS = {
-  refs: true,
-  flows: true,
-  terminalDrops: true,
-  componentDrops: true,
-  equipmentFlows: true,
-  roles: true,
-} as const;
-/** /ducts' edit door (ruling 2026-11-10, no cross-route write): Ducts Work only; the Fans inputs are /fans' door. */
-export const ductsCalcEditsSchema = calcEditsSchema.omit(FANS_EDITS);
 export type DuctsCalcEdits = z.infer<typeof ductsCalcEditsSchema>;
-/** /fans' edit door (ruling 2026-11-10, no cross-route write): its own cells only; /ducts' keys are refused. */
-export const fansCalcEditsSchema = calcEditsSchema.pick(FANS_EDITS);
-export type FansCalcEdits = z.infer<typeof fansCalcEditsSchema>;
 /** A closure or reading the engine took on its own: shown, never parsed. */
 export const calcNoteSchema = z.strictObject({
   kind: z.enum([

@@ -12,8 +12,9 @@ namespace Pe.Shared.RevitData.Serialization;
 ///     blob (or, for the duct results entity, the schema Revit's API requires). Changing the GUID orphans every model
 ///     that holds the blob. Owner data never holds secrets: a hidden parameter can leak through IFC or DWG export.
 /// </summary>
-public sealed record OwnerDescriptor(string Owner, int Version, Guid Guid, string Name, string Description) {
-    public Func<OwnerBlobRead, string?>? ValidateData { get; init; }
+public sealed record OwnerDescriptor(string Owner, int Version, Guid Guid, string Name, string Description,
+    Func<OwnerBlobRead, string?> ValidateData) {
+    public Func<OwnerBlobRead, string?> ValidateData { get; } = ValidateData ?? throw new ArgumentNullException(nameof(ValidateData));
 }
 
 [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
@@ -85,7 +86,7 @@ public static class OwnerBlob {
         if (storedVersion.Value is not long version || version != owner.Version)
             return Refused(OwnerBlobStatus.UnknownVersion, $"is version {storedVersion}; this build reads version {owner.Version}");
         var read = new OwnerBlobRead(owner, OwnerBlobStatus.Ok, data, raw, null);
-        return owner.ValidateData?.Invoke(read) is { } error
+        return owner.ValidateData(read) is { } error
             ? read with { Status = OwnerBlobStatus.Invalid, Data = null, Error = error }
             : read;
     }
@@ -100,13 +101,6 @@ public static class OwnerBlob {
         if (back.Status != OwnerBlobStatus.Ok || back.Data!.ToString(Formatting.None) != data.ToString(Formatting.None))
             throw new InvalidOperationException($"the {owner.Name} blob does not read back exactly ({back.Error ?? "the data changed"})");
         return text;
-    }
-
-    /// <summary>Seals an envelope whose data the owner refused without changing the read or the model.</summary>
-    public static OwnerBlobReplacement DataRefused(this OwnerBlobRead read, string reason) {
-        if (read.Status != OwnerBlobStatus.Ok || read.Raw is null)
-            throw new InvalidOperationException("A data refusal requires a readable envelope.");
-        return new OwnerBlobReplacement(read.Owner.Owner, OwnerBlobStatus.Invalid, reason, HashRaw(read.Raw));
     }
 
     internal static string HashRaw(string raw) {
@@ -163,7 +157,8 @@ public sealed record OwnerValue<T>(T? Value, string? Refusal) where T : class {
 /// </summary>
 public sealed record ProjectHomePointer {
     public static readonly OwnerDescriptor Owner = new("project-home", 1,
-        new Guid("3c1f6f0e-7d0b-4a53-9a55-6f2f0f1c7a11"), "_PE_ProjectHome", "Pe.Tools project home pointer.") { ValidateData = read => Read(read).Refusal };
+        new Guid("3c1f6f0e-7d0b-4a53-9a55-6f2f0f1c7a11"), "_PE_ProjectHome", "Pe.Tools project home pointer.",
+        static read => Read(read).Refusal);
 
     private static readonly char[] Forbidden = ['\\', ':', '<', '>', '"', '|', '?', '*'];
 

@@ -84,7 +84,7 @@ test.each([
       ? await host.send(0, [])
       : await (
           await host.probe({
-            read: "ducts.roster",
+            read: "ducts.overview",
             args: { target: ref },
             subscription: "casing-roster",
             generation: 1,
@@ -93,7 +93,8 @@ test.each([
   let rosterData: any = structuredClone(packet.value!.data);
   let deliverRoster = scenario !== "cold";
   let pendingRoster = () => {};
-  if (key === "duct-systems") rosterData.systems = [{ ...rosterData.systems[0], name: "SA 19" }];
+  if (key === "duct-systems")
+    rosterData.rows = [{ ...rosterData.rows[0], name: "SA 19", key: "SA 19" }];
   else rosterData.rows = [{ ...rosterData.rows[0], mark: "MUAS-1" }];
   if (key === "rooms")
     rosterData = {
@@ -353,9 +354,9 @@ test.each([
       key === "duct-systems"
         ? {
             ...rosterData,
-            systems: [
-              rosterData.systems[0],
-              { ...rosterData.systems[0], id: 999999, name: exact.toLowerCase() },
+            rows: [
+              rosterData.rows[0],
+              { ...rosterData.rows[0], key: exact.toLowerCase(), name: exact.toLowerCase() },
             ],
           }
         : {

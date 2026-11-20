@@ -344,7 +344,6 @@ const compositionRoots = new Set([
   // Typed mounts own the fixture/live composition boundary.
   `${WEB}shell/typed-mount.ts`,
   `${WEB}shell/typed-shell.tsx`,
-  `${WEB}shell/fixture-lane.ts`,
   // The shared selector was extracted without the retired fixture engine.
   `${WEB}shell/fixture-name.ts`,
 ]);
@@ -540,12 +539,6 @@ export function boundaryCensus(input?: Record<string, string>): OffenderSets {
         reaches(edge.target, privateModules)
       )
         result.rawPageImports!.push(identity(edge.node));
-      if (
-        file.startsWith(WEB) &&
-        !compositionRoots.has(file) &&
-        edge.target === `${WEB}shell/fixture-lane.ts`
-      )
-        result.fixtureMode!.push(identity(edge.node));
     }
   }
   return Object.fromEntries(Object.entries(result).map(([law, sites]) => [law, [...sites].sort()]));
@@ -565,5 +558,7 @@ if (
       sites.filter((site) => actual[law]?.includes(site)),
     ]),
   );
-  writeFileSync(resolve(root, baselinePath), `${JSON.stringify(next, null, 2)}\n`);
+  const file = resolve(root, baselinePath);
+  writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`);
+  execFileSync("vp", ["fmt", file], { cwd: resolve(root, "ts"), stdio: "inherit" });
 }

@@ -94,12 +94,17 @@ const familiesJourney = (options: { hold?: Promise<void>; start?: boolean } = {}
     options,
   );
 
-test("S6 the route publishes its roster while a separately demanded image is held", async () => {
-  const independent = { alone: true } as const;
+test("S6 the route publishes its roster while a declared alone image is held", async () => {
   const read = (key: string) => ({
-    ...hostRead(contract(key, { input: z.object({}), data: z.string(), uses: [] })),
+    ...hostRead(
+      contract(key, {
+        input: z.object({}),
+        data: z.string(),
+        uses: [],
+        load: { alone: true },
+      }),
+    ),
     args: () => ({}),
-    load: independent,
   });
   const roster = read("probe.roster");
   const image = read("probe.image");

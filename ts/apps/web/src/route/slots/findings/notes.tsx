@@ -20,7 +20,7 @@ import type { TypedMount } from "../../../shell/typed-mount.ts";
 import { subjectName } from "../subject-name.ts";
 
 /** Exact subjects and their parts share a notes surface. Non-subject attention keys never join. */
-export function notesOn(findings: readonly Finding[], subject: SubjectRefCode) {
+function notesOn(findings: readonly Finding[], subject: SubjectRefCode) {
   return findings.filter(
     (f) =>
       f.subject === subject || subjectCode({ ...subjectOf(f.subject), sub: undefined }) === subject,

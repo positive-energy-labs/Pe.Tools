@@ -6,7 +6,7 @@ From `ts`, run `pnpm test:browser:product`. `pnpm verify` runs the same command 
 cache. It runs selection, then conversation and persisted Work journeys once each. Selection typechecks the CDP calls and browser callbacks, then starts an isolated source host with
 `--no-revit --no-tray` and an owned headless `@pe/browser` session. The navigation fixture supplies
 fixed local data. The case opens SA Lab and SA Office through real controls and checks exact URL
-membership, open-system chips and picture scope through reload, Back and Forward. Reload must
+membership, selected rows and picture readiness through reload, Back and Forward. Reload must
 complete before the retained state can pass. Uncaught browser exceptions fail the case.
 
 The shared launcher writes `custody.json` and `journey-result.json` under the dated route-launch
@@ -67,7 +67,7 @@ The launcher checks its SHA-256 each second and after cleanup, and fails if it c
 Explicit attached mode borrows the named page/server and leaves their lifecycle to the caller:
 
 ```powershell
-vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Tools --url 'http://127.0.0.1:5173/ducts?demo=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,reconnect,worker
+vp run --no-cache journey:routes -- --attached --source C:/path/to/served/Pe.Tools --url 'http://127.0.0.1:5173/duct-systems?fixture=navigation' --port 9255 --target 129DC0038D97FA0AEC5ED4E23D8524D3 --require refresh,reconnect,worker
 ```
 
 `vp run --no-cache test:route-chaos` from `ts` runs the opt-in `route-chaos.config.ts` suite.
@@ -87,7 +87,7 @@ $pages = pnpm exec pe-browser targets $browser.id | ConvertFrom-Json
 $pages | Select-Object id, type, url
 $env:CDP_TARGET = '<full page id>'
 $env:CHAOS_LANE = 'demo'
-$env:E2E_WEB = 'http://127.0.0.1:<actual web port>/ducts?demo=navigation'
+$env:E2E_WEB = 'http://127.0.0.1:<actual web port>/duct-systems?fixture=navigation'
 $env:CHAOS_SEED = '20261023'
 $env:CHAOS_REQUIRE = 'refresh,reconnect,worker'
 $env:CHAOS_PRODUCT_ROOT = 'C:/path/to/served/Pe.Tools'
@@ -95,7 +95,7 @@ vp run --no-cache test:route-chaos
 pnpm exec pe-browser stop $browser.id
 ```
 
-The same test supports `CHAOS_LANE=host` with a full `/ducts?target=...` URL and no `demo`
+The same test supports `CHAOS_LANE=host` with a full `/duct-systems?target=...` URL and no `fixture`
 query. The runtime owner supplies the host, document and disposable Work. Neither a saved
 snapshot nor borrowed reads proves native writes. Do not use a person's existing draft or Work.
 
@@ -154,7 +154,7 @@ the parent's controlled native receipt loop. Example strict host coverage:
 
 ```powershell
 $env:CHAOS_LANE = 'host'
-$env:E2E_WEB = '<actual full /ducts URL with a bound disposable target>'
+$env:E2E_WEB = '<actual full /duct-systems URL with a bound disposable target>'
 $env:CHAOS_REQUIRE = 'refresh,reconnect,worker,thread,arming'
 $env:CHAOS_STAGE_SELECTOR = '<real visible editor selector discovered on that model>'
 $env:CHAOS_STAGE_VALUE = '<valid changed value>'

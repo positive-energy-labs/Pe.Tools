@@ -14,7 +14,7 @@ import { readZoneMeta } from "@pe/agent-contracts/takeoff-adoption";
 import { BridgeError } from "@pe/host-internal/bridge";
 import { leaf, type ReadContext } from "@pe/host-internal/read-graph";
 import { workBinding, workRead } from "@pe/host-internal/reads/work";
-import { product, regionCode } from "@pe/rooms-contract/product";
+import { product, regionCode, takeoffsWork } from "@pe/rooms-contract/product";
 
 const doc = (ref: DocumentRef) => ({ kind: "document" as const, ref });
 const point2 = z.tuple([z.number(), z.number()]);
@@ -141,8 +141,8 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
   },
   async adoption(ctx, { target, views }) {
     const key = await ctx.read(workBinding, { route: "takeoffs", target: doc(target) });
-    const work = key && (await ctx.read(workRead("takeoffs", product.works.takeoffs.schema), key));
-    const choices = stagedAdoptChoices(product.works.takeoffs.schema.parse(work?.doc ?? {}));
+    const work = key && (await ctx.read(workRead("takeoffs", takeoffsWork.schema), key));
+    const choices = stagedAdoptChoices(takeoffsWork.schema.parse(work?.doc ?? {}));
     const response = (
       await ctx.read(native("takeoffs.snapshot"), {
         target: doc(target),
@@ -182,6 +182,7 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
             view,
             viewName: row.view,
             elementId: row.elementId,
+            uniqueId: row.uniqueId,
             typeName: row.typeName,
             sqft: row.sqft,
             adopted,

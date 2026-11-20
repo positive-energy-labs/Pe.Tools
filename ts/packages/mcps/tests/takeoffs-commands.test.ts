@@ -136,6 +136,47 @@ test("snapshot projection preserves held regions and saved review after partitio
   });
 });
 
+test("a machine-local original missing from a residue is neither held nor void", () => {
+  const state = structuredClone(rawSnapshot);
+  const residue = state.regionsByZone["zone-1"][0]!;
+  residue.blob = JSON.stringify({
+    runId: "saved-run-1",
+    sourceRoomId: "R01",
+    originalTrace: "a".repeat(64),
+  });
+  const room = {
+    ...residue,
+    role: "room-region",
+    uniqueId: "room-missing",
+    blob: JSON.stringify({ ...JSON.parse(residue.blob), sourceSqft: 100 }),
+  };
+  state.regionsByZone["zone-1"].push(room);
+  const result = projectTakeoffSnapshot(
+    {
+      reading: {
+        at: address("C:/Harness.rvt"),
+        version: "v1",
+        observedAt: "2026-08-25T12:00:00.000Z",
+      },
+      snapshot: state,
+    } as unknown as Parameters<typeof projectTakeoffSnapshot>[0],
+    "Harness.rvt",
+    [{ name: "Zoning", level: "Main" }],
+  );
+  expect(result.world.zones[0]).toMatchObject({
+    heldSqft: 25,
+    rooms: [{ provenance: { originalIssue: "original not on this machine" } }],
+    residues: [{ reason: "original not on this machine" }, { reason: "void" }],
+    savedReview: {
+      shapes: [
+        { original: { disposition: null, reason: "original not on this machine" } },
+        { original: { disposition: "void" } },
+        { original: { disposition: null, reason: "original not on this machine" } },
+      ],
+    },
+  });
+});
+
 test("a carrier blob's old resolutions suppress no flag: decisions come from Work only", () => {
   const blob = JSON.stringify({
     runId: "run-1",

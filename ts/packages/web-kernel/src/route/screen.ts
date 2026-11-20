@@ -10,9 +10,8 @@ type Overlay<S extends { picture?: unknown }> =
   }
     ? O
     : never;
-// Remove the drawing hook from each mode while preserving its declaration members.
-type DeclaredPicture<P> = P extends object ? Omit<P, "overlay"> : never;
-
+/** Per member, so a picture slot with several modes keeps each one's own fields. */
+type WithoutOverlay<S> = S extends unknown ? Omit<S, "overlay"> : never;
 /**
  * The web half of a product route (ruling 1 of docs/features/routes/MAP.md). The contract declares
  * everything but the drawing; this adds the pane bodies, the layout and the picture overlay, and
@@ -36,8 +35,8 @@ export function screen<
     "panes" | "layout" | "picture"
   > & {
     readonly panes: readonly Pane[];
-    readonly picture?: DeclaredPicture<
-      Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>["picture"]
+    readonly picture?: WithoutOverlay<
+      NonNullable<Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>["picture"]>
     >;
   },
   parts: Pick<Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>, "panes" | "layout"> & {

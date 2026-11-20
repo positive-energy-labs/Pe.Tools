@@ -1,3 +1,6 @@
+import { ductSystemsTool } from "@pe/duct-systems-contract/semantic-actions";
+import { product as fans } from "@pe/fans-contract/product";
+const fansTool = fans.tool;
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
 import type { WorkPath } from "@pe/agent-contracts";
@@ -56,7 +59,7 @@ async function apply(
 }
 
 // A fake action that asks to retire one cell of each route, so the runtime's own filter is what is tested.
-const both = (bridge: never) =>
+const both = (owner: typeof fansTool | typeof ductSystemsTool) =>
   ductActionExecutors(
     {
       snapshot: async () => {
@@ -76,24 +79,24 @@ const both = (bridge: never) =>
       },
       bindings: [["ducts.apply-heal", "heal", "apply"]],
     },
-    bridge,
+    {} as never,
+    {},
+    owner,
   )["ducts.apply-heal"] as never;
 
 test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
-  const { key, calls } = await apply(both({} as never), "fans");
+  const { key, calls } = await apply(both(fansTool), "fans");
   expect(calls).toEqual([[key, "fans", [["roles", role]]]]);
 });
 
 test("a /duct-systems apply still retires its own verdict, under its own route", async () => {
-  const { key, calls } = await apply(both({} as never), "duct-systems");
+  const { key, calls } = await apply(both(ductSystemsTool), "duct-systems");
   expect(calls).toEqual([[key, "duct-systems", [["assumptions", "open-end:101:1"]]]]);
 });
 
 test.each(["unregistered", "__proto__", "constructor"])(
   "refuses an apply from unknown route %s",
   async (route) => {
-    await expect(apply(both({} as never), route)).rejects.toThrow(
-      `Duct actions are unavailable on route "${route}"`,
-    );
+    await expect(apply(both(ductSystemsTool), route)).rejects.toThrow("Expected duct-systems Work");
   },
 );

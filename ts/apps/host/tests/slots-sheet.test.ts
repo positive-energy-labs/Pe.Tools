@@ -94,7 +94,7 @@ test.each([
     const executors = sheetExecutors(
       {} as never,
       { workspace: { sheet: () => sheet } } as never,
-      losses as never,
+      new Map([["duct-systems", { id: "duct-systems", executors: losses as never }]]),
     );
     await expect(
       executors["sheet.plan"]!.bind({
@@ -111,13 +111,17 @@ test.each([
 );
 
 test("registered sheet routes select their product executor; unregistered routes use parameters", async () => {
-  const { sheetRoutes } = productExecutors({} as never);
+  const { sheets } = productExecutors({} as never);
   const bind = vi.fn(async () => ({ prepare: async () => "product" }));
   const executors = sheetExecutors(
     {} as never,
     { workspace: { sheet: () => ({ bindings: {} }) } } as never,
-    { "sheet.plan": { bind } } as never,
-    sheetRoutes,
+    new Map(
+      [...sheets].map(([route, sheet]) => [
+        route,
+        { ...sheet, executors: { "sheet.plan": { bind } } as never },
+      ]),
+    ),
   );
   const context = (route: string) =>
     ({
@@ -127,7 +131,7 @@ test("registered sheet routes select their product executor; unregistered routes
       },
     }) as never;
   const specialized = await executors["sheet.plan"]!.bind(context("fans"));
-  expect(await specialized.prepare!()).toEqual({ via: "losses", value: "product" });
+  expect(await specialized.prepare!()).toEqual({ product: "fans", value: "product" });
   for (const route of ["pod.other", "toString"]) {
     const generic = await executors["sheet.plan"]!.bind(context(route));
     await expect(generic.prepare!()).rejects.toThrow(
@@ -137,21 +141,9 @@ test("registered sheet routes select their product executor; unregistered routes
   expect(bind).toHaveBeenCalledTimes(1);
 });
 
-test.each(["unknown", "toString"])(
-  "P-097: unknown sheet executor via %s refuses by name",
-  async (name) => {
-    const executors = sheetExecutors(
-      {} as never,
-      { workspace: { sheet: () => ({ bindings: {} }) } } as never,
-      {},
-      { custom: name },
-    );
-    await expect(
-      executors["sheet.plan"]!.bind({
-        admission: { input: { work: { key: { route: "custom" } }, doc: {} } },
-      } as never),
-    ).rejects.toMatchObject({
-      refusal: { code: "sheet.executor-unknown", message: `Unknown sheet executor via: ${name}` },
-    });
-  },
-);
+test.each(["unknown", "toString"])("an unknown sealed product %s refuses", (product) => {
+  const executors = sheetExecutors({} as never, {});
+  expect(() => executors["sheet.plan"]!.seal!({ product, value: {} })).toThrow(
+    `Unknown sheet product: ${product}`,
+  );
+});

@@ -19,6 +19,7 @@ import {
   type CommandExecutor,
 } from "@pe/host-internal/command-executor";
 import { projectReader, type FamilyActionDependencies } from "../family-actions.ts";
+import type { SheetExecutors } from "../product-runtime.ts";
 
 /*
  * The host side of the sheet slot (ADR 0030 rule 4; ADR 0035 rule 3). One pair, `sheet.plan` and
@@ -92,7 +93,7 @@ const sheetInput = z.looseObject({
 });
 
 /** Every staged value is decoded before the generic or route-specific native executor binds. */
-export function validateSheetValues(sheet: SheetSlotData, doc: unknown): void {
+function validateSheetValues(sheet: SheetSlotData, doc: unknown): void {
   for (const [name, b] of Object.entries(sheet.bindings)) {
     if (b.home.at === "setting") continue;
     const held = name.split(".").reduce(get, doc);
@@ -191,68 +192,56 @@ function parameterExecutor(
   });
 }
 
-const via = z.object({ via: z.enum(["losses", "parameters"]), value: z.unknown() });
+const preparedBy = z.object({ product: z.string().nullable(), value: z.unknown() });
 
-/** One entry per key: product composition selects the executor for the Work handle's route. */
-function dispatch(
-  key: (typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS],
-  deps: FamilyActionDependencies,
-  byVia: Record<string, CommandExecutor>,
-  routes: Readonly<Record<string, string>>,
-): CommandExecutor {
-  const executorFor = (name: string) => {
-    const executor = Object.hasOwn(byVia, name) ? byVia[name] : undefined;
-    if (!via.shape.via.safeParse(name).success || !executor)
-      throw refused(`Unknown sheet executor via: ${name}`, "sheet.executor-unknown");
-    return executor;
-  };
-  const inner = (value: unknown) => {
-    const p = via.parse(value);
-    const executor = executorFor(p.via);
-    return { executor, value: executor.prepared.parse(p.value) };
-  };
-  return {
-    definition: commands[key],
-    prepared: via,
-    sealInput: via,
-    seal: (value) => {
-      const { executor, value: p } = inner(value);
-      return executor.seal!(p);
-    },
-    bind: async (ctx) => {
-      const { work, doc } = sheetInput.parse(ctx.admission.input);
-      const sheet = deps.workspace?.sheet(work.key.route);
-      if (!sheet)
-        throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
-      validateSheetValues(sheet, doc);
-      const name = Object.hasOwn(routes, work.key.route) ? routes[work.key.route] : "parameters";
-      if (name === undefined) throw refused("Missing sheet executor via", "sheet.executor-unknown");
-      const bound = await executorFor(name).bind(ctx);
-      return { ...bound, prepare: async () => ({ via: name, value: await bound.prepare?.() }) };
-    },
-    run: (ctx, execution) => {
-      const { executor, value } = inner(execution.prepared);
-      return executor.run(ctx, { ...execution, prepared: value });
-    },
-  };
-}
-
-/** Product registration selects specialized sheet writes; unregistered routes use parameter values. */
 export function sheetExecutors(
   bridge: RevitBridge["Service"],
   deps: FamilyActionDependencies,
-  losses: Record<string, CommandExecutor>,
-  routes: Readonly<Record<string, string>> = {},
+  sheets: SheetExecutors = new Map(),
 ): Record<string, CommandExecutor> {
   return Object.fromEntries(
-    Object.values(SHEET_COMMANDS).map((key) => [
-      key,
-      dispatch(
-        key,
-        deps,
-        { losses: losses[key]!, parameters: parameterExecutor(bridge, deps, key) },
-        routes,
-      ),
-    ]),
+    Object.values(SHEET_COMMANDS).map((key) => {
+      const parameters = parameterExecutor(bridge, deps, key);
+      const byProduct = new Map(
+        [...sheets.values()].map((owner) => [owner.id, owner.executors[key]!]),
+      );
+      const inner = (value: unknown) => {
+        const prepared = preparedBy.parse(value);
+        const executor = prepared.product === null ? parameters : byProduct.get(prepared.product);
+        if (!executor)
+          throw refused(`Unknown sheet product: ${prepared.product}`, "sheet.executor-unknown");
+        return { executor, value: executor.prepared.parse(prepared.value) };
+      };
+      const executor: CommandExecutor = {
+        definition: commands[key],
+        prepared: preparedBy,
+        sealInput: preparedBy,
+        seal: (value) => {
+          const { executor, value: parsed } = inner(value);
+          return executor.seal!(parsed);
+        },
+        bind: async (ctx) => {
+          const { work, doc } = sheetInput.parse(ctx.admission.input);
+          const sheet = deps.workspace?.sheet(work.key.route);
+          if (!sheet)
+            throw refused(`Route ${work.key.route} declares no sheet slot`, "sheet.undeclared");
+          validateSheetValues(sheet, doc);
+          const owner = sheets.get(work.key.route);
+          const bound = await (owner?.executors[key] ?? parameters).bind(ctx);
+          return {
+            ...bound,
+            prepare: async () => ({
+              product: owner?.id ?? null,
+              value: await bound.prepare?.(),
+            }),
+          };
+        },
+        run: (ctx, execution) => {
+          const { executor, value } = inner(execution.prepared);
+          return executor.run(ctx, { ...execution, prepared: value });
+        },
+      };
+      return [key, executor];
+    }),
   );
 }

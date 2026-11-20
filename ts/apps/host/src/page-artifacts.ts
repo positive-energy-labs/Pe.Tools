@@ -73,7 +73,7 @@ export function artifactRelative(root: string, path: string) {
   return from.replaceAll("\\", "/");
 }
 
-export class ContentAddressCorruption extends Error {
+class ContentAddressCorruption extends Error {
   override readonly name = "ContentAddressCorruption";
   constructor(
     readonly path: string,

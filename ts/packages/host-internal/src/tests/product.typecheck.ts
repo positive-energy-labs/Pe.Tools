@@ -21,7 +21,6 @@ const tiny = product({
   says: "Tiny",
   homes: {},
   cells: {},
-  works: {},
   readings: { roster: { handle: roster, sources: [] }, calc: { handle: calc, sources: [] } },
   commands: { "tiny.write": command, "tiny.draw": command },
   routes: {},

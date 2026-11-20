@@ -24,6 +24,7 @@ vi.mock("./resource-stream", () => ({
 
 test("S6 holder status has its own order and never reacquires the Value", async () => {
   const generation = 3;
+  const target: ReadingContext["target"] = { kind: "host" };
   const frames: unknown[] = [];
   const read = vi.fn(async () => ({
     generation,
@@ -33,9 +34,18 @@ test("S6 holder status has its own order and never reacquires the Value", async 
   }));
   const stop = publicationSource({ read }).open(
     {
+      target,
+      workKey: null,
+      workRevision: null,
+      page: {},
+      work: null,
+      attempt: { target, workKey: null, generation },
+      trigger: { kind: "demand" },
+      args: {},
+      inputs: {},
       signal: new AbortController().signal,
       publication: { subscription: "plans", generation },
-    } as ReadingContext,
+    },
     (frame) => frames.push(frame),
   );
   const send = (value: object) =>

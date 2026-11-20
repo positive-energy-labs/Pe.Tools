@@ -1,6 +1,7 @@
 import { fanRoster, networkCalcs } from "@pe/fans-contract/fans-host-reads";
 import {
   ductsNetworkArgs,
+  ductsOverviewData,
   ductsNetworkData,
   ductsPricingData,
   ductsRosterArgs,
@@ -19,6 +20,12 @@ export const roster = contract("ducts.roster", {
   data: ductsRosterData,
   uses: ["ducts.snapshot.roster"],
   keyedBy: { rows: { kind: "system-name" } },
+});
+export const overview = contract("ducts.overview", {
+  input: ductsRosterArgs,
+  data: ductsOverviewData,
+  uses: [roster],
+  keyedBy: roster.keyedBy,
 });
 export const network = contract("ducts.network", {
   input: scopedNetworkArgs,

@@ -19,6 +19,7 @@ import {
 } from "@pe/agent-contracts/native-output-read";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import type { AnyReadHandle, ReadHandle } from "@pe/agent-contracts/handle";
+import type { ReadingLoad } from "@pe/agent-contracts/value";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { ReadContext } from "./evaluator.ts";
 export type { ReadContext } from "./evaluator.ts";
@@ -29,6 +30,7 @@ export interface Read<I, O> {
   readonly input: z.ZodType<I>;
   readonly output: z.ZodType<O>;
   readonly run: (ctx: ReadContext, args: I) => Promise<O> | O;
+  readonly load?: ReadingLoad;
   /** The handle a `body()` serves; host registration joins its `uses` to bodies. */
   readonly contract?: AnyReadHandle;
 }
@@ -46,7 +48,13 @@ export function body<K extends string, I, D>(
   run: (ctx: ReadContext, args: I) => Promise<D> | D,
 ): Read<I, D> {
   if (bodies.has(h.key)) throw Error(`Read '${h.key}' already has a body`);
-  const made = read(h.key, { input: h.input, output: h.data, run, contract: h });
+  const made = read(h.key, {
+    input: h.input,
+    output: h.data,
+    run,
+    contract: h,
+    ...(h.load && { load: h.load }),
+  });
   bodies.set(h.key, made);
   return made;
 }

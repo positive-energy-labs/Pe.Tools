@@ -1,77 +1,10 @@
-import { publicationRequest, publicationSchema } from "@pe/agent-contracts/value";
-import { nativeResponseSchema } from "@pe/host-contracts/decoders";
-import { ductsDocumentSchema, ductSlotSourcesSchema } from "@pe/ducts-contract/system-work";
-import { fansDocumentSchema } from "./fans.ts";
-import { subjectRefCodeSchema } from "@pe/agent-contracts/subject-ref";
-import { z } from "zod";
-import { settingTiersSchema } from "@pe/agent-contracts/tiered-setting";
-import {
-  ductsRosterResponseSchema,
-  ductsCalcOverviewSchema,
-  ductsCalcResponseSchema,
-} from "./calc-read.ts";
-import { documentRefSchema } from "@pe/agent-contracts/target";
-
-const detail = ductsCalcResponseSchema.options;
-export const openFanCalcSchema = z.object({
-  overview: ductsCalcOverviewSchema,
-  inputs: detail[4].nullable(),
-  elements: detail[2].nullable(),
-  legs: detail[1].nullable(),
-  worstLegs: z.array(detail[1]),
-  calcBreakdown: detail[3].nullable(),
-});
-export const fanCalcSchema = z.object({
-  open: openFanCalcSchema.nullable(),
-  opened: z.array(openFanCalcSchema).optional(),
-  rows: ductsRosterResponseSchema.shape.rows,
-  progress: z
-    .object({ done: z.number(), total: z.number(), mark: z.string(), stopped: z.boolean() })
-    .nullable(),
-});
-export const fansReadArgs = z.strictObject({
-  target: documentRefSchema,
-  /** Fan ports as SubjectRef `UniqueId:<unit>#port:<n>` codes, decoded at this door. */
-  fan: z.union([z.literal("all"), z.array(subjectRefCodeSchema)]),
-  calcPath: z.string().default(""),
-});
-/** The detailed read builds a worksheet per port. Keep its serial native walks bounded. */
-export const FAN_DETAIL_LIMIT = 8;
-export const fanDetailLimitMessage = `Open up to ${FAN_DETAIL_LIMIT} fan ports at a time from the roster.`;
-export const fansReadRequest = publicationRequest(fansReadArgs);
-
-export const fansCalcData = fanCalcSchema.extend({
-  calcView: z.object({
-    blockers: detail[4].shape.blockers,
-    tiers: z.record(z.enum(["taken", "accept", "preview"]), z.number()),
-    taken: z.array(z.string()),
-    inputs: detail[4].shape.inputs.nullable(),
-    firm: detail[4].shape.firm.nullable(),
-  }),
-  design: z.object({ ...fansDocumentSchema.shape, ...ductsDocumentSchema.shape }),
-  /** Each owner's `Settings/<owner>.json` in every home tier, as the host read it: a `setting` cell's tiers (ADR 0037 rule 8). */
-  settings: z.record(z.string(), settingTiersSchema),
-  fans: ductsRosterResponseSchema,
-  ductSystemsWork: ductsDocumentSchema,
-  /** The /ducts Work revision this read priced with: the Fans sheet's read-only line to the design it depends on. */
-  ductSystemsRevision: z.number().int().nonnegative(),
-  fansWork: fansDocumentSchema,
-  calcSnapshot: z.union([
-    nativeResponseSchema("ducts.snapshot.walk")
-      .and(
-        z.object({
-          sourceVersion: z.string().optional(),
-          slotSources: ductSlotSourcesSchema.optional(),
-        }),
-      )
-      .refine(
-        (snapshot) =>
-          !snapshot.groups.some((group) => group.id === "sheet") &&
-          !snapshot.nodes.some((node) => node.groupId === "sheet") &&
-          !snapshot.segments.some((segment) => segment.groupId === "sheet"),
-        "Retired calc group; capture this calculation again. Recording bytes were not changed.",
-      ),
-    z.object({ kind: z.literal("absent") }),
-  ]),
-});
-export const fansReadResponse = publicationSchema(fansCalcData);
+export {
+  FAN_DETAIL_LIMIT,
+  fanDetailLimitMessage,
+  fanCalcSchema,
+  openFanCalcSchema,
+  fansReadArgs,
+  fansReadRequest,
+  fansReadResponse,
+  fansCalcData,
+} from "./product.ts";

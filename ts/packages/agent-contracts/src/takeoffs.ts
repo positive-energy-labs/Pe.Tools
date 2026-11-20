@@ -76,7 +76,12 @@ const modelRoomSchema = z.object({
   ceilingFt: z.number(),
   label: pointSchema,
   flags: z.array(z.string()),
-  provenance: z.object({ runId: z.string(), sourceRoomId: z.string(), sourceSqft: z.number() }),
+  provenance: z.object({
+    runId: z.string(),
+    sourceRoomId: z.string(),
+    sourceSqft: z.number(),
+    originalIssue: z.string().optional(),
+  }),
   r10: z
     .object({
       identifier: z.number(),
@@ -463,19 +468,22 @@ const stagedOf = <V>(cells: Record<string, CellLike>) =>
   );
 
 /** Current room edits, one per room: what sync consumes. Optional suggestions never appear. */
-export function stagedTakeoffEdits(doc: TakeoffsRouteDocument): Record<string, StagedRoomEdit> {
+export function stagedTakeoffEdits(
+  // The product's Work holds only cells, so it has no `bases`; no reader of a staged edit uses one.
+  doc: Pick<TakeoffsRouteDocument, "edits"> & Partial<Pick<TakeoffsRouteDocument, "bases">>,
+): Record<string, StagedRoomEdit> {
   const edits: Record<string, StagedRoomEdit> = {};
   for (const [key, value] of stagedOf<string | number>(doc.edits)) {
     const { roomId, field } = takeoffEditAddress(key);
-    const edit = (edits[roomId] ??= { roomId, base: doc.bases[roomId] ?? {}, next: {} });
+    const edit = (edits[roomId] ??= { roomId, base: doc.bases?.[roomId] ?? {}, next: {} });
     (edit.next as Record<string, unknown>)[field] = value;
   }
   return edits;
 }
-export const stagedAdoptChoices = (doc: TakeoffsRouteDocument): Record<string, AdoptChoice> =>
+export const stagedAdoptChoices = (doc: Pick<TakeoffsRouteDocument, "adopt">): Record<string, AdoptChoice> =>
   Object.fromEntries(stagedOf<AdoptChoice>(doc.adopt));
 /** Current flag verdict edits, keyed by `takeoffDecisionKey`. */
-export const stagedDecisions = (doc: TakeoffsRouteDocument): Record<string, "accept" | "dismiss"> =>
+export const stagedDecisions = (doc: Pick<TakeoffsRouteDocument, "decisions">): Record<string, "accept" | "dismiss"> =>
   Object.fromEntries(stagedOf<"accept" | "dismiss">(doc.decisions));
 /** Current review flag edits per zone. */
 export function stagedReviewFlags(doc: TakeoffsRouteDocument): Record<string, string[]> {

@@ -177,11 +177,8 @@ function Content({
   const openedSystems = namesOf(authored.system);
   const page = {
     ...authored,
-    system: openedSystems === "all" ? snapshot.systems.map((row) => row.name) : openedSystems,
-    active: activeName(
-      authored.system,
-      snapshot.systems.map((row) => row.name),
-    ),
+    system: openedSystems === "all" ? [] : openedSystems,
+    active: activeName(authored.system, []),
     selected: authored.selected.map((item) => item.id).join(","),
   };
   const select = (selected: string) =>

@@ -7,7 +7,7 @@ import { sheetCells } from "../../../route/slots/sheet/index.ts";
 import { SheetPane } from "../../../route/slots/sheet/pane.tsx";
 import { makeAtomRegistry } from "../../../shell/owner.ts";
 import { NO_SHARED_ROOT } from "@pe/agent-contracts/setting-owners";
-import { ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/settings";
+import { ENGINE_DEFAULT_NO_SHARED_ROOT } from "@pe/ducts-contract/product";
 import { designCalc } from "../../../../../../products/duct-systems/web/src/design-calc.ts";
 afterEach(cleanup);
 
@@ -64,6 +64,7 @@ test("/ducts with no shared root: a firm criterion is the engine default, and th
     value: 850,
     source: "work",
     label: "Velocity limit supply",
+    home: { at: "local" },
   });
   expect(rows.find((c) => c.binding === "setting.ducts.designFriction")).toMatchObject({
     value: 0.08,

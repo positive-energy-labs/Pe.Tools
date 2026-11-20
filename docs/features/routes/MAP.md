@@ -163,13 +163,13 @@ type PlanPictureSlot<C> = { readonly mode: "plan"; plan(ctx: C): PlanPicture };
 // Keep the existing model case as the default and project the plan mode explicitly.
 ```
 
-Command writes allowlist, for S2 and S11. From `plan-check/G5.md:117`:
+Command writes allowlist, for S2 and S11. From `plan-check/G5.md:117`, updated by the owner's `lands` ruling:
 
 ```ts
 type OwnerBlobHomeKey = `owner-blob:${string}`; // canonical lowercase Guid D
 type GeneratedOwnerBlobHome = { readonly key: OwnerBlobHomeKey };
 // HomeHandle is the S2 union; GeneratedOwnerBlobHome is its native blob branch.
-type CommandWriteContract = { readonly writes: readonly HomeHandle[] };
+type CommandWriteContract = { readonly writes: { readonly [home in keyof Homes]?: readonly CellName[] } }; // the allowlist is the keys; a cell lands in at most one home across all commands
 type NativeCommandAllowance = {
   readonly derivedCommand: string;
   readonly allowedHomeKeys: readonly string[];
@@ -187,8 +187,6 @@ OwnerBlobStore.Write(document, RegionRecord.Owner, regionRecord.ToData());
 // fields: { name, type, ceilingFt, people, lightingW,
 //           equipSensible, equipLatent, ventilationCfm }
 ```
-
-The owner's ruling on `lands` came after G5 was written. It makes `writes` a map from each home to the cells the command lands, so `CommandWriteContract` above is out of date in that one field. The allowlist is the keys of the map. S2b writes the new type here before S11 reads it.
 
 The two reports also name the region map differently: `data.byUniqueId` in G5 and `data.regions` in G6. S8a owns the record, so G6's name stands unless S8a changes it here.
 

@@ -4,18 +4,6 @@ using Pe.Shared.RevitData.Serialization;
 
 namespace Pe.Shared.RevitData.Takeoffs;
 
-/// <summary>
-///     The homes native code writes that a product declaration names (ruling 4 of docs/features/routes/MAP.md).
-///     Typegen emits these as <c>nativeHomes</c>; TypeScript mints a handle from that table and never restates a key.
-///     RoomsRegions is RoomsRegionRecord.Owner's Guid, which this assembly cannot see; NativeHomesTests pins the two.
-/// </summary>
-public static class NativeHomes
-{
-    public const string RoomsRegions = "owner-blob:b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020";
-    // The Rooms module's state folder (RoomsRunTraces.Root): one solve's evidence per zone, on this machine.
-    public const string RoomsRunTraces = "machine-file:rooms";
-}
-
 public sealed record TakeoffRegistrySystem(Guid Guid, string Tag);
 public enum TakeoffCarrierStage
 {
@@ -80,7 +68,7 @@ public sealed record TakeoffSnapshotResponse(Reading Reading, TakeoffSnapshotDat
 public sealed record TakeoffCandidatesRequest(string View);
 public sealed record TakeoffCandidatesData(IReadOnlyList<TakeoffRegionFacts> Regions);
 
-public sealed record TakeoffAdoptItem(long ElementId, string Name, string SystemTag);
+public sealed record TakeoffAdoptItem(long ElementId, string UniqueId, string Name, string SystemTag);
 public sealed record TakeoffRecordReplacements(OwnerBlobReplacement? Regions, OwnerBlobReplacement? Registry);
 public sealed record TakeoffAdoptRequest(string View, List<TakeoffAdoptItem> Items,
     OwnerBlobReplacement? Replacing = null, OwnerBlobReplacement? ReplacingRegistry = null);
@@ -150,7 +138,7 @@ public sealed record TakeoffRhvacLink(
     string FileIdentity,
     string SyncedAt,
     double LastSyncedSqft);
-public sealed record TakeoffRhvacLinkWrite(long ElementId, TakeoffRhvacLink Link);
+public sealed record TakeoffRhvacLinkWrite(long ElementId, string UniqueId, TakeoffRhvacLink Link);
 public sealed record TakeoffRhvacLinksRequest(List<TakeoffRhvacLinkWrite> Writes, OwnerBlobReplacement? Replacing = null);
 public sealed record TakeoffRhvacLinksData(IReadOnlyList<TakeoffWriteResult> Writes);
 
@@ -252,7 +240,8 @@ public sealed record RoomsZoneTrace(string ZoneUniqueId, string Label, RoomsTrac
 
 // RunId null reads the view's latest committed partition run.
 public sealed record RoomsTraceRequest(string View, string? RunId = null);
-public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones);
+public sealed record RoomsTraceData(string RunId, IReadOnlyList<RoomsZoneTrace> Zones,
+    string? OriginalIssue = null, IReadOnlyList<string>? MissingOriginals = null);
 
 /// <summary>Geometry scope. Empty scope reads only the geometry-free roster.</summary>
 public sealed record TakeoffReadRequest(IReadOnlyList<string>? Views = null, IReadOnlyList<string>? ZoneUniqueIds = null);

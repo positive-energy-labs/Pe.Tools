@@ -1,31 +1,15 @@
 import { expect, test } from "vite-plus/test";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
-import { renderProductAssembly } from "../../web/scripts/product-assembly.ts";
+import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
+import { productExecutors } from "../src/product-executors.generated.ts";
+import { detachedBridge } from "./effect-test.ts";
 
-test("P-097: codegen refuses an unknown sheet executor via", () => {
-  const root = mkdtempSync(join(tmpdir(), "pe-executor-"));
-  try {
-    const dir = join(root, "ts/products/custom/host");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(
-      join(dir, "package.json"),
-      JSON.stringify({
-        name: "@pe/custom-host",
-        exports: { "./actions": "./actions.ts" },
-        pe: {
-          executors: {
-            module: "./actions",
-            factory: "executors",
-            arguments: [],
-            sheet: { routes: ["custom"], via: "unknown" },
-          },
-        },
-      }),
-    );
-    expect(() => renderProductAssembly(root)).toThrow(/"sheet"\s*,\s*"via"/);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+test("the shared sheet pair binds to each admitted Work owner's executor", () => {
+  const { executors, sheets } = productExecutors(detachedBridge());
+  expect([...sheets.keys()].sort()).toEqual(["duct-systems", "fans"]);
+  for (const [route, sheet] of sheets) {
+    expect(sheet.id).toBe(route);
+    expect(Object.keys(sheet.executors).sort()).toEqual(Object.values(SHEET_COMMANDS).sort());
   }
+  expect(executors).toHaveProperty(["ducts.refresh"]);
+  expect(executors).not.toHaveProperty([SHEET_COMMANDS.apply]);
 });

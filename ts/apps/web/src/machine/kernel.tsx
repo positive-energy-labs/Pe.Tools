@@ -4,13 +4,6 @@ import { routeRegistry } from "../route/registry";
 import { useOpenTypedOwner, type OpenSource } from "./typed-owner";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { OpenOwnerContext } from "./context";
-export {
-  OpenOwnerContext,
-  OpenControlScope,
-  useOpenKernel,
-  useOpenOwner,
-  outcomeOf,
-} from "./context";
 /** Companion controls use the same typed actions as the Open route, with private Page pose. */
 export function OpenControls({ children }: { children: ReactNode }) {
   const [mount, setMount] = useState<TypedMount | null>(null);

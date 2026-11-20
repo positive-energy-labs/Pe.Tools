@@ -13,7 +13,6 @@ import type {
   DuctsCriteriaValues,
   DuctsFirm,
   DuctsInputs,
-  CalcEdits,
   Resolved,
   Stated,
 } from "@pe/ducts-contract/duct-inputs";
@@ -145,7 +144,7 @@ const written = (
   return { at, wrote, unit, live };
 };
 const writtenFlow = (at: string, read: number | null, receipt: FlowReceipt | undefined) =>
-  written(at, read, receipt?.parameter === at ? receipt.cfm : undefined, "cfm");
+  written(at, read, receipt && receipt.parameter === at ? receipt.cfm : undefined, "cfm");
 const WRITTEN = {
   // keyed by the Work segment that stages each value
   flows: (n: Node, slots: Slots, store: StoreLayer) =>
@@ -199,34 +198,6 @@ export const PROPOSED_KEY = (pair: readonly [string, string], toward: number | "
 export const FITTING_DROP_CELL = (key: string) => `${COMPONENT_DROP}${key}`;
 export const END_KEY = (end: { elementId: number; connector: number }) =>
   `open-end:${end.elementId}:${end.connector}`;
-
-/** The Work segment each record field of a sheet's `edits` writes, one cell per key. */
-export const EDIT_SEGMENTS = {
-  flows: "flows",
-  terminalDrops: "terminalDrops",
-  componentDrops: "componentDrops",
-  equipmentFlows: "equipmentFlows",
-  roles: "roles",
-  kinds: "kinds",
-  tables: "rules",
-  assignments: "ruleAssignments",
-} as const;
-
-/** The Work cells a sheet's `edits` touches, as document paths: one per record key, the one `criteria` cell, and the `assumptions` cell of each join, end and proposed-path drop. */
-export function editCells(edits: CalcEdits): string[][] {
-  const cells: string[][] = [];
-  for (const [field, segment] of Object.entries(EDIT_SEGMENTS) as [
-    keyof typeof EDIT_SEGMENTS,
-    string,
-  ][])
-    for (const key of Object.keys(edits[field] ?? {})) cells.push([segment, key]);
-  if (edits.criteria) cells.push(["criteria"]);
-  for (const { pair } of edits.joins ?? []) cells.push(["assumptions", JOIN_KEY(pair)]);
-  for (const key of Object.keys(edits.fittingDrops ?? {}))
-    cells.push(["assumptions", FITTING_DROP_CELL(key)]);
-  for (const { end } of edits.ends ?? []) cells.push(["assumptions", END_KEY(end)]);
-  return cells;
-}
 
 /** A drop parameter identical on every instance of a family (two or more) is the family's placeholder, not a design value: Chadds' 302 volume dampers all carry 1.0 in-wg (2026-10-28). */
 function familyPlaceholders(snapshot: Pick<CalcSnapshot, "nodes">) {

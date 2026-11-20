@@ -272,21 +272,27 @@ test.each([
       await invoke(commandKey, { work });
       if (commandKey === "takeoffs.sync") {
         expect(synced).toBe(true);
+        const write = (link: object) => ({
+          action: commandKey,
+          input: {
+            writes: [
+              {
+                elementId: 21,
+                uniqueId: expect.any(String),
+                link: expect.objectContaining(link),
+              },
+            ],
+          },
+        });
+        // The link write is rehearsed with a placeholder before the file is touched, then written.
         expect(calls).toEqual([
           {
+            key: "takeoffs.rhvac-links.preflight",
+            ...write({ identifier: -2147483648, fileIdentity: `recorded.r10#${"0".repeat(16)}` }),
+          },
+          {
             key: "takeoffs.rhvac-links",
-            action: commandKey,
-            input: {
-              writes: [
-                {
-                  elementId: 21,
-                  link: expect.objectContaining({
-                    identifier: 101,
-                    fileIdentity: "recorded.r10#recorded",
-                  }),
-                },
-              ],
-            },
+            ...write({ identifier: 101, fileIdentity: "recorded.r10#recorded" }),
           },
         ]);
         return;

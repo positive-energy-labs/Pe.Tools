@@ -1,5 +1,5 @@
-export { docsSources, type DocsHit, type DocsSource } from "./types.ts";
-export { searchHelp, fetchHelpTopic, type HelpSection } from "./help.ts";
+export { docsSources } from "./types.ts";
+export { searchHelp, fetchHelpTopic } from "./help.ts";
 export { searchBlog, fetchBlogPost } from "./blog.ts";
 export { searchTbc, fetchTbcPost } from "./tbc.ts";
 export { searchAu, fetchAuClass } from "./au.ts";
@@ -21,7 +21,7 @@ export async function runSources<Hit>(
   );
 }
 
-export const supportedFetchHosts = [
+const supportedFetchHosts = [
   "local:<memberId> (API index)",
   "rvtdocs.com",
   "help.autodesk.com",

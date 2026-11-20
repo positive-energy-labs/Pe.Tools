@@ -13,7 +13,7 @@ import {
   sideCaption,
   CalcBreakdown,
 } from "../../../../../../../products/fans/web/src/calc/calc-breakdown-table.tsx";
-import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
+import { fansCalcEditsSchema } from "@pe/fans-contract/product";
 import {
   fixture,
   key as workKey,

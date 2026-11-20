@@ -4,13 +4,14 @@
  * value with `implement()` (`@pe/rooms-host/product`); each route's screen is under `web/routes/`.
  */
 import { z } from "zod";
-import { takeoffCaptureSchema, takeoffCaptureSummarySchema, takeoffsRouteState } from "@pe/agent-contracts";
+import { takeoffCaptureSchema, takeoffCaptureSummarySchema } from "@pe/agent-contracts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
   cell,
   documentRecord,
   machineFile,
-  nativeHome,
+  machineFileHandle,
+  ownerBlob,
   product as define,
 } from "@pe/agent-contracts/product";
 import { field, subjectSchema } from "@pe/agent-contracts/route";
@@ -19,9 +20,9 @@ import {
   subjectOf,
   subjectRefCodeSchema,
   uniqueIdSchema,
-  type SubjectRefCode,
 } from "@pe/agent-contracts/subject-ref";
 import { documentRefSchema } from "@pe/agent-contracts/target";
+import { workWriteCommands } from "@pe/agent-contracts/write-intent";
 
 const target = documentRefSchema;
 /** A plan view's `UniqueId`. The native boundary resolves it; a name is display only. */
@@ -41,7 +42,7 @@ const unreadable = z.array(z.object({ parameter: z.string(), reason: z.string() 
 
 export const regionCode = (uniqueId: string) =>
   subjectCode({ keyKind: "UniqueId", key: uniqueIdSchema.parse(uniqueId) });
-export const regionId = (code: string) => String(subjectOf(code as SubjectRefCode).key);
+export const regionId = (code: string) => String(subjectOf(subjectRefCodeSchema.parse(code)).key);
 
 const plans = contract("rooms.plans", {
   input: z.object({ target }),
@@ -156,6 +157,8 @@ const adoption = contract("takeoffs.adoption", {
         view,
         viewName: z.string(),
         elementId: z.number(),
+        /** The region's `UniqueId`: the native adopt refuses an ElementId that names another element. */
+        uniqueId: z.string(),
         typeName: z.string(),
         sqft: z.number(),
         adopted: z.boolean(),
@@ -185,8 +188,13 @@ const captures = contract("takeoffs.captures", {
 
 const room = subjectSchema(Number.MAX_SAFE_INTEGER);
 const onPlan = (page: { view: string }) => ({ view: page.view });
-/** Free text: a value domain with no choices to acquire. */
-const text = { kind: "enum", shape: z.string(), choices: [] } as const;
+/**
+ * A value a person types or a mark they make: no choices to acquire.
+ * ponytail: steer 2 item 4 asks for the free-text domain kind, which is not on this branch's base.
+ * This one constructor is the only place to swap when it lands.
+ */
+const free = <S extends z.ZodType>(shape: S) => ({ kind: "enum", shape, choices: [] }) as const;
+const text = free(z.string());
 const count = { kind: "number", min: 0 } as const;
 const edit = { needs: "project-document", effect: "command", dirties: ["snapshot"] } as const;
 const directory = {
@@ -221,9 +229,13 @@ const writeRegion = z.object({
   ventilationCfm: amount.optional(),
   role: z.enum(["room", "zone"]).optional(),
 });
+const stagedCells = z.record(
+  z.string(),
+  z.record(z.string(), z.object({ edit: z.object({ value: z.unknown() }).nullish() })),
+);
 /** Every staged field cell, one native row per region. */
 function stagedRegions(work: unknown) {
-  const doc = work as Record<string, Record<string, { edit?: { value?: unknown } | null }>>;
+  const doc = stagedCells.parse(work);
   const rows = new Map<string, Record<string, unknown>>();
   for (const name of ROOM_FIELDS)
     for (const [code, staged] of Object.entries(doc[name] ?? {})) {
@@ -233,16 +245,23 @@ function stagedRegions(work: unknown) {
     }
   return { regions: [...rows.values()] };
 }
-const adoptItem = z.object({ elementId: z.number().int(), name: z.string(), systemTag: z.string() });
+const adoptItem = z.object({
+  elementId: z.number().int(),
+  uniqueId: z.string().min(1),
+  name: z.string(),
+  systemTag: z.string(),
+});
+const flag = (label: string) =>
+  ({ kind: "enum", shape: z.literal(true), choices: [{ value: true, label }] }) as const;
 
 export const product = define({
   id: "rooms",
   says: "Partition a plan into zones and rooms, state each room's fields, and write them to the model.",
   homes: {
     /** Role, provenance and the eight fields of every region, in one document record (ruling 14). */
-    regions: documentRecord(nativeHome("roomsRegions")),
+    regions: documentRecord(ownerBlob("regionRecord")),
     /** One solve's evidence per zone, kept by the native partition. */
-    traces: machineFile(nativeHome("roomsRunTraces")),
+    traces: machineFile(machineFileHandle("runTraces")),
   },
   cells: {
     name: cell(text, "subject", { label: "Name" }),
@@ -268,9 +287,8 @@ export const product = define({
     ),
     /** A person's or Pea's mark on the plan. No command lands it, so it stays in Work. */
     marks: cell(
-      {
-        kind: "enum",
-        shape: z.object({
+      free(
+        z.object({
           kind: z.enum(["merge", "reject", "wall", "split"]),
           view,
           polygon: ring,
@@ -278,22 +296,43 @@ export const product = define({
           regions: z.array(region).optional(),
           note: z.string().optional(),
         }),
-        choices: [],
-      },
+      ),
       "name",
     ),
+    // Takeoffs. Keys are the kernel's (`takeoffEditKey`, `takeoffDecisionKey`, `takeoffFlagKey`).
+    /** A room field's next value in RHVAC, keyed `[roomId, field]`. */
+    edits: cell(free(z.union([z.string(), z.number()])), "name", { label: "Room edits" }),
+    /** A designer region's adoption choice, keyed `<view UniqueId>:<elementId>`. */
+    adopt: cell(
+      free(
+        z.object({
+          checked: z.boolean().optional(),
+          name: z.string().optional(),
+          systemTag: z.string().optional(),
+        }),
+      ),
+      "name",
+      { label: "Adoption choices" },
+    ),
+    /** A person's verdict on a solver flag, keyed `[roomGuid, flag]`. */
+    decisions: cell(
+      {
+        kind: "enum",
+        shape: z.enum(["accept", "dismiss"]),
+        choices: [
+          { value: "accept", label: "Accept" },
+          { value: "dismiss", label: "Dismiss" },
+        ],
+      },
+      "name",
+      { label: "Flag decisions" },
+    ),
+    /** A review flag on one shape of a zone's saved review, keyed `[zoneKey, shapeKey]`. */
+    reviewFlags: cell(flag("Flagged"), "name", { label: "Review flags" }),
   },
   works: {
     rooms: [...ROOM_FIELDS, "marks"],
-    takeoffs: {
-      ...takeoffsRouteState,
-      editable: [
-        ["writeIntent", "*"],
-        ["edits", "*"],
-        ["adopt", "*"],
-        ["decisions", "*"],
-      ],
-    },
+    takeoffs: ["edits", "adopt", "decisions", "reviewFlags"],
   },
   readings: {
     plans: { handle: plans, sources: [], says: "rooms.plans lists each level's plan views." },
@@ -316,15 +355,14 @@ export const product = define({
     captures: { handle: captures, sources: [] },
   },
   commands: {
-    "rooms.partition": {
+    ...workWriteCommands("rooms", "rooms.partition", {
       ...edit,
       says: "Partition every zone on a plan into rooms, keeping locked and matched rooms.",
       input: z.object({ view, rejected: z.array(ring).optional() }),
       native: ["takeoffs.record-replacements", "rooms.partition"],
-      staged: "rooms",
       writes: { regions: [], traces: [] },
-    },
-    "rooms.draw": {
+    }),
+    ...workWriteCommands("rooms", "rooms.draw", {
       ...edit,
       says: "Draw one locked room, or one zone, from loops on a plan.",
       input: z.object({
@@ -334,37 +372,32 @@ export const product = define({
         role: z.enum(["room", "zone"]).optional(),
       }),
       native: ["takeoffs.record-replacements", "rooms.draw"],
-      staged: "rooms",
       writes: { regions: [] },
-    },
-    "rooms.write": {
+    }),
+    ...workWriteCommands("rooms", "rooms.write", {
       ...edit,
       says: "Write the staged room fields and designations, and answer for each cell (ruling 7).",
       input: z.object({ regions: z.array(writeRegion) }),
       native: ["takeoffs.record-replacements", "rooms.write"],
-      staged: "rooms",
-      derive: stagedRegions,
       writes: { regions: ROOM_FIELDS },
-    },
-    "rooms.merge": {
+    }, { derive: stagedRegions }),
+    ...workWriteCommands("rooms", "rooms.merge", {
       ...edit,
       says: "Combine two or more touching rooms of one zone into one locked room.",
       input: z.object({ view, regions: z.array(region).min(2), name: z.string().optional() }),
       native: ["takeoffs.record-replacements", "rooms.merge"],
-      staged: "rooms",
       writes: { regions: [] },
-    },
+    }),
     // The shared parameters and the system registry have no generated home handle yet, so these
     // name only the region record they also touch.
-    "takeoffs.initialize": {
+    ...workWriteCommands("takeoffs", "takeoffs.initialize", {
       ...edit,
       says: "Write the shared parameters this document is missing before any takeoff runs.",
       input: z.object({ stage: z.string().min(1) }),
       native: ["takeoffs.initialize-carrier"],
-      staged: "takeoffs",
       writes: {},
-    },
-    "takeoffs.adopt": {
+    }),
+    ...workWriteCommands("takeoffs", "takeoffs.adopt", {
       ...edit,
       says: "Adopt selected regions using the submitted names and system tags.",
       input: z.object({
@@ -372,10 +405,9 @@ export const product = define({
       }),
       dirties: ["snapshot", "takeoff-views", "candidates"],
       native: ["takeoffs.record-replacements", "takeoffs.initialize-carrier", "takeoffs.adopt"],
-      staged: "takeoffs",
       writes: { regions: [] },
-    },
-    "takeoffs.partition": {
+    }),
+    ...workWriteCommands("takeoffs", "takeoffs.partition", {
       ...edit,
       says: "Partition the selected adopted zone.",
       input: z.object({
@@ -387,10 +419,9 @@ export const product = define({
       }),
       dirties: ["snapshot", "takeoff-views"],
       native: ["takeoffs.record-replacements", "takeoffs.partition"],
-      staged: "takeoffs",
       writes: { regions: [] },
-    },
-    "takeoffs.sync": {
+    }),
+    ...workWriteCommands("takeoffs", "takeoffs.sync", {
       ...edit,
       says: "Insert eligible rooms, preserve system/link behavior, and update linked staged rooms in RHVAC.",
       input: z.object({
@@ -400,10 +431,13 @@ export const product = define({
         fileVersion: z.string().min(1),
       }),
       dirties: ["snapshot", "rhvac-open"],
-      native: ["takeoffs.record-replacements", "takeoffs.rhvac-links"],
-      staged: "takeoffs",
+      native: [
+        "takeoffs.record-replacements",
+        "takeoffs.rhvac-links.preflight",
+        "takeoffs.rhvac-links",
+      ],
       writes: { regions: [] },
-    },
+    }),
   },
   routes: {
     rooms: {
@@ -425,7 +459,7 @@ export const product = define({
         noun: "room",
         pane: "roster",
         options: (data: z.output<typeof regions.data>) =>
-          data.regions.map((row) => ({ id: row.subject as SubjectRefCode, label: row.name })),
+          data.regions.map((row) => ({ id: row.subject, label: row.name })),
       },
       core: ["regions", onPlan],
       reads: { plans: "plans", evidence: ["evidence", onPlan], planImage: ["planImage", onPlan] },
@@ -456,5 +490,5 @@ export const product = define({
 });
 
 /** Each Work by name: a route declaration imports it, and the host registry binds the same value. */
-export const roomsWork = product.works.rooms;
-export const takeoffsWork = product.works.takeoffs;
+export const roomsWork = product.tools.rooms.work;
+export const takeoffsWork = product.tools.takeoffs.work;

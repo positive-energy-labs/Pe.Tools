@@ -33,6 +33,10 @@ export const ductsRoster = body(contracts.roster, async function (ctx, { target 
     slotSources: input.flow.slotSources,
   };
 });
+export const ductsOverview = body(contracts.overview, async (ctx, args) => {
+  const { rows, sourceVersion } = await ctx.read(ductsRoster, args);
+  return { rows, sourceVersion };
+});
 const systems = read("ducts.systems", {
   input: ductsRosterArgs.extend({ systemIds: z.array(z.number()).max(SYSTEMS_PER_READ) }),
   output: ductsNetworkData,
@@ -76,11 +80,7 @@ export const ductsNetwork = body(contracts.network, async function (ctx, args) {
         },
       })
     : null;
-  const names = walk
-    ? fanSystems(walk.body, roster.systems)
-    : args.system === "all"
-      ? roster.systems.map((system) => system.name)
-      : [...new Set(args.system)];
+  const names = walk ? fanSystems(walk.body, roster.systems) : [...new Set(args.system)];
   const unknown = names.filter((name) => !roster.systems.some((system) => system.name === name));
   if (unknown.length) throw Error(`System is not in this document: ${unknown.join(", ")}`);
   const wanted = [
@@ -121,7 +121,7 @@ export const ductsPricing = body(contracts.pricing, async function (ctx, args) {
   const wanted = roster.systems.filter((system) =>
     args.fan
       ? network.systemReads.completed.includes(system.id)
-      : args.system === "all" || args.system.includes(system.name),
+      : args.system.includes(system.name),
   );
   if (
     wanted.some((system) => !network.systemReads.completed.includes(system.id)) ||
@@ -183,4 +183,9 @@ export const ductsPricing = body(contracts.pricing, async function (ctx, args) {
   );
 });
 
-export const reads = { roster: ductsRoster, network: ductsNetwork, pricing: ductsPricing };
+export const reads = {
+  overview: ductsOverview,
+  roster: ductsRoster,
+  network: ductsNetwork,
+  pricing: ductsPricing,
+};

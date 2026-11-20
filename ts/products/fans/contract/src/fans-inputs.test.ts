@@ -1,21 +1,19 @@
 import { expect, it } from "vite-plus/test";
 import { z } from "zod";
 import {
-  FAN_CELLS,
-  FAN_INPUTS,
   authoredValueSchema,
-  fanBindingRows,
   fanClaimSchema,
-  fanInputShape,
   fanIssueSchema,
   fanParameterCohortSchema,
-  fanWriteRows,
   sourcedValueSchema,
 } from "./fans-inputs.ts";
-import { VALUE_SOURCES, resolveValue } from "@pe/agent-contracts/work-value";
+import { resolveValue } from "@pe/agent-contracts/work-value";
 import { DUCT_UNIT_KINDS, FAN_BLOCKER_KINDS } from "@pe/host-contracts/generated";
 import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import { draftEditSchema } from "../../../../packages/agent-contracts/src/draft.ts";
+import { product, fansCalcEditsSchema, fanWriteSegments } from "./product.ts";
+import { sheetCells } from "@pe/agent-contracts/product";
+import { schemaOf } from "@pe/agent-contracts/slots/sheet";
 import { fansDocumentSchema } from "./fans.ts";
 import { subjectCode, uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 
@@ -141,27 +139,6 @@ it("a complete claim refuses pressure, coverage or blocking damage", () => {
     }).success,
   ).toBe(false);
 });
-it("one new metadata row is discovered by schema, bindings and write selectors", () => {
-  const extra = { ...FAN_CELLS.terminalDrops, name: "additional", segment: "additional" };
-  const rows = [...FAN_INPUTS, extra];
-  expect(
-    z
-      .strictObject(fanInputShape(rows))
-      .partial()
-      .parse({ additional: { inWg: 1 } }),
-  ).toEqual({ additional: { inWg: 1 } });
-  expect(fanBindingRows(rows)).toContain(extra);
-  expect(fanWriteRows(rows)).toContain(extra);
-  expect(fanBindingRows()).toContain(FAN_CELLS.ratedEsp);
-  expect(fanWriteRows()).not.toContain(FAN_CELLS.ratedEsp);
-  for (const row of FAN_INPUTS) {
-    expect(row.layers).toEqual(VALUE_SOURCES);
-    if (row.role === "result") {
-      expect(row.segment).toBeNull();
-      expect(row.write).toBe("never");
-    }
-  }
-});
 it("complete instance cohorts contain exactly their owner and type members are unique", () => {
   const cohort = {
     parameter: "ESP",
@@ -185,24 +162,20 @@ it("complete instance cohorts contain exactly their owner and type members are u
   ).toBe(false);
 });
 
-it("the Fans document's element segments are exactly the table's Fans-owned cells (P-026)", async () => {
-  const { fansDocumentSchema } = await import("./fans.ts");
-  const { FAN_CELLS, fanBindingRows } = await import("./fans-inputs.ts");
-  const own = fanBindingRows()
-    .filter((row) => row.owner === "fans")
-    .map((row) => row.segment);
-  // `writeIntent` is the route's scope; it is not an input row.
-  const segments = Object.keys(fansDocumentSchema.shape).filter((key) => key !== "writeIntent");
-  expect(segments.toSorted()).toEqual(own.toSorted());
-  expect(Object.keys(FAN_CELLS).toSorted()).toEqual(own.toSorted());
-  // A value the row's domain refuses is refused by the document, and the reverse.
-  const key = "UniqueId:02d3886c-b439-49e2-9967-e703036c2c90-00000007";
-  for (const [name, row] of Object.entries(FAN_CELLS))
-    for (const value of [250, { inWg: 0.5 }, { role: "fan" }, "x"])
-      if (name !== "terminalDrops" && name !== "componentDrops")
-        expect(
-          fansDocumentSchema.safeParse({ [name]: { [key]: { edit: { value, by: "human" } } } })
-            .success,
-          `${name} ${JSON.stringify(value)}`,
-        ).toBe(row.accepts(value));
+it("Work, sheet bindings, and edit admission share the declared cells", () => {
+  expect(Object.keys(fansDocumentSchema.shape)).toEqual(Object.keys(sheetCells(product)));
+  expect(fanWriteSegments).not.toContain("ratedEsp");
+  expect(fansCalcEditsSchema.safeParse({ esp: {} }).success).toBe(false);
+  for (const [name, { per, domain }] of Object.entries(product.cells)) {
+    if (per !== "subject") continue;
+    const key = "UniqueId:02d3886c-b439-49e2-9967-e703036c2c90-00000007";
+    for (const value of [250, { inWg: 0.5 }, { role: "fan" }, "x"]) {
+      const accepted = schemaOf(domain).safeParse(value).success;
+      expect(
+        fansDocumentSchema.safeParse({ [name]: { [key]: { edit: { value, by: "human" } } } })
+          .success,
+      ).toBe(accepted);
+      expect(fansCalcEditsSchema.safeParse({ [name]: { [key]: value } }).success).toBe(accepted);
+    }
+  }
 });

@@ -1,3 +1,4 @@
+import { documentRefSchema } from "@pe/agent-contracts/target";
 import { inputPort, type ReadSources } from "../../src/reads/inputs.ts";
 import type { RouteWorkspace } from "@pe/runtime";
 import { hostMarks } from "../../src/document-marks.ts";
@@ -7,7 +8,7 @@ import { settle } from "../effect-test.ts";
 export function calcPort(
   source: Omit<ReadSources, "file" | "resource"> & {
     firm: (owner: string) => Promise<unknown>;
-    catalogs: () => Promise<unknown>;
+    catalogs: (target: import("@pe/agent-contracts").DocumentRef | null) => Promise<unknown>;
   },
   workspace: RouteWorkspace,
   settings: readonly import("@pe/agent-contracts").SettingTierRead[] = [],
@@ -20,7 +21,7 @@ export function calcPort(
           ? source.firm(String(args))
           : name === "settings"
             ? settings
-            : source.catalogs(),
+            : source.catalogs(documentRefSchema.nullable().parse(args)),
       resource: async () => {
         throw Error("Fixture has no resources");
       },

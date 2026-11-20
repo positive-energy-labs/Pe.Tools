@@ -3,7 +3,7 @@ import { ductsDesign } from "@pe/duct-systems-contract/ducts";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import {
-  ductsRosterData,
+  ductsOverviewData,
   ductsNetworkData,
   ductsPricingData,
 } from "@pe/duct-systems-contract/ducts-read";
@@ -31,9 +31,8 @@ const network = (snapshot: Parameters<typeof pricingValue>[0]) =>
     sourceVersion: "fixture",
     systemReads: { completed: snapshot.systems.map((s) => s.id), missing: [] },
   });
-export const rosterFixtures = providers((snapshot) =>
-  ductsRosterData.parse({
-    ...snapshot,
+export const overviewFixtures = providers((snapshot) =>
+  ductsOverviewData.parse({
     sourceVersion: "fixture",
     rows: systemList(snapshot, null),
   }),

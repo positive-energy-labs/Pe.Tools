@@ -40,16 +40,17 @@ screen(tiny, { panes: { list: pane, detail: pane, extra: pane }, layout });
 
 // A route as `product()` returns it is what `screen()` takes: its key, name, directory and built reads.
 declare const roster: ReadHandle<"tiny.roster", { level: string }, number>;
+// `product()` names the route by its map key and refuses a `key` of its own.
+const { key: _key, ...route } = tiny;
 const declared = product({
   id: "tiny",
   says: "Tiny",
   homes: {},
   cells: {},
-  works: {},
   readings: { roster: { handle: roster, sources: [] } },
   commands: {},
   routes: {
-    tiny: { ...tiny, core: ["roster", () => ({ level: "" })], reads: { list: "roster" } },
+    tiny: { ...route, core: ["roster", () => ({ level: "" })], reads: { list: "roster" } },
   },
 });
 const drawn = screen(declared.routes.tiny, { panes: { list: pane, detail: pane }, layout });

@@ -11,7 +11,7 @@ import { ductsFanCalcSchema } from "@pe/fans-contract/fan-calc-data";
 import { ductFindingSchema, DUCT_INFERENCE_GRADES } from "./ducts-pricing-read.ts";
 import { catalogTableSchema } from "@pe/ducts-contract/duct-catalog";
 import { ductsInputsSchema } from "@pe/fans-contract/calc-read";
-import { fansReadRequest, fansReadResponse, fansCalcData } from "@pe/fans-contract/fans-read";
+import { fansReadResponse, fansCalcData } from "@pe/fans-contract/fans-read";
 
 const numberOrNull = z.number().nullable();
 export const ductsPriceRow = z.object({
@@ -114,13 +114,14 @@ const systemRow = z.object({
   terminal: numberOrNull,
   children: z.array(z.never()),
 });
+export const ductsOverviewData = z.object({ rows: z.array(systemRow), sourceVersion: z.string() });
 export const ductsRosterArgs = z.object({ target: documentRefSchema });
 export const DUCTS_SYSTEM_MAX = 512;
 /** Detailed pricing publishes the whole selected network and its fan calculations. */
 export const DUCTS_DETAIL_LIMIT = 16;
 export const ductDetailLimitMessage = `Open up to ${DUCTS_DETAIL_LIMIT} systems at a time from the Systems list.`;
 export const ductsNetworkArgs = ductsRosterArgs.extend({
-  system: z.union([z.literal("all"), z.array(z.string()).max(DUCTS_SYSTEM_MAX)]),
+  system: z.array(z.string()).max(DUCTS_SYSTEM_MAX),
 });
 export const ductsNetworkData = nativeResponseSchema("ducts.snapshot.walk").and(
   z.object({
@@ -214,25 +215,8 @@ export const ductsPricingData = z.object({
     inference: inferenceReadSchema,
   }),
 });
-/** Same publication/Value protocol as Fans; only the semantic data and args vary. */
-const requestFields = fansReadRequest.omit({ args: true });
-export const ductsReadRequest = z.discriminatedUnion("read", [
-  requestFields.extend({ read: z.literal("ducts.roster"), args: ductsRosterArgs }),
-  requestFields.extend({ read: z.literal("ducts.network"), args: ductsNetworkArgs }),
-  requestFields.extend({ read: z.literal("ducts.pricing"), args: ductsNetworkArgs }),
-]);
-const publicationOf = <T extends z.ZodType>(data: T) =>
-  fansReadResponse.extend({
-    value: fansReadResponse.shape.value.unwrap().extend({ data }).nullable(),
-  });
-export const ductsRosterReadResponse = publicationOf(ductsRosterData);
-export const ductsNetworkReadResponse = publicationOf(ductsNetworkData);
-export const ductsPricingReadResponse = publicationOf(ductsPricingData);
-// Network is the richer snapshot shape; roster-first decoding would strip its batch coverage.
-export const ductsReadResponse = z.union([
-  ductsNetworkReadResponse,
-  ductsRosterReadResponse,
-  ductsPricingReadResponse,
-]);
+export const ductsPricingReadResponse = fansReadResponse.extend({
+  value: fansReadResponse.shape.value.unwrap().extend({ data: ductsPricingData }).nullable(),
+});
 export type DuctsNetworkData = z.infer<typeof ductsNetworkData>;
 export type DuctsPricingData = z.infer<typeof ductsPricingData>;

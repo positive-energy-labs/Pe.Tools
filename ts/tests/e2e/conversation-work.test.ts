@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vite-plus/test";
+import { receiptBuildStamp } from "../../apps/host/src/build-stamp.ts";
 import { connect, type Page } from "./cdp.ts";
 import {
   workEvidence,
@@ -44,7 +45,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
   if (!dir) throw Error("PRECONDITION: CONVERSATION_WORK_ARTIFACT_DIR is required");
   await mkdir(dir, { recursive: true });
   const source = resolve(import.meta.dirname, "../../..");
-  const head = git("rev-parse", "HEAD");
+  const { commit: head, build: sourceBuild } = receiptBuildStamp("dev", source);
   const network: Network[] = [];
   const steps: { name: string; at: string; result: string }[] = [];
   const receipt = {
@@ -334,7 +335,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.open(url(`${seed.workUrl}&contextRadiusFt=${encodeURIComponent(seed.retainedPage)}`));
       await p.send("Page.bringToFront");
       await p.until(
-        async () => network.some((event) => event.build === head.slice(0, 12)),
+        async () => network.some((event) => event.build === sourceBuild),
         "standalone source hydration",
         90_000,
       );
@@ -387,7 +388,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       // A cold source Vite graph loads hundreds of modules before the device gate can read.
       // Keep that startup budget separate from the unchanged interaction/read deadlines below.
       await p.until(
-        async () => network.some((event) => event.build === head.slice(0, 12)),
+        async () => network.some((event) => event.build === sourceBuild),
         "cold source client hydration and first host request",
         90_000,
       );
@@ -400,11 +401,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       await p.waitText("3 unfinished");
       await p.waitText("Conversation without Work");
       await p.until(
-        async () => network.some((event) => event.build === head.slice(0, 12)),
+        async () => network.some((event) => event.build === sourceBuild),
         "source-pinned real host request",
       );
       const builds = [...new Set(network.flatMap((event) => (event.build ? [event.build] : [])))];
-      expect(builds).toEqual([head.slice(0, 12)]);
+      expect(builds).toEqual([sourceBuild]);
       await p.until(
         async () =>
           network.some(
@@ -697,7 +698,7 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
           if (
             frame.kind === "snapshot" &&
             frame.value?.revision === 2 &&
-            frame.value.doc?.flows?.["1001"]?.edit?.value?.source === "human effort"
+            frame.value.doc?.flows?.["UniqueId:fixture-1001"]?.edit?.value === 100
           )
             return frame;
         }
@@ -803,9 +804,12 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
       expect(after).toEqual(initial);
       const flows = after.find((work) => work.record.targetKey === seed.workId)!.record.value.doc
         .flows;
-      expect(Object.keys(flows).sort()).toEqual(["1001", "1002", "1003"]);
-      expect(flows["1002"].edit.value.cfm).toBe(200);
-      expect(flows["1002"].suggestion.value.cfm).toBe(220);
+      expect(Object.keys(flows).sort()).toEqual([
+        "UniqueId:fixture-1001",
+        "UniqueId:fixture-1002",
+        "UniqueId:fixture-1003",
+      ]);
+      expect(flows["UniqueId:fixture-1002"].edit).toMatchObject({ value: 220, by: "pea", base: 1 });
       await writeFile(join(dir, "work-readback.json"), JSON.stringify(after, null, 2));
       receipt.coverage.quiet = {
         milliseconds: Date.now() - start,
@@ -856,11 +860,11 @@ test("real conversation Work cutover retains authored cells, draft, Places and o
               return (
                 frame.kind === "snapshot" &&
                 frame.key === expectedKey &&
-                frame.value?.doc?.flows?.["1002"]?.edit?.value?.cfm === 200 &&
-                frame.value.doc.flows["1002"].suggestion?.value?.cfm === 220
+                frame.value?.doc?.flows?.["UniqueId:fixture-1002"]?.edit?.value === 220 &&
+                frame.value.doc.flows["UniqueId:fixture-1002"].edit.by === "pea"
               );
             }),
-          "unsaved Work reading uses the exact original lifetime and retains edited/suggested values",
+          "unsaved Work reading uses the exact original lifetime and retains the latest shared cell",
         );
         await p.waitText("Work is kept, read-only, while its document is closed.");
         await p.waitText("3 unfinished");
@@ -1204,7 +1208,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     expect(initial.status).toBe(200);
     expect(initial.body).toMatchObject({
       revision: 2,
-      doc: { flows: { "1001": { edit: { value: { cfm: 100 } } } } },
+      doc: { flows: { "UniqueId:fixture-1001": { edit: { value: 100 } } } },
     });
     const otherBefore = await request(other);
     expect(otherBefore.status).toBe(200);
@@ -1219,8 +1223,8 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     const edit = {
       patches: [
         {
-          path: ["flows", "1001", "edit"],
-          value: { value: { cfm: 175, source: "HTTP journey" }, by: "pea" },
+          path: ["flows", "UniqueId:fixture-1001", "edit"],
+          value: { value: 175, ref: "HTTP journey", by: "pea" },
         },
       ],
       expectedRevision: 2,
@@ -1238,7 +1242,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     expect(applied.body).toMatchObject({ ok: true, write: { by: "human", base: 2, revision: 3 } });
     expect((await request(target)).body).toMatchObject({
       revision: 3,
-      doc: { flows: { "1001": { edit: { value: { cfm: 175 }, by: "human" } } } },
+      doc: { flows: { "UniqueId:fixture-1001": { edit: { value: 175, by: "human" } } } },
     });
     await expect
       .poll(
@@ -1252,12 +1256,18 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     expect(
       savedEdit.find((row) => row.record.targetKey === "fans/target:c:\\models\\office.rvt")?.record
         .value,
-    ).toMatchObject({ revision: 3, doc: { flows: { "1001": { edit: { value: { cfm: 175 } } } } } });
+    ).toMatchObject({
+      revision: 3,
+      doc: { flows: { "UniqueId:fixture-1001": { edit: { value: 175 } } } },
+    });
     checkpoints.push({ step: "persisted-edit", applied, persisted: savedEdit });
     const stale = await request(target, "apply", {
       ...edit,
       patches: [
-        { path: ["flows", "1001", "edit"], value: { value: { cfm: 999, source: "stale writer" } } },
+        {
+          path: ["flows", "UniqueId:fixture-1001", "edit"],
+          value: { value: 999, ref: "stale writer" },
+        },
       ],
       press: "stale-other-tab",
     });
@@ -1272,7 +1282,7 @@ test("persisted Work edit, stale writer, subject switch and undo share the real 
     );
     expect((await request(target)).body).toMatchObject({
       revision: 3,
-      doc: { flows: { "1001": { edit: { value: { cfm: 175 } } } } },
+      doc: { flows: { "UniqueId:fixture-1001": { edit: { value: 175 } } } },
     });
     await subscribe();
     await expect

@@ -39,7 +39,9 @@ export const storedRuling = (store: Store, segment: RulingSegment, key: string) 
 
 const workRoleKey = (snapshot: Pick<DuctSnapshot, "nodes" | "segments">, key: string) => {
   const id = workElementId(snapshot, key);
-  return [...snapshot.nodes, ...snapshot.segments].find((element) => element.id === id)!.uniqueId;
+  const element = [...snapshot.nodes, ...snapshot.segments].find((element) => element.id === id);
+  if (!element) throw Error(`Work subject is absent from the acquisition: ${key}`);
+  return element.uniqueId;
 };
 
 const EMPTY = ductsDesign(null, neutralFansWork);

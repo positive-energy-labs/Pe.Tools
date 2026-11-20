@@ -1,5 +1,4 @@
 import type { FamilySnapshotRecord, FamilyParameterSnapshot } from "#/host/loaded-families-view";
-import type { DemoSpec } from "#/route/seeds";
 const param = (name: string, values: Record<string, string | null>): FamilyParameterSnapshot => ({
   definition: {
     identity: { key: `name:${name}`, kind: "NameFallback", name },
@@ -36,18 +35,3 @@ export const DEMO_FAMILIES: readonly FamilySnapshotRecord[] = [
   family(3102, "Heat Pump - Split", { "HP-1": "RXL24" }),
   family(3103, "Air Handler", { "AHU-1": "AHU-10" }),
 ];
-
-/** The demo spec's bytes. No schema is seeded, so the editor shows it raw. */
-export const DEMO_FAMILIES_SPEC: DemoSpec = {
-  content: JSON.stringify(
-    {
-      $schema: "/schemas/settings/FamilyFoundry/patches.json",
-      select: { categoryNames: ["Mechanical Equipment"] },
-      patch: { parameters: [{ name: "PE_G___Manufacturer", mapFrom: "Manufacturer" }] },
-      run: { singleTransaction: true },
-    },
-    null,
-    2,
-  ),
-  schema: "",
-};

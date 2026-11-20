@@ -7,13 +7,13 @@ import {
   product as define,
   sheetCells,
 } from "@pe/agent-contracts/product";
-import { product } from "../product.ts";
+import { product, roomsWork } from "../product.ts";
 
-type Editable = (typeof product.works.rooms.editable)[number];
+type Editable = (typeof roomsWork.editable)[number];
 const staged: Editable = ["ceilingFt", "*"];
 // @ts-expect-error a cell Pea may edit that the Work schema lacks
 const drifted: Editable = ["esp", "*"];
-const doc = product.works.rooms.schema.parse({});
+const doc = roomsWork.schema.parse({});
 const marks: Record<string, unknown> = doc.marks;
 // @ts-expect-error the Work schema has no such cell either
 const absent: unknown = doc.esp;
@@ -77,3 +77,19 @@ define({
   },
 });
 export const used = [staged, drifted, marks, absent, key, placed];
+
+const proofRoute = {
+  name: "Proof",
+  directory: product.routes.rooms.directory,
+  fields: {},
+  panes: ["room"],
+  subject: { field: "room", noun: "room", pane: "room", options: () => [] },
+} as const;
+define({ ...base, routes: { proof: proofRoute } });
+define({
+  ...base,
+  // @ts-expect-error a misspelled subject property must be refused through a spread
+  routes: { proof: { ...proofRoute, subject: { ...proofRoute.subject, optons: 1 } } },
+});
+// @ts-expect-error a misspelled route property must be refused through a spread
+define({ ...base, routes: { proof: { ...proofRoute, optons: 1 } } });

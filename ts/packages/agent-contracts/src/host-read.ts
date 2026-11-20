@@ -3,13 +3,14 @@ import type { UseSource } from "./reading-source.ts";
 import { z } from "zod";
 import type { ExecutionTarget } from "./target.ts";
 import type { PeRouteId } from "./pe-api.ts";
-import type { Publication } from "./value.ts";
+import type { Publication, ReadingLoad } from "./value.ts";
 import type { ReadHandle } from "./handle.ts";
 export interface HostRead {
   key: string;
   input: z.ZodType;
   output: z.ZodType<Publication>;
   axes: EntryContract["axes"];
+  readonly load?: ReadingLoad;
   fixtures?: FixtureProviders<any, unknown>;
   endpoint?: PeRouteId;
   request?(args: any, target?: ExecutionTarget): object;

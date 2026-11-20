@@ -11,11 +11,11 @@ import { useStaged } from "./staged.ts";
 type Row = AdoptionContext["value"]["value"]["rows"][number];
 /** The ticked rows as the adopt command takes them: one entry per plan, by its UniqueId. */
 export function adoptRequest(rows: readonly Row[]) {
-  const views = new Map<string, { elementId: number; name: string; systemTag: string }[]>();
+  const views = new Map<string, Pick<Row, "elementId" | "uniqueId" | "name" | "systemTag">[]>();
   for (const row of rows.filter((row) => row.checked))
     views.set(row.view, [
       ...(views.get(row.view) ?? []),
-      { elementId: row.elementId, name: row.name, systemTag: row.systemTag },
+      { elementId: row.elementId, uniqueId: row.uniqueId, name: row.name, systemTag: row.systemTag },
     ]);
   return views.size ? { views: [...views].map(([view, items]) => ({ view, items })) } : null;
 }

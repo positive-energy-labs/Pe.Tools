@@ -1,7 +1,7 @@
 import { inkOf } from "@pe/web-kernel/scene/ink";
 
 /** F10: the kit owns attention colours, including their theme and mixing ratios. */
-export const attentionRoles = { selected: "select", hover: "hover", lit: "indirect" } as const;
+const attentionRoles = { selected: "select", hover: "hover", lit: "indirect" } as const;
 export type AttentionMark = keyof typeof attentionRoles;
 
 export function attentionColours(mount: Element) {

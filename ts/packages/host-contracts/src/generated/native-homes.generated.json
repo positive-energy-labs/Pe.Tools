@@ -1,0 +1,15 @@
+{
+  "entity": {
+    "ductLossResults": "entity:5e1f0c0e-7e10-4c0e-9e1f-0000c0ef0003",
+    "specificCoefficient": "entity:5a598293-1504-46cc-a9c0-de55c82848b9",
+    "specificLoss": "entity:46245996-eebb-4536-ac17-9c1cd917d8cf"
+  },
+  "machine-file": {
+    "modelRecovery": "machine-file:model-recovery",
+    "runTraces": "machine-file:rooms"
+  },
+  "owner-blob": {
+    "ductLosses": "owner-blob:91e80aa7-f842-43ac-adbe-9b1f6a40c2d2",
+    "regionRecord": "owner-blob:b7e0c1d4-51aa-4a01-9f4e-2f6f1a0c9020"
+  }
+}

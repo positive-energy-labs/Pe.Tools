@@ -4,7 +4,7 @@ import { useRevitSubjectProps } from "@pe/web-kernel/revit/element-menu";
 import { useRouteSearchSlice } from "@pe/web-kernel/route/activity";
 import { useAdmittedSubject } from "@pe/web-kernel/shell/subject";
 
-import type { FansCalcEdits } from "@pe/ducts-contract/duct-inputs";
+import type { FansCalcEdits } from "@pe/fans-contract/product";
 import type { SubjectRefCode } from "@pe/agent-contracts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { SubjectKey } from "@pe/kit/lang/attention";
@@ -79,7 +79,7 @@ export function RosterBody({ ctx }: { ctx: CalcContext }) {
   );
   const subject = useAdmittedSubject();
   const open = (row: FanPort) => subject?.toggle(stableFanKey(row));
-  const pickedFans = authored.fan.kind === "all" ? "all" : authored.fan.ids;
+  const pickedFans = authored.fan.kind === "all" ? [] : authored.fan.ids;
   const search = useRouteSearchSlice((search) => search);
   const ownPane = (
     <>
@@ -94,7 +94,7 @@ export function RosterBody({ ctx }: { ctx: CalcContext }) {
           nameOf,
           value: ctx.value,
           roster: roster,
-          picked: pickedFans === "all" ? roster.map(stableFanKey) : pickedFans,
+          picked: pickedFans,
           open: open,
           busy: busy,
           loading: busy,

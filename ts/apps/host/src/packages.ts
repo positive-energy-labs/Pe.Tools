@@ -28,12 +28,7 @@ import {
   resolvePackageDiskSignature,
   samePackageDiskSignature,
 } from "./pod-disk-signature.ts";
-export {
-  bindPackageScanLogger,
-  logPackageDiscovery,
-  packageScanLog,
-  packageScanLogLineLimit,
-} from "./pod-discovery-log.ts";
+export { bindPackageScanLogger, logPackageDiscovery, packageScanLog } from "./pod-discovery-log.ts";
 import {
   captureIndexedPackage,
   rememberCaptureRoots,

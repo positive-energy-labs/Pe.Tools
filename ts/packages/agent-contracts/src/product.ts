@@ -6,18 +6,20 @@
  * missing or extra body is a compile error. Runtime-neutral: nothing here imports a host or web package.
  */
 import { z } from "zod";
-import { nativeHomes } from "@pe/host-contracts/generated";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
 import type { Command, Tool } from "./command.ts";
+import type { CallPolicy } from "./call-policy.ts";
+import { entities, machineFiles, ownerBlobs } from "./generated/native-homes.generated.ts";
 import { draftCellSchema } from "./draft.ts";
-import type { ReadHandle } from "./handle.ts";
+import type { AnyReadHandle, ReadHandle } from "./handle.ts";
 import { hostRead, read, type field, type HostRead } from "./route.ts";
 import type { RouteGraphWire } from "./route-kernel-data.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import { schemaOf, type Domain, type DomainValue, type Placement } from "./slots/sheet.ts";
-import { subjectRefCodeSchema } from "./subject-ref.ts";
-import { workWriteCommands, writeIntentSchema } from "./write-intent.ts";
-import { SETTING_TIERS, type SettingTier } from "./tiered-setting.ts";
+import { defineSettingOwners } from "./setting-owners.ts";
+import { subjectRefCodeSchema, type SubjectRefCode } from "./subject-ref.ts";
+import { SETTING_TIERS, writeSettingTier, type SettingTier } from "./tiered-setting.ts";
+import { writeIntentSchema } from "./write-intent.ts";
 import type { Publication } from "./value.ts";
 
 /** Unexported, so only this module makes a home, a native home handle or a cell. */
@@ -38,6 +40,7 @@ export type HomeCost = {
 export type Home<Takes extends CellKey = CellKey> = {
   readonly [made]: "home";
   readonly kind: string;
+  readonly rung: 3 | 4 | 5 | 6 | null;
   /** The identity the write door matches exactly (S11). */
   readonly key: string;
   readonly cost: HomeCost;
@@ -45,24 +48,27 @@ export type Home<Takes extends CellKey = CellKey> = {
   readonly takes: readonly Takes[];
   /** How a sheet places a cell that lands here (ADR 0032: placement is derived, never per field). */
   readonly place: (cell: string) => Placement;
+  readonly settingCells?: readonly string[];
 };
 /**
- * A home C# declares and writes (ruling 4): its generated handle, never a restated name. Only
- * `nativeHome()` makes one, from the table typegen emits from C#'s `NativeHomes`.
+ * A home C# declares and writes (ruling 4), identified by its generated handle.
  */
 export type NativeHome<Prefix extends string> = {
   readonly [made]: "native";
   readonly key: `${Prefix}:${string}`;
 };
-type NativeHomeName = keyof typeof nativeHomes;
-type PrefixOf<K> = K extends `${infer P}:${string}` ? P : never;
-/** The handle of a home C# declared, by its C# name, as `handle()` reads the command table. */
-export function nativeHome<N extends NativeHomeName>(
-  name: N,
-): NativeHome<PrefixOf<(typeof nativeHomes)[N]>>;
-export function nativeHome(name: NativeHomeName): NativeHome<string> {
-  return { [made]: "native", key: nativeHomes[name] };
-}
+export const ownerBlob = (name: keyof typeof ownerBlobs): NativeHome<"owner-blob"> => ({
+  [made]: "native",
+  key: ownerBlobs[name],
+});
+export const entity = (name: keyof typeof entities): NativeHome<"entity"> => ({
+  [made]: "native",
+  key: entities[name],
+});
+export const machineFileHandle = (name: keyof typeof machineFiles): NativeHome<"machine-file"> => ({
+  [made]: "native",
+  key: machineFiles[name],
+});
 
 /*
  * The home ladder in code (ADR 0058). Ask in order and stop at the first yes: a fact the model can
@@ -73,12 +79,15 @@ export function nativeHome(name: NativeHomeName): NativeHome<string> {
 export const homeFile = (
   owner: string,
   tiers: readonly SettingTier[] = SETTING_TIERS,
+  paths: Readonly<Record<string, readonly string[]>> = {},
 ): Home<"route"> => ({
   [made]: "home",
   kind: "home-file",
+  rung: 3,
   key: `home-file:${owner}`,
   takes: ["route"],
-  place: (cell) => ({ at: "setting", owner, path: cell.split("."), tiers }),
+  settingCells: Object.keys(paths),
+  place: (cell) => ({ at: "setting", owner, path: paths[cell] ?? cell.split("."), tiers }),
   cost: {
     readsPerCommand: "One file per tier",
     placesThatCanDisagree: "One per tier: default, firm and document",
@@ -92,6 +101,7 @@ export const homeFile = (
 export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => ({
   [made]: "home",
   kind: "revit-entity",
+  rung: 4,
   key: declared.key,
   takes: ["subject"],
   place: () => ({ at: "store", store: declared.key }),
@@ -104,10 +114,11 @@ export const revitEntity = (declared: NativeHome<"entity">): Home<"subject"> => 
     seenInRevit: "Nothing; Revit's calculation reads it",
   },
 });
-/** Rung 5: a named parameter the family already has. A setting holds its name. */
+/** Rung 5: a semantic parameter slot. Its owner's settings resolve the actual Revit name. */
 export const familyParameter = (slot: string): Home<"subject"> => ({
   [made]: "home",
   kind: "family-parameter",
+  rung: 5,
   key: `parameter:${slot}`,
   takes: ["subject"],
   place: () => ({ at: "parameter", parameter: slot }),
@@ -124,6 +135,7 @@ export const familyParameter = (slot: string): Home<"subject"> => ({
 export const documentRecord = (declared: NativeHome<"owner-blob">): Home => ({
   [made]: "home",
   kind: "document-record",
+  rung: 6,
   key: declared.key,
   takes: ["route", "name", "subject"],
   place: () => ({ at: "store", store: declared.key }),
@@ -144,6 +156,7 @@ export const documentRecord = (declared: NativeHome<"owner-blob">): Home => ({
 export const machineFile = (declared: NativeHome<"machine-file">): Home<never> => ({
   [made]: "home",
   kind: "machine-file",
+  rung: null,
   key: declared.key,
   takes: [],
   place: () => ({ at: "local" }),
@@ -178,13 +191,12 @@ type Cells = Readonly<Record<string, Cell>>;
 const single = <S extends z.ZodType>(schema: S) => draftCellSchema(schema).default({});
 const byName = <S extends z.ZodType>(schema: S) =>
   z.record(z.string(), draftCellSchema(schema)).default({});
-const bySubject = <S extends z.ZodType>(schema: S) =>
-  z.record(subjectRefCodeSchema, draftCellSchema(schema)).default({});
+type SubjectRecord = <S extends z.ZodType>(value: S) => z.ZodRecord<z.ZodType<string>, S>;
+const subjectRecord = <S extends z.ZodType>(value: S) => z.record(subjectRefCodeSchema, value);
+const bySubject = <S extends z.ZodType>(schema: S, record: SubjectRecord) =>
+  record(draftCellSchema(schema)).default({});
 type Schema<C extends Cell> = z.ZodType<DomainValue<C["domain"]>>;
 type WorkShape<C extends Cells> = {
-  /** A staged command's authored input, by command key (`workWriteCommands`). */
-  writeIntent: z.ZodDefault<typeof writeIntentSchema>;
-} & {
   -readonly [K in keyof C]: C[K]["per"] extends "route"
     ? ReturnType<typeof single<Schema<C[K]>>>
     : C[K]["per"] extends "subject"
@@ -192,33 +204,91 @@ type WorkShape<C extends Cells> = {
       : ReturnType<typeof byName<Schema<C[K]>>>;
 };
 /** What Pea may edit is every cell, so no second list can name a cell the schema lacks. */
-export type EditablePath<C extends Cells> =
-  | readonly ["writeIntent", "*"]
-  | {
-      [K in keyof C & string]: C[K]["per"] extends "route" ? readonly [K] : readonly [K, "*"];
-    }[keyof C & string];
+export type EditablePath<C extends Cells> = {
+  [K in keyof C & string]: C[K]["per"] extends "route" ? readonly [K] : readonly [K, "*"];
+}[keyof C & string];
 // `Object.entries` keeps no key types, so these two overloads state what the cell list builds.
-function workSchema<C extends Cells>(cells: C): z.ZodObject<WorkShape<C>, z.core.$strict>;
-function workSchema(cells: Cells) {
-  return z.strictObject({
-    writeIntent: writeIntentSchema.default({}),
-    ...Object.fromEntries(
+export function workSchema<C extends Cells>(
+  cells: C,
+  subjectRecord?: SubjectRecord,
+): z.ZodObject<WorkShape<C>, z.core.$strict>;
+export function workSchema(cells: Cells, record: SubjectRecord = subjectRecord) {
+  return z.strictObject(
+    Object.fromEntries(
       Object.entries(cells).map(([name, { domain, per }]) => {
         const schema = schemaOf(domain);
         return [
           name,
-          per === "route" ? single(schema) : per === "subject" ? bySubject(schema) : byName(schema),
+          per === "route"
+            ? single(schema)
+            : per === "subject"
+              ? bySubject(schema, record)
+              : byName(schema),
         ];
       }),
     ),
-  });
+  );
 }
 function editable<C extends Cells>(cells: C): readonly EditablePath<C>[];
 function editable(cells: Cells): readonly (readonly string[])[] {
-  return [
-    ["writeIntent", "*"],
-    ...Object.entries(cells).map(([name, { per }]) => (per === "route" ? [name] : [name, "*"])),
-  ];
+  return Object.entries(cells).map(([name, { per }]) => (per === "route" ? [name] : [name, "*"]));
+}
+
+/**
+ * One Work per route, for a product of several routes (G7: Work stays route-scoped). Each holds the
+ * cells its route names and `writeIntent`, where `workWriteCommands` stages a sealed command's input.
+ */
+type RouteWorks<C extends Cells> = Readonly<Record<string, readonly (keyof C & string)[]>>;
+type RouteWork<C extends Cells> = RouteStateSpec<
+  z.ZodObject<
+    WorkShape<C> & { writeIntent: z.ZodDefault<typeof writeIntentSchema> },
+    z.core.$strict
+  >
+> & {
+  readonly editable: readonly (EditablePath<C> | readonly ["writeIntent", "*"])[];
+  readonly schemaVersion: number;
+};
+type RouteTools<C extends Cells, W extends RouteWorks<C>> = {
+  readonly [K in keyof W]: Tool & { readonly work: RouteWork<Pick<C, W[K][number]>> };
+};
+/** One tool per Work: the commands staged in it. Every command of such a product is staged in one. */
+function routeTools(
+  says: string,
+  cells: Cells,
+  works: RouteWorks<Cells>,
+  commands: Readonly<Record<string, Command>>,
+) {
+  for (const [key, { work }] of Object.entries(commands))
+    if (!work || !Object.hasOwn(works, work.route))
+      throw Error(`${key} is staged in no declared Work`);
+  return Object.fromEntries(
+    Object.entries(works).map(([route, names]) => {
+      const own = Object.fromEntries(
+        Object.entries(cells).filter(([name]) => names.includes(name)),
+      );
+      return [
+        route,
+        {
+          name: route,
+          says,
+          work: {
+            route,
+            title: route,
+            description: says,
+            schemaVersion: 1,
+            schema: z.strictObject({
+              writeIntent: writeIntentSchema.default({}),
+              ...workSchema(own).shape,
+            }),
+            editable: [["writeIntent", "*"], ...editable(own)],
+          },
+          commands: Object.fromEntries(
+            Object.entries(commands).filter(([, command]) => command.work?.route === route),
+          ),
+        },
+      ];
+    }),
+  );
 }
 
 /** Load policy (S6 owns the meaning). Absent is today's behaviour. */
@@ -226,6 +296,9 @@ export type ReadingLoad = Readonly<{
   alone?: true;
   freshBy?: readonly ["document-mark"];
   slow?: string;
+  calls?: Readonly<Partial<Record<HostOperationKey, CallPolicy>>>;
+  resource?: true;
+  basisHeaders?: Readonly<Record<string, string>>;
 }>;
 export type Reading<Source extends PropertyKey = string> = {
   readonly handle: ReadHandle;
@@ -246,33 +319,10 @@ type Lands<H extends Home, C extends Cells> = {
 type Writes<H extends Homes, C extends Cells> = {
   readonly [N in keyof H]?: readonly Lands<H[N], C>[];
 };
-export type ProductCommand<
-  H extends Homes = Homes,
-  C extends Cells = Cells,
-  W extends string = string,
-> = Omit<Command, "work" | "derivation"> & {
+export type ProductCommand<H extends Homes = Homes, C extends Cells = Cells> = Command & {
   readonly native: readonly HostOperationKey[];
   readonly writes: Writes<H, C>;
-  /**
-   * The Work this command's input is staged in. A staged command is sealed: `product()` builds its
-   * apply entry and its `.preview` plan (`workWriteCommands`), which the command registry demands
-   * of every ModelWrite. Without `derive` the input is the Work's `writeIntent[key]`.
-   */
-  readonly staged?: W;
-  readonly derive?: (work: unknown) => unknown;
 };
-type Sealed<K extends string, D extends Command> = ReturnType<typeof workWriteCommands<K, D>>;
-type Intersect<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void
-  ? I
-  : never;
-/** The command table a declaration builds: each staged command with its plan beside it. */
-type BuiltCommands<M> = Intersect<
-  {
-    [K in keyof M & string]: M[K] extends { staged: string }
-      ? Sealed<K, Omit<M[K], "staged" | "derive"> & Command>
-      : { [P in K]: M[K] };
-  }[keyof M & string]
->;
 /** A cell lands in at most one home across every command, so the homes table can name it (S5). */
 type LandsIn<M, K> = {
   [N in keyof M]: M[N] extends { writes: infer W }
@@ -290,6 +340,16 @@ type IsUnion<T, U = T> = [T] extends [never]
     : never;
 type Sole<M, C> = { [K in keyof C]: IsUnion<LandsIn<M, K>> extends true ? never : K }[keyof C];
 
+type ResourceInput<R> = {
+  [K in keyof R]: R[K] extends { load: { resource: true }; handle: { input: infer I } } ? I : never;
+}[keyof R];
+function resourceInputs<R extends Readings>(readings: R): readonly ResourceInput<R>[];
+function resourceInputs(readings: Readings) {
+  return Object.values(readings).flatMap(({ handle, load }) =>
+    load?.resource ? [handle.input] : [],
+  );
+}
+
 /** A declared reading by name, alone or with the function that makes its arguments from the Page. */
 type Named<R extends string = string> = R | readonly [R, (page: never) => unknown];
 /**
@@ -306,6 +366,7 @@ export type ProductRoute<R extends string = string> = {
     readonly noun: string;
     readonly pane: string;
     readonly read?: Named<R>;
+    readonly options?: (data: never) => readonly { id: SubjectRefCode; label: string }[];
   };
   readonly core?: Named<R>;
   readonly reads?: Readonly<Record<string, Named<R>>>;
@@ -371,24 +432,38 @@ export type ProductDeclaration = {
   readonly homes: Homes;
   readonly cells: Cells;
   readonly readings: Readonly<Record<string, Reading>>;
-  readonly commands: Readonly<
-    Record<string, Command & Pick<ProductCommand, "native" | "writes">>
-  >;
+  readonly commands: Readonly<Record<string, ProductCommand>>;
   readonly routes: Readonly<Record<string, { readonly key: string }>>;
   readonly guide?: Guide;
 };
 type Stored = Pick<ProductDeclaration, "homes" | "cells" | "commands">;
-/** The home each cell lands in, by name, from every command's `writes`. A cell not here stays in Work. */
-export const landings = ({
+/** Platform settings writes and product commands use the same home-to-cells map. */
+export const productWrites = ({
+  homes,
+  cells,
   commands,
-}: Pick<Stored, "commands">): Readonly<Record<string, string>> =>
-  Object.fromEntries(
-    Object.values(commands).flatMap((command) =>
-      Object.entries(command.writes).flatMap(([home, cells]) =>
-        (cells ?? []).map((name) => [name, home]),
-      ),
-    ),
-  );
+}: Stored): Readonly<Record<string, ProductCommand["writes"]>> => ({
+  ...Object.fromEntries(Object.entries(commands).map(([key, { writes }]) => [key, writes])),
+  [writeSettingTier.key]: Object.fromEntries(
+    Object.entries(homes).flatMap(([name, home]) => {
+      const settings = home.settingCells?.filter((cell) => cells[cell]?.per === "route");
+      return settings?.length ? [[name, settings]] : [];
+    }),
+  ),
+});
+/** The home each cell lands in. A cell with no writer stays in Work. */
+export function landings(declared: Stored): Readonly<Record<string, string>> {
+  const lands = new Map<string, string>();
+  for (const writes of Object.values(productWrites(declared)))
+    for (const [home, cells] of Object.entries(writes))
+      for (const name of cells ?? []) {
+        const previous = lands.get(name);
+        if (previous !== undefined && previous !== home)
+          throw Error(`Cell ${name} lands in both ${previous} and ${home}`);
+        lands.set(name, home);
+      }
+  return Object.fromEntries(lands);
+}
 /**
  * The sheet's bindings by cell name, each placed by the home it lands in. The web adds how a cell is
  * drawn; it names no home (the owner's ruling against a home on the binding).
@@ -406,36 +481,61 @@ export const sheetCells = (declared: Stored) => {
 /** Refuses a key the declaration does not have, even through a variable or a spread. */
 export type NoExtras<Actual, Expected> = Record<Exclude<keyof Actual, keyof Expected>, never>;
 const noGuide: Guide = { instructions: "", skills: [] };
-type WorkSpec<C extends Cells> = RouteStateSpec<z.ZodObject<WorkShape<C>, z.core.$strict>> & {
-  readonly editable: readonly EditablePath<C>[];
+type Declared = Pick<ProductDeclaration, "says" | "cells" | "commands"> & {
+  readonly works?: RouteWorks<Cells>;
 };
-/**
- * ponytail: a Work that predates cells (Takeoffs: edits, baselines, verdicts) is declared whole.
- * Ceiling: no cell of it can land in a home or reach a sheet. Restate it as cells when its commands
- * move onto the cell grammar.
- */
-type WholeWork = RouteStateSpec<z.ZodObject> & {
-  readonly editable: readonly (readonly string[])[];
-};
-/** The declaration, plus what derives from it: each Work, Pea's tools, the named reads and the guide. */
+function toolTable<
+  K extends string,
+  T,
+  Publish extends boolean,
+  C extends Cells,
+  W extends RouteWorks<C>,
+>(
+  key: K,
+  value: T,
+  publish: Publish | undefined,
+  declared: Declared & { readonly cells: C; readonly works?: W },
+): [keyof W] extends [never]
+  ? Publish extends false
+    ? Record<never, never>
+    : { readonly [P in K]: T }
+  : RouteTools<C, W>;
+function toolTable(key: string, value: unknown, publish: boolean | undefined, declared: Declared) {
+  if (declared.works)
+    return routeTools(declared.says, declared.cells, declared.works, declared.commands);
+  return publish === false ? {} : { [key]: value };
+}
+
+/** The declaration, plus what derives from it: the Work, Pea's tool, the named reads and the guide. */
 export function product<
   const Id extends string,
   const H extends Homes,
   const C extends Cells,
-  const Works extends Readonly<Record<string, readonly (keyof C & string)[] | WholeWork>>,
   const R extends Readonly<Record<string, Reading<keyof H>>>,
-  const M extends Readonly<Record<string, ProductCommand<H, C, keyof Works & string>>>,
+  const M extends Readonly<Record<string, ProductCommand<H, C>>>,
   const Routes extends Readonly<Record<string, ProductRoute<keyof R & string>>>,
+  const Publish extends boolean = true,
+  const Works extends RouteWorks<C> = Record<never, never>,
 >(declaration: {
-  /** The product folder's name, and the tool of every command staged in no Work. */
+  /** The product folder's name, the name of Pea's tool and the route of its Work. */
   readonly id: Id;
   readonly says: string;
   /** Only the product's own. A platform home follows from the nouns a product uses. */
   readonly homes: H;
   readonly cells: C;
-  /** Each Work by its route namespace, with the cells it holds. Work stays route-scoped. */
-  readonly works: Works;
-  readonly readings: R;
+  readonly work?: Pick<
+    RouteStateSpec<z.ZodObject>,
+    "title" | "settingsOwners" | "schemaVersion"
+  > & {
+    readonly subjectRecord?: SubjectRecord;
+  };
+  /** Only for a product of several routes: each Work by its route, with the cells it holds. */
+  readonly works?: Works;
+  readonly readings: R & {
+    readonly [K in keyof R]: R[K] extends { load: { resource: true } }
+      ? { readonly handle: { readonly input: z.ZodType<{ kind: string }> } }
+      : unknown;
+  };
   /** Keyed by the catalog command key. */
   readonly commands: M & {
     readonly [K in keyof M]: {
@@ -446,71 +546,63 @@ export function product<
   };
   /** Zero or several, keyed by the route key. A subject's pane is one of the route's panes. */
   readonly routes: Routes & {
-    readonly [K in keyof Routes]: {
-      readonly subject?: { readonly pane: Routes[K]["panes"][number] };
+    readonly [K in keyof Routes]: NoExtras<Routes[K], ProductRoute> & {
+      readonly subject?: NoExtras<
+        NonNullable<Routes[K]["subject"]>,
+        NonNullable<ProductRoute["subject"]>
+      > & {
+        readonly pane: Routes[K]["panes"][number];
+      };
     };
   };
   readonly guide?: Guide;
+  readonly publishTool?: Publish;
 }) {
-  const works = Object.fromEntries(
-    Object.entries(declaration.works).map(([route, names]) => {
-      if (!Array.isArray(names)) return [route, names];
-      const cells = Object.fromEntries(
-        names.map((name: string) => [name, declaration.cells[name]!]),
-      );
-      return [
-        route,
-        {
-          route,
-          title: route,
-          description: declaration.says,
-          schema: workSchema(cells),
-          editable: editable(cells),
-        },
-      ];
-    }),
-  ) as unknown as {
-    readonly [K in keyof Works]: Works[K] extends readonly (keyof C)[]
-      ? WorkSpec<Pick<C, Works[K][number]>>
-      : Works[K];
+  if (Object.hasOwn(declaration.commands, writeSettingTier.key))
+    throw Error(`${writeSettingTier.key} belongs to the platform`);
+  const work: RouteStateSpec<z.ZodObject<WorkShape<C>, z.core.$strict>> & {
+    readonly editable: readonly EditablePath<C>[];
+    readonly schemaVersion: number;
+  } = {
+    route: declaration.id,
+    title: declaration.work?.title ?? declaration.id,
+    description: declaration.says,
+    settingsOwners: declaration.work?.settingsOwners,
+    schemaVersion: declaration.work?.schemaVersion ?? 1,
+    schema: workSchema(declaration.cells, declaration.work?.subjectRecord),
+    editable: editable(declaration.cells),
   };
-  const built = Object.entries<ProductCommand>(declaration.commands).map(
-    ([key, { staged, derive, ...command }]) => ({
-      staged,
-      entries: staged
-        ? workWriteCommands(staged, key, command, derive ? { derive } : {})
-        : { [key]: command },
-    }),
-  );
-  const commands = Object.assign({}, ...built.map((row) => row.entries)) as BuiltCommands<M>;
-  // One tool per Work, and one named for the product when a command is staged in none.
-  const names = [...new Set([...Object.keys(declaration.works), declaration.id])];
-  const tools: Readonly<Record<string, Tool>> = Object.fromEntries(
-    names.flatMap((name) => {
-      const own = built.filter((row) => (row.staged ?? declaration.id) === name);
-      const work = (works as Readonly<Record<string, Tool["work"]>>)[name];
-      if (!work && !own.length) return [];
-      return [
-        [
-          name,
-          {
-            name,
-            says: declaration.says,
-            ...(work && { work }),
-            commands: Object.assign({}, ...own.map((row) => row.entries)),
-          },
-        ],
-      ];
-    }),
-  );
+  const tool: Tool<M> & { readonly work: typeof work } = {
+    name: declaration.id,
+    says: declaration.says,
+    work,
+    commands: declaration.commands,
+  };
   const readings = Object.values<Reading<keyof H>>(declaration.readings);
+  const callPolicies: Readonly<Record<string, CallPolicy>> = Object.assign(
+    {},
+    ...readings.flatMap(({ load }) => load?.calls ?? []),
+  );
   return {
     ...declaration,
-    commands,
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,
-    works,
-    tools,
+    actions: declaration.commands,
+    // With `works`, each tool carries its route's Work, and `work` and `tool` are not the product's.
+    tools: toolTable<Id, typeof tool, Publish, C, Works>(
+      declaration.id,
+      tool,
+      declaration.publishTool,
+      declaration,
+    ),
+    settingOwners: defineSettingOwners(sheetCells(declaration)),
+    basisHeaders: Object.fromEntries(
+      readings.flatMap(({ load }) => Object.entries(load?.basisHeaders ?? {})),
+    ),
+    callPolicies,
+    resourceInputs: resourceInputs<R>(declaration.readings),
+    work,
+    tool,
     reads: {
       inputs: Object.fromEntries(
         readings.map((reading) => [reading.handle.key, reading.handle.input]),
@@ -525,14 +617,23 @@ type Handle<
   K extends keyof P["readings"],
 > = P["readings"][K]["handle"];
 /** One body per declared reading and per declared command. The runtime names its own context and executor. */
+type ReadingBody<P extends ProductDeclaration, K extends keyof P["readings"], Context> = (
+  ctx: Context,
+  args: z.output<Handle<P, K>["input"]>,
+) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
 export type HostBodies<P extends ProductDeclaration, Context, Executor> = {
   readonly readings: {
-    readonly [K in keyof P["readings"]]: (
-      ctx: Context,
-      args: z.output<Handle<P, K>["input"]>,
-    ) => z.output<Handle<P, K>["data"]> | Promise<z.output<Handle<P, K>["data"]>>;
+    readonly [K in keyof P["readings"]]:
+      | ReadingBody<P, K, Context>
+      | {
+          readonly name: string;
+          readonly input: z.ZodType;
+          readonly output: z.ZodType;
+          readonly contract?: AnyReadHandle;
+          readonly run: ReadingBody<P, K, Context>;
+        };
   };
-  /** A plan is its write's body in the preview phase, so it takes none of its own. */
+  /** A plan built by `workWriteCommands` is its write's body in the preview phase, so it takes none. */
   readonly commands: {
     readonly [K in keyof P["commands"] as K extends `${string}.preview` ? never : K]: Executor;
   };

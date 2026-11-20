@@ -49,7 +49,7 @@ import { queryWords, readClause, visibleRows } from "@pe/kit/table/view";
 
 import { keyOf, pidOf, processOf, selectionOf } from "./session";
 
-import { OpenControlScope, outcomeOf, useOpenKernel, useOpenOwner } from "./context";
+import { OpenControlScope, outcomeOf, useOpenOwner } from "./context";
 import type { OutcomeKind } from "@pe/kit/lang/outcome";
 import type { TableState } from "@pe/kit/table/model";
 
@@ -73,11 +73,8 @@ import type { RecentDocument } from "@pe/host-contracts/pe-revit-contract";
 import { TooltipHint } from "@pe/kit/lang/tooltip";
 
 /** Thread activity labels only; thread heads do not grant browser-computed access. */
-export function useThreadSummaries(
-  enabled: boolean,
-  fixture: readonly HarnessThreadSummary[] | null,
-) {
-  const owner = useOpenKernel();
+function useThreadSummaries(enabled: boolean, fixture: readonly HarnessThreadSummary[] | null) {
+  const owner = useOpenOwner();
   useEffect(() => (enabled ? owner.readings.mount(["threads"]) : undefined), [owner, enabled]);
   const reading = owner.readings.get("threads") as ReadingState<readonly HarnessThreadSummary[]>;
   return enabled ? (reading.value ?? reading.previous ?? null) : fixture;
@@ -97,7 +94,7 @@ function OutcomeOf({ outcome }: { outcome: Outcome | null }) {
  * the fixture threads and opens no transport.
  */
 export function useBayReadings(machine: Machine | null, fixture: boolean) {
-  const owner = useOpenKernel();
+  const owner = useOpenOwner();
   useEffect(() => owner.readings.mount(["recents"]), [owner]);
   const reading = owner.readings.get("recents") as ReadingState<{
     result?: { recents?: RecentDocument[] };

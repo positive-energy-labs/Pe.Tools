@@ -1,4 +1,6 @@
 // Fixture linkage only, never J-V3 acceptance. No native/SDK transport.
+import { once } from "node:events";
+import { createServer as createTcpServer } from "node:net";
 import { mkdir, writeFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { spawn, execFileSync } from "node:child_process";
@@ -10,6 +12,7 @@ import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { firmLayer, workLayer } from "@pe/ducts-host/ducts-inputs";
 import { resolveCriteria } from "@pe/ducts-domain/calc/inputs";
 import { designCalc } from "@pe/duct-systems-web/design-calc";
+import { receiptBuildDefines } from "../../apps/host/src/build-stamp.ts";
 import { sheetCells } from "../../apps/web/src/route/slots/sheet/index.ts";
 
 const dir = resolve("../.artifacts/runs/field-20261118/J-V3", String(Date.now()));
@@ -69,7 +72,14 @@ if (process.argv.includes("--witness")) {
   process.exit(ok ? 0 : 1);
 }
 let browser: Awaited<ReturnType<typeof openBrowser>> | undefined;
+const portProbe = createTcpServer().listen(0, "127.0.0.1");
+await once(portProbe, "listening");
+const address = portProbe.address();
+portProbe.close();
+await once(portProbe, "close");
+if (address === null || typeof address === "string") throw Error("Fixture has no TCP port");
 const server = await createServer({
+  define: receiptBuildDefines("dev"),
   configFile: false,
   root: resolve("."),
   optimizeDeps: {
@@ -91,8 +101,15 @@ const server = await createServer({
     ],
   },
   esbuild: { jsx: "automatic" },
-  resolve: { dedupe: ["react", "react-dom"] },
-  server: { host: "127.0.0.1", port: 0 },
+  resolve: {
+    alias: Object.fromEntries(
+      ["react", "react-dom", "@effect/atom-react"].map((name) => [
+        name,
+        resolve("apps/web/node_modules", name),
+      ]),
+    ),
+  },
+  server: { host: "127.0.0.1", port: address.port, strictPort: true },
   plugins: [
     {
       name: "jv3-fixture",

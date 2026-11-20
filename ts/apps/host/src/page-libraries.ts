@@ -42,7 +42,7 @@ export function pageFolderCollisions(names: readonly string[]): string[][] {
 }
 
 /** The ordinary folders under the Pages root; a dot-folder is private. */
-export async function scratchPageFolders(pagesRoot: string) {
+async function scratchPageFolders(pagesRoot: string) {
   const entries = await readdir(pagesRoot, { withFileTypes: true }).catch((error) => {
     if ((error as { code?: string }).code === "ENOENT") return [];
     throw error;
@@ -51,7 +51,7 @@ export async function scratchPageFolders(pagesRoot: string) {
 }
 
 /** The scratch Page key (the folder as named), or why the folder has none. */
-export function scratchPageKey(
+function scratchPageKey(
   slug: string,
   collisions: readonly string[][] = [],
 ): { key: string; reason: null } | { key: null; reason: string } {
@@ -175,7 +175,7 @@ export const pageDescriptors = async (
  * Packaged Pages, pure over one admitted snapshot (`listPackages()`): no read of its own, so every
  * consumer of that snapshot sees the same keys, URLs and hashes. Ordered by key.
  */
-export function packagePageDescriptors(packages: readonly AdmittedPackage[]): PageDescriptor[] {
+function packagePageDescriptors(packages: readonly AdmittedPackage[]): PageDescriptor[] {
   return packages
     .flatMap((pod) =>
       pod.contributions.flatMap((row) => {

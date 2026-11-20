@@ -121,7 +121,9 @@ test("Takeoffs: choose a plan by its UniqueId, stage the choice in Work, initial
     await waitFor(() => expect(keys(j)).toContain("takeoffs.adopt"), { timeout: 20000 });
     expect(keys(j)).toContain("takeoffs.adopt.preview");
     expect(j.mount.owner()?.doc.writeIntent["takeoffs.adopt"].edit.value).toEqual({
-      views: [{ view: CEILING, items: [{ elementId: 22, name: "West office", systemTag: "" }] }],
+      views: [{ view: CEILING, items: [
+            { elementId: 22, uniqueId: "office-zone-00000016", name: "West office", systemTag: "" },
+          ], }],
     });
     // Every read of chosen plans was kept by the host: the saved capture opens without the model.
     await j.ready();

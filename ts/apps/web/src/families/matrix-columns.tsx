@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  familyCellAddress,
   familyCellKey,
   showFamilyCell,
   type FamilyCellState,
@@ -26,10 +25,6 @@ import { cn } from "@pe/kit/lib/utils";
 import type { TypeRow, ParamColumn } from "../../../../packages/agent-contracts/src/families-read";
 export type { TypeRow, ParamColumn } from "../../../../packages/agent-contracts/src/families-read";
 
-/** Revit's Yes/No spec (`autodesk.spec:spec.bool-1.0.0`), read off the definition's data type. */
-export const isYesNo = (dataTypeId: string | null | undefined) =>
-  dataTypeId?.startsWith("autodesk.spec:spec.bool") === true;
-
 const YES_NO = ["Yes", "No"] as const;
 const unitLock = (unit: MeasuredDisplayUnit | null | undefined): string | null =>
   unit && (!unit.typeId || unit.refusal)
@@ -54,21 +49,6 @@ function patchable(row: TypeRow, key: string): boolean {
     row.formulas[key] !== "Present"
   );
 }
-
-/**
- * The families lock facts: a cell a patch cannot write (unresolved, project-bound, formula-driven)
- * is locked, and its reason is the one the matrix already says. Unknown addresses are not locked.
- */
-export const familiesLockOf =
-  (rows: readonly TypeRow[], params: readonly ParamColumn[]) =>
-  (key: string): string | null => {
-    const { familyName, typeName, parameter } = familyCellAddress(key);
-    const row = rows.find((r) => r.familyName === familyName && r.typeName === typeName);
-    const param = params.find((p) => p.name === parameter);
-    if (!row || !param) return null;
-    if (!patchable(row, param.key)) return cellReason(row, param.key, param.isInstance);
-    return unitLock(row.displayUnits ? row.displayUnits[param.key] : param.displayUnit);
-  };
 
 /** What a cell's value MEANS — the title text, so a read-only cell still explains itself. */
 function cellReason(row: TypeRow, key: string, instance: boolean): string {

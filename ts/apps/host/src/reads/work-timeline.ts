@@ -2,7 +2,6 @@ import { authorSchema } from "@pe/agent-contracts";
 import {
   actionStatusSchema,
   refuse,
-  workKey,
   workTimelineArgsSchema,
   workTimelineSchema,
   WORK_TIMELINE_READ,
@@ -51,7 +50,7 @@ export function registerTimelineSource(source: TimelineSource): () => void {
  * K-A4: the document's findings Work is a member of every Place bound to a document. The host adds
  * it; a client never sends it.
  */
-export const timelineMembers = (works: readonly WorkKey[]): WorkKey[] => {
+const timelineMembers = (works: readonly WorkKey[]): WorkKey[] => {
   const bound = works.find((key) => key.binding === "address" || key.binding === "open");
   const members = works.filter((key) => key.route !== FINDINGS_OWNER);
   return bound ? [...members, { ...bound, route: FINDINGS_OWNER }] : members;
@@ -123,7 +122,6 @@ export function hostTimeline(
     },
   };
 }
-export type HostTimeline = ReturnType<typeof hostTimeline>;
 
 const timelineInput = workTimelineArgsSchema.extend({ by: authorSchema });
 /** Tracked input: it moves with any Work write and any action receipt (`reads/invalidations.ts`). */
@@ -141,4 +139,3 @@ export const withTimelineCaller = (name: string, args: unknown, by: WorkAuthor |
   name === WORK_TIMELINE_READ
     ? { ...workTimelineArgsSchema.strip().parse(args), by: by ?? "human" }
     : args;
-export const sameWorks = (a: WorkKey, b: WorkKey) => workKey(a) === workKey(b);

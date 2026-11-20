@@ -95,6 +95,12 @@ internal sealed class RevitDataRequestService {
         // references Pe.Revit.Global, so Global referencing Partition is a project cycle.
         RunTakeoff(activeDocument.Value, document => TakeoffAtlas.Partition(document, request), "Pe Partition Takeoff Zone");
 
+    [Op("takeoffs.rhvac-links.preflight", OpSubject.Elements, OpTouches.Metadata, Internal = true,
+        Does = "Check that the proposed RHVAC links fit the staged Rooms record without writing.",
+        Title = "Check RHVAC Link Capacity", Finds = ["takeoffs", "rhvac", "capacity"], Cost = OpCost.Bounded)]
+    private static TakeoffRhvacLinksData PreflightTakeoffRhvacCore(TakeoffRhvacLinksRequest request, ProjectDocument activeDocument) =>
+        RunTakeoff(activeDocument.Value, document => new TakeoffRhvacLinksData(TakeoffAtlas.LinkRhvacBatch(document, request, commit: false)));
+
     [Op("takeoffs.rhvac-links", OpSubject.Elements, OpTouches.Metadata, Internal = true, Does = "Write RHVAC file and room links to Room Region provenance in one transaction.", Title = "Link Takeoff Rooms to RHVAC", Finds = ["takeoffs", "rhvac", "links", "rooms", "provenance"], Actor = OpActor.Any, Cost = OpCost.Mutation)]
     private static TakeoffRhvacLinksData LinkTakeoffRhvacCore(TakeoffRhvacLinksRequest request, ProjectDocument activeDocument, ModelWrite scope) =>
         RunTakeoff(

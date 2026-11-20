@@ -7,7 +7,11 @@ import {
 } from "@pe/host-internal/input-occurrence";
 import { z } from "zod";
 import { readingKey } from "@pe/agent-contracts";
-import { ductsReadingSchema, type DuctsReadingRequest } from "@pe/ducts-contract/reading";
+import {
+  ductsSnapshotReadingSchema,
+  ductsTablesReadingSchema,
+  type DuctsReadingRequest,
+} from "@pe/ducts-contract/reading";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "@pe/host-internal/native-read";
 import type { DoorFailure } from "@pe/host-internal/request-contracts";
 import { InvalidRead } from "@pe/host-internal/read-errors";
@@ -29,7 +33,7 @@ const target = z.strictObject({
   documentRef: z.strictObject({ session: z.string(), openId: z.string() }).optional(),
 });
 const basisSchema = z.strictObject({
-  subject: ductsReadingSchema,
+  subject: z.union([ductsSnapshotReadingSchema, ductsTablesReadingSchema]),
   version: z.string().min(1),
   nativeRequestId: z.string().min(1),
   target,
@@ -52,11 +56,11 @@ export function ductBodySubject(input: NativeReadInput): DuctsReadingRequest {
     throw refused("Retained Ducts read needs an exact canonical session", "read.target");
   const args = input.input && typeof input.input === "object" ? input.input : {};
   if (input.key === "ducts.tables")
-    return ductsSubject(ductsReadingSchema.parse({ ...args, kind: "ducts-tables", session }));
+    return ductsSubject(ductsTablesReadingSchema.parse({ ...args, kind: "ducts-tables", session }));
   if (input.key !== "ducts.snapshot.roster" && input.key !== "ducts.snapshot.walk")
     throw refused("Operation has no retained Ducts subject", "read.contract");
   return ductsSubject(
-    ductsReadingSchema.parse({
+    ductsSnapshotReadingSchema.parse({
       ...args,
       kind: "ducts-snapshot",
       ...(input.key === "ducts.snapshot.roster" ? { selector: { kind: "roster" } } : {}),

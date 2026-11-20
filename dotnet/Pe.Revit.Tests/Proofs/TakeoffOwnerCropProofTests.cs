@@ -52,8 +52,8 @@ public sealed class TakeoffOwnerCropProofTests {
             using (var tx = new Transaction(doc, "Adopt both")) {
                 _ = tx.Start();
                 result = TakeoffAtlas.AdoptZones(doc, new TakeoffAdoptRequest(duplicate.UniqueId, [
-                    new TakeoffAdoptItem(inside.Id.Value(), "Inside", ""),
-                    new TakeoffAdoptItem(outside.Id.Value(), "Outside", "")
+                    new TakeoffAdoptItem(inside.Id.Value(), inside.UniqueId, "Inside", ""),
+                    new TakeoffAdoptItem(outside.Id.Value(), outside.UniqueId, "Outside", "")
                 ]));
                 Assert.That(tx.Commit(), Is.EqualTo(TransactionStatus.Committed));
             }

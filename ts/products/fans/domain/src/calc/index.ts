@@ -17,8 +17,6 @@ export {
   END_KEY,
   PROPOSED_KEY,
   FITTING_DROP_CELL,
-  EDIT_SEGMENTS,
-  editCells,
   encounterRulings,
   sourced,
   type InputLayers,
