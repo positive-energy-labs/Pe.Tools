@@ -11,7 +11,7 @@ import { FactChip } from "@pe/kit/lang/chip";
 import { useList, emptyListState, type ListState, type ListPersist } from "@pe/kit/lang/collection";
 import { ListView, type ListRowParts } from "@pe/kit/lang/list-view";
 
-import { showInRevit } from "@pe/web-kernel/revit/element-menu";
+import { useShowInRevit } from "@pe/web-kernel/revit/element-menu";
 import { SelectInRevitIcon } from "@pe/kit/lang/gesture-glyph";
 import {
   prepareElements,
@@ -116,6 +116,7 @@ export function Inbox({
   address?: ListPersist<"name" | "status">;
   cells: (row: { segment: string; key: string }) => ReactNode;
 }) {
+  const showInRevit = useShowInRevit();
   const observation = useNativeObservation();
   const subjects = useContext(SubjectTextContext);
   const registry = useContext(RegistryContext);

@@ -5,14 +5,14 @@
  * focus. One delegate at the root serves every surface; a surface only declares its ids.
  * Double-click stays free. The nearest displayed-observation scope is mandatory.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { decode } from "@pe/agent-contracts/subject-ref";
 import { SelectInRevitIcon, SelectionBoxKey } from "@pe/kit/lang/gesture-glyph";
 import { ListPopup } from "@pe/kit/lang/list-popup";
 import { Button } from "@pe/kit/lang/button";
 import { FactChip } from "@pe/kit/lang/chip";
 import { revitTarget } from "@pe/kit/lang/revit-target";
-import { submitAction } from "../../../mcps/src/shared/takeoff-action-client.ts";
+import type { ActionAdmission, ActionReceipt, DetachedAction } from "@pe/agent-contracts";
 import {
   elementTargetOf as targetOf,
   prepareElements,
@@ -28,6 +28,12 @@ const revitScope = (scope: Target["scope"] | undefined) => ({
 });
 
 export type { ShowElementsResult } from "./element-target.ts";
+
+type Submit = (admission: ActionAdmission, base: string, waitMs: number) => Promise<ActionReceipt | DetachedAction>;
+export const ElementActionSubmission = createContext<Submit>(() => {
+  throw Error("This surface has no action submission port.");
+});
+
 
 /**
  * `refProps` for kit `SubjectText`: each Subject token answers this menu with its own element and
@@ -52,6 +58,7 @@ const SECTION_BOX_LABEL = "Section Box";
 export async function showInRevit(
   target: Target,
   selectOnly: boolean,
+  submitAction: Submit,
 ): Promise<ShowElementsResult> {
   let prepared = prepareElements(target, selectOnly);
   if (prepared.kind === "refused") return prepared;
@@ -115,7 +122,13 @@ const VERBS = [
 const typing = (el: Element | null) =>
   !!el?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
 
+export function useShowInRevit() {
+  const submit = useContext(ElementActionSubmission);
+  return useCallback((target: Target, selectOnly: boolean) => showInRevit(target, selectOnly, submit), [submit]);
+}
+
 export function ElementMenu() {
+  const show = useShowInRevit();
   const [menu, setMenu] = useState<{ target: Target | null; code: string | null; route: string | null; x: number; y: number } | null>(null);
   const count = menu?.target
     ? new Set([...menu.target.ids, ...(menu.target.refs ?? []).map((ref) => ref.elementId)]).size
@@ -126,12 +139,12 @@ export function ElementMenu() {
   const [said, setSaid] = useState<{ text: string; x: number; y: number } | null>(null);
   const caret = useRef<HTMLSpanElement>(null);
   // The answer stands by the pointer: what Revit did, or why it refused.
-  const run = (target: Target, selectOnly: boolean, x: number, y: number) => {
+  const run = useCallback((target: Target, selectOnly: boolean, x: number, y: number) => {
     setSaid({ text: selectOnly ? "selecting…" : "boxing…", x, y });
-    void showInRevit(target, selectOnly).then((result) =>
+    void show(target, selectOnly).then((result) =>
       setSaid({ text: showElementsMessage(result), x, y }),
     );
-  };
+  }, [show]);
 
   useEffect(() => {
     let pointer: Element | null = null;
@@ -189,9 +202,7 @@ export function ElementMenu() {
       document.removeEventListener("pointerover", onOver);
       document.removeEventListener("keydown", onKey);
     };
-    // run only calls a state setter, which is stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [run]);
 
   useEffect(() => {
     if (!said || said.text.endsWith("…")) return;
@@ -270,6 +281,7 @@ export function ElementMenu() {
  * selection strip): the BX key and its answer beside it.
  */
 export function SelectionBoxButton({ target }: { target: Target }) {
+  const show = useShowInRevit();
   const [result, setResult] = useState<ShowElementsResult | null>(null);
   const [busy, setBusy] = useState(false);
   const prepared = prepareElements(target, false);
@@ -287,7 +299,7 @@ export function SelectionBoxButton({ target }: { target: Target }) {
         onClick={() => {
           setResult(null);
           setBusy(true);
-          void showInRevit(target, false)
+          void show(target, false)
             .then(setResult)
             .finally(() => setBusy(false));
         }}

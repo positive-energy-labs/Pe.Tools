@@ -2,7 +2,7 @@
 import { RevitTarget, revitTarget } from "@pe/kit/lang/revit-target";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { ElementMenu, SelectionBoxButton, showInRevit } from "@pe/web-kernel/revit/element-menu";
+import { ElementActionSubmission, ElementMenu, SelectionBoxButton, showInRevit } from "@pe/web-kernel/revit/element-menu";
 import {
   elementTargetOf,
   prepareElements,
@@ -10,10 +10,7 @@ import {
   showElementsMessage,
 } from "@pe/web-kernel/revit/element-target";
 
-const { submit } = vi.hoisted(() => ({ submit: vi.fn() }));
-vi.mock("../../../../packages/mcps/src/shared/takeoff-action-client", () => ({
-  submitAction: submit,
-}));
+const submit = vi.fn();
 const documentRef = { session: "original-session", openId: "original-lifetime" };
 const scope = { document: documentRef, source: "native" } as const;
 afterEach(() => {
@@ -27,7 +24,7 @@ test.each([
   { document: null, source: "native" },
   ...["fixture", "saved", "dry-run"].map((source) => ({ document: documentRef, source })),
 ])("missing or non-native observation refuses without admission: %j", async (badScope) => {
-  const result = await showInRevit({ ids: [42], scope: badScope as typeof scope }, false);
+  const result = await showInRevit({ ids: [42], scope: badScope as typeof scope }, false, submit);
   expect(result.kind).toBe("refused");
   expect(submit).not.toHaveBeenCalled();
 });
@@ -35,7 +32,7 @@ test.each([
 test.each(
   [[], [0], [-1], [1.5], [NaN], [Infinity], [Number.MAX_SAFE_INTEGER + 1]].map((ids) => ({ ids })),
 )("invalid IDs refuse before admission: %j", async ({ ids }) => {
-  expect((await showInRevit({ ids, scope }, true)).kind).toBe("refused");
+  expect((await showInRevit({ ids, scope }, true, submit)).kind).toBe("refused");
   expect(submit).not.toHaveBeenCalled();
 });
 
@@ -69,6 +66,7 @@ test.each([2, 0])(
         scope,
       },
       false,
+      submit,
     );
     expect(submit.mock.calls[0]?.[0]).toMatchObject({
       key: "revit.context.show-elements",
@@ -147,7 +145,7 @@ test("BX needs both keys, targets pointer or focus, leaves double-click and typi
   submit.mockResolvedValue({ id: "action-1", state: "running" });
   const view = render(
     <RevitTarget scope={scope}>
-      <ElementMenu />
+      <ElementActionSubmission value={submit}><ElementMenu /></ElementActionSubmission>
       <button {...revitTarget([42])}>target</button>
       <input aria-label="edit" />
     </RevitTarget>,
@@ -175,7 +173,7 @@ test("right-click Select uses the same exact observation and never invokes a box
   submit.mockResolvedValue({ id: "action-select", state: "running" });
   const view = render(
     <RevitTarget scope={scope}>
-      <ElementMenu />
+      <ElementActionSubmission value={submit}><ElementMenu /></ElementActionSubmission>
       <button {...revitTarget([42])}>target</button>
     </RevitTarget>,
   );
@@ -196,7 +194,7 @@ test("right-click Select uses the same exact observation and never invokes a box
 
 test("the visible Selection Box door is only the kit BX key and still boxes the captured target", async () => {
   submit.mockResolvedValue({ id: "action-box", state: "running" });
-  const view = render(<SelectionBoxButton target={{ ids: [42], scope }} />);
+  const view = render(<ElementActionSubmission value={submit}><SelectionBoxButton target={{ ids: [42], scope }} /></ElementActionSubmission>);
   const box = view.getByRole("button", { name: "Selection Box in Revit" });
   expect(box.textContent).toBe("BX");
   expect(box.querySelector("kbd")).not.toBeNull();

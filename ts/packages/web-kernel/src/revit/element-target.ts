@@ -1,7 +1,7 @@
+import type { DetachedAction } from "@pe/agent-contracts";
 import { documentRefSchema, type ActionReceipt, type DocumentRef } from "@pe/agent-contracts";
 import { revitTarget, type RevitElementReference } from "@pe/kit/lang/revit-target";
 import type { OpRequestOf, OpResponseOf } from "@pe/host-contracts/operation-types";
-import type { DetachedAction } from "../../../mcps/src/shared/takeoff-action-client.ts";
 
 type RevitTargetSource = "native" | "fixture" | "saved" | "dry-run";
 /** Construct from the displayed observation, never the current route selector or thread head. */

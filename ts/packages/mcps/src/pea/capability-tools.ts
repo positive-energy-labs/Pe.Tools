@@ -24,10 +24,10 @@ import {
   workTimelineSchema,
   WORK_TIMELINE_READ,
   type ActionReceipt,
+  type DetachedAction,
   actionReceiptSchema,
 } from "@pe/agent-contracts";
 import {
-  type DetachedAction,
   receiptForModel,
   recoverAction,
   submitAction,

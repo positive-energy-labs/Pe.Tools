@@ -1,8 +1,9 @@
+import type { DetachedAction } from "@pe/agent-contracts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { readPeError } from "@pe/host-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
 import { documentRefSchema, type ActionReceipt, type DocumentRef, type Touched } from "@pe/agent-contracts";
-import { recoverAction, type DetachedAction } from "./takeoff-action-client.ts";
+import { recoverAction } from "./takeoff-action-client.ts";
 import { runCapability, CANCEL_KEY, opWrites } from "./admission.ts";
 import { Effect } from "effect";
 import { resolveHostBaseUrl } from "./host-config.ts";

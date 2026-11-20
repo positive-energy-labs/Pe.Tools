@@ -22,10 +22,19 @@ const productNames = new Set(
 );
 
 function productImport(file: string, specifier: string): boolean {
-  if (specifier.startsWith("."))
-    return posix.join(posix.dirname(file), specifier).startsWith("products/");
-  return productNames.has(specifier.split("/").slice(0, 2).join("/"));
+  if (specifier.startsWith(".")) {
+    const path = posix.join(posix.dirname(file), specifier);
+    return path.startsWith("products/") || path.startsWith("packages/mcps/");
+  }
+  const name = specifier.split("/").slice(0, 2).join("/");
+  return name === "@pe/mcps" || productNames.has(name);
 }
+
+test("shared packages cannot import Pea's product assembly indirectly", () => {
+  expect(productImport("packages/runtime/src/p.ts", "@pe/mcps/product-actions")).toBe(true);
+  expect(productImport("packages/runtime/src/p.ts", "../../mcps/src/pea/product-actions.ts")).toBe(true);
+  expect(productImport("packages/runtime/src/p.ts", "@pe/agent-contracts")).toBe(false);
+});
 
 function files(dir: string): string[] {
   return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {

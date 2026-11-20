@@ -36,7 +36,8 @@ import { Button } from "@pe/kit/lang/button";
 import { RemoteDeviceGate } from "#/machine/devices";
 
 import { TooltipProvider } from "@pe/kit/lang/tooltip";
-import { ElementMenu } from "@pe/web-kernel/revit/element-menu";
+import { ElementMenu, ElementActionSubmission } from "@pe/web-kernel/revit/element-menu";
+import { submitAction } from "@pe/mcps/actions";
 import { WorkbenchProvider } from "#/workbench/provider";
 import { RouteDock } from "#/workbench/route-panes";
 import { useRouteActivity } from "@pe/web-kernel/route/activity";
@@ -171,6 +172,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: startupWatch }} />
         <RegistryContext.Provider value={appAtomRegistry}>
           <PaneFaultProvider onFault={(error) => reportFault({ code: "pane.failed" }, error)}>
+            <ElementActionSubmission value={submitAction}>
             <WorkOwner owner="root" className="contents">
               {card ? (
                 <TooltipProvider>{children}</TooltipProvider>
@@ -192,6 +194,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                 </SurfaceHostProvider>
               )}
             </WorkOwner>
+            </ElementActionSubmission>
           </PaneFaultProvider>
         </RegistryContext.Provider>
         {KnobsFloater && (

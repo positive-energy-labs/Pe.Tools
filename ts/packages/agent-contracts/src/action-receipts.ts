@@ -418,3 +418,10 @@ export function invocationOutcome(row: ActionReceipt | ActionStatus): Invocation
         : {}),
   };
 }
+
+export type DetachedAction = {
+  state: "detached";
+  id: string;
+  key: string;
+  acceptance: "admitted" | "unknown";
+};

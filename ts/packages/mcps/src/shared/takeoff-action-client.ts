@@ -24,6 +24,7 @@ import {
   type ActionAdmission,
   type DocumentRef,
   type ActionReceipt,
+  type DetachedAction,
   type WorkKey,
 } from "@pe/agent-contracts";
 import { commands, commandTarget, type SemanticActionKey } from "../pea/product-actions.ts";
@@ -462,12 +463,6 @@ export function actionResult(row: ActionReceipt | DetachedAction): unknown {
   return row.result;
 }
 
-export type DetachedAction = {
-  state: "detached";
-  id: string;
-  key: string;
-  acceptance: "admitted" | "unknown";
-};
 export async function controlAction(
   key: ActionControlKey,
   input: unknown,
