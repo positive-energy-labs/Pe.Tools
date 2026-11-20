@@ -93,6 +93,7 @@ export function implement<P extends ProductDeclaration, D = Dependencies>(
   http: Record<string, (request: HttpRequest, deps: Partial<D>) => Promise<unknown>>;
   local: Record<string, (input: unknown, deps: Partial<D>) => LocalRun>;
   files: Record<string, FileBody<Partial<D>>>;
+  register: () => void;
   /** By the call key each emitting reading declares with a `snapshot` policy. */
   emitters: Record<string, Emitter<Partial<D>>>;
 };
@@ -104,14 +105,13 @@ export function implement<D>(
   const emitting: Readonly<Record<string, Emitter<Partial<D>>["run"] | undefined>> =
     bodies.emits ?? {};
   const readers: Readonly<Record<string, HomeReader | undefined>> = bodies.homes ?? {};
-  for (const [key, home] of Object.entries(product.homes)) {
-    if (home.read !== "product") continue;
+  const homes = Object.entries(product.homes).flatMap(([key, home]) => {
+    if (home.read !== "product") return [];
     const reader = readers[key];
     if (!reader) throw Error(`No host reader for home ${key}`);
     const place = home.place(key);
-    declareHome(key, { ...reader, directory: place.at === "setting" ? place.owner : key });
-  }
-  declareRetained(product);
+    return [[key, { ...reader, directory: place.at === "setting" ? place.owner : key }] as const];
+  });
   const reads = Object.fromEntries(
     Object.entries(product.readings).map(([key, { handle }]) => {
       const run = bodies.readings[key];
@@ -125,6 +125,11 @@ export function implement<D>(
   return {
     product,
     reads,
+    /** The host registers these from its product list; importing a product registers nothing. */
+    register() {
+      for (const [key, reader] of homes) declareHome(key, reader);
+      declareRetained(product);
+    },
     executors: (...args: Parameters<CommandBody<D>>) =>
       Object.fromEntries(
         Object.entries(bodies.commands).map(([key, make]) => [key, make(...args)]),

@@ -21,6 +21,8 @@ export function bindProducts(
   // Each product's bodies take what they need from the offer; one that needs more fails `tsc` here.
   hosts: readonly ReturnType<typeof implement<ProductDeclaration, HostOffers>>[],
 ) {
+  // The explicit list: each product's retained readings and home readers, registered here once.
+  for (const host of hosts) host.register();
   return {
     productReads: hosts.map(({ reads }) => ({ reads })),
     /** Every declared `http` route with its body: the call route mounts each, and names none. */
