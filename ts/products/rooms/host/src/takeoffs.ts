@@ -346,11 +346,13 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
                     .filter((system) => system.name.trim())
                     .map((system) => [system.name.trim().toLocaleLowerCase(), system.number]),
                 );
+                const [only, ...others] = before.rooms;
                 const firstRun =
-                  before.rooms.length === 1 &&
-                  before.rooms[0]!.number === 1 &&
-                  !before.rooms[0]!.name.trim() &&
-                  before.rooms[0]!.areaSquareFeet === 0;
+                  only !== undefined &&
+                  !others.length &&
+                  only.number === 1 &&
+                  !only.name.trim() &&
+                  only.areaSquareFeet === 0;
                 let nextSystem = Math.max(0, ...before.systems.map((system) => system.number)) + 1;
                 const systems = new Map<string, number>();
                 for (const { zone } of inserts) {
