@@ -190,9 +190,9 @@ export function readInvalidations(
       )
         publications.invalidate((trace) => trace.name === machineRead.recipe, subscription);
     };
-    const stop = publications.observe(subscription, (publication) => {
+    const stop = publications.observe(subscription, (publication, retry) => {
       if (publication.generation !== generation) return;
-      publish(publication);
+      publish(publication, retry);
       if (recorded || publication.state !== "current") return;
       // Keep the existing machine poll observed for the lifetime of the subscription.
       const data = publication.value?.trace.some((trace) => trace.name === machineRead.recipe)
