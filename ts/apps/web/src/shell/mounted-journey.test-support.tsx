@@ -6,6 +6,7 @@
 import { cleanup, waitFor } from "@testing-library/react";
 import { expect } from "vite-plus/test";
 import { actionReceiptSchema, bindWork } from "@pe/agent-contracts";
+import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import type { UseSource } from "@pe/agent-contracts/route";
 import { refusalOf } from "@pe/web-kernel/route/typed-route";
@@ -164,7 +165,7 @@ export async function mounted(
     submit(command) {
       if (command.key === "work.start") return feed.submit(command);
       actions.push({ key: command.key, input: command.input });
-      const preview = command.key.endsWith(".preview");
+      const preview = command.key.endsWith(".preview") || command.key === SHEET_COMMANDS.plan;
       const result = preview
         ? {
             previewOnly: true,

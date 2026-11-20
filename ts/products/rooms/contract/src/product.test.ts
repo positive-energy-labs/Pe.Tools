@@ -1,6 +1,6 @@
 import { expect, it } from "vite-plus/test";
 import { address, applyPatches, bindWork, message, type RouteStatePatch } from "@pe/agent-contracts";
-import { product, roomsWork } from "./product.ts";
+import { product, ROOM_FIELDS, roomsWork } from "./product.ts";
 
 const FLOOR = "8a0c1e3f-0000-4000-8000-000000000001-000026dc";
 const CEILING = "8a0c1e3f-0000-4000-8000-000000000001-0014edcd";
@@ -60,10 +60,14 @@ it("one declaration carries both routes, each with its own Work", () => {
     "rooms.draw",
     "rooms.merge",
     "rooms.partition",
-    "rooms.write",
     "takeoffs.adopt",
     "takeoffs.initialize",
     "takeoffs.partition",
     "takeoffs.sync",
   ]);
+});
+
+it("the staged room fields are written through the platform sheet pair, never a Rooms command", () => {
+  expect(Object.keys(commands)).not.toContain("rooms.write");
+  expect(product.sheetWrites).toEqual({ regions: ROOM_FIELDS });
 });

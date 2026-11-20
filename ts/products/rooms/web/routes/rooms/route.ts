@@ -1,8 +1,10 @@
 import { z } from "zod";
 import { routeStatePatchSchema } from "@pe/agent-contracts";
 import { handle } from "@pe/agent-contracts/handle";
-import { product, roomsWork } from "@pe/rooms-contract/product";
-import { fillBody, split, type ContextOf, type Verbs } from "@pe/web-kernel/route";
+import { sheetCells } from "@pe/agent-contracts/product";
+import type { SheetBinding } from "@pe/agent-contracts/slots";
+import { product, ROOM_FIELDS, roomsWork } from "@pe/rooms-contract/product";
+import { fillBody, scrollBody, split, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { screen } from "@pe/web-kernel/route/screen";
 
@@ -14,13 +16,38 @@ export type RoomsContext = ContextOf<
   typeof declared.core,
   typeof roomsWork,
   typeof patches,
-  Verbs<never, "partition" | "merge" | "write">
+  Verbs<never, "partition" | "merge">
 >;
 const says = (sentence: string) => () => ({ sentence, rows: [] });
 
 // Hoisted: a generic call inside the `screen()` argument defers the inference of its pane keys.
 const rosterBody = draw("scroll", () => import("../../src/rooms.tsx"), "RosterBody");
-const fieldsBody = draw("scroll", () => import("../../src/rooms.tsx"), "FieldsBody");
+
+type Read = RoomsContext["value"]["value"] | null | undefined;
+const regionOf = (read: Read, row: string | undefined) =>
+  read?.regions.find((region) => region.subject === row);
+const cells = sheetCells(product);
+/** One cell per field of each picked room, over what the region record holds now. */
+const bindings: Record<string, SheetBinding> = Object.fromEntries(
+  ROOM_FIELDS.map((name) => {
+    const { domain, label, home } = cells[name];
+    return [
+      name,
+      {
+        domain,
+        label,
+        home,
+        per: "subject" as const,
+        // Two picked rooms show each field twice: the room's name tells the cells apart.
+        rowLabel: (read: Read, row: string) => `${label} of ${regionOf(read, row)?.name || "room"}`,
+        model: (read: Read, row: string | undefined) => {
+          const region = regionOf(read, row);
+          return region ? { value: region[name] } : null;
+        },
+      },
+    ];
+  }),
+);
 
 export const module = screen(
   {
@@ -37,11 +64,6 @@ export const module = screen(
       describe: (history) => ({ label: history.label }),
     },
     verbs: {
-      write: {
-        handle: handle("rooms.write"),
-        label: "Write to Revit",
-        present: says("Write every staged room field. Each cell the model confirms leaves Work."),
-      },
       partition: {
         handle: handle("rooms.partition"),
         label: "Partition",
@@ -53,7 +75,12 @@ export const module = screen(
         present: says("Combine the selected rooms into one locked room."),
       },
     },
-    band: ["write"],
+    // The kernel draws the sheet pane and its `sheet` verb: `sheet.plan`, then `sheet.apply`.
+    sheet: {
+      draft: true,
+      bindings,
+      empty: (read: Read) => read?.missing ?? null,
+    },
     // Design choice (S9): plan mode pans, zooms and picks. Draw and the marks have no sketch hook
     // there yet, so they go through Work and Pea (`rooms.draw`, the `marks` cells).
     picture: {
@@ -94,8 +121,9 @@ export const module = screen(
       fields: {
         title: "Fields",
         purpose: "State each room's fields",
+        kernel: "sheet" as const,
         body: "scroll" as const,
-        draw: fieldsBody,
+        draw: () => scrollBody(null),
       },
     },
     layout: split("h", [split("v", ["roster", "fields"], { id: "rooms-side", size: 320, sized: "end" }), "plan"], {

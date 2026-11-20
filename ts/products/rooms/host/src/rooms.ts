@@ -1,10 +1,13 @@
-/** The four Rooms model writes. Each is one native leaf behind the carrier pattern of `takeoffs.ts`. */
+/** The Rooms model writes. Each is one native leaf behind the carrier pattern of `takeoffs.ts`. */
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import { command, refused } from "@pe/host-internal/command-executor";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import { Effect } from "effect";
 import { z } from "zod";
-import { product, regionCode, regionId } from "@pe/rooms-contract/product";
+import { builtinCommands } from "@pe/agent-contracts/semantic-actions";
+import type { CommandBody } from "@pe/host-internal/product";
+import type { WorkKey } from "@pe/agent-contracts";
+import { product, regionCode, regionId, stagedRegions } from "@pe/rooms-contract/product";
 import {
   carrier,
   preparedCarrierSchema,
@@ -59,33 +62,6 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
           });
         }),
     }),
-    "rooms.write": command(commands["rooms.write"], preparedCarrierSchema, {
-      seal: sealCarrier,
-      bind: (ctx) => {
-        const { regions } = ctx.admission.input;
-        if (!regions.length) throw refused("No room field is staged. Nothing was written.");
-        return bind(ctx, "rooms.write", [{ regions }]);
-      },
-      run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, null, (native) => {
-          const { regions } = ctx.admission.input;
-          const asked = new Map(regions.map((row) => [row.uniqueId, new Map(Object.entries(row))]));
-          return Effect.map(
-            native("rooms.write", { regions, replacing: replacing(execution.prepared) }),
-            (value) => ({
-              ...z.record(z.string(), z.unknown()).parse(value),
-              // Ruling 7: a cell retires only when the model answers with the value it was asked for.
-              confirmed: written
-                .parse(value)
-                .cells.filter((cell) => asked.get(cell.uniqueId)?.get(cell.field) === cell.value),
-            }),
-          );
-        }),
-      retires: (result) =>
-        written
-          .parse({ cells: z.looseObject({ confirmed: z.unknown() }).parse(result).confirmed })
-          .cells.map((cell) => [cell.field, regionCode(cell.uniqueId)]),
-    }),
     "rooms.merge": command(commands["rooms.merge"], preparedCarrierSchema, {
       seal: sealCarrier,
       retires: () => [["writeIntent", "rooms.merge"]],
@@ -106,3 +82,54 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
     }),
   };
 }
+
+const sheetInput = z.looseObject({
+  work: z.looseObject({ key: z.custom<WorkKey>((value) => value !== null && typeof value === "object") }),
+  doc: z.unknown(),
+});
+/**
+ * The Rooms body of the platform's sheet pair: the staged field cells of the admitted Work, one
+ * native `rooms.write`. The plan reads the record replacements and writes nothing.
+ */
+export const roomsSheet =
+  (key: "sheet.plan" | "sheet.apply"): CommandBody =>
+  (bridge, deps) => {
+    const { bind } = carrier(bridge, deps);
+    const staged = (input: unknown) => stagedRegions(sheetInput.parse(input).doc).regions;
+    return command(builtinCommands[key], preparedCarrierSchema, {
+      seal: sealCarrier,
+      bind: (ctx) => {
+        const regions = staged(ctx.admission.input);
+        if (!regions.length) throw refused("No room field is staged. Nothing was written.");
+        return bind(ctx, "rooms.write", [{ regions }]);
+      },
+      run: (ctx, execution) => {
+        const regions = staged(ctx.admission.input);
+        // The plan answers with what it saw of the records, so the apply replaces exactly that.
+        if (key === "sheet.plan")
+          return Effect.succeed({ writes: regions, evidence: execution.prepared.replacement });
+        const asked = new Map(regions.map((row) => [row.uniqueId, new Map(Object.entries(row))]));
+        const { key: work } = sheetInput.parse(ctx.admission.input).work;
+        return runModel(ctx, execution, deps, bridge, null, (native) =>
+          Effect.gen(function* () {
+            const value = yield* native("rooms.write", {
+              regions,
+              replacing: replacing(execution.prepared),
+            });
+            // Ruling 7: a cell retires only when the model answers with the value it was asked for.
+            const confirmed = written
+              .parse(value)
+              .cells.filter((cell) => asked.get(cell.uniqueId)?.get(cell.field) === cell.value);
+            // The sheet pair forwards no `retires`, so the body retires its own cells (as Fans does).
+            if (confirmed.length)
+              yield* execution.retireWork(
+                work,
+                work.route,
+                confirmed.map((cell) => [cell.field, regionCode(cell.uniqueId)]),
+              );
+            return { ...z.record(z.string(), z.unknown()).parse(value), confirmed };
+          }),
+        );
+      },
+    });
+  };

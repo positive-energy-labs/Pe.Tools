@@ -230,8 +230,8 @@ const stagedCells = z.record(
   z.string(),
   z.record(z.string(), z.object({ edit: z.object({ value: z.unknown() }).nullish() })),
 );
-/** Every staged field cell, one native row per region. */
-function stagedRegions(work: unknown) {
+/** Every staged field cell of the Rooms Work, one native `rooms.write` row per region. */
+export function stagedRegions(work: unknown): { regions: z.output<typeof writeRegion>[] } {
   const doc = stagedCells.parse(work);
   const rows = new Map<string, Record<string, unknown>>();
   for (const name of ROOM_FIELDS)
@@ -240,7 +240,7 @@ function stagedRegions(work: unknown) {
       const uniqueId = regionId(code);
       rows.set(uniqueId, { ...rows.get(uniqueId), uniqueId, [name]: staged.edit.value });
     }
-  return { regions: [...rows.values()] };
+  return { regions: z.array(writeRegion).parse([...rows.values()]) };
 }
 const adoptItem = z.object({
   elementId: z.number().int(),
@@ -373,13 +373,6 @@ export const product = define({
       native: ["takeoffs.record-replacements", "rooms.draw"],
       writes: { regions: [] },
     }),
-    ...workWriteCommands("rooms", "rooms.write", {
-      ...edit,
-      says: "Write the staged room fields and designations, and answer for each cell (ruling 7).",
-      input: z.object({ regions: z.array(writeRegion) }),
-      native: ["takeoffs.record-replacements", "rooms.write"],
-      writes: { regions: ROOM_FIELDS },
-    }, { derive: stagedRegions }),
     ...workWriteCommands("rooms", "rooms.merge", {
       ...edit,
       says: "Combine two or more touching rooms of one zone into one locked room.",
@@ -438,6 +431,9 @@ export const product = define({
       writes: { regions: [] },
     }),
   },
+  // The staged room fields reach the region record through the platform's sheet pair
+  // (`sheet.plan`, `sheet.apply`); the host body answers for each cell (ruling 7).
+  sheetWrites: { regions: ROOM_FIELDS },
   routes: {
     rooms: {
       name: "Rooms",

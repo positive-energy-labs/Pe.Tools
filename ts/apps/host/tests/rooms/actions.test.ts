@@ -8,6 +8,7 @@ import { address } from "@pe/agent-contracts";
 import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract/product";
 import { captureStore, testRegistry, testDocumentMarks } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
+import { withRoomsSheet } from "./rooms-sheet.ts";
 import { nativeRecordingRequest } from "../native-recordings.ts";
 import { bindControl } from "../../src/control.ts";
 import { nativeRequestSchema } from "@pe/host-contracts/decoders";
@@ -32,7 +33,7 @@ test.each([null, unreadableRooms])(
     const socket = await native.connect();
     native.reportTakeoffReplacements({ regions: replacing, registry: null });
     let state: unknown;
-    const workspace = new RouteWorkspace({
+    const workspace = withRoomsSheet(new RouteWorkspace({
       publicationAuthor: () => "human",
       registrations: [{ spec: roomsWork }],
       store: {
@@ -41,7 +42,7 @@ test.each([null, unreadableRooms])(
           state = structuredClone(value);
         },
       },
-    });
+    }));
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
     const post = native.actions(
       { workspace, marks: testDocumentMarks(native.bridge) },
@@ -193,7 +194,7 @@ test.each(["initialize", "adopt", "partition"])(
 );
 
 test.each(["selected", "unrelated", "none"] as const)(
-  "recorded rooms.write admission fences %s changes and a current preview retires only confirmed field values",
+  "recorded Rooms sheet admission fences %s changes and a current preview retires only confirmed field values",
   async (changed) => {
     const directory = await mkdtemp(join(tmpdir(), "pe-rooms-recorded-"));
     const native = await fixtureNative(
@@ -210,7 +211,7 @@ test.each(["selected", "unrelated", "none"] as const)(
     const a = regionCode(regions[0]!.uniqueId),
       b = regionCode(regions[1]!.uniqueId);
     let state: unknown;
-    const work = new RouteWorkspace({
+    const work = withRoomsSheet(new RouteWorkspace({
       publicationAuthor: () => "human",
       registrations: [{ spec: roomsWork }],
       store: {
@@ -219,7 +220,7 @@ test.each(["selected", "unrelated", "none"] as const)(
           state = structuredClone(value);
         },
       },
-    });
+    }));
     const runs = testRegistry();
     const run = { thread: "rooms-recorded", turn: "write" };
     runs.open(run);
@@ -258,7 +259,7 @@ test.each(["selected", "unrelated", "none"] as const)(
       );
       const revision = (await work.read(key, "rooms"))!.revision;
       expect(
-        await submit("preview", "rooms.write.preview", revision, {
+        await submit("preview", "sheet.plan", revision, {
           kind: "pea",
           context: "rooms-recorded",
           thread: run.thread,
@@ -275,7 +276,7 @@ test.each(["selected", "unrelated", "none"] as const)(
           [{ path: ["name", changed === "selected" ? a : b, "edit", "value"], value: "newer" }],
           revision,
         );
-      const receipt = await submit("write", "rooms.write", revision, {
+      const receipt = await submit("write", "sheet.apply", revision, {
         kind: "pea",
         context: "rooms-recorded",
         thread: run.thread,
@@ -292,10 +293,10 @@ test.each(["selected", "unrelated", "none"] as const)(
         });
         expect(native.calls).toEqual([]);
         const latest = (await work.read(key, "rooms"))!.revision;
-        expect(await submit("fresh-preview", "rooms.write.preview", latest)).toMatchObject({
+        expect(await submit("fresh-preview", "sheet.plan", latest)).toMatchObject({
           state: "succeeded",
         });
-        expect(await submit("fresh-write", "rooms.write", latest)).toMatchObject({
+        expect(await submit("fresh-write", "sheet.apply", latest)).toMatchObject({
           state: "succeeded",
         });
       }
@@ -315,7 +316,7 @@ test.each(["selected", "unrelated", "none"] as const)(
             ? "newer"
             : region.name,
       }));
-      expect(native.calls[0]).toMatchObject({ action: "rooms.write", input: { regions: values } });
+      expect(native.calls[0]).toMatchObject({ action: "sheet.apply", input: { regions: values } });
     } finally {
       runs.closeAll();
       bindControl({ runs: undefined });
@@ -334,7 +335,7 @@ test("a room field under a key that is no region is refused by Work before any n
   );
   const socket = await native.connect();
   let state: unknown;
-  const work = new RouteWorkspace({
+  const work = withRoomsSheet(new RouteWorkspace({
     publicationAuthor: () => "human",
     registrations: [{ spec: roomsWork }],
     store: {
@@ -343,7 +344,7 @@ test("a room field under a key that is no region is refused by Work before any n
         state = value;
       },
     },
-  });
+  }));
   const key = { binding: "address" as const, target: address("C:/model.rvt"), route: "rooms" };
   try {
     // A region is keyed by its SubjectRef: Work refuses any other key, so no command ever derives it.
@@ -367,7 +368,7 @@ test("foreign Rooms Work is refused by real action admission before native prepa
   const native = await fixtureNative(join(directory, "native"));
   const socket = await native.connect();
   let state: unknown;
-  const workspace = new RouteWorkspace({
+  const workspace = withRoomsSheet(new RouteWorkspace({
     publicationAuthor: () => "human",
     registrations: [{ spec: roomsWork }],
     store: {
@@ -376,7 +377,7 @@ test("foreign Rooms Work is refused by real action admission before native prepa
         state = value;
       },
     },
-  });
+  }));
   const key = { binding: "address" as const, route: "rooms", target: address("C:/another.rvt") };
   try {
     await workspace.publish(
@@ -392,7 +393,7 @@ test("foreign Rooms Work is refused by real action admission before native prepa
     );
     const response = await native.actions({ workspace, marks: testDocumentMarks(native.bridge) })({
       id: "foreign",
-      key: "rooms.write.preview",
+      key: "sheet.plan",
       target: { kind: "document", ref: socket.target },
       input: { work: { key, revision: 1 } },
     });

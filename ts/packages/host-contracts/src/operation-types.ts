@@ -17,9 +17,10 @@ export const sheetNativeOperations = {
     "ducts.snapshot.walk",
     "ducts.snapshot.roster",
     "ducts.tables",
+    "takeoffs.record-replacements",
   ],
   plan: ["ducts.apply.plan"],
-  apply: ["revit.apply.parameter-values", "ducts.apply"],
+  apply: ["revit.apply.parameter-values", "ducts.apply", "rooms.write"],
 } as const satisfies Record<string, readonly HostOperationKey[]>;
 
 type NoRequest = Record<string, never> | undefined;

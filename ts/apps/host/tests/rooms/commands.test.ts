@@ -22,6 +22,7 @@ import {
   testRegistry,
 } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
+import { withRoomsSheet } from "./rooms-sheet.ts";
 import { sdkSessions } from "../native-receipt-fixture.ts";
 import { nativeRecordingRequest } from "../native-recordings.ts";
 import syncSeed from "./fixtures/sync-seed.json" with { type: "json" };
@@ -130,17 +131,18 @@ test.each([
   ["takeoffs.partition", recordedInput("fresh-takeoffs.partition")],
   ["rooms.partition", recordedInput("fresh-rooms.partition")],
   ["rooms.draw", recordedInput("fresh-rooms.draw")],
-  ["rooms.write", {}],
+  // The field write is the platform sheet pair, bound to the Rooms body.
+  ["sheet.apply", {}],
   ["rooms.merge", mergeIntent],
   ["takeoffs.sync", {}],
 ] as const)(
   "JZ carrier commands run real declarations and guarded native dispatch: %s",
   async (commandKey, intent) => {
     const dir = await mkdtemp(join(tmpdir(), "jz-takeoffs-leaf-"));
-    const route = commandKey.startsWith("rooms.") ? "rooms" : "takeoffs";
+    const route = commandKey.startsWith("takeoffs.") ? "takeoffs" : "rooms";
     const key = { binding: "address" as const, target: address("C:/model.rvt"), route };
     let saved: unknown;
-    const workspace = new RouteWorkspace({
+    const workspace = withRoomsSheet(new RouteWorkspace({
       publicationAuthor: () => "human",
       registrations: [{ spec: works[route] }],
       store: {
@@ -149,7 +151,7 @@ test.each([
           saved = structuredClone(value);
         },
       },
-    });
+    }));
     const native = await fixtureNative(
       join(dir, "native"),
       "fresh-takeoffs.initialize-carrier",
@@ -250,7 +252,7 @@ test.each([
         };
       }
       const edits =
-        commandKey === "rooms.write"
+        commandKey === "sheet.apply"
           ? recordedRoomWrites.map((room) => ({
               path: ["name", regionCode(room.uniqueId)],
               value: { edit: { value: room.name } },
@@ -259,12 +261,19 @@ test.each([
       await workspace.publish(
         key,
         route,
-        [{ path: ["writeIntent", commandKey], value: { edit: { value: authored } } }, ...edits],
+        commandKey === "sheet.apply"
+          ? edits
+          : [{ path: ["writeIntent", commandKey], value: { edit: { value: authored } } }],
         0,
       );
       const work = { key, revision: (await workspace.read(key, route))!.revision };
-      const definition = commands[commandKey];
-      if ("writeBoundary" in definition) {
+      if (commandKey === "sheet.apply") {
+        expect(await invoke("sheet.plan", { work })).toMatchObject({
+          result: { previewOnly: true },
+        });
+        expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
+      } else if ("writeBoundary" in commands[commandKey]) {
+        const definition = commands[commandKey];
         const plan = await invoke(definition.writeBoundary.previewKey, { work });
         expect(plan).toMatchObject({ result: { previewOnly: true } });
         expect(calls, "A plan never dispatches a carrier mutation").toEqual([]);
@@ -317,9 +326,10 @@ test.each([
         });
       expect(calls.map((row) => row.key)).toEqual(
         initialize ? ["takeoffs.initialize-carrier"]
-          : adopt ? ["takeoffs.initialize-carrier", commandKey] : [commandKey],
+          : adopt ? ["takeoffs.initialize-carrier", commandKey]
+          : [commandKey === "sheet.apply" ? "rooms.write" : commandKey],
       );
-      if (commandKey === "rooms.write") {
+      if (commandKey === "sheet.apply") {
         expect(calls[0]).toEqual({
           key: "rooms.write",
           action: commandKey,

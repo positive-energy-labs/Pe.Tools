@@ -116,7 +116,8 @@ export const runModel = (
 /** What the plan saw of the records an apply may replace; the apply sends exactly that. */
 export const carrier = (bridge: RevitBridge["Service"], deps: Deps) => {
   const replacementFor = async (ctx: CommandContext, registry = false) => {
-    if (!ctx.admission.key.endsWith(".preview")) {
+    // The platform sheet pair plans under its own key, not a `.preview` twin.
+    if (!ctx.admission.key.endsWith(".preview") && ctx.admission.key !== "sheet.plan") {
       const plan = ctx.read.receipts(ctx.admission.id)[0];
       return plan?.state === "succeeded"
         ? recordReplacements.parse((plan.result as { evidence: unknown }).evidence)

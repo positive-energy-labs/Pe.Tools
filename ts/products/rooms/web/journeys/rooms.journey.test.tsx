@@ -2,9 +2,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 import { BridgeError } from "@pe/host-internal/bridge";
-import { FieldsBody, RosterBody } from "../src/rooms.tsx";
+import { RosterBody } from "../src/rooms.tsx";
 import { CEILING, FLOOR, GONE, code, levels, region, zone, journey } from "./fixtures.ts";
-import { Pane, planned, type Native } from "../../../../tests/e2e/mounted.test-support.tsx";
+import { Pane, Sheet, planned, type Native } from "../../../../tests/e2e/mounted.test-support.tsx";
 
 /** A model of two plans. Each plan holds its own regions, so a wrong plan key shows at once. */
 function model() {
@@ -47,16 +47,14 @@ const Screen = ({ mount }: { mount: Parameters<typeof Pane>[0]["mount"] }) => (
     <Pane mount={mount} pane="roster">
       {(ctx) => <RosterBody ctx={ctx} />}
     </Pane>
-    <Pane mount={mount} pane="fields">
-      {(ctx) => <FieldsBody ctx={ctx} />}
-    </Pane>
+    <Sheet mount={mount} pane="fields" />
   </>
 );
 const plan = () => screen.getByRole("combobox", { name: "Plan" }) as HTMLSelectElement;
 const choose = (view: string) => fireEvent.change(plan(), { target: { value: view } });
 const keys = (j: { actions: { key: string }[] }) => j.actions.map((row) => row.key);
 
-test("Rooms: choose one of two plans of one name, state a field, write it, partition and merge", async () => {
+test("Rooms: choose one of two plans of one name, state a field on the sheet, write it, partition and merge", async () => {
   const { native } = model();
   const j = await journey("rooms", native);
   try {
@@ -76,20 +74,25 @@ test("Rooms: choose one of two plans of one name, state a field, write it, parti
     expect(j.search().get("view")).toContain(FLOOR);
     expect(j.writes.filter((write) => write.search.includes(FLOOR.slice(0, 8)))).toHaveLength(1);
     expect(j.nativeCalls).toContainEqual({ key: "rooms.snapshot", input: { view: FLOOR } });
-    // Locked and stale are two facts of one room; an unset type says so, a real type reads as itself.
+    // Locked and stale are two facts of one room.
     expect((await screen.findByRole("option", { name: /^Room Office/ })).textContent).toContain("locked · stale");
-    expect(screen.getByRole("textbox", { name: "Type of Office" })).toMatchObject({ value: "", placeholder: "No type" });
-    expect(screen.getByRole("textbox", { name: "Type of Hall" })).toHaveProperty("value", "hall");
+    // No room picked: the sheet lists no cell. A picked room's fields are the sheet's cells.
+    expect(screen.getByText(/open a subject to list its cells/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: /^Room Hall/ }));
+    expect(await screen.findByRole("textbox", { name: "Type of Hall" })).toHaveProperty("value", "hall");
+    fireEvent.click(screen.getByRole("option", { name: /^Room Office/ }));
     // A stated field is a cell in Work, keyed by the region's UniqueId SubjectRef.
-    const name = screen.getByRole("textbox", { name: "Name of Office" });
+    const name = await screen.findByRole("textbox", { name: "Name of Office" });
+    expect(screen.queryByRole("textbox", { name: "Type of Hall" })).toBeNull();
     fireEvent.change(name, { target: { value: "Pantry" } });
-    fireEvent.blur(name);
+    fireEvent.keyDown(name, { key: "Enter" });
     await waitFor(() => expect(j.mount.owner()?.doc.name[code(1)]?.edit?.value).toBe("Pantry"));
     await j.ready();
-    await planned(j.mount.verb("write")).plan();
-    expect(keys(j)).toEqual(["rooms.write.preview"]);
-    await planned(j.mount.verb("write")).apply();
-    await waitFor(() => expect(keys(j)).toContain("rooms.write"));
+    // The write is the platform's sheet pair: no Rooms command of its own.
+    await planned(j.mount.verb("sheet")).plan();
+    expect(keys(j)).toEqual(["sheet.plan"]);
+    await planned(j.mount.verb("sheet")).apply();
+    await waitFor(() => expect(keys(j)).toContain("sheet.apply"));
     // Partition names this plan in Work; the sealed command reads it from there.
     await j.ready();
     fireEvent.click(screen.getByRole("button", { name: "Partition" }));
@@ -165,27 +168,38 @@ test("Rooms: a record the build cannot read is named and kept, and an outside ed
   }
 });
 
-test("Rooms: seven rooms stay rows of one table whose columns hold every field", async () => {
+test("Rooms: the sheet holds every field of each picked room, and seven rooms stay seven roster rows", async () => {
   const { native, state } = model();
   state.regions[FLOOR] = [zone, ...[1, 2, 3, 4, 5, 6, 7].map((n) => region(n))];
   const j = await journey("rooms", native, new URLSearchParams({ view: JSON.stringify(FLOOR) }));
   try {
     render(<Screen mount={j.mount} />);
     await j.ready();
-    const table = await screen.findByRole("table", { name: "Room fields" });
     // The zone is a row too: a person may state its fields and designation.
-    expect(within(table).getAllByRole("row")).toHaveLength(1 + 8);
-    expect(within(table).getAllByRole("columnheader").map((cell) => cell.textContent)).toEqual([
-      "Name",
-      "Type",
-      "Ceiling height",
-      "People",
-      "Lighting",
-      "Equipment sensible",
-      "Equipment latent",
-      "Ventilation",
-      "Role",
-    ]);
+    expect(await screen.findAllByRole("option", { name: /^(Room|Zone) / })).toHaveLength(8);
+    fireEvent.click(screen.getByRole("option", { name: /^Room Room 3/ }));
+    fireEvent.click(screen.getByRole("option", { name: /^Zone West zone/ }), { ctrlKey: true });
+    const sheet = await screen.findByRole("region", { name: "Sheet" });
+    await waitFor(() => expect(sheet.querySelectorAll("[data-sheet-cell]")).toHaveLength(18));
+    const labels = [...sheet.querySelectorAll("[data-sheet-cell]")].map((cell) =>
+      cell.getAttribute("data-sheet-cell"),
+    );
+    expect(labels.filter((label) => label?.endsWith(" of Room 3"))).toEqual(
+      [
+        "Name",
+        "Type",
+        "Ceiling height",
+        "People",
+        "Lighting",
+        "Equipment sensible",
+        "Equipment latent",
+        "Ventilation",
+        "Role",
+      ].map((field) => `${field} of Room 3`),
+    );
+    expect(labels).toContain("Role of West zone");
+    // Each cell stands on what the region record holds until Work states otherwise.
+    expect(within(sheet).getByRole("textbox", { name: "Name of Room 3" })).toHaveProperty("value", "Room 3");
   } finally {
     await j.close();
   }

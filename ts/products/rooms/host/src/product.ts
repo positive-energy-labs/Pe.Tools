@@ -1,7 +1,7 @@
 import { implement, type CommandBody } from "@pe/host-internal/product";
 import { product } from "@pe/rooms-contract/product";
 import { readings } from "./readings.ts";
-import { roomsExecutors } from "./rooms.ts";
+import { roomsExecutors, roomsSheet } from "./rooms.ts";
 import { takeoffExecutors } from "./takeoffs.ts";
 
 type Key = keyof ReturnType<typeof roomsExecutors> | keyof ReturnType<typeof takeoffExecutors>;
@@ -17,12 +17,13 @@ export const host = implement(product, {
   commands: {
     "rooms.partition": body("rooms.partition"),
     "rooms.draw": body("rooms.draw"),
-    "rooms.write": body("rooms.write"),
     "rooms.merge": body("rooms.merge"),
     "takeoffs.initialize": body("takeoffs.initialize"),
     "takeoffs.adopt": body("takeoffs.adopt"),
     "takeoffs.partition": body("takeoffs.partition"),
     "takeoffs.sync": body("takeoffs.sync"),
+    "sheet.plan": roomsSheet("sheet.plan"),
+    "sheet.apply": roomsSheet("sheet.apply"),
   },
 });
 /** What each route's host module serves. */

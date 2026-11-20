@@ -19,14 +19,14 @@ const marks: Record<string, unknown> = doc.marks;
 const absent: unknown = doc.esp;
 
 const base = { ...product, routes: {} };
-const write = product.commands["rooms.write"];
-define({ ...base, commands: { "rooms.write": { ...write, writes: { regions: ["name"] } } } });
+const write = product.commands["rooms.merge"];
+define({ ...base, commands: { "rooms.merge": { ...write, writes: { regions: ["name"] } } } });
 // @ts-expect-error a command whose writes names a cell the product lacks
-define({ ...base, commands: { "rooms.write": { ...write, writes: { regions: ["esp"] } } } });
+define({ ...base, commands: { "rooms.merge": { ...write, writes: { regions: ["esp"] } } } });
 // @ts-expect-error a command whose writes names a home the product lacks
-define({ ...base, commands: { "rooms.write": { ...write, writes: { carriers: [] } } } });
+define({ ...base, commands: { "rooms.merge": { ...write, writes: { carriers: [] } } } });
 // @ts-expect-error a machine file holds no cell
-define({ ...base, commands: { "rooms.write": { ...write, writes: { traces: ["name"] } } } });
+define({ ...base, commands: { "rooms.merge": { ...write, writes: { traces: ["name"] } } } });
 // @ts-expect-error a reading whose source is no home of the product
 define({ ...base, readings: { plans: { ...product.readings.plans, sources: ["carriers"] } } });
 
@@ -59,19 +59,19 @@ define({ ...base, cells: { ...product.cells, byHand } });
 
 // M4: a cell lands in at most one home across every command.
 const one = { ...write, writes: { regions: ["name"] } } as const;
-define({ ...base, homes, commands: { "rooms.write": one } });
+define({ ...base, homes, commands: { "rooms.merge": one } });
 define({
   ...base,
   homes,
   // @ts-expect-error one command that lands a cell in two homes
-  commands: { "rooms.write": { ...write, writes: { regions: ["name"], carrier: ["name"] } } },
+  commands: { "rooms.merge": { ...write, writes: { regions: ["name"], carrier: ["name"] } } },
 });
 define({
   ...base,
   homes,
   commands: {
     // @ts-expect-error two commands that land one cell in two homes
-    "rooms.write": one,
+    "rooms.draw": one,
     // @ts-expect-error the other of the two
     "rooms.merge": { ...write, writes: { carrier: ["name"] } },
   },
