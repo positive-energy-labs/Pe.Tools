@@ -225,10 +225,10 @@ export function ductActionExecutors(
       )
       .findLast((r) => phase !== "apply" || r.id === ctx.admission.id);
     const result = plan?.state === "succeeded" ? plan.result : undefined;
-    const value = isRecord(result) ? result.value : undefined;
+    const planValue = isRecord(result) ? result.value : undefined;
     const replacement =
-      kind === "losses" && phase === "apply" && plan?.state === "succeeded"
-        ? ownerBlobReplacementSchema.parse(isRecord(value) ? value.replacement : undefined)
+      phase === "apply" && isRecord(planValue)
+        ? ownerBlobReplacementSchema.parse(planValue.replacement)
         : undefined;
     const appliedAt =
       phase === "plan"
