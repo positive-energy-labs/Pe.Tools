@@ -1,3 +1,4 @@
+import { settle } from "../../../host/tests/effect-test.ts";
 import { VOCABULARY } from "@pe/ducts-domain/calc/scoped-snapshot";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { Context, Effect, Fiber, Layer, Schema, Option } from "effect";
@@ -54,7 +55,7 @@ async function liveHost(
   const inputs =
     isolated ??
     (record
-      ? await Effect.runPromise(
+      ? await settle(
           hostInputs(admittedReceiptStamps().host, { kind: "live", capture: "automatic" }),
         )
       : undefined);
@@ -72,7 +73,7 @@ async function liveHost(
           Effect.gen(function* () {
             const connected = yield* connectTestBridge(process.pid);
             target = connected.target;
-            disconnectBridge = () => Effect.runPromise(Fiber.interrupt(connected.connection));
+            disconnectBridge = () => settle(Fiber.interrupt(connected.connection));
             const actualTarget = {
               processIncarnation: { pid: process.pid, startedAt: 1000 },
               openDocumentLifetime: { openId: target.openId },
@@ -290,18 +291,18 @@ test("a captured Fans publication reopens through real host history", async () =
 
 test("a stopped recording preserves live Fans but cannot hide a late closed target", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-capture-stop-"));
-  const automatic = await Effect.runPromise(
+  const automatic = await settle(
     hostInputs(admittedReceiptStamps().host, { kind: "live", capture: "automatic" }),
   );
   if (automatic.lane.kind !== "live" || !automatic.lane.captureStore)
     throw Error("Expected an automatic recording");
-  const writer = await Effect.runPromise(
+  const writer = await settle(
     openRecordingWriter(stateFixture(dir), automatic.lane.captureStore.identity, {
       maxBytes: 256 * 1024 * 1024,
       maxTakings: 10000,
     }),
   );
-  const inputs = await Effect.runPromise(
+  const inputs = await settle(
     HostInputContext.pipe(
       Effect.provide(HostInputContext.layer({ kind: "live", captureStore: writer })),
     ),
@@ -328,7 +329,7 @@ test("a stopped recording preserves live Fans but cannot hide a late closed targ
     expect((await historyBefore.json()).points).toHaveLength(1);
     const writer = host.inputs?.lane.kind === "live" ? host.inputs.lane.captureStore : undefined;
     expect(writer).toBeTruthy();
-    await Effect.runPromise(
+    await settle(
       writer!.capture.stop(writer!.capture.begin()!, "unsupported", {
         site: "builtin",
         op: "test.capture",

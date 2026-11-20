@@ -29,8 +29,8 @@ import {
   HOST_RUNTIME_SERVICE_QUERY,
 } from "@pe/host-contracts/contracts";
 import { hostOwnership } from "../src/host-ownership.ts";
-import { detachedBridge } from "./effect-test.ts";
-import { Effect, Layer } from "effect";
+import { settle, detachedBridge } from "./effect-test.ts";
+import { Layer } from "effect";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { getHostStatus } from "../src/local-ops.ts";
 import { productPodsRootPath } from "../src/product-paths.ts";
@@ -153,7 +153,7 @@ test("host status defaults to the cached snapshot and cannot call the sync home 
   const owner = acquireContentRoots();
   try {
     await owner.ready;
-    const status = await Effect.runPromise(getHostStatus({ connected: false }));
+    const status = await settle(getHostStatus({ connected: false }));
     expect(status.homes).toContainEqual(expect.objectContaining({ tier: "firm", path: firm }));
     expect(sync).not.toHaveBeenCalled();
   } finally {

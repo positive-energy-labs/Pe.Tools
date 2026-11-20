@@ -1,7 +1,7 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { serviceHeaders } from "./callers.ts";
-import { journalAt } from "./effect-test.ts";
+import { settle, journalAt } from "./effect-test.ts";
 import { sourceProvenanceSchema, type Caller, type WorkKey } from "@pe/agent-contracts";
 import {
   HOST_RUNTIME_SERVICE_HEADER,
@@ -51,8 +51,8 @@ const key = "host.ops.catalog";
 const bundle = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-historical-composition-"));
   dirs.push(dir);
-  const writer = await Effect.runPromise(openRecordingWriter(stateFixture(dir), identity, bounds));
-  const schemas = await Effect.runPromise(readSchemas(key));
+  const writer = await settle(openRecordingWriter(stateFixture(dir), identity, bounds));
+  const schemas = await settle(readSchemas(key));
   const input = {
     input: { kind: "native" as const, key, args: "{}" },
     scope: JSON.stringify(scope),
@@ -94,11 +94,11 @@ const bundle = async () => {
       });
       return taking;
     });
-  const taking = await Effect.runPromise(append(input, outcome));
+  const taking = await settle(append(input, outcome));
   return { dir, writer: { ...writer, append }, recording: writer, taking, input, outcome };
 };
 const router = async (dir: string, bindings?: ReadonlyMap<string, string>) => {
-  const inputs = await Effect.runPromise(
+  const inputs = await settle(
     hostInputs(stamp, { kind: "recording", directory: dir, at: null, bindings }),
   );
   let liveFactories = 0;
@@ -195,7 +195,7 @@ test("actual caller, scope, coverage, unknown and missing input refuse without l
 
 test("equal takings remain ambiguous until an exact root binding is supplied", async () => {
   const { dir, writer, taking, input, outcome } = await bundle();
-  await Effect.runPromise(writer.append(input, outcome));
+  await settle(writer.append(input, outcome));
   const ambiguous = await router(dir);
   try {
     expect(await (await ambiguous.send("/call", { key })).text()).toContain("recording.ambiguous");
@@ -204,7 +204,7 @@ test("equal takings remain ambiguous until an exact root binding is supplied", a
   }
   const bound = await router(
     dir,
-    new Map([[await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope })), taking.id]]),
+    new Map([[await settle(nativeInputIdentity({ key, input: {}, scope })), taking.id]]),
   );
   try {
     expect((await bound.send("/call", { key })).status).toBe(200);
@@ -228,12 +228,12 @@ test("native root bindings refuse foreign consumers, scopes, unknown takings and
       refusal === "unknown-taking"
         ? randomUUID()
         : (
-            await Effect.runPromise(
+            await settle(
               recording.append({ ...input, scope: JSON.stringify(selectedScope) }, outcome),
             )
           ).id;
     if (refusal !== "unknown-taking") {
-      await Effect.runPromise(
+      await settle(
         recording.readSets.keep({
           version: 2,
           id: randomUUID(),
@@ -267,9 +267,7 @@ test("native root bindings refuse foreign consumers, scopes, unknown takings and
     }
     const app = await router(
       dir,
-      new Map([
-        [await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope })), boundTaking],
-      ]),
+      new Map([[await settle(nativeInputIdentity({ key, input: {}, scope })), boundTaking]]),
     );
     try {
       const response = await app.send("/call", { key });
@@ -322,7 +320,7 @@ test("historical mutation doors refuse without append or any live graph", async 
     }
     expect(await readdir(dir, { recursive: true })).toEqual(before);
     expect(
-      writer.candidates(await Effect.runPromise(nativeInputIdentity({ key, input: {}, scope }))),
+      writer.candidates(await settle(nativeInputIdentity({ key, input: {}, scope }))),
     ).toHaveLength(1);
     expect(app.liveFactories()).toBe(0);
   } finally {
@@ -332,9 +330,7 @@ test("historical mutation doors refuse without append or any live graph", async 
 
 test("journal, Work and pointer owners refuse before storage or executor access", async () => {
   const { dir } = await bundle();
-  const inputs = await Effect.runPromise(
-    hostInputs(stamp, { kind: "recording", directory: dir, at: null }),
-  );
+  const inputs = await settle(hostInputs(stamp, { kind: "recording", directory: dir, at: null }));
   const journalPath = join(dir, "forbidden-journal.jsonl");
   const journal = journalAt(journalPath, Date.now);
   journal.bindInputContext(inputs);
@@ -397,33 +393,30 @@ test("journal, Work and pointer owners refuse before storage or executor access"
 test("historical open creates nothing; identity and point gaps refuse; unrecorded live is explicit", async () => {
   const { dir } = await bundle();
   const missing = join(dir, "missing");
-  const failure = await Effect.runPromise(
+  const failure = await settle(
     hostInputs(stamp, { kind: "recording", directory: missing, at: null }).pipe(Effect.flip),
   );
   expect(failure.problem).toBe("recording.missing");
   expect(await readdir(dir)).not.toContain("missing");
   expect(
     (
-      await Effect.runPromise(
+      await settle(
         hostInputs(null, { kind: "recording", directory: dir, at: null }).pipe(Effect.flip),
       )
     ).problem,
   ).toBe("recording.identity");
   expect(
-    (
-      await Effect.runPromise(
-        hostInputs(null, { kind: "live", capture: "automatic" }).pipe(Effect.flip),
-      )
-    ).problem,
+    (await settle(hostInputs(null, { kind: "live", capture: "automatic" }).pipe(Effect.flip)))
+      .problem,
   ).toBe("recording.identity");
   expect(
     (
-      await Effect.runPromise(
+      await settle(
         hostInputs(stamp, { kind: "recording", directory: dir, at: "point" }).pipe(Effect.flip),
       )
     ).problem,
   ).toBe("recording.point");
-  const live = await Effect.runPromise(hostInputs(null, { kind: "live", capture: "off" }));
+  const live = await settle(hostInputs(null, { kind: "live", capture: "off" }));
   expect(live.source).toEqual({ kind: "live", capturing: false });
   let built = 0;
   hostInputGraph(
@@ -447,8 +440,8 @@ test("historical entry serves real static files through identity and retains API
   await writeFile(join(webRoot, "index.html"), html);
   await writeFile(join(webRoot, "assets/app.js"), "export const recorded = true;");
   await writeFile(join(webRoot, "assets/app.css"), "body { color: navy; }");
-  const selection = await Effect.runPromise(recordingInputSelection(["--recording", dir]));
-  const inputs = await Effect.runPromise(hostInputs(stamp, selection!));
+  const selection = await settle(recordingInputSelection(["--recording", dir]));
+  const inputs = await settle(hostInputs(stamp, selection!));
   let live = 0;
   const files = vi.spyOn(DuctFiles, "layer").mockImplementation(() => {
     live++;
@@ -633,7 +626,7 @@ test("historical entry serves real static files through identity and retains API
 
 test("recording process selection is strict and cannot enter the source live fallback", async () => {
   expect(
-    await Effect.runPromise(recordingInputSelection(["--open", "--no-revit", "--take-over-host"])),
+    await settle(recordingInputSelection(["--open", "--no-revit", "--take-over-host"])),
   ).toBeUndefined();
   const { dir } = await bundle();
   let entered = 0;
@@ -665,12 +658,12 @@ test("recording process selection is strict and cannot enter the source live fal
     expect(relaunchOutOfGuard(startup)).toBe(true);
     expect(relaunchOutOfGuard(startup)).toBe(false);
     expect(launch).toHaveBeenCalledExactlyOnceWith(prefix[0]);
-    expect(await Effect.runPromise(recordingInputSelection(prefix))).toBeUndefined();
-    const selected = await Effect.runPromise(
+    expect(await settle(recordingInputSelection(prefix))).toBeUndefined();
+    const selected = await settle(
       recordingInputSelection([...prefix, "--open", "--recording", dir, "--no-revit"]),
     );
     expect(selected).toEqual({ kind: "recording", directory: dir, at: null });
-    expect(await Effect.runPromise(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({
+    expect(await settle(hostInputs(null, selected!).pipe(Effect.flip))).toMatchObject({
       problem: "recording.identity",
     });
     for (const args of [
@@ -685,7 +678,7 @@ test("recording process selection is strict and cannot enter the source live fal
       ["--recording", dir, "--recording", dir],
       ["--recording", "\0"],
     ]) {
-      const failed = await Effect.runPromise(
+      const failed = await settle(
         recordingInputSelection([...prefix, ...args]).pipe(
           Effect.tap(() =>
             Effect.sync(() => {

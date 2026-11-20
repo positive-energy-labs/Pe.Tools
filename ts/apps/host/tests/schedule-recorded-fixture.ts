@@ -1,6 +1,6 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
-import { testDocumentMarks, captureStore } from "./effect-test.ts";
+import { settle, testDocumentMarks, captureStore } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
@@ -88,7 +88,7 @@ export async function setup(options: { cold?: boolean; projectHome?: string; pod
           revision: () => 0,
           workspace: app.workspace,
           marks: hostMarks(marks),
-          run: Effect.runPromise,
+          run: settle,
           source: {
             workKey: async () => {
               throw Error("Unexpected Work binding");
@@ -124,7 +124,7 @@ export async function setup(options: { cold?: boolean; projectHome?: string; pod
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
     markReadings: (observe) => (request, publish) =>
       markReadings(marks, (ref, key, at) =>
-        ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+        ref ? settle(marks.readFrame(ref, key, at)) : Promise.resolve(null),
       )(observe)(request, publish),
     registrations: [
       {
@@ -307,7 +307,7 @@ export async function setup(options: { cold?: boolean; projectHome?: string; pod
       onCatalog = callback;
     },
     revitChanged: async () => {
-      await Effect.runPromise(
+      await settle(
         Queue.offer(
           socket.incoming,
           JSON.stringify({
@@ -321,7 +321,7 @@ export async function setup(options: { cold?: boolean; projectHome?: string; pod
       );
     },
     bridgeDetached: async () => {
-      await Effect.runPromise(Fiber.interrupt(socket.connection));
+      await settle(Fiber.interrupt(socket.connection));
     },
     hold: () => {
       hold = new Promise((resolve) => {

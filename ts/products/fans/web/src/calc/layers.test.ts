@@ -9,6 +9,7 @@ import {
   ductOf,
   issueOf,
   snapshotOf,
+  systemOf,
   type Connector,
 } from "@pe/ducts-domain/test-snapshot";
 import type { DuctsCalcOverview } from "@pe/fans-contract/calc-read";
@@ -233,6 +234,7 @@ it("an inferred-join blocker keeps only the faces on its own pair", () => {
 /** The capped round open end `finding-layers.test` proves draws a cylinder heal volume. */
 const round = snapshotOf({
   ...snapshot,
+  systems: [systemOf(1, { name: "SA 1", isWellConnected: true })],
   segments: [
     {
       ...duct(
@@ -247,6 +249,7 @@ const round = snapshotOf({
             widthIn: null,
             heightIn: null,
             diameterIn: 12,
+            flowCfm: 0,
           },
         ],
       ),

@@ -2,7 +2,7 @@ import { hostState } from "../src/host-ownership.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { ownedSession } from "./callers.ts";
-import { testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
+import { settle, testDocumentMarks, journalAt, callRouteOver } from "./effect-test.ts";
 import { graphRoute } from "../src/reads/routes.ts";
 import { Publications } from "../src/reads/publications.ts";
 import { inputPort } from "../src/reads/inputs.ts";
@@ -92,7 +92,7 @@ export async function setup(options: { cold?: boolean } = {}) {
           revision: () => 0,
           workspace: app.workspace,
           marks: hostMarks(marks),
-          run: Effect.runPromise,
+          run: settle,
           source: {
             workKey: async () => {
               throw Error("Unexpected Work binding");
@@ -128,7 +128,7 @@ export async function setup(options: { cold?: boolean } = {}) {
     // As the host boots: one mark holder per bridge, shared by every Reading and every push.
     markReadings: (observe) => (request, publish) =>
       markReadings(marks, (ref, key, at) =>
-        ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+        ref ? settle(marks.readFrame(ref, key, at)) : Promise.resolve(null),
       )(observe)(request, publish),
     registrations: [
       {

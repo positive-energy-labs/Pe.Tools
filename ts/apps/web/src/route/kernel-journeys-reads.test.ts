@@ -157,6 +157,7 @@ import { RouteWorkspace } from "@pe/runtime";
 import { bindWork, readingKey, type ReadingRequest } from "@pe/agent-contracts";
 import { withInvocationContext } from "@pe/runtime/context";
 import {
+  settle,
   captureStore,
   detachedBridge,
   sessionView,
@@ -961,7 +962,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
   });
   const admissionScope = Scope.makeUnsafe();
-  await Effect.runPromise(Layer.buildWithScope(admittedBuiltinsLayer(workspace), admissionScope));
+  await settle(Layer.buildWithScope(admittedBuiltinsLayer(workspace), admissionScope));
   const filter = {
     categoryNames: ["Air Terminals"],
     familyNames: [],
@@ -1318,7 +1319,7 @@ test("JX4 Families apply readback cannot overwrite a newer manual read or certif
     paused?.release.resolve();
     await journal.close();
     await web.dispose();
-    await Effect.runPromise(Scope.close(admissionScope, Exit.void));
+    await settle(Scope.close(admissionScope, Exit.void));
     await rm(dir, { recursive: true, force: true });
   }
 }, 60_000);

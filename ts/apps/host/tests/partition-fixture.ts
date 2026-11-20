@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { captureStore } from "./effect-test.ts";
+import { settle, captureStore } from "./effect-test.ts";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -53,8 +53,7 @@ export async function partitionFixture(dir: string, target: DocumentRef) {
     loops: [],
   };
   const captures = captureStore(join(dir, "captures"));
-  // effect-edge: test-runner
-  const { capture } = await Effect.runPromise(
+  const { capture } = await settle(
     captures.refresh(
       target,
       Effect.succeed({

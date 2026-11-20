@@ -30,6 +30,7 @@ import { fileRouteDocumentStore } from "../../../host/src/route-document-store.t
 import { SdkDriver } from "../../../host/src/sdk-session.ts";
 import { hostResourceObserver } from "../../../host/src/resource-adapters.ts";
 import {
+  settle,
   detachedBridge,
   testHostInputs,
   journalAt,
@@ -51,7 +52,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   const dir = await mkdtemp(join(tmpdir(), "pe-attach-"));
   const member = { pod: "test", path: "settings/family/HCB.json" };
   const scope = Scope.makeUnsafe();
-  const writer = await Effect.runPromise(
+  const writer = await settle(
     openRecordingWriter(
       stateFixture(join(dir, "history")),
       { build: "surface", catalog: nativeCatalogIdentity() },
@@ -60,14 +61,14 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
   );
   const lane = { kind: "live" as const, captureStore: writer };
   const sets = Context.get(
-    await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)),
+    await settle(Layer.buildWithScope(HostInputReadSets.layer(lane), scope)),
     HostInputReadSets,
   );
   const work = new RouteWorkspace({
     publicationAuthor: () => "human",
     registrations: [],
     store: fileRouteDocumentStore(stateFixture(join(dir, "work"))),
-    capture: capturedWorkReads(writer, Effect.runPromise),
+    capture: capturedWorkReads(writer, settle),
   });
   const workReads: NonNullable<CommandResources["workReads"]> = (admission) => {
     const read = async (
@@ -75,7 +76,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
       key: Parameters<RouteWorkspace["read"]>[0],
       route: string,
     ) => {
-      const current = await Effect.runPromise(
+      const current = await settle(
         sets.open(
           {
             key: `command.work.${method}`,
@@ -88,11 +89,11 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
         ),
       );
       try {
-        const value = await work[method](key, route, workReadContext(current, Effect.runPromise));
-        await Effect.runPromise(current.seal);
+        const value = await work[method](key, route, workReadContext(current, settle));
+        await settle(current.seal);
         return value;
       } finally {
-        await Effect.runPromise(current.close);
+        await settle(current.close);
       }
     };
     return {
@@ -100,9 +101,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
       view: (key, route) => read("view", key, route),
     };
   };
-  const admitted = await Effect.runPromise(
-    Layer.buildWithScope(admittedBuiltinsLayer(work), scope),
-  );
+  const admitted = await settle(Layer.buildWithScope(admittedBuiltinsLayer(work), scope));
   const fingerprint = Context.get(admitted, AdmittedBuiltins).routes.get("family")!.workFingerprint;
   const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
   const bridge = detachedBridge();
@@ -142,14 +141,14 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
       headers: { ...Object.fromEntries(new Headers(init?.headers)), [HOST_CONTEXT_HEADER]: token },
     });
   };
-  const feed = await Effect.runPromise(
+  const feed = await settle(
     sets.open({ key: "surface.work-feed", input: {}, scope: "host" }, null),
   );
   const observe = observeResources(
     work,
     undefined,
     hostResourceObserver(bridge, () => journal),
-    workReadContext(feed, Effect.runPromise),
+    workReadContext(feed, settle),
   );
   const frames: unknown[] = [];
   const readings = {
@@ -208,13 +207,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
     const attached = (await journal.list()).find((row) => row.key === "family.attach-spec")!;
     expect(attached).toMatchObject({ state: "succeeded", input: { work: { revision: 1 } } });
     expect(
-      (
-        await work.read(
-          bindWork("family", null),
-          "family",
-          workReadContext(feed, Effect.runPromise),
-        )
-      )?.doc,
+      (await work.read(bindWork("family", null), "family", workReadContext(feed, settle)))?.doc,
     ).toMatchObject({ spec: { member, doc: { jobId: "small" } } });
     expect(
       JSON.parse(await readFile(join(dir, member.pod, `${member.path}.spec.json`), "utf8")),
@@ -272,7 +265,7 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
             stored: await work.read(
               bindWork("family", null),
               "family",
-              workReadContext(feed, Effect.runPromise),
+              workReadContext(feed, settle),
             ),
             truncated: writer.capture.truncated(),
             receipts: await journal.list(),
@@ -283,12 +276,12 @@ test("Start publishes Family Work before immediate small attach and 7 MB refusal
       );
     mount.dispose();
     stop();
-    await Effect.runPromise(feed.seal);
-    await Effect.runPromise(feed.close);
+    await settle(feed.seal);
+    await settle(feed.close);
     vi.unstubAllGlobals();
     await journal.close();
     await web.close();
-    await Effect.runPromise(Scope.close(scope, Exit.void));
+    await settle(Scope.close(scope, Exit.void));
     await rm(dir, { recursive: true, force: true });
   }
 });

@@ -1,8 +1,8 @@
+import { settle } from "./effect-test.ts";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { stateTree } from "@pe/host-contracts/service-identity";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { afterEach, expect, test, vi } from "vite-plus/test";
-import { Effect } from "effect";
 import { writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +43,7 @@ test("a refused capture carries typed reasons and never reads or stores a PNG", 
   );
   const keep = vi.spyOn(pictures, "keep");
   const notDrawn = [{ elementId: 7, reasons: ["PhaseHidden"] }];
-  const value = await Effect.runPromise(
+  const value = await settle(
     projectNativeOutput(
       pictures,
       "capture.test",
@@ -64,7 +64,7 @@ test("a capture policy row projects using that call's key for both schemas", asy
     await writeFile(filePath, "image bytes");
     const pictures = new PictureCaptures(stateFixture(dir), 1024 * 1024, () => 1);
     const keep = vi.spyOn(pictures, "keep");
-    const result = await Effect.runPromise(
+    const result = await settle(
       projectNativeOutput(
         pictures,
         "capture.test",
@@ -107,7 +107,7 @@ test("an already projected capture uses its own output schema without reading a 
     },
   };
   expect(
-    await Effect.runPromise(
+    await settle(
       projectNativeOutput(
         new PictureCaptures(
           stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"),
@@ -129,7 +129,7 @@ test("an already projected capture uses its own output schema without reading a 
 test("a call without capture policy passes through unchanged", async () => {
   const value = { filePath: "not-a-capture" };
   expect(
-    await Effect.runPromise(
+    await settle(
       projectNativeOutput(
         new PictureCaptures(
           stateTree(process.env.PE_TEST_HOME_ROOT!).directory("unused"),

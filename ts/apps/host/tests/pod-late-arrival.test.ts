@@ -1,3 +1,4 @@
+import { settle as settleEffect } from "./effect-test.ts";
 import { createHash } from "node:crypto";
 import { Effect, type FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -605,7 +606,7 @@ test("a slow filesystem scan leaves inventory and unrelated HTTP reads available
 });
 
 const settle = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+  settleEffect(effect.pipe(Effect.provide(NodeServices.layer)));
 test("REVIEW: host member write must reconcile before the next inventory", async () => {
   const entered = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();

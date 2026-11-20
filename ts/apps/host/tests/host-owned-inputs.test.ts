@@ -31,7 +31,7 @@ import {
 } from "../src/native-recording.ts";
 import { type HostInputLane } from "@pe/host-internal/input-recording";
 import * as localInputs from "../src/local-inputs.ts";
-import { settle } from "./effect-test.ts";
+import { settleSync, settle } from "./effect-test.ts";
 
 test("recorded host-local inputs and immutable capture files replay without a live owner", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-owner-inputs-"));
@@ -67,9 +67,7 @@ test("recorded host-local inputs and immutable capture files replay without a li
   );
   const who = { kind: "human" as const, via: "local" as const };
   const make = (lane: HostInputLane) => {
-    const inputs = Effect.runSync(
-      HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))),
-    );
+    const inputs = settleSync(HostInputContext.pipe(Effect.provide(HostInputContext.layer(lane))));
     return HttpRouter.toWebHandler(
       readInputRoutes(
         inputs,

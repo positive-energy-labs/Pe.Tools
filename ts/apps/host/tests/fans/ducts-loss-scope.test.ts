@@ -1,3 +1,4 @@
+import { settle } from "../effect-test.ts";
 import {
   DUCT_UNIT_KINDS,
   FAN_BLOCKER_KINDS,
@@ -93,7 +94,7 @@ test("the real /fans apply asks to retire its own role only, and retires it unde
     step: () => Effect.succeed(answer),
     retireWork,
   };
-  await Effect.runPromise(
+  await settle(
     fansExecutors({} as never)["sheet.apply"]!.run(
       ctx as never,
       execution as never,

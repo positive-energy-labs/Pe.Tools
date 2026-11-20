@@ -370,7 +370,9 @@ export function SystemsPane({ ctx }: { ctx: DuctsSystemsContext }) {
             </div>
           }
           systems={systemRows}
-          allRefusal={(roster?.systems.length ?? 0) > DUCTS_DETAIL_LIMIT ? ductDetailLimitMessage : null}
+          allRefusal={
+            (roster?.systems.length ?? 0) > DUCTS_DETAIL_LIMIT ? ductDetailLimitMessage : null
+          }
           value={ctx.value}
           fansOf={fansOf}
           nameOf={nameOf}
@@ -905,11 +907,7 @@ const SystemsList = memo(function SystemsList({
         <>
           {header}
           <div className="flex gap-1 px-1">
-            <Button
-              label="All systems"
-              refusal={allRefusal}
-              onPress={() => door?.all()}
-            >
+            <Button label="All systems" refusal={allRefusal} onPress={() => door?.all()}>
               All
             </Button>
             <Button label="Clear systems" onPress={() => door?.clear()}>

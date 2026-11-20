@@ -22,7 +22,7 @@ import { productPathNames } from "@pe/host-contracts/contracts";
 import * as contentHomes from "@pe/host-contracts/product-paths";
 import { testInputContext } from "./effect-test.ts";
 import { bootHost } from "./real-server.ts";
-import { Deferred, Effect } from "effect";
+import { Deferred } from "effect";
 import type { ServiceHostHandle } from "@pe/host-contracts/pe-service-host";
 import { peaAgentInstructions } from "@pe/mcps";
 import * as store from "@pe/host-contracts/kinds";
@@ -39,8 +39,8 @@ const composeHost = () =>
     webRoot: null,
     routeRegistrations: () => [],
     lifecycle: {
-      latch: Effect.runSync(Deferred.make<void>()),
-      handle: Effect.runSync(Deferred.make<ServiceHostHandle>()),
+      latch: Deferred.makeUnsafe<void>(),
+      handle: Deferred.makeUnsafe<ServiceHostHandle>(),
     },
   });
 

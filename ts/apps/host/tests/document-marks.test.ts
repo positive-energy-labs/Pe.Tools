@@ -4,7 +4,7 @@ import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
  * The host derives it once, against when the Reading it serves was taken, and republishes the
  * envelope; no consumer compares clocks and no consumer can miss the fact by missing an event.
  */
-import { detachedBridge, captureStore } from "./effect-test.ts";
+import { settle as settleEffect, settleSync, detachedBridge, captureStore } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import { Context, Effect, Exit, Layer, Scope } from "effect";
 import * as TestClock from "effect/testing/TestClock";
@@ -108,16 +108,14 @@ async function holdMarks(bridge: RevitBridge["Service"], at?: number) {
   const built = Layer.buildWithScope(HostDocumentMarks.layer, scope).pipe(
     Effect.provideService(RevitBridge, bridge),
   );
-  // effect-edge: test-runner
-  const context = await Effect.runPromise(
+  const context = await settleEffect(
     at === undefined
       ? built
       : TestClock.setTime(at).pipe(Effect.andThen(built), Effect.provide(TestClock.layer())),
   );
   return {
     marks: Context.get(context, HostDocumentMarks),
-    // effect-edge: test-runner
-    close: () => Effect.runSync(Scope.close(scope, Exit.void)),
+    close: () => settleSync(Scope.close(scope, Exit.void)),
   };
 }
 
@@ -151,7 +149,7 @@ test("the envelope carries the mark: served unchanged, republished changed, with
   const frames: ReadingFrame[] = [];
   const capture = { id: "c1", target: A, capturedAt: new Date().toISOString() };
   const observe = markReadings(marks, (ref, key, at) =>
-    ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+    ref ? settleEffect(marks.readFrame(ref, key, at)) : Promise.resolve(null),
   )(
     hostResourceObserver(
       world.bridge,
@@ -216,7 +214,7 @@ test("the families matrix Reading streams an envelope, never the body, and wears
   };
   const frames: ReadingFrame[] = [];
   const release = markReadings(marks, (ref, key, at) =>
-    ref ? Effect.runPromise(marks.readFrame(ref, key, at)) : Promise.resolve(null),
+    ref ? settleEffect(marks.readFrame(ref, key, at)) : Promise.resolve(null),
   )(hostResourceObserver(world.bridge, undefined as never, () => captures))(
     { kind: "families-matrix", target: A, filter },
     (frame) => frames.push(frame),

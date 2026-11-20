@@ -1,9 +1,9 @@
+import { settleSync } from "../effect-test.ts";
 import { hostState } from "../../src/host-ownership.ts";
 import { afterEach, beforeEach, expect, test, vi } from "vite-plus/test";
 import { join, relative, isAbsolute, sep } from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { Effect } from "effect";
 import { resolvePeaProductHomePath } from "@pe/mcps";
 import { productPathNames } from "@pe/host-contracts/contracts";
 import {
@@ -83,7 +83,7 @@ test("Work, Page state and the agent's working directory are machine state under
   expect(hostState().pages).toBe(join(state, "Pages"));
   expect(hostState().t3).toBe(join(state, "T3"));
   // Real projection publication is checked by home-authored-only.guard.test.ts.
-  const { world } = Effect.runSync(getHostStatus({ connected: false }));
+  const { world } = settleSync(getHostStatus({ connected: false }));
   expect(world.root).toBe(agent);
   expect(world.id).toBe(`pea:${Buffer.from(agent).toString("base64url")}`);
 });
