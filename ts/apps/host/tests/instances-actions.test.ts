@@ -150,7 +150,7 @@ const observed = { selection: { pid: 4242 }, process: { ...originalProcess, pid:
 const observedRow = {
   year: 2025,
   observedAtUtc: originalProcess.processStartUtc,
-  bridge: { bridge: "missing-endpoint" },
+  bridge: { bridge: "answering", sessionDescriptor: null },
   case: "observed-active",
   process: observed.process,
   shape: shape("foreground"),
@@ -197,13 +197,15 @@ async function setup(
   const sdk = async (args: readonly string[]) => {
     calls.push([...args]);
     // The SDK answers a name it no longer lists with `result: {}` (pe-revit 0.1.0-beta.224).
-    if (args[0] === "session" && args[1] === "list")
+    if (args[0] === "session" && args[1] === "list") {
+      if (census.beforeSessionList) await census.beforeSessionList();
       return args.includes("--id") && !sessionRows.some((row) => (row as { id?: string }).id === flag(args, "--id"))
         ? replayAnswer(args, { result: {}, exitCode: 3,
             diagnostics: [{ code: "session.no-match", detail: `no session '${flag(args, "--id")}'`, fix: "pe-revit session list" }] })
         : replayAnswer(args, { result: {
             state: "ok", sessions: sessionRows, processReadErrors: [], unreadableReceipts: [],
           } });
+    }
     if (args[0] === "doc" && args[1] === "list") {
       census.beforeSdkList?.();
       const { pid, processStartUtc } =
@@ -269,6 +271,7 @@ async function setup(
     /** External SDK session-list input can change between successive census reads. */
     beforeCensus: null as null | (() => void),
     beforeSdkList: null as null | (() => void),
+    beforeSessionList: undefined as (() => Promise<void>) | undefined,
     /** The incarnation `doc list` resolves; the default fixture process when null. */
     process: null as null | {
       pid: number;
@@ -306,18 +309,21 @@ async function setup(
       census.beforeCensus?.();
       census.reads++;
       if (census.fail) throw Error("census unavailable");
-      return sessionRows.map((row) => ({
-        ...(row as SessionObservation),
-        observedAtUtc: new Date().toISOString(),
-        bridge: {
-          bridge: "ready",
-          documents: census.documents.map((openId) => ({
-            openId,
-            title: openId,
-            ...census.facts,
-          })),
-        },
-      })) as SessionObservation[];
+      return sessionRows.map((row) => {
+        const session = row as SessionObservation;
+        return session.case === "observed-active" ? session : {
+          ...session,
+          observedAtUtc: new Date().toISOString(),
+          bridge: {
+            bridge: "ready",
+            documents: census.documents.map((openId) => ({
+              openId,
+              title: openId,
+              ...census.facts,
+            })),
+          },
+        };
+      }) as SessionObservation[];
     },
     holdings: async () => null,
     documents: async (process) => JSON.parse(await sdk(docListArgv({ pid: process.pid }))).result,
@@ -1666,6 +1672,31 @@ test.each([false, true])("K1c: stopping a Revit that already closed succeeds wit
   const stop = await f.admit("instances.stop", { session, unsaved: "discard" });
   expect(stop).toMatchObject({ state: "succeeded", result: { state: "ok", phase: "already-gone" } });
   expect(f.calls.every((args) => args[0] === "session" && args[1] === "list")).toBe(true);
+});
+
+test("Stop refuses in three seconds if the SDK cannot answer its opening census", async () => {
+  const f = await setup(() => Error("Unexpected SDK mutation"));
+  const entered = Promise.withResolvers<void>();
+  const blocked = Promise.withResolvers<void>();
+  f.census.beforeSessionList = () => {
+    entered.resolve();
+    return blocked.promise;
+  };
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const stopping = f.admit("instances.stop", { session, unsaved: "keep" });
+  try {
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(3_001);
+    expect(await stopping).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      error: expect.stringContaining("Switch to Revit and save or sync your work"),
+    });
+    expect(f.calls.every((args) => args[1] === "list")).toBe(true);
+  } finally {
+    blocked.resolve();
+    vi.useRealTimers();
+  }
 });
 
 test("restart refuses a session the SDK no longer names without dispatching", async () => {

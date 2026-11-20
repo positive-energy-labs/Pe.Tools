@@ -2,12 +2,14 @@ import { testJournal } from "./effect-test.ts";
 import { expect, test, vi } from "vite-plus/test";
 import type { ActionReceipt, Machine } from "@pe/agent-contracts";
 import type {
+  ControlledPending,
   DocListResult,
   ObservedActive,
   SessionObservation,
 } from "@pe/host-contracts/pe-revit-contract";
 import {
   machineSources,
+  readMachineSession,
   unavailableShare,
   type AttachmentRead,
   type HeldTarget,
@@ -18,6 +20,11 @@ import { unreadLeg } from "../src/update-reader.ts";
 import { planAcquisition } from "../src/acquisition.ts";
 import { hostResourceObserver } from "../src/resource-adapters.ts";
 import { sdkBinary, sdkCommand } from "./sdk-replay.ts";
+import { mkdtemp, stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { stateDirectory } from "@pe/host-contracts/service-identity";
 
 /** Effect yields on setImmediate: only the clock and its timers are faked, or no fiber ever resumes. */
 const FAKE_CLOCK: { toFake: ("setTimeout" | "clearTimeout" | "Date")[] } = {
@@ -87,7 +94,7 @@ const docs: DocListResult = {
   ],
 };
 
-function fixture() {
+function fixture(options?: import("../src/machine.ts").MachineOptions) {
   const update = {
     plan: null,
     receipt: null,
@@ -148,8 +155,34 @@ function fixture() {
       subscribe: vi.fn(() => vi.fn()),
     },
   };
-  return { sources, machine: machineOwner(sources, { periodMs: 60_000 }) };
+  return { sources, machine: machineOwner(sources, { periodMs: 60_000, ...options }) };
 }
+
+test("a new host serves kept years immediately, survives a refusal, and replaces them after success", async () => {
+  const root = stateFixture(await mkdtemp(join(tmpdir(), "pe-kept-years-")));
+  const yearsState = stateDirectory(root.machine, "host", "test-host");
+  const now = "2026-11-19T00:00:00.000Z";
+  mkdirSync(yearsState.path, { recursive: true });
+  writeFileSync(join(yearsState.path, "revit-years.json"), "{damaged");
+  const first = fixture({ yearsState, now: () => now });
+  expect(first.machine.current().revit.years).toBeNull();
+  await first.machine.refresh();
+
+  const second = fixture({ yearsState });
+  vi.mocked(second.sources.years).mockRejectedValueOnce(Error("SDK timed out")).mockResolvedValue([2026]);
+  const received: Machine[] = [];
+  const stop = second.machine.observe((value) => received.push(value));
+  try {
+    expect(received[0]).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now, attemptedAtUtc: null } } });
+    const failed = await second.machine.refresh();
+    expect(failed).toMatchObject({ revit: { years: [2025] }, legs: { years: { observedAtUtc: now } } });
+    expect(failed.legs.years?.error).toContain("timed out");
+    expect((await second.machine.refresh()).revit.years).toEqual([2026]);
+  } finally {
+    stop();
+  }
+  expect(fixture({ yearsState }).machine.current().revit.years).toEqual([2026]);
+});
 
 test("a stalled observed-document leg publishes unknown at the Machine deadline", async () => {
   vi.useFakeTimers(FAKE_CLOCK);
@@ -166,6 +199,64 @@ test("a stalled observed-document leg publishes unknown at the Machine deadline"
       documents: null,
       documentsLeg: { observedAtUtc: null, error: expect.stringContaining("leg exceeded") },
     });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("only an answering Revit in the SDK execution boundary is asked for holdings", async () => {
+  const fault = vi.fn();
+  const f = fixture({ fault });
+  const foreign: ObservedActive = {
+    ...row, process: { ...row.process, pid: 43 },
+    execution: { allowed: false, code: "session.no-match", detail: "Outside this command's execution boundary" },
+  };
+  const starting: ControlledPending = {
+    case: "controlled-pending", id: "starting", detail: "Bridge has not registered",
+    execution: row.execution, year: row.year, observedAtUtc: row.observedAtUtc,
+    shape: row.shape, origin: "cli", project: null, worktree: "C:/checkout",
+    receipt: { payload: "installed", generationRoot: "C:/revit", receiptPath: "C:/revit/session.json" },
+    attempt: { attempt: "launched", process: { ...row.process, pid: 44 }, bridge: { bridge: "missing-endpoint" } },
+  };
+  vi.mocked(f.sources.sessions).mockResolvedValue([foreign, starting, row]);
+  vi.mocked(f.sources.holdings).mockRejectedValue(Error("holdings decoder failed"));
+  const result = await f.machine.refresh();
+  expect(f.sources.holdings).toHaveBeenCalledExactlyOnceWith(row.process);
+  expect(f.sources.documents).toHaveBeenCalledExactlyOnceWith(row.process);
+  expect(result.revit.sessions?.map((entry) => entry.holdingsLeg.error)).toEqual([
+    null, null, expect.stringContaining("holdings decoder failed"),
+  ]);
+  expect(fault).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ leg: "holdings", kind: "error" }));
+});
+
+test("lifecycle gets the exact document census while years and holdings are still waiting", async () => {
+  vi.useFakeTimers(FAKE_CLOCK);
+  const f = fixture();
+  vi.mocked(f.sources.years).mockReturnValue(new Promise(() => {}));
+  vi.mocked(f.sources.holdings).mockReturnValue(new Promise(() => {}));
+  const result = readMachineSession(row.process).then(
+    (value) => ({ value }), (error: unknown) => ({ error }),
+  );
+  try {
+    await vi.advanceTimersByTimeAsync(15_001);
+    await vi.advanceTimersByTimeAsync(15_001);
+    expect(await result).toMatchObject({ value: { documents: docs.documents } });
+    expect(f.sources.years).not.toHaveBeenCalled();
+    expect(f.sources.holdings).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a stuck document census refuses with a next step before the machine deadline", async () => {
+  vi.useFakeTimers(FAKE_CLOCK);
+  const f = fixture();
+  vi.mocked(f.sources.documents).mockReturnValue(new Promise(() => {}));
+  let error: unknown;
+  void readMachineSession(row.process).catch((caught: unknown) => { error = caught; });
+  try {
+    await vi.advanceTimersByTimeAsync(3_001);
+    expect(error).toMatchObject({ message: expect.stringContaining("Switch to Revit") });
   } finally {
     vi.useRealTimers();
   }
@@ -299,12 +390,12 @@ test("unread observed documents remain unknown and a reused pid cannot classify 
 
 test("SDK adapter uses the all-row census and pid document read, refusing a different incarnation", async () => {
   const f = fixture();
-  const envelope = (result: unknown, resolved: unknown = null) =>
+  const envelope = (result: unknown, resolved: unknown = null, diagnostics: unknown[] = []) =>
     JSON.stringify({
       result,
       resolved,
       exitCode: 0,
-      diagnostics: [],
+      diagnostics,
       binary: sdkBinary,
       command: sdkCommand,
       nextSteps: [],
@@ -316,6 +407,9 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
     sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
     expect(await settle(sources.sessions())).toEqual([row]);
     expect(sdkRun).toHaveBeenLastCalledWith(["session", "list", "--all", "--json"]);
+    sdkRun.mockResolvedValueOnce(envelope({ sessions: [row], processReadErrors: [] }));
+    expect(await settle(sources.sessions(row.process.pid))).toEqual([row]);
+    expect(sdkRun).toHaveBeenLastCalledWith(["session", "list", "--pid", "42", "--json"]);
     sdkRun.mockResolvedValueOnce(envelope(docs, row.process));
     expect(await settle(sources.documents(row.process))).toEqual(docs);
     expect(sdkRun).toHaveBeenLastCalledWith(["doc", "list", "--pid", "42", "--json"]);
@@ -323,6 +417,11 @@ test("SDK adapter uses the all-row census and pid document read, refusing a diff
       envelope(docs, { ...row.process, processStartUtc: "a-new-process" }),
     );
     await expect(settle(sources.documents(row.process))).rejects.toThrow("different process incarnation");
+    sdkRun.mockResolvedValueOnce(envelope(
+      { state: "ok", documents: [] }, row.process,
+      [{ code: "doc.bridge-unreachable", detail: "bridge did not answer" }],
+    ));
+    await expect(settle(sources.documents(row.process))).rejects.toThrow("incomplete document census");
     const holdings = [
       {
         openId: "sdk-open",

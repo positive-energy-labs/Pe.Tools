@@ -4,6 +4,7 @@ import { join, win32 } from "node:path";
 import { Cause, Clock, Context, Deferred, Effect, Layer, Queue, Schedule, Schema } from "effect";
 import { z } from "zod";
 import { DOCUMENT_IDENTITY_AUTHORITY, productIdentity } from "@pe/host-contracts/contracts";
+import { read as readState, stateKind, writeState, type StateDirectory } from "@pe/host-contracts/kinds";
 import type {
   ActionReceipt,
   DocumentRef,
@@ -118,7 +119,7 @@ export interface MachineSources {
   actions(this: void): Promise<readonly ActionReceipt[]>;
   host(this: void): Effect.Effect<Omit<MachineHost, "peers">, unknown>;
   peers(this: void): Effect.Effect<readonly MachinePeer[], unknown>;
-  sessions(this: void): Effect.Effect<readonly SessionObservation[], unknown>;
+  sessions(this: void, pid?: number): Effect.Effect<readonly SessionObservation[], unknown>;
   documents(this: void, process: ProcessIdentity): Effect.Effect<DocListResult, unknown>;
   holdings(this: void, process: ProcessIdentity): Effect.Effect<MachineSession["holdings"], unknown>;
   attachments(this: void): Effect.Effect<readonly AttachmentRead[], unknown>;
@@ -137,6 +138,28 @@ export interface MachineSources {
  * "reading this machine" forever (DELL_PE, 2026-10-12). Now it is a leg error in the frame.
  */
 const LEG_DEADLINE_MS = 15_000;
+const LIFECYCLE_CENSUS_DEADLINE_MS = 3_000;
+const lifecycleCensusRefusal = () => unreadable(
+  "Pe couldn’t verify the open documents in this Revit. Switch to Revit and save or sync your work, then retry when Revit responds.",
+);
+
+/** Bound a lifecycle's Promise-shaped SDK reads and pass cancellation through to its child. */
+export async function withinLifecycleCensus<T>(read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const refusal = lifecycleCensusRefusal();
+      reject(refusal);
+      controller.abort(refusal);
+    }, LIFECYCLE_CENSUS_DEADLINE_MS);
+  });
+  try {
+    return await Promise.race([expired, read(controller.signal)]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 /** The machine tick: it recovers receipts and census drift without reading the update feed. */
 export const POLL_PERIOD_MS = 5_000;
 /** The update feed is GitHub's API at 60 unauthenticated calls an hour: read at boot and this often. */
@@ -189,9 +212,19 @@ export interface MachineOptions {
   periodMs?: number;
   updatePeriodMs?: number;
   automaticUpdates?: { peaActive(): boolean };
+  yearsState?: StateDirectory;
   /** The spine's intake for leg faults; absent where nothing observes them. */
   fault?: (fault: MachineLegFault) => void;
 }
+
+const installedYearsKind = stateKind({
+  schema: z.strictObject({
+    years: z.array(z.number().int()),
+    observedAtUtc: z.iso.datetime(),
+  }),
+  place: () => "Last installed Revit versions check",
+  segments: () => ["revit-years.json"],
+});
 
 /**
  * A leg's error as the wire has always spelled it: `Error: <message>`, so a tagged failure reads
@@ -243,10 +276,14 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   let peers: readonly MachinePeer[] = [];
   let sessions: readonly SessionObservation[] | null = null;
   let attachments: readonly AttachmentRead[] = [];
-  let years: readonly number[] | null = null;
+  const yearsFile = options.yearsState && installedYearsKind.in(options.yearsState);
+  const storedYears = yearsFile && readState(yearsFile);
+  const keptYears = storedYears?.kind === "ok" ? storedYears.value : null;
+  let years: readonly number[] | null = keptYears?.years ?? null;
   let providers: readonly MachineProvider[] | null = null;
   let share: MachineShare | null = null;
   const legs: Record<string, MachineLeg> = {};
+  if (keptYears) legs.years = { ...unreadLeg(), observedAtUtc: keptYears.observedAtUtc };
   /** The last fold of the journal this Machine read; an unread actions leg folds nothing. */
   let acquisitions: readonly Acquisition[] = [];
   const documents = new Map<string, { value: MachineSession["documents"]; leg: MachineLeg }>();
@@ -254,11 +291,11 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   let latest: Machine = {
     observedAtUtc: yield* nowIso,
     host: null,
-    revit: { years: null, sessions: null, unclassifiedAttachments: [] },
+    revit: { years, sessions: null, unclassifiedAttachments: [] },
     update: sources.update.current(),
     share: null,
     providers: null,
-    legs: {},
+    legs: { ...legs },
   };
 
   /** Bound one source by the leg deadline; a stall is a typed failure, not an unsettled frame. */
@@ -273,20 +310,20 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   const read = <A>(
     leg: MachineReadingLeg,
     acquire: Effect.Effect<A, unknown>,
-    accept: (value: A) => void,
+    accept: (value: A, observedAtUtc: string) => void,
     key: string = leg,
   ) =>
     Effect.gen(function* () {
       const attemptedAtUtc = yield* nowIso;
       const startedMs = yield* Clock.currentTimeMillis;
       return yield* deadline(acquire, key).pipe(
-        Effect.flatMap((value) => parsed(() => accept(value))),
-        Effect.flatMap(() =>
+        Effect.flatMap((value) =>
           nowIso.pipe(
-            Effect.map((observedAtUtc) => {
+            Effect.flatMap((observedAtUtc) => parsed(() => {
+              accept(value, observedAtUtc);
               legs[key] = { observedAtUtc, attemptedAtUtc, error: null };
               return true;
-            }),
+            })),
           ),
         ),
         Effect.catchCause((cause) =>
@@ -354,8 +391,14 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                   ),
                 ),
               ),
-              (value) => {
+              (value, observedAtUtc) => {
                 years = value;
+                if (yearsFile)
+                  try {
+                    writeState(yearsFile, JSON.stringify({ years, observedAtUtc }));
+                  } catch (error) {
+                    console.warn("Could not keep installed Revit versions for the next host start", error);
+                  }
               },
             )
           : Effect.succeed(true),
@@ -488,12 +531,21 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
             const process = processOf(row);
             if (!process) return;
             const key = processKey(process);
-            yield* read(
-              "holdings",
-              sources.holdings(process),
-              (value) => holdings.set(key, value),
-              `holdings:${key}`,
-            );
+            if (row.execution?.allowed === true && bridgeAnswering(row)) {
+              yield* read(
+                "holdings",
+                sources.holdings(process),
+                (value) => holdings.set(key, value),
+                `holdings:${key}`,
+              );
+            } else {
+              holdings.delete(key);
+              delete legs[`holdings:${key}`];
+            }
+            if (row.execution?.allowed !== true || row.case === "controlled-pending") {
+              documents.delete(key);
+              return;
+            }
             const attemptedAtUtc = yield* nowIso;
             const previous = documents.get(key) ?? { value: null, leg: unreadLeg() };
             if (row.case === "controlled-active") {
@@ -509,7 +561,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                       leg: { ...previous.leg, attemptedAtUtc, error: "SDK bridge is not answering." },
                     },
               );
-            } else if (row.case === "observed-active") {
+            } else if (row.case === "observed-active" && bridgeAnswering(row)) {
               yield* deadline(sources.documents(process), `documents:${key}`).pipe(
                 Effect.flatMap((result) =>
                   nowIso.pipe(
@@ -530,7 +582,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
                   ),
                 ),
               );
-            }
+            } else documents.delete(key);
           }),
         { concurrency: "unbounded", discard: true },
       );
@@ -587,11 +639,9 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
       }),
     );
     for (const key of documents.keys()) if (!currentKeys.has(key)) documents.delete(key);
-    for (const key of holdings.keys())
-      if (!currentKeys.has(key)) {
-        holdings.delete(key);
-        delete legs[`holdings:${key}`];
-      }
+    for (const key of holdings.keys()) if (!currentKeys.has(key)) holdings.delete(key);
+    for (const key of Object.keys(legs))
+      if (key.startsWith("holdings:") && !currentKeys.has(key.slice("holdings:".length))) delete legs[key];
     latest = {
       observedAtUtc: yield* nowIso,
       host: host ? { ...host, peers } : null,
@@ -634,11 +684,50 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
     ).pipe(Effect.andThen(Deferred.await(flight)));
   });
 
-  // A mutation must not reuse a refresh that began before its request.
-  const fresh: Effect.Effect<Machine, MachineRetired> = Effect.suspend(() =>
-    inFlight ? Deferred.await(inFlight) : Effect.void,
-  ).pipe(
-    Effect.andThen(Effect.suspend(() => (closed ? Effect.fail(new MachineRetired()) : refresh))),
+  // A lifecycle gate needs this exact process and its document identities. It owns a new read
+  // so a slow display poll (or the next poll behind it) cannot delay or certify a mutation.
+  const sessionCensus = Effect.fn("MachineOwner.sessionCensus")(function* (
+    process: Pick<ProcessIdentity, "pid" | "processStartUtc">,
+  ) {
+    if (closed) return yield* new MachineRetired();
+    const [rows, sockets, receipts] = yield* Effect.all([
+      sources.sessions(process.pid),
+      sources.attachments(),
+      attempt(sources.actions),
+    ], { concurrency: "unbounded" });
+    const exact = rows.filter((row): row is Extract<SessionObservation, { case: "controlled-active" | "observed-active" }> =>
+      (row.case === "controlled-active" || row.case === "observed-active") &&
+      row.process.pid === process.pid && row.process.processStartUtc === process.processStartUtc,
+    );
+    const [row] = exact;
+    if (exact.length !== 1 || !row || row.execution?.allowed !== true)
+      return yield* lifecycleCensusRefusal();
+    const matched = sockets.filter((socket) => matches(socket, process));
+    const [socket] = matched;
+    if (matched.length > 1 || (socket && socket.documentIdentity !== DOCUMENT_IDENTITY_AUTHORITY))
+      return yield* lifecycleCensusRefusal();
+    const documents = row.case === "controlled-active" && row.bridge.bridge === "ready" && !row.bridge.unresponsive
+      ? row.bridge.documents
+      : row.case === "observed-active" && bridgeAnswering(row)
+        ? (yield* sources.documents(row.process)).documents.map((doc) => ({ ...doc, persistence: null }))
+        : null;
+    if (!documents) return yield* lifecycleCensusRefusal();
+    return {
+      documents,
+      attachment: socket
+        ? withAccess(
+            socket,
+            acquiredOpenIds(
+              foldAcquisitions(receipts), row.process, documents,
+              socket.documents?.map((doc) => doc.openId) ?? [],
+            ),
+            sources.targets.targets(),
+          )
+        : null,
+    };
+  },
+  Effect.timeout(LIFECYCLE_CENSUS_DEADLINE_MS),
+  Effect.mapError((error) => error instanceof MachineRetired ? error : lifecycleCensusRefusal()),
   );
 
   // Callback sources (the bridge, the thread heads, the share owner) cannot yield: they offer a
@@ -670,7 +759,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
   function observe(accept: (value: Machine) => void) {
     if (closed) throw new MachineRetired();
     listeners.add(accept);
-    if (latest.legs.sessions) accept(latest);
+    if (latest.legs.sessions || latest.revit.years !== null) accept(latest);
     if (listeners.size === 1) {
       const unwatch = sources.subscribe?.(notify);
       const untarget = sources.targets.subscribe(notify);
@@ -693,7 +782,7 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
 
   return {
     refresh,
-    fresh,
+    sessionCensus,
     observe,
     current: () => latest,
     acquisitions: () => acquisitions,
@@ -729,12 +818,13 @@ export class MachineOwner extends Context.Service<
  * action doors. Sync reads pass through; the two asks cross one marked edge.
  */
 export const machineOwnerPromise = (machine: MachineOwner["Service"]) => {
-  const edge = <A, E>(effect: Effect.Effect<A, E>) =>
+  const edge = <A, E>(effect: Effect.Effect<A, E>, signal?: AbortSignal) =>
     // effect-edge: island, phase 5
-    Effect.runPromise(effect);
+    Effect.runPromise(effect, { signal });
   return {
     refresh: () => edge(machine.refresh),
-    fresh: () => edge(machine.fresh),
+    sessionCensus: (process: Pick<ProcessIdentity, "pid" | "processStartUtc">, signal?: AbortSignal) =>
+      edge(machine.sessionCensus(process), signal),
     observe: machine.observe,
     current: machine.current,
     acquisitions: machine.acquisitions,
@@ -779,7 +869,7 @@ export const machineForRead = async (
 };
 export const hostMachineFace: MachineOwnerPromise = {
   refresh: () => liveMachine().refresh(),
-  fresh: () => liveMachine().fresh(),
+  sessionCensus: (process, signal) => liveMachine().sessionCensus(process, signal),
   observe: (accept) => liveMachine().observe(accept),
   current: () => liveMachine().current(),
   acquisitions: () => liveMachine().acquisitions(),
@@ -818,31 +908,9 @@ export function processCustody(
 export async function readMachineSession(process: {
   pid: number;
   processStartUtc: string;
-}): Promise<MachineSession> {
-  if (!hostMachine) throw Error("Machine census is unavailable.");
-  const machine = await hostMachine.fresh();
-  for (const key of ["sessions", "attachments", "actions"]) {
-    const leg = machine.legs[key];
-    if (!leg?.observedAtUtc || leg.error)
-      throw Error(`Machine ${key} census is unavailable: ${leg?.error ?? "unread"}`);
-  }
-  const rows =
-    machine.revit.sessions?.filter(
-      ({ row }) =>
-        (row.case === "controlled-active" || row.case === "observed-active") &&
-        row.process.pid === process.pid &&
-        row.process.processStartUtc === process.processStartUtc,
-    ) ?? [];
-  const row = rows.length === 1 ? rows[0] : undefined;
-  if (!row || !row.documents || !row.documentsLeg.observedAtUtc || row.documentsLeg.error)
-    throw Error(
-      `Machine has no fresh document census for the exact process incarnation${row?.documentsLeg.error ? `: ${row.documentsLeg.error}` : "."}`,
-    );
-  if (machine.revit.unclassifiedAttachments.some((attachment) => matches(attachment, process)))
-    throw Error("Machine cannot join the process to one exact bridge attachment.");
-  if (row.attachment && row.attachment.documentIdentity !== DOCUMENT_IDENTITY_AUTHORITY)
-    throw Error("The bridge attachment does not attest SDK document identity; no document joins.");
-  return row;
+}, signal?: AbortSignal) {
+  if (!hostMachine) throw lifecycleCensusRefusal();
+  return hostMachine.sessionCensus(process, signal);
 }
 
 /** The acquisition that holds one exact product lifetime now; unproven (no census) is none. */
@@ -877,6 +945,9 @@ function processOf(row: SessionObservation): ProcessIdentity | null {
       : null;
 }
 const processKey = (process: ProcessIdentity) => `${process.pid}:${process.processStartUtc}`;
+const bridgeAnswering = (row: SessionObservation) =>
+  (row.case === "controlled-active" && row.bridge.bridge === "ready" && !row.bridge.unresponsive) ||
+  (row.case === "observed-active" && row.bridge.bridge === "answering");
 const matches = (
   attachment: AttachmentRead,
   process: Pick<ProcessIdentity, "pid" | "processStartUtc">,
@@ -942,8 +1013,8 @@ export function machineSources(
       };
     }),
     peers: () => attempt(() => readMachinePeers(hostOwnership.rootPath, hostOwnership.serviceName)),
-    sessions: Effect.fn("machine.sessions")(function* () {
-      const { result } = yield* sdk<SessionListResult>(sessionListArgv({ all: true }));
+    sessions: Effect.fn("machine.sessions")(function* (pid?: number) {
+      const { result } = yield* sdk<SessionListResult>(sessionListArgv(pid === undefined ? { all: true } : { pid }));
       if (!Array.isArray(result.sessions))
         return yield* unreadable("SDK session census has no sessions array.");
       if (!Array.isArray(result.processReadErrors))
@@ -958,6 +1029,8 @@ export function machineSources(
     }),
     documents: Effect.fn("machine.documents")(function* (process: ProcessIdentity) {
       const envelope = yield* sdk<DocListResult>(docListArgv({ pid: process.pid }));
+      if (envelope.diagnostics.length)
+        return yield* unreadable("SDK reported an incomplete document census.");
       if (
         envelope.resolved?.pid !== process.pid ||
         envelope.resolved.processStartUtc !== process.processStartUtc

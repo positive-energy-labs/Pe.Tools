@@ -61,7 +61,7 @@ import {
 } from "./acquisition.ts";
 
 import { resolveStartProject } from "./session-route.ts";
-import { readMachineSession, receiptProcessOf } from "./machine.ts";
+import { readMachineSession, receiptProcessOf, withinLifecycleCensus } from "./machine.ts";
 import { downloadCloudVersion } from "./cloud-version.ts";
 import {
   readSdk,
@@ -311,15 +311,16 @@ async function observeLifecycle(
   selection?: SdkSessionSelection,
   expected?: Incarnation["process"],
   document?: SdkDocumentRef,
+  signal?: AbortSignal,
 ) {
   const target = selection ? await readTarget(selection, expected, read) : null;
   const effects: Footprint = [];
   const consumes: Consumed[] = [];
   let basis = ctx.basis;
   if (target) {
-    const census = await readMachineSession(target.process).catch((error: unknown) => {
+    const census = await readMachineSession(target.process, signal).catch((error: unknown) => {
       throw refused(
-        `Cannot prove which documents the process affects: ${String(error)}`,
+        error instanceof Error ? error.message : String(error),
         "lifecycle.ungranted-documents",
       );
     });
@@ -401,6 +402,7 @@ async function bindControl(
   session: Incarnation,
   document: SdkDocumentRef | undefined,
   guard: (documents: readonly GuardedDocument[]) => void,
+  signal?: AbortSignal,
 ): Promise<CommandBinding> {
   const { target, ...facts } = await observeLifecycle(
     ctx,
@@ -408,6 +410,7 @@ async function bindControl(
     session.selection,
     session.process,
     document,
+    signal,
   );
   if (!target) throw refused("The original SDK process is unavailable");
   // The guards' evidence is the SDK's own `doc list`: the session census carries no `isModified`.
@@ -754,15 +757,18 @@ export function instancesExecutors(deps: InstancesActionDependencies = {}) {
         ),
     }),
     "instances.stop": command(commands["instances.stop"], stopPreparedSchema, {
-      bind: async (ctx) => {
+      bind: (ctx) => withinLifecycleCensus(async (signal) => {
         const { session } = ctx.admission.input;
-        const census = await sdkEnvelope<SessionListResult>(stopCensus, read);
+        const boundedRead: SdkReceiptReader = (args) => read(args, signal);
+        const census = await sdkEnvelope<SessionListResult>(stopCensus, boundedRead);
         if (processGone(census, session.process))
           return { effects: [], prepare: async () => ({ gone: session.process }) };
-        return bindControl(ctx, read, session, undefined, (docs) =>
-          guardDiscard(ctx.caller, docs, "stop"),
+        return bindControl(
+          ctx, boundedRead, session, undefined,
+          (docs) => guardDiscard(ctx.caller, docs, "stop"),
+          signal,
         );
-      },
+      }),
       run: (ctx, execution) => {
         if ("gone" in execution.prepared) {
           const { gone } = execution.prepared;

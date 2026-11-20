@@ -15,6 +15,10 @@ export const machineLegSchema = z
     error: z.string().nullable(),
   })
   .readonly();
+
+/** A retained answer predates this host or its latest failed attempt. */
+export const keptMachineLegAt = (leg: MachineLeg | undefined) =>
+  leg && (leg.attemptedAtUtc === null || leg.error !== null) ? leg.observedAtUtc : null;
 const processSchema = sdkSchema("ProcessIdentity").pick({ pid: true, processStartUtc: true });
 export const machinePeerSchema = z
   .object({

@@ -1390,6 +1390,7 @@ function* hostPeRoutes(
   const machineSpec = {
     sources: machineSources(journal, bridge, providers, update, share, threads.heads),
     options: {
+      yearsState: hostState().directory("host", hostOwnership.serviceName),
       fault: (fault) =>
         telemetry.track(
           telemetry.record({

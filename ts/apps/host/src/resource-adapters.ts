@@ -180,7 +180,7 @@ export function hostResourceObserver(
   origin = "http://127.0.0.1",
   // Resolved at the call, not at the build: one observer outlives any one `fetch` binding.
   read: (url: URL, init?: RequestInit) => Promise<Response> = (url, init) => fetch(url, init),
-  machine?: MachineOwnerPromise,
+  machine?: Pick<MachineOwnerPromise, "observe" | "current">,
   resolveSession: (
     bridge: RevitBridge["Service"],
     scope: HostSessionScope,

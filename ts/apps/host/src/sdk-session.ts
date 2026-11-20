@@ -23,10 +23,11 @@ import { hostOwnership } from "./host-ownership.ts";
 import { hostServiceName, runtimeOwnerRejection } from "@pe/host-contracts/service-identity";
 
 /** Transitional: phase 5 I deletes readSdk with its remaining consumers. Do not add imports. */
-export const readSdk: SdkReceiptReader = (args) =>
+export const readSdk: SdkReceiptReader = (args, signal) =>
   // effect-edge: island, phase 5
   Effect.runPromise(
     runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout("30 seconds")),
+    { signal },
   );
 const refusal = (message: string, result?: unknown) =>
   new BridgeError(message, 409, { notDispatched: true, result });

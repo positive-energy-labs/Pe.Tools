@@ -24,11 +24,15 @@ export const SDK_REQUEST_ID = "<request-id>";
 export type SdkStepInput = { readonly expectSession?: string; readonly argv: readonly string[] };
 export const readSdk = (
   args: readonly string[],
-  timeout: "2 minutes" | "15 minutes" = "15 minutes",
+  limit: "2 minutes" | "15 minutes" | AbortSignal = "15 minutes",
 ) =>
   // effect-edge: island, phase 5
   Effect.runPromise(
-    runPeRevitCli(args).pipe(Effect.provide(NodeServices.layer), Effect.timeout(timeout)),
+    runPeRevitCli(args).pipe(
+      Effect.provide(NodeServices.layer),
+      Effect.timeout(typeof limit === "string" ? limit : "15 minutes"),
+    ),
+    { signal: typeof limit === "string" ? undefined : limit },
   );
 export const sdkEnvelope = async <T, R = unknown>(
   args: readonly string[],

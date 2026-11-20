@@ -20,6 +20,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Plug, Square } from "lucide-react";
 import {
   instancesActions,
+  keptMachineLegAt,
   nativeProcessSchema,
   type HarnessThreadSummary,
   type Machine,
@@ -155,6 +156,7 @@ function PatchBayBody({
     [machine],
   );
   const years = machine?.revit.years ?? [];
+  const keptYearsAt = keptMachineLegAt(machine?.legs.years);
   const yearStatus = machine?.legs.years?.error != null
     ? { kind: "error", label: "The Revit version check failed. Pe is trying again." } as const
     : machine?.revit.years == null
@@ -494,6 +496,9 @@ function PatchBayBody({
           />
         </div>
         <div className="flex flex-wrap items-center gap-1 px-(--gutter) pb-1 hairline-t pt-1">
+          {keptYearsAt && (
+            <OutcomeLine kind="advisory" label={`Using Revit versions last checked ${new Date(keptYearsAt).toLocaleString()}. Pe is checking again.`} />
+          )}
           {years.length ? (
             <Switcher
               ariaLabel="new Revit year"
