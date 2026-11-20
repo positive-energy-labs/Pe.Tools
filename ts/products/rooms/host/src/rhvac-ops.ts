@@ -1,7 +1,6 @@
 import type { ModelRoom, StagedRoomEdit } from "@pe/rooms-contract/takeoffs";
 import { refused } from "@pe/host-internal/command-executor";
 import { createHash, randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { productScratchPath } from "@pe/host-contracts/service-identity";
 import { dirname, join, resolve } from "node:path";

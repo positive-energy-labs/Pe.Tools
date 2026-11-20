@@ -623,7 +623,7 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
                   current,
                   { kind: "resource", key: "snapshot", args: canonicalJson(json(request)) },
                   () => {
-                    const resource = resourceReadingSchema.parse(request);
+                    resourceReadingSchema.parse(request);
                     return new Promise((resolve, reject) => {
                       let settled = false,
                         stop = () => {};

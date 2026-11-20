@@ -7,7 +7,6 @@ import {
   nativeProcessSchema,
   workAdmissionSchema,
   type Consumed,
-  type DocumentRef,
   type NativeProcess,
 } from "@pe/agent-contracts";
 import {
@@ -20,15 +19,10 @@ import {
   takeoffEditAddress,
   takeoffEditKey,
   type StagedRoomEdit,
-  type TakeoffCapture,
 } from "@pe/rooms-contract/takeoffs";
 import { nativeRequestSchema, nativeResponseSchema } from "@pe/host-contracts/decoders";
 import type { HostOperationKey } from "@pe/host-contracts/operation-types";
-import type {
-  RhvacExtractData,
-  RhvacSyncRequest,
-  RhvacSyncResult,
-} from "@pe/rooms-contract/local-operations";
+import type { RhvacSyncRequest } from "@pe/rooms-contract/local-operations";
 import type { ActionExecution, Step } from "@pe/host-internal/action-execution";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import {
