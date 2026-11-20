@@ -26,16 +26,10 @@ afterEach(async () => {
   for (const close of closes.splice(0).reverse()) await close();
 });
 
-test("file inputs retain the target pointer for project Catalogs and family spec evidence", async () => {
+test("file inputs retain the target pointer for project Catalogs", async () => {
   const f = await projectFixture(false);
   await mkdir(join(f.project, "Catalogs", "site"), { recursive: true });
   await writeFile(join(f.project, "Catalogs", "site", "bad.json"), "{");
-  // A broken saved evidence link is a project-owned finding, distinct from an absent link.
-  await mkdir(join(f.pod, "settings", "family"), { recursive: true });
-  await writeFile(
-    join(f.pod, "settings", "family", "fixture.json.spec.json"),
-    JSON.stringify({ path: "settings/family/missing.json" }),
-  );
   const definition = read("test.project-inputs", {
     input: z.object({ name: z.string(), args: z.unknown() }),
     output: z.unknown(),
@@ -94,15 +88,5 @@ test("file inputs retain the target pointer for project Catalogs and family spec
   };
   expect(await take("catalogs", f.target.ref)).toMatchObject({
     findings: [expect.stringContaining("site")],
-  });
-  expect(
-    await take("family-spec", {
-      pod: "project-only",
-      path: "settings/family/fixture.json",
-      target: f.target.ref,
-    }),
-  ).toMatchObject({
-    doc: null,
-    error: expect.stringContaining("Saved PDF evidence is unavailable"),
   });
 });

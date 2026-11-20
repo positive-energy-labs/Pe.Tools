@@ -1,3 +1,4 @@
+import { settle } from "./effect-test.ts";
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,7 +15,6 @@ import { servePeRoute } from "@pe/mcps/product-catalog";
 import { contentRootsRefreshMs } from "../src/content-roots.ts";
 import { freezeScript } from "../src/operation-script.ts";
 import { readMemberPod } from "../src/settings.ts";
-import { Effect } from "effect";
 
 const reinstall = vi.hoisted(
   (): { hold: { entered: () => void; wait: Promise<void> } | undefined } => ({ hold: undefined }),
@@ -127,9 +127,7 @@ test.each(["package", "settings", "indexed-settings"])(
     const read = () =>
       door === "package"
         ? readPackage("requested", { podsRoots: pods })
-        : Effect.runPromise(
-            readMemberPod("requested", { podsRoot: pods }, door === "indexed-settings"),
-          );
+        : settle(readMemberPod("requested", { podsRoot: pods }, door === "indexed-settings"));
     await read();
     await fs.writeFile(path, "<title>changed!!</title>");
     clock.mockReturnValue(frozen.mtimeMs + 2001);

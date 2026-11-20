@@ -101,10 +101,17 @@ test("borrowed calls follow generated safety metadata, including rolled-back tra
 });
 
 test("document requests reach the app before API routing, without turning API doors into documents", () => {
-  for (const url of ["/family", "/families", "/schedules", "/captures", "/ops"])
+  for (const url of ["/families", "/ops"])
     for (const headers of [{ accept: "text/html" }, { "sec-fetch-mode": "navigate" }])
       expect(isAppNavigation({ method: "GET", url, headers }), url).toBe(true);
-  for (const url of ["/call", "/host/shutdown", "/pages/probe/", "/api/bridge"])
+  for (const url of [
+    "/call",
+    "/host/shutdown",
+    "/pages/probe/",
+    "/api/bridge",
+    "/captures",
+    "/captures/" + "a".repeat(64) + ".png",
+  ])
     expect(isAppNavigation({ method: "GET", url, headers: { accept: "text/html" } }), url).toBe(
       false,
     );

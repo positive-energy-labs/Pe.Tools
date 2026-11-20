@@ -4,7 +4,7 @@ import { fansTool } from "@pe/fans-contract/semantic-actions";
 
 import { canonicalRouteInput, workKey } from "@pe/agent-contracts";
 
-import { ductsDesign } from "@pe/duct-systems-contract/ducts";
+import { ductsDesign, ownerBlobReplacementSchema } from "@pe/duct-systems-contract/ducts";
 import { ductsFirmSchema } from "@pe/ducts-contract/duct-inputs";
 import { subjectOf, workHandleSchema } from "@pe/agent-contracts";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -99,6 +99,7 @@ const prepared = z.object({
   process: z.unknown(),
   input: z.record(z.string(), z.unknown()),
   dependencies: z.unknown(),
+  replacement: ownerBlobReplacementSchema,
   nothingToWrite: z.boolean().optional(),
   subjects: z.record(z.string(), z.string()).default({}),
   cells: z.array(z.tuple([z.string(), z.string()])).default([]),
@@ -222,7 +223,13 @@ export function ductActionExecutors(
           r.state === "succeeded" &&
           canonicalRouteInput(r.target) === canonicalRouteInput(ctx.admission.target),
       )
-      .at(-1);
+      .findLast((r) => phase !== "apply" || r.id === ctx.admission.id);
+    const replacement =
+      kind === "losses" && phase === "apply" && plan?.state === "succeeded"
+        ? ownerBlobReplacementSchema.parse(
+            (plan.result as { value?: { replacement?: unknown } }).value?.replacement,
+          )
+        : undefined;
     const appliedAt =
       phase === "plan"
         ? new Date().toISOString()
@@ -316,7 +323,7 @@ export function ductActionExecutors(
           bridge,
           appliedAt,
         });
-        return { process, ...derived };
+        return { process, ...derived, replacement };
       },
     };
   };
@@ -344,11 +351,12 @@ export function ductActionExecutors(
       // The losses plan reads through the native Read sibling; a rehearsal calls its rolled-back TransactRead;
       // only apply reaches the ModelWrite leaf. Heal and fan plans never get here: the write boundary seals them.
       const key = phase === "apply" ? entry.key : entry.native;
+      const input = p.replacement ? { ...p.input, replacement: p.replacement } : p.input;
       const value = yield* execution.step(
         "native",
         key,
-        p.input,
-        (id) => nativeStep(bridge, target, key, p.input, id),
+        input,
+        (id) => nativeStep(bridge, target, key, input, id),
         { process: p.process as import("@pe/agent-contracts").NativeProcess },
       );
       // Retain the review and its read evidence. A refusal blocks the whole intent at the write boundary;

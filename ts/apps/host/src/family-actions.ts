@@ -1,8 +1,6 @@
 import { authorSchema } from "@pe/agent-contracts";
-import { targetHomes } from "@pe/host-internal/target-homes";
 import { currentDocument as current, lifetime } from "./document-lifetime.ts";
 import { createHash } from "node:crypto";
-import { resolve, win32 } from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { Effect, type FileSystem } from "effect";
 import type { RunPods } from "@pe/host-internal/pod-runner";
@@ -11,7 +9,6 @@ import {
   familyActions,
   familyMemberPath,
   familyReads,
-  familyLiveReadSchema,
   familiesCaptureEvidenceSchema,
   familiesExcluded,
   type FfPlanEntry,
@@ -35,7 +32,6 @@ import {
   workKeySchema,
   workKey,
   bindWork,
-  address,
   addressSchema,
   familiesObservationSchema,
   summarizeFamiliesObservation,
@@ -52,7 +48,6 @@ import {
   stagedFilter,
   parseContributionKey,
   type FamiliesRouteDocument,
-  type FamilyDraft,
   type WorkPath,
 } from "@pe/agent-contracts";
 import { commands, tools } from "@pe/mcps/product-actions";
@@ -65,12 +60,10 @@ import type {
   FamiliesApply,
   FamiliesCapture,
   FamiliesPlan,
-  FamilyCapture as NativeFamilyCapture,
-  FamilyPlan,
   RevitCatalogLoadedFamilies,
   RevitMatrixLoadedFamilies,
 } from "@pe/host-contracts/generated";
-import { CANCEL_OPERATION_KEY, invokeBridge as invoke } from "./bridge.ts";
+import { documentHomes, invokeBridge as invoke } from "./bridge.ts";
 import { type RevitBridge } from "@pe/host-internal/bridge";
 import { assertFresh, type DocumentMarks } from "./document-marks.ts";
 import type { ActionExecution } from "@pe/host-internal/action-execution";
@@ -99,7 +92,6 @@ import {
 } from "./settings.ts";
 import type { TakeoffCaptures } from "./takeoff-captures.ts";
 import { LocalOpError } from "./local-error.ts";
-import { familySpecExecutor } from "./family-spec.ts";
 import type { FamiliesReader } from "./families-reader.ts";
 import { nativeInputSchema } from "./native-input.ts";
 
@@ -119,7 +111,6 @@ export const sourceRunDirectory = async (
 };
 
 export type PodDependencies = {
-  parsePdf?: (request: import("@pe/mcps/family-pdf").FamilyPdfRequest) => Promise<unknown>;
   podsRoot?: string;
   runPods?: RunPods;
 };
@@ -197,23 +188,15 @@ const familyMember = (modelJson: string) => {
 };
 
 /** A draft saved as a member says what it is, whatever `$schema` it carried. */
-const draftContent = (spec: string) => {
-  const { $schema: _, ...model } = JSON.parse(spec.replace(/^\uFEFF/, "")) as object & {
-    $schema?: string;
-  };
-  return `${JSON.stringify({ $schema: familyModelSchema, ...model }, null, 2)}
-`;
-};
-
-/** Pod context whose composition runs in the exact admitted session and document lifetime. */
 export const podContext = async (
   deps: PodDependencies,
   bridge: RevitBridge["Service"],
   target?: DocumentRef,
 ): Promise<PodContext> => ({
-  ...(await Effect.runPromise(
-    targetHomes(bridge, { bridgeSessionId: target?.session, openDocumentId: target?.openId }),
-  )),
+  ...(await documentHomes(bridge, {
+    bridgeSessionId: target?.session,
+    openDocumentId: target?.openId,
+  })),
   podsRoot: deps.podsRoot,
   ...(target
     ? {
@@ -273,15 +256,14 @@ export const writeCaptureRun = (
 
 const retirementSchema = z.strictObject({
   key: workKeySchema,
-  route: z.enum(["family", "families"]),
+  route: z.literal("families"),
   cells: z.array(z.string()),
   patch: z.literal(true).optional(),
 });
 type Retirement = z.infer<typeof retirementSchema>;
 /**
  * The consumed Work paths a native apply result confirms. Only a successful receipt confirms intent:
- * a cancelled or refused run retires nothing, so the edits stay staged. A family document is one
- * family, so any success confirms its cells; a project confirms each cell by its family's receipt.
+ * a cancelled or refused run retires nothing, so the edits stay staged. Each cell needs its family's receipt.
  */
 export const confirmedRetirement = (
   consumed: Retirement,
@@ -292,9 +274,7 @@ export const confirmedRetirement = (
     converged = new Set(receipts.filter((x) => x.success && x.converged).map((x) => x.familyName));
   if (!succeeded.size) return [];
   const paths: WorkPath[] = consumed.cells
-    .filter(
-      (cell) => consumed.route === "family" || succeeded.has(familyCellAddress(cell).familyName),
-    )
+    .filter((cell) => succeeded.has(familyCellAddress(cell).familyName))
     .map((cell) => ["cells", cell]);
   if (consumed.patch && patchNames?.every((name) => converged.has(name))) paths.push(["patch"]);
   return paths;
@@ -367,16 +347,8 @@ const batchOf = <S extends z.ZodType>(leaf: S) =>
   z.union([leaf, z.strictObject({ kind: z.literal("batch"), items: z.array(leaf) })]);
 const plansSchema = batchOf(planLeafSchema),
   appliesSchema = batchOf(applyLeafSchema);
-const composedInput = <K extends "family.apply" | "families.apply" | "family.build">(key: K) =>
+const composedInput = (key: "families.apply") =>
   z.intersection(nativeInputSchema(key), z.object({ source: sealedSourceSchema }));
-const familyAppliesSchema = batchOf(
-  applyLeafSchema.extend({
-    input: composedInput("family.apply").refine(
-      (input) => typeof input.plan === "string",
-      "Apply must retain its exact plan",
-    ),
-  }),
-);
 const familiesAppliesSchema = batchOf(
   applyLeafSchema.extend({
     input: composedInput("families.apply").refine(
@@ -385,12 +357,6 @@ const familiesAppliesSchema = batchOf(
     ),
   }),
 );
-const buildSchema = nativeSchema.extend({
-  input: composedInput("family.build").refine(
-    (input) => typeof input.modelDirectory === "string",
-    "Build must retain its model directory",
-  ),
-});
 const captureSchema = z.object({
   kind: z.literal("capture"),
   process: nativeProcessSchema,
@@ -400,16 +366,8 @@ const captureSchema = z.object({
   spec: z.string().nullable(),
   at: z.string(),
 });
-const preparedFamilyCaptureSchema = captureSchema.extend({
-  input: nativeInputSchema("family.capture"),
-});
 const preparedFamiliesCaptureSchema = captureSchema.extend({
   input: nativeInputSchema("families.capture"),
-});
-const observationSchema = z.strictObject({
-  kind: z.literal("observation"),
-  reading: z.string(),
-  takenAt: z.string().nullable(),
 });
 const settingsBasisSchema = z.strictObject({
   member: z.strictObject({ pod: z.string(), path: z.string() }),
@@ -465,12 +423,6 @@ const handleOf = (ctx: CommandContext) => {
   if (!handle) throw refused("Reviewed Work is required");
   return handle;
 };
-const familyDrafts = (doc: FamilyDraft): DraftSource[] => {
-  if (!doc.reading) throw refused("Read this family before planning");
-  return [
-    { source: { path: "edit/family.json", content: settingsCandidate(doc.reading, doc.cells) } },
-  ];
-};
 const familiesDrafts = (doc: FamiliesRouteDocument): DraftSource[] => {
   const names = [
     ...new Set(editedEntries(doc.cells).map(([cell]) => familyCellAddress(cell).familyName)),
@@ -490,8 +442,6 @@ const familiesDrafts = (doc: FamiliesRouteDocument): DraftSource[] => {
     executionOptions: doc.executionOptions,
   }));
 };
-const familySelection = (ctx: CommandContext) =>
-  ctx.selectWork(tools.family.work, handleOf(ctx), () => ({ facts: [["reading"], ["takenAt"]] }));
 const familiesSelection = (ctx: CommandContext, names?: readonly string[]) =>
   ctx.selectWork(tools.families.work, handleOf(ctx), (doc, cells) => ({
     cells: cells
@@ -531,9 +481,9 @@ export function familyExecutors(
       throw refused("Select an exact document lifetime");
     return ctx.admission.target.ref;
   };
-  const nativeBinding = async (ctx: CommandContext, family: boolean | "project") => {
+  const nativeBinding = async (ctx: CommandContext) => {
     const target = targetOf(ctx),
-      { process } = await lifetime(bridge, target, family, deps);
+      { process } = await lifetime(bridge, target, "project", deps);
     return {
       target,
       process,
@@ -591,31 +541,6 @@ export function familyExecutors(
       (id) => nativeStep(bridge, targetOf(ctx), key, prepared.input, id),
       { process: prepared.process, ...(check ? { check } : {}) },
     );
-  const planFamily = (
-    ctx: CommandContext,
-    doc: FamilyDraft | null,
-    source: Sealed,
-    process: NativeProcess,
-  ): Plan => {
-    const cells = doc ? editedEntries(doc.cells).map(([cell]) => cell) : [];
-    const consumed =
-      doc?.reading &&
-      cells.length &&
-      unstamped(settingsCandidate(doc.reading, doc.cells)) === unstamped(rootText(source.source))
-        ? { key: handleOf(ctx).key, route: "family" as const, cells }
-        : null;
-    return {
-      kind: "native",
-      process,
-      planned: { scope: null, excluded: {}, written: [] },
-      sealed: {
-        specJson: source.specJson,
-        source: source.source,
-        consumed,
-        ...(consumed ? { takenAt: doc!.takenAt } : {}),
-      },
-    };
-  };
   const planFamilies = async (
     ctx: CommandContext,
     doc: FamiliesRouteDocument,
@@ -670,25 +595,6 @@ export function familyExecutors(
   };
   // A plan runs at prepare time (Promise) and as a journaled step (Effect): it yields its native
   // calls and each driver answers them, so one algorithm serves both without a run call.
-  const runFamilyPlan = function* (ctx: CommandContext, prepared: Plan): PlanCalls {
-    const result = (yield {
-        key: "family.plan",
-        input: { specJson: prepared.sealed.specJson },
-        process: prepared.process,
-      }) as FamilyPlan.Res.Response,
-      plan = result.families[0];
-    if (result.diagnostics.length || result.families.length !== 1 || plan!.refusals.length)
-      throw refused(
-        [...result.diagnostics, ...(plan?.refusals ?? [])].map(diagnosticLine).join(" · ") ||
-          "Expected one family plan",
-      );
-    return {
-      id: ctx.admission.id,
-      executionContext: targetOf(ctx),
-      plan: plan!,
-      included: { [String(plan!.familyId)]: plan!.planHash },
-    };
-  };
   const runFamiliesPlan = function* (ctx: CommandContext, prepared: Plan): PlanCalls {
     const catalog = (yield {
       key: "revit.catalog.loaded-families",
@@ -770,7 +676,7 @@ export function familyExecutors(
     let next = calls.next();
     while (!next.done) {
       const { key, input, process } = next.value;
-      await current(bridge, targetOf(ctx), p.planned.scope ? "project" : true, process);
+      await current(bridge, targetOf(ctx), "project", process);
       next = calls.next(
         await invoke(
           bridge,
@@ -813,7 +719,6 @@ export function familyExecutors(
     plan: Preview,
     include: "all" | string[],
     process: NativeProcess,
-    project: boolean,
     doc?: FamiliesRouteDocument,
   ): Apply[] => {
     const prepared = plansSchema.parse(
@@ -838,7 +743,6 @@ export function familyExecutors(
       if (!Object.keys(hashes).length) return [];
       const consumed = item.sealed.consumed;
       if (
-        project &&
         doc &&
         ((consumed?.patch && editedEntries(doc.cells).length) ||
           (consumed?.cells.length && doc.patch.edit))
@@ -856,17 +760,13 @@ export function familyExecutors(
             specJson: item.sealed.specJson,
             source: item.sealed.source,
             expectedPlanHashes: hashes,
-            ...(project
-              ? {
-                  familyNames: Object.fromEntries(
-                    entries.flatMap((e) =>
-                      e.familyId != null && Object.hasOwn(hashes, String(e.familyId))
-                        ? [[String(e.familyId), e.familyName]]
-                        : [],
-                    ),
-                  ),
-                }
-              : {}),
+            familyNames: Object.fromEntries(
+              entries.flatMap((e) =>
+                e.familyId != null && Object.hasOwn(hashes, String(e.familyId))
+                  ? [[String(e.familyId), e.familyName]]
+                  : [],
+              ),
+            ),
             ...(item.sealed.executionOptions
               ? { executionOptions: item.sealed.executionOptions }
               : {}),
@@ -883,7 +783,7 @@ export function familyExecutors(
                     : null,
               }
             : {}),
-          ...(project && (consumed || doc)
+          ...(consumed || doc
             ? {
                 readbackWork: consumed?.key ?? handleOf(ctx).key,
                 readbackTakenAt: consumed ? item.sealed.takenAt : doc?.takenAt,
@@ -893,14 +793,14 @@ export function familyExecutors(
       ];
     });
   };
-  const runApply = (ctx: CommandContext, execution: ActionExecution, project: boolean) =>
+  const runApply = (ctx: CommandContext, execution: ActionExecution) =>
     Effect.gen(function* () {
       const results = [];
       for (const prepared of leaves<Apply>(execution.prepared as z.infer<typeof appliesSchema>)) {
         const result = (yield* native(
             ctx,
             execution,
-            project ? "families.apply" : "family.apply",
+            "families.apply",
             prepared,
             appliedSomething,
           )) as FamiliesApply.Res.Response,
@@ -914,7 +814,7 @@ export function familyExecutors(
           );
         const readback: Record<string, unknown> = {},
           names = [...new Set(result.receipts.filter((x) => x.success).map((x) => x.familyName))];
-        if (project && names.length)
+        if (names.length)
           yield* io(async () => {
             try {
               if (!prepared.readbackWork)
@@ -956,7 +856,6 @@ export function familyExecutors(
       return (execution.prepared as { kind: string }).kind === "batch" ? { results } : results[0];
     });
   type Review = {
-    family: true | "project";
     takenAt: string | null;
     drafts(): DraftSource[];
     compile(source: Composed, process: NativeProcess): Plan | Promise<Plan>;
@@ -967,20 +866,9 @@ export function familyExecutors(
     if (!doc) throw refused("Reviewed Work is required");
     return doc;
   };
-  const reviewFamily = async (ctx: CommandContext): Promise<Review> => {
-    const doc = ctx.admission.input.work ? await familySelection(ctx) : null;
-    return {
-      family: true,
-      takenAt: doc?.takenAt ?? null,
-      drafts: () => familyDrafts(reviewed(doc)),
-      compile: (source, process) => planFamily(ctx, doc, source, process),
-      preview: runFamilyPlan,
-    };
-  };
   const reviewFamilies = async (ctx: CommandContext, names?: string[]): Promise<Review> => {
     const doc = ctx.admission.input.work ? await familiesSelection(ctx, names) : null;
     return {
-      family: "project",
       takenAt: doc?.takenAt ?? null,
       drafts: () => familiesDrafts(reviewed(doc)),
       compile: (source, process) => planFamilies(ctx, reviewed(doc), source, process),
@@ -1004,7 +892,7 @@ export function familyExecutors(
         ]
       : review.drafts());
   const planBinding = async (ctx: CommandContext, input: SourceInput, review: Review) => {
-    const bound = await nativeBinding(ctx, review.family),
+    const bound = await nativeBinding(ctx),
       submitted = await compose(ctx, sourcesFor(input, review));
     return {
       consumes: [...bound.consumes, ...submitted.consumes, ...mark(bound.target, review.takenAt)],
@@ -1022,10 +910,9 @@ export function familyExecutors(
     ctx: CommandContext,
     input: z.output<(typeof familyActions)["families.apply"]["input"]>,
     review: Review,
-    previewKey: "family.plan" | "families.plan",
   ) => {
-    const bound = await nativeBinding(ctx, review.family),
-      plan = input.plan ? adopt(ctx, input.plan, previewKey) : null;
+    const bound = await nativeBinding(ctx),
+      plan = input.plan ? adopt(ctx, input.plan, "families.plan") : null;
     const submitted = plan
       ? { sealed: [], consumes: [] }
       : await compose(ctx, sourcesFor(input, review));
@@ -1060,14 +947,7 @@ export function familyExecutors(
               }),
             );
         const items = intents.flatMap((intent) =>
-          selectApply(
-            ctx,
-            intent,
-            input.include,
-            bound.process,
-            review.family === "project",
-            review.projectDoc,
-          ),
+          selectApply(ctx, intent, input.include, bound.process, review.projectDoc),
         );
         if (!items.length) throw refused("No included family has changes to apply");
         return input.sources || (!input.source && !input.plan) || adopted?.kind === "batch"
@@ -1076,10 +956,6 @@ export function familyExecutors(
       },
     };
   };
-  const familyPlan = command(commands["family.plan"], plansSchema, {
-    bind: async (ctx) => planBinding(ctx, ctx.admission.input, await reviewFamily(ctx)),
-    run: (ctx, execution) => runPreview(ctx, execution, runFamilyPlan),
-  });
   const familiesPlan = command(commands["families.plan"], plansSchema, {
     bind: async (ctx) =>
       planBinding(
@@ -1089,12 +965,6 @@ export function familyExecutors(
       ),
     run: (ctx, execution) => runPreview(ctx, execution, runFamiliesPlan),
   });
-  const familyApply = command(commands["family.apply"], familyAppliesSchema, {
-    seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
-    bind: async (ctx) =>
-      applyBinding(ctx, ctx.admission.input, await reviewFamily(ctx), "family.plan"),
-    run: (ctx, execution) => runApply(ctx, execution, false),
-  });
   const familiesApply = command(commands["families.apply"], familiesAppliesSchema, {
     seal: (p) => ({ request: p.kind === "batch" ? p.items.map(({ input }) => input) : p.input }),
     bind: async (ctx) =>
@@ -1102,9 +972,8 @@ export function familyExecutors(
         ctx,
         ctx.admission.input,
         await reviewFamilies(ctx, ctx.admission.input.familyNames),
-        "families.plan",
       ),
-    run: (ctx, execution) => runApply(ctx, execution, true),
+    run: (ctx, execution) => runApply(ctx, execution),
   });
 
   // A capture names no family before Revit answers, so its member is named by the action that filed it.
@@ -1112,10 +981,9 @@ export function familyExecutors(
     familyMemberPath(`${digest(ctx.admission.id).slice(0, 24)}-${familyId}`);
   const captureBinding = async (
     ctx: CommandContext,
-    family: true | "project",
     input: { pod?: string; path?: string; spec?: string; familyIds?: number[] },
   ) => {
-    const bound = await nativeBinding(ctx, family),
+    const bound = await nativeBinding(ctx),
       paths = (input.familyIds ?? [0]).map((id) => input.path ?? capturedMember(ctx, id));
     return {
       consumes: bound.consumes,
@@ -1145,7 +1013,7 @@ export function familyExecutors(
     ctx: CommandContext,
     execution: ActionExecution,
     prepared: z.infer<typeof captureSchema>,
-    operation: "family.capture" | "families.capture",
+    operation: "families.capture",
     specs: { familyId: number; content: string; unmodeled: unknown[] }[],
   ) =>
     Effect.gen(function* () {
@@ -1172,52 +1040,11 @@ export function familyExecutors(
       }
       return { members, runs };
     });
-  const familyCapture = command(commands["family.capture"], preparedFamilyCaptureSchema, {
-    bind: async (ctx) => {
-      if (ctx.admission.input.work)
-        await ctx.selectWork(tools.family.work, ctx.admission.input.work, () => ({ cells: [] }));
-      return captureBinding(ctx, true, ctx.admission.input);
-    },
-    run: (ctx, execution) =>
-      Effect.gen(function* () {
-        const prepared = execution.prepared,
-          captured = (yield* native(
-            ctx,
-            execution,
-            "family.capture",
-            prepared,
-          )) as NativeFamilyCapture.Res.Response;
-        const spec = {
-          familyId: 0,
-          ...familyMember(captured.modelJson),
-          ...(prepared.spec ? { content: draftContent(prepared.spec) } : {}),
-        };
-        if (!prepared.pod)
-          return {
-            id: ctx.admission.id,
-            executionContext: targetOf(ctx),
-            spec: spec.content,
-            capturedAt: prepared.at,
-            evidence: { ...captured, origin: "capture", rfaPath: null, run: null },
-          };
-        const { members, runs } = yield* fileCapture(ctx, execution, prepared, "family.capture", [
-          spec,
-        ]);
-        // The member holds the model and the run holds `unmodeled.json`: the result is their handle,
-        // not a second copy of a field family's 300 KB (gate-9d6ce645: Pea could not relay it).
-        const { modelJson: _, ...seen } = captured;
-        return {
-          executionContext: targetOf(ctx),
-          member: members[0],
-          evidence: { ...seen, origin: "capture", rfaPath: null, run: runs.get(0) ?? null },
-        };
-      }),
-  });
   const familiesCapture = command(commands["families.capture"], preparedFamiliesCaptureSchema, {
     bind: async (ctx) => {
       if (ctx.admission.input.work)
         await ctx.selectWork(tools.families.work, ctx.admission.input.work, () => ({ cells: [] }));
-      return captureBinding(ctx, "project", ctx.admission.input);
+      return captureBinding(ctx, ctx.admission.input);
     },
     run: (ctx, execution) =>
       Effect.gen(function* () {
@@ -1249,63 +1076,6 @@ export function familyExecutors(
               run: runs.get(f.familyId) ?? null,
             })),
           }),
-        };
-      }),
-  });
-  const familyObserve = command(commands["family.observe"], observationSchema, {
-    bind: async (ctx) => {
-      const input = ctx.admission.input;
-      if (input.work)
-        await ctx.selectWork(tools.family.work, input.work, () => ({
-          cells: [],
-          facts: [["reading"], ["takenAt"]],
-        }));
-      const bound = await nativeBinding(ctx, true),
-        sources = await compose(ctx, input.source ? [{ source: input.source }] : []),
-        capture = input.readingId ? ctx.read.receipts(input.readingId)[0] : null;
-      if (
-        capture &&
-        (capture.key !== "family.capture" ||
-          capture.state !== "succeeded" ||
-          canonicalRouteInput(capture.target) !== canonicalRouteInput(ctx.admission.target))
-      )
-        throw refused("Baseline must name a succeeded capture for this exact family lifetime");
-      const result = capture?.result as { spec?: string; capturedAt?: string } | undefined,
-        reading = input.source ? rootText(sources.sealed[0]!.source) : result?.spec;
-      if (!reading || (!input.source && !result?.capturedAt))
-        throw refused("Capture has no live draft baseline");
-      return {
-        consumes: [
-          ...bound.consumes,
-          ...sources.consumes,
-          ...(capture
-            ? [
-                {
-                  kind: "receipt" as const,
-                  probe: { id: capture.id, key: "family.capture" },
-                  expected: true as const,
-                },
-              ]
-            : []),
-        ],
-        effects: [],
-        prepare: async () => ({
-          kind: "observation",
-          reading,
-          takenAt: input.source ? null : result!.capturedAt,
-        }),
-      };
-    },
-    run: (ctx, execution) =>
-      Effect.gen(function* () {
-        const prepared = execution.prepared;
-        if (!ctx.admission.input.work) return prepared;
-        yield* execution.publishWork(ctx.admission.input.work.key, "family", [
-          { path: ["reading"], value: prepared.reading },
-          { path: ["takenAt"], value: prepared.takenAt },
-        ]);
-        return {
-          envelope: yield* io(() => ctx.work.read(ctx.admission.input.work!.key, "family")),
         };
       }),
   });
@@ -1439,51 +1209,9 @@ export function familyExecutors(
         return { saved: members.length, members };
       }),
   });
-  const build = command(commands["family.build"], buildSchema, {
-    seal: (p) => ({ request: p.input }),
-    bind: async (ctx) => {
-      if (ctx.admission.input.work) await familySelection(ctx);
-      const bound = await nativeBinding(ctx, false),
-        input = ctx.admission.input,
-        sources = await compose(ctx, [{ source: input.source }]),
-        sealed = sources.sealed[0]!,
-        file = win32.join(
-          await runPods(deps, podFolder(input.source.pod, await podsFor(ctx))),
-          input.source.path,
-        );
-      return {
-        consumes: [...bound.consumes, ...sources.consumes],
-        effects: [{ kind: "document", ref: bound.target }, ...(await outputs(ctx, [sealed]))],
-        prepare: async () => {
-          return {
-            kind: "native" as const,
-            process: bound.process,
-            input: {
-              specJson: sealed.specJson,
-              source: sealed.source,
-              ...(deps.nativePaths
-                ? await deps.nativePaths(input, ctx.admission.id, file)
-                : { modelDirectory: resolve(input.modelDirectory ?? win32.dirname(file)) }),
-            },
-          };
-        },
-      };
-    },
-    run: (ctx, execution) =>
-      Effect.gen(function* () {
-        const result = yield* native(ctx, execution, "family.build", execution.prepared);
-        return {
-          executionContext: targetOf(ctx),
-          native: result,
-          outputPath: (result as { outputPath?: string }).outputPath,
-        };
-      }),
-  });
   return {
     "settings.observe": settingsObserve,
     "settings.write": settingsWrite,
-    "family.observe": familyObserve,
-    "family.capture": familyCapture,
     "families.read": command(
       familyActions["families.read"],
       z.object({
@@ -1580,103 +1308,10 @@ export function familyExecutors(
       },
     ),
     "families.capture": familiesCapture,
-    "family.plan": familyPlan,
     "families.plan": familiesPlan,
-    "family.apply": familyApply,
     "families.apply": familiesApply,
     "families.save-draft": saveDraft,
-    "family.build": build,
-    "family.attach-spec": familySpecExecutor(deps, bridge),
   } satisfies Record<FamilyActionKey, CommandExecutor>;
-}
-
-const liveFamilyReads = new WeakMap<
-  RevitBridge["Service"],
-  Map<string, { owner: string; cancelled: boolean; active: boolean }>
->();
-
-async function readLiveFamily(
-  key: "family.read" | "family.cancel-read",
-  input: unknown,
-  scope: unknown,
-  target: unknown,
-  bridge: RevitBridge["Service"],
-  deps: FamilyActionDependencies,
-) {
-  const { readId } = familyReads[key].input.parse(input);
-  const work = workKeySchema.parse(scope);
-  const document = documentRefSchema.parse(target);
-  if (work.route !== "family") throw refused("Family read requires Family Work");
-  const owner = canonicalRouteInput({ work, document });
-  let reads = liveFamilyReads.get(bridge);
-  if (!reads) liveFamilyReads.set(bridge, (reads = new Map()));
-  if (key === "family.cancel-read") {
-    const running = reads.get(readId);
-    if (!running || running.owner !== owner) throw refused("No matching running Family read");
-    running.cancelled = true;
-    if (running.active) await invoke(bridge, document, CANCEL_OPERATION_KEY, { requestId: readId });
-    return { cancelled: true as const };
-  }
-  if (reads.has(readId)) throw refused("Family read is already running");
-  const running = { owner, cancelled: false, active: false };
-  reads.set(readId, running);
-  try {
-    if (!deps.workspace) throw refused("Route Work is unavailable");
-    const { expectedRevision } = familyReads["family.read"].input.parse(input);
-    const { session, process } = await lifetime(bridge, document, true, deps);
-    const opened = session.state!.openDocuments.find((doc) => doc.openId === document.openId)!;
-    const bound = bindWork(
-      "family",
-      opened.address ? address(opened.address) : null,
-      undefined,
-      document,
-    );
-    const from =
-      work.binding === "address" ? work.from : work.binding === "open" ? work.open : null;
-    if (
-      workKey(work) !== workKey(bound) ||
-      (from && canonicalRouteInput(from) !== canonicalRouteInput(document))
-    )
-      throw refused("Family Work belongs to a different document");
-    const marks = deps.marks!;
-    const takenAt = new Date().toISOString();
-    const fence = async () => {
-      if (running.cancelled) throw refused("Family read cancelled");
-      await current(bridge, document, true, process);
-      assertFresh(marks, document, takenAt);
-    };
-    await fence();
-    running.active = true;
-    const captured = await invoke<NativeFamilyCapture.Res.Response>(
-      bridge,
-      document,
-      "family.capture",
-      {},
-      readId,
-    );
-    running.active = false;
-    await fence();
-    const result = familyLiveReadSchema.parse({
-      reading: familyMember(captured.modelJson).content,
-      takenAt,
-      executionContext: document,
-      process,
-    });
-    // Baselines are host observations; the edit door deliberately refuses these paths.
-    const written = await deps.workspace.publish(
-      work,
-      "family",
-      [
-        { path: ["reading"], value: result.reading },
-        { path: ["takenAt"], value: result.takenAt },
-      ],
-      expectedRevision,
-    );
-    if (!written.ok) throw refused("error" in written ? written.error : written.agentHint);
-    return result;
-  } finally {
-    reads.delete(readId);
-  }
 }
 
 export async function readFamily(
@@ -1689,8 +1324,7 @@ export async function readFamily(
   const key = raw.key as FamilyReadKey;
   const input = familyReads[key].input.parse(raw.input ?? {});
   if (key === "family.saved") return captures.family(familyReads[key].input.parse(input).id);
-  if (key === "family.read" || key === "family.cancel-read")
-    return readLiveFamily(key, input, raw.scope, raw.target, bridge, deps);
+
   const scope = workKeySchema.parse(raw.scope);
   const target = documentRefSchema.parse(raw.target);
   const reader = await projectReader(bridge, target, deps);

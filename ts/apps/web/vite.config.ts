@@ -2,7 +2,7 @@ import { cachedRuntimeRoutes, routeModuleHash } from "./route-module-hash.ts";
 import { isBuiltin } from "node:module";
 import { fileURLToPath } from "node:url";
 import path, { dirname, resolve } from "node:path";
-import { checkoutRoot, familyFixturesDir } from "./checkout-paths.ts";
+import { checkoutRoot } from "./checkout-paths.ts";
 import { devIcons } from "./dev-icons.ts";
 import {
   checkoutIngress,
@@ -136,7 +136,7 @@ const config = defineConfig(({ mode, command }) => {
       fs: {
         allow: [
           searchForWorkspaceRoot(import.meta.dirname),
-          familyFixturesDir,
+
           resolve(checkoutRoot, "examples/pods"),
           ...(ductsFixture ? [dirname(ductsFixture)] : []),
         ],
@@ -148,7 +148,6 @@ const config = defineConfig(({ mode, command }) => {
     resolve: {
       tsconfigPaths: true,
       dedupe: ["react", "react-dom"],
-      alias: { "@family-fixtures": familyFixturesDir },
     },
     build: {
       // Private symbolication only: "hidden" emits maps without a sourceMappingURL, the chunk and

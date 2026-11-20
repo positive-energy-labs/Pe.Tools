@@ -133,7 +133,7 @@ export type Ask = "live" | "allowed" | "refused" | "expired";
 function AskLine({ resolve }: { resolve: (verdict: Ask) => void }) {
   return (
     <div className="flex flex-wrap items-baseline gap-3 py-0.5">
-      <span className="face-mono text-ink">⌗ family.capture</span>
+      <span className="face-mono text-ink">⌗ families.capture</span>
       <span>on Air Handler</span>
       <Button
         kind="commit"
@@ -238,7 +238,7 @@ export function ChatScale({
           <span className="pt-2 t-small t-upper text-ink-2">transcript</span>
           {ask === "live" ? null : (
             <p className="face-mono text-ink-2">
-              family.capture {ask === "expired" ? "expired · the turn ended" : ask}
+              families.capture {ask === "expired" ? "expired · the turn ended" : ask}
             </p>
           )}
         </div>

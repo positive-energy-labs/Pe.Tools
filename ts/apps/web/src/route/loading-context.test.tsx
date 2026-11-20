@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { module as ducts } from "@pe/duct-systems-web/route";
-import { module as family } from "../family/route";
+import { module as families } from "../families/route";
 import { publicRoutes } from "./route-discovery";
-for (const typed of [ducts, family])
+for (const typed of [ducts, families])
   if (!publicRoutes.typed(typed.data.key))
     publicRoutes.register({ typed, manifest: typed.data, hosted: () => null });
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -96,9 +96,9 @@ test("route declarations replace rather than merge and unsupported routes never 
   const view = render(<HelpWorld facts={referenceTeaching("/duct-systems")} />);
   expect(screen.getByRole("group", { name: "Page regions" })).toBeTruthy();
   expect(view.container.textContent).toContain("Design");
-  view.rerender(<HelpWorld facts={referenceTeaching("/family")} />);
+  view.rerender(<HelpWorld facts={referenceTeaching("/families")} />);
   expect(view.container.textContent).not.toContain("Design");
-  expect(view.container.textContent).toContain("Family");
+  expect(view.container.textContent).toContain("Families");
 });
 
 const recorded = {

@@ -12,7 +12,7 @@ import {
   writeHomesConfig,
 } from "./content-roots.ts";
 import { homeLogLines } from "@pe/host-contracts/product-paths";
-import { targetHomes } from "@pe/host-internal/target-homes";
+import { documentHomes } from "./bridge.ts";
 import { readPlaces, writePlaces } from "./places.ts";
 import { workKeySchema as mountedWorkKeySchema } from "@pe/agent-contracts";
 import type { DocumentRef, Receipt } from "@pe/agent-contracts";
@@ -1559,9 +1559,7 @@ function* hostPeRoutes(
       return content.read();
     },
     pages: async (scope) =>
-      content.pages(
-        bridge ? (await Effect.runPromise(targetHomes(bridge, scope))).pointer : undefined,
-      ),
+      content.pages(bridge ? (await documentHomes(bridge, scope)).pointer : undefined),
     admittedRoutes: () => hostWork?.workspace.admittedRoutes() ?? [],
   });
   invalidateCatalog = () => catalog.invalidate();

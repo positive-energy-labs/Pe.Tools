@@ -95,11 +95,16 @@ export function appliedCellPaths(
         paths.push(
           ...cells.filter(([s, key]) => s === segment && subjects[key] === String(row.id)),
         );
-  for (const write of succeeded)
-    if (write.kind === "role" && write.id != null)
-      paths.push(
-        ...cells.filter(([s, key]) => s === "roles" && subjects[key] === String(write.id)),
-      );
+  for (const [segment, key] of cells) {
+    if (segment !== "roles") continue;
+    const ref = decode(key);
+    if (
+      ref.ok &&
+      ref.value.keyKind === "UniqueId" &&
+      succeeded.some((write) => write.kind === "role" && write.uniqueId === ref.value.key)
+    )
+      paths.push([segment, key]);
+  }
   return paths;
 }
 
@@ -124,15 +129,25 @@ export function scopeApplyRequest(
   const equipment = request.equipment;
   const terminalFlows = request.terminalFlows.filter((row) => has("flows", row.id));
   const equipmentFlows = request.equipmentFlows.filter((row) => has("equipmentFlows", row.id));
+  const uniqueIds = new Map(
+    [...snapshot.nodes, ...snapshot.segments].map((e) => [e.id, e.uniqueId]),
+  );
   const merge = (
     key: "instances" | "terminals" | "terminalFlows" | "equipmentFlows",
     ids: readonly number[],
   ) => ({
     ...store?.[key],
     ...Object.fromEntries(
-      Object.entries(request.store?.[key] ?? {}).filter(([id]) => ids.includes(Number(id))),
+      Object.entries(request.store?.[key] ?? {}).filter(([key]) =>
+        ids.some((id) => uniqueIds.get(id) === key),
+      ),
     ),
   });
+  const roleKeys = new Set(
+    cells.flatMap(([segment, key]) =>
+      segment === "roles" ? [uniqueIds.get(workElementId(snapshot, key))] : [],
+    ),
+  );
   return {
     ...request,
     fittings,
@@ -142,7 +157,7 @@ export function scopeApplyRequest(
     terminalFlows,
     equipmentFlows,
     store: {
-      version: 2,
+      version: 3,
       workRevision: store?.workRevision ?? 0,
       appliedAt: request.store?.appliedAt,
       instances: merge(
@@ -151,7 +166,7 @@ export function scopeApplyRequest(
       ),
       terminals: merge(
         "terminals",
-        terminals.map((row) => row.id),
+        [...terminals, ...components].map((row) => row.id),
       ),
       terminalFlows: merge(
         "terminalFlows",
@@ -164,13 +179,13 @@ export function scopeApplyRequest(
       roles: {
         ...store?.roles,
         ...Object.fromEntries(
-          Object.entries(request.store?.roles ?? {}).filter(([id]) => has("roles", Number(id))),
+          Object.entries(request.store?.roles ?? {}).filter(([id]) => roleKeys.has(id)),
         ),
       },
     },
     storeDeletes: {
       ...request.storeDeletes,
-      roles: request.storeDeletes?.roles?.filter((id) => has("roles", id)),
+      roles: request.storeDeletes?.roles?.filter((id) => roleKeys.has(id)),
     },
   };
 }

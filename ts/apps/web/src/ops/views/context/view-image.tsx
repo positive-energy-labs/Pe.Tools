@@ -1,11 +1,11 @@
 /**
  * `revit.context.view-image`: the picture itself, from the host's captures store. The response
- * names the registered sha; an unregistered taking (a sheet, an uncropped view) is still kept, so
- * its picture is the newest row of `/captures`.
+ * names the registered sha; an unregistered taking (a sheet, an uncropped view) is still kept, in the picture store.
  */
 import type { RevitContextViewImage } from "@pe/host-contracts/generated";
-import { Link } from "@tanstack/react-router";
 import { captureUrl } from "@pe/agent-contracts";
+import { runtimeStreamUrl } from "@pe/web-kernel/host/runtime";
+import { currentFixture } from "@pe/web-kernel/shell/fixture-name";
 
 import { FactChip } from "@pe/kit/lang/chip";
 import { OutcomeLine } from "@pe/kit/lang/outcome";
@@ -41,8 +41,16 @@ export function ViewImageView({ data }: OpViewProps) {
         ) : null}
       </Section>
     );
-  if (typeof rec.filePath !== "string") return <UnrecognizedShape />;
   const sha = res.registration?.imageSha256;
+  const png =
+    typeof rec.imageUrl === "string" && /^\/captures\/[0-9a-f]{64}\.png$/.test(rec.imageUrl)
+      ? rec.imageUrl
+      : sha
+        ? captureUrl(encodeURIComponent(sha))
+        : null;
+  if (!png && typeof rec.filePath !== "string") return <UnrecognizedShape />;
+  const imageUrl =
+    png && typeof window !== "undefined" && currentFixture() === null ? runtimeStreamUrl(png) : png;
   return (
     <Section
       label={res.view.label ?? "view"}
@@ -68,17 +76,12 @@ export function ViewImageView({ data }: OpViewProps) {
         </>
       }
     >
-      {sha ? (
-        <a href={captureUrl(sha)} target="_blank" rel="noreferrer">
-          <img src={captureUrl(sha)} alt={res.view.label ?? "view"} className="w-full" />
+      {imageUrl ? (
+        <a href={imageUrl} target="_blank" rel="noreferrer">
+          <img src={imageUrl} alt={res.view.label ?? "view"} className="w-full" />
         </a>
       ) : null}
-      <Provenance>
-        {res.byteSize} bytes ·{" "}
-        <Link to="/$route" params={{ route: "captures" }} search={sha ? { sha } : {}}>
-          {sha ? `capture ${sha.slice(0, 8)}` : "kept in captures"}
-        </Link>
-      </Provenance>
+      <Provenance>{res.byteSize} bytes</Provenance>
     </Section>
   );
 }

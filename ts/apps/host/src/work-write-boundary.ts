@@ -84,7 +84,7 @@ export function writeSeal({
     documentMark,
     incarnation,
     // K2 dropped member bytes from consumed facts, so this hash changed for every bind that consumes a
-    // saved member (family.apply, families.apply, family.build, schedule.apply). A plan sealed before
+    // saved member (families.apply). A plan sealed before
     // that is refused, but it already was: the seal carries the host's boot clock, and an upgrade restarts.
     dependencies: hash({ input, dependencies, evidence }),
   };

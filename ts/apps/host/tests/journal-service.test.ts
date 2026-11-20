@@ -12,7 +12,7 @@ import { launchOverJournal, openJournal } from "../src/host-program.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
 import { ReceiptExport } from "../src/receipt-export.ts";
 import { connectTestBridge } from "./bridge-fixture.ts";
-import { effectTest } from "./effect-test.ts";
+import { settle, effectTest } from "./effect-test.ts";
 
 test("a consumer takes a fake journal through a Layer, and no log is required", async () => {
   const recordFact = vi.fn(async () => undefined);
@@ -21,8 +21,8 @@ test("a consumer takes a fake journal through a Layer, and no log is required", 
     close: vi.fn(),
     subscribe: () => () => {},
   } as unknown as ActionJournal;
-  const scope = await Effect.runPromise(Scope.make());
-  const exporter = await Effect.runPromise(
+  const scope = await settle(Scope.make());
+  const exporter = await settle(
     Effect.gen(function* () {
       return yield* ReceiptExport;
     }).pipe(
@@ -41,7 +41,7 @@ test("a consumer takes a fake journal through a Layer, and no log is required", 
     null,
     undefined,
   );
-  await Effect.runPromise(Scope.close(scope, Exit.void));
+  await settle(Scope.close(scope, Exit.void));
   // The exporter is a consumer: releasing it never closes the journal; the journal's Layer does.
   expect(fake.close).not.toHaveBeenCalled();
 });

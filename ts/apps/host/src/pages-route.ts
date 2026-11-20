@@ -5,7 +5,7 @@ import {
   contentHomes,
   ContentHomeUnavailable,
 } from "./content-roots.ts";
-import { targetHomes } from "@pe/host-internal/target-homes";
+import { documentHomes } from "./bridge.ts";
 import { readSessionScope } from "./sdk-session.ts";
 import { peRouteUrl } from "@pe/agent-contracts/pe-api";
 import { servePeRoute, peClientScript, matchPeRoute } from "@pe/mcps/product-catalog";
@@ -1368,7 +1368,7 @@ export const pagesRoute = (
         });
         const resolvePage = async () => {
           const scope = readSessionScope(Object.fromEntries(request.headers));
-          const { pointer } = bridge ? await Effect.runPromise(targetHomes(bridge, scope)) : {};
+          const { pointer } = bridge ? await documentHomes(bridge, scope) : {};
           if (root === productPagesRoots || pods === productPodsRoots) {
             await contentRootsReady(pointer);
             if (!contentHomes().some((home) => home.tier === "user")) {

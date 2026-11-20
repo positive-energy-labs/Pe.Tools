@@ -11,6 +11,7 @@ import {
   issueOf,
   nodeOf,
   snapshotOf,
+  systemOf,
   type Connector,
 } from "@pe/ducts-domain/test-snapshot";
 import { findingLayers, findingShapes, noRunLayers } from "./finding-layers.ts";
@@ -243,6 +244,7 @@ it("SA 44 excludes FC-1's RA 50 return rectangle, 4.634 ft below its duct, even 
 it("a heal that caps a round open end draws a cylinder of the duct's diameter", () => {
   const round = snapshotOf({
     ...snapshot,
+    systems: [systemOf(1, { name: "SA 1", isWellConnected: true })],
     segments: [
       {
         ...duct(
@@ -257,6 +259,7 @@ it("a heal that caps a round open end draws a cylinder of the duct's diameter", 
               widthIn: null,
               heightIn: null,
               diameterIn: 12,
+              flowCfm: 0,
             },
           ],
         ),

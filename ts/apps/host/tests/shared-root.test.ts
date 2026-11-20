@@ -1,3 +1,4 @@
+import { settle } from "./effect-test.ts";
 import { homes as catalogHomes } from "@pe/host-contracts/product-paths";
 import { hostState } from "../src/host-ownership.ts";
 import { contentRootsReady } from "../src/content-roots.ts";
@@ -81,7 +82,7 @@ const tree = (root: string) =>
     : {};
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
+  settle(effect.pipe(Effect.provide(NodeServices.layer)));
 const pod = (home: string, folder: string, id: string, name: string) => {
   mkdirSync(join(home, "Pods", folder, "settings"), { recursive: true });
   writeFileSync(

@@ -591,17 +591,42 @@ export function mountTypedRoute(
       connectTimeline();
     };
     syncWork();
-    const allReads = {
-      [Symbol.iterator]() {
-        const active = visibleReads(spec, page);
-        for (const [read, record] of reads)
-          if (!active.has(read)) {
-            record.stop();
-            reads.delete(read);
-          }
-        return active[Symbol.iterator]();
-      },
-    };
+    const allReads = (() => {
+      type HostRead = import("@pe/agent-contracts/route").HostRead;
+      type QueueHolder = import("@pe/agent-contracts/value").QueueHolder;
+      const attempts = new WeakMap<
+        HostRead,
+        {
+          subscription: string;
+          generation: number;
+          holder: QueueHolder;
+        }
+      >();
+      return {
+        begin(read: HostRead) {
+          const previous = attempts.get(read);
+          const attempt = {
+            subscription: previous?.subscription ?? crypto.randomUUID(),
+            generation: (previous?.generation ?? -1) + 1,
+            holder: null as QueueHolder,
+          };
+          attempts.set(read, attempt);
+          return attempt;
+        },
+        holder: (read: HostRead) => attempts.get(read)?.holder,
+        forget: (read: HostRead) => attempts.delete(read),
+        [Symbol.iterator]() {
+          const active = visibleReads(spec, page);
+          for (const [read, record] of reads)
+            if (!active.has(read)) {
+              record.stop();
+              reads.delete(read);
+              attempts.delete(read);
+            }
+          return active[Symbol.iterator]();
+        },
+      };
+    })();
     const syncReads = (force = false) => {
       if (disposed || released || !input.custody.current()) return;
       const all = boundedAll();
@@ -622,7 +647,9 @@ export function mountTypedRoute(
         if ((!force || applyingDocumentWrite()) && signature === reads.get(read)?.args) continue;
         const previous = reads.get(read)?.snapshot;
         reads.get(read)?.stop();
+        const attempt = allReads.begin(read);
         const controller = new AbortController();
+        let close: (() => void) | void;
         const record: { snapshot: Snapshot; args: string; stop(): void } = {
           args: signature,
           snapshot: reading(
@@ -630,13 +657,24 @@ export function mountTypedRoute(
             retain(previous?.publication ?? null),
             applyingDocumentWrite() ? applyingReadReason : undefined,
           ),
-          stop: () => controller.abort(),
+          stop() {
+            if (controller.signal.aborted) return;
+            attempt.holder = null;
+            if (record.args === "" || disposed) allReads.forget(read);
+            controller.abort();
+            close?.();
+          },
         };
         reads.set(read, record);
         const deliver = (
           frame: Parameters<UseSource["open"]>[1] extends (arg: infer P) => any ? P : never,
         ) => {
           if (controller.signal.aborted || disposed || reads.get(read) !== record) return;
+          if (frame.kind === "queue-holder") {
+            attempt.holder = frame.holder;
+            notify();
+            return;
+          }
           // A read may have crossed this mount's accepted write. Refresh it after settlement.
           if (applyingDocumentWrite()) return;
           if (frame.kind === "complete" || frame.kind === "part") {
@@ -726,6 +764,7 @@ export function mountTypedRoute(
             work: null,
             page,
             args,
+            publication: { subscription: attempt.subscription, generation: attempt.generation },
             signal: controller.signal,
             inputs: {},
             attempt: { target: input.target!, workKey: key, generation: revision },
@@ -735,11 +774,7 @@ export function mountTypedRoute(
           Promise.resolve(source.open(ctx, deliver))
             .then((stop) => {
               if (controller.signal.aborted) stop?.();
-              else
-                record.stop = () => {
-                  controller.abort();
-                  stop?.();
-                };
+              else close = stop;
             })
             .catch((error) => deliver({ kind: "failure", error }));
         }
@@ -851,8 +886,7 @@ export function mountTypedRoute(
     };
     const writeRefusal = () =>
       input.fixture !== null ? "Fixture has no native writes" : basisRefusal();
-    // Settlement includes every demanded reading, not only the core write basis.
-    const readiness = (): RouteReadiness => {
+    const readiness = (all = false, showHolder = true): RouteReadiness => {
       if (disposed || released || !input.custody.current())
         return { kind: "blocked", reason: "Place is inactive or retired" };
       for (const owner of owners.values()) {
@@ -868,11 +902,26 @@ export function mountTypedRoute(
             reason: owner.problem ?? "Reading Work...",
           };
       }
+      let waiting: RouteReadiness | undefined;
+      let holder: string | undefined;
       for (const read of allReads) {
         const value = reads.get(read)?.snapshot ?? reading();
-        if (value.state !== "ready")
-          return { kind: inFlight(value) ? "pending" : "blocked", reason: reasonOf(value) };
+        const pending = inFlight(value);
+        if (pending && showHolder) holder ??= allReads.holder(read)?.label;
+        // The core and subject remain required even when their policy allows separate publication.
+        if (
+          !all &&
+          read !== spec.core &&
+          read !== subjectRead &&
+          "load" in read &&
+          (read.load as import("@pe/agent-contracts/value").ReadingLoad | undefined)?.alone
+        )
+          continue;
+        if (value.state !== "ready" && (!waiting || (all && pending)))
+          waiting = { kind: pending ? "pending" : "blocked", reason: reasonOf(value) };
       }
+      if (holder && waiting?.kind !== "blocked") return { kind: "pending", reason: holder };
+      if (waiting) return waiting;
       // Recorded and fixture views can settle without granting native write authority.
       const reason = valueAfterWork();
       if (reason) return { kind: "pending", reason };
@@ -882,7 +931,7 @@ export function mountTypedRoute(
       new Promise<void>((resolve, reject) => {
         let stop = () => {};
         const inspect = () => {
-          const state = readiness();
+          const state = readiness(!writable, false);
           if (state.kind === "pending") return;
           stop();
           const reason = state.kind === "blocked" ? state.reason : writable ? writeRefusal() : null;

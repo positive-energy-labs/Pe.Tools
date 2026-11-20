@@ -393,7 +393,7 @@ function liveHttpLive(options: HttpLiveOptions) {
         shareRoute(share),
         deviceRoutes(devices),
         mcpRoute(() => `http://127.0.0.1:${port()}`),
-        capturesRoute(spa),
+        capturesRoute,
         pagesRoute(),
         productHttpRoutes,
         historyRoutes(reads.history),

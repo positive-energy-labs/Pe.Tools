@@ -123,7 +123,7 @@ const rowStateProps = (state: RowState) => ({
   "data-failed": state.failed ? "" : undefined,
   "data-damage": state.damage || undefined,
   "aria-disabled": state.refusal ? true : undefined,
-  "aria-description": state.refusal ?? undefined,
+  ...(state.refusal == null ? {} : { "aria-description": state.refusal }),
   "aria-selected": state.selected === undefined ? undefined : state.selected,
   "aria-checked": state.checked,
 });

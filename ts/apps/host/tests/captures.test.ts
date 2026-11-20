@@ -1,7 +1,6 @@
 import { hostState } from "../src/host-ownership.ts";
 import { stateFixture, stateMachine } from "../../../tests/isolated-home/storage.ts";
 import { notices as storedNotices } from "@pe/host-contracts/kinds";
-import { dirname as storedParent } from "node:path";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { actAs } from "./callers.ts";
 import { existsSync } from "node:fs";
@@ -30,24 +29,21 @@ import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Context, Effect, Layer } from "effect";
-import { HttpRouter, HttpServerResponse } from "effect/http";
-import { expect, test, vi } from "vite-plus/test";
+import { HttpRouter } from "effect/http";
+import { expect, test } from "vite-plus/test";
 import { PictureCaptureStore, capturesRoute } from "../src/captures-route.ts";
 
 const sha = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
-test("/captures serves the store only: a navigation is the SPA, a caller path never reaches the filesystem", async () => {
+test("/captures serves the store only: a caller path never reaches the filesystem", async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-"));
   const store = pictureCaptures(join(dir, "store"));
-  const web = HttpRouter.toWebHandler(
-    capturesRoute(() => Effect.succeed(HttpServerResponse.text("spa"))),
-  );
+  const web = HttpRouter.toWebHandler(capturesRoute);
   const fetch = (path: string, init?: RequestInit) =>
     web.handler(new Request(`http://host${path}`, init), Context.make(PictureCaptureStore, store));
   try {
-    const navigation = await fetch("/captures", { headers: { accept: "text/html" } });
-    expect(await navigation.text(), `navigation status ${navigation.status}`).toBe("spa");
-    expect(await (await fetch("/captures")).json()).toEqual({ captures: [] });
+    const list = await fetch("/captures", { headers: { accept: "text/html" } });
+    expect(await list.json()).toEqual({ captures: [] });
     const outside = Buffer.from("secret");
     await writeFile(join(dir, `${sha(outside)}.png`), outside);
     for (const path of [
@@ -227,9 +223,7 @@ test("a torn last receipt line leaves every other receipt listed, posts one noti
   const dir = await mkdtemp(join(tmpdir(), "pe-captures-torn-"));
   const root = join(dir, "store");
   const store = pictureCaptures(root);
-  const web = HttpRouter.toWebHandler(
-    capturesRoute(() => Effect.succeed(HttpServerResponse.text("spa"))),
-  );
+  const web = HttpRouter.toWebHandler(capturesRoute);
   const list = () =>
     web.handler(new Request("http://host/captures"), Context.make(PictureCaptureStore, store));
   const facts = {

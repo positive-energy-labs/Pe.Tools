@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import type { RouteStatePatch, ScheduleGridDocument } from "@pe/agent-contracts";
+import { cellPatches, type RouteStatePatch, type ScheduleGridDocument } from "@pe/agent-contracts";
 import type { CellWire } from "@pe/web-kernel/components/work/band";
 import { Button } from "@pe/kit/lang/button";
-import { staleAnswer } from "./columns";
 
 const values = (n: number) => `${n} changed value${n === 1 ? "" : "s"}`;
 
@@ -48,7 +47,16 @@ export function StaleResolve({
   const others = edit - stale.length;
   const answer = (kind: "set" | "clear") =>
     write(
-      ready.flatMap((s): RouteStatePatch[] => staleAnswer(s.key, cells[s.key]!, kind)),
+      ready.flatMap(({ key }): RouteStatePatch[] => {
+        const cell = cells[key];
+        if (!cell?.edit) return [];
+        return cellPatches(
+          ["cells"],
+          key,
+          cell,
+          kind === "set" ? { kind: "set", rung: cell.edit } : { kind: "clear" },
+        );
+      }),
       revision ?? undefined,
     );
   // The push admits the Work revision the page holds, so it waits for the re-stage's revision.

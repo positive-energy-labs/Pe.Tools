@@ -157,6 +157,36 @@ test("taking back a stored ignore stages a delete over it", () => {
   ]);
 });
 
+test("a fan role press stages the captured UniqueId Work key", () => {
+  const key = "UniqueId:6d52156a-3876-4d76-b641-341454252f26-00000011";
+  const { container, write } = mount({
+    diagnostics: [
+      item({
+        key: "multi-fan",
+        group: "diagnostics",
+        title: "Several fans",
+        ids: [17],
+        verbs: [
+          {
+            kind: "role",
+            key,
+            role: "passive",
+            label: "FC-17 is passive",
+            says: "Rule it passive",
+          },
+        ],
+      }),
+    ],
+  });
+  fireEvent.click(container.querySelector('[aria-label="Diagnostics"] button')!);
+  fireEvent.click(screen.getByText("Several fans"));
+  const detail = container.querySelector('[data-inbox-detail="multi-fan"]') as HTMLElement;
+  fireEvent.click(within(detail).getByRole("button", { name: "FC-17 is passive" }));
+  expect(write).toHaveBeenCalledWith([
+    { path: ["roles", key, "edit"], value: { value: { role: "passive" } } },
+  ]);
+});
+
 const rowKeysOf = (over: NonNullable<Parameters<typeof mount>[0]>) =>
   new Set([
     "heal:g1",

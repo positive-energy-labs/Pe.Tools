@@ -4,16 +4,12 @@ import {
   scheduleCatalogSchema,
   type ScheduleCatalog,
   type ScheduleReading,
-  type ScheduleGridDocument,
-  type RouteEnvelope,
   type ScheduleReadKey,
   type DocumentRef,
 } from "@pe/agent-contracts";
 type ScheduleResult<K extends ScheduleReadKey> = K extends "schedule.grid.catalog"
   ? ScheduleCatalog
-  : K extends "schedule.grid.bind"
-    ? { envelope: RouteEnvelope<ScheduleGridDocument> }
-    : ScheduleReading;
+  : ScheduleReading;
 
 export async function readScheduleCapture<K extends ScheduleReadKey>(
   key: K,

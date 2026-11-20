@@ -9,16 +9,17 @@ internal sealed class ParameterLinksProfileStorage {
     public ProfileReadResult Read(RevitDocument document) {
         var blob = OwnerBlobStore.Read(document, ParameterLinkProfile.Owner);
         var read = ParameterLinkProfile.Read(blob);
-        return new ProfileReadResult(read.Value, blob.Status != OwnerBlobStatus.Absent, read.Refusal);
+        return new ProfileReadResult(read.Value, blob.Status != OwnerBlobStatus.Absent, read.Refusal, blob.Replacement);
     }
 
-    /// <summary>The store refuses to write over a blob it cannot read; the service refuses first, with an issue.</summary>
-    public bool Write(RevitDocument document, ParameterLinkProfile profile) =>
-        OwnerBlobStore.Write(document, ParameterLinkProfile.Owner, profile.ToData());
+    public bool Write(RevitDocument document, ParameterLinkProfile profile, OwnerBlobReplacement? replacing = null) =>
+        replacing is null ? OwnerBlobStore.Write(document, ParameterLinkProfile.Owner, profile.ToData())
+            : OwnerBlobStore.Write(document, ParameterLinkProfile.Owner, profile.ToData(), replacing);
 }
 
 internal sealed record ProfileReadResult(
     ParameterLinkProfile? Profile,
     bool HasStoredProfile,
-    string? Error
+    string? Error,
+    OwnerBlobReplacement? Replacement = null
 );

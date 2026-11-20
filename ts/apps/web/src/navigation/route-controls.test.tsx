@@ -13,7 +13,7 @@ import {
 import { RouteBand, BandOutlet, RouteControlsProvider } from "./route-controls";
 import { TypedShell } from "../shell/typed-shell";
 import { route, paneLayout, scrollBody } from "@pe/web-kernel/route";
-import { module as schedules } from "../schedules/route";
+import { module as families } from "../families/route";
 import { workFingerprintSchema } from "@pe/agent-contracts";
 
 afterEach(cleanup);
@@ -25,7 +25,7 @@ test("two mounted typed routes publish only the addressed route's band", async (
       name: key,
       needs: "browser",
       fields: {},
-      directory: schedules.data.directory,
+      directory: families.data.directory,
       panes: { main: { title: key, purpose: key, body: "scroll", draw: () => scrollBody(key) } },
       layout: paneLayout("main"),
     }),
@@ -109,7 +109,7 @@ test("a host route with no Work draws one band and no Timeline", async () => {
     name: "Pea",
     needs: "host",
     fields: {},
-    directory: schedules.data.directory,
+    directory: families.data.directory,
     panes: {
       main: {
         title: "Chat",

@@ -130,7 +130,7 @@ export const slots: DuctSnapshot["slots"] = {
 export const storeOf = (
   over: Partial<NonNullable<DuctSnapshot["store"]>> = {},
 ): NonNullable<DuctSnapshot["store"]> => ({
-  version: 2,
+  version: 3,
   workRevision: 0,
   rules: {},
   instances: {},

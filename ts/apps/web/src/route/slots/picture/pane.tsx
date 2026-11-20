@@ -1,7 +1,13 @@
 import * as Atom from "effect/reactivity/Atom";
 import { createElement, useMemo, useState, type ReactNode } from "react";
 import type { PicturePage } from "@pe/agent-contracts";
-import type { Finding, Mark, PictureScope, PictureSlot } from "@pe/agent-contracts/slots";
+import type {
+  Finding,
+  Mark,
+  ModelPictureSlot,
+  PictureScope,
+  PictureSlot,
+} from "@pe/agent-contracts/slots";
 import type { SubjectKey } from "@pe/kit/lang/attention";
 import { Pane } from "@pe/kit/lang/pane";
 import type { TeachingPaneRender } from "@pe/kit/lang/teaching-layout";
@@ -23,14 +29,13 @@ import { subjectName } from "../subject-name.ts";
 import { elementOf, pictureSlot, type Captured } from "@pe/web-kernel/route/slots/picture";
 import { markLayer } from "./marks.ts";
 import type { PictureOverlayProps, PictureParts } from "@pe/web-kernel/route/slots/picture/overlay";
+import { PlanPane } from "./plan-pane.tsx";
 
 /*
  * The kernel's picture pane (ADR 0035 rules 1, 2 and 9; owner ruling 2026-11-11). A route that
- * declares `picture` gets this pane, builtin or Pod: the kernel resolves the slot's scope to the
- * capture's focus, reads and writes the pose and the selection on the Page, draws the declared
- * marks and the document's findings on captured geometry, and mounts the one `Picture`. A route
- * mounts no picture and builds no capture source; what the closed marks cannot express arrives
- * through the slot's one `overlay` hook (`overlay.tsx`).
+ * declares `picture` gets this pane, builtin or Pod. The plan draws its declared raster and rings
+ * in one frame. The model resolves its scope to a capture's focus, then draws closed marks,
+ * findings and the declared overlay on captured geometry. Both use the Page's pose and selection.
  */
 export interface PicturePaneContext {
   /** The pane's draw context; its Page carries the kernel's pose fields (`picturePose`). */
@@ -59,6 +64,8 @@ const PLAIN: PictureParts = {
 
 export function PicturePane({ ctx }: { ctx: PicturePaneContext }) {
   const { draw, slot } = ctx;
+  if (slot.mode === "plan")
+    return renderPane(<PlanPane plan={slot.plan(draw)} draw={draw} name={ctx.name} />, undefined);
   const field = ctx.subjectField
     ? (
         draw.page.read() as unknown as Record<
@@ -71,7 +78,7 @@ export function PicturePane({ ctx }: { ctx: PicturePaneContext }) {
   const subject = field?.kind === "ids" ? (field.ids ?? []) : [];
   const scope = pictureSlot(slot, draw, { subject, captured: [] }).read().scope;
   const picture = (parts: PictureParts) => (
-    <KernelPicture ctx={ctx} scope={scope} subject={subject} parts={parts} />
+    <KernelPicture ctx={ctx} slot={slot} scope={scope} subject={subject} parts={parts} />
   );
   return slot.overlay
     ? createElement(slot.overlay as (props: PictureOverlayProps<unknown>) => ReactNode, {
@@ -109,16 +116,18 @@ function capturedOf(
 
 function KernelPicture({
   ctx,
+  slot,
   scope,
   subject,
   parts,
 }: {
   ctx: PicturePaneContext;
+  slot: ModelPictureSlot<any>;
   scope: PictureScope;
   subject: readonly SubjectRefCode[];
   parts: PictureParts;
 }) {
-  const { draw, slot, findings } = ctx;
+  const { draw, findings } = ctx;
   const elements = useElementIndex();
   // The pose is the kernel's Page fields (`picturePose`); the selection holds SubjectKeys, and an issue is the place `issue:<key>`.
   const authored = draw.page.read();

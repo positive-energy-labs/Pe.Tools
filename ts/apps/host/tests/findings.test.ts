@@ -1,3 +1,4 @@
+import { settle } from "./effect-test.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -323,7 +324,7 @@ test("findings.say twice mints two ids from ids.mint() and two times from clock.
   const executors = findingsExecutors(workspace, null as never);
   const run = async (door: keyof typeof executors, prepared: object) => {
     const work = workHandle(key, (await workspace.view(key, "findings"))?.revision ?? 0);
-    return Effect.runPromise(
+    return settle(
       executors[door].run(
         ctx as never,
         {

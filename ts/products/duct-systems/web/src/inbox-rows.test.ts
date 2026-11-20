@@ -142,10 +142,13 @@ describe("the ducts inbox", () => {
         snapshot: fanless,
         roles,
         nameOf: (id) => (id === 7 ? "FC-17" : String(id)),
-      })
-        .fix.find((r) => r.kind === "no-fan")!
-        .verbs.filter((v) => v.kind === "command");
-    expect(noFan()[0]).toMatchObject({
+      }).fix.find((r) => r.kind === "no-fan")!.verbs;
+    expect(noFan().find((v) => v.kind === "role")).toMatchObject({
+      kind: "role",
+      key: `UniqueId:${unit.uniqueId}`,
+      role: "fan",
+    });
+    expect(noFan().find((v) => v.kind === "command")).toMatchObject({
       kind: "command",
       on: { verb: "fan", unitId: 7, systemId: 19 },
       label: "make FC-17 the fan of SA 19",

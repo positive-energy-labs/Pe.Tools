@@ -14,7 +14,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Effect } from "effect";
 import { afterEach, beforeEach, describe, expect, test } from "vite-plus/test";
 import { sha256Hex } from "@pe/host-contracts/kinds";
 import { hostInputs } from "../src/host-program.ts";
@@ -30,7 +29,7 @@ import { shareIntentFile, shareKind } from "../src/share.ts";
 import { TakeoffCaptures } from "../src/takeoff-captures.ts";
 import { admitBuild } from "../src/receipt-export.ts";
 import { createUpdateReader } from "../src/update-reader.ts";
-import { journalAt } from "./effect-test.ts";
+import { settle, journalAt } from "./effect-test.ts";
 
 const CORRUPT = "{ this is not JSON";
 /** JSON that no stored kind here accepts: every one is an object or a list of objects. */
@@ -285,7 +284,7 @@ test("host start throws 0 times over corrupt scheduled tasks, devices, a torn jo
     randomUUID(),
     randomUUID(),
   )!;
-  const record = () => Effect.runPromise(hostInputs(stamp, { kind: "live", capture: "automatic" }));
+  const record = () => settle(hostInputs(stamp, { kind: "live", capture: "automatic" }));
   expect((await record()).source).toEqual({ kind: "live", capturing: true });
   const recordings = join(hostOwnership.rootPath, "state", "recordings");
   const bundle = readdirSync(recordings, { recursive: true, withFileTypes: true }).find(

@@ -1,9 +1,12 @@
+import { nativeResponseDefinitionSchema } from "@pe/host-contracts/native-schemas";
+import type { DuctsApplyPlan } from "@pe/host-contracts/generated";
 import {
   DUCT_SYSTEMS_ROUTE,
   ductsDocumentSchema,
   type DuctsRouteDocument,
 } from "@pe/ducts-contract/system-work";
 import { z } from "zod";
+import { uniqueIdSchema } from "@pe/agent-contracts";
 import { cellPatches } from "@pe/agent-contracts/draft";
 import type { FanIssue } from "@pe/fans-contract/fans-inputs";
 import { criteriaLayer, criteriaMeta } from "@pe/ducts-contract/duct-inputs";
@@ -142,9 +145,12 @@ export const workingPhaseOf = (doc: DuctsRouteDocument | null) =>
  * terminal flows (`terminalFlow` slot) and edited `equipmentFlows` (`fanFlow` slot).
  */
 const optionalText = z.string().nullable().optional();
+const elementKey = z
+  .string()
+  .refine((key) => uniqueIdSchema.safeParse(key).success, "Expected a Revit UniqueId");
 const flowReceipts = z
   .record(
-    z.string(),
+    elementKey,
     z.strictObject({
       cfm: z.number().nonnegative(),
       source: optionalText,
@@ -187,7 +193,14 @@ const slotsSchema = z
 /** Pe server consumes host-priced leg results; Specific Coefficient freezes one export coefficient. */
 export const DUCT_FITTING_METHODS = ["pe-server", "specific-coefficient"] as const;
 export type DuctFittingMethod = (typeof DUCT_FITTING_METHODS)[number];
+export const ownerBlobReplacementSchema =
+  nativeResponseDefinitionSchema<DuctsApplyPlan.Res.OwnerBlobReplacement>(
+    "ducts.apply.plan",
+    "OwnerBlobReplacement",
+  ).nullish();
+
 export const ductsApplyInputSchema = z.strictObject({
+  replacement: ownerBlobReplacementSchema,
   slots: slotsSchema.nullable().optional(),
   fittings: z.array(
     z
@@ -227,17 +240,17 @@ export const ductsApplyInputSchema = z.strictObject({
   /** Staged unit design flow, written to the FanFlow slot (instance first, then type). */
   equipmentFlows: z.array(writeFlow),
   /**
-   * This apply's store entries (`DuctLossStore` v2). The native op overlays them per key on the
+   * This apply's store entries (`DuctLossStore` v3). The native op overlays them per key on the
    * model's store (K3): a key omitted here keeps its stored entry; provenance records only writes
    * that land. `workRevision` is the model store's revision as read; an older one refuses as stale.
    */
   store: z.looseObject({
-    /** 2; the native op reads v1 and v2 and writes v2. */
+    /** Stored envelope version. Its five element maps use Revit UniqueId keys. */
     version: z.number().int().optional(),
     rules: z.record(z.string(), z.strictObject({ table: optionalText })).optional(),
     instances: z
       .record(
-        z.string(),
+        elementKey,
         z.strictObject({
           table: optionalText,
           inputs: optionalText,
@@ -248,7 +261,7 @@ export const ductsApplyInputSchema = z.strictObject({
       .optional(),
     terminals: z
       .record(
-        z.string(),
+        elementKey,
         z.strictObject({
           inWg: z.number().nonnegative(),
           source: optionalText,
@@ -262,9 +275,9 @@ export const ductsApplyInputSchema = z.strictObject({
     verdicts: z
       .record(z.string(), z.strictObject({ verdict: z.string().min(1), ruledAt: z.string() }))
       .optional(),
-    /** Unit roles (`fan` or `passive`) a person ruled, by element id. */
+    /** Unit roles (`fan` or `passive`) a person ruled, by Revit UniqueId. */
     roles: z
-      .record(z.string(), z.strictObject({ role: z.string().min(1), ruledAt: z.string() }))
+      .record(elementKey, z.strictObject({ role: z.string().min(1), ruledAt: z.string() }))
       .optional(),
     slots: slotsSchema.nullable().optional(),
     workRevision: z.number().int().nonnegative().optional(),
@@ -274,12 +287,12 @@ export const ductsApplyInputSchema = z.strictObject({
   storeDeletes: z
     .strictObject({
       rules: z.array(z.string()).optional(),
-      instances: z.array(z.number().int()).optional(),
-      terminals: z.array(z.number().int()).optional(),
-      terminalFlows: z.array(z.number().int()).optional(),
-      equipmentFlows: z.array(z.number().int()).optional(),
+      instances: z.array(elementKey).optional(),
+      terminals: z.array(elementKey).optional(),
+      terminalFlows: z.array(elementKey).optional(),
+      equipmentFlows: z.array(elementKey).optional(),
       verdicts: z.array(z.string()).optional(),
-      roles: z.array(z.number().int()).optional(),
+      roles: z.array(elementKey).optional(),
     })
     .optional(),
 });

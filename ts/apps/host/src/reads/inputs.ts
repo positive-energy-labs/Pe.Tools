@@ -22,6 +22,7 @@ import type { WorkInputRunner } from "../work-inputs.ts";
 import type { InputConsumption } from "@pe/host-internal/input-occurrence";
 import { BridgeError } from "@pe/host-internal/bridge";
 import { BridgeError as InputBridgeError } from "@pe/host-internal/dispatch";
+import type { ReadingDemand } from "@pe/host-internal/native-read";
 
 export interface ReadSources {
   inputs?: { consumption: InputConsumption; run: WorkInputRunner; work: WorkReadContext };
@@ -36,6 +37,8 @@ export interface ReadSources {
     role: "acquire" | "validate" | "join" | "beyond" | "none",
     /** The read's own lifetime (evaluator.ts): the native call stops when the read's last subscriber released. */
     signal?: AbortSignal,
+    demand?: ReadingDemand,
+    label?: string,
   ) => Promise<Response>;
 }
 export function inputPort(options: {
@@ -56,7 +59,7 @@ export function inputPort(options: {
       return options.origin();
     },
     revision: options.revision,
-    async take(name, raw, context, signal) {
+    async take(name, raw, context, signal, demand, label) {
       const source = options.source;
       const custom = options.leaves?.[name];
       if (custom)
@@ -113,6 +116,8 @@ export function inputPort(options: {
             args.version,
             args.role ?? "none",
             signal,
+            demand,
+            label,
           );
         } catch (error) {
           if (

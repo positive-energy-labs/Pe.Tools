@@ -32,26 +32,12 @@ public sealed class ButtonRegistry {
             ToolTip = "Open Pea in your browser. Choose the target there; this entry does not resume existing Work.",
             Container = new ButtonContainer.Panel("Pea")
         }),
-        Register(new ButtonRegistration<CmdFamilyEditor> {
-            Text = "Family Editor",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip = "Open the Family Foundry editor in your browser. Choose the document or Pod member there.",
-            Container = new ButtonContainer.Panel("Family Foundry")
-        }),
         Register(new ButtonRegistration<CmdFamilyAudit> {
             Text = "Project Families",
             SmallImage = "Red_16.png",
             LargeImage = "Red_32.png",
             ToolTip = "Open the Family Foundry project-family audit in your browser. Choose the exact project there.",
             Container = new ButtonContainer.Panel("Family Foundry")
-        }),
-        Register(new ButtonRegistration<CmdSchedulesWeb> {
-            Text = "Schedules",
-            SmallImage = "Red_16.png",
-            LargeImage = "Red_32.png",
-            ToolTip = "Open Schedules in your browser. Choose the document or Pod member there. Native schedule execution remains in Native Schedules.",
-            Container = new ButtonContainer.Panel("Schedules")
         }),
         Register(new ButtonRegistration<CmdTakeoffsWeb> {
             Text = "Takeoffs",

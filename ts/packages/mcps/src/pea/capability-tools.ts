@@ -55,7 +55,6 @@ import {
   parseContributionKey,
   declaredScriptRun,
   parseRouteKey,
-  scheduleGridRouteState,
   settingsRouteState,
   putTargetResultSchema,
   putTargetSchema,
@@ -299,9 +298,7 @@ const runInputSchema = z.object({
     .min(1)
     .max(200)
     .optional()
-    .describe(
-      "Work address: Pods uses the member's Work key; Schedules takes workspaceId from its schedule reading.",
-    ),
+    .describe("Work address: Pods uses the member's Work key."),
   key: z.string().min(1).describe("A capability key from pe_find."),
   input: z.unknown().optional().describe("Matches the row's input schema."),
   page: pageKeySchema
@@ -957,19 +954,12 @@ async function dispatch(
       if (parsed && row.source === "route graph")
         return { ok: true, target: scopeTarget, result: await routeGraph(parsed.route) };
       if (!parsed) throw new Error(`Malformed route key '${row.key}'.`);
-      if (parsed.route === scheduleGridRouteState.route && !input.workspaceId)
-        throw new Error(
-          "Read op:schedule.grid.snapshot and pass its workspaceId for subject Work.",
-        );
       if (parsed.route === settingsRouteState.route && !input.workspaceId)
         throw new Error(
           "Use op:pod.list to find members and supply workspaceId for the member's Work opened by the editor.",
         );
-      if (
-        input.workspaceId &&
-        ![settingsRouteState.route, scheduleGridRouteState.route].includes(parsed.route)
-      )
-        throw new Error("workspaceId targets Pods or Schedules Work only.");
+      if (input.workspaceId && parsed.route !== settingsRouteState.route)
+        throw new Error("workspaceId targets Pods Work only.");
       const workspaceId = input.workspaceId;
       let mountedScope: Awaited<ReturnType<typeof routeWorkScope>> | undefined;
       if (viewThread && input.target === undefined && !workspaceId) {
@@ -1149,8 +1139,7 @@ function documentWork(row: Capability): boolean {
     row.kind === "route-doc" &&
     row.source === "route registry" &&
     !!route &&
-    route.route !== settingsRouteState.route &&
-    route.route !== scheduleGridRouteState.route
+    route.route !== settingsRouteState.route
   );
 }
 

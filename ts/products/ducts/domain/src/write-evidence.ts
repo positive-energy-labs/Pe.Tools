@@ -237,7 +237,7 @@ const DuctHealthTolerances = (v: DuctsSnapshotWalk.Res.DuctHealthTolerances) => 
   ...pick(v, "candidateBoxIn", "autoJoinGapIn"),
 });
 const Response = (v: DuctsSnapshotWalk.Res.Response) => ({
-  ...pick(v, "coordinateEncoding", "storeError"),
+  ...pick(v, "coordinateEncoding", "storeError", "storeReplacement"),
   document: DuctDocument(v.document),
   levels: set(v.levels.map(DuctLevel)),
   groups: set(v.groups.map(DuctGroup)),

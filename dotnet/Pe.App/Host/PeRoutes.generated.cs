@@ -21,19 +21,6 @@ internal static class PeRoutes {
         }
     }
 
-    /// <summary>Captures: <c>/captures</c>.</summary>
-    internal static class Captures {
-        public const string Path = "/captures";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Focus = "focus";
-            public const string Open = "open";
-            public const string Selected = "selected";
-        }
-    }
-
     /// <summary>Pea: <c>/pea</c>.</summary>
     internal static class Pea {
         public const string Path = "/pea";
@@ -112,28 +99,6 @@ internal static class PeRoutes {
             public const string ThreadSort = "threadSort";
             public const string ReadId = "readId";
             public const string Focus = "focus";
-            public const string Selected = "selected";
-        }
-    }
-
-    /// <summary>Family: <c>/family</c>.</summary>
-    internal static class Family {
-        public const string Path = "/family";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string Pod = "pod";
-            public const string Query = "query";
-            public const string Sort = "sort";
-            public const string Hidden = "hidden";
-            public const string Member = "member";
-            public const string Stage = "stage";
-            public const string Pane = "pane";
-            public const string Overlay = "overlay";
-            public const string Drill = "drill";
-            public const string Inspector = "inspector";
-            public const string Doc = "doc";
             public const string Selected = "selected";
         }
     }
@@ -231,20 +196,6 @@ internal static class PeRoutes {
             public const string Layers = "layers";
             public const string Viewport = "viewport";
             public const string Card = "card";
-            public const string Selected = "selected";
-        }
-    }
-
-    /// <summary>Schedules: <c>/schedules</c>.</summary>
-    internal static class Schedules {
-        public const string Path = "/schedules";
-        /// <summary>The URL keys a link may carry.</summary>
-        internal static class Keys {
-            public const string ThreadSearch = "threadSearch";
-            public const string ThreadSort = "threadSort";
-            public const string WorkspaceId = "workspaceId";
-            public const string Table = "table";
-            public const string Cell = "cell";
             public const string Selected = "selected";
         }
     }

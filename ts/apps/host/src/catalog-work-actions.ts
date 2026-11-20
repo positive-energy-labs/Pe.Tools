@@ -6,6 +6,7 @@
  * guards dispatch. The plan never reaches the leaf. No retire: catalog Work is the authored source.
  */
 import { z } from "zod";
+import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {
   CatalogWorkRefused,
   catalogWorkCommands,
@@ -30,6 +31,8 @@ const prepared = z.object({
   target: z.object({ session: z.string(), openId: z.string() }),
   request: z.unknown(),
   before: z.unknown(),
+  replacement: z.unknown(),
+  adoptedReplacement: z.unknown(),
   touched: z.array(z.unknown()),
 });
 
@@ -50,7 +53,10 @@ export function catalogWorkExecutors(
         const work = catalogWorks[owner] as CatalogWork<z.ZodType, unknown>;
         const executor = command(definition, prepared, {
           // The before the plan observed is evidence: a moved base changes the seal, never the request silently.
-          seal: (p) => ({ request: p.request, evidence: { before: p.before, touched: p.touched } }),
+          seal: (p) => ({
+            request: p.request,
+            evidence: { before: p.before, touched: p.touched, replacement: p.replacement },
+          }),
           bind: async (ctx) => {
             if (ctx.admission.target.kind !== "document") throw refused("Exact document required");
             const target = ctx.admission.target.ref;
@@ -69,16 +75,29 @@ export function catalogWorkExecutors(
                 try {
                   // The owner's declared base, through the one fenced project Read owner (no capture).
                   const reader = await projectReader(bridge, target, deps);
-                  const before = work.base.project(
-                    await reader.read(work.base.op, work.base.input(doc)),
-                    doc,
-                  );
+                  const observed = await reader.read(work.base.op, work.base.input(doc));
+                  const before = work.base.project(observed, doc);
+                  const replacement =
+                    owner === "parameter-links"
+                      ? nativeResponseSchema("revit.detail.parameter-links").parse(observed)
+                          .replacement
+                      : undefined;
+                  const plan = ctx.read
+                    .receipts(ctx.admission.id)
+                    .find((r) => r.key === `${key}.plan` && r.state === "succeeded");
+                  const adoptedReplacement =
+                    plan?.state === "succeeded"
+                      ? (plan.result as { evidence?: { replacement?: unknown } }).evidence
+                          ?.replacement
+                      : undefined;
                   const { request, touched } = work.derive(doc, before);
                   return {
                     target,
                     process: reader.process,
                     request,
                     before,
+                    replacement,
+                    adoptedReplacement,
                     touched: [...touched],
                   };
                 } catch (error) {
@@ -90,12 +109,15 @@ export function catalogWorkExecutors(
             };
           },
           run: (_ctx, execution) => {
-            const { target, request } = execution.prepared;
+            const { target, request, adoptedReplacement } = execution.prepared;
+            const input = adoptedReplacement
+              ? { ...(request as object), replacement: adoptedReplacement }
+              : request;
             return execution.step(
               "native",
               work.op,
-              request,
-              (id) => nativeStep(bridge, target, work.op, request, id),
+              input,
+              (id) => nativeStep(bridge, target, work.op, input, id),
               { process: execution.prepared.process },
             );
           },

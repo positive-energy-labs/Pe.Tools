@@ -1,3 +1,4 @@
+using Pe.Revit.Extensions.ProjDocument;
 using Newtonsoft.Json.Linq;
 using Pe.App.Services.AutoTag;
 using Pe.Revit.Global.Lib.Mep;
@@ -5,6 +6,8 @@ using Pe.Revit.Global.Services.ParameterLinks;
 using Pe.Revit.Partition;
 using Pe.Revit.SettingsRuntime.Modules.AutoTag;
 using Pe.Revit.Takeoff;
+using Pe.Shared.Product;
+using System.Text;
 using Pe.Shared.RevitData.Ducts;
 using Pe.Shared.RevitData.Serialization;
 using Pe.Shared.RevitData.Takeoffs;
@@ -14,7 +17,7 @@ namespace Pe.Revit.Tests;
 /// <summary>
 ///     The homes slice 2 falsifier (docs/features/homes/MAP.md): on a real model every owner's blob round-trips
 ///     through the one envelope, and a model that carries an enveloped blob this build cannot read opens, refuses the
-///     blob and never overwrites its bytes (ADR 0026 D4). An old un-enveloped blob is not an error path: it reads as
+///     blob until an apply preserves its bytes and posts a notice (ADR 0057). An old un-enveloped blob reads as
 ///     absent and the first write replaces it. The codec itself is proven in Pe.Shared.Tests' OwnerBlobTests.
 ///     Not covered here: the duct per-fitting results entity needs a fitting on the Pe loss server; its text is the
 ///     same codec, and the duct apply proofs write and read it.
@@ -112,12 +115,12 @@ public sealed class OwnerBlobRoundTripTests {
     }
 
     [Test]
-    public void A_future_version_blob_opens_is_refused_and_is_never_overwritten(UIApplication uiApplication) =>
+    public void A_future_version_blob_opens_and_its_read_keeps_the_bytes(UIApplication uiApplication) =>
         RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.UnknownVersion,
             owner => $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version + 998}}},"data":{"fromTheFuture":true}}""");
 
     [Test]
-    public void A_broken_envelope_opens_is_refused_and_is_never_overwritten(UIApplication uiApplication) =>
+    public void A_broken_envelope_opens_and_its_read_keeps_the_bytes(UIApplication uiApplication) =>
         RefusesAndKeeps(uiApplication.Application, OwnerBlobStatus.Invalid,
             owner => $$$"""{"owner":"{{{owner.Owner}}}","version":{{{owner.Version}}},"data":[]}""");
 
@@ -189,6 +192,143 @@ public sealed class OwnerBlobRoundTripTests {
         }
     }
 
+    [Test]
+    public void A_v2_duct_record_previews_without_writing_and_apply_keeps_one_copy_and_notice(UIApplication uiApplication) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        try {
+            var owner = DuctLossStore.Owner;
+            var target = document.ProjectInformation;
+            var raw = $$$"""{"owner":"duct-losses","version":2,"data":{"roles":{"42":{"role":"fan"}},"test":"{{{Guid.NewGuid():N}}}"}}""";
+            void Plant(Document model, string text) {
+                using var transaction = new Transaction(model, "Plant v2 numeric duct store");
+                _ = transaction.Start();
+                _ = SharedParameterBinder.EnsureProjectBinding(model, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
+                model.Regenerate();
+                Assert.That(model.ProjectInformation.get_Parameter(owner.Guid).Set(text), Is.True);
+                Assert.That(transaction.Commit(), Is.EqualTo(TransactionStatus.Committed));
+            }
+            Plant(document, raw);
+
+            using var isolated = new OwnerBlobRecoveryFixture();
+            var state = isolated.Root;
+            var notices = Path.Combine(state, ProductPathNames.StoredNoticesFileName);
+            var replacement = OwnerBlob.Decode(owner, raw).Replacement!;
+            var recovery = Path.Combine(state, "model-recovery", "owner-duct-losses");
+            var backup = Path.Combine(recovery, replacement.RawUtf8Sha256 + ".txt");
+            int NoticeCount() => File.Exists(notices) ? File.ReadLines(notices).Count(line =>
+                line.Contains(replacement.RawUtf8Sha256, StringComparison.Ordinal)) : 0;
+            var request = new DuctApplyRequest(null, [], [], [], [], [], [], new DuctLossStore {
+                Roles = new() { [target.UniqueId] = new DuctRoleRecord("passive", DateTimeOffset.UnixEpoch) }
+            });
+
+            var preview = DuctApplier.Apply(document, request, true);
+            Assert.Multiple(() => {
+                Assert.That(preview.Replacement, Is.EqualTo(replacement));
+                Assert.That(DuctApplier.ReadStore(document).Store, Is.Null);
+                Assert.That(preview.Writes.Single(w => w.Kind == "store").Outcome, Is.EqualTo("planned"));
+                Assert.That(Raw(document, owner), Is.EqualTo(raw));
+                Assert.That(File.Exists(backup), Is.False);
+                Assert.That(NoticeCount(), Is.Zero);
+            });
+
+            Assert.That(DuctApplier.Apply(document, request, false).Writes.Single(w => w.Kind == "store").Reason,
+                Does.Contain("Preview before"));
+            var changed = raw.Replace("\"fan\"", "\"passive\"");
+            Plant(document, changed);
+            var sealedRequest = request with { Replacement = preview.Replacement };
+            Assert.That(DuctApplier.Apply(document, sealedRequest, false).Writes.Single(w => w.Kind == "store").Outcome, Is.EqualTo("refused"));
+            Assert.That(Raw(document, owner), Is.EqualTo(changed));
+            Assert.That(Directory.GetFileSystemEntries(state), Is.Empty);
+            Plant(document, raw);
+            Directory.CreateDirectory(notices);
+            using (var transaction = new Transaction(document, "Force a recovery notice failure")) {
+                _ = transaction.Start();
+                Assert.That(() => OwnerBlobStore.Write(document, owner, request.Store.ToData(), replacement), Throws.Exception);
+                Assert.That(Raw(document, owner), Is.EqualTo(raw));
+                _ = transaction.RollBack();
+            }
+            Directory.Delete(notices);
+            Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
+
+            foreach (var retry in new[] { false, true }) {
+                if (retry) Plant(document, raw);
+                var result = DuctApplier.Apply(document, sealedRequest, false);
+                Assert.Multiple(() => {
+                    Assert.That(result.Writes.Single(w => w.Kind == "store").Outcome, Is.EqualTo("written"));
+                    var role = result.Writes.Single(w => w.Kind == "role");
+                    Assert.That((role.Id, role.UniqueId), Is.EqualTo(((long?)target.Id.Value(), target.UniqueId)));
+                    Assert.That(DuctApplier.ReadStore(document).Store!.Roles.Keys, Is.EqualTo(new[] { target.UniqueId }));
+                    Assert.That(File.ReadAllBytes(backup), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
+                    Assert.That(Directory.GetFiles(recovery, replacement.RawUtf8Sha256 + "*"), Is.EqualTo(new[] { backup }));
+                    Assert.That(NoticeCount(), Is.EqualTo(1));
+                });
+            }
+            var other = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+            try {
+                Plant(other, raw);
+                var otherRequest = request with { Store = new DuctLossStore() };
+                var otherPreview = DuctApplier.Apply(other, otherRequest, true);
+                var applied = DuctApplier.Apply(other, otherRequest with { Replacement = otherPreview.Replacement }, false);
+                Assert.That(applied.Writes.Single(w => w.Kind == "store").Outcome, Is.EqualTo("written"));
+                Assert.That(NoticeCount(), Is.EqualTo(2));
+                var places = File.ReadLines(notices).Select(line => (string?)JObject.Parse(line)["place"]).ToList();
+                Assert.That(places, Is.EquivalentTo(new[] { $"{document.GetDocumentKey()} / {owner.Owner}", $"{other.GetDocumentKey()} / {owner.Owner}" }));
+                Assert.That(Directory.GetFiles(recovery), Is.EqualTo(new[] { backup }));
+            } finally {
+                RevitFamilyFixtureHarness.CloseDocument(other);
+            }
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
+    [Test]
+    public void AutoTag_save_recovers_once_and_element_writes_enforce_the_seal(UIApplication uiApplication) {
+        var document = RevitFamilyFixtureHarness.CreateProjectDocument(uiApplication.Application);
+        using var isolated = new OwnerBlobRecoveryFixture();
+        try {
+            var owner = AutoTagSettings.Owner;
+            var anchor = document.ProjectInformation;
+            const string raw = """{"owner":"autotag","version":1,"data":{"unknownAutoTagField":true}}""";
+            var settings = new AutoTagSettings { Enabled = false };
+            OwnerBlobReplacement evidence;
+            using (var transaction = new Transaction(document, "Plant unreadable AutoTag settings")) {
+                _ = transaction.Start();
+                _ = SharedParameterBinder.EnsureProjectBinding(document, OwnerBlobStore.Spec(owner), [BuiltInCategory.OST_ProjectInformation]);
+                document.Regenerate();
+                Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
+                evidence = OwnerBlobStore.Read(anchor, owner).Replacement!;
+                Assert.That(evidence, Is.Not.Null);
+                Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData()),
+                    Throws.InvalidOperationException.With.Message.Contains("Preview before"));
+                Assert.That(Raw(document, owner), Is.EqualTo(raw));
+                Assert.That(Directory.GetFileSystemEntries(isolated.Root), Is.Empty);
+                _ = transaction.Commit();
+            }
+
+            AutoTagService.Instance.SaveSettingsForDocument(document, settings);
+            AutoTagService.Instance.SaveSettingsForDocument(document, settings);
+            var recovery = Path.Combine(isolated.Root, "model-recovery", "owner-autotag");
+            Assert.That(File.ReadAllBytes(Directory.GetFiles(recovery).Single()), Is.EqualTo(Encoding.UTF8.GetBytes(raw)));
+            var notices = Path.Combine(isolated.Root, ProductPathNames.StoredNoticesFileName);
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+            var readable = OwnerBlobStore.Read(anchor, owner);
+            Assert.That(readable.Status, Is.EqualTo(OwnerBlobStatus.Ok));
+            Assert.That(AutoTagSettings.Read(readable).Value?.Enabled, Is.False);
+
+            using var edit = new Transaction(document, "Check the sealed element writer");
+            _ = edit.Start();
+            Assert.That(() => OwnerBlobStore.Write(anchor, owner, settings.ToData(), readable.DataRefused("claimed unreadable")),
+                Throws.InvalidOperationException.With.Message.Contains("is readable"));
+            Assert.That(anchor.get_Parameter(owner.Guid).Set(raw), Is.True);
+            Assert.That(OwnerBlobStore.Write(anchor, owner, settings.ToData(), evidence), Is.True);
+            Assert.That(File.ReadAllLines(notices), Has.Length.EqualTo(1));
+            _ = edit.RollBack();
+        } finally {
+            RevitFamilyFixtureHarness.CloseDocument(document);
+        }
+    }
+
     private static void RefusesAndKeeps(Application application, OwnerBlobStatus expected, Func<OwnerDescriptor, string> plant) {
         var document = RevitFamilyFixtureHarness.CreateProjectDocument(application);
         string? path = null;
@@ -221,34 +361,14 @@ public sealed class OwnerBlobRoundTripTests {
                 Assert.That(storage.Read(document).Error, Is.Not.Null);
                 Assert.That(() => TakeoffCarriers.ReadRegistry(document), Throws.InvalidOperationException);
                 Assert.That(() => TakeoffCarriers.ReadRegion(planted).OrThrow(), Throws.InvalidOperationException);
-                Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("refused and kept"));
+                Assert.That(EnclosureDeclaration.Read(document).Source, Does.StartWith("default:").And.Contain("unreadable"));
                 // The keep policy for reads (ADR 0039): the refusal is a value, so a listing goes on.
-                Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("refused and kept"));
-                Assert.That(TakeoffCarriers.TryReadProvenance(planted).Refusal, Does.Contain("refused and kept"));
-                Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Does.Contain("refused and kept"));
+                Assert.That(TakeoffCarriers.TryReadRegistry(document).Refusal, Does.Contain("unreadable"));
+                Assert.That(TakeoffCarriers.TryReadProvenance(planted).Refusal, Does.Contain("unreadable"));
+                Assert.That(AutoTagService.Instance.GetStatus(document).StoredSettingsRefusal, Does.Contain("unreadable"));
                 Assert.That(() => TakeoffAtlas.Snapshot(document, new TakeoffReadRequest()).Unreadable!.Select(blob => blob.ElementId),
                     Is.EqualTo(new long?[] { null }), "the roster read reports the registry and does not throw");
             });
-
-            // Every owner's own write door, and the store under all of them, refuses.
-            using (var transaction = new Transaction(document, "Try to overwrite")) {
-                _ = transaction.Start();
-                Assert.Multiple(() => {
-                    foreach (var owner in ProjectOwners)
-                        Assert.That(() => OwnerBlobStore.Write(document, owner, new JObject { ["overwritten"] = true }),
-                            Throws.InvalidOperationException.With.Message.Contains("Refusing to overwrite"), owner.Name);
-                    Assert.That(() => storage.Write(document, new ParameterLinkProfile { Definitions = [], Assignments = [] }), Throws.InvalidOperationException);
-                    Assert.That(() => TakeoffCarriers.WriteRegistry(document, new SystemRegistry()), Throws.InvalidOperationException);
-                    Assert.That(() => TakeoffCarriers.WriteProvenance(planted, new RegionProvenance(Guid.NewGuid(), "run", "R01", 1).ToJson()),
-                        Throws.InvalidOperationException);
-                    Assert.That(() => EnclosureDeclaration.Write(document, Enclosure.Default), Throws.InvalidOperationException);
-                });
-                _ = transaction.Commit();
-            }
-            Assert.That(() => AutoTagService.Instance.SaveSettingsForDocument(document, new AutoTagSettings()), Throws.InvalidOperationException);
-            var apply = DuctApplier.Apply(document,
-                new DuctApplyRequest(new DuctParameterSlotOverrides(), [], [], [], [], [], [], new DuctLossStore()), false);
-            Assert.That(apply.Writes.Single(write => write.Kind == "store").Outcome, Is.EqualTo("refused"));
 
             Assert.Multiple(() => {
                 foreach (var owner in ProjectOwners)
@@ -259,5 +379,17 @@ public sealed class OwnerBlobRoundTripTests {
             RevitFamilyFixtureHarness.CloseDocument(document);
             if (path != null) File.Delete(path);
         }
+    }
+}
+
+internal sealed class OwnerBlobRecoveryFixture : IDisposable {
+    private readonly string? _previous = OwnerBlobStore.RecoveryStateOverride.Value;
+    public string Root { get; } = Directory.CreateTempSubdirectory("pe-revit-owner-recovery-").FullName;
+
+    public OwnerBlobRecoveryFixture() => OwnerBlobStore.RecoveryStateOverride.Value = this.Root;
+
+    public void Dispose() {
+        OwnerBlobStore.RecoveryStateOverride.Value = this._previous;
+        Directory.Delete(this.Root, recursive: true);
     }
 }

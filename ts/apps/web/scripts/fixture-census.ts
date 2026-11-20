@@ -10,17 +10,14 @@ const canonicalFixtures: Record<
 > = {
   "/": { canonicalReviewUrl: "/", fixtureKind: "inherent-static" },
   "/bind": { canonicalReviewUrl: "/bind?page=todo", fixtureKind: "live-route" },
-  "/captures": { canonicalReviewUrl: "/captures", fixtureKind: "live-route" },
   "/pea": { canonicalReviewUrl: "/pea?demo=diagram", fixtureKind: "demo-fixture" },
   "/duct-systems": { canonicalReviewUrl: "/duct-systems", fixtureKind: "live-route" },
   "/duct-loss": { canonicalReviewUrl: "/duct-loss", fixtureKind: "inherent-static" },
   "/families": { canonicalReviewUrl: "/families?demo=apply", fixtureKind: "demo-fixture" },
-  "/family": { canonicalReviewUrl: "/family?demo=apply", fixtureKind: "demo-fixture" },
   "/open": { canonicalReviewUrl: "/open?demo=refresh", fixtureKind: "demo-fixture" },
   "/ops": { canonicalReviewUrl: "/ops", fixtureKind: "live-route" },
   "/rooms": { canonicalReviewUrl: "/rooms", fixtureKind: "live-route" },
   "/pods": { canonicalReviewUrl: "/pods?demo=browse", fixtureKind: "demo-fixture" },
-  "/schedules": { canonicalReviewUrl: "/schedules?demo=apply", fixtureKind: "demo-fixture" },
   "/settings": {
     canonicalReviewUrl: "/settings?shell=tray&demo=blocked-plan",
     fixtureKind: "demo-fixture",

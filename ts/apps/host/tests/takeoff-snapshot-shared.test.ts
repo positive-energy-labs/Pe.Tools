@@ -10,6 +10,7 @@ import { hostOwnership } from "../src/host-ownership.ts";
 import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { SdkDriver } from "../src/sdk-session.ts";
 import {
+  settle,
   callRouteOver,
   captureStore,
   detachedBridge,
@@ -161,7 +162,7 @@ async function harness() {
     }
   };
   const answer = (job: (typeof dispatches)[number]) =>
-    Effect.runPromise(
+    settle(
       Effect.gen(function* () {
         const attached = {
           processIncarnation: { pid: 42, startedAt: 1000 },

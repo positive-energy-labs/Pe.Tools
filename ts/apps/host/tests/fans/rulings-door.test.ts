@@ -30,11 +30,25 @@ test.each([snapshot.slots.requiredEsp, null])(
     // The native owner overlays a request's store per key on the model's whole store (K3). The fixture only echoes
     // the last request, so the store the next read answers is composed here.
     let store: Record<string, unknown> | undefined;
+    const replacement = {
+      owner: "duct-losses",
+      status: "UnknownVersion",
+      reason: "version 2",
+      rawUtf8Sha256: "b".repeat(64),
+    };
     const f = await nativeFixture("real", undefined, null, {
       native: (key, input) =>
         key.startsWith("ducts.snapshot.")
           ? { ...snapshot, slots: { ...snapshot.slots, ...input.slots, requiredEsp }, store }
-          : undefined,
+          : key === "ducts.apply.plan" && !store
+            ? {
+                previewOnly: true,
+                writes: [],
+                counts: { planned: 0, written: 0, refused: 0, unchanged: 0 },
+                storeRevision: 0,
+                replacement,
+              }
+            : undefined,
     });
     closes.push(() => f.close());
     const round = async (id: string, patches: { path: (string | number)[]; value: unknown }[]) => {
@@ -81,6 +95,7 @@ test.each([snapshot.slots.requiredEsp, null])(
       },
     ]);
     expect(first.sent).toHaveLength(1);
+    expect(first.sent[0]).toHaveProperty("replacement", replacement);
     expect(first.sent[0]!.slots).toMatchObject({ requiredEsp: requiredEsp ?? "" });
     expect(first.sent[0]!.store.rules).toEqual({ [RULE]: { table: TABLE } });
     expect(first.sent[0]!.store.verdicts).toEqual({
@@ -115,6 +130,7 @@ test.each([snapshot.slots.requiredEsp, null])(
       { path: ["assumptions", VERDICT, "edit"], value: { delete: true } },
     ]);
     expect(second.sent).toHaveLength(2);
+    expect(second.sent[1]).not.toHaveProperty("replacement");
     expect(second.sent[1]!.storeDeletes).toEqual({ verdicts: [VERDICT] });
     expect(second.sent[1]!.store.verdicts).toEqual({});
     expect(second.sent[1]!.store.rules).toEqual({});
@@ -123,7 +139,7 @@ test.each([snapshot.slots.requiredEsp, null])(
 );
 
 const wholeStore = (verdicts: Record<string, unknown>) => ({
-  version: 2,
+  version: 3,
   rules: {},
   instances: {},
   terminals: {},

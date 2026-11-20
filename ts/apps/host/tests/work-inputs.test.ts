@@ -1,7 +1,7 @@
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
-import { journalAt } from "./effect-test.ts";
+import { settle, settleExit, journalAt } from "./effect-test.ts";
 import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,25 +41,25 @@ import {
 
 /** The test's explicit Effect edge: a rejection is the DoorFailure itself. */
 const run: WorkInputRunner = (effect) =>
-  Effect.runPromiseExit(effect).then((exit) =>
+  settleExit(effect).then((exit) =>
     Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
   );
 const decodes = async (codec: Schema.Codec<unknown, Schema.Json>, value: unknown) =>
-  Exit.isSuccess(await Effect.runPromiseExit(Schema.decodeUnknownEffect(codec)(value)));
+  Exit.isSuccess(await settleExit(Schema.decodeUnknownEffect(codec)(value)));
 const bundle = async () => {
   const dir = await mkdtemp(join(tmpdir(), "pe-work-inputs-"));
   dirs.push(dir);
   return {
     dir,
-    writer: await Effect.runPromise(openRecordingWriter(stateFixture(dir), identity, bounds)),
+    writer: await settle(openRecordingWriter(stateFixture(dir), identity, bounds)),
   };
 };
-const reader = (dir: string) => Effect.runPromise(openRecordingReader(dir, identity, bounds));
+const reader = (dir: string) => settle(openRecordingReader(dir, identity, bounds));
 
 const dirs: string[] = [];
 const scopes: Scope.Closeable[] = [];
 afterEach(async () => {
-  for (const scope of scopes.splice(0)) await Effect.runPromise(Scope.close(scope, Exit.void));
+  for (const scope of scopes.splice(0)) await settle(Scope.close(scope, Exit.void));
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 const fans = builtinEnrollments.find((entry) => entry.routeKey === "fans")!;
@@ -76,13 +76,11 @@ const identity = { build: "build-1", catalog: nativeCatalogIdentity() };
 const bounds = { maxBytes: 1_000_000, maxTakings: 100 };
 /** The real builtin Fans admission, held open until the test ends (or `retire` closes it). */
 async function admit(workspace: RouteWorkspace) {
-  const scope = await Effect.runPromise(Scope.make());
+  const scope = await settle(Scope.make());
   scopes.push(scope);
-  const built = await Effect.runPromise(
-    Layer.buildWithScope(admittedBuiltinsLayer(workspace, [fans]), scope),
-  );
+  const built = await settle(Layer.buildWithScope(admittedBuiltinsLayer(workspace, [fans]), scope));
   expect(Context.get(built, AdmittedBuiltins).routes.has("fans")).toBe(true);
-  return () => Effect.runPromise(Scope.close(scope, Exit.void));
+  return () => settle(Scope.close(scope, Exit.void));
 }
 const memory = (): RouteDocumentStore => {
   const state = new Map<string, unknown>();
@@ -122,12 +120,10 @@ const recipe: ConsumerRecipe = {
 };
 /** One request's consumption over a real lane, and the Work context it carries explicitly. */
 async function consumer(lane: HostInputLane, selected: ReadSetId | null = null) {
-  const scope = await Effect.runPromise(Scope.make());
+  const scope = await settle(Scope.make());
   scopes.push(scope);
-  const built = await Effect.runPromise(Layer.buildWithScope(HostInputReadSets.layer(lane), scope));
-  const consumption = await Effect.runPromise(
-    Context.get(built, HostInputReadSets).open(recipe, selected),
-  );
+  const built = await settle(Layer.buildWithScope(HostInputReadSets.layer(lane), scope));
+  const consumption = await settle(Context.get(built, HostInputReadSets).open(recipe, selected));
   return { consumption, context: workReadContext(consumption, run) };
 }
 

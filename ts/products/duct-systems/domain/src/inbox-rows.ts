@@ -8,6 +8,7 @@ import { healFindings, type HealGroup, type HealItem, type HealPlan } from "@pe/
 import { findingLabel, healSystems, subjectName } from "@pe/ducts-domain/words";
 import { ruleByKey } from "@pe/ducts-domain/loss-rules";
 import type { SystemScope } from "@pe/ducts-domain/system-scope";
+import { elementSubject } from "@pe/ducts-domain/work-subject";
 import type { DuctSnapshot } from "@pe/ducts-domain/types";
 
 import { slotWord, type AirflowOf, type AirflowOption } from "@pe/ducts-domain/airflow";
@@ -65,7 +66,7 @@ export type RowVerb =
       says: string;
       on: boolean;
     }
-  | { kind: "role"; id: number; role: "fan" | "passive"; label: string; says: string }
+  | { kind: "role"; key: string; role: "fan" | "passive"; label: string; says: string }
   | {
       kind: "command";
       on: { verb: "heal"; group: string } | { verb: "fan"; unitId: number; systemId: number };
@@ -179,8 +180,6 @@ const verdictOf = (doc: DuctsDesign | null, key: string) => {
   const value = doc?.assumptions[key]?.edit?.value;
   return value?.kind === "verdict" ? value.verdict : null;
 };
-const roleOf = (doc: DuctsDesign | null, id: number) =>
-  doc?.roles[String(id)]?.edit?.value.role ?? null;
 
 const select = (ids: readonly number[]): RowVerb => ({ kind: "select", ids });
 const verdict = (
@@ -207,11 +206,29 @@ const proximityIds = (key: string) =>
 
 export function triage(input: TriageInput) {
   const { snapshot, scope, findings, flows, equipmentFlows, doc } = input;
-  // The role a unit plays now: the survey's (ruled, edit, else proposed), else Work's edit one.
-  const roleNow = (id: number) => readIndex(input.roles, id)?.role ?? roleOf(doc, id);
   const name = (id: number) => subjectName("unnamed element", input.nameOf?.(id));
   const label = input.groupLabel ?? ((id: string) => id);
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n]));
+  const roleKey = (id: number) => {
+    const node = nodes.get(id);
+    return node ? elementSubject(node) : null;
+  };
+  const roleNow = (id: number) =>
+    readIndex(input.roles, id)?.role ?? doc?.roles[roleKey(id) ?? ""]?.edit?.value.role;
+  const roleVerb = (id: number, role: "fan" | "passive", says: string): RowVerb[] => {
+    const key = roleKey(id);
+    return key
+      ? [
+          {
+            kind: "role",
+            key,
+            role,
+            label: `${name(id)} is ${role === "fan" ? "a fan" : role}`,
+            says,
+          },
+        ]
+      : [];
+  };
   const inGroups = new Set(scope?.groups ?? []);
   const owner = new Map(
     snapshot.groups.flatMap((g) =>
@@ -366,14 +383,12 @@ export function triage(input: TriageInput) {
         title: `Several fans: ${names(f.elementIds)}`,
         status: "priced per fan",
         verbs: [
-          ...f.elementIds.map(
-            (id): RowVerb => ({
-              kind: "role",
+          ...f.elementIds.flatMap((id) =>
+            roleVerb(
               id,
-              role: "passive",
-              label: `${name(id)} is passive`,
-              says: `Rule ${name(id)} passive (it moves no design air); it then passes air through`,
-            }),
+              "passive",
+              `Rule ${name(id)} passive (it moves no design air); it then passes air through`,
+            ),
           ),
           select(f.elementIds),
         ],
@@ -458,14 +473,12 @@ export function triage(input: TriageInput) {
           title: "No duct path to a fan",
           status: label(f.groupId!),
           verbs: [
-            ...roots.map(
-              (id): RowVerb => ({
-                kind: "role",
+            ...roots.flatMap((id) =>
+              roleVerb(
                 id,
-                role: "fan",
-                label: `${name(id)} is a fan`,
-                says: `Stage ${name(id)} as the fan; a group needs an air mover to price`,
-              }),
+                "fan",
+                `Stage ${name(id)} as the fan; a group needs an air mover to price`,
+              ),
             ),
             ...based.flatMap((a) => fanVerbs(a, name)),
             select(f.elementIds),

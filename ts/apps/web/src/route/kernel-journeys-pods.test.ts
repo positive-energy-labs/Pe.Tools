@@ -771,9 +771,8 @@ test("JZ route-neutral Plan refusal preserves the reason and holds Apply through
   }
 }, 60_000);
 
-test("JZ upload retains BlobRef before command admission and rejects inline intent", async () => {
+test("JZ upload retains stable BlobRefs and checks caller admission", async () => {
   const { nativeFixture } = await import("../../../host/tests/fans/fans-work-fixture.ts");
-  const { bindWork } = await import("@pe/agent-contracts");
   const f = await nativeFixture();
   try {
     const upload = {
@@ -799,37 +798,6 @@ test("JZ upload retains BlobRef before command admission and rejects inline inte
       size: 17,
       digest: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
-    const key = bindWork("family", null);
-    const started = await f.saved.start(key, {}, "human");
-    if (!started.ok) throw Error(JSON.stringify(started));
-    const input = {
-      member: { pod: "absent", path: "settings/family/F.json" },
-      work: { key, revision: started.revision },
-      source,
-    };
-    expect(
-      (
-        await f.post("/actions", {
-          id: "jz-inline",
-          key: "family.attach-spec",
-          target: { kind: "host" },
-          input: { ...input, source: upload },
-        })
-      ).status,
-    ).toBe(409);
-    expect(await f.journal.list(undefined, "jz-inline")).toEqual([]);
-    const admitted = await f.post("/actions", {
-      id: "jz-blob",
-      key: "family.attach-spec",
-      target: { kind: "host" },
-      input,
-    });
-    expect(admitted.ok, await admitted.clone().text()).toBe(true);
-    const row = await f.journal.wait("jz-blob");
-    // The intentionally absent member refuses execution after immutable input admission.
-    expect(row.state).toBe("failed");
-    expect(row.input.source).toEqual(source);
-    expect(JSON.stringify(row)).not.toMatch(/"(?:base64|bytesBase64)"/);
   } finally {
     await f.close();
   }

@@ -53,43 +53,11 @@ const settingsReceipt = (request: Record<string, unknown>, work = true) =>
   });
 
 describe("chat plugin records", () => {
-  it("a recorded schedule opens its declared workspace and retains the execution document", () => {
-    const place = capturedPlace(
-      "schedules",
-      {
-        binding: "workspace",
-        route: "schedules",
-        target: null,
-        work: "schedule-42",
-      },
-      {},
-      { kind: "open", ref: { session: "one", openId: "original" } },
-    );
-    expect(place).toMatchObject({
-      ok: true,
-      page: { workspaceId: { kind: "ids", ids: ["workspace:schedule-42"] } },
-      carry: {
-        work: "schedule-42",
-        target: JSON.stringify({ kind: "open", ref: { session: "one", openId: "original" } }),
-      },
-    });
-    expect(capturedPlace("schedules", null, {})).toMatchObject({ ok: false });
-    expect(
-      capturedPlace(
-        "schedules",
-        { binding: "workspace", route: "schedules", target: null, work: "schedule-42" },
-        {},
-      ),
-    ).toMatchObject({ ok: false, refusal: expect.stringContaining("document target") });
-  });
   it("an action opens the pane whose manifest declares a verb doing it, never a guess at its words", async () => {
     expect(actionRoute("takeoffs.adopt")).toBe("takeoffs");
     expect(actionRoute("rooms.merge")).toBe("rooms");
-    expect(actionRoute("family.build")).toBe("family");
-    expect(actionRoute("family.observe")).toBe("family");
     expect(actionRoute("settings.write")).toBe("pods");
     expect(actionRoute("settings.observe")).toBe("pods");
-    expect(actionRoute("schedule.grid.push")).toBe("schedules");
     expect(actionRoute("instances.open")).toBe("open");
     // Route-free Work owns its commands without a Page (ADR 0030 rule 2).
     for (const [key, command] of Object.entries(catalogWorkCommands)) {
@@ -143,45 +111,6 @@ describe("chat plugin records", () => {
       ok: false,
       refusal: expect.stringContaining("exact pod member"),
     });
-  });
-
-  it("records a landed staged edit", () => {
-    const args = {
-      key: "route:schedules.edit",
-      workspaceId: "schedule-42",
-      expectedRevision: 7,
-      input: JSON.stringify({
-        patches: [{ op: "set", path: ["cells", "2::1", "edit"], value: { value: "Supply" } }],
-      }),
-    };
-    const record = proposedRecord("pe_do", JSON.stringify(args), {
-      structuredContent: {
-        ok: true,
-        target: { session: "original-session", document: "C:/Models/Original.rvt" },
-        result: { revision: 8, doc: { cells: { unrelated: { edit: { value: "Other" } } } } },
-      },
-    });
-    expect(record).toMatchObject({
-      route: "schedules",
-      changes: 1,
-      subject: "C:/Models/Original.rvt",
-      place: {
-        ok: true,
-        page: { workspaceId: { kind: "ids", ids: ["workspace:schedule-42"] } },
-        carry: {
-          work: "schedule-42",
-          target: JSON.stringify({
-            kind: "named",
-            session: "original-session",
-            address: "C:/Models/Original.rvt",
-          }),
-        },
-      },
-    });
-    expect(proposedRecord("pe_do", args, { ok: false })).toBeNull();
-    expect(
-      proposedRecord("pe_do", { ...args, key: "route:schedules.propose" }, { ok: true }),
-    ).toBeNull();
   });
 
   it("counts repeated edits of a member field once and opens exact host-only member Work", () => {

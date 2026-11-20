@@ -166,3 +166,40 @@ test("outbox and host writers post to the notice feed's contract path", async ()
     rmSync(file, { force: true });
   }
 });
+
+test("model recovery shows one notice per document for a shared backup", () => {
+  const root = mkdtempSync(join(tmpdir(), "pe-model-recovery-notices-"));
+  try {
+    const machine = stateMachine(root);
+    const path = join(root, "duct-losses.txt");
+    const at = "2026-11-20T00:00:00Z";
+    mkdirSync(storedParent(machine.notices), { recursive: true });
+    writeFileSync(
+      machine.notices,
+      ["project:a", "project:b"]
+        .map((documentKey) =>
+          JSON.stringify({
+            class: "keep",
+            place: documentKey + " / duct-losses",
+            documentKey,
+            path,
+            sha256: "a".repeat(64),
+            reason: "Kept at " + path + " before replacing the model record.",
+            at,
+          }),
+        )
+        .join("\n"),
+    );
+    const rows = noticeRows(
+      { threads: [], receipts: [], works: [], machine: null, stored: storedNotices(machine) },
+      Date.parse(at),
+    );
+    expect(rows).toHaveLength(2);
+    expect(new Set(rows.map((row) => row.key)).size).toBe(2);
+    expect(rows.map((row) => row.says)).toEqual(
+      Array(2).fill("Kept at " + path + " before replacing the model record."),
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

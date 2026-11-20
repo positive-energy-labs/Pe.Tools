@@ -7,7 +7,7 @@ import { Context, Deferred, Effect, Fiber, Layer, Result, Schema } from "effect"
 import { RevitBridge } from "@pe/host-internal/bridge";
 import { NativeReads } from "../src/native-reads.ts";
 import { prepareRead } from "../../../packages/host-internal/src/read-admission.ts";
-import { detachedBridge, effectTest } from "./effect-test.ts";
+import { detachedBridge, effectTest, settle as run } from "./effect-test.ts";
 import { CurrentInputConsumption, type InputConsumption } from "@pe/host-internal/input-occurrence";
 import { HostInputReadSets } from "../src/input-occurrence.ts";
 import { HttpRouter } from "effect/http";
@@ -36,7 +36,6 @@ import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
 
-const run = Effect.runPromise;
 const dirs: string[] = [];
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });

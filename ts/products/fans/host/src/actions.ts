@@ -151,9 +151,7 @@ export function fanRulings(
   return {
     rulings: { roles },
     storeDeletes: {
-      roles: Object.keys(snapshot.store?.roles ?? {})
-        .filter((id) => !(id in roles))
-        .map(Number),
+      roles: Object.keys(snapshot.store?.roles ?? {}).filter((id) => !(id in roles)),
     },
   };
 }

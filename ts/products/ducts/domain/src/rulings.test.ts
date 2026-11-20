@@ -22,14 +22,14 @@ const snapshot = {
 } as any;
 const AT = "2026-10-20T12:00:00.000Z";
 const store = {
-  version: 2,
+  version: 3,
   rules: {},
   instances: {},
   terminals: {},
   terminalFlows: {},
   equipmentFlows: {},
   verdicts: { "open-end:101:1": { verdict: "ignore", ruledAt: AT } },
-  roles: { "900": { role: "passive", ruledAt: AT } },
+  roles: { [snapshot.nodes[0].uniqueId]: { role: "passive", ruledAt: AT } },
   workRevision: 3,
 } satisfies NonNullable<DuctSnapshot["store"]>;
 const doc = designOf;
@@ -88,7 +88,7 @@ it("takes a stored verdict back with a edit delete, and a stored passive is rule
   ]);
   expect(storeRulings(edit, store, "later", snapshot)).toEqual({
     verdicts: {},
-    roles: { "900": { role: "fan", ruledAt: "later" } },
+    roles: { [snapshot.nodes[0].uniqueId]: { role: "fan", ruledAt: "later" } },
   });
 });
 
@@ -111,6 +111,6 @@ it("writes the stored rulings with their own time and new ones with the write's"
       "open-end:101:1": { verdict: "ignore", ruledAt: AT },
       "proximity:12:0|34:1": { verdict: "ignore", ruledAt: "later" },
     },
-    roles: { "900": { role: "passive", ruledAt: AT } },
+    roles: { [snapshot.nodes[0].uniqueId]: { role: "passive", ruledAt: AT } },
   });
 });

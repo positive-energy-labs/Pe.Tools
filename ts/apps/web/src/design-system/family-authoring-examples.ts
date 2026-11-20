@@ -1,7 +1,7 @@
 import { settingsFieldPointer, type SettingsFieldState } from "@pe/agent-contracts";
 import type { PodList } from "@pe/host-contracts/operation-types";
-import { FAMILY_MODEL_SCHEMA } from "../family/page";
-import type { AuthoredFamilyName } from "../family/authored-families";
+
+const FAMILY_MODEL_SCHEMA = "/schemas/settings/FamilyFoundry/models.json";
 
 export function familyDemoFields(raw: string): Record<string, SettingsFieldState> {
   const parameters = (JSON.parse(raw) as { parameters?: Record<string, { dataType?: string }> })
@@ -27,9 +27,9 @@ export function familyDemoFields(raw: string): Record<string, SettingsFieldState
 }
 
 const DEMO_POD = "demo";
-const demoPath = (name: AuthoredFamilyName) => `settings/family/${name}.json`;
+const demoPath = (name: (typeof FAMILY_NAMES)[number]) => `settings/family/${name}.json`;
 const demoHash = (n: number) => String(n).repeat(64);
-const FAMILY_NAMES = ["box", "grd", "bath", "refline"] as const satisfies AuthoredFamilyName[];
+const FAMILY_NAMES = ["box", "grd", "bath", "refline"] as const;
 
 /** The demo pod: the four authored fixtures, each a family model member. */
 export const FAMILY_DEMO_PODS: readonly PodList["pods"][number][] = [

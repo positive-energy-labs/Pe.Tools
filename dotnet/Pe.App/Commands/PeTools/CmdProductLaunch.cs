@@ -44,18 +44,8 @@ public sealed class CmdPea : ProductLaunchCommand {
 }
 
 [Transaction(TransactionMode.Manual)]
-public sealed class CmdFamilyEditor : ProductLaunchCommand {
-    protected override string Route => PeRoutes.Family.Path;
-}
-
-[Transaction(TransactionMode.Manual)]
 public sealed class CmdFamilyAudit : ProductLaunchCommand {
     protected override string Route => PeRoutes.Families.Path;
-}
-
-[Transaction(TransactionMode.Manual)]
-public sealed class CmdSchedulesWeb : ProductLaunchCommand {
-    protected override string Route => PeRoutes.Schedules.Path;
 }
 
 [Transaction(TransactionMode.Manual)]

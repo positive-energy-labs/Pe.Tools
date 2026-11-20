@@ -1,3 +1,4 @@
+import { settle, settleExit } from "./effect-test.ts";
 import { Effect, Exit } from "effect";
 import { expect, test } from "vite-plus/test";
 import type { ActionAdmission, Caller } from "@pe/agent-contracts";
@@ -22,7 +23,7 @@ test("a command read keeps its Pea caller, exact document and command parent in 
     caller: pea,
     admission: plan({ kind: "document", ref: { session: "s1", openId: "doc-a" } }),
   };
-  const [first, second] = await Effect.runPromise(
+  const [first, second] = await settle(
     Effect.all([admittedCommandReadIdentity(context), admittedCommandReadIdentity(context)]),
   );
   expect(first).toMatchObject({
@@ -43,6 +44,6 @@ test.each([
     "read.admission",
   ],
 ])("%s is refused before any identity is minted", async (_, admission, problem) => {
-  const exit = await Effect.runPromiseExit(admittedCommandReadIdentity({ caller: pea, admission }));
+  const exit = await settleExit(admittedCommandReadIdentity({ caller: pea, admission }));
   expect(Exit.isFailure(exit) && JSON.stringify(exit.cause)).toContain(problem);
 });
