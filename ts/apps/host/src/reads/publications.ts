@@ -27,7 +27,8 @@ export interface Publication<T> {
   readonly refreshCause?: "document-changed";
 }
 type Dependency = Pick<Trace, "name" | "args">;
-type Pending = { inputs: Dependency[]; superseded: boolean };
+type Pending = { inputs: Dependency[]; superseded: boolean; timelineInvalidated?: boolean };
+type PublicationListener = (replacement?: Publication<unknown>, retry?: number) => void;
 type Slot = {
   generation: number;
   key: string;
@@ -52,18 +53,18 @@ export class Publications {
     string,
     { version: number; flights: Map<string, Flight<Publication<unknown>>> }
   >();
-  private readonly listeners = new Map<string, Set<(retry?: Publication<unknown>) => void>>();
+  private readonly listeners = new Map<string, Set<PublicationListener>>();
   private readonly flightInputs = new WeakMap<Flight<Publication<unknown>>, Pending>();
   constructor(
     private readonly capacity = 128,
     private readonly byteLimit = 128 * 1024 * 1024,
     private readonly open: StartFlight = startFlight,
   ) {}
-  observe(id: string, notify: (publication: Publication<unknown>) => void) {
-    const listeners = this.listeners.get(id) ?? new Set<(retry?: Publication<unknown>) => void>();
-    const listener = (retry?: Publication<unknown>) => {
-      const value = retry ?? this.slots.get(id)?.published;
-      if (value) notify(value);
+  observe(id: string, notify: (publication: Publication<unknown>, retry?: number) => void) {
+    const listeners = this.listeners.get(id) ?? new Set<PublicationListener>();
+    const listener: PublicationListener = (replacement, retry) => {
+      const value = replacement ?? this.slots.get(id)?.published;
+      if (value) notify(value, retry);
     };
     listeners.add(listener);
     this.listeners.set(id, listeners);
@@ -76,11 +77,11 @@ export class Publications {
       }
     };
   }
-  private notify(id: string, retry?: Publication<unknown>) {
+  private notify(id: string, replacement?: Publication<unknown>, retry?: number) {
     const listeners = this.listeners.get(id);
     for (const listener of listeners ?? []) {
       try {
-        listener(retry);
+        listener(replacement, retry);
       } catch {
         listeners?.delete(listener);
       }
@@ -121,6 +122,8 @@ export class Publications {
     return published;
   }
   invalidate(matches: (trace: Dependency) => boolean, subscription?: string) {
+    const changesTimeline = (input: Dependency) => input.name === "work-timeline" && matches(input);
+    const documentChanged = (input: Dependency) => input.name === "document-mark" && matches(input);
     const slots =
       subscription === undefined
         ? this.slots
@@ -129,9 +132,9 @@ export class Publications {
       if (!slot) continue;
       const previous = slot.published;
       const pending = slot.pending?.inputs.some((input) => input.name === "work" && matches(input));
-      const documentChanged = (trace: Dependency) =>
-        trace.name === "document-mark" && matches(trace);
-      if (pending || previous?.value?.trace.some(matches)) {
+      const pendingTimeline = slot.pending?.inputs.some(changesTimeline);
+      if (pendingTimeline && slot.pending) slot.pending.timelineInvalidated = true;
+      if (pending || pendingTimeline || previous?.value?.trace.some(matches)) {
         // Work creation or editing replaces the pending basis, including the first publication.
         if (pending && slot.pending) {
           slot.pending.superseded = true;
@@ -148,7 +151,10 @@ export class Publications {
           ...(previous?.value?.trace.some(documentChanged) && { refreshCause: "document-changed" }),
           value: previous?.value ? { ...previous.value, freshness: "refresh-needed" } : null,
         });
-        this.notify(id);
+        // The tab can be refreshing a retained Timeline Value when another receipt lands.
+        // Give that invalidation a distinct wire identity even when the Value's version stands.
+        const timeline = pendingTimeline || previous?.value?.trace.some(changesTimeline);
+        this.notify(id, undefined, timeline ? ++this.retryVersion : undefined);
       }
     }
   }
@@ -374,6 +380,11 @@ export class Publications {
           : [];
         const commit = await keep?.(published);
         if (!mine()) return obsolete();
+        if (pending.timelineInvalidated)
+          throw new RefreshNeeded(
+            "Timeline receipts changed while publishing the read",
+            "work-timeline",
+          );
         const changed = dependencies.find(
           ({ trace, revision }) => port.revision(trace.name, trace.args) !== revision,
         );

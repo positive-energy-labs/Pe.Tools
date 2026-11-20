@@ -13,7 +13,12 @@ import {
   draftCellSchema,
   workFingerprintSchema,
   workTimelineSchema,
+  type WorkTimeline,
 } from "@pe/agent-contracts";
+import { Publications } from "../../../host/src/reads/publications";
+import { readInvalidations } from "../../../host/src/reads/invalidations";
+import { workTimelineRead } from "../../../host/src/reads/work-timeline";
+import { peReadings } from "../host/resource-stream";
 import { module as reference } from "@pe/fans-web/route";
 import { route } from "@pe/web-kernel/route/typed-route";
 import { scrollBody } from "@pe/web-kernel/route/body";
@@ -31,12 +36,224 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+test.each(["succeeded", "cancelled"])(
+  "an open Timeline follows admission through %s",
+  async (terminal) => {
+    const work = bindWork("rooms", null, "chadds");
+    const base: WorkTimeline = {
+      rows: [
+        {
+          kind: "edit",
+          work,
+          revision: 2,
+          by: "human",
+          label: "Choose rooms.partition scope",
+          state: "applied",
+          at: 1,
+        },
+      ],
+      undo: null,
+      redo: null,
+      refusal: { undo: null, redo: null },
+    };
+    let snapshot = base;
+    let receiptChanged = () => {};
+    const publications = new Publications();
+    const invalidations = readInvalidations(
+      { subscribeUncaptured: () => () => {} } as never,
+      {} as never,
+      false,
+      publications,
+      undefined,
+      (changed) => {
+        receiptChanged = changed;
+        return () => {};
+      },
+    );
+    vi.spyOn(peReadings, "subscribe").mockImplementation((request, accept) => {
+      if (request.kind !== "publication") throw Error("Expected Timeline publication");
+      let last = "";
+      const send = (state: string, version: number, retry?: number) => {
+        const value = { generation: request.generation, version, state, retry };
+        const wire = JSON.stringify(value);
+        if (wire === last) return;
+        last = wire;
+        accept({ kind: "snapshot", key: request.subscription, value });
+      };
+      const stop = invalidations.observePublication(
+        request.subscription,
+        request.generation,
+        (publication, retry) => send(publication.state, publication.version, retry),
+        { recipe: "open.documents", observe: () => () => {} },
+      );
+      if (!last) send("absent", 0);
+      return stop;
+    });
+    let held:
+      | { started: PromiseWithResolvers<void>; release: PromiseWithResolvers<void> }
+      | undefined;
+    const response = vi.fn(
+      async (
+        _route: string,
+        request: { body: { subscription: string; generation: number; release: boolean } },
+      ) => {
+        const { subscription, generation, release } = request.body;
+        if (release) {
+          publications.release(subscription, generation);
+          return Response.json(null);
+        }
+        return Response.json(
+          await publications.publish(
+            subscription,
+            generation,
+            workTimelineRead,
+            { works: [work], by: "human" },
+            {
+              evaluation: "timeline-replay",
+              origin: null,
+              revision: invalidations.revision,
+              async take() {
+                const current = snapshot;
+                const read = held;
+                held = undefined;
+                read?.started.resolve();
+                await read?.release.promise;
+                return current;
+              },
+            },
+          ),
+        );
+      },
+    );
+    const listeners = new Set<() => void>();
+    let value: WorkTimeline | null = null,
+      reason: string | null = null,
+      revision = 0;
+    const owner: TimelineOwner = {
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      revision: () => revision,
+      timeline: () => value,
+      timelineRefusal: () => reason,
+      reviewProblem: () => null,
+      stepTimeline: async () => null,
+      pendingEdits: () => [],
+      discardIntent: () => {},
+      stopCommand: async () => {
+        throw Error("Unused");
+      },
+    };
+    const view = render(<GraphHistory owner={owner} />);
+    const stop = createTimelineClient({ response: response as never }).open(
+      [work],
+      (next, problem) => {
+        value = next;
+        reason = problem ?? null;
+        revision++;
+        for (const listener of listeners) listener();
+      },
+    );
+    const step = async (
+      state: string,
+      words: RegExp,
+      progress?: { phase: "Prepare" | "Solve"; zonesDone: number; zonesTotal: number | null },
+      race = false,
+      whileReading?: () => void,
+    ) => {
+      const read =
+        race || whileReading
+          ? { started: Promise.withResolvers<void>(), release: Promise.withResolvers<void>() }
+          : undefined;
+      await act(async () => {
+        if (race && read) {
+          held = read;
+          receiptChanged(); // A preceding receipt revision starts a read before the next one lands.
+          await read.started.promise;
+        } else if (read) held = read;
+        snapshot = {
+          ...base,
+          rows: [
+            ...base.rows,
+            {
+              kind: "receipt",
+              id: "partition",
+              work,
+              label: "rooms.partition",
+              by: "human",
+              state,
+              at: 2,
+              progress,
+            },
+          ],
+        };
+        receiptChanged();
+        await read?.started.promise;
+      });
+      if (read) {
+        try {
+          whileReading?.();
+        } finally {
+          await act(async () => read.release.resolve());
+        }
+      }
+      expect(await screen.findByText(words, {}, { timeout: 1500 })).toBeTruthy();
+      expect(view.container.firstElementChild).toBe(section);
+    };
+    const section = view.container.firstElementChild;
+    try {
+      await screen.findByText("Choose rooms.partition scope");
+      await step("running", /you \/ running/, undefined, true);
+      const scroller = view.container.querySelector<HTMLElement>("[data-scroll]");
+      if (!scroller) throw Error("Timeline scroller is absent");
+      const row = screen.getByText("rooms.partition").closest("[data-key]");
+      scroller.scrollTop = 93;
+      const samePosition = () => {
+        expect(view.container.querySelector("[data-scroll]")).toBe(scroller);
+        expect(screen.getByText("rooms.partition").closest("[data-key]")).toBe(row);
+        expect(scroller.scrollTop).toBe(93);
+      };
+      await step(
+        "running",
+        /Reading model geometry/,
+        { phase: "Prepare", zonesDone: 0, zonesTotal: null },
+        false,
+        () => {
+          expect(screen.getByRole("status").textContent).toBe("Refreshing Timeline");
+          samePosition();
+        },
+      );
+      await step("running", /Finding rooms · 1\/2 zones done/, {
+        phase: "Solve",
+        zonesDone: 1,
+        zonesTotal: 2,
+      });
+      samePosition();
+      if (terminal === "cancelled")
+        await step("stopping", /Stopping…/, { phase: "Solve", zonesDone: 1, zonesTotal: 2 });
+      await step(terminal, new RegExp(`you / ${terminal}`), undefined, true);
+    } finally {
+      stop();
+      invalidations.close();
+    }
+  },
+);
+
 test("the shell Timeline popover keeps activity in its own Scroll", () => {
   // D31: removing GraphHistory's maxHeight reproduces assertScrollOwner's popover exception.
   // jsdom does not load Tailwind: supply the popover's real overflow rule.
   const css = document.createElement("style");
   css.textContent = '[data-slot="popover-content"] { overflow-y: auto; }';
   document.head.append(css);
+  const scrollDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollIntoView");
+  const reveal = vi.fn();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: reveal,
+  });
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   vi.stubGlobal(
     "ResizeObserver",
@@ -48,6 +265,7 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
   );
   const timeline = workTimelineSchema.parse({
     rows: [
+      { kind: "point", id: "older", reason: "captured", at: 0 },
       {
         kind: "receipt",
         id: "partition-rooms",
@@ -113,7 +331,10 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
     const [activity] = screen.getAllByRole("region", { name: "Timeline activity" });
     if (!activity) throw Error("Timeline activity is absent");
     expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
-    fireEvent.click(within(activity).getByRole("button", { name: "Stop command" }));
+    const stop = within(activity).getByRole("button", { name: "Stop command" });
+    expect.soft(stop.closest("[data-row-actions-persistent]")).not.toBeNull();
+    expect.soft(reveal.mock.contexts).toContain(stop.closest("[data-key]"));
+    fireEvent.click(stop);
     expect(within(activity).getByText(/Stopping…/)).toBeTruthy();
     expect(within(activity).getByText(/Finding rooms · 1\/2 zones done/)).toBeTruthy();
     expect(within(activity).queryByRole("button", { name: "Stop command" })).toBeNull();
@@ -126,6 +347,9 @@ test("the shell Timeline popover keeps activity in its own Scroll", () => {
   } finally {
     cleanup();
     css.remove();
+    if (scrollDescriptor)
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", scrollDescriptor);
+    else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }

@@ -64,6 +64,7 @@ export function createTimelineClient(
     open(works, deliver, document) {
       const args = { works, ...(document ? { document } : {}) };
       const controller = new AbortController();
+      let current: WorkTimeline | null = null;
       const source = publicationSource({
         async read(_ctx, publication, release) {
           const response = await client.response("reads.value", {
@@ -98,12 +99,13 @@ export function createTimelineClient(
         (frame) => {
           if (frame.kind === "complete") {
             const parsed = workTimelineSchema.safeParse(frame.value.value?.data);
-            deliver(
-              parsed.success ? parsed.data : null,
-              parsed.success ? undefined : "Timeline answer does not match its contract",
-            );
-          } else if (frame.kind === "failure") deliver(null, String(frame.error));
-          else if (frame.kind !== "log") deliver(null, "Refreshing Timeline");
+            if (!parsed.success)
+              return deliver(current, "Timeline answer does not match its contract");
+            current = parsed.data;
+            deliver(current, frame.fresh ? undefined : frame.reason || "Refreshing Timeline");
+          } else if (frame.kind === "failure") deliver(current, String(frame.error));
+          // The reason fences history steps while the retained rows keep their scroll owner.
+          else if (frame.kind !== "log") deliver(current, "Refreshing Timeline");
         },
       );
       return () => {

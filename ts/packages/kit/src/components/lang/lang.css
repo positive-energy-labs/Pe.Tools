@@ -796,6 +796,14 @@ tr.dl-row[data-active] {
   margin: 4px 0;
   background: var(--pe-line);
 }
+
+.dl-row-actions[data-row-actions-persistent] {
+  visibility: visible;
+  opacity: 1;
+}
+.dl-row-meta:has(> .dl-row-actions[data-row-actions-persistent]) > .dl-row-fact {
+  visibility: hidden;
+}
 .dl-row-head,
 .dl-row-colhead {
   position: sticky;

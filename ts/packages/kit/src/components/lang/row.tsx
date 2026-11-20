@@ -93,6 +93,8 @@ export type RowProps = RowState & {
         /** Row verbs (usually one menu): they take the meta slot in place on hover, keyboard
          *  focus or an open menu; without hover, a tap on the slot opens them. Never the pick. */
         actions?: ReactNode;
+        /** Keep urgent row verbs in the trailing slot at rest as well as on hover and focus. */
+        persistentActions?: boolean;
         /** A measure below the row, inside its measured virtual extent. */
         band?: ReactNode;
         /** Semantic depth from zero; CSS caps the visual indent. */
@@ -262,6 +264,7 @@ function ListRow({
                 {props.actions != null ? (
                   <span
                     className={slots.actions()}
+                    data-row-actions-persistent={props.persistentActions ? "" : undefined}
                     onPointerDown={(event) => event.stopPropagation()}
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
