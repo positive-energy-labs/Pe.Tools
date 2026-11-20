@@ -137,7 +137,6 @@
   "apps/web/src/scene/section.test.ts",
   "apps/web/src/settings/tiers.test.ts",
   "apps/web/src/shell/coverage-reason.test.tsx",
-  "apps/web/src/shell/document-picker.rooms.test.tsx",
   "apps/web/src/shell/fixture-picture-loading.test.tsx",
   "apps/web/src/shell/graph-history.test.tsx",
   "apps/web/src/shell/journey-marks.test.tsx",
