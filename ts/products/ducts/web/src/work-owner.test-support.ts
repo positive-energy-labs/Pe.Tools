@@ -1,5 +1,5 @@
-import { route, read, type TypedRoute } from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { read, hostRead } from "@pe/agent-contracts/route";
+import { route, type TypedRoute } from "@pe/web-kernel/route";
 import { contract } from "@pe/agent-contracts/handle";
 import { scrollBody } from "@pe/web-kernel/route/body";
 import type { RouteStateSpec } from "@pe/agent-contracts/route-state";

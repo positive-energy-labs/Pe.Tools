@@ -20,7 +20,7 @@ import { module as pods } from "./route";
 import { TypedChrome } from "../shell/typed-shell";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createFixtureWorkDoor } from "../shell/fixture-work-door";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 
 afterEach(cleanup);
 

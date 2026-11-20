@@ -1,9 +1,10 @@
-import type { EntryContract } from "@pe/agent-contracts/route-kernel-bodies";
-import type { UseSource } from "../shell/source-contract.ts";
+import type { EntryContract } from "./route-kernel-bodies.ts";
+import type { UseSource } from "./reading-source.ts";
 import { z } from "zod";
-import type { PeRouteId } from "@pe/agent-contracts/pe-api";
-import type { Publication } from "@pe/agent-contracts/value";
-import type { ReadHandle } from "@pe/agent-contracts/handle";
+import type { ExecutionTarget } from "./target.ts";
+import type { PeRouteId } from "./pe-api.ts";
+import type { Publication } from "./value.ts";
+import type { ReadHandle } from "./handle.ts";
 export interface HostRead {
   key: string;
   input: z.ZodType;
@@ -11,7 +12,7 @@ export interface HostRead {
   axes: EntryContract["axes"];
   fixtures?: FixtureProviders<any, unknown>;
   endpoint?: PeRouteId;
-  request?(args: any, target?: import("@pe/agent-contracts").ExecutionTarget): object;
+  request?(args: any, target?: ExecutionTarget): object;
   source: Omit<UseSource, "open"> & {
     provide?(name: string, args: unknown): Publication | Promise<Publication>;
   };
@@ -48,7 +49,7 @@ export function hostRead<K extends string, D>(
     ...contract,
     input,
     endpoint: "reads.value" as const,
-    request(args: z.output<typeof input>, target?: import("@pe/agent-contracts").ExecutionTarget) {
+    request(args: z.output<typeof input>, target?: ExecutionTarget) {
       const shape = contract.input instanceof z.ZodObject ? contract.input.shape.target : undefined;
       const bound = target ?? { kind: "host" as const };
       const direct = shape instanceof z.ZodType ? shape.safeParse(bound) : undefined;

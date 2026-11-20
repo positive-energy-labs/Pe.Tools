@@ -16,7 +16,8 @@ import {
 } from "@pe/web-kernel/scene/picture/content";
 import type { SceneMeshes } from "@pe/web-kernel/scene/types";
 import type { SubjectRefCode } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
-import type { DrawContext, picturePose } from "@pe/web-kernel/route/typed-route";
+import type { picturePose } from "@pe/agent-contracts/route";
+import type { DrawContext } from "@pe/web-kernel/route/typed-route";
 import { findingMark } from "@pe/web-kernel/route/slots/findings";
 import { subjectName } from "../subject-name.ts";
 import { elementOf, pictureSlot, type Captured } from "@pe/web-kernel/route/slots/picture";

@@ -6,7 +6,7 @@ import {
   type ComponentType,
 } from "react";
 import type { OpenPageState } from "./open-page";
-import type { ReadingState } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingState } from "@pe/agent-contracts/route";
 export interface OpenOutcome {
   state: string;
   outcome?: { state: string };

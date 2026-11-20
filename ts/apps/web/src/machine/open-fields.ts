@@ -1,8 +1,8 @@
 import * as contracts from "./open-contract.ts";
 import { z } from "zod";
 
-import { field, read, type ContextOf, type Verbs } from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { field, read, hostRead } from "@pe/agent-contracts/route";
+import { type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import { EMPTY_DRAFT } from "./open-model";
 export const fields = {
   draft: field(

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { route, field, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
+import { field } from "@pe/agent-contracts/route";
+import { route, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { fields as openFields, loaded } from "../machine/open-fields";
 import { module as open } from "../open/route";

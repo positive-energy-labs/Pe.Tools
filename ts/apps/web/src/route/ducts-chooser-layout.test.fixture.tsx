@@ -17,7 +17,7 @@ import { typedSubjectDoor } from "../shell/typed-mount.ts";
 import { createWorkFeedClient } from "../shell/work-feed-client";
 import { fixtureTimeline } from "../shell/fixture-work-door";
 import { workFingerprintSchema } from "@pe/agent-contracts";
-import type { ReadingDelivery } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingDelivery } from "@pe/agent-contracts/route";
 
 // Native boundary: replay the committed Chadds roster, holding network completion
 // until the instrument has measured the usable chooser during Reading.

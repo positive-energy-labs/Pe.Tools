@@ -12,7 +12,12 @@ import type {
 } from "@pe/agent-contracts";
 import { subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 export { oneName, nameOf } from "@pe/agent-contracts/subject-ref";
-import { subjectSchema } from "@pe/agent-contracts/route-kernel-codecs";
+import {
+  picturePose,
+  type FieldHistory,
+  type FieldRole,
+  type HostRead,
+} from "@pe/agent-contracts/route";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "@pe/agent-contracts/value";
@@ -28,7 +33,6 @@ export { handle };
 import type { KernelVerbKey } from "./slots/findings/index.ts";
 import { linkRouteGates } from "@pe/agent-contracts/route-kernel-data";
 import {
-  picturePoseSchemas,
   pictureSlotData,
   sheetSlotData,
   writesRevit,
@@ -46,8 +50,8 @@ export type { Owners, Specification } from "./specification.ts";
 type Field = {
   schema: z.ZodType;
   initial: unknown;
-  role: "pose" | "query" | "subject" | "stage";
-  url: "push" | "replace";
+  role: FieldRole;
+  url: FieldHistory;
   share?: false;
   codec?: FieldCodec;
 };
@@ -114,27 +118,6 @@ export const split = (
     typeof child === "string" ? { kind: "pane", id: child } : child,
   ),
 });
-export const field = <S extends z.ZodType, const R extends Field["role"]>(
-  schema: S,
-  initial: z.input<S>,
-  role: R,
-  url: Field["url"] = "replace",
-) => ({ schema, initial, role, url });
-/**
- * The kernel's picture pose as Page fields (ADR 0035 rule 1). Each default is the contract schema's own
- * (`picturePoseSchemas`): nothing here states one. `route()` puts `picturePose` on the Page of every route
- * that declares `picture`; a route spreads it into `fields` only to read the pose in its own typed context.
- */
-export const poseFields = (s: typeof picturePoseSchemas) => ({
-  contextRadiusFt: field(s.contextRadiusFt, s.contextRadiusFt.parse(undefined), "pose", "replace"),
-  sceneView: field(s.sceneView, s.sceneView.parse(undefined), "pose", "replace"),
-  viewport: field(s.viewport, s.viewport.parse(undefined), "pose", "replace"),
-  context: field(s.context, s.context.parse(undefined), "pose", "push"),
-  layers: field(s.layers, s.layers.parse(undefined), "pose", "push"),
-  encoding: field(s.encoding, s.encoding.parse(undefined), "pose", "push"),
-  picture: field(s.picture, s.picture.parse(undefined), "pose", "push"),
-});
-export const picturePose = poseFields(picturePoseSchemas);
 /** The text keys of a subject set of plain refs (system name, workspace id); a tuple key, placement or sub is not a name and throws. */
 export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
   value.kind === "all"
@@ -145,7 +128,6 @@ export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
           throw Error(`namesOf: ${id} is not a plain text-keyed subject`);
         return key;
       });
-export { subjectSchema };
 export type Fields = Readonly<Record<string, Field>>;
 /** Route-owned Page fields no slot holds (ADR 0035 rule 1). */
 export type QueryFields = Readonly<Record<string, Field & { role: "query" }>>;
@@ -310,7 +292,6 @@ export type AnyVerb = {
   input?(ctx: VerbContext, supplied?: unknown): unknown;
   present?(result: unknown, ctx: VerbContext): Presentation;
 };
-type HostRead = import("./host-read.ts").HostRead;
 export type ReadData<R extends HostRead> = NonNullable<z.output<R["output"]>["value"]>["data"];
 /** The shell executes this typed module. Data is a one-way discovery/host admission projection. */
 export function route<

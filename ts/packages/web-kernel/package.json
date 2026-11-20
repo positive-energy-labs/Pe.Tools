@@ -7,7 +7,6 @@
     "./attention": "./src/attention.tsx",
     "./components/work/band": "./src/components/work/band.tsx",
     "./element-index": "./src/element-index.ts",
-    "./host-read": "./src/route/host-read.ts",
     "./host/build-stamp": "./src/host/build-stamp.ts",
     "./host/read-fetch": "./src/host/read-fetch.ts",
     "./host/runtime": "./src/host/runtime.ts",
@@ -50,7 +49,6 @@
     "./scene/use-plane-viewport": "./src/scene/use-plane-viewport.ts",
     "./shell/fixture-name": "./src/shell/fixture-name.ts",
     "./shell/subject-set": "./src/shell/subject-set.ts",
-    "./shell/source-contract": "./src/shell/source-contract.ts",
     "./shell/subject": "./src/shell/subject.ts",
     "./test-setup": "./src/test-setup.ts"
   },

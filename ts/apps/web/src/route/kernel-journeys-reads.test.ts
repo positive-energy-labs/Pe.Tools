@@ -125,7 +125,7 @@ import {
 import { module as fans } from "@pe/fans-web/route";
 import { direct, mountTypedRoute, planned } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 import { Effect } from "effect";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
 import {

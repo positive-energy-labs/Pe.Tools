@@ -14,7 +14,7 @@ import {
   uniqueIdSchema,
 } from "../../../../../../packages/agent-contracts/src/subject-ref.ts";
 import { pictureSlot, resolveMark } from "@pe/web-kernel/route/slots/picture";
-import { picturePose, poseFields } from "@pe/web-kernel/route/typed-route";
+import { picturePose, poseFields } from "@pe/agent-contracts/route";
 
 /*
  * Slice 8's red falsifier (routes MAP row 8). The Pod half is the Pod author's red test on

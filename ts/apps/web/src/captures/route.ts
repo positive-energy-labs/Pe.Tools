@@ -1,10 +1,9 @@
 import * as contracts from "./contract.ts";
 import type { ContextOf } from "@pe/web-kernel/route";
-import { read } from "@pe/web-kernel/route";
+import { read, field, hostRead } from "@pe/agent-contracts/route";
 import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
-import { field, route } from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { route } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 
 export const loaded = read(hostRead(contracts.browse));

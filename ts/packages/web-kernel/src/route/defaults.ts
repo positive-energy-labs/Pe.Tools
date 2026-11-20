@@ -1,7 +1,5 @@
 import { z } from "zod";
-import { listSearchSchema } from "@pe/agent-contracts/list-search";
 import {
-  field,
   route as declareRoute,
   type Specification,
   type QueryFields,
@@ -11,28 +9,12 @@ import {
   type VerbHandle,
 } from "./typed-route.ts";
 import type { CommandHandle } from "@pe/agent-contracts/handle";
-import type { HostRead } from "./host-read.ts";
+import type { HostRead } from "@pe/agent-contracts/route";
 export * from "./typed-route.ts";
-/** A picture is declared with these; the pose fields (`picturePose`) come with `./typed-route`. */
+/** A picture is declared with these; the pose fields (`picturePose`) come from `@pe/agent-contracts/route`. */
 export type { Mark, PictureScope, PictureSlot } from "@pe/agent-contracts/slots";
 
-/** Mechanical Page policy; names and their product meaning remain at the call site. */
-export const listFields = <const P extends string>(prefix: P) =>
-  ({
-    [`${prefix}Search`]: searchField(),
-    [`${prefix}Sort`]: sortField(),
-  }) as { [K in `${P}Search`]: ReturnType<typeof searchField> } & {
-    [K in `${P}Sort`]: ReturnType<typeof sortField>;
-  };
-const searchField = () => field(listSearchSchema, { keywords: "", pills: [], v: 1 }, "query");
-const sortField = () => field(z.enum(["", "name"]), "", "query");
-export const stageField = <const S extends readonly [string, ...string[]]>(stages: S) =>
-  field(z.enum(stages), stages[0], "stage", "push");
 export const paneLayout = (id: string) => ({ kind: "pane" as const, id });
-export const read = <R extends HostRead, P>(
-  handle: R,
-  args: (page: P) => unknown = () => ({}),
-) => ({ ...handle, args });
 type WorkOf<T> = T extends { schema: infer S extends z.ZodType }
   ? z.output<S>
   : T extends z.ZodType

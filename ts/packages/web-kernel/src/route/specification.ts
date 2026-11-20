@@ -11,7 +11,7 @@ import type { SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import type { Publication } from "@pe/agent-contracts/value";
 import type { z } from "zod";
 import type { Body, BodyKind } from "./body.ts";
-import type { HostRead } from "./host-read.ts";
+import type { HostRead } from "@pe/agent-contracts/route";
 import type {
   DrawContext,
   Fields,

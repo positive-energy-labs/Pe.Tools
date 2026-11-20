@@ -4,7 +4,8 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { MARK_KINDS, type Finding } from "@pe/agent-contracts/slots";
 import { z } from "zod";
-import { field, route, paneLayout, picturePose, scrollBody, split } from "@pe/web-kernel/route";
+import { field, picturePose } from "@pe/agent-contracts/route";
+import { route, paneLayout, scrollBody, split } from "@pe/web-kernel/route";
 import {
   subjectCode,
   uniqueIdSchema,

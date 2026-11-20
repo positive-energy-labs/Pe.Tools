@@ -10,7 +10,7 @@ import {
 import { module as pods } from "../../../pods/route.ts";
 import { mountTypedRoute } from "../../../shell/typed-mount.ts";
 import { createFixtureWorkDoor } from "../../../shell/fixture-work-door.ts";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 import { z } from "zod";
 
 // Reviews 8d8f690a and 4e935215: retain A's drawing while B's read is held or refused.

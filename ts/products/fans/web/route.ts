@@ -1,9 +1,15 @@
 import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./src/bindings.ts";
-import { read } from "@pe/web-kernel/route";
-import { stageField } from "@pe/web-kernel/route";
-import { listFields } from "@pe/web-kernel/route";
+import {
+  read,
+  stageField,
+  listFields,
+  field,
+  picturePose,
+  subjectSchema,
+  hostRead,
+} from "@pe/agent-contracts/route";
 import { fansDocumentSchema, fansRouteState } from "@pe/fans-contract/fans";
 import { z } from "zod";
 import { fansCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
@@ -11,8 +17,7 @@ import { type Immutable } from "@pe/agent-contracts";
 import * as reads from "@pe/fans-contract/contract";
 import { FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
 import { editPatches } from "@pe/ducts-domain/calc/edits";
-import { field, picturePose, route, subjectSchema, split } from "@pe/web-kernel/route";
-import { hostRead } from "@pe/web-kernel/host-read";
+import { route, split } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { fillBody, scrollBody } from "@pe/web-kernel/route/body";
 import { overlay } from "@pe/web-kernel/route/slots/picture/overlay";

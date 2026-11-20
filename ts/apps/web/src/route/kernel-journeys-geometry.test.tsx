@@ -541,7 +541,7 @@ test("JZ Fans Revert A then stage B: a plan on an incomplete fan calc is refused
   let generation = 0;
   const { fansReadResponse } = await import("@pe/fans-contract/fans-read");
   const { address: workAddress } = await import("@pe/agent-contracts");
-  const source: import("@pe/web-kernel/shell/source-contract").UseSource = {
+  const source: import("@pe/agent-contracts/route").UseSource = {
     kind: "use",
     open(ctx, deliver) {
       const subscription = crypto.randomUUID(),

@@ -9,7 +9,7 @@ import { ButtonGroup } from "@pe/kit/lang/button-group";
 import { keyOf, sessionReadStatus } from "#/machine/session";
 import { lifecycleRequest } from "../machine/lifecycle";
 import { readingList } from "#/host/resource-list";
-import type { ReadingState } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingState } from "@pe/agent-contracts/route";
 function Sessions({
   selectedKey,
   choose,

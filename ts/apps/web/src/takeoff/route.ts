@@ -1,8 +1,8 @@
 import * as contracts from "./contract.ts";
 import { z } from "zod";
-import { route, field, read, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
+import { field, read, hostRead } from "@pe/agent-contracts/route";
+import { route, paneLayout, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import type { ReadingState } from "@pe/agent-contracts";
-import { hostRead } from "@pe/web-kernel/host-read";
 import { draw } from "@pe/web-kernel/route/draw";
 import { handle } from "@pe/agent-contracts/handle";
 import {

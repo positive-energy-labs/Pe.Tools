@@ -13,6 +13,7 @@
   "include": [
     "src/schema-names.guard.test.ts",
     "src/route-closure*.ts",
+    "src/route-declaration.guard.test.ts",
     "src/product-names.guard.test.ts",
     "src/product-layers*.ts",
     "src/product-assembly.guard.test.ts",

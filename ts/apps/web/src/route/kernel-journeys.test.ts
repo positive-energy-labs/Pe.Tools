@@ -9,7 +9,7 @@ import { fixture, ref, path, gate } from "../../../host/tests/host-read-graph.te
 import { module as fans } from "@pe/fans-web/route";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { createWorkFeedClient } from "../shell/work-feed-client";
-import type { UseSource } from "@pe/web-kernel/shell/source-contract";
+import type { UseSource } from "@pe/agent-contracts/route";
 
 // Reuse the existing host HTTP fixture. Only native input and the address bar are recorded adapters.
 async function journey() {

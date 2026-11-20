@@ -1,7 +1,7 @@
 import type { ContextOf, Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./bindings";
-import { read } from "@pe/web-kernel/route";
+import { read, field, subjectSchema, hostRead } from "@pe/agent-contracts/route";
 import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
 import {
@@ -11,9 +11,8 @@ import {
   showCellValue,
 } from "@pe/agent-contracts";
 import * as reads from "./contract.ts";
-import { route, field, subjectSchema, namesOf } from "@pe/web-kernel/route";
+import { route, namesOf } from "@pe/web-kernel/route";
 import { subjectCode } from "../../../../packages/agent-contracts/src/subject-ref.ts";
-import { hostRead } from "@pe/web-kernel/host-read";
 import { draw } from "@pe/web-kernel/route/draw";
 export const fields = {
   workspaceId: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),

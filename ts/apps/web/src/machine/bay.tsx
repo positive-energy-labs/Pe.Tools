@@ -1,4 +1,4 @@
-import type { ReadingState } from "@pe/web-kernel/shell/source-contract";
+import type { ReadingState } from "@pe/agent-contracts/route";
 /**
  * THE PATCH BAY (host MAP round 4, promoted 2026-10-12): documents are jacks on the left (the
  * master table with its filters), Revits are sockets on the right (one `SessionCard` each, plus a
