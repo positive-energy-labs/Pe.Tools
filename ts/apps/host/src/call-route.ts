@@ -41,7 +41,11 @@ import {
   type TsOnlyRequest,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import { isTsOnlyOperationKey, tsOnlyOperationSchemas } from "@pe/mcps/product-operations";
+import {
+  isTsOnlyOperationKey,
+  tsOnlyOperationSchemas,
+  type TsOnlyOperationKey as LocalOperationKey,
+} from "@pe/mcps/product-operations";
 
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "./native-reads.ts";
@@ -1083,7 +1087,8 @@ function unknownBodyKeyMessage(key: string): string {
 }
 
 const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
-  key: TsOnlyOperationKey,
+  // Every local key, a product's included: the generated table declares them, not host-contracts.
+  key: LocalOperationKey,
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],

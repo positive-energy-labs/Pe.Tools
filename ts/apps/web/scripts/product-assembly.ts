@@ -66,14 +66,16 @@ export function renderProductAssembly(checkout: string) {
   return {
     outputs: {
       [productAssemblyPaths.operations]: source(
-        'import { builtinLocalCatalog, builtinLocalSchemas, isHostOperationKey, type AnyOperationKey, type HostLocalCatalogEntry, type TsOnlyOperationKey, type TsOnlyOperationSchemas } from "@pe/host-contracts/operation-types";',
+        'import { builtinLocalCatalog, builtinLocalSchemas, isHostOperationKey, type HostLocalCatalogEntry, type HostOperationKey } from "@pe/host-contracts/operation-types";',
         ...operations.map(
           (name, index) =>
             `import { localOperationCatalog as catalog${index}, localOperationSchemas as schemas${index} } from "${name}/local-operations";`,
         ),
-        // The annotation is the completeness check: a product that declares keys and is not spread here fails to compile.
-        `export const tsOnlyOperationSchemas: TsOnlyOperationSchemas = { ...builtinLocalSchemas, ${spread(operations.map((_, index) => `schemas${index}`))} };`,
-        `export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry[] = [${spread([...operations.map((_, index) => `catalog${index}`), "builtinLocalCatalog"])}];`,
+        `export const tsOnlyOperationSchemas = { ...builtinLocalSchemas, ${spread(operations.map((_, index) => `schemas${index}`))} };`,
+        "/** Every local operation key, the platform's and each product's: this table is their one declaration. */",
+        "export type TsOnlyOperationKey = keyof typeof tsOnlyOperationSchemas;",
+        "export type AnyOperationKey = HostOperationKey | TsOnlyOperationKey;",
+        `export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry<TsOnlyOperationKey>[] = [${spread([...operations.map((_, index) => `catalog${index}`), "builtinLocalCatalog"])}];`,
         "export const isTsOnlyOperationKey = (key: string): key is TsOnlyOperationKey => Object.hasOwn(tsOnlyOperationSchemas, key);",
         "export const isAnyOperationKey = (key: string): key is AnyOperationKey => isHostOperationKey(key) || isTsOnlyOperationKey(key);",
       ),
