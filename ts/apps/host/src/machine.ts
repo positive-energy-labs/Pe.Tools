@@ -146,10 +146,15 @@ export interface MachineSources {
  * "reading this machine" forever (DELL_PE, 2026-10-12). Now it is a leg error in the frame.
  */
 const LEG_DEADLINE_MS = 15_000;
-const LIFECYCLE_CENSUS_DEADLINE_MS = 3_000;
-const lifecycleCensusRefusal = () =>
+// Stop's admission can run three fresh SDK lists in sequence. Give that read budget room
+// for process startup under load while still bounding the whole admission below a display leg.
+const LIFECYCLE_CENSUS_DEADLINE_MS = 8_000;
+const lifecycleCensusTimeout = () => unreadable("Pe couldn’t check this Revit in time. Try again.");
+const lifecycleSessionUnread = () =>
+  unreadable("Pe couldn’t verify this Revit session. Check the session and try again.");
+const lifecycleDocumentsUnread = () =>
   unreadable(
-    "Pe couldn’t verify the open documents in this Revit. Switch to Revit and save or sync your work, then retry when Revit responds.",
+    "Pe couldn’t list the open documents in this Revit. Switch to Revit and save or sync your work, then retry when Revit responds.",
   );
 
 /** Bound a lifecycle's Promise-shaped SDK reads and pass cancellation through to its child. */
@@ -160,7 +165,7 @@ export async function withinLifecycleCensus<T>(
   let timer: ReturnType<typeof setTimeout> | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      const refusal = lifecycleCensusRefusal();
+      const refusal = lifecycleCensusTimeout();
       reject(refusal);
       controller.abort(refusal);
     }, LIFECYCLE_CENSUS_DEADLINE_MS);
@@ -733,7 +738,15 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
     function* (process: Pick<ProcessIdentity, "pid" | "processStartUtc">) {
       if (closed) return yield* new MachineRetired();
       const [rows, sockets, receipts] = yield* Effect.all(
-        [sources.sessions(process.pid), sources.attachments(), attempt(sources.actions)],
+        [
+          sources.sessions(process.pid).pipe(Effect.mapError(lifecycleSessionUnread)),
+          sources.attachments().pipe(Effect.mapError(lifecycleDocumentsUnread)),
+          attempt(sources.actions).pipe(
+            Effect.mapError(() =>
+              unreadable("Pe couldn’t check the action receipts for this Revit. Try again."),
+            ),
+          ),
+        ],
         { concurrency: "unbounded" },
       );
       const exact = rows.filter(
@@ -745,24 +758,28 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
           row.process.processStartUtc === process.processStartUtc,
       );
       const [row] = exact;
-      if (exact.length !== 1 || !row || row.execution?.allowed !== true)
-        return yield* lifecycleCensusRefusal();
+      if (exact.length !== 1 || !row) return yield* lifecycleSessionUnread();
+      if (row.execution?.allowed === false)
+        return yield* unreadable("This Revit is outside this host’s scope.");
+      if (row.execution?.allowed !== true) return yield* lifecycleSessionUnread();
       const matched = sockets.filter((socket) => matches(socket, process));
       const [socket] = matched;
       if (matched.length > 1 || (socket && socket.documentIdentity !== DOCUMENT_IDENTITY_AUTHORITY))
-        return yield* lifecycleCensusRefusal();
+        return yield* lifecycleDocumentsUnread();
       const documents =
         row.case === "controlled-active" &&
         row.bridge.bridge === "ready" &&
         !row.bridge.unresponsive
           ? row.bridge.documents
           : row.case === "observed-active" && bridgeAnswering(row)
-            ? (yield* sources.documents(row.process)).documents.map((doc) => ({
+            ? (yield* sources
+                .documents(row.process)
+                .pipe(Effect.mapError(lifecycleDocumentsUnread))).documents.map((doc) => ({
                 ...doc,
                 persistence: null,
               }))
             : null;
-      if (!documents) return yield* lifecycleCensusRefusal();
+      if (!documents) return yield* lifecycleDocumentsUnread();
       return {
         documents,
         attachment: socket
@@ -779,10 +796,10 @@ const makeMachineOwner = Effect.fn("MachineOwner.make")(function* (
           : null,
       };
     },
-    Effect.timeout(LIFECYCLE_CENSUS_DEADLINE_MS),
-    Effect.mapError((error) =>
-      error instanceof MachineRetired ? error : lifecycleCensusRefusal(),
-    ),
+    Effect.timeoutOrElse({
+      duration: LIFECYCLE_CENSUS_DEADLINE_MS,
+      orElse: () => Effect.fail(lifecycleCensusTimeout()),
+    }),
   );
 
   // Callback sources (the bridge, the thread heads, the share owner) cannot yield: they offer a
@@ -966,7 +983,7 @@ export async function readMachineSession(
   },
   signal?: AbortSignal,
 ) {
-  if (!hostMachine) throw lifecycleCensusRefusal();
+  if (!hostMachine) throw lifecycleSessionUnread();
   return hostMachine.sessionCensus(process, signal);
 }
 

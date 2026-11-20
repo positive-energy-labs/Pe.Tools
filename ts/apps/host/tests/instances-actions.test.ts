@@ -315,7 +315,7 @@ async function setup(
     /** The bridge snapshot's SDK identity marker; null is a payload that did not attest. */
     identity: "sdk-open-v1" as "sdk-open-v1" | null,
     /** External SDK session-list input can change between successive census reads. */
-    beforeCensus: null as null | (() => void),
+    beforeCensus: null as null | (() => void | Promise<void>),
     beforeSdkList: null as null | (() => void),
     beforeSessionList: undefined as (() => Promise<void>) | undefined,
     /** The incarnation `doc list` resolves; the default fixture process when null. */
@@ -352,7 +352,7 @@ async function setup(
       setAutomatic: async () => update,
     },
     sessions: async () => {
-      census.beforeCensus?.();
+      await census.beforeCensus?.();
       census.reads++;
       if (census.fail) throw Error("census unavailable");
       return sessionRows.map((row) => {
@@ -1832,7 +1832,35 @@ test.each([false, true])(
   },
 );
 
-test("Stop refuses in three seconds if the SDK cannot answer its opening census", async () => {
+test("the first Stop accepts three individually responsive reads of an empty Revit", async () => {
+  const f = await setup(() => ({ result: { state: "ok", phase: "stopped" } }));
+  const entered = Promise.withResolvers<void>();
+  const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 1_100));
+  let sdkLists = 0;
+  let machineLists = 0;
+  f.census.documents = [];
+  f.census.beforeSessionList = async () => {
+    if (++sdkLists > 2) return;
+    const waiting = pause();
+    entered.resolve();
+    await waiting;
+  };
+  f.census.beforeCensus = () => {
+    if (++machineLists === 1) return pause();
+  };
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const stopping = f.admit("instances.stop", { session, unsaved: "keep" });
+    await entered.promise;
+    await vi.advanceTimersByTimeAsync(3_301);
+    expect(await stopping).toMatchObject({ state: "succeeded" });
+    expect(f.calls.at(-1)?.slice(0, 2)).toEqual(["session", "stop"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("Stop times out without advising a save when the SDK cannot answer its opening census", async () => {
   const f = await setup(() => Error("Unexpected SDK mutation"));
   const entered = Promise.withResolvers<void>();
   const blocked = Promise.withResolvers<void>();
@@ -1844,17 +1872,34 @@ test("Stop refuses in three seconds if the SDK cannot answer its opening census"
   const stopping = f.admit("instances.stop", { session, unsaved: "keep" });
   try {
     await entered.promise;
-    await vi.advanceTimersByTimeAsync(3_001);
+    await vi.advanceTimersByTimeAsync(8_001);
     expect(await stopping).toMatchObject({
       state: "failed",
       notDispatched: true,
-      error: expect.stringContaining("Switch to Revit and save or sync your work"),
+      error: "Pe couldn’t check this Revit in time. Try again.",
     });
     expect(f.calls.every((args) => args[1] === "list")).toBe(true);
   } finally {
     blocked.resolve();
     vi.useRealTimers();
   }
+});
+
+test("Stop refuses another host’s Revit without advising a save", async () => {
+  const f = await setup(
+    () => Error("Unexpected SDK mutation"),
+    [
+      controlledRow({
+        execution: { allowed: false, code: "runtime.foreign", detail: "Another checkout." },
+      }),
+    ],
+  );
+  expect(await f.admit("instances.stop", { session, unsaved: "keep" })).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    error: "This Revit is outside this host’s scope.",
+  });
+  expect(f.calls.every((args) => args[1] === "list")).toBe(true);
 });
 
 test("restart refuses a session the SDK no longer names without dispatching", async () => {
