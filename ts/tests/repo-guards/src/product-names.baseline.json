@@ -184,7 +184,6 @@
   "tests/e2e/jv1-live-flow.journey.test.ts",
   "tests/e2e/marks.test.ts",
   "tests/e2e/product-selection.test.ts",
-  "tests/e2e/products/document-switch.journey.test.tsx",
   "tests/e2e/products/fans-oob-work.journey.test.tsx",
   "tests/e2e/products/fans-plan-composition.test.tsx",
   "tests/e2e/products/ledger-fix.journey.test.tsx",

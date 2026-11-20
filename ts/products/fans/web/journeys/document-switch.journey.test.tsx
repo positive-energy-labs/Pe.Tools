@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { expect, test } from "vite-plus/test";
-import { module as fans } from "@pe/fans-web/route";
-import { mounted } from "../mounted.test-support.tsx";
-import { switchDocument } from "../document-switch.test-support.tsx";
+import { module as fans } from "../route.ts";
+import { mounted } from "../../../../tests/e2e/mounted.test-support.tsx";
+import { switchDocument } from "../../../../tests/e2e/document-switch.test-support.tsx";
 
 test("Fans: changing document clears an addressed fan", async () => {
   const fan = JSON.stringify({ kind: "ids", ids: ["UniqueId:fan-from-chadds"] });

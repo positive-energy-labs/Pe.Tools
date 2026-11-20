@@ -68,7 +68,7 @@
       "entry": ["*.ts"]
     },
     "products/fans/web": {
-      "entry": ["journeys/*.ts"]
+      "entry": ["journeys/*.ts", "journeys/*.journey.test.tsx", "vite.journeys.config.ts"]
     },
     "products/rooms/web": {
       "entry": ["journeys/*.journey.test.tsx", "vite.test.config.ts"]
