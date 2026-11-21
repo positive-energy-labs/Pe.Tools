@@ -5,6 +5,7 @@ import { product } from "@pe/rooms-contract/product";
 import { module } from "../routes/rooms/route.ts";
 import { module as takeoffs } from "../routes/takeoffs/route.ts";
 import { CEILING, FLOOR, code, levels, reading, region, zone } from "./fixtures.ts";
+import { LAYER, readMarks, settled } from "../../../../tests/e2e/marks.ts";
 import {
   backRestores,
   hostedRouteAddress,
@@ -296,6 +297,49 @@ test.each([false, true])(
     }
   },
 );
+
+test("NoForeignPlan: a full browser load removes a foreign plan from the address", async () => {
+  const plans = delayedSnowdonPlans();
+  const j = await targetJourney(module, rooms.reads, plans.native, {
+    open: ["chadds", "snowdon"],
+    search: roomsEntry("snowdon", FLOOR),
+    browserHistory: true,
+  });
+  // The docked Pea Place can settle independently while Rooms waits on its document roster.
+  const pea = document.createElement("section");
+  pea.dataset.urlSettled = "";
+  document.body.append(pea);
+  try {
+    const live = await j.mounted("snowdon");
+    const roomsRoot = '[data-findings-route="rooms"]';
+    await waitFor(
+      () => {
+        expect(live.value(module.spec.core).state).toBe("ready");
+        expect(live.value(module.spec.reads!.plans).state).toBe("reading");
+        expect(
+          document.querySelector(`[aria-busy="true"]:not(${roomsRoot}, [inert] *)`),
+        ).toBeNull();
+      },
+      { timeout: 10_000 },
+    );
+    expect(new URLSearchParams(window.location.search).get("view")).toBe(JSON.stringify(FLOOR));
+    expect(live.page.read().view).toBe("");
+    expect.soft(settled(readMarks(LAYER)), "Rooms still needs its plans roster").toBe(false);
+    plans.release();
+    await waitFor(() => {
+      expect(live.value(module.spec.reads!.plans).state).toBe("ready");
+      expect(new URLSearchParams(window.location.search).get("view")).toBeNull();
+      expect(document.querySelector(`${roomsRoot}[data-url-settled]`)).toBeTruthy();
+    });
+    expect(new URLSearchParams(window.location.search).get("target")).toBe(pin("snowdon"));
+    expect(live.page.read().view).toBe("");
+    expect(settled(readMarks(LAYER))).toBe(true);
+  } finally {
+    pea.remove();
+    plans.release();
+    await j.close();
+  }
+});
 
 test("an initial sole document can appear while Machine is pending", async () => {
   const j = await targetJourney(module, rooms.reads, rooms.native, {

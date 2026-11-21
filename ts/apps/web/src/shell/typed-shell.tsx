@@ -273,14 +273,12 @@ function TypedPlace({
   }, [mount, place, history, snapshot, target.workAddress, instance, fixture, module]);
   // Slice 6.1: a script awaits `[data-url-settled]` before it reads or reloads the URL. A Place
   // whose `?target` does not parse never claims it, so a re-encoded target shows here first.
-  const urlSettled = useSyncExternalStore(
-    mount?.subscribe ?? still,
-    () =>
-      !!mount &&
-      visible &&
-      parseTarget(params.get("target"))?.kind !== "invalid" &&
-      mount.urlCurrent(),
-  );
+  const addressStatus = useSyncExternalStore(mount?.subscribe ?? still, () => {
+    if (!mount || !visible) return null;
+    // A document roster can still be loading after every drawn pane and docked Pea have settled.
+    if (liveDocument && mount.targetFieldsPending()) return "validating";
+    return parseTarget(rawPin)?.kind !== "invalid" && mount.urlCurrent() ? "settled" : null;
+  });
   const document = (
     <DocumentPicker
       place={place}
@@ -314,8 +312,8 @@ function TypedPlace({
     <section
       data-findings-route={module.spec.key}
       className="flex min-h-0 flex-1 flex-col"
-      aria-busy={(binding && visible) || undefined}
-      data-url-settled={urlSettled ? "" : undefined}
+      aria-busy={(visible && (binding || addressStatus === "validating")) || undefined}
+      data-url-settled={addressStatus === "settled" ? "" : undefined}
       data-tone={history ? "caution" : undefined}
       data-wash={history ? "" : undefined}
       aria-label={history ? "Recorded view, read-only" : undefined}

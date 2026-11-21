@@ -7,8 +7,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { RegistryContext } from "@effect/atom-react";
 import {
   RouterProvider,
+  createBrowserHistory,
   createMemoryHistory,
   createRootRoute,
+  createRoute,
   createRouter,
 } from "@tanstack/react-router";
 import { expect, vi } from "vite-plus/test";
@@ -21,6 +23,8 @@ import { readingAtom } from "../host/resource-state";
 import { routeRegistry } from "../route/registry";
 import "../route/builtin-routes";
 import { useRestoreTabPage } from "../route/url";
+import { searchCodec } from "../route/address-transport";
+import { RouteRetention } from "../workbench/route-retention";
 import { hosted, type JourneyDocument, type Native } from "./mounted-journey.test-support";
 import { StandaloneBand } from "./band.test-support";
 import { appAtomRegistry } from "./owner";
@@ -115,6 +119,7 @@ export async function targetJourney(
     before?: URLSearchParams[];
     after?: URLSearchParams[];
     machinePending?: boolean;
+    browserHistory?: boolean;
   },
 ) {
   const route = module.spec.key;
@@ -163,20 +168,32 @@ export async function targetJourney(
   world.places = {
     tabs: start.remembered ? [{ id: "remembered", link: `/${route}?${start.remembered}` }] : [],
   };
+  const path = `/${route}`;
+  const Tool = () => <TypedShell module={module} fingerprint={routeRegistry[route]!.fingerprint} />;
   const root = createRootRoute({
     component: () => {
       useRestoreTabPage();
-      return <TypedShell module={module} fingerprint={routeRegistry[route]!.fingerprint} />;
+      return start.browserHistory ? (
+        <RouteRetention route={route} active={null} tabs={[]} ready renderRoute={(body) => body} />
+      ) : (
+        <Tool />
+      );
     },
   });
-  const history = createMemoryHistory({
-    initialEntries: [...(start.before ?? []), start.search, ...(start.after ?? [])].map(
-      (search) => `/${route}?${search}`,
-    ),
-  });
+  const href = (search: URLSearchParams) => `${path}?${search}`;
+  const previous = { state: window.history.state, href: window.location.href };
+  if (start.browserHistory) window.history.replaceState(null, "", href(start.search));
+  const history = start.browserHistory
+    ? createBrowserHistory()
+    : createMemoryHistory({
+        initialEntries: [...(start.before ?? []), start.search, ...(start.after ?? [])].map(href),
+      });
   for (const _ of start.after ?? []) history.back();
-  const router = createRouter({ routeTree: root, history });
-  await router.load();
+  const routeTree = start.browserHistory
+    ? root.addChildren([createRoute({ getParentRoute: () => root, path, component: Tool })])
+    : root;
+  const router = createRouter({ routeTree, history, ...(start.browserHistory ? searchCodec : {}) });
+  if (!start.browserHistory) await router.load();
   const renderShell = () =>
     render(
       <RegistryContext.Provider value={appAtomRegistry}>
@@ -257,6 +274,11 @@ export async function targetJourney(
       }),
     async close() {
       cleanup();
+      if (start.browserHistory) {
+        history.flush();
+        history.destroy();
+        window.history.replaceState(previous.state, "", previous.href);
+      }
       world.places = { tabs: [] };
       world.mounts.length = 0;
       await Promise.all(files.map((doc) => hosts[doc].close()));
