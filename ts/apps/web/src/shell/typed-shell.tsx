@@ -161,9 +161,11 @@ function TypedPlace({
       : target.resolution.kind === "resolved"
         ? target.resolution.target
         : null;
+  const ownerKnown = resolved !== null || (!target.busy && target.resolution.kind !== "checking");
   const signature = canonicalRouteInput([
     rawPin,
     resolved,
+    ownerKnown,
     target.workAddress,
     target.workOpen,
     history?.point.id,
@@ -197,15 +199,14 @@ function TypedPlace({
   const [mounted, setMount] = useState<{ mount: TypedMount; input: PlaceInput } | null>(null);
   const mount = mounted?.input === input ? mounted.mount : null;
   const [problem, setProblem] = useState<string | null>(null);
+  // Saved Work may be available before the inventory establishes the Page's owner.
+  const owner = fixture === null && ownerKnown ? targetOwner(input) : null;
   useEffect(() => {
     place.setVisible(visible);
     if (
       (snapshot && !pose) ||
       (needs !== "browser" && !input.target && !input.work.address && !input.work.open) ||
-      !place.enter(fixture === null ? targetOwner(input) : null, [
-        ...Object.keys(module.spec.fields),
-        "selected",
-      ])
+      !place.enter(owner, [...Object.keys(module.spec.fields), "selected"])
     ) {
       setMount(null);
       setProblem(null);
@@ -233,14 +234,14 @@ function TypedPlace({
       return;
     }
     return () => state.mount.release();
-  }, [module, place, input, visible]);
+  }, [module, place, input, visible, owner]);
   const lastPose = useRef("");
   useEffect(() => {
     if (!mount) return;
     const remember = () => {
       const page = mount.page.read();
       if (!history) place.remember(page);
-      if (snapshot || !target.workAddress || fixture !== null) return;
+      if (snapshot || !target.workAddress || fixture !== null || !mount.urlCurrent()) return;
       const pose = publicationPose(instance, module.spec.key, page);
       const signature = canonicalRouteInput([target.workAddress, pose]);
       window.dispatchEvent(new Event("pe:history-change"));

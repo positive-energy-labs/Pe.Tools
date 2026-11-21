@@ -115,6 +115,9 @@ export function mountTypedRoute(
     const spec = module.spec;
     const subjectSpec = spec.subject;
     const subjectRead = subjectSpec?.read ?? spec.core;
+    // An unbound presentation can use its supplied readings without acquiring host authority.
+    const detachedSources =
+      input.target === null && !input.work.open && !input.work.address ? ports.sources : undefined;
     const fields = Object.entries(spec.fields);
     const targetFields =
       input.fixture !== null || input.history ? [] : fields.filter(([, field]) => field.target);
@@ -153,7 +156,7 @@ export function mountTypedRoute(
     const targetMembership = [...targetQueries, ...(targetSubject ? [targetSubject] : [])];
     const membershipReads = new Set(targetMembership.map(({ read }) => read));
     const reads = new Map<HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
-    const readInput = (read: HostRead, from: Record<string, unknown> = page) => {
+    const readInput = (read: HostRead, from: Record<string, unknown> = projection.admitted) => {
       const project =
         "args" in read && typeof read.args === "function"
           ? read.args
@@ -244,6 +247,7 @@ export function mountTypedRoute(
       return fitted === value ? candidate : { ...candidate, [subjectSpec.field]: fitted };
     };
     const fitTarget = (candidate: Record<string, unknown>) => {
+      // The Page keeps the request. Reads and actions consume only the elements its roster admits.
       let admitted = candidate;
       const corrections = new Map<string, unknown>();
       let pending = false;
@@ -261,14 +265,21 @@ export function mountTypedRoute(
           !pending &&
           snapshot?.state === "ready" &&
           record?.args === canonicalRouteInput(readInput(read, admitted));
-        const bound = input.target?.kind === "document";
+        const bound = input.target?.kind === "document" || !!detachedSources?.[read.key];
         const next = bound && ready ? retain(value, snapshot.value) : initial;
         if (canonicalRouteInput(value) === canonicalRouteInput(next)) continue;
         admitted = { ...admitted, [name]: next };
-        if (!bound || ready) corrections.set(name, next);
+        if (bound && ready) corrections.set(name, next);
         else pending = true;
       }
-      return { admitted, corrections };
+      return {
+        admitted: freezePage(admitted),
+        requested: corrections.size
+          ? { ...candidate, ...Object.fromEntries(corrections) }
+          : candidate,
+        corrections,
+        pending,
+      };
     };
     const writeField = (search: URLSearchParams, name: string, value: unknown) => {
       const field = spec.fields[name];
@@ -286,13 +297,14 @@ export function mountTypedRoute(
       candidate: Record<string, unknown>,
       roster?: () => readonly unknown[] | undefined,
     ) => {
-      const { admitted, corrections } = fitTarget(candidate);
+      const next = fitTarget(candidate);
+      const fitted = next.pending ? next.requested : fitPage(next.requested, roster);
+      const { corrections } = next;
       const search = input.address.read();
       for (const [name, field] of malformedFields(search)) corrections.set(name, field.initial);
-      const next = fitPage(admitted, roster);
-      if (next !== admitted && subjectSpec?.limit) {
+      if (fitted !== next.requested && subjectSpec?.limit) {
         subjectNotice = subjectSpec.limit.message;
-        corrections.set(subjectSpec.field, next[subjectSpec.field]);
+        corrections.set(subjectSpec.field, fitted[subjectSpec.field]);
       }
       if (corrections.size) {
         const previous = search.toString();
@@ -302,7 +314,9 @@ export function mountTypedRoute(
             input.address.write(search, "replace");
         });
       }
-      return next;
+      return fitted === next.requested
+        ? next
+        : { ...next, admitted: freezePage(fitted), requested: fitted };
     };
     const owners = new Map<
       string,
@@ -319,11 +333,12 @@ export function mountTypedRoute(
         lease: ReturnType<typeof registry.acquire>;
       }
     >();
-    let page: Record<string, any> = freezePage(fitAddress(decodePage()));
+    let projection = fitAddress(decodePage());
+    let page: Record<string, any> = freezePage(projection.requested);
     const selectedKey = () => {
       if (!edits) return null;
       if (edits.key) {
-        const member = edits.key(page as never);
+        const member = edits.key(projection.admitted as never);
         return member === null ? null : bindWork(own, null, member);
       }
       return bindWork(own, input.work.address, undefined, input.work.open ?? undefined);
@@ -722,7 +737,7 @@ export function mountTypedRoute(
     })();
     const syncReads = (force = false) => {
       if (disposed || released || !input.custody.current()) return;
-      if (input.target === null && input.fixture === null) {
+      if (input.target === null && input.fixture === null && !detachedSources) {
         connectTimeline();
         notify();
         return;
@@ -731,16 +746,15 @@ export function mountTypedRoute(
       const roster = all ? limitRoster() : undefined;
       if (roster) {
         const next = fitAddress(page, () => roster);
-        if (next !== page) {
-          page = freezePage(next);
-          gate.movePage(page, { kind: "human", source: "query", history: "replace" });
-          syncWork();
-        }
+        installPage(next);
       }
       for (const read of allReads) {
+        if (input.target === null && input.fixture === null && !detachedSources?.[read.key])
+          continue;
         // All cannot start detail until the roster establishes what it would open.
         if (all && !roster && read !== subjectRead) continue;
-        const args = readInput(read),
+        const readPage = detachedSources ? page : projection.admitted;
+        const args = readInput(read, readPage),
           signature = canonicalRouteInput(args);
         if ((!force || applyingDocumentWrite()) && signature === reads.get(read)?.args) continue;
         const previous = reads.get(read)?.snapshot;
@@ -835,7 +849,7 @@ export function mountTypedRoute(
                         : undefined,
                   );
           if (record.snapshot.state === "ready") {
-            if (membershipReads.has(read)) queueMicrotask(followAddress);
+            if (membershipReads.has(read)) queueMicrotask(reconcilePage);
             else if (read === subjectRead && boundedAll()) queueMicrotask(() => syncReads());
           }
           connectTimeline();
@@ -859,10 +873,10 @@ export function mountTypedRoute(
             workRevision: null,
             historyPoint: input.history?.point.id,
             historyPose: input.publicationInstance
-              ? publicationPose(input.publicationInstance, spec.key, page)
+              ? publicationPose(input.publicationInstance, spec.key, projection.admitted)
               : undefined,
             work: null,
-            page,
+            page: readPage,
             args,
             publication: { subscription: attempt.subscription, generation: attempt.generation },
             signal: controller.signal,
@@ -894,10 +908,8 @@ export function mountTypedRoute(
         ...fitted,
       };
       const search = input.address.read();
-      for (const [name, field] of targetFields)
-        if (!Object.hasOwn(patch, name))
-          requested[name] = decodeField(field, search.get(name) ?? field.initial);
-      const { admitted: next, corrections } = fitTarget(requested);
+      const next = fitTarget(requested);
+      const { corrections } = next;
       if (fitted !== patch && subjectSpec?.limit) subjectNotice = subjectSpec.limit.message;
       if (canonicalRouteInput(requested) === canonicalRouteInput(page) && !corrections.size) {
         if (fitted !== patch) notify();
@@ -908,9 +920,7 @@ export function mountTypedRoute(
       history ??= Object.keys(patch).some((key) => spec.fields[key]?.url === "push")
         ? "push"
         : "replace";
-      page = freezePage(next);
-      gate.movePage(page, { kind: "human", source: "query", history: "replace" });
-      syncWork();
+      installPage(next);
       notify();
       for (const [key, value] of Object.entries(fitted))
         search.set(key, encodeField(spec.fields[key], value));
@@ -937,25 +947,40 @@ export function mountTypedRoute(
       const next = decodePage(remembered);
       return input.address.read().has("selected") ? next : { ...next, selected: page.selected };
     };
+    const installPage = (next: typeof projection) => {
+      const changed = canonicalRouteInput(next.requested) !== canonicalRouteInput(page);
+      const scopeChanged =
+        canonicalRouteInput(next.admitted) !== canonicalRouteInput(projection.admitted);
+      projection = next;
+      if (changed) {
+        page = freezePage(next.requested);
+        gate.movePage(page, { kind: "human", source: "query", history: "replace" });
+      }
+      if (changed || scopeChanged) syncWork();
+    };
+    const reconcilePage = () => {
+      if (disposed || released || !input.custody.current()) return;
+      installPage(fitAddress(page, limitRoster));
+      syncReads();
+    };
     const followAddress = (traversed = false) => {
       if (disposed || !input.custody.current()) return;
       const addressed = traversed ? decodePage(false) : addressPage();
       const next = fitAddress(addressed, limitRoster);
       // An unchanged address can be the custody-return notification for released read resources.
-      if (canonicalRouteInput(next) === canonicalRouteInput(page)) {
+      if (canonicalRouteInput(next.requested) === canonicalRouteInput(page)) {
+        installPage(next);
         syncReads();
         return;
       }
       if (
-        next === addressed &&
+        next.requested === addressed &&
         subjectSpec &&
-        canonicalRouteInput(next[subjectSpec.field]) !==
+        canonicalRouteInput(next.requested[subjectSpec.field]) !==
           canonicalRouteInput(page[subjectSpec.field])
       )
         subjectNotice = null;
-      page = freezePage(next);
-      gate.movePage(page, { kind: "human", source: "query", history: "replace" });
-      syncWork();
+      installPage(next);
       syncReads();
       notify();
     };
@@ -974,6 +999,7 @@ export function mountTypedRoute(
         : null;
     const basisRefusal = () => {
       if (input.readOnly || input.history) return "needs live Revit";
+      if (projection.pending) return "Resolving model fields...";
       if (!edits) return "No Work declared";
       if (!key) return "Choose a Work member";
       const owner = [...owners.values()].find((o) => !o.ready);
@@ -1025,6 +1051,7 @@ export function mountTypedRoute(
       }
       if (holder && waiting?.kind !== "blocked") return { kind: "pending", reason: holder };
       if (waiting) return waiting;
+      if (projection.pending) return { kind: "pending", reason: "Resolving model fields..." };
       // Recorded and fixture views can settle without granting native write authority.
       const reason = valueAfterWork();
       if (reason) return { kind: "pending", reason };
@@ -1130,6 +1157,7 @@ export function mountTypedRoute(
       const refused = (refusal: string): SubjectState => ({ ready: false, refusal, label: "" });
       if (disposed || released || !input.custody.current())
         return refused("Place is inactive or retired");
+      if (projection.pending) return null;
       if (
         targetFields.some(
           ([key, field]) =>
@@ -1234,7 +1262,7 @@ export function mountTypedRoute(
     const pending = new Set<string>();
     type Verb = AnyVerb;
     const verbContext = (work: WorkHandle | null): VerbContext => ({
-      page,
+      page: projection.admitted,
       target: input.target,
       work,
       value: spec.core ? valueOf(reads.get(spec.core)?.snapshot) : undefined,
@@ -1250,7 +1278,7 @@ export function mountTypedRoute(
       // A read answers the Page it was asked from; a write lands whatever the Page did meanwhile.
       const readPage = verb.handle.effect === "Read" ? gate.read()?.pageEpoch : null;
       try {
-        const refusal = workRefusal(key);
+        const refusal = verbRefusal(verb);
         if (refusal) throw Error(refusal);
         const work = owners.get(own)?.handle ?? null;
         const proposed = z
@@ -1444,7 +1472,9 @@ export function mountTypedRoute(
           ? "Fixture has no native actions"
           : verb.handle.plan
             ? basisRefusal()
-            : workRefusal(verb.handle.key);
+            : verb.input && projection.pending
+              ? "Resolving model fields..."
+              : workRefusal(verb.handle.key);
     const handleOf = (id: string, verb: Verb): VerbHandle => {
       const facts = {
         label: verb.label,
@@ -1604,8 +1634,9 @@ export function mountTypedRoute(
               if (disposed || released || !input.custody.current())
                 return finish("Place is inactive or retired");
               const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
-              if (roster?.state === "ready") finish();
-              else if (roster && !inFlight(roster))
+              if (roster?.state === "ready") {
+                if (!projection.pending) finish();
+              } else if (roster && !inFlight(roster))
                 finish(`Subject roster unavailable: ${reasonOf(roster)}`);
             };
             const timer = setTimeout(
@@ -1638,7 +1669,7 @@ export function mountTypedRoute(
               }
               if (subject?.field === key) {
                 const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
-                if (roster?.state !== "ready")
+                if (projection.pending || roster?.state !== "ready")
                   throw Error("Read the subject roster before choosing a subject");
                 const options = subject.options(roster.value);
                 if (field.schema.safeParse(value).success) {
@@ -1726,6 +1757,7 @@ export function mountTypedRoute(
       /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
        *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
       urlCurrent: () =>
+        !projection.pending &&
         !malformedFields(input.address.read()).length &&
         canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page),
       target: () => input.target,
