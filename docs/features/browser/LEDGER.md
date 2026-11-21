@@ -75,3 +75,8 @@
 - Add thread switching and write arming to the standard route journey’s verified outcomes, beyond its optional coverage hooks. [owed-20261119 tooling-1-063, 1 item]
 - Capture the actual preview origin and dependency readiness in browser startup failure receipts so a responsive page cannot stand in for ready dependencies. [owed-20261119 tooling-3-260, 1 item]
 - Give browser journeys an isolated host Place store in addition to a fresh browser profile so a prior journey’s Places cannot leak into a new one. [owed-20261119 tooling-1-084, 1 item]
+- D-03492914-startup (test/tooling fault). Diagnose the SDK startup restart-required refusal during overlapping Revit startup. Evidence in `.artifacts/runs/product-decl-20261120/drive-03492914/sdk/session-start.json`.
+- D-03492914-custody (test/tooling fault). Fence the driver's admitted checkout and pinned SHA through setup so launcher drift cannot invalidate a drive. Evidence in `.artifacts/runs/product-decl-20261120/drive-03492914-repeat/head-reflog.log`.
+- S8a-revit-overlap (test/tooling fault). Prevent fresh SDK tests from overlapping a previously admitted drive. Evidence in `.artifacts/runs/product-decl-20261120/BACKLOG.md (S8a-revit-overlap)`.
+- D-aee6a992-admission (test/tooling fault). Reconcile follow-up drive scheduling with the Revit and memory admission refusals. Evidence in `.artifacts/runs/product-decl-20261120/drive-aee6a992/blocked.json`.
+- T2-barrel-transform (test/tooling fault). Measure the first agent-contracts and open-examples transforms on a quiet machine before attributing Web waitFor failures to them. Evidence in `.artifacts/runs/product-decl-20261120/smell4-evidence/t2/`.

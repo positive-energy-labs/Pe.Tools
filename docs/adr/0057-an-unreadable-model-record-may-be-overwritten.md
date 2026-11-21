@@ -1,6 +1,6 @@
 # 0057: An unreadable model record may be overwritten after its bytes are kept and one notice is posted
 
-Date: 2026-11-20. Status: accepted, not built. Source: kaitpw's ruling 5 of the product-declaration muse, 2026-11-19, and the owner's words in the [homes ledger](../features/homes/LEDGER.md) (Decided, 2026-11-19). Supersedes the in-model clause of [ADR 0039](0039-two-failure-policies-by-class.md) rule 1, the words "and in-model owner blobs" in its `keep` list. The rest of ADR 0039 stands. Slice S8b of the [product-declaration map](../features/routes/MAP.md) builds it.
+Date: 2026-11-20. Status: accepted. Source: kaitpw's ruling 5 of the product-declaration muse, 2026-11-19, and the owner's words in the [homes ledger](../features/homes/LEDGER.md) (Decided, 2026-11-19). Supersedes the in-model clause of [ADR 0039](0039-two-failure-policies-by-class.md) rule 1, the words "and in-model owner blobs" in its `keep` list. The rest of ADR 0039 stands. Slice S8b of the [product-declaration map](../features/routes/MAP.md) records the landing.
 
 ## Context
 
@@ -12,7 +12,7 @@ Two changes in this effort make unreadable records ordinary. Ruling 14 changes t
 
 ## Decision
 
-1. **An unreadable model record does not lock its owner.** A write may replace a record that does not decode. This covers a decode failure of the envelope and a decode failure of the owner's data, an older version included. Per the owner's 2026-11-20 ruling, “i want no extra machinery that is business logic unless its absolutely critical”, Pe refuses to replace a valid envelope from the same owner at a newer version and tells the user to update Pe.
+1. **An unreadable model record does not lock its owner.** A write may replace a record that does not decode. This covers a decode failure of the envelope and a decode failure of the owner's data, an older version included. Per the owner's 2026-11-20 ruling, “i want no extra machinery that is business logic unless its absolutely critical”, Pe refuses to replace a valid envelope from the same owner at a newer version and tells the user to update Pe. Evidence in `.artifacts/runs/product-decl-20261120/RULES.md` (Unknown-version envelope).
 2. **The bytes are kept first.** Before the replacement, the raw text of the old record is written to a file on this machine. The write then posts one notice that names the document, the owner and the place of the kept bytes. The notice does not repeat on a retry.
 3. **The order is the safety.** A failed backup or a failed notice keeps the old bytes in the model, and the write is refused. A plan reports that a replacement is needed. It keeps no bytes, posts no notice and changes nothing.
 4. **One mechanism.** The backup and the notice are one shared path beside `OwnerBlobStore.Write`. No owner writes its own.

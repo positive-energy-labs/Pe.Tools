@@ -39,6 +39,8 @@
 - 2026-11-19, ruling 6: Takeoffs becomes the second route of the one Rooms product. The [rooms ledger](../rooms/LEDGER.md) holds the ruling.
 - 2026-11-20, ruling 14: the takeoff carriers on Detail Items go, and regions live in one document record keyed by `UniqueId`. The [rooms ledger](../rooms/LEDGER.md) holds the ruling. The system registry on Project Information is a separate home and stays. Takeoffs still resolves a plan by name (`dotnet/Pe.Revit.Takeoff/TakeoffAtlas.cs`), which S10 ends.
 
+- 2026-11-20, kaitpw on Initialize, "yes delete!!!" Adopt is the one command and binds its parameters during the write. Evidence in `.artifacts/runs/product-decl-20261120/RULES.md` and `.artifacts/runs/product-decl-20261120/drive-90dbe51e/REPORT.md` (Adopt and SM42).
+
 ## Tried & rejected
 
 - 2026-09-07, reject the `jamb-local` prototype: the same CAD import is not the same wall, and synthetic rectangle endpoints are not original jamb evidence. Its failure does not prove source insufficiency.

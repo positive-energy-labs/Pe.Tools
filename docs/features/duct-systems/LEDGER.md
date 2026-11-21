@@ -28,6 +28,8 @@
 - 2026-11-20, PROVEN[browser and session, 09943e6c, 2026-11-20]: the seventeenth system was disabled with the limit’s wording, the sixteen read systems, Picture and Rulings stayed visible, and no read was sent. The fourth drive used controlled Revit 2025 session `acc-tieup-rooms-09943e6c` (pid 29324), add-ins off, on a fresh Chadds copy. Evidence: `rooms-drive/tieup-rooms-09943e6c/REPORT.md`, row 5. UNPROVEN[oversized system addresses and Pea navigation, and All on a roster that fits in Revit].
 - 2026-11-20, Pea can plan saving staged duct rulings without a Fans write scope. The fan-scope preflight applies only to Fans. `8d2a6057`, merged in `7d1e67e8`. UNPROVEN[the unscoped duct-rulings plan on Revit].
 
+- 2026-11-21, settled reload and Back/Forward restore the system IDs of each history entry. The explicit document picker clears selections and search. Evidence in `.artifacts/runs/product-decl-20261120/drive-90dbe51e/Ducts-address-recheck.json`.
+
 ## Tried & rejected
 
 - 2026-11-16, MAP D2, kaitpw: "yes d2, delete". Do not restore the circuits chain or its five Pea projections as a second system-pricing authority.
@@ -96,3 +98,7 @@
 - 2026-11-19, decide whether Fans may write required pressure calculated with an unsaved rule. A hand-driven Fans write selects no fitting rule for its write scope. Pea can name a rule and request a coefficient write.
 - 2026-11-19, give the person a way to withdraw a stored rule from the page. Today the person can save a replacement table. A fitting keeps its old coefficient until a Fans write names that rule again.
 - 2026-11-19, decide how to handle catalogue links and rule assignments in the pending count. They can keep the count above zero after a save because the save leaves them staged.
+- D-b43f6fec-ex65 (older than the run). Diagnose the unpriced EX65 result with open ends and implausible ED5-3 loss. EX59 is the control. Evidence in `.artifacts/runs/product-decl-20261120/drive-b43f6fec-repeat/per-clause-readback.json`.
+- D-aee6a992-refresh (older than the run). Diagnose the separate post-confirmation browser settlement that exceeded 120 seconds and recovered without a second write. Evidence in `.artifacts/runs/product-decl-20261120/drive-aee6a992-retry/per-clause-readback.json`.
+- D-c9264109-ducts-refresh-interactive (older than the run). Re-drive post-save fan-network acquisition after SDK queue recovery. The retained-read fix has deterministic proof at baf571ae. Evidence in `.artifacts/runs/product-decl-20261120/ducts-refresh-integration.log`.
+- Verify-589c0c40-ducts-chooser (test/tooling fault). Measure the recurring workspace-only Ducts chooser timeout. The file passed alone. Evidence in `.artifacts/runs/product-decl-20261120/candidate-589c0c40-reads-alone.log`.

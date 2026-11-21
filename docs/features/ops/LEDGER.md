@@ -34,3 +34,4 @@
 - Offer Stop only for actions the host can still stop, including in the unknown-action inspector. [owed-20261119 host-journal-1-325, 2 items]
 - Replace 4 counted type assertions in ts/apps/host/tests/operation-script.test.ts with typed fixtures or a checked constructor and ratchet the allowance down. [owed-20261119 tooling-3-342, 1 item]
 - Measure first-use cost of the generated operation catalog bundle and runtime schema conversion before deciding whether codegen should emit per-operation schemas. [owed-20261119 other-1-218, 1 item]
+- Stop-after-native-dispatch (older than the run). UNPROVEN[cancellation after native dispatch was not exercised]. Drive Timeline Stop after native dispatch with independent readback. Queued Stop cancelled before dispatch and preserved the model. Evidence in `.artifacts/runs/product-decl-20261120/drive-90dbe51e/REPORT.md (Rooms Stop)`.
