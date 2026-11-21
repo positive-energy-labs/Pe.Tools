@@ -1,10 +1,9 @@
-import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { hostOffer, hostState } from "../src/host-ownership.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync, stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { journalFixture } from "./storage.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { HomeFiles } from "@pe/host-internal/home-files";

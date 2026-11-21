@@ -42,6 +42,10 @@ export type HostFiles = Readonly<
 >;
 /** The host's own file inputs: a product file by one of these names would answer for the platform. */
 export const platformFiles = ["firm", "settings", "capture"] as const;
+/** A product's files as it may declare them: none by a platform name. */
+export type DeclaredFiles<Files extends HostFiles> = Files & {
+  readonly [K in keyof Files & (typeof platformFiles)[number]]: never;
+};
 
 type Handle<
   P extends ProductDeclaration,
