@@ -481,6 +481,12 @@ def setup(run: str, args: list[str]) -> None:
                 dev_session(run, prior, args)
             return
         sys.exit(f"{root} exists; pick a new run name or tear it down and delete it")
+    if not installed:
+        # A pinned checkout can still have workspace links from the previous tip.
+        install = [shutil.which("vp") or "vp", "i", "--frozen-lockfile", "--prefer-offline"]
+        result = subprocess.run(install, cwd=CHECKOUT / "ts")
+        if result.returncode:
+            sys.exit(f"Frozen workspace install failed with exit {result.returncode}; setup did not acquire resources.")
     models = [] if host_only else pick_models(args, main_checkout() / DEFAULT_MODEL)
     existing_listeners = listeners()
     listener_pids = {row["pid"] for row in existing_listeners}
