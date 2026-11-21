@@ -4,6 +4,7 @@ import { picturePoseSchemas } from "./slots/picture.ts";
 import { hostRead, type HostRead } from "./host-read.ts";
 import type { ReadHandle } from "./handle.ts";
 import type { DocumentRef } from "./target.ts";
+import type { Publication } from "./value.ts";
 import { subjectSchema } from "./route-kernel-codecs.ts";
 import { canonicalRouteInput } from "./route-doc.ts";
 export { hostRead, type HostRead } from "./host-read.ts";
@@ -55,6 +56,21 @@ export const targetSubject = (schema: ReturnType<typeof subjectSchema>, url?: Fi
   ...field(schema, { kind: "ids", ids: [] }, "subject", url),
   target: "subject" as const,
 });
+
+export type TargetFocus = {
+  readonly read: HostRead;
+  owns(this: void, id: string): boolean;
+  membership(this: void, data: unknown): ((id: string) => boolean) | null;
+};
+
+/** A model focus is admitted only by the reading that establishes its selection scope. */
+export function targetFocus<D>(
+  read: HostRead & { output: z.ZodType<Publication<D>> },
+  members: (data: NoInfer<D>) => ((id: string) => boolean) | null,
+  owns: (id: string) => boolean = () => true,
+): TargetFocus {
+  return { read, owns, membership: (data: D) => members(data) };
+}
 /**
  * The kernel's picture pose as Page fields (ADR 0035 rule 1). Each default is the contract schema's own
  * (`picturePoseSchemas`): nothing here states one. `route()` puts `picturePose` on the Page of every route

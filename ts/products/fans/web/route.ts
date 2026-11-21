@@ -1,7 +1,7 @@
 import type { ContextOf } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings, fanScope } from "./src/bindings.ts";
-import { hostRead } from "@pe/agent-contracts/route";
+import { hostRead, targetFocus } from "@pe/agent-contracts/route";
 import { fansDocumentSchema, fansRouteState, fanWriteScopeMessage } from "@pe/fans-contract/fans";
 import { product, fansCalcEditsSchema, fanEditPatches } from "@pe/fans-contract/product";
 import { FAN_DETAIL_LIMIT, fanDetailLimitMessage } from "@pe/fans-contract/fans-read";
@@ -11,6 +11,7 @@ import { draw } from "@pe/web-kernel/route/draw";
 import { fillBody, scrollBody } from "@pe/web-kernel/route/body";
 import { overlay } from "@pe/web-kernel/route/slots/picture/overlay";
 import { fanLabel, stableFanKey } from "@pe/ducts-web/calc/model";
+import { ductFocusMembership, isDuctModelFocus } from "@pe/ducts-web/cell-focus";
 import { describeInputHistory, editMetaSchema } from "@pe/ducts-web/calc/input-history.neutral";
 import { lazyFixtures } from "@pe/ducts-web/registry";
 const calcValueFixtures = lazyFixtures(() =>
@@ -70,6 +71,7 @@ const panes = {
 export const module = screen(
   {
     ...declared,
+    focus: targetFocus(calc, (data) => ductFocusMembership(data.calcSnapshot), isDuctModelFocus),
     retiredPage: { fields: ["sheetPath"], values: { stage: ["sheet"] } },
     subject: {
       ...declared.subject,

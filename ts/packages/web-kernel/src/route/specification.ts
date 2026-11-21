@@ -11,7 +11,7 @@ import type { SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import type { Publication } from "@pe/agent-contracts/value";
 import type { z } from "zod";
 import type { Body, BodyKind } from "./body.ts";
-import type { HostRead } from "@pe/agent-contracts/route";
+import type { HostRead, TargetFocus } from "@pe/agent-contracts/route";
 import type {
   DrawContext,
   Fields,
@@ -76,6 +76,7 @@ export type Specification<
   directory: RouteGraphJson["directory"];
   needs?: "project" | "family" | "document" | "host" | "browser";
   optionalTarget?: "document" | "project" | "family" | "session";
+  focus?: TargetFocus;
   /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {

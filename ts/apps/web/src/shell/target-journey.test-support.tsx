@@ -108,7 +108,14 @@ export async function targetJourney(
   module: TypedRoute,
   reads: string[],
   native: (doc: JourneyDoc) => Native,
-  start: { open: JourneyDoc[]; search: URLSearchParams; remembered?: URLSearchParams },
+  start: {
+    open: JourneyDoc[];
+    search: URLSearchParams;
+    remembered?: URLSearchParams;
+    before?: URLSearchParams[];
+    after?: URLSearchParams[];
+    machinePending?: boolean;
+  },
 ) {
   const route = module.spec.key;
   const names = Object.keys(documents) as JourneyDoc[];
@@ -130,7 +137,7 @@ export async function targetJourney(
   world.atoms.set(readingAtom({ kind: "inventory" }, peReadings), "inventory");
   world.atoms.set(readingAtom({ kind: "machine" }, peReadings), "machine");
   /** The census: which documents the one Revit holds open now. */
-  const open = (docs: JourneyDoc[]) => {
+  const open = (docs: JourneyDoc[], updateMachine = true) => {
     const rows = docs.map((doc, index) => ({
       openId: documents[doc].ref.openId,
       title: documents[doc].title,
@@ -144,13 +151,15 @@ export async function targetJourney(
         sessions: [{ sessionId: ref.session, connected: true, processId: 1, openDocuments: rows }],
       },
     };
-    world.machine = {
-      state: "ready",
-      observation: machineFixture([{ session: ref.session, documents: rows }]),
-    };
+    if (updateMachine)
+      world.machine = {
+        state: "ready",
+        observation: machineFixture([{ session: ref.session, documents: rows }]),
+      };
     world.listeners.forEach((notify) => notify());
   };
   open(start.open);
+  if (start.machinePending) world.machine = { state: "absent" };
   world.places = {
     tabs: start.remembered ? [{ id: "remembered", link: `/${route}?${start.remembered}` }] : [],
   };
@@ -160,15 +169,22 @@ export async function targetJourney(
       return <TypedShell module={module} fingerprint={routeRegistry[route]!.fingerprint} />;
     },
   });
-  const history = createMemoryHistory({ initialEntries: [`/${route}?${start.search}`] });
+  const history = createMemoryHistory({
+    initialEntries: [...(start.before ?? []), start.search, ...(start.after ?? [])].map(
+      (search) => `/${route}?${search}`,
+    ),
+  });
+  for (const _ of start.after ?? []) history.back();
   const router = createRouter({ routeTree: root, history });
   await router.load();
-  render(
-    <RegistryContext.Provider value={appAtomRegistry}>
-      <RouterProvider router={router} />
-    </RegistryContext.Provider>,
-    { wrapper: StandaloneBand },
-  );
+  const renderShell = () =>
+    render(
+      <RegistryContext.Provider value={appAtomRegistry}>
+        <RouterProvider router={router} />
+      </RegistryContext.Provider>,
+      { wrapper: StandaloneBand },
+    );
+  let shell = renderShell();
   const mount = () => world.mounts.at(-1) as TypedMount | undefined;
   let started = false;
   return {
@@ -177,6 +193,13 @@ export async function targetJourney(
     started: () => started,
     mount,
     search: () => new URLSearchParams(history.location.search),
+    async mounted(doc: JourneyDoc) {
+      await waitFor(
+        () => expect(mount()?.target()).toEqual({ kind: "document", ref: documents[doc].ref }),
+        { timeout: 20000 },
+      );
+      return mount()!;
+    },
     /** The shell has bound this document, its address is settled, and its Work is started. */
     async bound(doc: JourneyDoc, work = true) {
       await waitFor(
@@ -199,6 +222,21 @@ export async function targetJourney(
       return live;
     },
     open: (docs: JourneyDoc[]) => act(() => open(docs)),
+    openInventory: (docs: JourneyDoc[]) => act(() => open(docs, false)),
+    /** Replace the Place while retaining the current history entry and the fixture hosts' Work. */
+    async reload() {
+      shell.unmount();
+      const inventory = world.inventory;
+      world.inventory = { state: "absent" };
+      world.mounts.length = 0;
+      shell = renderShell();
+      // A pinned page can mount saved Work before the inventory confirms live execution.
+      await waitFor(() => expect(mount()?.target()).toBeNull(), { timeout: 20000 });
+      await act(() => {
+        world.inventory = inventory;
+        world.listeners.forEach((notify) => notify());
+      });
+    },
     /** The picker's own path: the person presses the document control and takes a row. */
     async pick(doc: JourneyDoc) {
       fireEvent.click(
@@ -212,6 +250,11 @@ export async function targetJourney(
     go: (next: URLSearchParams) => act(() => history.push(`/${route}?${next}`)),
     back: () => act(() => history.back()),
     forward: () => act(() => history.forward()),
+    traverseTwice: (direction: "back" | "forward") =>
+      act(() => {
+        history[direction]();
+        history[direction]();
+      }),
     async close() {
       cleanup();
       world.places = { tabs: [] };
@@ -232,11 +275,6 @@ export interface TargetProduct {
   shows(doc: JourneyDoc): RegExp;
 }
 const both: JourneyDoc[] = ["chadds", "snowdon"];
-const repin = (j: Journey, doc: JourneyDoc) => {
-  const search = j.search();
-  search.set("target", pin(doc));
-  return j.go(search);
-};
 /** Every path that changes the resolved target. `from` holds a selection; `to` must start clean. */
 const paths: Record<
   string,
@@ -251,12 +289,12 @@ const paths: Record<
   }
 > = {
   "the picker": { open: both, from: "chadds", to: "snowdon", change: (j) => j.pick("snowdon") },
-  // Pea or a shared link replaces the pin and leaves the other fields of the address as they were.
+  // A bare link supplies a pin and no model fields of its own.
   "a pinned ?target": {
     open: both,
     from: "chadds",
     to: "snowdon",
-    change: (j) => repin(j, "snowdon"),
+    change: (j) => j.go(new URLSearchParams({ target: pin("snowdon") })),
   },
   "a lost binding reopened": {
     open: ["chadds"],
@@ -267,6 +305,8 @@ const paths: Record<
       // The closed lifetime keeps its saved Work on screen, read-only, with no target to act on.
       await waitFor(() => expect(j.mount()?.target()).toBeNull());
       await j.open(["again"]);
+      expect(j.mount()?.target()).toBeNull();
+      expect(j.search().get("target")).toBe(pin("chadds"));
       await j.pick("again");
     },
   },
@@ -283,9 +323,7 @@ const paths: Record<
     from: "chadds",
     to: "snowdon",
     change(j) {
-      const search = j.search();
-      search.set("target", documents.snowdon.path);
-      return j.go(search);
+      return j.go(new URLSearchParams({ target: documents.snowdon.path }));
     },
   },
 };

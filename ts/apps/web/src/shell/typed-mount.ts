@@ -121,6 +121,10 @@ export function mountTypedRoute(
     const fields = Object.entries(spec.fields);
     const targetFields =
       input.fixture !== null || input.history ? [] : fields.filter(([, field]) => field.target);
+    const focus = input.fixture === null && !input.history ? spec.focus : undefined;
+    const focusField = { schema: focusSelectionSchema, initial: [] };
+    const localFocus = (value: unknown) =>
+      focusSelectionSchema.parse(value).filter(({ id }) => !focus?.owns(id));
     const targetQueries = targetFields.flatMap(([name, field]) => {
       const target = field.target;
       if (!target || target === "subject") return [];
@@ -155,6 +159,7 @@ export function mountTypedRoute(
     // A subject roster may depend on an admitted query (the regions on a plan).
     const targetMembership = [...targetQueries, ...(targetSubject ? [targetSubject] : [])];
     const membershipReads = new Set(targetMembership.map(({ read }) => read));
+    if (focus) membershipReads.add(focus.read);
     const reads = new Map<HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
     const readInput = (read: HostRead, from: Record<string, unknown> = projection.admitted) => {
       const project =
@@ -220,10 +225,9 @@ export function mountTypedRoute(
             ];
           }),
         ),
-        selected: decodeField(
-          { schema: focusSelectionSchema, initial: [] },
-          search.has("selected") ? search.get("selected") : (memory.selected ?? []),
-        ),
+        selected: search.has("selected")
+          ? decodeField(focusField, search.get("selected"))
+          : localFocus(decodeField(focusField, memory.selected)),
       });
     };
     let subjectNotice: string | null = null;
@@ -248,29 +252,44 @@ export function mountTypedRoute(
     };
     const fitTarget = (candidate: Record<string, unknown>) => {
       // The Page keeps the request. Reads and actions consume only the elements its roster admits.
-      let admitted = candidate;
+      let admitted: Record<string, any> = candidate;
       const corrections = new Map<string, unknown>();
       let pending = false;
+      const rosterOf = (read: HostRead) => {
+        const record = reads.get(read);
+        return !pending &&
+          (input.target?.kind === "document" || detachedSources?.[read.key]) &&
+          record?.snapshot.state === "ready" &&
+          record.args === canonicalRouteInput(readInput(read, admitted))
+          ? record.snapshot
+          : null;
+      };
       for (const {
         name,
         read,
-        field: { initial },
+        field: { initial, target },
         retain,
       } of targetMembership) {
         const value = admitted[name];
+        if (target === "subject" && isOpenSet(value) && value.kind === "all") continue;
         if (canonicalRouteInput(value) === canonicalRouteInput(initial)) continue;
-        const record = reads.get(read);
-        const snapshot = record?.snapshot;
-        const ready =
-          !pending &&
-          snapshot?.state === "ready" &&
-          record?.args === canonicalRouteInput(readInput(read, admitted));
-        const bound = input.target?.kind === "document" || !!detachedSources?.[read.key];
-        const next = bound && ready ? retain(value, snapshot.value) : initial;
+        const roster = rosterOf(read);
+        const next = roster ? retain(value, roster.value) : initial;
         if (canonicalRouteInput(value) === canonicalRouteInput(next)) continue;
         admitted = { ...admitted, [name]: next };
-        if (bound && ready) corrections.set(name, next);
+        if (roster) corrections.set(name, next);
         else pending = true;
+      }
+      if (focus) {
+        const selected = focusSelectionSchema.parse(candidate.selected);
+        if (selected.some(({ id }) => focus.owns(id))) {
+          const roster = rosterOf(focus.read);
+          const contains = roster ? focus.membership(roster.value) : null;
+          const next = selected.filter(({ id }) => !focus.owns(id) || contains?.(id));
+          admitted = { ...admitted, selected: next };
+          if (contains === null) pending = true;
+          else if (next.length !== selected.length) corrections.set("selected", next);
+        }
       }
       return {
         admitted: freezePage(admitted),
@@ -283,7 +302,10 @@ export function mountTypedRoute(
     };
     const writeField = (search: URLSearchParams, name: string, value: unknown) => {
       const field = spec.fields[name];
-      if (field?.target && canonicalRouteInput(field.initial) === canonicalRouteInput(value))
+      if (
+        (name === "selected" && canonicalRouteInput(value) === "[]") ||
+        (field?.target && canonicalRouteInput(field.initial) === canonicalRouteInput(value))
+      )
         search.delete(name);
       else search.set(name, encodeField(field, value));
     };
@@ -308,9 +330,17 @@ export function mountTypedRoute(
       }
       if (corrections.size) {
         const previous = search.toString();
+        const entry = input.address.entry?.();
+        const revision = input.address.revision?.();
         for (const [field, value] of corrections) writeField(search, field, value);
         queueMicrotask(() => {
-          if (!disposed && input.custody.current() && input.address.read().toString() === previous)
+          if (
+            !disposed &&
+            input.custody.current() &&
+            input.address.entry?.() === entry &&
+            input.address.revision?.() === revision &&
+            input.address.read().toString() === previous
+          )
             input.address.write(search, "replace");
         });
       }
@@ -715,7 +745,7 @@ export function mountTypedRoute(
         holder: (read: HostRead) => attempts.get(read)?.holder,
         forget: (read: HostRead) => attempts.delete(read),
         [Symbol.iterator]() {
-          const active = visibleReads(spec, page);
+          const active = visibleReads(spec, projection.admitted);
           const search = input.address.read();
           for (const { name, field, read } of targetQueries) {
             const raw = search.get(name);
@@ -725,6 +755,8 @@ export function mountTypedRoute(
             )
               active.add(read);
           }
+          if (focus && focusSelectionSchema.parse(page.selected).some(({ id }) => focus.owns(id)))
+            active.add(focus.read);
           for (const [read, record] of reads)
             if (!active.has(read)) {
               record.stop();
@@ -945,7 +977,9 @@ export function mountTypedRoute(
     // The Page the address holds; an address without `selected` keeps the current selection.
     const addressPage = (remembered = true): Record<string, unknown> => {
       const next = decodePage(remembered);
-      return input.address.read().has("selected") ? next : { ...next, selected: page.selected };
+      return input.address.read().has("selected")
+        ? next
+        : { ...next, selected: localFocus(page.selected) };
     };
     const installPage = (next: typeof projection) => {
       const changed = canonicalRouteInput(next.requested) !== canonicalRouteInput(page);
@@ -1717,7 +1751,7 @@ export function mountTypedRoute(
           : { state: "not-yet-run", publication: null },
       owner: (id = own) => owners.get(id),
       page: {
-        read: () => page,
+        read: () => projection.admitted,
         pose: (patch: any, intent?: "gesture" | "named") =>
           moveRole(
             "pose",
@@ -2041,7 +2075,10 @@ export function mountTypedRoute(
           value,
           page: mounted.page,
           cells,
-          selection: { read: () => page.selected, set: (selected: any) => move({ selected }) },
+          selection: {
+            read: () => projection.admitted.selected,
+            set: mounted.page.select,
+          },
           // A route's own id wins over a kernel verb of the same name.
           verb: (id: string) =>
             Object.hasOwn(spec.verbs, id) || !Object.hasOwn(kernelVerbs, id)

@@ -6,7 +6,14 @@
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
+import {
+  focusSelectionSchema,
+  routeAddress,
+  type History,
+  type RouteKey,
+  type RoutePage,
+} from "@pe/agent-contracts";
+import { decodeField } from "@pe/web-kernel/route/field-codec";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { places } from "../workbench/places";
@@ -287,11 +294,19 @@ export function restorableTabSearch(pathname: string, url: URLSearchParams) {
     return memory;
   const pin = url.get("target");
   if (pin === null || memory.target !== pin) return undefined;
-  return Object.fromEntries(
+  const restored = Object.fromEntries(
     Object.entries(memory).filter(
       ([key]) => key !== "target" && key !== "fixture" && !spec.fields[key]?.target,
     ),
   );
+  if (spec.focus && restored.selected !== undefined) {
+    const selected = focusSelectionSchema
+      .parse(decodeField({ schema: focusSelectionSchema, initial: [] }, restored.selected))
+      .filter(({ id }) => !spec.focus?.owns(id));
+    if (selected.length) restored.selected = JSON.stringify(selected);
+    else delete restored.selected;
+  }
+  return restored;
 }
 
 /** Restore before device admission, so a bare fixture Place never falls into the host lane. */

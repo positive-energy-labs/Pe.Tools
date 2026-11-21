@@ -22,7 +22,7 @@ import {
   targetInventory,
   retainTargetInventory,
 } from "#/host/resource-state";
-import { soleUserDocument } from "#/workbench/sole-user-document";
+import { observedDocumentAccess, soleUserDocument } from "#/workbench/sole-user-document";
 import { useOwned } from "#/shell/owner";
 
 export interface BindingLost {
@@ -96,26 +96,36 @@ export function retainSoleDocument(
       (s) => "process" in s.row && s.row.process != null && s.attachment === null,
     ) ??
       false);
-  // The sole document is a default, not a binding that is recomputed on every census.
-  // Once observed, tab memory wins until a complete inventory confirms its lifetime ended.
-  const observed = live?.kind === "ready" ? live : inventory;
-  const stillOpen =
-    last && resolveCallTarget({ needs: "document" }, [last], observed).kind === "resolved";
+  // Keep the tab's default through uncertainty and while its exact lifetime stays open. Once
+  // live inventory answers, it decides which lifetimes are open even if the Machine census lags.
+  const liveAnswered = live?.kind === "ready";
+  const observed = liveAnswered ? live : inventory;
+  const held = last && resolveCallTarget({ needs: "document" }, [last], observed);
+  const keep = liveAnswered ? held?.kind !== "choose" : busy || held?.kind === "resolved";
+  const request =
+    last && keep
+      ? last
+      : liveAnswered
+        ? liveSoleDocument(live)
+        : busy
+          ? null
+          : soleUserDocument(machine);
   return {
-    request: stillOpen ? last : busy ? (last ?? liveSoleDocument(live)) : soleUserDocument(machine),
+    request:
+      request?.kind === "open" && observedDocumentAccess(machine, request.ref)?.kind === "pea"
+        ? null
+        : request,
     busy,
   };
 }
 
 /**
- * The live session inventory's only open document, for a page that has no last-known target while
- * the machine census is busy (N4: a reload mid-read showed "missing target" for a minute while the
- * one session stayed open with one document). EXCEPTION to `soleUserDocument`: the inventory rows
- * carry no access, so this cannot refuse a Pea-opened document. It holds only until the machine
- * census answers, which then rules as before; native writes stay behind Work and consent.
+ * The live inventory can establish a sole open lifetime before the Machine census classifies its
+ * access. `retainSoleDocument` excludes Pea's document once it has evidence for that exact ref.
  */
-function liveSoleDocument(live: ReturnType<typeof targetInventory> | null): DocumentRequest | null {
-  if (live?.kind !== "ready") return null;
+function liveSoleDocument(
+  live: Extract<ReturnType<typeof targetInventory>, { kind: "ready" }>,
+): DocumentRequest | null {
   const sessions = Object.entries(live.sessions);
   if (sessions.length !== 1) return null;
   const [session, found] = sessions[0]!;

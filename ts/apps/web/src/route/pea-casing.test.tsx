@@ -26,8 +26,9 @@ import { fakeRuntimeHost } from "../../../../packages/mcps/tests/runtime-host-fi
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { fixture, ref } from "../../../host/tests/host-read-graph.test-support";
 import { peClient } from "../host/pe-client";
-import { module as rooms } from "@pe/rooms-web/routes/rooms";
+import { module as rooms, plans } from "@pe/rooms-web/routes/rooms";
 import { regionCode } from "@pe/rooms-contract/product";
+import type { UseSource } from "@pe/agent-contracts/route";
 
 afterEach(() => {
   cleanup();
@@ -131,6 +132,31 @@ test.each([
     };
   const fanIdentity = key === "fans" ? stableFanKey(rosterData.rows[0]) : "";
   const fanPort = key === "fans" ? rosterData.rows[0].portIndex : 0;
+  const plansSource: UseSource = {
+    kind: "use",
+    open(_ctx, deliver) {
+      deliver({
+        kind: "complete",
+        revision: 1,
+        value: {
+          ...packet,
+          value: {
+            ...packet.value,
+            data: {
+              levels: [
+                {
+                  name: "L2",
+                  elevationFt: 0,
+                  views: [{ view: PLAN, name: "L2", type: "FloorPlan" }],
+                },
+              ],
+              trackedRegionIds: [PLAN_ROOM],
+            },
+          },
+        },
+      });
+    },
+  };
   const mount = mountTypedRoute(
     module,
     {
@@ -150,6 +176,7 @@ test.each([
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
     {
       sources: {
+        ...(key === "rooms" ? { [plans.key]: plansSource } : {}),
         [roster.key]: {
           kind: "use",
           open(_ctx, deliver) {
@@ -270,14 +297,19 @@ test.each([
     if (scenario === "move") {
       const id = module.spec.subject!.options(rosterData)[0]!.id;
       deliverRoster = false;
-      const result = await call(JSON.stringify({ kind: "ids", ids: [id] }), {
+      const request = call(JSON.stringify({ kind: "ids", ids: [id] }), {
         view: JSON.stringify(PLAN),
       });
+      await waitFor(() => expect(search.get("view")).toBe(JSON.stringify(PLAN)));
+      expect(mount.value(roster).state).not.toBe("ready");
+      expect(mount.page.read().room).toEqual({ kind: "ids", ids: [] });
+      await act(async () => pendingRoster());
+      const result = await request;
       expect(result, JSON.stringify(result)).toMatchObject({
         ok: true,
         result: { outcome: "rendered" },
       });
-      expect(mount.value(roster).state).not.toBe("ready");
+      expect(mount.page.read().room).toEqual({ kind: "ids", ids: [id] });
       return;
     }
     const exact = key === "duct-systems" ? "SA 19" : `MUAS-1 / port ${fanPort}`;

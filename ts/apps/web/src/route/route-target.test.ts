@@ -103,7 +103,7 @@ test("N4: a fresh page mid-read (machine census busy, nothing kept) binds the li
     request: { kind: "open", ref: { session: "one", openId: "doc" } },
     busy: true,
   });
-  // Two open documents in the live inventory name no sole one; the kept target still wins.
+  // Two open documents name no sole one. A held lifetime wins only while it still exists.
   const two = {
     ...live,
     sessions: {
@@ -117,8 +117,16 @@ test("N4: a fresh page mid-read (machine census busy, nothing kept) binds the li
     },
   };
   expect(retainSoleDocument(busy, null, two).request).toBeNull();
-  const kept = { kind: "open" as const, ref: { session: "one", openId: "kept" } };
-  expect(retainSoleDocument(busy, kept, live).request).toBe(kept);
+  const kept = { kind: "open" as const, ref: { session: "one", openId: "doc" } };
+  expect(retainSoleDocument(busy, kept, two).request).toBe(kept);
+  const closed = { kind: "open" as const, ref: { session: "one", openId: "closed" } };
+  expect(retainSoleDocument(busy, closed, live).request).toEqual(kept);
+
+  // Live inventory does not carry access. Later evidence for this exact open can exclude it.
+  Object.assign(machine.revit.sessions![0]!.attachment!.documents![0]!, {
+    access: { kind: "pea", acquisition: "pea-open" },
+  });
+  expect(retainSoleDocument(machine, kept, live).request).toBeNull();
 });
 
 test("a reconnecting attachment does not confirm that the automatic document closed", () => {
