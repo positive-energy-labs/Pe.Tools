@@ -491,3 +491,6 @@ restated here.
 - Make the Pea root command identify and refuse unrouteable arguments. [owed-20261119 host-journal-1-344, 1 item]
 - Use the typed store for provider configuration publication so its temporary writes share the store's recovery rules. [owed-20261119 homes-1-079, 1 item]
 - Admit typed thread prompt, cancel and fork host commands before exposing them through the chat host adapter. Render readable historical thread titles in the thread palette. [owed-20261119 agent-unfinished-code-markers-1, 2 items]
+- W0-browser (test/tooling fault). Reproduce cold Conversation Work hydration and revision mismatch. Track the two later baseline assertions separately. Evidence in `.artifacts/runs/product-decl-20261120/green-tip-2-classes.md`.
+- W0-conversation-place (older than the run). Diagnose the standalone browser Place identity timeout in Conversation Work. Evidence in `.artifacts/runs/product-decl-20261120/verify-90dbe51e.log`.
+- W0-conversation-write (older than the run). Diagnose the Conversation Work apply refusal when the human write should land. Evidence in `.artifacts/runs/product-decl-20261120/verify-90dbe51e.log`.

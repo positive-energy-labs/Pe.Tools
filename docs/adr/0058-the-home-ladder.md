@@ -1,6 +1,6 @@
 # 0058: The home ladder decides where a stored fact rests
 
-Date: 2026-11-20. Status: accepted, not built. Source: kaitpw's ruling 15 of the product-declaration muse, 2026-11-20. Amends the storage amendment of [ADR 0032](0032-value-domains-declared-on-work-cells.md) (rules 1 and 7) with an order of choice. The rules of that amendment stand. Slice S2b of the [product-declaration map](../features/routes/MAP.md) builds it.
+Date: 2026-11-20. Status: accepted. Source: kaitpw's ruling 15 of the product-declaration muse, 2026-11-20. Amends the storage amendment of [ADR 0032](0032-value-domains-declared-on-work-cells.md) (rules 1 and 7) with an order of choice. The rules of that amendment stand. Slice S2b of the [product-declaration map](../features/routes/MAP.md) records the landing.
 
 ## Context
 

@@ -1,6 +1,6 @@
 # 0042: Handles, a host Timeline, and answers that say what they observed
 
-Date: 2026-11-12. Status: accepted. Source: kaitpw's rulings on a twelve-reader review of `crusade/homes` at e02163e0, quoted in the decision log of [the kernel crusade 2 map](../features/routes/MAP.md).
+Date: 2026-11-12. Status: accepted. Source: kaitpw's rulings on a twelve-reader review of `crusade/homes` at e02163e0, quoted in the kernel crusade 2 decision log at `8d3a507c:docs/features/routes/MAP.md` in Git.
 
 ## Context
 

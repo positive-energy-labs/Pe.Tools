@@ -44,6 +44,10 @@
 
 ## Owed
 
+- D-5f77d0ae-tutorial-owner (introduced by the run). Check the Fans Tutorial ownership labels for shared Ducts settings and catalogs. Evidence in `.artifacts/runs/product-decl-20261120/drive-5f77d0ae/fans-tutorial-homes.txt`.
+
+- D-5f77d0ae-fans-all (test/tooling fault). Re-drive Fans All with the populated roster before attributing the two 120-second read timeouts to the product. Evidence in `.artifacts/runs/product-decl-20261120/drive-5f77d0ae/fans-all-repeat-window.json`.
+
 - 2026-11-18, the J-V1 journey script (`ts/products/fans/web/journeys/jv1-live-flow.ts`) has never passed on a real session as written, so the live-flow journey is proven only by hand (field-20261118, `45c670d4`). Three faults of the tooling, none of the product: the drift note was looked for as inline text (repaired at `3c667277`); the write-scope helper missed an option that was on screen, not reproduced; and `revit.url` in `ts/tests/e2e/cdp.ts` puts the internal target kind `document` into the page's public target query, which the page rightly refuses as invalid, so the script cannot bind (`jv1-live-flow.ts:45`). The same projection fault was worked around by hand in J-V7's first real pass.
 
 - 2026-11-18, the 0.03 seed drop still draws as a plain "drop": `lossSourceOf` in `ts/products/fans/domain/src/calc/build.ts` recognises only "firm default" while provenance emits `default:...`. Found by run field-20261118 at 272c0120 and older than it. It is item 4 of the reduced fans wave 5, which is still running on `crusade/fans-w5` (last merge 2026-11-18 02:47) and is not on main.
@@ -128,3 +132,9 @@
 - Resolve Fans walk writes at the host from a typed port SubjectRef. [owed-20261119 routes-kernel-1-426, 1 item]
 - Give the tests typed fixtures or checked constructors where they now assert a type, and lower each file's test-cast allowance once the test expresses the same witness. The [guard baseline](../../../ts/tests/repo-guards/src/test-casts.baseline.json) records the file allowances. [owed-20261119 fans-test-casts, 24 items]
 - Resolve the unfinished Fans calculation read contract work recorded by the health guard and lower its marker allowance after checking the owning contract. [owed-20261119 tooling-2-414, 1 item]
+- B1 (older than the run). Recheck the Fans All assertion and async document access that failed on the pre-run Web base. Evidence in `.artifacts/runs/product-decl-20261120/BACKLOG.md (B1)`.
+- D-b43f6fec-jv1-text (test/tooling fault). Make the archived J-V1 drift test tolerate added firm/source detail while checking the readback. Evidence in `.artifacts/runs/product-decl-20261120/drive-b43f6fec/raw/ev/fans-rekey-and-confirmed-readback.json`.
+- SM17 (older than the run). Derive Fans write segments and Work retirement from the declared writes map so a landed cell cannot be left staged. Evidence in `.artifacts/runs/product-decl-20261120/smell-2.md (finding 8)`.
+- D-6ec290e2-fans-address (introduced by the run). Re-drive the Fans reload and the Fans-to-Duct Systems Ledger handoff with port and fitting focus. The mounted reload replay and final Fans history drive cover their own paths. Evidence in `.artifacts/runs/product-decl-20261120/drive-6ec290e2/REPORT.md (Fans)`.
+- Verify-589c0c40-fans-geometry (test/tooling fault). Reproduce the suite-only Revert A/Stage B missing None control. The file passed alone. Evidence in `.artifacts/runs/product-decl-20261120/candidate-589c0c40-geometry-alone.log`.
+- Verify-90dbe51e-fans-forward (test/tooling fault). Reproduce the suite-only Fans J1 Forward subject loss. The isolated case passed and the controlled drive restored the target and subject. Evidence in `.artifacts/runs/product-decl-20261120/candidate-90dbe51e-fans-alone.log`.
