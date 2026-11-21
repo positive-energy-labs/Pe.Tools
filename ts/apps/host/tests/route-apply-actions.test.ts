@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
-import { ANY_ROUTE } from "@pe/agent-contracts";
+import { ANY_ROUTE, type Tool } from "@pe/agent-contracts";
 import { commands, tools } from "@pe/mcps/product-actions";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
 import type { CommandExecutor } from "@pe/host-internal/command-executor";
@@ -11,11 +11,15 @@ import { z } from "zod";
 // Payload/plan-ticket fixtures belonged to the retired caller-payload boundary.
 // Every migrated command must bind executable derivation and refuse foreign Work first.
 const writes = Object.entries(commands).filter(([, entry]) => "writeBoundary" in entry);
+const registeredTools: readonly Tool[] = Object.values(tools);
+const registeredRoute = registeredTools.find((tool) => tool.work)?.work?.route;
 test.each(writes)(
   "%s links derivation and refuses foreign Work without reading evidence",
   async (key, definition) => {
     if (!("writeBoundary" in definition)) throw Error(`${key} has no write boundary`);
     const hooks = definition.writeBoundary;
+    const route = hooks.route === ANY_ROUTE ? registeredRoute : hooks.route;
+    if (!route) throw Error(`${key} needs a registered Work route`);
     expect(typeof hooks.derive).toBe("function");
     expect(typeof hooks.preview).toBe("function");
     const executor: CommandExecutor = {
@@ -44,7 +48,7 @@ test.each(writes)(
           work: {
             key: {
               binding: "open",
-              route: hooks.route === ANY_ROUTE ? tools.ducts.work.route : hooks.route,
+              route,
               target: null,
               open: { session: "A", openId: "B" },
             },
