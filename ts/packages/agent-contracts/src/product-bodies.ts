@@ -36,6 +36,17 @@ export type LocalFootprint<O> = O extends { readonly effect: "SessionWrite" }
   : { readonly effects?: never };
 export type LocalOperations = Readonly<Record<string, LocalOperation>>;
 
+/** A declared host file: what a reading hands it and what it answers, read through `hostFile`. */
+export type HostFiles = Readonly<
+  Record<string, { readonly input: z.ZodType; readonly output: z.ZodType }>
+>;
+/** The host's own file inputs: a product file by one of these names would answer for the platform. */
+export const platformFiles = ["firm", "settings", "capture"] as const;
+/** A product's files as it may declare them: none by a platform name. */
+export type DeclaredFiles<Files extends HostFiles> = Files & {
+  readonly [K in keyof Files & (typeof platformFiles)[number]]: never;
+};
+
 type Handle<
   P extends ProductDeclaration,
   K extends keyof P["readings"],
@@ -88,10 +99,11 @@ export type HostBodies<
     ? unknown
     : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
   /**
-   * Host files a reading takes as `file:<name>`: the kernel records the answer as one taking, so the
-   * body may read host state a `ReadContext` cannot. `document` resolves an open document's address.
+   * One body per declared host file, which a reading takes through `hostFile`: the kernel records
+   * the answer as one taking, so the body may read host state a `ReadContext` cannot. `document`
+   * resolves an open document's address.
    */
-  readonly files?: Readonly<Record<string, FileBody<Deps>>>;
+  readonly files?: { readonly [K in keyof P["files"]]: FileBody<Deps> };
   /**
    * One body per reading that declares `emits`: it answers the reading's `snapshot` call and returns
    * the value to keep, of the declared kind. The kernel stores it; the body holds no store.
@@ -141,6 +153,7 @@ export type OwedBodies<P extends ProductDeclaration, Bodies> = Undeclared<P> &
       (
         | Declares<P["http"], "http">
         | Declares<P["local"], "local">
+        | Declares<P["files"], "files">
         | ([Emitting<P>] extends [never] ? never : "emits")
         | Declares<ProductRead<P>, "homes">
       ) &

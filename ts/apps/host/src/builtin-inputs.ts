@@ -91,7 +91,7 @@ import {
   type HostWork,
   type PeInvocationFactory,
 } from "./pe-routes.ts";
-import { hostState } from "./host-ownership.ts";
+import { hostOffer, hostState } from "./host-ownership.ts";
 import { RequestIdentity } from "@pe/host-internal/request-identity";
 import { markReadings } from "./resource-adapters.ts";
 import { fileRouteDocumentStore } from "./route-document-store.ts";
@@ -565,24 +565,24 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
           // A product's own host file: its body, with the stores and the inventory this host holds.
           Object.hasOwn(productFiles, name)
             ? productFiles[name]!(args, {
-                deps: { captures: captureStore() },
+                deps: hostOffer(captureStore(), files),
                 document: (target) => invoke(inventory.document(target)),
                 sessions: () => invoke(inventory.list()),
               })
             : name === "settings"
-                ? (async () => {
-                    // The project tier is the home the target model's pointer names (homes freeze shape 4).
-                    const { owner, target } = settingsFile.input.parse(args);
-                    const pointer = target
-                      ? (await invoke(inventory.document(target))).projectHome
-                      : null;
-                    return settingWatches
-                      ? settingWatches.read(owner, pointer)
-                      : readSettingTiers(owner, pointer);
-                  })()
-                : name.startsWith("local:")
-                  ? readLocal(name.slice(6), args)
-                  : Promise.reject(Error(`Unknown file input ${name}`)),
+              ? (async () => {
+                  // The project tier is the home the target model's pointer names (homes freeze shape 4).
+                  const { owner, target } = settingsFile.input.parse(args);
+                  const pointer = target
+                    ? (await invoke(inventory.document(target))).projectHome
+                    : null;
+                  return settingWatches
+                    ? settingWatches.read(owner, pointer)
+                    : readSettingTiers(owner, pointer);
+                })()
+              : name.startsWith("local:")
+                ? readLocal(name.slice(6), args)
+                : Promise.reject(Error(`Unknown file input ${name}`)),
         );
       const sources = (current: InputConsumption): ReadSources => {
         const context = Context.add(admitted, CurrentInputConsumption, current);

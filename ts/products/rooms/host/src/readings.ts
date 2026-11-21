@@ -5,12 +5,12 @@ import {
   stagedAdoptChoices,
   takeoffCaptureSchema,
   takeoffCaptureSummarySchema,
-  takeoffSnapshotInput,
 } from "@pe/rooms-contract/takeoffs";
 import { native } from "@pe/agent-contracts/handle";
 import type { HostBodies } from "@pe/agent-contracts/product";
 import { readZoneMeta } from "./takeoff-adoption.ts";
 import { BridgeError } from "@pe/host-internal/bridge";
+import { hostFile } from "@pe/host-internal/product";
 import { leaf, type ReadContext } from "@pe/host-internal/read-graph";
 import { workBinding, workRead } from "@pe/host-internal/reads/work";
 import { product, regionCode, takeoffsWork } from "@pe/rooms-contract/product";
@@ -25,19 +25,15 @@ const xy = (point: readonly number[]) => point2.parse(point.slice(0, 2));
 const ring = (points: readonly (readonly number[])[]) => points.map(xy);
 const unreadable = (rows: readonly { parameter: string; reason: string }[] | null | undefined) =>
   (rows ?? []).map(({ parameter, reason }) => ({ parameter, reason }));
-const retained = leaf("file:takeoff-capture", takeoffSnapshotInput, takeoffCaptureSchema, false);
-const observations = product.readings.observations.handle;
+const retained = hostFile(product, "takeoff-capture", false);
+const observation = hostFile(product, "observation");
 // The saved captures are the same host file the `observations` reading takes, by id or as a list.
-const savedCapture = leaf("file:observation", observations.input, takeoffCaptureSchema.nullable());
-const savedCaptures = leaf(
-  "file:observation",
-  observations.input,
-  z.array(takeoffCaptureSummarySchema),
-);
+const saved = <O>(output: z.ZodType<O>) => leaf(observation.name, observation.input, output);
+const savedCapture = saved(takeoffCaptureSchema.nullable());
+const savedCaptures = saved(z.array(takeoffCaptureSummarySchema));
 
 export const readings: HostBodies<typeof product, ReadContext, never>["readings"] = {
-  observations: (ctx, args) =>
-    ctx.read(leaf("file:observation", observations.input, observations.data), args),
+  observations: (ctx, args) => ctx.read(observation, args),
   async plans(ctx, { target }) {
     const { body } = await ctx.read(native("rooms.roster"), { target: doc(target), request: {} });
     return {

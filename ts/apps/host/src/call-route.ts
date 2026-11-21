@@ -1,10 +1,7 @@
+import { hostOffer } from "./host-ownership.ts";
 import type { HostOffers } from "@pe/host-internal/product";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
-import {
-  productEmitters,
-  productHttp,
-  productLocal,
-} from "./product-executors.generated.ts";
+import { productEmitters, productHttp, productLocal } from "./product-executors.generated.ts";
 import { fileVersion } from "@pe/host-internal/local-files";
 import { HomeFiles } from "@pe/host-internal/home-files";
 import type { createRetainedBasis } from "@pe/host-internal/retained-basis";
@@ -15,7 +12,6 @@ import {
   retainedReadings,
   type RetainedReadings,
 } from "@pe/host-internal/retained-readings";
-import { hostOwnership } from "./host-ownership.ts";
 import { blobUploadSchema } from "@pe/agent-contracts";
 import { put as putBlob } from "./action-blobs.ts";
 import { captureReceiptSchema } from "@pe/agent-contracts";
@@ -61,7 +57,7 @@ import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-
 import { RevitBridge, BridgeError, NoRevitSession } from "@pe/host-internal/bridge";
 import { PictureCaptureStore, PictureStoreFull } from "./captures-route.ts";
 import { CommandRejected, StepFailure } from "@pe/host-internal/command-executor";
-import { bindCommandRuntime } from "./command-registry.ts";
+import { bindCommandRuntime, type Offer } from "./command-registry.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import type { AttemptHost } from "@pe/host-internal/action-execution";
 import type { GatewayLocal, GatewayLocalContext } from "./gateway-actions.ts";
@@ -137,6 +133,7 @@ const said = (error: unknown): string =>
  * Native failures use the typed problem mapper; remaining local handlers migrate with I.
  */
 
+/** The offer as this host's own operations take it: the capture store whole. */
 export type CallRouteDispatch = (
   ...args: Parameters<typeof dispatchTsOnlyOperation>
 ) => Effect.Effect<
@@ -156,7 +153,7 @@ function callRoutes(
   operations: ActionJournal,
   captures?: ObservationFiles,
   actionDeps: FamilyActionDependencies &
-    HostOffers &
+    Partial<HostOffers> &
     InstancesActionDependencies & {
       launchShell?: (path: string) => Promise<void>;
     } = {},
@@ -200,6 +197,12 @@ function callRoutes(
   const observations = (): ObservationFiles => {
     if (!captures) throw Error("Captures are read before the call route layer is built.");
     return captures;
+  };
+  // What every product body takes: built once by this layer, and the same value on every path.
+  let offer: Offer | undefined;
+  const offered = (): Offer => {
+    if (!offer) throw Error("The offer is read before the call route layer is built.");
+    return offer;
   };
   const owner = () => operations;
   const admit = async (
@@ -302,7 +305,7 @@ function callRoutes(
 
       if (entry.saved) {
         op = { key, tsOnly: true, startedAt: Date.now(), origin, originClass, requestId };
-        const value = yield* productLocalCall(key, request, observations());
+        const value = yield* productLocalCall(key, request, offered());
         recordOperation(op, { ok: true });
         return Response.jsonUnsafe(value);
       }
@@ -440,7 +443,7 @@ function callRoutes(
       }
       const result = isTsOnlyOperationKey(key)
         ? {
-            value: yield* dispatch(key, request, scope, bridge, observations(), {
+            value: yield* dispatch(key, request, scope, bridge, offered(), {
               caller,
               pointers: composition?.pointers,
             }),
@@ -473,10 +476,7 @@ function callRoutes(
                 .kept.of(emitter.kind, emitter.schema)
                 .refresh(
                   target,
-                  emitter.run(
-                    { target, key, request, scope: readScope, selected },
-                    { captures: observations() },
-                  ),
+                  emitter.run({ target, key, request, scope: readScope, selected }, offered()),
                   Effect.map(selected, (now) => !!now?.address && now.address === before),
                 );
               captureId = published.capture.id;
@@ -674,7 +674,7 @@ function callRoutes(
                   session: req.headers[HOST_RPC_BRIDGE_SESSION_HEADER],
                   openId: req.headers[HOST_RPC_DOCUMENT_HEADER],
                 },
-                { captures: observations() },
+                offered(),
               ),
             catch: (error) => error,
           }),
@@ -924,12 +924,14 @@ function callRoutes(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore)) ??
             Context.get(yield* Layer.build(CaptureStore.layer()), CaptureStore);
+          const files = yield* HomeFiles;
           actionDeps = {
             ...actionDeps,
             marks: yield* HostDocumentMarks,
             pictures: yield* PictureCaptureStore,
-            files: yield* HomeFiles,
+            files,
           };
+          offer = hostOffer(captures, files);
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.
@@ -962,7 +964,7 @@ function callRoutes(
           bindCommandRuntime(
             operations,
             bridge,
-            observations(),
+            offer,
             {
               ...actionDeps,
               families: composition?.families,
@@ -975,7 +977,7 @@ function callRoutes(
                   key,
                   input,
                   bridge,
-                  observations(),
+                  offered(),
                   actionDeps.pictures!,
                   actionDeps.launchShell,
                   scope,
@@ -1092,17 +1094,17 @@ const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],
-  captures: ObservationFiles,
+  offer: Offer,
   via: { caller: Caller; pointers?: ThreadPointers; action?: GatewayLocalContext },
 ) {
   // pod.export, pod.import and pod.promote have no local entry: the gateway runs their prepared
   // archive inline (gateway-actions.ts host-leaf), and /call refuses them as mutations.
-  if (Object.hasOwn(productLocal, key)) return yield* productLocalCall(key, request, captures);
+  if (Object.hasOwn(productLocal, key)) return yield* productLocalCall(key, request, offer);
   if (!hasLocalEntry(key))
     return yield* Effect.fail(
       new BridgeError(`${key} runs only through /actions`, 409, { notDispatched: true }),
     );
-  return yield* localEntries[key]({ request, scope, bridge, captures, ...via });
+  return yield* localEntries[key]({ request, scope, bridge, captures: offer.captures, ...via });
 });
 const hasLocalEntry = (key: string): key is keyof typeof localEntries =>
   Object.hasOwn(localEntries, key);
@@ -1303,11 +1305,7 @@ const decodeRequest = Effect.fnUntraced(function* <K extends TsOnlyOperationKey>
   )) as TsOnlyRequest<K>;
 });
 /** A product's local operation: the kernel decodes the request it declared, then calls its body. */
-const productLocalCall = Effect.fnUntraced(function* (
-  key: string,
-  request: unknown,
-  captures: ObservationFiles,
-) {
+const productLocalCall = Effect.fnUntraced(function* (key: string, request: unknown, offer: Offer) {
   const declared = productLocal[key];
   if (!declared)
     return yield* new BridgeError(`${key} has no host body`, 409, { notDispatched: true });
@@ -1316,7 +1314,7 @@ const productLocalCall = Effect.fnUntraced(function* (
         onExcessProperty: "error",
       })(request ?? {}).pipe(Effect.mapError((error) => new InvalidHostRequest(key, error.message)))
     : {};
-  return yield* declared.run(input, { captures, roots: hostOwnership });
+  return yield* declared.run(input, offer);
 });
 
 function toProblem(error: unknown): {
@@ -1414,7 +1412,7 @@ function executeGatewayLocal(
   key: string,
   input: unknown,
   bridge: RevitBridge["Service"],
-  captures: ObservationFiles,
+  offer: Offer,
   pictures: PictureCaptureStore["Service"],
   launch?: (path: string) => Promise<void>,
   scope?: HostSessionScope,
@@ -1425,7 +1423,7 @@ function executeGatewayLocal(
     return Effect.fail(new BridgeError("Unknown host operation", 409, { notDispatched: true }));
   // The journal Layer holds the node and HTTP services; the picture store is this route's value.
   if (!linkedCatalog().entries.get(key)?.call?.shell)
-    return dispatchTsOnlyOperation(key, input, scope, bridge, captures, {
+    return dispatchTsOnlyOperation(key, input, scope, bridge, offer, {
       caller: action?.caller ?? { kind: "anonymous" },
       action,
       pointers,

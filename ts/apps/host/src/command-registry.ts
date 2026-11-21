@@ -1,5 +1,5 @@
+import { hostOffer } from "./host-ownership.ts";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
-import { hostOwnership } from "./host-ownership.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import {
@@ -36,12 +36,16 @@ import { commands } from "@pe/mcps/product-actions";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies &
-  HostOffers &
-  InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
+  Pick<HostOffers, "projectLifetime" | "runPods"> &
+  InstancesActionDependencies & {
+    nativeRead?: HostNativeRead["Service"];
+  };
+/** The offer as this host's own executors take it: the capture store whole. */
+export type Offer = ReturnType<typeof hostOffer<ObservationFiles>>;
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
-  captures: ObservationFiles,
+  offer: Offer,
   deps: CommandDependencies,
   local: GatewayLocal,
   origin?: () => string,
@@ -64,13 +68,12 @@ export function commandRegistry(
   // Product-owned sheet writes answer through the generic sheet dispatcher.
   const products = productExecutors(bridge, {
     ...deps,
-    captures,
-    roots: hostOwnership,
+    ...offer,
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
   for (const group of [
-    familyExecutors(captures, bridge, deps),
+    familyExecutors(offer.captures, bridge, deps),
     instancesExecutors(deps),
     products.executors,
     sheetExecutors(bridge, deps, products.sheets),
@@ -176,13 +179,8 @@ export function commandRegistry(
 export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
-  captures: ObservationFiles,
-  deps: FamilyActionDependencies &
-    HostOffers &
-    InstancesActionDependencies & {
-      nativeRead?: HostNativeRead["Service"];
-      nativeReads?: NativeReadTerminals;
-    },
+  offer: Offer,
+  deps: CommandDependencies & { nativeReads?: NativeReadTerminals },
   local: GatewayLocal,
   origin?: () => string,
 ): void {
@@ -192,7 +190,7 @@ export function bindCommandRuntime(
     readOwnership: owned.readOwnership,
     resolve: commandRegistry(
       bridge,
-      captures,
+      offer,
       { ...deps, nativeRead: owned.nativeRead },
       local,
       origin,

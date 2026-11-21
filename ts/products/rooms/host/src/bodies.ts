@@ -2,9 +2,9 @@
 import { Effect } from "effect";
 import { addressSchema, documentRefSchema, sameAddress } from "@pe/agent-contracts";
 import type { z } from "zod";
-import type { FileBody, HostBodies } from "@pe/agent-contracts/product";
+import type { HostBodies } from "@pe/agent-contracts/product";
 import { BridgeError } from "@pe/host-internal/bridge";
-import { io, refused } from "@pe/host-internal/command-executor";
+import { io } from "@pe/host-internal/command-executor";
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import type { EmitCall, LocalRun } from "@pe/host-internal/product";
 import { nativeResponseSchema } from "@pe/host-contracts/decoders";
@@ -23,20 +23,14 @@ import {
 import * as rhvac from "./rhvac-ops.ts";
 import { takeoffs, type Deps } from "./takeoffs.ts";
 
-type Host = Partial<Deps>;
-type Bodies = Required<HostBodies<typeof product, never, never, Host, LocalRun, EmitCall>>;
-const store = (deps: Host) => {
-  const kept = takeoffs(deps);
-  if (!kept) throw Error("This host holds no capture store");
-  return kept;
-};
+type Bodies = Required<HostBodies<typeof product, never, never, Deps, LocalRun, EmitCall>>;
 const observations = product.readings.observations.handle;
 /** The `observations` reading: one saved capture, the saved list, or the open document's status. */
 async function query(
-  deps: Host,
+  deps: Deps,
   { target, capture, text, saved, document }: z.output<typeof observations.input>,
 ) {
-  const kept = store(deps);
+  const kept = takeoffs(deps);
   if (capture) return text ? kept.savedText(capture) : kept.saved(capture);
   if (!saved) {
     if (!target) throw Error("Observation status needs an exact open document");
@@ -58,24 +52,19 @@ const live = (target: z.output<typeof documentRefSchema>, snapshot: TakeoffSnaps
   capturedAt: snapshot.reading.observedAt,
   snapshot: takeoffSnapshotSchema.parse(snapshot),
 });
-const roots = (deps: Host) => {
-  if (!deps.roots) throw refused("This host named no roots for the RHVAC file lane");
-  return deps.roots;
-};
 
 /** The `.r10` writer of the sync command. A test injects `openFile` and `syncFile` here. */
-export const commandFiles = ({ openFile, syncFile, ...deps }: Host) => ({
-  open: (path: string) =>
-    openFile ? io(() => openFile(path)) : rhvac.rhvacOpen(roots(deps), { path }),
+export const commandFiles = ({ openFile, syncFile, roots }: Deps) => ({
+  open: (path: string) => (openFile ? io(() => openFile(path)) : rhvac.rhvacOpen(roots, { path })),
   sync: (request: RhvacSyncRequest, expectedVersion: string) =>
     syncFile
       ? io(() => syncFile(request, expectedVersion))
-      : rhvac.rhvacSync(roots(deps), request, expectedVersion),
+      : rhvac.rhvacSync(roots, request, expectedVersion),
   applyStaged: rhvac.applyStaged,
   buildInsert: rhvac.buildRhvacInsert,
 });
 
-export const files: Record<string, FileBody<Host>> = {
+export const files: Bodies["files"] = {
   observation: (args, { deps }) => query(deps, observations.input.parse(args)),
   async "takeoff-capture"(args, { deps, document, sessions }) {
     const { target, snapshot: body, views } = takeoffSnapshotInput.parse(args);
@@ -89,7 +78,7 @@ export const files: Record<string, FileBody<Host>> = {
     if (!title) throw Error("Snapshot document is no longer open");
     // ponytail: a reading's host file keeps through the kind's handle; only the `snapshot` call is
     // wrapped by the kernel. Give `files` an `emits` of their own when a second reading keeps.
-    return store(deps).keep(
+    return takeoffs(deps).keep(
       live(target, projectTakeoffSnapshot(body, title, views)),
       async () => {
         const current = await document(target);
@@ -116,23 +105,21 @@ export const emits = {
     const native = yield* HostNativeRead;
     // Both natives are per-caller admitted and joined by NativeReads: a peer fetch shares them.
     const [result, index] = yield* Effect.all(
-          [
-            native.read({ key, input: request ?? {}, scope }),
-            native.read({
-              key: "revit.catalog.project-index",
-              input: takeoffProjectIndexRequest,
-              scope,
-            }),
-          ],
-          { concurrency: "unbounded" },
-        );
-        const snapshot = projectTakeoffSnapshot(
-          nativeResponseSchema("takeoffs.snapshot").parse(result.value),
-          document.title,
-          projectTakeoffViews(
-            nativeResponseSchema("revit.catalog.project-index").parse(index.value),
-          ),
-        );
+      [
+        native.read({ key, input: request ?? {}, scope }),
+        native.read({
+          key: "revit.catalog.project-index",
+          input: takeoffProjectIndexRequest,
+          scope,
+        }),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const snapshot = projectTakeoffSnapshot(
+      nativeResponseSchema("takeoffs.snapshot").parse(result.value),
+      document.title,
+      projectTakeoffViews(nativeResponseSchema("revit.catalog.project-index").parse(index.value)),
+    );
     if (!sameAddress(snapshot.reading.at, at))
       return yield* new BridgeError("Snapshot returned a different document", 409);
     return {
@@ -164,10 +151,9 @@ export const local: Bodies["local"] = {
       try: () => query(deps, { ...input, capture: captureId, saved: true }),
       catch: (error) => new BridgeError(String(error), 400),
     }),
-  "rhvac.open": (input, deps) => Effect.suspend(() => rhvac.rhvacOpen(roots(deps), input)),
-  "rhvac.assemblies": (input, deps) =>
-    Effect.suspend(() => rhvac.rhvacAssemblies(roots(deps), input)),
-  "rhvac.sync": (input, deps) => Effect.suspend(() => rhvac.rhvacSync(roots(deps), input)),
+  "rhvac.open": (input, { roots }) => rhvac.rhvacOpen(roots, input),
+  "rhvac.assemblies": (input, { roots }) => rhvac.rhvacAssemblies(roots, input),
+  "rhvac.sync": (input, { roots }) => rhvac.rhvacSync(roots, input),
   "rhvac.launch": (input) => rhvac.rhvacLaunch(input),
   "rhvac.takeoff": (input) => rhvac.rhvacTakeoff(input),
   "rhvac.list": (input) => rhvac.rhvacList(input),

@@ -5,6 +5,7 @@ import { evaluate, read, type InputPort } from "@pe/host-internal/reads/evaluato
 import { host as rooms } from "@pe/rooms-host/product";
 import { sheetExecutors, sheetWrites } from "../src/slots/sheet.ts";
 import { bindProducts } from "../src/product-runtime.ts";
+import { testOffer } from "./effect-test.ts";
 
 // Slice 7, the host half of the sheet slot: what sheet.plan derives from a route's Work, and the Pod's document Work door.
 test("sheetWrites derives one parameter write per staged row, by UniqueId, and none for a local binding", () => {
@@ -113,15 +114,13 @@ test.each([
 
 test("Rooms dispatches by Work route even when the product id differs", async () => {
   const bind = vi.fn(async () => ({ prepare: async () => "product" }));
-  const { sheets } = bindProducts(
-    [
-      {
-        ...rooms,
-        product: { ...rooms.product, id: "renamed-rooms" },
-        executors: () => ({ "sheet.plan": { bind } as never, "sheet.apply": { bind } as never }),
-      },
-    ],
-  ).productExecutors({} as never);
+  const { sheets } = bindProducts([
+    {
+      ...rooms,
+      product: { ...rooms.product, id: "renamed-rooms" },
+      executors: () => ({ "sheet.plan": { bind } as never, "sheet.apply": { bind } as never }),
+    },
+  ]).productExecutors({} as never, testOffer());
   const executors = sheetExecutors(
     {} as never,
     {

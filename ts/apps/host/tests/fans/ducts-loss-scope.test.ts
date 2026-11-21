@@ -1,4 +1,4 @@
-import { settle } from "../effect-test.ts";
+import { settle, testOffer } from "../effect-test.ts";
 import {
   DUCT_UNIT_KINDS,
   FAN_BLOCKER_KINDS,
@@ -95,7 +95,7 @@ test("the real /fans apply asks to retire its own role only, and retires it unde
     retireWork,
   };
   await settle(
-    fanLosses("sheet.apply", "apply")({} as never, {}).run(
+    fanLosses("sheet.apply", "apply")({} as never, testOffer()).run(
       ctx as never,
       execution as never,
     ) as Effect.Effect<unknown>,

@@ -1,6 +1,6 @@
 import { ObservationFiles } from "@pe/host-internal/observation-files";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
-import { detachedBridge, captureStore, journalAt } from "./effect-test.ts";
+import { detachedBridge, captureStore, journalAt, testOffer } from "./effect-test.ts";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { Effect, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
@@ -216,7 +216,7 @@ function settingsDoor() {
   bindCommandRuntime(
     owner,
     detachedBridge(),
-    captureStore(join(root, "captures")),
+    testOffer(captureStore(join(root, "captures"))),
     { workspace: work, podsRoot: root },
     () => Effect.fail(Error("settings.write owns its writer")),
   );

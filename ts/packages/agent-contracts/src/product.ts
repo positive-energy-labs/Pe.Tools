@@ -37,6 +37,7 @@ const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
 export * from "./product-bodies.ts";
+import type { DeclaredFiles, HostFiles } from "./product-bodies.ts";
 import type { LocalFootprint, LocalOperations } from "./product-bodies.ts";
 
 /**
@@ -358,6 +359,7 @@ export type ProductDeclaration = {
   >;
   readonly guide?: Guide;
   readonly http: HttpRoutes;
+  readonly files: HostFiles;
   readonly local: LocalOperations;
   readonly callPolicies: Readonly<Record<string, CallPolicy>>;
 };
@@ -474,6 +476,7 @@ export function product<
   const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
   const Http extends HttpRoutes = Record<never, never>,
+  const Files extends HostFiles = Record<never, never>,
   const Local extends LocalOperations = Record<never, never>,
   const Caps extends Captures = Record<never, never>,
 >(declaration: {
@@ -522,6 +525,8 @@ export function product<
   };
   readonly guide?: Guide;
   readonly http?: Http;
+  /** The product's host files by name; the host half owes one body each. */
+  readonly files?: DeclaredFiles<Files>;
   /** The product's local operations by catalog key; the host half owes one body each. */
   readonly local?: Local & { readonly [K in keyof Local]: LocalFootprint<Local[K]> };
   readonly publishTool?: Publish;
@@ -558,6 +563,7 @@ export function product<
     ...declaration,
     captures: Object.assign({}, declaration.captures),
     http: Object.assign({}, declaration.http),
+    files: Object.assign({}, declaration.files),
     local: Object.assign({}, declaration.local),
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,

@@ -1,6 +1,6 @@
-import type { Effect } from "effect";
+import { Effect } from "effect";
 import type { z } from "zod";
-import type { DocumentRef, NativeProcess } from "@pe/agent-contracts";
+import { documentRefSchema, type DocumentRef, type NativeProcess } from "@pe/agent-contracts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type {
   FileBody,
@@ -18,22 +18,65 @@ import type { RunPods } from "./pod-runner.ts";
 import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
 import type { RequestIdentity } from "./request-contracts.d.ts";
-import { body, type Read, type ReadContext } from "./reads/door.ts";
+import { body, leaf, type Read, type ReadContext } from "./reads/door.ts";
 
+/** What a host always holds, so every product body takes it whole, on every path. */
+export type HostOffer = {
+  /** The kernel capture store: a product reads its declared kinds through `captured`. */
+  readonly captures: { readonly kept: CaptureKinds };
+  /** Where this host keeps its checkout and its state. */
+  readonly roots: { readonly sourceRoot: string | null; readonly rootPath: string };
+  readonly files: HomeFiles["Service"];
+};
 /**
- * What a host offers every product body. The host states it once here; a product's dependency type
- * takes the members it needs, so no host line depends on which products are registered.
+ * What a host offers every product body: the offer, and what only a command holds. The host states
+ * it once here; a product's dependency type takes the members it needs, so no host line depends on
+ * which products are registered.
  */
-export type HostOffers = {
+export type HostOffers = HostOffer & {
   nativeRead?: HostNativeRead["Service"];
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
-  /** The kernel capture store: a product reads its declared kinds through `captured`. */
-  captures?: { readonly kept: CaptureKinds };
-  /** Where this host keeps its checkout and its state. */
-  roots?: { readonly sourceRoot: string | null; readonly rootPath: string };
   runPods?: RunPods;
-  files?: HomeFiles["Service"];
 };
+/** A declared host file as a read input: its name and schemas come from the declaration. */
+export const hostFile = <F extends ProductDeclaration["files"], K extends keyof F & string>(
+  product: { readonly files: F },
+  key: K,
+  validate = true,
+): {
+  readonly name: string;
+  readonly input: F[K]["input"];
+  readonly output: F[K]["output"];
+  readonly leaf: true;
+  readonly validate: boolean;
+} => {
+  // Built here and not by `leaf`, so each schema keeps its declared type and a read infers from it.
+  const file: F[K] = product.files[key];
+  return Object.freeze({
+    name: `file:${key}`,
+    input: file.input,
+    output: file.output,
+    leaf: true,
+    validate,
+  });
+};
+type ProductHome<P extends Pick<ProductDeclaration, "homes">> = {
+  [K in keyof P["homes"]]: P["homes"][K] extends { read: "product" } ? K : never;
+}[keyof P["homes"]] &
+  string;
+/**
+ * A home the product reads itself, as a read input: every tier's files for the target's project
+ * home. `from` is the same input for a command, which holds the files service and the pointer.
+ */
+export const homeLeaf = <P extends Pick<ProductDeclaration, "homes">, T>(
+  _product: P,
+  key: ProductHome<P>,
+  reader: HomeReader<T>,
+) => ({
+  ...leaf(`file:${key}`, documentRefSchema.nullable(), reader.schema),
+  from: (files: HomeFiles["Service"], pointer?: string | null) =>
+    Effect.map(files.home(key, pointer), (value) => reader.schema.parse(value)),
+});
 type Dependencies = Pick<HostOffers, "nativeRead" | "projectLifetime">;
 
 /** A command's host body. The command registry calls it once with the services it owns. */
@@ -83,27 +126,34 @@ export type Emitter<D> = {
  */
 export function implement<P extends ProductDeclaration, D = Dependencies>(
   product: P,
-  bodies: HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, EmitCall, HomeReader> &
-    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, Partial<D>, LocalRun, EmitCall, HomeReader>>,
+  bodies: HostBodies<P, ReadContext, CommandBody<D>, D, LocalRun, EmitCall, HomeReader> &
+    OwedBodies<P, HostBodies<P, ReadContext, CommandBody<D>, D, LocalRun, EmitCall, HomeReader>>,
 ): {
   product: P;
   reads: Record<string, Read<unknown, unknown>>;
   executors: (...args: Parameters<CommandBody<D>>) => Record<string, CommandExecutor>;
-  /** Outside a command the host hands these bodies what it holds, so each takes a partial `D`. */
-  http: Record<string, (request: HttpRequest, deps: Partial<D>) => Promise<unknown>>;
-  local: Record<string, (input: unknown, deps: Partial<D>) => LocalRun>;
-  files: Record<string, FileBody<Partial<D>>>;
+  /** Outside a command the host hands these bodies the same offer, so each takes `D`. */
+  http: Record<string, (request: HttpRequest, deps: D) => Promise<unknown>>;
+  local: Record<string, (input: unknown, deps: D) => LocalRun>;
+  files: Record<string, FileBody<D>>;
   register: () => void;
   /** By the call key each emitting reading declares with a `snapshot` policy. */
-  emitters: Record<string, Emitter<Partial<D>>>;
+  emitters: Record<string, Emitter<D>>;
 };
 export function implement<D>(
   product: ProductDeclaration,
-  bodies: HostBodies<ProductDeclaration, ReadContext, CommandBody<D>, Partial<D>, LocalRun, EmitCall, HomeReader>,
+  bodies: HostBodies<
+    ProductDeclaration,
+    ReadContext,
+    CommandBody<D>,
+    D,
+    LocalRun,
+    EmitCall,
+    HomeReader
+  >,
 ) {
   // With its names erased a declaration emits nothing, so the table is read by reading name.
-  const emitting: Readonly<Record<string, Emitter<Partial<D>>["run"] | undefined>> =
-    bodies.emits ?? {};
+  const emitting: Readonly<Record<string, Emitter<D>["run"] | undefined>> = bodies.emits ?? {};
   const readers: Readonly<Record<string, HomeReader | undefined>> = bodies.homes ?? {};
   const homes = Object.entries(product.homes).flatMap(([key, home]) => {
     if (home.read !== "product") return [];

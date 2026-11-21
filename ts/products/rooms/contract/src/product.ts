@@ -1,7 +1,11 @@
 /** Rooms and Takeoffs share one product declaration. */
 import { z } from "zod";
 import { route } from "@pe/host-contracts/pe-api";
-import { takeoffCaptureSchema, takeoffCaptureSummarySchema } from "./takeoffs.ts";
+import {
+  takeoffCaptureSchema,
+  takeoffCaptureSummarySchema,
+  takeoffSnapshotInput,
+} from "./takeoffs.ts";
 import { localOperations } from "./local-operations.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
@@ -397,6 +401,10 @@ export const product = define({
       ),
       axes: observations.axes,
     },
+  },
+  files: {
+    observation: { input: observations.input, output: observations.data },
+    "takeoff-capture": { input: takeoffSnapshotInput, output: takeoffCaptureSchema },
   },
   local: localOperations,
   commands: {
