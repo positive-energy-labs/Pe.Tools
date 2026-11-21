@@ -1,10 +1,12 @@
-import type { ObservationFiles } from "@pe/host-internal/observation-files";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { mkdtempSync } from "../../../tests/isolated-home/storage.ts";
 import type { Caller } from "@pe/agent-contracts";
 import type { HostBridgeEvent } from "@pe/host-internal/bridge";
 import { opsCatalogRoute } from "../src/ops-catalog.ts";
 import { SdkDriver } from "../src/sdk-session.ts";
 import { nativeReadRoot, settingsSchemaRoute } from "../src/app.ts";
-import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
+import { testHostInputs, journalAt, callRouteOver, captureStore } from "./effect-test.ts";
 import { Context, Deferred, Effect, Fiber, Layer, Queue, Schema } from "effect";
 import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { expect, test, vi } from "vite-plus/test";
@@ -535,9 +537,10 @@ effectTest(
           }),
         );
       };
+      const captures = captureStore(mkdtempSync(join(tmpdir(), "pe-native-resolve-")));
       const web = HttpRouter.toWebHandler(
         Layer.mergeAll(
-          callRouteOver(journal, {} as ObservationFiles, {}).pipe(Layer.provide(testHostInputs)),
+          callRouteOver(journal, captures).pipe(Layer.provide(testHostInputs)),
           settingsSchemaRoute,
           opsCatalogRoute(() => Effect.die("not navigation")),
           Layer.effectDiscard(
