@@ -8,6 +8,7 @@ import {
 import { z } from "zod";
 import { hostFetch } from "@pe/web-kernel/host/runtime";
 import type { WorkJournalDoor } from "@pe/agent-contracts";
+import type { AdmittedPage } from "@pe/web-kernel/route/typed-route";
 
 export const historySnapshotSchema = z.object({
   point: historyPointSchema,
@@ -32,7 +33,7 @@ export const historyRequest = async (query: string, body?: unknown) => {
 export const publicationPose = (
   instance: string,
   route: string,
-  page: Readonly<Record<string, unknown>>,
+  page: AdmittedPage,
 ): HistoryPose => ({
   instance,
   route,

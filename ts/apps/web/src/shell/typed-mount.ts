@@ -18,7 +18,7 @@ function valueRefusal(error: unknown, read: string): string {
   );
 }
 import { decodeField, encodeField } from "@pe/web-kernel/route/field-codec";
-import { visibleReads } from "@pe/web-kernel/route/typed-route";
+import { focusField, localPage, visibleReads } from "@pe/web-kernel/route/typed-route";
 import {
   applyPatches,
   bindWork,
@@ -58,6 +58,7 @@ import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
 import type { HostRead, ReadingContext, UseSource } from "@pe/agent-contracts/route";
 import type {
+  AdmittedPage,
   AnyVerb,
   DrawContext,
   EditFailure,
@@ -81,6 +82,9 @@ export type RouteReadiness = { kind: "ready" } | { kind: "pending" | "blocked"; 
 type Publication = DrawContext<any, any, any, any>["value"]["publication"];
 /** A read as the mount holds it: its state, the publication it came from, and the hash of a ready value. */
 type Snapshot = ReadingState<any> & { readonly publication: Publication; readonly hash?: string };
+type PageValues = Readonly<Record<string, any>>;
+type RequestedPage = PageValues & { readonly selected?: unknown };
+type MountedPage = PageValues & AdmittedPage;
 // The one-to-one mapping from a read's outcome (routes CONTRACTS.md, "Reading state"): a refusal over a
 // held value is `stale`, alone it is `refused`; a read in flight over a held value is `refreshing`, alone `reading`.
 const unavailable = (reason: string, value?: unknown, publication: Publication = null): Snapshot =>
@@ -122,9 +126,6 @@ export function mountTypedRoute(
     const targetFields =
       input.fixture !== null || input.history ? [] : fields.filter(([, field]) => field.target);
     const focus = input.fixture === null && !input.history ? spec.focus : undefined;
-    const focusField = { schema: focusSelectionSchema, initial: [] };
-    const localFocus = (value: unknown) =>
-      focusSelectionSchema.parse(value).filter(({ id }) => !focus?.owns(id));
     const targetQueries = targetFields.flatMap(([name, field]) => {
       const target = field.target;
       if (!target || target === "subject") return [];
@@ -161,13 +162,15 @@ export function mountTypedRoute(
     const membershipReads = new Set(targetMembership.map(({ read }) => read));
     if (focus) membershipReads.add(focus.read);
     const reads = new Map<HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
-    const readInput = (read: HostRead, from: Record<string, unknown> = projection.admitted) => {
+    const projectRead = <P extends Readonly<Record<string, unknown>>>(read: HostRead, page: P) => {
       const project =
         "args" in read && typeof read.args === "function"
           ? read.args
           : (spec.core?.args ?? (() => ({})));
-      return read.input.parse(project(from as never));
+      return { page, args: read.input.parse(project(page as never)) };
     };
+    const readDemand = (read: HostRead, from: AdmittedPage = projection.admitted) =>
+      projectRead(read, from);
     const edits = spec.edits;
     const own = edits?.work.route ?? spec.key;
     const ownerConfigs = edits?.owners ?? {};
@@ -214,20 +217,17 @@ export function mountTypedRoute(
         if (values.some((value) => raw === value || raw === JSON.stringify(value)))
           throw Error(`Saved Page value ${key} is retired. Open a new Place.`);
       }
+      const local = input.fixture === null && !input.history ? localPage(spec, memory) : memory;
       return freezePage({
         ...Object.fromEntries(
-          fields.map(([key, field]) => {
-            const raw = search.get(key);
-            const carry = !field.target || input.fixture !== null || input.history;
-            return [
-              key,
-              decodeField(field, raw ?? (carry ? memory[key] : undefined) ?? field.initial),
-            ];
-          }),
+          fields.map(([key, field]) => [
+            key,
+            decodeField(field, search.get(key) ?? local[key] ?? field.initial),
+          ]),
         ),
         selected: search.has("selected")
           ? decodeField(focusField, search.get("selected"))
-          : localFocus(decodeField(focusField, memory.selected)),
+          : decodeField(focusField, local.selected),
       });
     };
     let subjectNotice: string | null = null;
@@ -250,9 +250,11 @@ export function mountTypedRoute(
       const fitted = fitSubject(value, roster);
       return fitted === value ? candidate : { ...candidate, [subjectSpec.field]: fitted };
     };
+    const freezeAdmitted = (candidate: Record<string, unknown>) =>
+      freezePage(candidate) as MountedPage;
     const fitTarget = (candidate: Record<string, unknown>) => {
       // The Page keeps the request. Reads and actions consume only the elements its roster admits.
-      let admitted: Record<string, any> = candidate;
+      let admitted = candidate;
       const corrections = new Map<string, unknown>();
       let pending = false;
       const rosterOf = (read: HostRead) => {
@@ -260,7 +262,7 @@ export function mountTypedRoute(
         return !pending &&
           (input.target?.kind === "document" || detachedSources?.[read.key]) &&
           record?.snapshot.state === "ready" &&
-          record.args === canonicalRouteInput(readInput(read, admitted))
+          record.args === canonicalRouteInput(projectRead(read, admitted).args)
           ? record.snapshot
           : null;
       };
@@ -292,7 +294,7 @@ export function mountTypedRoute(
         }
       }
       return {
-        admitted: freezePage(admitted),
+        admitted: freezeAdmitted(admitted),
         requested: corrections.size
           ? { ...candidate, ...Object.fromEntries(corrections) }
           : candidate,
@@ -346,7 +348,7 @@ export function mountTypedRoute(
       }
       return fitted === next.requested
         ? next
-        : { ...next, admitted: freezePage(fitted), requested: fitted };
+        : { ...next, admitted: freezeAdmitted(fitted), requested: fitted };
     };
     const owners = new Map<
       string,
@@ -364,11 +366,13 @@ export function mountTypedRoute(
       }
     >();
     let projection = fitAddress(decodePage());
-    let page: Record<string, any> = freezePage(projection.requested);
+    let page: RequestedPage = freezePage(projection.requested);
+    const actionable = (): AdmittedPage | string =>
+      projection.pending ? "Resolving model fields..." : projection.admitted;
     const selectedKey = () => {
       if (!edits) return null;
       if (edits.key) {
-        const member = edits.key(projection.admitted as never);
+        const member = edits.key(projection.admitted);
         return member === null ? null : bindWork(own, null, member);
       }
       return bindWork(own, input.work.address, undefined, input.work.open ?? undefined);
@@ -407,7 +411,7 @@ export function mountTypedRoute(
     const currentPublication = (read: import("@pe/agent-contracts/route").HostRead) => {
       const record = reads.get(read);
       return record?.snapshot.state === "ready" &&
-        record.args === canonicalRouteInput(readInput(read))
+        record.args === canonicalRouteInput(readDemand(read).args)
         ? record.snapshot.publication
         : null;
     };
@@ -785,9 +789,8 @@ export function mountTypedRoute(
           continue;
         // All cannot start detail until the roster establishes what it would open.
         if (all && !roster && read !== subjectRead) continue;
-        const readPage = detachedSources ? page : projection.admitted;
-        const args = readInput(read, readPage),
-          signature = canonicalRouteInput(args);
+        const demand = detachedSources ? projectRead(read, page) : readDemand(read);
+        const signature = canonicalRouteInput(demand.args);
         if ((!force || applyingDocumentWrite()) && signature === reads.get(read)?.args) continue;
         const previous = reads.get(read)?.snapshot;
         reads.get(read)?.stop();
@@ -889,7 +892,7 @@ export function mountTypedRoute(
         };
         if (input.fixture !== null) {
           try {
-            const packet = read.source.provide!(input.fixture, args);
+            const packet = read.source.provide!(input.fixture, demand.args);
             if (packet instanceof Promise)
               void packet
                 .then((value) => deliver({ kind: "complete", value, revision: 1 }))
@@ -908,8 +911,7 @@ export function mountTypedRoute(
               ? publicationPose(input.publicationInstance, spec.key, projection.admitted)
               : undefined,
             work: null,
-            page: readPage,
-            args,
+            ...demand,
             publication: { subscription: attempt.subscription, generation: attempt.generation },
             signal: controller.signal,
             inputs: {},
@@ -979,7 +981,12 @@ export function mountTypedRoute(
       const next = decodePage(remembered);
       return input.address.read().has("selected")
         ? next
-        : { ...next, selected: localFocus(page.selected) };
+        : {
+            ...next,
+            selected: focusSelectionSchema.parse(
+              localPage({ fields: {}, focus }, { selected: page.selected }).selected ?? [],
+            ),
+          };
     };
     const installPage = (next: typeof projection) => {
       const changed = canonicalRouteInput(next.requested) !== canonicalRouteInput(page);
@@ -1033,7 +1040,8 @@ export function mountTypedRoute(
         : null;
     const basisRefusal = () => {
       if (input.readOnly || input.history) return "needs live Revit";
-      if (projection.pending) return "Resolving model fields...";
+      const admitted = actionable();
+      if (typeof admitted === "string") return admitted;
       if (!edits) return "No Work declared";
       if (!key) return "Choose a Work member";
       const owner = [...owners.values()].find((o) => !o.ready);
@@ -1085,7 +1093,8 @@ export function mountTypedRoute(
       }
       if (holder && waiting?.kind !== "blocked") return { kind: "pending", reason: holder };
       if (waiting) return waiting;
-      if (projection.pending) return { kind: "pending", reason: "Resolving model fields..." };
+      const admitted = actionable();
+      if (typeof admitted === "string") return { kind: "pending", reason: admitted };
       // Recorded and fixture views can settle without granting native write authority.
       const reason = valueAfterWork();
       if (reason) return { kind: "pending", reason };
@@ -1191,7 +1200,7 @@ export function mountTypedRoute(
       const refused = (refusal: string): SubjectState => ({ ready: false, refusal, label: "" });
       if (disposed || released || !input.custody.current())
         return refused("Place is inactive or retired");
-      if (projection.pending) return null;
+      if (typeof actionable() === "string") return null;
       if (
         targetFields.some(
           ([key, field]) =>
@@ -1499,16 +1508,13 @@ export function mountTypedRoute(
         notify();
       }
     };
-    const verbRefusal = (verb: Verb) =>
-      input.readOnly || input.history
-        ? "needs live Revit"
-        : input.fixture !== null
-          ? "Fixture has no native actions"
-          : verb.handle.plan
-            ? basisRefusal()
-            : verb.input && projection.pending
-              ? "Resolving model fields..."
-              : workRefusal(verb.handle.key);
+    const verbRefusal = (verb: Verb) => {
+      if (input.readOnly || input.history) return "needs live Revit";
+      if (input.fixture !== null) return "Fixture has no native actions";
+      if (verb.handle.plan) return basisRefusal();
+      const admitted = actionable();
+      return verb.input && typeof admitted === "string" ? admitted : workRefusal(verb.handle.key);
+    };
     const handleOf = (id: string, verb: Verb): VerbHandle => {
       const facts = {
         label: verb.label,
@@ -1578,7 +1584,7 @@ export function mountTypedRoute(
                 key: record.scope.key,
                 seed:
                   id === own
-                    ? edits.seed!(page as never, input.target)
+                    ? edits.seed!(projection.admitted, input.target)
                     : record.config.state.schema.parse({}),
               }),
             );
@@ -1669,7 +1675,7 @@ export function mountTypedRoute(
                 return finish("Place is inactive or retired");
               const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
               if (roster?.state === "ready") {
-                if (!projection.pending) finish();
+                if (typeof actionable() !== "string") finish();
               } else if (roster && !inFlight(roster))
                 finish(`Subject roster unavailable: ${reasonOf(roster)}`);
             };
@@ -1703,7 +1709,7 @@ export function mountTypedRoute(
               }
               if (subject?.field === key) {
                 const roster = reads.get(subject.read ?? spec.core!)?.snapshot;
-                if (projection.pending || roster?.state !== "ready")
+                if (typeof actionable() === "string" || roster?.state !== "ready")
                   throw Error("Read the subject roster before choosing a subject");
                 const options = subject.options(roster.value);
                 if (field.schema.safeParse(value).success) {
@@ -1751,7 +1757,7 @@ export function mountTypedRoute(
           : { state: "not-yet-run", publication: null },
       owner: (id = own) => owners.get(id),
       page: {
-        read: () => projection.admitted,
+        read: (): MountedPage => projection.admitted,
         pose: (patch: any, intent?: "gesture" | "named") =>
           moveRole(
             "pose",
@@ -1791,7 +1797,7 @@ export function mountTypedRoute(
       /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
        *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
       urlCurrent: () =>
-        !projection.pending &&
+        typeof actionable() !== "string" &&
         !malformedFields(input.address.read()).length &&
         canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page),
       target: () => input.target,
@@ -2076,7 +2082,7 @@ export function mountTypedRoute(
           page: mounted.page,
           cells,
           selection: {
-            read: () => projection.admitted.selected,
+            read: (): AdmittedPage["selected"] => projection.admitted.selected,
             set: mounted.page.select,
           },
           // A route's own id wins over a kernel verb of the same name.

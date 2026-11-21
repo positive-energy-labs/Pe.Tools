@@ -157,17 +157,14 @@ export class KeptCaptures<T extends Kept> {
     );
   }
   /** Keep this exact value; the acquiring read owns its scope and freshness fence. */
-  async keep(value: Omit<T, "id">, current?: () => Promise<void>): Promise<T> {
+  private async keep(value: Omit<T, "id">): Promise<T> {
     const id = createHash("sha256").update(JSON.stringify(value)).digest("hex");
     const capture = this.schema.parse({ id, ...value });
-    await current?.();
     await writeArtifact(
       join(this.storage.path, this.kind),
       this.files.in(this.storage, id),
       JSON.stringify(capture),
     );
-    // Cancellation withdraws the answer, never immutable bytes a peer may already reference.
-    await current?.();
     return capture;
   }
 }

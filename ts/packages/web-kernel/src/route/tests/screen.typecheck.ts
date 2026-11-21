@@ -23,7 +23,7 @@ const tinyDeclaration = {
   fields: {},
   panes: ["list", "detail"],
 } as const;
-const tiny = { ...tinyDeclaration, key: "tiny" } as const;
+const tiny = { ...tinyDeclaration, key: "tiny", focus: null } as const;
 const pane = {
   title: "Pane",
   purpose: "Draw",
@@ -55,7 +55,8 @@ const declared = product({
     },
   },
 });
-const drawn = screen(declared.routes.tiny, { panes: { list: pane, detail: pane }, layout });
+const productRoute = { ...declared.routes.tiny, focus: null };
+const drawn = screen(productRoute, { panes: { list: pane, detail: pane }, layout });
 // @ts-expect-error a product route still needs every pane drawn
-screen(declared.routes.tiny, { panes: { list: pane }, layout });
+screen(productRoute, { panes: { list: pane }, layout });
 export const used = drawn;

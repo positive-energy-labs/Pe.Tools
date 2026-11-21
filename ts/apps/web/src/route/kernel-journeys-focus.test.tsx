@@ -111,6 +111,7 @@ test("S6 the route publishes its roster while a declared alone image is held", a
   const module = route({
     key: "s6-plans",
     name: "Test plans",
+    focus: null,
     directory: families.spec.directory,
     fields: {},
     core: roster,
@@ -908,6 +909,7 @@ test("JM H17 browse an optional host route without a pin, then refuse malformed 
     ...families.spec,
     needs: "host",
     optionalTarget: "document",
+    focus: null,
     edits: undefined,
     core: undefined,
     subject: undefined,
@@ -2296,6 +2298,7 @@ test("JZ audit optional document pins retain exact source authority and retire r
     ...families.spec,
     needs: "host",
     optionalTarget: "document",
+    focus: null,
     edits: undefined,
     core: undefined,
     subject: undefined,

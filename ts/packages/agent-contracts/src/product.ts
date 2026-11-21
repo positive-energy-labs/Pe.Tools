@@ -15,7 +15,7 @@ import type { CellKey, Home } from "./product-homes.ts";
 import type { DocumentRef } from "./target.ts";
 import { draftCellSchema } from "./draft.ts";
 import type { ReadHandle } from "./handle.ts";
-import { hostRead, read, type field, type HostRead } from "./route.ts";
+import { hostRead, read, type HostRead, type ScopedPageField } from "./route.ts";
 import type { RouteGraphWire } from "./route-kernel-data.ts";
 import type { RouteStateSpec } from "./route-state.ts";
 import {
@@ -260,7 +260,7 @@ type Named<R extends string = string> = R | readonly [R, (page: never) => unknow
 export type ProductRoute<R extends string = string> = {
   readonly name: string;
   readonly directory: RouteGraphWire["directory"];
-  readonly fields: Readonly<Record<string, ReturnType<typeof field>>>;
+  readonly fields: Readonly<Record<string, ScopedPageField>>;
   readonly subject?: {
     readonly field: string;
     readonly noun: string;

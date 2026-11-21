@@ -2,7 +2,13 @@ import type { z } from "zod";
 import type { CommandHandle } from "@pe/agent-contracts/handle";
 import type { NoExtras } from "@pe/agent-contracts/product";
 import type { HostRead } from "@pe/agent-contracts/route";
-import { route, type Fields, type QueryFields, type Specification } from "./defaults.ts";
+import {
+  route,
+  type Fields,
+  type QueryFields,
+  type RouteTargetPolicy,
+  type Specification,
+} from "./defaults.ts";
 
 type Overlay<S extends { picture?: unknown }> =
   NonNullable<S["picture"]> extends {
@@ -33,12 +39,13 @@ export function screen<
   declared: Omit<
     Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>,
     "panes" | "layout" | "picture"
-  > & {
-    readonly panes: readonly Pane[];
-    readonly picture?: WithoutOverlay<
-      NonNullable<Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>["picture"]>
-    >;
-  },
+  > &
+    RouteTargetPolicy & {
+      readonly panes: readonly Pane[];
+      readonly picture?: WithoutOverlay<
+        NonNullable<Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>["picture"]>
+      >;
+    },
   parts: Pick<Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>, "panes" | "layout"> & {
     readonly overlay?: Overlay<Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>>;
     // `Reads` widens to every string once one pane names no read, so the drawn keys are inferred apart.

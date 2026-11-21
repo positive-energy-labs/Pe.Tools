@@ -18,6 +18,7 @@ export function contractOwner(
     name: state.title,
     directory,
     fields: {},
+    focus: null,
     core: read(
       hostRead(
         contract(state.route === "duct-systems" ? "ducts.pricing" : "fans.calc", {

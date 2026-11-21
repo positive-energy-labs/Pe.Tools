@@ -70,6 +70,7 @@ export function declaredPlan(raster: "ready" | "absent" | "pending" | "refused" 
         satellites: [],
       },
       fields: {},
+      focus: null,
       panes: ["main"],
       picture: {
         mode: "plan",

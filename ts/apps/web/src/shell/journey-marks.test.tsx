@@ -30,7 +30,9 @@ vi.mock("#/host/pe-client", () => ({ peClient: { call } }));
 const DATA = { missing: null, regions: [], unreadable: [] };
 const { picture: _picture, reads: _reads, ...base } = module.spec;
 const fingerprint = workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`);
-const roomsProbe = (spec: Partial<typeof module.spec> = {}) =>
+const roomsProbe = (
+  spec: Partial<Pick<typeof module.spec, "key" | "address" | "name" | "agent">> = {},
+) =>
   route({
     ...base,
     ...spec,

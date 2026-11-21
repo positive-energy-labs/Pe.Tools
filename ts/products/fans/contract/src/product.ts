@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { cell, product as declare, workSchema, type Cell } from "@pe/agent-contracts/product";
 import {
-  field,
+  localField,
   listFields,
   picturePose,
   stageField,
@@ -200,7 +200,7 @@ const fields = {
   stage: stageField(["calc"]),
   ...listFields("input"),
   ...listFields("roster"),
-  calcPath: field(z.string(), "", "query"),
+  calcPath: localField(z.string(), "", "query"),
 };
 export const fansPanes = {
   roster: "calc-roster",

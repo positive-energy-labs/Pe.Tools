@@ -1,15 +1,17 @@
 import * as contracts from "./contract.ts";
 import type { ContextOf, Verbs } from "@pe/web-kernel/route";
 import { handle } from "@pe/agent-contracts/handle";
-import { read, field, subjectSchema, hostRead } from "@pe/agent-contracts/route";
+import { read, localField, subjectSchema, hostRead } from "@pe/agent-contracts/route";
 import { paneLayout } from "@pe/web-kernel/route";
 import { z } from "zod";
 import { route, oneName } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 
 /** The op is the subject (keyKind `name`, tuple `[op key]`); the receipt in view is route-owned query. */
-export const fields = { op: field(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push") };
-export const query = { actionId: field(z.string(), "", "query", "push") };
+export const fields = {
+  op: localField(subjectSchema(1), { kind: "ids", ids: [] }, "subject", "push"),
+};
+export const query = { actionId: localField(z.string(), "", "query", "push") };
 export const loaded = read(hostRead(contracts.workspace), (page: { actionId: string }) => ({
   actionId: page.actionId,
 }));
@@ -28,6 +30,7 @@ export const module = route({
   agent: false,
   needs: "host",
   optionalTarget: "session",
+  focus: null,
   host: "./host.ts",
   directory: {
     label: "Host API",

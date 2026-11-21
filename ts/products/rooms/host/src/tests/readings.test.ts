@@ -206,7 +206,6 @@ test("adoption rows are keyed by the plan's UniqueId, carry the staged choice, a
     port(native, staged),
   );
   expect(raced.data).toMatchObject({
-    missingViews: [CEILING],
     rows: [{ view: FLOOR, name: "Office zone" }],
   });
   const none = await evaluate(

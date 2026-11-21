@@ -6,14 +6,8 @@
  * and Forward step through what the Situation targeted; a gesture replaces the entry instead.
  * Nothing here hand-rolls `new URL().searchParams`.
  */
-import {
-  focusSelectionSchema,
-  routeAddress,
-  type History,
-  type RouteKey,
-  type RoutePage,
-} from "@pe/agent-contracts";
-import { decodeField } from "@pe/web-kernel/route/field-codec";
+import { routeAddress, type History, type RouteKey, type RoutePage } from "@pe/agent-contracts";
+import { localPage, ownsDocument } from "@pe/web-kernel/route/typed-route";
 import { useRouter, useRouterState, type SearchMiddleware } from "@tanstack/react-router";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { places } from "../workbench/places";
@@ -249,7 +243,7 @@ export function useUrlPage<P>(url: UrlPage<P> | null, owner: ViewOwner<P>) {
 }
 
 /** Defaults are applied by UrlPage.read after merging tab memory and explicit deep-link keys. */
-export function tabPageSearch(pathname: string): Record<string, unknown> | undefined {
+function tabPageSearch(pathname: string): Record<string, unknown> | undefined {
   try {
     const tabs = places.read().tabs;
     const focused = sessionStorage.getItem("pe.place.focus");
@@ -279,13 +273,7 @@ export function restorePageSearch(memory?: Record<string, unknown>, url?: Record
 export function restorableTabSearch(pathname: string, url: URLSearchParams) {
   const memory = tabPageSearch(pathname);
   const spec = publicRoutes.byAddress(pathname)?.typed.spec;
-  const documentRoute =
-    spec &&
-    (spec.needs === "document" ||
-      spec.needs === "project" ||
-      spec.needs === "family" ||
-      !!spec.optionalTarget);
-  if (!memory || !documentRoute || url.has("fixture")) return memory;
+  if (!memory || !spec || !ownsDocument(spec) || url.has("fixture")) return memory;
   if (
     Object.hasOwn(memory, "fixture") &&
     !url.has("target") &&
@@ -294,18 +282,12 @@ export function restorableTabSearch(pathname: string, url: URLSearchParams) {
     return memory;
   const pin = url.get("target");
   if (pin === null || memory.target !== pin) return undefined;
-  const restored = Object.fromEntries(
-    Object.entries(memory).filter(
-      ([key]) => key !== "target" && key !== "fixture" && !spec.fields[key]?.target,
-    ),
+  const page = Object.fromEntries(
+    Object.entries(memory).filter(([key]) => key !== "target" && key !== "fixture"),
   );
-  if (spec.focus && restored.selected !== undefined) {
-    const selected = focusSelectionSchema
-      .parse(decodeField({ schema: focusSelectionSchema, initial: [] }, restored.selected))
-      .filter(({ id }) => !spec.focus?.owns(id));
-    if (selected.length) restored.selected = JSON.stringify(selected);
-    else delete restored.selected;
-  }
+  const restored = localPage(spec, page);
+  if (spec.focus && restored.selected !== undefined)
+    restored.selected = JSON.stringify(restored.selected);
   return restored;
 }
 

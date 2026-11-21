@@ -47,6 +47,7 @@ export const module = route({
   key: "families",
   name: "Families",
   needs: "project",
+  focus: null,
   host: "./host.ts",
   directory: {
     group: "Build / audit families",

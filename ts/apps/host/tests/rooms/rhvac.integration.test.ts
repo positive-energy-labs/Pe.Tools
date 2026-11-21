@@ -72,15 +72,16 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       room.analysis = { state: "current", hold: null, runId: null, floorZ: null, ceilingZ: null };
       snapshot.world.zones = [zone];
       const capture = await settle(
-        Effect.promise(() =>
-          captures.kept
-            .of("takeoff", takeoffCaptureSchema)
-            .keep({
-              provenance: { kind: "live", target: ref },
+        captures.kept.of("takeoff", takeoffCaptureSchema).refresh(
+          ref,
+          Effect.succeed({
+            capture: {
+              provenance: { kind: "live" as const, target: ref },
               capturedAt: snapshot.reading.observedAt,
               snapshot,
-            })
-            .then((capture) => ({ capture })),
+            },
+          }),
+          Effect.succeed(true),
         ),
       );
 

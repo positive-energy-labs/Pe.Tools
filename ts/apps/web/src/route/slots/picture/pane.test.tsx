@@ -6,7 +6,7 @@ import { afterEach, expect, test, vi } from "vite-plus/test";
 import { MARK_KINDS, pictureSlotDataSchema, type Finding } from "@pe/agent-contracts/slots";
 import type { PlaneViewport } from "@pe/agent-contracts";
 import { z } from "zod";
-import { field, picturePose } from "@pe/agent-contracts/route";
+import { localField, picturePose } from "@pe/agent-contracts/route";
 import { route, paneLayout, scrollBody, split } from "@pe/web-kernel/route";
 import {
   subjectCode,
@@ -77,6 +77,7 @@ const picture = {
 const pod = route({
   key: "pod-pipes",
   name: "Pipes",
+  focus: null,
   directory,
   fields: {},
   picture,
@@ -99,8 +100,9 @@ test("a route that declares `picture` gets the kernel's picture pane; one it pla
     route({
       key: "pod-clash",
       name: "Pipes",
+      focus: null,
       directory,
-      fields: { layers: field(z.string(), "", "query") },
+      fields: { layers: localField(z.string(), "", "query") },
       picture,
       panes: { main },
       layout: paneLayout("main"),
@@ -109,6 +111,7 @@ test("a route that declares `picture` gets the kernel's picture pane; one it pla
   const placed = route({
     key: "pod-placed",
     name: "Pipes",
+    focus: null,
     directory,
     fields: { ...picturePose },
     picture,
@@ -129,6 +132,7 @@ test("a route that declares `picture` gets the kernel's picture pane; one it pla
   const unplaced = route({
     key: "pod-unplaced",
     name: "Pipes",
+    focus: null,
     directory,
     fields: {},
     picture,
@@ -141,6 +145,7 @@ test("a route that declares `picture` gets the kernel's picture pane; one it pla
     route({
       key: "pod-plain",
       name: "Pipes",
+      focus: null,
       directory,
       fields: {},
       panes: { main },
