@@ -1794,6 +1794,7 @@ export function mountTypedRoute(
         };
       },
       available: () => !disposed && input.custody.current(),
+      targetFieldsPending: () => projection.pending,
       /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
        *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
       urlCurrent: () =>
