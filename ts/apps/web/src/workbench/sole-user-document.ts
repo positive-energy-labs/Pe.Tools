@@ -2,9 +2,22 @@ import { parseTarget } from "#/route/target-codec";
 import {
   machineInventory,
   resolveCallTarget,
+  type DocumentRef,
   type DocumentRequest,
   type Machine,
 } from "@pe/agent-contracts";
+
+const attachmentsOf = (machine: Machine | null) => [
+  ...(machine?.revit.sessions ?? []).flatMap((s) => (s.attachment ? [s.attachment] : [])),
+  ...(machine?.revit.unclassifiedAttachments ?? []),
+];
+
+/** Access evidence applies only to the exact open lifetime reported by the Machine. */
+export function observedDocumentAccess(machine: Machine | null, ref: DocumentRef) {
+  return attachmentsOf(machine)
+    .find(({ session }) => session === ref.session)
+    ?.documents?.find(({ openId }) => openId === ref.openId)?.access;
+}
 
 /**
  * A new thread's visible first target: the one user document when exactly one connected Revit has
@@ -13,10 +26,7 @@ import {
  */
 export function soleUserDocument(machine: Machine | null): DocumentRequest | null {
   if (!machine) return null;
-  const revits = [
-    ...(machine.revit.sessions ?? []).flatMap((s) => (s.attachment ? [s.attachment] : [])),
-    ...machine.revit.unclassifiedAttachments,
-  ];
+  const revits = attachmentsOf(machine);
   const [only] = revits;
   if (revits.length !== 1 || only?.documents?.length !== 1) return null;
   const document = only.documents[0];

@@ -2,7 +2,8 @@ import type { ContextOf } from "@pe/web-kernel/route";
 import { systemCode } from "@pe/ducts-web/identity";
 import { handle } from "@pe/agent-contracts/handle";
 import { bindings } from "./src/bindings.ts";
-import { hostRead } from "@pe/agent-contracts/route";
+import { hostRead, targetFocus } from "@pe/agent-contracts/route";
+import { ductFocusMembership, isDuctModelFocus } from "@pe/ducts-web/cell-focus";
 import { DUCTS_DETAIL_LIMIT, ductDetailLimitMessage } from "@pe/duct-systems-contract/ducts-read";
 import { ductSystemsWork, product } from "@pe/duct-systems-contract/product";
 import { ductsCalcEditsSchema } from "@pe/ducts-contract/duct-inputs";
@@ -116,6 +117,7 @@ const panes = {
 export const module = screen(
   {
     ...declared,
+    focus: targetFocus(network, (data) => ductFocusMembership(data), isDuctModelFocus),
     subject: {
       ...declared.subject,
       resetQuery: ["fan"],

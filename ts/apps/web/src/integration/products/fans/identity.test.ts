@@ -66,7 +66,8 @@ test("P06/P08: MUAS-1 restores from a direct URL and duplicate FC-23 ports have 
   expect(twinOptions).toHaveLength(2);
   expect(new Set(twinOptions.map((option) => option.label)).size).toBe(2);
   mounted.close();
-  expect(f.mount(f.admitted.presenter, undefined, "direct").page.read().fan).toEqual(value);
+  const reopened = f.mount(f.admitted.presenter, undefined, "direct");
+  await vi.waitFor(() => expect(reopened.page.read().fan).toEqual(value));
 });
 test("P08: all and explicit none survive address reload independently", async () => {
   const f = await createWitness(closes);
@@ -94,18 +95,23 @@ test("P07/P12: two retained Places keep separate subject, selection, query and p
   a.page.select([{ kind: "focus", id: "7" }]);
   a.page.pose({ contextRadiusFt: 15 }, "gesture");
   a.controls.query("inputSort", "name");
-  expect(b.page.read()).toMatchObject({
-    fan: picked([ids[1]!]),
-    selected: [],
-    contextRadiusFt: 10,
-    inputSort: "",
-  });
+  await vi.waitFor(() =>
+    expect(b.page.read()).toMatchObject({
+      fan: picked([ids[1]!]),
+      selected: [],
+      contextRadiusFt: 10,
+      inputSort: "",
+    }),
+  );
   a.close();
-  expect(f.mount(f.admitted.presenter, undefined, "a").page.read()).toMatchObject({
-    fan: picked([ids[0]!]),
-    contextRadiusFt: 15,
-    inputSort: "name",
-  });
+  const reopened = f.mount(f.admitted.presenter, undefined, "a");
+  await vi.waitFor(() =>
+    expect(reopened.page.read()).toMatchObject({
+      fan: picked([ids[0]!]),
+      contextRadiusFt: 15,
+      inputSort: "name",
+    }),
+  );
 });
 test("a stale Fans tab gets a reload refusal before any edit", async () => {
   const f = await createWitness(closes);

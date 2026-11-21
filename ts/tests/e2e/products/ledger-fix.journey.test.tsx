@@ -64,9 +64,11 @@ test("a Fans Ledger fix is a link that lands on /ducts with its element selected
   const { f, href, ducts0 } = await ledgerLink();
   // Arrive on /ducts with that link's search: the blocker's element is the selection.
   const arrived = f.mount(f.admitted.owner, href.searchParams, "ducts-arrival");
-  const selected = arrived.native.page.read().selected as readonly { kind: string; id: string }[];
-  expect(selected).toHaveLength(1);
-  expect(selected.map((s) => s.id)).toEqual([elementKey(element.uniqueId)]);
+  await vi.waitFor(() =>
+    expect(arrived.native.page.read().selected).toEqual([
+      { kind: "focus", id: elementKey(element.uniqueId) },
+    ]),
+  );
   // Following the link wrote nothing: /ducts Work is where it was.
   expect(f.owner.work()?.revision ?? 0).toBe(ducts0);
 });

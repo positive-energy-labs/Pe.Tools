@@ -17,6 +17,15 @@ export function admittedRouterAddress(history: {
 }): AdmittedAddressPort {
   return {
     read: () => new URLSearchParams(history.location.search),
+    entry: () => {
+      const state = history.location.state;
+      return state &&
+        typeof state === "object" &&
+        "__TSR_key" in state &&
+        typeof state.__TSR_key === "string"
+        ? state.__TSR_key
+        : undefined;
+    },
     write(search, mode) {
       const query = search.toString();
       // Carry the entry's state: a dropped route-tab tag left the tab without custody until re-render.

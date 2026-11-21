@@ -18,7 +18,7 @@ export type PlaceInput = Readonly<{
 
 type Disposable = { dispose(): void };
 export interface AdmittedPlace<State extends Disposable> extends Disposable {
-  readonly address: AdmittedAddressPort;
+  readonly address: AdmittedAddressPort & { revision(): number };
   readonly fixture: string | null;
   current(): boolean;
   visible(): boolean;
@@ -30,7 +30,8 @@ export interface AdmittedPlace<State extends Disposable> extends Disposable {
    * The resolved target owns the Page (route-target.ts `targetOwner`). False means the Page this
    * Place holds was another target's and could not be dropped yet: the caller must not mount.
    */
-  enter(owner: string | null, fields: readonly string[]): boolean;
+  enter(owner: string | null, fields: readonly string[], liveDocument: boolean): boolean;
+  claim(owner: string, revision: number): void;
 }
 
 export function createAdmittedPlace<State extends Disposable>(options: {
@@ -50,23 +51,36 @@ export function createAdmittedPlace<State extends Disposable>(options: {
   let owner: string | null = null;
   const addressListeners = new Set<(traversed?: boolean) => void>();
   const current = () => !disposed && visible && scope.current();
-  // Back or Forward onto an entry that names another `?target`: that entry names its own Page.
-  let arrived = false;
+  let revision = 0;
+  let entry = 0;
+  let ownerEntry: string | number | null = null;
+  let writing = false;
+  const currentEntry = () => options.address.entry?.() ?? entry;
   const unsubscribe = options.address.subscribe((traversed) => {
     if (!current()) return;
-    const next = new URLSearchParams(options.address.read());
-    arrived = !!traversed && next.get("target") !== captured.get("target");
-    captured = next;
+    revision++;
+    if (!writing || traversed) entry++;
+    captured = new URLSearchParams(options.address.read());
     addressListeners.forEach((listener) => listener(traversed));
   });
   const place: AdmittedPlace<State> = {
     fixture: fixtureName(Object.fromEntries(options.search)),
     address: {
       read: () => new URLSearchParams(current() ? options.address.read() : captured),
+      entry: currentEntry,
+      revision: () => revision,
       write(search, history) {
         if (!current()) return;
+        const owned = ownerEntry === currentEntry();
         captured = new URLSearchParams(search);
-        options.address.write(new URLSearchParams(search), history);
+        revision++;
+        writing = true;
+        try {
+          options.address.write(new URLSearchParams(search), history);
+        } finally {
+          writing = false;
+        }
+        if (owned) ownerEntry = currentEntry();
       },
       subscribe(listener) {
         addressListeners.add(listener);
@@ -90,7 +104,7 @@ export function createAdmittedPlace<State extends Disposable>(options: {
     remember(page) {
       if (!disposed) memory = freezePage(page);
     },
-    enter(next, fields) {
+    enter(next, fields, liveDocument) {
       if (next === null || next === owner) return true;
       // The first target adopts the address as given: a link or a reload names its own Page.
       if (owner !== null) {
@@ -100,17 +114,21 @@ export function createAdmittedPlace<State extends Disposable>(options: {
         state?.dispose();
         state = undefined;
         memory = freezePage({});
-        // Default taken: a history entry names its own Page, as a link does. Back and Forward adopt
-        // its fields and never rewrite it; only Place memory and the old mount are dropped.
-        if (!arrived) {
+        // A topology change may replace this entry's owner. External arrivals supply their own
+        // request and keep it for the new mount to validate, even after several traversals.
+        if (ownerEntry === currentEntry()) {
           const search = place.address.read();
           for (const field of fields) search.delete(field);
           place.address.write(search, "replace");
         }
       }
-      arrived = false;
       owner = next;
+      // Address-bound saved Work can mount before any live document owns this request.
+      ownerEntry = liveDocument ? currentEntry() : null;
       return true;
+    },
+    claim(next, observedRevision) {
+      if (current() && next === owner && observedRevision === revision) ownerEntry = currentEntry();
     },
     dispose() {
       if (disposed) return;

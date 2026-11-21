@@ -45,7 +45,8 @@ const rooms: TargetProduct = {
       return { levels, regions: model.regions, unreadable: [] };
     }
     if (key === "revit.context.view-image") throw Error("No image in this fixture");
-    if (key === "takeoffs.snapshot" && input.views.length === 0)
+    if (key === "takeoffs.candidates") return { regions: [] };
+    if (key === "takeoffs.snapshot" && input.views.every((view: string) => view === model.view))
       return {
         reading,
         snapshot: { status: { systems: [] }, unreadable: [], zoneFrs: [], regionsByZone: {} },
@@ -126,6 +127,57 @@ test("Takeoffs: a direct Chadds pin cannot restore views from Snowdon", async ()
   }
 });
 
+test.each([
+  {
+    route: "Rooms",
+    screenModule: module,
+    from: "chadds",
+    to: "snowdon",
+    field: "view",
+    machinePending: true,
+  },
+  {
+    route: "Takeoffs",
+    screenModule: takeoffs,
+    from: "snowdon",
+    to: "chadds",
+    field: "views",
+    machinePending: false,
+  },
+] as const)(
+  "$route: inventory alone rebinds an unpinned Place after close and open",
+  async (entry) => {
+    const { route, screenModule, from, to, field, machinePending } = entry;
+    const view = models[from].view;
+    const selection = route === "Rooms" ? view : [view];
+    const slow = { timeout: 20000 };
+    const j = await targetJourney(screenModule, rooms.reads, rooms.native, {
+      open: [from],
+      machinePending,
+      search: new URLSearchParams({ [field]: JSON.stringify(selection) }),
+    });
+    try {
+      const first = await j.bound(from, false);
+      expect(first.page.read()).toMatchObject({ [field]: selection });
+      expect(j.search().has("target")).toBe(false);
+      await j.openInventory([]);
+      expect(await screen.findByRole("button", { name: "Choose a document" }, slow)).toBeTruthy();
+      // The live inventory reports the replacement before the broader Machine census catches up.
+      await j.openInventory([to]);
+      const live = await j.bound(to, false);
+      expect(live).not.toBe(first);
+      expect(j.search().has("target")).toBe(false);
+      for (const [name, declaration] of Object.entries(screenModule.spec.fields)) {
+        if (!("target" in declaration)) continue;
+        expect(j.search().has(name)).toBe(false);
+        expect(live.page.read()).toMatchObject({ [name]: declaration.initial });
+      }
+    } finally {
+      await j.close();
+    }
+  },
+);
+
 test("Rooms: an unpinned URL uses the reopened sole document instead of a remembered closed pin", async () => {
   const j = await targetJourney(module, rooms.reads, rooms.native, {
     open: ["again"],
@@ -140,3 +192,200 @@ test("Rooms: an unpinned URL uses the reopened sole document instead of a rememb
     await j.close();
   }
 });
+
+const roomsEntry = (doc: JourneyDoc, view?: string) =>
+  new URLSearchParams({ target: pin(doc), ...(view ? { view: JSON.stringify(view) } : {}) });
+
+function delayedSnowdonPlans() {
+  let hold = Promise.withResolvers<void>();
+  return {
+    hold() {
+      hold = Promise.withResolvers<void>();
+    },
+    release: () => hold.resolve(),
+    native: (doc: JourneyDoc) => async (key: string, input: unknown) => {
+      if (doc === "snowdon" && key === "rooms.roster") await hold.promise;
+      return rooms.native(doc)(key, input);
+    },
+  };
+}
+
+test("NoLossWhileLoading: a direct link in the same Place holds the destination plan", async () => {
+  const plans = delayedSnowdonPlans();
+  const j = await targetJourney(module, rooms.reads, plans.native, {
+    open: ["chadds", "snowdon"],
+    search: roomsEntry("chadds", FLOOR),
+  });
+  try {
+    await j.bound("chadds", false);
+    await j.go(roomsEntry("snowdon", CEILING));
+    const live = await j.mounted("snowdon");
+    expect(j.search().get("view")).toBe(JSON.stringify(CEILING));
+    expect(live.page.read().view).toBe("");
+    plans.release();
+    await j.bound("snowdon", false);
+    expect(live.page.read().view).toBe(CEILING);
+    await j.pick("chadds");
+    const picked = await j.bound("chadds", false);
+    expect(j.search().has("view")).toBe(false);
+    expect(picked.page.read().view).toBe("");
+  } finally {
+    plans.release();
+    await j.close();
+  }
+});
+
+test("a saved-Address link keeps its plan when its document becomes available", async () => {
+  const plans = delayedSnowdonPlans();
+  const search = new URLSearchParams({
+    target: "C:/Models/Snowdon.rvt",
+    view: JSON.stringify(CEILING),
+  });
+  const j = await targetJourney(module, rooms.reads, plans.native, { open: ["chadds"], search });
+  try {
+    await waitFor(() => expect(j.mount()?.target()).toBeNull(), { timeout: 20000 });
+    expect(j.search().get("view")).toBe(JSON.stringify(CEILING));
+    await j.open(["chadds", "snowdon"]);
+    const live = await j.mounted("snowdon");
+    expect(j.search().get("view")).toBe(JSON.stringify(CEILING));
+    expect(live.page.read().view).toBe("");
+    plans.release();
+    await j.bound("snowdon", false);
+    expect(live.page.read().view).toBe(CEILING);
+  } finally {
+    plans.release();
+    await j.close();
+  }
+});
+
+test.each([false, true])(
+  "NoForeignPlan: a cold link holds plan bytes during loading (valid=%s)",
+  async (valid) => {
+    const plans = delayedSnowdonPlans();
+    const view = valid ? CEILING : FLOOR;
+    const j = await targetJourney(module, rooms.reads, plans.native, {
+      open: [],
+      search: roomsEntry("snowdon", view),
+    });
+    try {
+      await j.open(["snowdon"]);
+      const live = await j.mounted("snowdon");
+      expect(j.search().get("view")).toBe(JSON.stringify(view));
+      expect(live.page.read().view).toBe("");
+      expect(
+        j.hosts.snowdon.nativeCalls.some(({ input }) => JSON.stringify(input).includes(view)),
+      ).toBe(false);
+      plans.release();
+      await j.bound("snowdon", false);
+      expect(live.page.read().view).toBe(valid ? view : "");
+      expect(j.search().get("view")).toBe(valid ? JSON.stringify(view) : null);
+      if (valid) {
+        plans.hold();
+        j.hosts.snowdon.host.documentChanged();
+        await j.reload();
+        const reloaded = await j.mounted("snowdon");
+        expect(j.search().get("view")).toBe(JSON.stringify(view));
+        expect(reloaded.page.read().view).toBe("");
+        plans.release();
+        await j.bound("snowdon", false);
+        expect(reloaded.page.read().view).toBe(view);
+      }
+    } finally {
+      plans.release();
+      await j.close();
+    }
+  },
+);
+
+test("an initial sole document can appear while Machine is pending", async () => {
+  const j = await targetJourney(module, rooms.reads, rooms.native, {
+    open: [],
+    machinePending: true,
+    search: new URLSearchParams(),
+  });
+  try {
+    await j.openInventory(["chadds"]);
+    const live = await j.bound("chadds", false);
+    expect(live.page.read().view).toBe("");
+    expect(j.search().has("target")).toBe(false);
+  } finally {
+    await j.close();
+  }
+});
+
+test.each(["chadds", "snowdon"] as const)(
+  "tab memory on pin %s cannot supply a plan or a model focus",
+  async (doc) => {
+    const remembered = roomsEntry("chadds", FLOOR);
+    remembered.set("contextRadiusFt", "19");
+    remembered.set("selected", JSON.stringify([{ kind: "focus", id: code(1) }]));
+    const j = await targetJourney(module, rooms.reads, rooms.native, {
+      open: ["chadds", "snowdon"],
+      search: roomsEntry(doc),
+      remembered,
+    });
+    try {
+      const live = await j.bound(doc, false);
+      expect(live.page.read()).toMatchObject({
+        view: "",
+        selected: [],
+        contextRadiusFt: doc === "chadds" ? 19 : 10,
+      });
+      expect(j.search().has("view")).toBe(false);
+      expect(j.search().has("selected")).toBe(false);
+    } finally {
+      await j.close();
+    }
+  },
+);
+
+test("NoForeignFocus: only Snowdon's model focus reaches its Page", async () => {
+  const plans = delayedSnowdonPlans();
+  const selected = [code(1), code(3)].map((id) => ({ kind: "focus", id }));
+  const search = roomsEntry("snowdon");
+  search.set("selected", JSON.stringify(selected));
+  const j = await targetJourney(module, rooms.reads, plans.native, { open: [], search });
+  try {
+    await j.open(["snowdon"]);
+    const live = await j.mounted("snowdon");
+    expect(j.search().get("selected")).toBe(JSON.stringify(selected));
+    expect(live.page.read().selected).toEqual([]);
+    plans.release();
+    await j.bound("snowdon", false);
+    expect(live.page.read().selected).toEqual([selected[1]]);
+    expect(JSON.parse(j.search().get("selected")!)).toEqual([selected[1]]);
+  } finally {
+    plans.release();
+    await j.close();
+  }
+});
+
+test.each([
+  { direction: "back", commit: false },
+  { direction: "forward", commit: false },
+  { direction: "back", commit: true },
+  { direction: "forward", commit: true },
+] as const)(
+  "$direction restores its entry after two traversals (intermediate mount=$commit)",
+  async ({ direction, commit }) => {
+    const destinations = [roomsEntry("snowdon"), roomsEntry("snowdon", CEILING)];
+    const j = await targetJourney(module, rooms.reads, rooms.native, {
+      open: ["chadds", "snowdon"],
+      search: roomsEntry("chadds", FLOOR),
+      ...(direction === "back" ? { before: destinations.reverse() } : { after: destinations }),
+    });
+    try {
+      await j.bound("chadds", false);
+      if (commit) {
+        await j[direction]();
+        await j.bound("snowdon", false);
+        await j[direction]();
+      } else await j.traverseTwice(direction);
+      const live = await j.bound("snowdon", false);
+      expect(j.search().get("view")).toBe(JSON.stringify(CEILING));
+      expect(live.page.read().view).toBe(CEILING);
+    } finally {
+      await j.close();
+    }
+  },
+);

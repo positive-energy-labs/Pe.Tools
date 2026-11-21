@@ -115,6 +115,7 @@ function TypedPlace({
   const search = useSyncExternalStore(place.address.subscribe, () =>
     place.address.read().toString(),
   );
+  const addressRevision = useSyncExternalStore(place.address.subscribe, place.address.revision);
   const fixture = place.fixture,
     visible = useContext(RouteVisibility);
   const params = new URLSearchParams(search),
@@ -201,12 +202,14 @@ function TypedPlace({
   const [problem, setProblem] = useState<string | null>(null);
   // Saved Work may be available before the inventory establishes the Page's owner.
   const owner = fixture === null && ownerKnown ? targetOwner(input) : null;
+  const liveDocument = input.target?.kind === "document";
+  const fields = useMemo(() => [...Object.keys(module.spec.fields), "selected"], [module]);
   useEffect(() => {
     place.setVisible(visible);
     if (
       (snapshot && !pose) ||
       (needs !== "browser" && !input.target && !input.work.address && !input.work.open) ||
-      !place.enter(owner, [...Object.keys(module.spec.fields), "selected"])
+      !place.enter(owner, fields, liveDocument)
     ) {
       setMount(null);
       setProblem(null);
@@ -234,7 +237,11 @@ function TypedPlace({
       return;
     }
     return () => state.mount.release();
-  }, [module, place, input, visible, owner]);
+  }, [module, place, input, visible, owner, fields, liveDocument]);
+  useEffect(() => {
+    if (visible && liveDocument && owner && mount && input.custody.current())
+      place.claim(owner, addressRevision);
+  }, [addressRevision, input, liveDocument, mount, owner, place, visible]);
   const lastPose = useRef("");
   useEffect(() => {
     if (!mount) return;
@@ -276,6 +283,7 @@ function TypedPlace({
   const document = (
     <DocumentPicker
       place={place}
+      fields={fields}
       target={resolved}
       needs={module.spec.optionalTarget ?? needs}
       enabled={

@@ -4,6 +4,7 @@ import type { Members, SubjectKey } from "@pe/kit/lang/attention";
 import type { ElementIndex } from "@pe/web-kernel/element-index";
 import { z } from "zod";
 import type { CellRef } from "@pe/ducts-domain/stage-issue";
+import { ductElements } from "./identity.ts";
 
 const address = z.tuple([
   z.literal("cell"),
@@ -48,6 +49,18 @@ export const selectedKeys = (ids: readonly string[]): SubjectKey[] =>
 export function focusedElement(subject: string, elements: ElementIndex): number | null {
   const id = cellFocusOf(subject)?.id ?? elements.idOf(subject);
   return Number.isFinite(id) ? id : null;
+}
+
+export const isDuctModelFocus = (id: string) =>
+  id.startsWith("UniqueId:") || cellFocusOf(id) !== null;
+
+export function ductFocusMembership(snapshot: Parameters<typeof ductElements>[0]) {
+  if (!snapshot || !("nodes" in snapshot)) return null;
+  const elements = ductElements(snapshot);
+  return (id: string) => {
+    const element = focusedElement(id, elements);
+    return element !== null && elements.keyOf(element) !== null;
+  };
 }
 
 /** A picked issue is the place `issue:<key>`; the marks and rows key on the bare key. */

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { routeStatePatchSchema } from "@pe/agent-contracts";
 import { handle } from "@pe/agent-contracts/handle";
+import { targetFocus } from "@pe/agent-contracts/route";
 import { sheetCells } from "@pe/agent-contracts/product";
 import type { SheetBinding } from "@pe/agent-contracts/slots";
-import { product, regionId, ROOM_FIELDS, roomsWork } from "@pe/rooms-contract/product";
+import { product, regionCode, regionId, ROOM_FIELDS, roomsWork } from "@pe/rooms-contract/product";
 import { fillBody, scrollBody, split, type ContextOf, type Verbs } from "@pe/web-kernel/route";
 import { draw } from "@pe/web-kernel/route/draw";
 import { screen } from "@pe/web-kernel/route/screen";
@@ -54,6 +55,11 @@ export const module = screen(
   {
     ...declared,
     host: "@pe/rooms-host/product",
+    focus: targetFocus(plans, ({ trackedRegionIds }) => {
+      if (!trackedRegionIds) return null;
+      const members = new Set<string>(trackedRegionIds.map(regionCode));
+      return (id) => members.has(id);
+    }),
     edits: {
       work: roomsWork,
       seed: () => roomsWork.schema.parse({}),

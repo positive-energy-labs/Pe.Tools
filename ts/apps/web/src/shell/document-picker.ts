@@ -10,11 +10,13 @@ export function DocumentPicker({
   target,
   needs,
   enabled,
+  fields = [],
 }: {
   place: { address: AdmittedAddressPort };
   target: PlaceInput["target"];
   needs: string;
   enabled: boolean;
+  fields?: readonly string[];
 }) {
   const inventory = useInventory(enabled);
   if (!enabled) return null;
@@ -63,6 +65,7 @@ export function DocumentPicker({
       row: (option) => ({ label: option.label, sub: option.session }),
       onPick: (option) => {
         const search = place.address.read();
+        if (key(option.ref) !== selected) for (const field of fields) search.delete(field);
         search.set("target", JSON.stringify({ kind: "open", ref: option.ref }));
         place.address.write(search, "push");
       },

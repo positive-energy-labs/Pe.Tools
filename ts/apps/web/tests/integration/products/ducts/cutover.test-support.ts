@@ -7,6 +7,7 @@ import { ductsDesign } from "@pe/duct-systems-contract/ducts";
 import { ductsDocumentSchema } from "@pe/ducts-contract/system-work";
 import { fansDocumentSchema } from "@pe/fans-contract/fans";
 import { fansCalcData, openFanCalcSchema } from "@pe/fans-contract/fans-read";
+import { fanRoster } from "@pe/fans-contract/fans-host-reads";
 import { RouteWorkspace, observeResources } from "@pe/runtime";
 import sheet from "../../../../../../products/ducts/web/src/fixtures/fan-sheet.json";
 import { snapshot } from "@pe/ducts-domain/test-fixture";
@@ -151,6 +152,12 @@ export function witnessFactory(dependencies: FixtureDependencies) {
         freshness: "current",
       },
     });
+    native[fanRoster.key] = {
+      kind: "use",
+      open(_ctx, deliver) {
+        deliver({ kind: "complete", revision: 1, value: packet(sheet.roster, 1) });
+      },
+    };
     for (const [entry, read] of Object.entries({
       [ductsReads.overview.key]: "roster",
       [ductsReads.network.key]: "network",

@@ -149,8 +149,12 @@ test("J1 open Fans, choose a subject, carry pose through Back/Forward and share 
       { work: j.work, sources: { "fans.calc": j.source } },
     );
     try {
-      expect(shared.page.read(), "B01: a shared URL overrides remembered pose").toEqual(
-        j.mount.page.read(),
+      await vi.waitFor(
+        () =>
+          expect(shared.page.read(), "B01: a shared URL overrides remembered pose").toEqual(
+            j.mount.page.read(),
+          ),
+        { timeout: 20000 },
       );
       shared.page.subject({ kind: "ids", ids: [] });
       expect(shared.page.read().fan, "B01/B03: explicit none survives URL decode").toEqual({
@@ -185,6 +189,9 @@ test("JM B01 move a typed Page while URL custody waits for the router, then shar
     );
     try {
       mount.subscribe(() => {});
+      await vi.waitFor(() => expect(mount.value(fans.spec.subject!.read).state).toBe("ready"), {
+        timeout: 20000,
+      });
       mount.page.subject(j.fan("MUAS-1"));
       expect(
         mount.page.read().fan,
@@ -196,7 +203,9 @@ test("JM B01 move a typed Page while URL custody waits for the router, then shar
         sources: { "fans.calc": j.source },
       });
       try {
-        expect(restored.page.read().fan).toEqual(mount.page.read().fan);
+        await vi.waitFor(() => expect(restored.page.read().fan).toEqual(mount.page.read().fan), {
+          timeout: 20000,
+        });
       } finally {
         restored.dispose();
       }

@@ -40,6 +40,7 @@ import { fileRouteDocumentStore } from "../src/route-document-store.ts";
 import { RequestIdentity, admittedRequestIdentity } from "@pe/host-internal/request-identity";
 import { nativeCatalogIdentity, openRecordingWriter } from "../src/native-recording.ts";
 import { settle } from "./effect-test.ts";
+export { closedFan, recordedTables } from "@pe/fans-host/tests/closed-fan.fixture";
 export const ref = { session: "spike", openId: "model" };
 export const target = {
   processIncarnation: { pid: 42, startedAt: 1 },
@@ -409,6 +410,15 @@ export async function fixture(
       if (!sameMillisecond) mark++;
       generation++;
       for (const notify of markListeners) notify();
+    },
+    documentChanged() {
+      owner.changed({
+        kind: "event",
+        sessionId: here.session,
+        eventName: "document-changed",
+        payloadJson: JSON.stringify({ changedOpenIds: [here.openId] }),
+      });
+      this.changed();
     },
     holdNative() {
       owner.refresh(ref);
