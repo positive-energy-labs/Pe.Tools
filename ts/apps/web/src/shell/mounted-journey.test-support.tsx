@@ -24,7 +24,7 @@ import { mountTypedRoute, type TypedMount } from "./typed-mount";
 import { completion } from "./work-door-observation";
 import { createWorkFeedClient } from "./work-feed-client";
 
-export { path, ref };
+export { path };
 export type Native = (key: string, input: any) => unknown;
 export type JourneyDocument = { ref: typeof ref; path: typeof path; title?: string };
 

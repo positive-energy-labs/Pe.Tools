@@ -659,7 +659,6 @@ test("absent Work feeds capture and replay null without stopping recording", asy
 test("command Work reads carry context through binding and revalidation", async () => {
   const { dir, writer } = await bundle();
   const commandWorkKey = { ...key, route: "duct-systems" };
-  const { ActionJournal } = await import("../src/action-journal.ts");
   const { commands, tools } = await import("@pe/mcps/product-actions");
   const { z } = await import("zod");
   const { crossingOf } = await import("./callers.ts");
@@ -677,6 +676,7 @@ test("command Work reads carry context through binding and revalidation", async 
       view: (key, route) => workspace.view(key, route, request.context),
     }),
     probe: async () => true,
+    target: async () => address("C:\\Models\\A.rvt"),
     resolve: () => ({
       definition: commands["sheet.plan"],
       prepared: z.unknown(),

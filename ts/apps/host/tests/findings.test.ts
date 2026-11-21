@@ -456,14 +456,23 @@ test("a row verb's own route handle (Pumps, Families) addresses the same documen
 });
 
 /* purge-2 integrity 5: the caller's handle named the Work, so a handle keyed to another document wrote that document. */
-test("findings.say handed another document's handle lands in the admitted document's findings Work, never the other's", async () => {
+test("journal admission refuses findings.say with another document's Work", async () => {
   const d = await doors();
   try {
     const other = bindWork("findings", address("C:/other.rvt"));
-    await d.say(input("x1", port, "note"), human, workHandle(other, 0));
+    const refusal = await d.refusedCall(
+      "findings.say",
+      { ...input("x1", port, "note"), work: workHandle(other, 0) },
+      human,
+    );
+    expect(JSON.parse(refusal)).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: { code: "work.target", message: "Work belongs to another document" },
+    });
     expect(await d.held(other), "the other document's findings Work").toEqual([]);
-    expect(await d.authors()).toEqual([["x1", "human"]]);
-    expect(d.stored()).toHaveLength(1);
+    expect(await d.authors()).toEqual([]);
+    expect(d.stored()).toHaveLength(0);
   } finally {
     await d.close();
   }

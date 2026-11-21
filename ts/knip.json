@@ -79,6 +79,8 @@
     "tests/journey-fixtures": {
       "entry": ["*.ts", "jv3-field-fixture.tsx"]
     },
-    "tests/repo-guards": {}
+    "tests/repo-guards": {
+      "entry": ["src/product-removed.ts"]
+    }
   }
 }

@@ -1,4 +1,4 @@
-import { ownedSession } from "./callers.ts";
+import { crossingOf, ownedSession } from "./callers.ts";
 import { writePreviewSchema, type Command, type ActionReceipt } from "@pe/agent-contracts";
 import { commands, tools } from "@pe/mcps/product-actions";
 import { Effect } from "effect";
@@ -8,7 +8,7 @@ import type { ActionExecution } from "@pe/host-internal/action-execution";
 import type { CommandContext } from "@pe/host-internal/command-executor";
 import { assertSealed } from "../src/document-marks.ts";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
-import { settle, testDocumentMarks } from "./effect-test.ts";
+import { settle, testDocumentMarks, testJournal } from "./effect-test.ts";
 // These fakes read no attempt service; the journal provides them in production.
 const runOwned = (run: Effect.Effect<unknown, unknown, unknown>) =>
   settle(run as Effect.Effect<unknown, unknown>);
@@ -223,14 +223,45 @@ test("re-derived identical inputs apply; a changed dependency refuses before exe
   expect(f.run).toHaveBeenCalledTimes(1);
 });
 
-test("missing preview and foreign Work refuse before native execution", async () => {
+test("missing preview refuses before native execution", async () => {
   const f = await fixture();
   f.apply();
   const binding = await f.executor.bind(f.ctx);
   await expect(binding.preflight!()).rejects.toMatchObject({ refusal: { code: "preview.stale" } });
   await expect(binding.prepare!()).rejects.toThrow("Plan the current Work first");
-  (f.ctx.admission.input.work as { key: { open: { openId: string } } }).key.open.openId = "foreign";
-  await expect(f.executor.bind(f.ctx)).rejects.toThrow("another document");
+  expect(f.run).not.toHaveBeenCalled();
+});
+
+test("journal admission refuses foreign Work before binding a write", async () => {
+  const f = await fixture();
+  f.apply();
+  const bind = vi.fn(f.executor.bind);
+  const journal = testJournal();
+  journal.bindCommands({ probe: async () => null, resolve: () => ({ ...f.executor, bind }) });
+  await journal.invoke(
+    {
+      ...f.ctx.admission,
+      id: "foreign-write",
+      input: {
+        work: {
+          key: {
+            binding: "open",
+            route: "families",
+            target: null,
+            open: { session: "A", openId: "foreign" },
+          },
+          revision: 1,
+        },
+      },
+    },
+    crossingOf(),
+  );
+  expect(await journal.wait("foreign-write")).toMatchObject({
+    state: "failed",
+    notDispatched: true,
+    refusal: { code: "work.target", message: "Work belongs to another document" },
+  });
+  expect(bind).not.toHaveBeenCalled();
   expect(f.run).not.toHaveBeenCalled();
 });
 
