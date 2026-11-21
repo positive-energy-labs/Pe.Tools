@@ -1,5 +1,5 @@
+import { hostOffer } from "./host-ownership.ts";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
-import { hostOwnership } from "./host-ownership.ts";
 import type { ActionJournal } from "./action-journal.ts";
 import type { HostNativeRead } from "@pe/host-internal/native-read";
 import {
@@ -19,7 +19,8 @@ import { familyExecutors, runPods, type FamilyActionDependencies } from "./famil
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { lifetime } from "./document-lifetime.ts";
 import { productExecutors } from "./product-executors.generated.ts";
-import type { HostOffers } from "@pe/host-internal/product";
+import type { HostOffer, HostOffers } from "@pe/host-internal/product";
+import { HomeFiles } from "@pe/host-internal/home-files";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
@@ -36,8 +37,17 @@ import { commands } from "@pe/mcps/product-actions";
 import { hostProcessIdentity } from "@pe/host-contracts/contracts";
 
 type CommandDependencies = FamilyActionDependencies &
-  HostOffers &
-  InstancesActionDependencies & { nativeRead?: HostNativeRead["Service"] };
+  Pick<HostOffers, "projectLifetime" | "runPods"> &
+  InstancesActionDependencies & {
+    nativeRead?: HostNativeRead["Service"];
+    /** The call route layer's one offer. */
+    offer?: HostOffer;
+  };
+// A registry bound with no call route layer (a test) has no offer handed to it, so it makes its own
+// with the same constructor; one bound with no files service refuses the first read of a home.
+const noFiles = (): never => {
+  throw Error("This command registry was bound with no home files");
+};
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
@@ -64,8 +74,8 @@ export function commandRegistry(
   // Product-owned sheet writes answer through the generic sheet dispatcher.
   const products = productExecutors(bridge, {
     ...deps,
-    captures,
-    roots: hostOwnership,
+    ...(deps.offer ??
+      hostOffer(captures, deps.files ?? HomeFiles.of({ firm: noFiles, home: noFiles }))),
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
@@ -177,12 +187,7 @@ export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
   captures: ObservationFiles,
-  deps: FamilyActionDependencies &
-    HostOffers &
-    InstancesActionDependencies & {
-      nativeRead?: HostNativeRead["Service"];
-      nativeReads?: NativeReadTerminals;
-    },
+  deps: CommandDependencies & { nativeReads?: NativeReadTerminals },
   local: GatewayLocal,
   origin?: () => string,
 ): void {

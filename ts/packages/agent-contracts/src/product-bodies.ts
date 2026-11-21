@@ -63,10 +63,11 @@ export type HostBodies<
     ? unknown
     : Readonly<Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], Executor>>);
   /**
-   * Host files a reading takes as `file:<name>`: the kernel records the answer as one taking, so the
-   * body may read host state a `ReadContext` cannot. `document` resolves an open document's address.
+   * One body per declared host file, which a reading takes through `hostFile`: the kernel records
+   * the answer as one taking, so the body may read host state a `ReadContext` cannot. `document`
+   * resolves an open document's address.
    */
-  readonly files?: Readonly<Record<string, FileBody<Deps>>>;
+  readonly files?: { readonly [K in keyof P["files"]]: FileBody<Deps> };
   /**
    * One body per reading that declares `emits`: it answers the reading's `snapshot` call and returns
    * the value to keep, of the declared kind. The kernel stores it; the body holds no store.
@@ -109,15 +110,20 @@ type Declares<Table, Slot extends string> = [keyof Table] extends [never] ? neve
  * object: `implement()` intersects this in, and a declared `http` route or local operation with no
  * body fails `tsc`.
  */
-export type OwedBodies<P extends ProductDeclaration, Bodies> = Undeclared<P> & Required<
-  Pick<Bodies, (
-      | Declares<P["http"], "http">
-      | Declares<P["local"], "local">
-      | ([Emitting<P>] extends [never] ? never : "emits")
-      | Declares<ProductRead<P>, "homes">
-    ) &
-      keyof Bodies>
->;
+export type OwedBodies<P extends ProductDeclaration, Bodies> = Undeclared<P> &
+  Required<
+    Pick<
+      Bodies,
+      (
+        | Declares<P["http"], "http">
+        | Declares<P["local"], "local">
+        | Declares<P["files"], "files">
+        | ([Emitting<P>] extends [never] ? never : "emits")
+        | Declares<ProductRead<P>, "homes">
+      ) &
+        keyof Bodies
+    >
+  >;
 export type FileBody<Deps> = (
   args: unknown,
   host: {

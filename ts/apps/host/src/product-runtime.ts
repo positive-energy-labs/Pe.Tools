@@ -2,14 +2,19 @@ import { SHEET_COMMANDS } from "@pe/agent-contracts/slots";
 import type { RevitBridge } from "@pe/host-internal/bridge";
 import type { CommandExecutor } from "@pe/host-internal/command-executor";
 import type { HostOffers, implement } from "@pe/host-internal/product";
-import type { ProductDeclaration } from "@pe/agent-contracts/product";
+import { platformFiles, type ProductDeclaration } from "@pe/agent-contracts/product";
 type SheetOwner = Record<(typeof SHEET_COMMANDS)[keyof typeof SHEET_COMMANDS], CommandExecutor>;
 export type SheetExecutors = ReadonlyMap<string, SheetOwner>;
 
-/** One table from every product's, refusing a key two products claim. */
-function merged<T>(what: string, tables: readonly Readonly<Record<string, T>>[]) {
+/** One table from every product's, refusing a key two products claim or the platform holds. */
+function merged<T>(
+  what: string,
+  tables: readonly Readonly<Record<string, T>>[],
+  claimed: readonly string[] = [],
+) {
   const all: Record<string, T> = Object.create(null);
   for (const [key, value] of tables.flatMap((table) => Object.entries(table))) {
+    if (claimed.includes(key)) throw Error(`The platform owns the ${what} ${key}`);
     if (Object.hasOwn(all, key)) throw Error(`Duplicate product ${what} ${key}`);
     all[key] = value;
   }
@@ -46,16 +51,26 @@ export function bindProducts(
         ),
       ),
     ),
+    /** Every declared host file with its body, by the name `hostFile` gives its input. */
     productFiles: merged(
       "host file",
-      hosts.map(({ files }) => files),
+      hosts.map(({ product, files }) =>
+        Object.fromEntries(
+          Object.keys(product.files).map((key) => {
+            const run = files[key];
+            if (!run) throw Error(`No host body for the host file ${key}`);
+            return [key, run];
+          }),
+        ),
+      ),
+      platformFiles,
     ),
     /** Every `snapshot` call of a reading that declares `emits`, with the kind the kernel keeps. */
     productEmitters: merged(
       "emitting call",
       hosts.map(({ emitters }) => emitters),
     ),
-    productExecutors(bridge: RevitBridge["Service"], deps: HostOffers = {}) {
+    productExecutors(bridge: RevitBridge["Service"], deps: HostOffers) {
       const executors: Record<string, CommandExecutor> = Object.create(null);
       const sheets = new Map<string, SheetOwner>();
       for (const { product, executors: make } of hosts) {

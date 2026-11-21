@@ -9,6 +9,8 @@ import {
   stateTree,
   type HostLane,
 } from "@pe/host-contracts/service-identity";
+import type { HomeFiles } from "@pe/host-internal/home-files";
+import type { HostOffer } from "@pe/host-internal/product";
 import type { PeaRuntimeCapabilities } from "@pe/runtime";
 
 export type { HostLane } from "@pe/host-contracts/service-identity";
@@ -27,7 +29,14 @@ export type HostOwnership = {
 const NO_REVIT_ARGUMENT = "--no-revit";
 export const hostCapabilities = resolveHostCapabilities();
 export const hostOwnership = resolveHostOwnership();
-/** The one directory for this host runtime's journal, log and exporter files. */
+/**
+ * The one offer every product body takes. Every site hands a value this makes, so none assembles a
+ * subset of its own.
+ */
+export const hostOffer = <C extends HostOffer["captures"]>(
+  captures: C,
+  files: HomeFiles["Service"],
+): HostOffer & { readonly captures: C } => ({ captures, roots: hostOwnership, files });
 /**
  * This host's machine state: the one table of its state paths, and the root every state kind is
  * minted from (`kind.in(hostState(), ...)`; `hostState().home(home)` binds a home to this machine).

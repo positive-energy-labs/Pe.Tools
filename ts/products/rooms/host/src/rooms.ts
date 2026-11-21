@@ -103,7 +103,7 @@ const preparedSheet = preparedReplacementSchema.extend({
  * native `rooms.write`. The plan reads the record replacements and writes nothing.
  */
 export const roomsSheet =
-  (key: "sheet.plan" | "sheet.apply"): CommandBody =>
+  (key: "sheet.plan" | "sheet.apply"): CommandBody<Deps> =>
   (bridge, deps) => {
     const { bind } = replacementEvidence(bridge, deps);
     return command(builtinCommands[key], preparedSheet, {

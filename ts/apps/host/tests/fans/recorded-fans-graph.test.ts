@@ -638,7 +638,9 @@ test.each([
         expect(fresh.value.version).not.toBe(original.value.version);
         if (roster)
           expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
-        const refresh = ductsExecutors(liveFactories.service!).executors["ducts.refresh"]!;
+        const refresh = ductsExecutors(liveFactories.service!, {} as never).executors[
+          "ducts.refresh"
+        ]!;
         await run(
           refresh.run(
             { admission: { target: { kind: "document", ref } } } as CommandContext,
@@ -1356,7 +1358,9 @@ test.each([
           payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }),
         });
       await reread();
-      const refresh = ductsExecutors(liveFactories.service!).executors["ducts.refresh"]!;
+      const refresh = ductsExecutors(liveFactories.service!, {} as never).executors[
+        "ducts.refresh"
+      ]!;
       await run(
         refresh.run(
           { admission: { target: { kind: "document", ref } } } as CommandContext,

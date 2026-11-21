@@ -1,5 +1,5 @@
 import { product } from "@pe/fans-contract/product";
-import { catalogsFor } from "@pe/ducts-host/duct-catalogs";
+import { catalogs as catalogsHome } from "@pe/ducts-host/duct-catalogs";
 import { workElementId } from "@pe/ducts-domain/work-subject";
 import { elementLabeler } from "@pe/ducts-domain/element-label";
 import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
@@ -171,7 +171,7 @@ async function prepareLosses(p: DuctActionPreparation) {
   if (!walk) throw refused(fanWriteScopeMessage);
   const tables = await readNative("ducts.tables", { ids: TABLE_IDS });
   const grids = toGrids(tables);
-  const catalogs = await runPods(catalogsFor(deps.files!, pointer));
+  const catalogs = await runPods(catalogsHome.from(deps.files, pointer));
   const work = workLayer(design);
   // One fan port's calc inputs, as its worksheet reads them: its walk, the far side of accepted joins, and the ruled roster.
   const inputOf = async (fan: { unitId: number; portIndex: number }, near: DuctSnapshot) => {

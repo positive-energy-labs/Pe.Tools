@@ -358,11 +358,18 @@ export type ProductDeclaration = {
   >;
   readonly guide?: Guide;
   readonly http: HttpRoutes;
+  readonly files: HostFiles;
   readonly local: LocalOperations;
   readonly callPolicies: Readonly<Record<string, CallPolicy>>;
 };
 /** A declared HTTP route: the kernel mounts it at its path, so the path is rooted. */
 type HttpRoutes = Readonly<Record<string, HttpRead & { readonly path: `/${string}` }>>;
+/** A declared host file: what a reading hands it and what it answers, read through `hostFile`. */
+type HostFiles = Readonly<
+  Record<string, { readonly input: z.ZodType; readonly output: z.ZodType }>
+>;
+/** The host's own file inputs: a product file by one of these names would answer for the platform. */
+export const platformFiles = ["firm", "settings", "capture"] as const;
 type SheetNative = {
   readonly native?: Readonly<Partial<Record<"plan" | "apply", readonly HostOperationKey[]>>>;
 };
@@ -474,6 +481,7 @@ export function product<
   const Sheet extends Writes<H, C> | undefined = undefined,
   const Works extends RouteWorks<C> = Record<never, never>,
   const Http extends HttpRoutes = Record<never, never>,
+  const Files extends HostFiles = Record<never, never>,
   const Local extends LocalOperations = Record<never, never>,
   const Caps extends Captures = Record<never, never>,
 >(declaration: {
@@ -494,7 +502,9 @@ export function product<
   /** Only for a product of several routes: each Work by its route, with the cells it holds. */
   readonly works?: Works;
   readonly readings: R & {
-    readonly [K in keyof R]: (R[K] extends { load: { resource: true } } ? Retained<R[K]> : unknown) &
+    readonly [K in keyof R]: (R[K] extends { load: { resource: true } }
+      ? Retained<R[K]>
+      : unknown) &
       Emits<R[K], keyof Caps>;
   };
   /** Keyed by the catalog command key. */
@@ -520,6 +530,8 @@ export function product<
   };
   readonly guide?: Guide;
   readonly http?: Http;
+  /** The product's host files by name; the host half owes one body each. */
+  readonly files?: Files & { readonly [K in keyof Files & (typeof platformFiles)[number]]: never };
   /** The product's local operations by catalog key; the host half owes one body each. */
   readonly local?: Local;
   readonly publishTool?: Publish;
@@ -556,6 +568,7 @@ export function product<
     ...declaration,
     captures: Object.assign({}, declaration.captures),
     http: Object.assign({}, declaration.http),
+    files: Object.assign({}, declaration.files),
     local: Object.assign({}, declaration.local),
     routes: bind<R, Routes>(declaration.readings, declaration.routes),
     guide: declaration.guide ?? noGuide,

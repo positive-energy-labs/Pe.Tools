@@ -218,7 +218,9 @@ test("an authored product folder feeds Host, web and Pea without editing their s
       discovery: { title: freshCommand },
     });
     expect(guides.productGuides).toEqual([{ instructions: "Fixture guide.", skills: [] }]);
-    expect(hostExecutors.productExecutors({} as never).executors).toHaveProperty([freshCommand]);
+    expect(hostExecutors.productExecutors({} as never, {} as never).executors).toHaveProperty([
+      freshCommand,
+    ]);
     const discovery = catalog.linkedCatalog().entries.get("route:reads.value")?.discovery;
     expect(discovery?.description).toContain("A proof reading.");
     expect(discovery?.input).toMatchObject({
@@ -234,7 +236,11 @@ test("an authored product folder feeds Host, web and Pea without editing their s
       canonicalSession: true,
     });
     expect(
-      contracts.resourceReadingSchema.parse({ kind: "proof-reading", session: "s", text: "fixture" }),
+      contracts.resourceReadingSchema.parse({
+        kind: "proof-reading",
+        session: "s",
+        text: "fixture",
+      }),
     ).toMatchObject({ text: "fixture" });
     mkdirSync(join(root, "ts/apps/web/src"), { recursive: true });
     expect(routeFolderCandidates(root)).toContain(join(root, product, "web"));

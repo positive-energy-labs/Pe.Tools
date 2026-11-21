@@ -40,7 +40,7 @@ import { ductWriteEvidence } from "@pe/ducts-domain/write-evidence";
 
 export type DuctActionDependencies = {
   runPods?: RunPods;
-  files?: HomeFiles["Service"];
+  files: HomeFiles["Service"];
   nativeRead?: HostNativeRead["Service"];
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
 };
@@ -159,7 +159,10 @@ export function ductActionBody(
   owner: typeof fansTool | typeof ductSystems.tool,
   kind: Kind,
 ) {
-  return (key: keyof typeof ductCommands, mode: Phase | "seal"): CommandBody =>
+  return (
+    key: keyof typeof ductCommands,
+    mode: Phase | "seal",
+  ): CommandBody<DuctActionDependencies> =>
     (bridge, deps) =>
       ductActionExecutor(action, bridge, deps, owner, kind, key, mode);
 }
@@ -272,7 +275,7 @@ function ductActionExecutor(
           .find((open) => open.openId === target.openId)?.projectHome;
         const settings = readSettingTiers("ducts", pointer);
         const firm = firmLayer(
-          resolveFirm(await runPods(deps.files!.firm("ducts")), ductsFirmSchema, {}),
+          resolveFirm(await runPods(deps.files.firm("ducts")), ductsFirmSchema, {}),
           settings,
         );
         const criteria = resolveCriteria(workLayer(design), firm);

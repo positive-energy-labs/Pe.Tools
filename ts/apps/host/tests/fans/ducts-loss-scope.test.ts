@@ -95,7 +95,7 @@ test("the real /fans apply asks to retire its own role only, and retires it unde
     retireWork,
   };
   await settle(
-    fanLosses("sheet.apply", "apply")({} as never, {}).run(
+    fanLosses("sheet.apply", "apply")({} as never, {} as never).run(
       ctx as never,
       execution as never,
     ) as Effect.Effect<unknown>,

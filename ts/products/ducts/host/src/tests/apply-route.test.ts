@@ -80,7 +80,7 @@ const both = (owner: typeof fansTool | typeof ductSystems.tool) =>
     },
     owner,
     "heal",
-  )("ducts.apply-heal", "apply")({} as never, {}) as never;
+  )("ducts.apply-heal", "apply")({} as never, {} as never) as never;
 
 test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
   const { key, calls } = await apply(both(fansTool), "fans");
