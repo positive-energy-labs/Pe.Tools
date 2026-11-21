@@ -106,6 +106,34 @@ export type HostBridgeEvent = {
   readonly openDocumentIds?: readonly string[];
 };
 
+/**
+ * What one bridge event makes stale, for every store of document-owned state: asked with a session
+ * and its open document (none for session-scoped state), it answers why that state is stale now.
+ */
+export function staleBy(event: HostBridgeEvent) {
+  let changed: unknown;
+  if (event.kind === "event" && event.eventName === "document-changed") {
+    try {
+      changed = JSON.parse(event.payloadJson ?? "{}").changedOpenIds;
+    } catch {
+      changed = null;
+    }
+  }
+  return (session: string, openId?: string) => {
+    if (session !== event.sessionId) return undefined;
+    if (event.kind === "disconnected" || event.kind === "connected") return event.kind;
+    if (!openId) return undefined;
+    if (event.kind === "state-sync")
+      return event.openDocumentIds && !event.openDocumentIds.includes(openId)
+        ? ("closed" as const)
+        : undefined;
+    return event.eventName === "document-changed" &&
+      (!Array.isArray(changed) || changed.includes(openId))
+      ? ("changed" as const)
+      : undefined;
+  };
+}
+
 // Exact attachment registry. Session selection belongs to the SDK.
 export class RevitBridge extends Context.Service<
   RevitBridge,

@@ -37,7 +37,7 @@ const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
 export * from "./product-bodies.ts";
-import type { DeclaredFiles, HostFiles } from "./product-bodies.ts";
+import type { DeclaredFiles, Emits, HostFiles } from "./product-bodies.ts";
 import type { LocalFootprint, LocalOperations } from "./product-bodies.ts";
 
 /**
@@ -249,13 +249,6 @@ type Retained<R> = R extends { load: { scope: "document" } }
   : R extends { load: { scope: "session" } }
     ? { readonly handle: { readonly input: z.ZodType<{ kind: string; session: string }> } }
     : { readonly load: { readonly scope: "document" | "session" } };
-
-/** A reading with a `snapshot` call names the kind that call produces, so the kernel can keep it. */
-type Emits<R, Kind> = R extends { load: { calls: infer Calls } }
-  ? { snapshot: true } extends Calls[keyof Calls]
-    ? { readonly emits: Kind }
-    : unknown
-  : unknown;
 
 /** A declared reading by name, alone or with the function that makes its arguments from the Page. */
 type Named<R extends string = string> = R | readonly [R, (page: never) => unknown];
@@ -526,7 +519,7 @@ export function product<
   readonly guide?: Guide;
   readonly http?: Http;
   /** The product's host files by name; the host half owes one body each. */
-  readonly files?: DeclaredFiles<Files>;
+  readonly files?: DeclaredFiles<Files, keyof Caps>;
   /** The product's local operations by catalog key; the host half owes one body each. */
   readonly local?: Local & { readonly [K in keyof Local]: LocalFootprint<Local[K]> };
   readonly publishTool?: Publish;

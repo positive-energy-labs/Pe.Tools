@@ -2,7 +2,6 @@ import { hostOffer } from "./host-ownership.ts";
 import type { HostOffers } from "@pe/host-internal/product";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import { productEmitters, productHttp, productLocal } from "./product-executors.generated.ts";
-import { fileVersion } from "@pe/host-internal/local-files";
 import { HomeFiles } from "@pe/host-internal/home-files";
 import type { createRetainedBasis } from "@pe/host-internal/retained-basis";
 import {
@@ -762,19 +761,6 @@ function callRoutes(
     return Effect.tryPromise({
       try: async () => {
         const query = new URL(req.url, "http://host").searchParams;
-        if (query.has("file")) {
-          if (caller.kind !== "human" && caller.kind !== "pea")
-            throw new Refused({
-              code: "context.missing",
-              door: "/actions",
-              reason: "File versions require a human or Pea caller",
-            });
-          const path = query.get("file")!;
-          return Response.jsonUnsafe({
-            path,
-            fileVersion: await fileVersion(path),
-          });
-        }
         // Exported inputs by original action ID; the receipt, not this, says how the action settled.
         if (query.has("output")) {
           const visible = await owner().readFor(caller, undefined, query.get("output")!);
@@ -932,6 +918,11 @@ function callRoutes(
             files,
           };
           offer = hostOffer(captures, files);
+          // A changed or closed document retires its captures in the kernel, for every product.
+          yield* Effect.acquireRelease(
+            Effect.sync(() => observations().kept.follow(bridge)),
+            (release) => Effect.sync(release),
+          );
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.

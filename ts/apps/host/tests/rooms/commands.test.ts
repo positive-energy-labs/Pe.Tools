@@ -21,7 +21,7 @@ import { product, regionCode, roomsWork, takeoffsWork } from "@pe/rooms-contract
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
 import { bindCommandRuntime } from "../../src/command-registry.ts";
 import { bindControl } from "../../src/control.ts";
-import { fileVersion } from "@pe/host-internal/local-files";
+import { fileVersion } from "@pe/rooms-host/tests/file-version";
 import {
   captureStore,
   settle,
@@ -254,15 +254,15 @@ test.each([
         snapshot.world.zones = [zone];
         const retained = await settle(
           Effect.promise(() =>
-          captures.kept
-          .of("takeoff", takeoffCaptureSchema)
-          .keep({
-            provenance: { kind: "live", target: ref },
-            capturedAt: snapshot.reading.observedAt,
-            snapshot,
-          })
-          .then((capture) => ({ capture })),
-        ),
+            captures.kept
+              .of("takeoff", takeoffCaptureSchema)
+              .keep({
+                provenance: { kind: "live", target: ref },
+                capturedAt: snapshot.reading.observedAt,
+                snapshot,
+              })
+              .then((capture) => ({ capture })),
+          ),
         );
         const file = join(dir, "recorded.r10");
         await writeFile(file, "recorded RHVAC transport input", "utf8");

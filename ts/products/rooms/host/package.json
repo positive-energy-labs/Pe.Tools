@@ -8,6 +8,7 @@
     "./rhvac": "./src/rhvac-ops.ts",
     "./takeoff-projection": "./src/takeoff-ops.ts",
     "./tests/demo-seed": "./src/tests/demo-seed.ts",
+    "./tests/file-version": "./src/tests/file-version.ts",
     "./tests/rooms-sheet": "./src/tests/rooms-sheet.ts"
   },
   "scripts": {

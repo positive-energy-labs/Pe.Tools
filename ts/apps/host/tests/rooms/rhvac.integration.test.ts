@@ -15,7 +15,7 @@ import { product, takeoffsWork } from "@pe/rooms-contract/product";
 import { RouteWorkspace } from "@pe/runtime";
 import { checkoutRoot } from "../../../web/checkout-paths.ts";
 import { mkdtemp } from "../../../../tests/isolated-home/storage.ts";
-import { fileVersion } from "@pe/host-internal/local-files";
+import { fileVersion } from "@pe/rooms-host/tests/file-version";
 import { captureStore, settle, testDocumentMarks } from "../effect-test.ts";
 import { fixtureNative } from "../fixture-native.ts";
 import { readRhvacFixture, sdkSessions } from "../native-receipt-fixture.ts";
@@ -74,13 +74,13 @@ test.skipIf(process.env.PE_DEMO_JET !== "1")(
       const capture = await settle(
         Effect.promise(() =>
           captures.kept
-          .of("takeoff", takeoffCaptureSchema)
-          .keep({
-            provenance: { kind: "live", target: ref },
-            capturedAt: snapshot.reading.observedAt,
-            snapshot,
-          })
-          .then((capture) => ({ capture })),
+            .of("takeoff", takeoffCaptureSchema)
+            .keep({
+              provenance: { kind: "live", target: ref },
+              capturedAt: snapshot.reading.observedAt,
+              snapshot,
+            })
+            .then((capture) => ({ capture })),
         ),
       );
 
