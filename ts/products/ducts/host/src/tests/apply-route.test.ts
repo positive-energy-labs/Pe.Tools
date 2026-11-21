@@ -2,6 +2,10 @@ import { product as ductSystems } from "@pe/duct-systems-contract/product";
 import { product as fans } from "@pe/fans-contract/product";
 const fansTool = fans.tool;
 import { Effect } from "effect";
+
+const unused = (): never => {
+  throw Error("This test reads no home file");
+};
 import { expect, test, vi } from "vite-plus/test";
 import type { WorkPath } from "@pe/agent-contracts";
 import { ductActionBody } from "../action-runtime.ts";
@@ -80,7 +84,7 @@ const both = (owner: typeof fansTool | typeof ductSystems.tool) =>
     },
     owner,
     "heal",
-  )("ducts.apply-heal", "apply")({} as never, {} as never) as never;
+  )("ducts.apply-heal", "apply")({} as never, { files: { firm: unused, home: unused } }) as never;
 
 test("an apply executed on /fans never retires a /duct-systems cell, whatever its action asks", async () => {
   const { key, calls } = await apply(both(fansTool), "fans");

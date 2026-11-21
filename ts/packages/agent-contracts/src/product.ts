@@ -37,7 +37,12 @@ const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
 export * from "./product-bodies.ts";
-import type { LocalFootprint, LocalOperations } from "./product-bodies.ts";
+import type {
+  HostFiles,
+  LocalFootprint,
+  LocalOperations,
+  platformFiles,
+} from "./product-bodies.ts";
 
 /**
  * One staged value family, with its ADR 0032 value domain; the schema follows from `schemaOf`. The
@@ -364,12 +369,6 @@ export type ProductDeclaration = {
 };
 /** A declared HTTP route: the kernel mounts it at its path, so the path is rooted. */
 type HttpRoutes = Readonly<Record<string, HttpRead & { readonly path: `/${string}` }>>;
-/** A declared host file: what a reading hands it and what it answers, read through `hostFile`. */
-type HostFiles = Readonly<
-  Record<string, { readonly input: z.ZodType; readonly output: z.ZodType }>
->;
-/** The host's own file inputs: a product file by one of these names would answer for the platform. */
-export const platformFiles = ["firm", "settings", "capture"] as const;
 type SheetNative = {
   readonly native?: Readonly<Partial<Record<"plan" | "apply", readonly HostOperationKey[]>>>;
 };

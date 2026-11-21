@@ -19,8 +19,7 @@ import { familyExecutors, runPods, type FamilyActionDependencies } from "./famil
 import { instancesExecutors, type InstancesActionDependencies } from "./instances-actions.ts";
 import { lifetime } from "./document-lifetime.ts";
 import { productExecutors } from "./product-executors.generated.ts";
-import type { HostOffer, HostOffers } from "@pe/host-internal/product";
-import { HomeFiles } from "@pe/host-internal/home-files";
+import type { HostOffers } from "@pe/host-internal/product";
 import { catalogWorkExecutors } from "./catalog-work-actions.ts";
 import { sheetExecutors } from "./slots/sheet.ts";
 import { gatewayExecutor } from "./gateway-actions.ts";
@@ -40,18 +39,13 @@ type CommandDependencies = FamilyActionDependencies &
   Pick<HostOffers, "projectLifetime" | "runPods"> &
   InstancesActionDependencies & {
     nativeRead?: HostNativeRead["Service"];
-    /** The call route layer's one offer. */
-    offer?: HostOffer;
   };
-// A registry bound with no call route layer (a test) has no offer handed to it, so it makes its own
-// with the same constructor; one bound with no files service refuses the first read of a home.
-const noFiles = (): never => {
-  throw Error("This command registry was bound with no home files");
-};
+/** The offer as this host's own executors take it: the capture store whole. */
+export type Offer = ReturnType<typeof hostOffer<ObservationFiles>>;
 /** Composed once for this exact runtime. Invocation-local facts live only in bind/prepare. */
 export function commandRegistry(
   bridge: RevitBridge["Service"],
-  captures: ObservationFiles,
+  offer: Offer,
   deps: CommandDependencies,
   local: GatewayLocal,
   origin?: () => string,
@@ -74,13 +68,12 @@ export function commandRegistry(
   // Product-owned sheet writes answer through the generic sheet dispatcher.
   const products = productExecutors(bridge, {
     ...deps,
-    ...(deps.offer ??
-      hostOffer(captures, deps.files ?? HomeFiles.of({ firm: noFiles, home: noFiles }))),
+    ...offer,
     runPods: (effect, options) => runPods(deps, effect, options),
     projectLifetime: async (target) => (await lifetime(bridge, target, "project", deps)).process,
   });
   for (const group of [
-    familyExecutors(captures, bridge, deps),
+    familyExecutors(offer.captures, bridge, deps),
     instancesExecutors(deps),
     products.executors,
     sheetExecutors(bridge, deps, products.sheets),
@@ -186,7 +179,7 @@ export function commandRegistry(
 export function bindCommandRuntime(
   owner: ActionJournal,
   bridge: RevitBridge["Service"],
-  captures: ObservationFiles,
+  offer: Offer,
   deps: CommandDependencies & { nativeReads?: NativeReadTerminals },
   local: GatewayLocal,
   origin?: () => string,
@@ -197,7 +190,7 @@ export function bindCommandRuntime(
     readOwnership: owned.readOwnership,
     resolve: commandRegistry(
       bridge,
-      captures,
+      offer,
       { ...deps, nativeRead: owned.nativeRead },
       local,
       origin,

@@ -36,6 +36,13 @@ export type LocalFootprint<O> = O extends { readonly effect: "SessionWrite" }
   : { readonly effects?: never };
 export type LocalOperations = Readonly<Record<string, LocalOperation>>;
 
+/** A declared host file: what a reading hands it and what it answers, read through `hostFile`. */
+export type HostFiles = Readonly<
+  Record<string, { readonly input: z.ZodType; readonly output: z.ZodType }>
+>;
+/** The host's own file inputs: a product file by one of these names would answer for the platform. */
+export const platformFiles = ["firm", "settings", "capture"] as const;
+
 type Handle<
   P extends ProductDeclaration,
   K extends keyof P["readings"],

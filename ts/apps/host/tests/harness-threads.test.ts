@@ -32,6 +32,7 @@ import {
   testHostInputs,
   captureStore,
   journalAt,
+  testOffer,
 } from "./effect-test.ts";
 import { nativeReadRoot } from "../src/app.ts";
 import { HostNativeRead } from "@pe/host-internal/native-read";
@@ -397,8 +398,11 @@ test.each([
       files: Context.get(readContext, HomeFiles),
       marks: Context.get(readContext, HostDocumentMarks),
     };
-    const resolve = commandRegistry(bridge, captureStore(join(dir, "captures")), deps, () =>
-      Effect.fail(Error("No local command in this journey")),
+    const resolve = commandRegistry(
+      bridge,
+      testOffer(captureStore(join(dir, "captures")), deps.files),
+      deps,
+      () => Effect.fail(Error("No local command in this journey")),
     );
     const journal = journalAt(join(dir, "journal.jsonl"), Date.now);
     journal.bindCommands({

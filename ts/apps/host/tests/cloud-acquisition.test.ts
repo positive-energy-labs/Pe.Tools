@@ -12,7 +12,7 @@ import { Effect } from "effect";
 import { crossingOf } from "./callers.ts";
 import { replay } from "./sdk-replay.ts";
 import { unavailableShare } from "../src/machine.ts";
-import { detachedBridge, captureStore, machineOwner, journalAt } from "./effect-test.ts";
+import { detachedBridge, captureStore, machineOwner, journalAt, testOffer } from "./effect-test.ts";
 import { unreadLeg } from "../src/update-reader.ts";
 const folders: string[] = [];
 afterEach(async () => {
@@ -200,7 +200,7 @@ test("recorded SDK envelopes: only the downloaded local work file crosses the ac
   bindCommandRuntime(
     owner,
     bridge,
-    captureStore(join(dir, "captures")),
+    testOffer(captureStore(join(dir, "captures"))),
     {
       sdk,
       peaWork,

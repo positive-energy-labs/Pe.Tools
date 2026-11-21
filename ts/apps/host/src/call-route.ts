@@ -57,7 +57,7 @@ import { apsAuthLogin, apsAuthLogout, apsAuthStatus, apsAuthToken } from "./aps-
 import { RevitBridge, BridgeError, NoRevitSession } from "@pe/host-internal/bridge";
 import { PictureCaptureStore, PictureStoreFull } from "./captures-route.ts";
 import { CommandRejected, StepFailure } from "@pe/host-internal/command-executor";
-import { bindCommandRuntime } from "./command-registry.ts";
+import { bindCommandRuntime, type Offer } from "./command-registry.ts";
 import { ActionJournalService } from "./receipt-services.ts";
 import type { AttemptHost } from "@pe/host-internal/action-execution";
 import type { GatewayLocal, GatewayLocalContext } from "./gateway-actions.ts";
@@ -134,7 +134,6 @@ const said = (error: unknown): string =>
  */
 
 /** The offer as this host's own operations take it: the capture store whole. */
-type Offer = ReturnType<typeof hostOffer<ObservationFiles>>;
 export type CallRouteDispatch = (
   ...args: Parameters<typeof dispatchTsOnlyOperation>
 ) => Effect.Effect<
@@ -925,13 +924,14 @@ function callRoutes(
           captures ??=
             Option.getOrUndefined(yield* Effect.serviceOption(CaptureStore)) ??
             Context.get(yield* Layer.build(CaptureStore.layer()), CaptureStore);
+          const files = yield* HomeFiles;
           actionDeps = {
             ...actionDeps,
             marks: yield* HostDocumentMarks,
             pictures: yield* PictureCaptureStore,
-            files: yield* HomeFiles,
+            files,
           };
-          offer = hostOffer(captures, actionDeps.files!);
+          offer = hostOffer(captures, files);
           const freshness = yield* ReadFreshness;
           yield* Effect.acquireRelease(
             // Queue/native-read telemetry must not invalidate an in-flight read's identity.
@@ -964,10 +964,9 @@ function callRoutes(
           bindCommandRuntime(
             operations,
             bridge,
-            observations(),
+            offer,
             {
               ...actionDeps,
-              offer,
               families: composition?.families,
               nativeRead: yield* HostNativeRead,
               nativeReads: nativeReads ?? { kind: "recorded" },
