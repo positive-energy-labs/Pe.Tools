@@ -373,7 +373,7 @@ export function gatewayExecutor(
             if (!declared) throw refused(`'${key}' has no declared external effect adapter`);
             // `validateInput` decoded `authored` by the request schema the declaration types this by.
             effects.push(
-              ...declared(authored as never).map((path) => ({
+              ...declared(authored).map((path) => ({
                 kind: "file" as const,
                 path: resolve(path),
               })),

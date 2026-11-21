@@ -23,7 +23,11 @@ export type LocalOperation = {
   readonly says: string;
   /** A read unless it says so. */
   readonly effect?: "SessionWrite";
-  readonly effects?: (input: never) => readonly string[];
+  /**
+   * A method, so each entry's own request type fits the erased table and the gateway calls it with
+   * the request it has already decoded. `LocalFootprint` holds the exact type at the declaration.
+   */
+  effects?(input: unknown): readonly string[];
 } & Pick<CatalogRow, "displayName" | "requestTypeName" | "responseTypeName" | "searchTerms"> &
   Partial<Pick<CatalogRow, "costTier">>;
 /** A mutation owes the files it writes, read from its declared request; a read can name none. */
