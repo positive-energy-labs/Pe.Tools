@@ -56,7 +56,7 @@ import { publicationPose, recordedWorkDoor } from "./history";
 import { settleWork } from "./work-door-observation";
 import { freezePage } from "./freeze-page";
 import type { PlaceInput } from "./typed-place";
-import type { ReadingContext, UseSource } from "@pe/agent-contracts/route";
+import type { HostRead, ReadingContext, UseSource } from "@pe/agent-contracts/route";
 import type {
   AnyVerb,
   DrawContext,
@@ -115,6 +115,51 @@ export function mountTypedRoute(
     const spec = module.spec;
     const subjectSpec = spec.subject;
     const subjectRead = subjectSpec?.read ?? spec.core;
+    const fields = Object.entries(spec.fields);
+    const targetFields =
+      input.fixture !== null || input.history ? [] : fields.filter(([, field]) => field.target);
+    const targetQueries = targetFields.flatMap(([name, field]) => {
+      const target = field.target;
+      if (!target || target === "subject") return [];
+      const read =
+        Object.values(spec.reads ?? {}).find(
+          (read) =>
+            read.key === target.read.key && "args" in read && read.args === target.read.args,
+        ) ?? target.read;
+      return [{ name, field, read, retain: target.retain }];
+    });
+    const subjectField =
+      subjectSpec && targetFields.find(([name]) => name === subjectSpec.field)?.[1];
+    const targetSubject =
+      subjectSpec && subjectRead && subjectField?.target === "subject"
+        ? {
+            name: subjectSpec.field,
+            field: subjectField,
+            read: subjectRead,
+            retain(this: void, value: unknown, roster: unknown) {
+              if (!isOpenSet(value) || value.kind === "all") return value;
+              const available = new Set<unknown>(subjectSpec.options(roster).map(({ id }) => id));
+              const ids = value.ids.filter((id) => available.has(id));
+              if (
+                ids.length === value.ids.length &&
+                (value.active === undefined || ids.includes(value.active))
+              )
+                return value;
+              return openSet<unknown>(canonicalRouteInput, []).select(value, ids);
+            },
+          }
+        : null;
+    // A subject roster may depend on an admitted query (the regions on a plan).
+    const targetMembership = [...targetQueries, ...(targetSubject ? [targetSubject] : [])];
+    const membershipReads = new Set(targetMembership.map(({ read }) => read));
+    const reads = new Map<HostRead, { snapshot: Snapshot; args: string; stop(): void }>();
+    const readInput = (read: HostRead, from: Record<string, unknown> = page) => {
+      const project =
+        "args" in read && typeof read.args === "function"
+          ? read.args
+          : (spec.core?.args ?? (() => ({})));
+      return read.input.parse(project(from as never));
+    };
     const edits = spec.edits;
     const own = edits?.work.route ?? spec.key;
     const ownerConfigs = edits?.owners ?? {};
@@ -148,7 +193,7 @@ export function mountTypedRoute(
       if (input.target === null) throw Error("Place has no write target");
       if (input.readOnly || input.history) throw Error("needs live Revit");
     };
-    const decodePage = (remembered = true) => {
+    const decodePage = (remembered = true): Record<string, unknown> => {
       const search = input.address.read();
       const memory = remembered
         ? z.record(z.string(), z.unknown()).parse(input.memory() ?? {})
@@ -163,9 +208,13 @@ export function mountTypedRoute(
       }
       return freezePage({
         ...Object.fromEntries(
-          Object.entries(spec.fields).map(([key, field]) => {
+          fields.map(([key, field]) => {
             const raw = search.get(key);
-            return [key, decodeField(field, raw === null ? (memory[key] ?? field.initial) : raw)];
+            const carry = !field.target || input.fixture !== null || input.history;
+            return [
+              key,
+              decodeField(field, raw ?? (carry ? memory[key] : undefined) ?? field.initial),
+            ];
           }),
         ),
         selected: decodeField(
@@ -194,17 +243,60 @@ export function mountTypedRoute(
       const fitted = fitSubject(value, roster);
       return fitted === value ? candidate : { ...candidate, [subjectSpec.field]: fitted };
     };
+    const fitTarget = (candidate: Record<string, unknown>) => {
+      let admitted = candidate;
+      const corrections = new Map<string, unknown>();
+      let pending = false;
+      for (const {
+        name,
+        read,
+        field: { initial },
+        retain,
+      } of targetMembership) {
+        const value = admitted[name];
+        if (canonicalRouteInput(value) === canonicalRouteInput(initial)) continue;
+        const record = reads.get(read);
+        const snapshot = record?.snapshot;
+        const ready =
+          !pending &&
+          snapshot?.state === "ready" &&
+          record?.args === canonicalRouteInput(readInput(read, admitted));
+        const bound = input.target?.kind === "document";
+        const next = bound && ready ? retain(value, snapshot.value) : initial;
+        if (canonicalRouteInput(value) === canonicalRouteInput(next)) continue;
+        admitted = { ...admitted, [name]: next };
+        if (!bound || ready) corrections.set(name, next);
+        else pending = true;
+      }
+      return { admitted, corrections };
+    };
+    const writeField = (search: URLSearchParams, name: string, value: unknown) => {
+      const field = spec.fields[name];
+      if (field?.target && canonicalRouteInput(field.initial) === canonicalRouteInput(value))
+        search.delete(name);
+      else search.set(name, encodeField(field, value));
+    };
+    const malformed = Symbol("malformed model field");
+    const malformedFields = (search: URLSearchParams) =>
+      targetFields.filter(([name, field]) => {
+        const raw = search.get(name);
+        return raw !== null && decodeField({ ...field, initial: malformed }, raw) === malformed;
+      });
     const fitAddress = (
       candidate: Record<string, unknown>,
       roster?: () => readonly unknown[] | undefined,
     ) => {
-      const next = fitPage(candidate, roster);
-      if (next !== candidate && subjectSpec?.limit) {
+      const { admitted, corrections } = fitTarget(candidate);
+      const search = input.address.read();
+      for (const [name, field] of malformedFields(search)) corrections.set(name, field.initial);
+      const next = fitPage(admitted, roster);
+      if (next !== admitted && subjectSpec?.limit) {
         subjectNotice = subjectSpec.limit.message;
-        const search = new URLSearchParams(input.address.read());
+        corrections.set(subjectSpec.field, next[subjectSpec.field]);
+      }
+      if (corrections.size) {
         const previous = search.toString();
-        const field = subjectSpec.field;
-        search.set(field, encodeField(spec.fields[field], next[field]));
+        for (const [field, value] of corrections) writeField(search, field, value);
         queueMicrotask(() => {
           if (!disposed && input.custody.current() && input.address.read().toString() === previous)
             input.address.write(search, "replace");
@@ -260,10 +352,6 @@ export function mountTypedRoute(
     const applyingReviews = new Set<string>();
     const applyingDocumentWrite = () =>
       input.target?.kind === "document" && applyingReviews.size > 0;
-    const reads = new Map<
-      import("@pe/agent-contracts/route").HostRead,
-      { snapshot: Snapshot; args: string; stop(): void }
-    >();
     const limitRoster = () => {
       const snapshot = subjectRead && reads.get(subjectRead)?.snapshot;
       if (subjectSpec?.limit && snapshot?.state === "ready")
@@ -271,13 +359,6 @@ export function mountTypedRoute(
     };
     const boundedAll = () =>
       subjectSpec?.limit && !subjectSpec.limit.overview && page[subjectSpec.field].kind === "all";
-    const readInput = (read: import("@pe/agent-contracts/route").HostRead) => {
-      const project =
-        "args" in read && typeof read.args === "function"
-          ? read.args
-          : (spec.core?.args ?? (() => ({})));
-      return read.input.parse(project(page as never));
-    };
     const currentPublication = (read: import("@pe/agent-contracts/route").HostRead) => {
       const record = reads.get(read);
       return record?.snapshot.state === "ready" &&
@@ -620,6 +701,15 @@ export function mountTypedRoute(
         forget: (read: HostRead) => attempts.delete(read),
         [Symbol.iterator]() {
           const active = visibleReads(spec, page);
+          const search = input.address.read();
+          for (const { name, field, read } of targetQueries) {
+            const raw = search.get(name);
+            if (
+              raw !== null &&
+              canonicalRouteInput(decodeField(field, raw)) !== canonicalRouteInput(field.initial)
+            )
+              active.add(read);
+          }
           for (const [read, record] of reads)
             if (!active.has(read)) {
               record.stop();
@@ -632,6 +722,11 @@ export function mountTypedRoute(
     })();
     const syncReads = (force = false) => {
       if (disposed || released || !input.custody.current()) return;
+      if (input.target === null && input.fixture === null) {
+        connectTimeline();
+        notify();
+        return;
+      }
       const all = boundedAll();
       const roster = all ? limitRoster() : undefined;
       if (roster) {
@@ -739,8 +834,10 @@ export function mountTypedRoute(
                         ? record.snapshot.reason
                         : undefined,
                   );
-          if (read === subjectRead && record.snapshot.state === "ready" && boundedAll())
-            queueMicrotask(() => syncReads());
+          if (record.snapshot.state === "ready") {
+            if (membershipReads.has(read)) queueMicrotask(followAddress);
+            else if (read === subjectRead && boundedAll()) queueMicrotask(() => syncReads());
+          }
           connectTimeline();
           notify();
         };
@@ -792,9 +889,17 @@ export function mountTypedRoute(
         else spec.fields[key]!.schema.parse(value);
       }
       const fitted = fitPage(patch, limitRoster);
-      const next = { ...page, ...fitted };
+      const requested = {
+        ...page,
+        ...fitted,
+      };
+      const search = input.address.read();
+      for (const [name, field] of targetFields)
+        if (!Object.hasOwn(patch, name))
+          requested[name] = decodeField(field, search.get(name) ?? field.initial);
+      const { admitted: next, corrections } = fitTarget(requested);
       if (fitted !== patch && subjectSpec?.limit) subjectNotice = subjectSpec.limit.message;
-      if (canonicalRouteInput(next) === canonicalRouteInput(page)) {
+      if (canonicalRouteInput(requested) === canonicalRouteInput(page) && !corrections.size) {
         if (fitted !== patch) notify();
         return { kind: "accepted", changed: false } as const;
       }
@@ -806,12 +911,12 @@ export function mountTypedRoute(
       page = freezePage(next);
       gate.movePage(page, { kind: "human", source: "query", history: "replace" });
       syncWork();
-      syncReads();
       notify();
-      const search = input.address.read();
       for (const [key, value] of Object.entries(fitted))
         search.set(key, encodeField(spec.fields[key], value));
+      for (const [key, value] of corrections) writeField(search, key, value);
       input.address.write(search, history);
+      syncReads();
       return { kind: "accepted", changed: true } as const;
     };
     const moveRole = (
@@ -828,12 +933,13 @@ export function mountTypedRoute(
       return move(patch, history);
     };
     // The Page the address holds; an address without `selected` keeps the current selection.
-    const addressPage = (remembered = true) => {
+    const addressPage = (remembered = true): Record<string, unknown> => {
       const next = decodePage(remembered);
       return input.address.read().has("selected") ? next : { ...next, selected: page.selected };
     };
-    const stopAddress = input.address.subscribe(() => {
-      const addressed = addressPage();
+    const followAddress = (traversed = false) => {
+      if (disposed || !input.custody.current()) return;
+      const addressed = traversed ? decodePage(false) : addressPage();
       const next = fitAddress(addressed, limitRoster);
       // An unchanged address can be the custody-return notification for released read resources.
       if (canonicalRouteInput(next) === canonicalRouteInput(page)) {
@@ -852,7 +958,8 @@ export function mountTypedRoute(
       syncWork();
       syncReads();
       notify();
-    });
+    };
+    const stopAddress = input.address.subscribe(followAddress);
     cleanups.push(stopAddress);
     const valueAfterWork = () =>
       [...owners.values()].some(
@@ -1023,6 +1130,14 @@ export function mountTypedRoute(
       const refused = (refusal: string): SubjectState => ({ ready: false, refusal, label: "" });
       if (disposed || released || !input.custody.current())
         return refused("Place is inactive or retired");
+      if (
+        targetFields.some(
+          ([key, field]) =>
+            search[key] !== undefined &&
+            canonicalRouteInput(decodeField(field, search[key])) !== canonicalRouteInput(page[key]),
+        )
+      )
+        return null;
       try {
         const subjectSpec = spec.subject;
         if (!subjectSpec) {
@@ -1046,9 +1161,11 @@ export function mountTypedRoute(
         const options = subjectSpec.options(core.value),
           ids = subject.kind === "all" ? options.map((o) => o.id) : (subject.ids ?? []);
         if (missingSubjects(options, ids).length)
-          return refused(
-            `A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`,
-          );
+          return targetSubject
+            ? null
+            : refused(
+                `A ${spec.subject?.noun ?? "Subject"} in this link is not in this model; choose it again from the roster`,
+              );
         if (canonicalRouteInput(subject) !== canonicalRouteInput(page[field])) return null;
         const link = input.address.read();
         link.delete("thread");
@@ -1608,7 +1725,9 @@ export function mountTypedRoute(
       available: () => !disposed && input.custody.current(),
       /** The URL write is flushed: the address alone, without Place memory, decodes to this Page
        *  (slice 6.1, `data-url-settled`); a reload reads only the address. */
-      urlCurrent: () => canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page),
+      urlCurrent: () =>
+        !malformedFields(input.address.read()).length &&
+        canonicalRouteInput(addressPage(false)) === canonicalRouteInput(page),
       target: () => input.target,
       revision: () => revision,
       work: () => gate.read()?.work ?? null,

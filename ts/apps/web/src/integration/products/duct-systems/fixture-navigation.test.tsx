@@ -11,6 +11,7 @@ import { module as ducts } from "../../../../../../products/duct-systems/web/rou
 import { ductsLink, systemCode } from "@pe/ducts-web/identity";
 import { networkFixtures } from "@pe/ducts-web/network-fixtures";
 import { workFingerprintSchema } from "@pe/agent-contracts";
+import { uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { mountTypedRoute, typedSubjectDoor } from "../../../shell/typed-mount.ts";
 import { TypedChrome } from "../../../shell/typed-shell.tsx";
 import { StandaloneBand } from "../../../shell/band.test-support.tsx";
@@ -83,11 +84,17 @@ test.each(Object.keys(networkFixtures))("/ducts resolves registered fixture %s",
   await arrive(`/ducts?fixture=${name}`);
 });
 test("MUAS-1 scene fix href reaches a rendering ducts mount", async () => {
-  await arrive(ductsLink({ unitId: 14577391, portIndex: 2 }, { fixture: "scene" }));
+  await arrive(
+    ductsLink(
+      { uniqueId: uniqueIdSchema.parse("scene:14577391"), portIndex: 2 },
+      { fixture: "scene" },
+    ),
+  );
 });
 
+const repairPort = { uniqueId: uniqueIdSchema.parse("navigation:10052051"), portIndex: 1 };
 test("a fan link replaces remembered systems and Clear closes the fan scope", async () => {
-  const fan = { unitId: 10052051, portIndex: 1 };
+  const fan = repairPort;
   const { mount, url } = await arrive(ductsLink(fan, { fixture: "navigation" }), {
     system: { kind: "ids", ids: [systemCode("SA Office")] },
   });
@@ -100,9 +107,7 @@ test("a fan link replaces remembered systems and Clear closes the fan scope", as
 });
 
 test("choosing a system writes both scope fields together before Clear", async () => {
-  const { mount, url } = await arrive(
-    ductsLink({ unitId: 10052051, portIndex: 1 }, { fixture: "navigation" }),
-  );
+  const { mount, url } = await arrive(ductsLink(repairPort, { fixture: "navigation" }));
   const ids = [systemCode("SA Office")];
   act(() => {
     typedSubjectDoor(mount)?.select(ids);

@@ -2,6 +2,7 @@
 import { hostState } from "../../../host/src/host-ownership.ts";
 import { mkdtemp, stateFixture } from "../../../../tests/isolated-home/storage.ts";
 import { fixtureTimeline } from "../shell/fixture-work-door";
+import { testAddress } from "../shell/typed-place.test-support";
 import { refusalOf, valueOf } from "@pe/web-kernel/route/typed-route";
 import { elementSubject } from "@pe/ducts-domain/work-subject";
 import { snapshot as workSnapshot } from "../../../host/tests/host-read-graph.test-support";
@@ -254,18 +255,12 @@ async function journey(module: TypedRoute = fans) {
   const fingerprint = workFingerprintSchema.parse(
     `builtin-closure:${builtinEnrollments.find((e) => e.routeKey === "fans")!.closure.fingerprint}`,
   );
-  const input: PlaceInput = {
+  const input: Omit<PlaceInput, "address"> = {
     target: { kind: "document" as const, ref },
     fixture: null,
     work: { address: path, open: ref },
-    address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
     custody: { current: () => current },
-    memory: () => ({
-      fan: {
-        kind: "ids",
-        ids: [stableFanKey({ uniqueId: fan.uniqueId, portIndex: fan.portIndex })],
-      },
-    }),
+    memory: () => ({}),
   };
   const mounts: ReturnType<typeof mountTypedRoute>[] = [];
   const mount = (
@@ -274,7 +269,10 @@ async function journey(module: TypedRoute = fans) {
     ports: Parameters<typeof mountTypedRoute>[3] = {},
     candidate: TypedRoute = module,
   ) => {
-    const m = mountTypedRoute(candidate, { ...input, ...place, readOnly }, fingerprint, {
+    const address = testAddress({
+      fan: JSON.stringify({ kind: "ids", ids: [stableFanKey(fan)] }),
+    });
+    const m = mountTypedRoute(candidate, { ...input, address, ...place, readOnly }, fingerprint, {
       work,
       timeline: fixtureTimeline(host.workspace),
       sources: { "fans.calc": read },
@@ -292,6 +290,7 @@ async function journey(module: TypedRoute = fans) {
     return vi.waitFor(
       () => {
         expect(m.value()).toMatchObject({ state: "ready" });
+        expect(m.urlCurrent()).toBe(true);
         expect(m.timeline()).not.toBeNull();
         if (m.owner()?.ready) expect(m.problem()).toBeNull();
       },

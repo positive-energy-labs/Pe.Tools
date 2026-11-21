@@ -87,8 +87,16 @@ test("pricing reads Chadds' saved ignore with empty pending Work", async () => {
 });
 
 test("fan scope walks its port even when no roster system names it as base equipment", async () => {
-  const fan = { unitId: 17, portIndex: 2 },
-    calls: unknown[] = [];
+  const target = { session: "test", openId: "document" };
+  const fan = { uniqueId: "fan-on-this-model", portIndex: 2 };
+  const unitId = 17;
+  const calls: unknown[] = [];
+  const ports = {
+    target,
+    slots: [],
+    activeSlot: "",
+    rows: [{ ...fan, unitId, mark: "MA-1", kind: "muas", side: "supply", ratedEspInWg: null }],
+  };
   const roster = {
     ...snapshot,
     rows: [],
@@ -113,11 +121,12 @@ test("fan scope walks its port even when no roster system names it as base equip
     files: { firm: unexpected, tiers: unexpected },
     compute: (schema, inputs, pure) => schema.parse(pure(inputs)),
     read: async (read, args) => {
-      const isRoster = "name" in read && read.name === ductsRoster.name;
-      if (!isRoster) calls.push(args);
-      return ("data" in read ? read.data : read.output).parse(
-        isRoster ? roster : { body: walk, version: null },
-      );
+      const key = "name" in read ? read.name : read.key;
+      const schema = "data" in read ? read.data : read.output;
+      if (key === ductsRoster.name) return schema.parse(roster);
+      if (key === "fans.roster") return schema.parse(ports);
+      calls.push(args);
+      return schema.parse({ body: walk, version: null });
     },
     collect: async (ids, options) => {
       expect(ids).toEqual([7]);
@@ -131,13 +140,22 @@ test("fan scope walks its port even when no roster system names it as base equip
       ];
     },
   };
-  const target = { session: "test", openId: "document" };
+  await expect(
+    ductsNetwork.run(ctx, {
+      target,
+      system: [],
+      fan: { ...fan, uniqueId: "fan-on-another-model" },
+    }),
+  ).rejects.toThrow("Fan port is not in this document");
   const network = await ductsNetwork.run(ctx, { target, system: [], fan });
   expect(calls).toEqual([
     {
       role: "acquire",
       target: { kind: "document", ref: target },
-      request: { slots: roster.slots, selector: { kind: "from", ...fan } },
+      request: {
+        slots: roster.slots,
+        selector: { kind: "from", unitId, portIndex: fan.portIndex },
+      },
     },
   ]);
   expect(network.systems.map((s) => s.name)).toEqual(fanSystems(walk, roster.systems));

@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { ViewOwner } from "./view-owner";
 import { causeRefusal } from "./refusal";
 import { useRouteActivity } from "@pe/web-kernel/route/activity";
+import { publicRoutes } from "./route-discovery";
 
 import { commitAddress, rawQuery } from "./address-transport";
 export { commitAddress, rawQuery } from "./address-transport";
@@ -267,6 +268,32 @@ export function restorePageSearch(memory?: Record<string, unknown>, url?: Record
     : undefined;
 }
 
+/** A document binding and its model fields come from this entry and its resolved target. */
+export function restorableTabSearch(pathname: string, url: URLSearchParams) {
+  const memory = tabPageSearch(pathname);
+  const spec = publicRoutes.byAddress(pathname)?.typed.spec;
+  const documentRoute =
+    spec &&
+    (spec.needs === "document" ||
+      spec.needs === "project" ||
+      spec.needs === "family" ||
+      !!spec.optionalTarget);
+  if (!memory || !documentRoute || url.has("fixture")) return memory;
+  if (
+    Object.hasOwn(memory, "fixture") &&
+    !url.has("target") &&
+    !Object.entries(spec.fields).some(([key, field]) => field.target && url.has(key))
+  )
+    return memory;
+  const pin = url.get("target");
+  if (pin === null || memory.target !== pin) return undefined;
+  return Object.fromEntries(
+    Object.entries(memory).filter(
+      ([key]) => key !== "target" && key !== "fixture" && !spec.fields[key]?.target,
+    ),
+  );
+}
+
 /** Restore before device admission, so a bare fixture Place never falls into the host lane. */
 export function useRestoreTabPage() {
   useSyncExternalStore(places.subscribe, places.read, places.read);
@@ -275,7 +302,7 @@ export function useRestoreTabPage() {
   const memory =
     "__pePageMove" in at.state || "__peRouteTab" in at.state
       ? undefined
-      : tabPageSearch(at.pathname);
+      : restorableTabSearch(at.pathname, rawQuery(router));
   // Memory is codec text: it fills only the keys the URL leaves out, and an explicit value wins.
   const missing = Object.entries(memory ?? {}).filter(([key]) => !rawQuery(router).has(key));
   useEffect(() => {

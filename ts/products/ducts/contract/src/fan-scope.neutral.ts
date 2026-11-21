@@ -1,6 +1,6 @@
 import { z } from "zod";
 export const fanScopeSchema = z.object({
-  unitId: z.number().int().positive(),
+  uniqueId: z.string().min(1),
   portIndex: z.number().int().nonnegative(),
 });
 export type FanScope = z.infer<typeof fanScopeSchema>;

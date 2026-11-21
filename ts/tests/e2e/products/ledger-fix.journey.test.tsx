@@ -104,9 +104,14 @@ test("the 369-system handoff names the fan port and resolves only its systems", 
   const { href } = await ledgerLink();
   expect(href.href.length).toBeLessThan(2048);
   const fan = fields.fan.schema.parse(JSON.parse(href.searchParams.get("fan")!));
+  const port = sheetFixture.roster.rows.find(
+    ({ unitId, portIndex }) =>
+      unitId === sheetFixture.overview.fan?.unitId &&
+      portIndex === sheetFixture.overview.fan.portIndex,
+  );
   expect(fan).toEqual({
-    unitId: sheetFixture.overview.fan!.unitId,
-    portIndex: sheetFixture.overview.fan!.portIndex,
+    uniqueId: port?.uniqueId,
+    portIndex: port?.portIndex,
   });
   expect(JSON.parse(href.searchParams.get("system")!)).toEqual({ kind: "ids", ids: [] });
   const walk = {

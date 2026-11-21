@@ -38,7 +38,7 @@ export function hostedRouteAddress(
   const listeners = new Set<() => void>();
   const retainSubject = () => {
     const subject = route.spec.subject;
-    if (work !== undefined && subject)
+    if (work !== undefined && subject && !route.spec.fields[subject.field]?.target)
       search.set(
         subject.field,
         JSON.stringify(

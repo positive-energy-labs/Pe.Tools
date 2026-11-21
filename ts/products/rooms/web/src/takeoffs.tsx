@@ -10,7 +10,7 @@ import { PreviewAction } from "@pe/kit/lang/write-action";
 type Row = AdoptionContext["value"]["value"]["rows"][number];
 export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
   const page = ctx.page.read();
-  const { rows, unreadable, missingViews } = ctx.value.value;
+  const { rows, unreadable } = ctx.value.value;
   const catalogue = ctx.read(plans);
   const levels = "value" in catalogue ? (catalogue.value?.levels ?? []) : [];
   const saved = ctx.read(captures);
@@ -36,35 +36,23 @@ export function AdoptionBody({ ctx }: { ctx: AdoptionContext }) {
       <fieldset>
         <legend>Plans</legend>
         {levels.flatMap((level) =>
-          level.views
-            .filter((plan) => !missingViews.includes(plan.view))
-            .map((plan) => (
-              <label key={plan.view} className="flex items-center gap-2">
-                <Input
-                  type="checkbox"
-                  checked={page.views.includes(plan.view)}
-                  onChange={(event) =>
-                    ctx.page.query({
-                      views: event.target.checked
-                        ? [...page.views, plan.view]
-                        : page.views.filter((view) => view !== plan.view),
-                    })
-                  }
-                />
-                {level.name} · {plan.name} · {plan.type}
-              </label>
-            )),
+          level.views.map((plan) => (
+            <label key={plan.view} className="flex items-center gap-2">
+              <Input
+                type="checkbox"
+                checked={page.views.includes(plan.view)}
+                onChange={(event) =>
+                  ctx.page.query({
+                    views: event.target.checked
+                      ? [...page.views, plan.view]
+                      : page.views.filter((view) => view !== plan.view),
+                  })
+                }
+              />
+              {level.name} · {plan.name} · {plan.type}
+            </label>
+          )),
         )}
-        {missingViews.map((view) => (
-          <label key={view} className="flex items-center gap-2">
-            <Input
-              type="checkbox"
-              checked={page.views.includes(view)}
-              onChange={() => ctx.page.query({ views: page.views.filter((id) => id !== view) })}
-            />
-            Missing plan: {view}
-          </label>
-        ))}
       </fieldset>
       <div className="flex gap-2 py-1">
         <Button label="refresh" onClick={() => ctx.refresh()}>

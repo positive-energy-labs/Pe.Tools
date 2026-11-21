@@ -3,9 +3,13 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, test } from "vite-plus/test";
 import { product } from "@pe/rooms-contract/product";
 import { module } from "../routes/rooms/route.ts";
-import { CEILING, FLOOR, code, levels, region, zone } from "./fixtures.ts";
+import { module as takeoffs } from "../routes/takeoffs/route.ts";
+import { CEILING, FLOOR, code, levels, reading, region, zone } from "./fixtures.ts";
 import {
   backRestores,
+  hostedRouteAddress,
+  pin,
+  targetJourney,
   targetChange,
   targetPaths,
   type JourneyDoc,
@@ -41,6 +45,11 @@ const rooms: TargetProduct = {
       return { levels, regions: model.regions, unreadable: [] };
     }
     if (key === "revit.context.view-image") throw Error("No image in this fixture");
+    if (key === "takeoffs.snapshot" && input.views.length === 0)
+      return {
+        reading,
+        snapshot: { status: { systems: [] }, unreadable: [], zoneFrs: [], regionsByZone: {} },
+      };
     throw Error(`Unexpected native read ${key}`);
   },
   async use(doc, j) {
@@ -65,3 +74,69 @@ test.each(targetPaths)("Rooms: %s leaves the old document's plan and room behind
 );
 test("Rooms: Back restores the plan and room its entry names, and Forward the other document's", () =>
   backRestores(rooms));
+
+test("Rooms: a hosted Work key cannot become a room subject", () => {
+  const address = hostedRouteAddress(module, {
+    thread: "caller",
+    work: "workspace",
+    visible: true,
+  });
+  expect(address.read().has("room")).toBe(false);
+  expect(address.read().get("work")).toBe("workspace");
+});
+
+test("Rooms: a direct Snowdon pin drops the foreign plan and room", async () => {
+  const j = await targetJourney(module, rooms.reads, rooms.native, {
+    open: ["chadds", "snowdon"],
+    search: new URLSearchParams({
+      target: pin("snowdon"),
+      view: JSON.stringify(FLOOR),
+      room: JSON.stringify({ kind: "ids", ids: [code(1)] }),
+    }),
+  });
+  try {
+    const live = await j.bound("snowdon", false);
+    expect(j.search().has("view")).toBe(false);
+    expect(j.search().has("room")).toBe(false);
+    expect(live.page.read()).toMatchObject({ view: "", room: { kind: "ids", ids: [] } });
+    expect(
+      j.hosts.snowdon.nativeCalls.some(({ input }) => JSON.stringify(input).includes(FLOOR)),
+    ).toBe(false);
+  } finally {
+    await j.close();
+  }
+});
+
+test("Takeoffs: a direct Chadds pin cannot restore views from Snowdon", async () => {
+  const j = await targetJourney(takeoffs, rooms.reads, rooms.native, {
+    open: ["chadds", "snowdon"],
+    search: new URLSearchParams({ target: pin("chadds") }),
+    remembered: new URLSearchParams({ target: pin("snowdon"), views: JSON.stringify([CEILING]) }),
+  });
+  try {
+    const live = await j.bound("chadds", false);
+    expect(j.search().has("views")).toBe(false);
+    expect(live.page.read()).toMatchObject({ views: [] });
+    expect(
+      await screen.findByText("No regions on the chosen plans", {}, { timeout: 20000 }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Missing plan:/)).toBeNull();
+  } finally {
+    await j.close();
+  }
+});
+
+test("Rooms: an unpinned URL uses the reopened sole document instead of a remembered closed pin", async () => {
+  const j = await targetJourney(module, rooms.reads, rooms.native, {
+    open: ["again"],
+    search: new URLSearchParams({ view: JSON.stringify(FLOOR) }),
+    remembered: new URLSearchParams({ target: pin("chadds"), view: JSON.stringify(FLOOR) }),
+  });
+  try {
+    const live = await j.bound("again", false);
+    expect(j.search().has("target")).toBe(false);
+    expect(live.page.read()).toMatchObject({ view: FLOOR });
+  } finally {
+    await j.close();
+  }
+});

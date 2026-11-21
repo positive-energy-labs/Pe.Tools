@@ -138,6 +138,10 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
     ctx,
     snapshot,
   );
+  const fan = sheet?.overview.fan;
+  const port =
+    fan &&
+    roster.find(({ unitId, portIndex }) => unitId === fan.unitId && portIndex === fan.portIndex);
   const select = (selected: string) =>
     ctx.selection.set(selected ? [{ kind: "focus", id: selected }] : []);
   const state = ctx.value.value?.calcView ?? EMPTY_CALC_STATE;
@@ -201,7 +205,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
       return {
         says: `Fix in /duct-systems: ${what} ›`,
         href: ductsLink(
-          sheet?.overview.fan ?? null,
+          port ?? null,
           search,
           // The contract admitted it as an element UniqueId code (`elementSubjectSchema`).
           blocker.subject
@@ -327,7 +331,7 @@ function LedgerContent({ ctx, snapshot }: { ctx: CalcContext; snapshot: DuctSnap
       {ownPane}
       <FittingReadouts
         groups={groups}
-        ductsHref={ductsLink(sheet?.overview.fan ?? null, search)}
+        ductsHref={ductsLink(port ?? null, search)}
         waiting={!sheet ? "Open a fan first" : state.inputs ? null : "Wait for inputs"}
       />
     </CalcFrame>

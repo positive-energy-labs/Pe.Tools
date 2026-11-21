@@ -8,11 +8,12 @@ import { SCENE_FIXTURE } from "@pe/ducts-web/scene.fixture";
 import { designOf } from "@pe/ducts-domain/test-design";
 import { pricingValue, pricingWire } from "@pe/duct-systems-domain/pricing-value";
 import { ductsLink, systemCode } from "@pe/ducts-web/identity";
+import { uniqueIdSchema } from "@pe/agent-contracts/subject-ref";
 import { fields, network, pricing } from "../route.ts";
 
 test("selecting a system replaces the MA-1 repair link's read scope", () => {
   const link = new URL(
-    ductsLink({ unitId: 10052051, portIndex: 1 }, {}),
+    ductsLink({ uniqueId: uniqueIdSchema.parse("navigation:10052051"), portIndex: 1 }, {}),
     "https://fixture.invalid",
   );
   const fan = fields.fan.schema.parse(JSON.parse(link.searchParams.get("fan") ?? "null"));

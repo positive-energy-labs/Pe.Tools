@@ -161,20 +161,14 @@ test("Rooms: choose one of two plans of one name, stage a field and submit the s
   }
 });
 
-test("Rooms: a link to a plan that left the document says so and returns to an explicit choice", async () => {
+test("Rooms: a link to a plan that left the document drops it and returns to an explicit choice", async () => {
   const { native } = model();
   const j = await journey("rooms", native, new URLSearchParams({ view: JSON.stringify(GONE) }));
   try {
     render(<Screen mount={j.mount} />);
-    await waitFor(
-      () =>
-        expect(document.body.textContent).toContain(
-          "That view is not in this document. Choose a plan.",
-        ),
-      {
-        timeout: 20000,
-      },
-    );
+    await waitFor(() => expect(j.search().has("view")).toBe(false));
+    expect(j.nativeCalls.some(({ key }) => key === "rooms.snapshot")).toBe(false);
+    expect(plan()).toHaveProperty("value", "");
     // The same document still lists its plans, and choosing one recovers.
     await waitFor(() => expect(within(plan()).getAllByRole("option")).toHaveLength(3));
     choose(FLOOR);

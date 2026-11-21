@@ -2175,10 +2175,10 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     },
     layout: { kind: "pane", id: "detail" },
   });
-  let seq = 0,
-    search = new URLSearchParams(),
-    moves = 0;
   const unknown = stableFanKey({ uniqueId: "unknown-roster-audit", portIndex: 0 });
+  let seq = 0,
+    search = new URLSearchParams({ fan: JSON.stringify({ kind: "ids", ids: [unknown] }) }),
+    moves = 0;
   const source: UseSource = {
     kind: "use",
     open(ctx, deliver) {
@@ -2222,8 +2222,9 @@ test("JZ audit named subject choices preserve all none add and toggle without ra
     await Promise.allSettled([...tasks]);
     view = render(<RouterProvider router={router} />);
     await screen.findByRole("button", { name: "Choose fan" });
+    await waitFor(() => expect(search.has("fan")).toBe(false));
     expect(document.body.textContent).not.toContain(unknown);
-    expect(screen.getByText(/outside the current roster/)).toBeTruthy();
+    expect(screen.queryByText(/outside the current roster/)).toBeNull();
     const options = module.spec.subject!.options(valueOf(mount.value(roster)));
     expect(options).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "No fan" }));

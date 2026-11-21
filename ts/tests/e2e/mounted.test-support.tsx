@@ -10,12 +10,15 @@ import { typedSubjectDoor, type TypedMount } from "../../apps/web/src/shell/type
 import { SubjectDoor } from "@pe/web-kernel/shell/subject";
 
 export { mounted, path, type Native } from "../../apps/web/src/shell/mounted-journey.test-support";
+export { hostedRouteAddress } from "../../apps/web/src/workbench/hosted-route";
 export { planned, typedSubjectDoor } from "../../apps/web/src/shell/typed-mount";
 // The recorded Chadds duct walk the fixture host answers duct reads with.
 export { roster, snapshot } from "../../apps/host/tests/host-read-graph.test-support";
 export {
   targetChange,
   backRestores,
+  pin,
+  targetJourney,
   targetPaths,
   type JourneyDoc,
   type TargetProduct,
