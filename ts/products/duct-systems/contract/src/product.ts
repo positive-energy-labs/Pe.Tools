@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { listSearchSchema } from "@pe/agent-contracts";
 import { product as define, type ProductCommand } from "@pe/agent-contracts/product";
-import { picturePose, field, stageField, subjectSchema } from "@pe/agent-contracts/route";
+import {
+  picturePose,
+  field,
+  stageField,
+  subjectSchema,
+  targetField,
+  targetSubject,
+} from "@pe/agent-contracts/route";
+import { fanRoster } from "@pe/fans-contract/fans-host-reads";
 import type { Many } from "@pe/agent-contracts/route-kernel-page";
 import { subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import { workIntent, workWriteCommands } from "@pe/agent-contracts/write-intent";
@@ -18,8 +26,10 @@ import * as reads from "./contract.ts";
 const system = subjectSchema(DUCTS_SYSTEM_MAX);
 const fields = {
   ...picturePose,
-  fan: field(fanScopeSchema.nullable(), null, "query"),
-  system: field(system, { kind: "ids", ids: [] }, "subject", "push"),
+  fan: targetField(fanScopeSchema.nullable(), null, fanRoster, (roster) =>
+    roster.rows.map(({ uniqueId, portIndex }) => ({ uniqueId, portIndex })),
+  ),
+  system: targetSubject(system, "push"),
   stage: stageField(["network"]),
   systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
   systemSort: field(z.enum(["", "name", "loss"]), "", "query"),

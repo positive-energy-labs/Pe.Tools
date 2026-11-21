@@ -6,6 +6,7 @@ import { stableFanKey } from "@pe/ducts-web/calc/model";
 import { systemCode } from "@pe/ducts-web/identity";
 import { expect, test, vi } from "vite-plus/test";
 import { fileURLToPath } from "node:url";
+import { testAddress } from "../shell/typed-place.test-support";
 import retiredReads from "../../../../tests/repo-guards/src/retired-read-aliases.forbidden.json";
 
 test("JZ Ducts chooser search box does not move across recorded Reading settlement", async () => {
@@ -270,14 +271,23 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
     );
     mounted = mountTypedRoute(
       fans,
-      { ...j.input, memory: () => ({ fan: { kind: "ids", ids: [stableFanKey(row)] } }) },
+      {
+        ...j.input,
+        address: testAddress({
+          fan: JSON.stringify({ kind: "ids", ids: [stableFanKey(row)] }),
+        }),
+      },
       fingerprint,
-      { work, sources: { "fans.calc": source } },
+      { work, sources: { "fans.calc": source }, timeline: fixtureTimeline(j.host.workspace) },
     );
     mounted.subscribe(() => {});
-    await vi.waitFor(() => expect(mounted!.value().state === "ready").toBe(true), {
-      timeout: 20_000,
-    });
+    await vi.waitFor(
+      () => {
+        expect(mounted?.value().state).toBe("ready");
+        expect(mounted?.urlCurrent()).toBe(true);
+      },
+      { timeout: 20_000 },
+    );
     // One stream for the tab, carrying each read's invalidation as a key.
     await vi.waitFor(() => expect(watched.size).toBeGreaterThan(0));
     expect(streams.size).toBe(1);
@@ -372,12 +382,12 @@ test("JZ Plan route switch: Ducts reads preserve the Fans seal; changed Work sta
       ducts,
       {
         ...j.input,
-        address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+        address: testAddress({}),
       },
       workFingerprintSchema.parse(
         `builtin-closure:${builtinEnrollments.find((e) => e.routeKey === "duct-systems")!.closure.fingerprint}`,
       ),
-      { work, sources },
+      { work, sources, timeline: fixtureTimeline(j.host.workspace) },
     );
     try {
       await ductMount.whenReady();
@@ -609,7 +619,9 @@ test("JX1 compare named Fans and shared-fan Duct systems, clear scope, then clos
 }, 60_000);
 
 test("JX2 retain the pane through waiting, a refused subject, hiding and returning", async () => {
-  const j = await journey();
+  const malformed = structuredClone(snapshot);
+  Reflect.set(malformed, "nodes", "not a node collection");
+  const j = await journey({ snapshot: malformed });
   let held: ReturnType<typeof gate> | undefined;
   try {
     await j.ready();
@@ -624,10 +636,9 @@ test("JX2 retain the pane through waiting, a refused subject, hiding and returni
     held.release.resolve();
     await j.ready();
     const retained = valueOf(j.mount.value());
-    j.mount.page.subject({
-      kind: "ids",
-      ids: [stableFanKey({ uniqueId: "missing-fan", portIndex: 0 })],
-    });
+    const roster = valueOf(j.mount.value(fans.spec.reads!.roster)).rows;
+    const row = roster.find((row: { mark: string }) => row.mark === "MUAS-1")!;
+    j.mount.page.subject({ kind: "ids", ids: [stableFanKey(row)] });
     await vi.waitFor(() =>
       expect(j.mount.value(), "B05: refusal is honest and preserves the last answer").toMatchObject(
         {
@@ -794,12 +805,15 @@ async function compareSystemAnswers() {
       work: { address: path, open: ref },
       memory: () => ({}),
       custody: { current: () => true },
-      address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+      address: testAddress({}),
     },
     workFingerprintSchema.parse(`builtin-closure:${"a".repeat(64)}`),
     { work, sources, timeline: fixtureTimeline(host.workspace) },
   );
   try {
+    await vi.waitFor(() => expect(mount.value(ducts.spec.reads?.roster).state).toBe("ready"), {
+      timeout: 20_000,
+    });
     const staged = await host.workspace.apply(
       { route: "fans", binding: "address", target: path },
       "fans",

@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { listSearchSchema } from "./list-search.ts";
 import { picturePoseSchemas } from "./slots/picture.ts";
-import type { HostRead } from "./host-read.ts";
+import { hostRead, type HostRead } from "./host-read.ts";
+import type { ReadHandle } from "./handle.ts";
+import type { DocumentRef } from "./target.ts";
+import { subjectSchema } from "./route-kernel-codecs.ts";
+import { canonicalRouteInput } from "./route-doc.ts";
 export { hostRead, type HostRead } from "./host-read.ts";
 export { subjectSchema } from "./route-kernel-codecs.ts";
 export type * from "./reading-source.ts";
@@ -15,6 +19,42 @@ export const field = <S extends z.ZodType, const R extends FieldRole>(
   role: R,
   url: FieldHistory = "replace",
 ) => ({ schema, initial, role, url });
+
+export type TargetField =
+  | "subject"
+  | {
+      read: HostRead & { args(): object };
+      retain(this: void, value: unknown, roster: unknown): unknown;
+    };
+type Member<T> = T extends readonly (infer Item)[] ? Item : NonNullable<T>;
+const wholeRoster = () => ({});
+
+/** A model query comes with the document reading that establishes its members. */
+export function targetField<S extends z.ZodType, I extends { target: DocumentRef }, D>(
+  schema: S,
+  initial: z.input<S>,
+  roster: ReadHandle<string, I, D> & ({ target: DocumentRef } extends I ? unknown : never),
+  members: (roster: NoInfer<D>) => Iterable<Member<z.output<S>>>,
+  url?: FieldHistory,
+) {
+  return {
+    ...field(schema, initial, "query", url),
+    target: {
+      read: { ...hostRead(roster), args: wholeRoster },
+      retain(this: void, value: unknown, data: D) {
+        const available = new Set(Array.from(members(data), canonicalRouteInput));
+        const has = (item: unknown) => available.has(canonicalRouteInput(item));
+        return Array.isArray(value) ? value.filter(has) : has(value) ? value : initial;
+      },
+    },
+  };
+}
+
+/** A model subject uses the route's existing subject roster. */
+export const targetSubject = (schema: ReturnType<typeof subjectSchema>, url?: FieldHistory) => ({
+  ...field(schema, { kind: "ids", ids: [] }, "subject", url),
+  target: "subject" as const,
+});
 /**
  * The kernel's picture pose as Page fields (ADR 0035 rule 1). Each default is the contract schema's own
  * (`picturePoseSchemas`): nothing here states one. `route()` puts `picturePose` on the Page of every route
@@ -45,5 +85,5 @@ export const stageField = <const S extends readonly [string, ...string[]]>(stage
   field(z.enum(stages), stages[0], "stage", "push");
 export const read = <R extends HostRead, P>(
   handle: R,
-  args: (page: P) => unknown = () => ({}),
+  args: (page: P) => unknown = wholeRoster,
 ) => ({ ...handle, args });

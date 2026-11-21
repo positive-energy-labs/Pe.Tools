@@ -1,6 +1,17 @@
 import type { AdmittedAddressPort } from "./typed-address";
 import type { PlaceInput } from "./typed-place";
 import { fixtureName } from "@pe/web-kernel/shell/fixture-name";
+export function testAddress(initial: Record<string, string>): AdmittedAddressPort {
+  let search = new URLSearchParams(initial);
+  return {
+    read: () => new URLSearchParams(search),
+    write(next) {
+      search = new URLSearchParams(next);
+    },
+    subscribe: () => () => {},
+  };
+}
+
 export function placeInput(
   address: AdmittedAddressPort,
   overrides: Partial<PlaceInput> = {},

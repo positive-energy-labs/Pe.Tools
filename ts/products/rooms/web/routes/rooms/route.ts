@@ -117,7 +117,6 @@ export const module = screen(
     sheet: {
       draft: true,
       bindings,
-      empty: (read: Read) => read?.missing ?? null,
     },
     // Design choice (S9): plan mode pans, zooms and picks. Draw and the marks have no sketch hook
     // there yet, so they go through Work and Pea (`rooms.draw`, the `marks` cells).

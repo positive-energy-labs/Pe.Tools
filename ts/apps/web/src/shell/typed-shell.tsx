@@ -129,7 +129,8 @@ function TypedPlace({
     ) ?? [];
   const pose = poses.length === 1 ? poses[0] : undefined,
     instance = pose?.instance ?? liveInstance;
-  const pin = compare ? snapshot.point.history.address : params.get("target");
+  const rawPin = params.get("target");
+  const pin = compare ? snapshot.point.history.address : rawPin;
   const needs = module.spec.needs;
   const required =
     needs === "host"
@@ -161,6 +162,7 @@ function TypedPlace({
         ? target.resolution.target
         : null;
   const signature = canonicalRouteInput([
+    rawPin,
     resolved,
     target.workAddress,
     target.workOpen,
@@ -182,7 +184,12 @@ function TypedPlace({
         address: history?.point.history.address ?? target.workAddress,
         open: resolved?.kind === "document" ? resolved.ref : target.workOpen,
       },
-      custody: { current: () => place.current() && current.current === signature },
+      custody: {
+        current: () =>
+          place.current() &&
+          current.current === signature &&
+          place.address.read().get("target") === rawPin,
+      },
       memory: history ? () => pose?.page ?? {} : place.memory,
     }),
     [place, signature],

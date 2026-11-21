@@ -8,6 +8,18 @@ import {
   sheetCells,
 } from "@pe/agent-contracts/product";
 import { product, roomsWork } from "../product.ts";
+import { targetField } from "@pe/agent-contracts/route";
+
+const plans = product.readings.plans.handle;
+targetField(z.array(z.string()), [], plans, (roster) => roster.levels.map(({ name }) => name));
+const elevation = (roster: z.output<typeof plans.data>) =>
+  roster.levels.map(({ elevationFt }) => elevationFt);
+// @ts-expect-error a model field's members must have the field's identity type
+targetField(z.array(z.string()), [], plans, elevation);
+// @ts-expect-error the membership projector receives this reading's own payload
+targetField(z.string(), "", plans, (roster) => roster.regions);
+// @ts-expect-error a model query cannot use membership that first requires a plan
+targetField(z.string(), "", product.readings.regions.handle, () => []);
 
 type Editable = (typeof roomsWork.editable)[number];
 const staged: Editable = ["ceilingFt", "*"];

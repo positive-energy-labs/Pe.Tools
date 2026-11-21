@@ -17,7 +17,7 @@ import {
   ownerBlob,
   product as define,
 } from "@pe/agent-contracts/product";
-import { field, subjectSchema } from "@pe/agent-contracts/route";
+import { field, subjectSchema, targetField, targetSubject } from "@pe/agent-contracts/route";
 import {
   subjectCode,
   subjectOf,
@@ -62,6 +62,8 @@ const plans = contract("rooms.plans", {
   }),
   uses: ["rooms.roster"],
 });
+const planIds = (roster: z.output<typeof plans.data>) =>
+  roster.levels.flatMap((level) => level.views.map(({ view }) => view));
 const regions = contract("rooms.regions", {
   // An empty view is the screen before a plan is chosen: it reads nothing and lists nothing.
   input: z.object({ target, view: z.string() }),
@@ -503,8 +505,8 @@ export const product = define({
         summary: "Partition a plan into rooms and state each room's fields",
       },
       fields: {
-        view: field(z.string(), "", "query", "push"),
-        room: field(room, { kind: "ids", ids: [] }, "subject", "push"),
+        view: targetField(z.string(), "", plans, planIds, "push"),
+        room: targetSubject(room, "push"),
       },
       subject: {
         field: "room",
@@ -528,7 +530,7 @@ export const product = define({
         summary: "Adopt zoning regions from chosen views.",
       },
       fields: {
-        views: field(z.array(z.string()), [], "query", "push"),
+        views: targetField(z.array(z.string()), [], plans, planIds, "push"),
         capture: field(z.string(), "", "query", "push"),
       },
       core: ["adoption", (page: { views: readonly string[] }) => ({ views: [...page.views] })],

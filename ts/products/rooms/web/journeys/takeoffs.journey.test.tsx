@@ -175,7 +175,7 @@ test("Takeoffs: a record the build cannot read is named beside the rows", async 
 });
 
 test.each([GONE, "Old saved plan name", "123"])(
-  "Takeoffs: a gone selection %s can be unticked while a live plan loads",
+  "Takeoffs: drops gone selection %s and keeps the live plan",
   async (gone) => {
     const { native } = model();
     const j = await journey(
@@ -189,11 +189,9 @@ test.each([GONE, "Old saved plan name", "123"])(
       expect(
         await screen.findByRole("checkbox", { name: "Select Office zone in L2" }),
       ).toBeTruthy();
-      const missing = screen.getByRole("checkbox", { name: `Missing plan: ${gone}` });
-      expect(missing).toHaveProperty("checked", true);
-      fireEvent.click(missing);
-      await j.ready();
       expect(JSON.parse(j.search().get("views")!)).toEqual([FLOOR]);
+      expect(screen.queryByText(/Missing plan:/)).toBeNull();
+      expect(j.nativeCalls.some(({ input }) => JSON.stringify(input).includes(gone))).toBe(false);
       expect(screen.getByRole("checkbox", { name: "Select Office zone in L2" })).toHaveProperty(
         "disabled",
         false,
@@ -203,3 +201,18 @@ test.each([GONE, "Old saved plan name", "123"])(
     }
   },
 );
+
+test("Takeoffs: a malformed views field is removed from the address", async () => {
+  const { native } = model();
+  const j = await journey(
+    "takeoffs",
+    native,
+    new URLSearchParams({ views: JSON.stringify("not-a-list") }),
+  );
+  try {
+    await waitFor(() => expect(j.search().has("views")).toBe(false));
+    expect(j.mount.page.read().views).toEqual([]);
+  } finally {
+    await j.close();
+  }
+});

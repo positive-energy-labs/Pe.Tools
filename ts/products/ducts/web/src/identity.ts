@@ -23,8 +23,8 @@ export function ductsLink(
   const params = new URLSearchParams();
   for (const key of ["target", "fixture", "thread"])
     if (typeof search[key] === "string") params.set(key, search[key]);
-  // A link owns both scope fields. An omitted field would reopen the remembered scope.
-  const fan = ids && "unitId" in ids ? { unitId: ids.unitId, portIndex: ids.portIndex } : null;
+  const fan =
+    ids && "uniqueId" in ids ? { uniqueId: ids.uniqueId, portIndex: ids.portIndex } : null;
   params.set("fan", JSON.stringify(fan));
   params.set(
     "system",

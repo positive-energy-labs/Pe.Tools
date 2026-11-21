@@ -70,13 +70,20 @@ const systems = read("ducts.systems", {
 export const ductsNetwork = body(contracts.network, async function (ctx, args) {
   const roster = await ctx.read(ductsRoster, { target: args.target });
   // Roster base equipment misses unassigned fans. Walk the named port before resolving system names.
-  const walk = args.fan
+  const fan = args.fan;
+  const port =
+    fan &&
+    (await ctx.read(fanRoster, { target: args.target })).rows.find(
+      ({ uniqueId, portIndex }) => uniqueId === fan.uniqueId && portIndex === fan.portIndex,
+    );
+  if (fan && !port) throw Error("Fan port is not in this document");
+  const walk = port
     ? await ctx.read(native("ducts.snapshot.walk"), {
         role: "acquire",
         target: { kind: "document", ref: args.target },
         request: {
           slots: roster.slots,
-          selector: { kind: "from", unitId: args.fan.unitId, portIndex: args.fan.portIndex },
+          selector: { kind: "from", unitId: port.unitId, portIndex: port.portIndex },
         },
       })
     : null;

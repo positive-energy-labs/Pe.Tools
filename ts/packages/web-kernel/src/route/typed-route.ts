@@ -16,6 +16,7 @@ import {
   picturePose,
   type FieldHistory,
   type FieldRole,
+  type TargetField,
   type HostRead,
 } from "@pe/agent-contracts/route";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
@@ -50,11 +51,14 @@ export type { Owners, Specification } from "./specification.ts";
 type Field = {
   schema: z.ZodType;
   initial: unknown;
-  role: FieldRole;
   url: FieldHistory;
   share?: false;
   codec?: FieldCodec;
-};
+} & (
+  | { role: FieldRole; target?: undefined }
+  | { role: "query"; target: Exclude<TargetField, "subject"> }
+  | { role: "subject"; target: "subject" }
+);
 export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
   kind: "gate",
   when: "subject",

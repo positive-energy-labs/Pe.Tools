@@ -1,5 +1,5 @@
 import { subjectState, useSubjects } from "@pe/web-kernel/shell/subject";
-import { commitAddress, rawQuery, restorePageSearch, tabPageSearch } from "../route/url";
+import { commitAddress, rawQuery, restorableTabSearch, restorePageSearch } from "../route/url";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { z } from "zod";
 import { useRouter, useRouterState } from "@tanstack/react-router";
@@ -146,7 +146,7 @@ export function useRouteTabs() {
     restorePageSearch(
       "__pePageMove" in location.state || "__peRouteTab" in location.state
         ? undefined
-        : tabPageSearch(location.pathname),
+        : restorableTabSearch(location.pathname, rawQuery(router)),
       Object.fromEntries(Object.entries(location.search).filter(([key]) => explicit.has(key))),
     ) ?? {};
   // Admitted codecs consume raw history text; router JSON parsing is not their decoder.

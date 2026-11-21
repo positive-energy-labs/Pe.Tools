@@ -64,11 +64,7 @@ export function RosterBody({ ctx }: { ctx: RoomsContext }) {
         <select
           aria-label="Plan"
           value={page.view}
-          // The plan is the address: another plan clears the picked rooms.
-          onChange={(event) => {
-            subject?.select([]);
-            ctx.page.query({ view: event.target.value });
-          }}
+          onChange={(event) => ctx.page.query({ view: event.target.value })}
         >
           <option value="">Choose a plan</option>
           {levels.flatMap((level) =>
@@ -82,13 +78,6 @@ export function RosterBody({ ctx }: { ctx: RoomsContext }) {
         </select>
       </label>
       {"value" in catalogue ? null : ctx.absent(catalogue)}
-      {ctx.value.value.missing && (
-        <OutcomeLine
-          kind="refused"
-          label="Plan"
-          says={`${ctx.value.value.missing} Choose a plan.`}
-        />
-      )}
       {ctx.value.value.unreadable.map((row, index) => (
         <OutcomeLine
           key={index}

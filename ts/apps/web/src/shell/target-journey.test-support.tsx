@@ -19,6 +19,8 @@ import { ref } from "../../../host/tests/host-read-graph.test-support";
 import { peReadings } from "../host/resource-stream";
 import { readingAtom } from "../host/resource-state";
 import { routeRegistry } from "../route/registry";
+import "../route/builtin-routes";
+import { useRestoreTabPage } from "../route/url";
 import { hosted, type JourneyDocument, type Native } from "./mounted-journey.test-support";
 import { StandaloneBand } from "./band.test-support";
 import { appAtomRegistry } from "./owner";
@@ -41,6 +43,10 @@ const world = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   ports: (_openId: string | undefined): object => ({}),
   mounts: [] as unknown[],
+  places: { tabs: [] as { id: string; link: string }[] },
+}));
+vi.mock("../workbench/places", () => ({
+  places: { read: () => world.places, subscribe: () => () => {} },
 }));
 const census = (notify: () => void) => {
   world.listeners.add(notify);
@@ -96,13 +102,13 @@ const documents = {
   },
 } satisfies Record<string, Required<JourneyDocument>>;
 export type JourneyDoc = keyof typeof documents;
-const pin = (doc: JourneyDoc) => JSON.stringify({ kind: "open", ref: documents[doc].ref });
+export const pin = (doc: JourneyDoc) => JSON.stringify({ kind: "open", ref: documents[doc].ref });
 
-async function targetJourney(
+export async function targetJourney(
   module: TypedRoute,
   reads: string[],
   native: (doc: JourneyDoc) => Native,
-  start: { open: JourneyDoc[]; search: URLSearchParams },
+  start: { open: JourneyDoc[]; search: URLSearchParams; remembered?: URLSearchParams },
 ) {
   const route = module.spec.key;
   const names = Object.keys(documents) as JourneyDoc[];
@@ -145,8 +151,14 @@ async function targetJourney(
     world.listeners.forEach((notify) => notify());
   };
   open(start.open);
+  world.places = {
+    tabs: start.remembered ? [{ id: "remembered", link: `/${route}?${start.remembered}` }] : [],
+  };
   const root = createRootRoute({
-    component: () => <TypedShell module={module} fingerprint={routeRegistry[route]!.fingerprint} />,
+    component: () => {
+      useRestoreTabPage();
+      return <TypedShell module={module} fingerprint={routeRegistry[route]!.fingerprint} />;
+    },
   });
   const history = createMemoryHistory({ initialEntries: [`/${route}?${start.search}`] });
   const router = createRouter({ routeTree: root, history });
@@ -202,6 +214,7 @@ async function targetJourney(
     forward: () => act(() => history.forward()),
     async close() {
       cleanup();
+      world.places = { tabs: [] };
       world.mounts.length = 0;
       await Promise.all(files.map((doc) => hosts[doc].close()));
     },

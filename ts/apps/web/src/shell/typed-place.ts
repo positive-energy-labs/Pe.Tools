@@ -48,7 +48,7 @@ export function createAdmittedPlace<State extends Disposable>(options: {
   let memory: unknown = freezePage(options.memory ?? {});
   let captured = new URLSearchParams(options.search);
   let owner: string | null = null;
-  const addressListeners = new Set<() => void>();
+  const addressListeners = new Set<(traversed?: boolean) => void>();
   const current = () => !disposed && visible && scope.current();
   // Back or Forward onto an entry that names another `?target`: that entry names its own Page.
   let arrived = false;
@@ -57,7 +57,7 @@ export function createAdmittedPlace<State extends Disposable>(options: {
     const next = new URLSearchParams(options.address.read());
     arrived = !!traversed && next.get("target") !== captured.get("target");
     captured = next;
-    addressListeners.forEach((listener) => listener());
+    addressListeners.forEach((listener) => listener(traversed));
   });
   const place: AdmittedPlace<State> = {
     fixture: fixtureName(Object.fromEntries(options.search)),

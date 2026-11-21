@@ -14,6 +14,7 @@ import { TestAttention } from "../test-attention";
 import { makeAtomRegistry } from "../shell/owner";
 import { mountTypedRoute } from "../shell/typed-mount";
 import { fixtureTimeline } from "../shell/fixture-work-door";
+import { testAddress } from "../shell/typed-place.test-support";
 import { hostEventSource } from "../host/event-source.test-support";
 import { route } from "@pe/web-kernel/route/typed-route";
 import { module as fans } from "@pe/fans-web/route";
@@ -164,7 +165,17 @@ function pictureJourney() {
         target: { kind: "document", ref: { session: "h04", openId } },
         fixture: null,
         work: { address: null, open: null },
-        address: { read: () => new URLSearchParams(), write() {}, subscribe: () => () => {} },
+        address: testAddress({
+          fan: JSON.stringify({
+            kind: "ids",
+            ids: [
+              stableFanKey({
+                uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001",
+                portIndex: 2,
+              }),
+            ],
+          }),
+        }),
         custody: { current: () => true },
         memory: () => ({
           viewport: { kind: "orbit", yaw: 225, elev: 32, zoom: 1, pivot: [0, 0, 0] },
@@ -198,12 +209,6 @@ function pictureJourney() {
     );
     mounts.push(mount);
     mount.subscribe(() => {});
-    mount.page.subject({
-      kind: "ids",
-      ids: [
-        stableFanKey({ uniqueId: "9cb9f188-28aa-4094-8b76-785395cc35e1-00000001", portIndex: 2 }),
-      ],
-    });
     return mount;
   };
   const tree = (mount: ReturnType<typeof open>) => (

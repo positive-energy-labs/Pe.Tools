@@ -30,7 +30,7 @@ export const overview = contract("ducts.overview", {
 export const network = contract("ducts.network", {
   input: scopedNetworkArgs,
   data: ductsNetworkData,
-  uses: [roster, "ducts.snapshot.walk"],
+  uses: [roster, fanRoster, "ducts.snapshot.walk"],
   keyedBy: {
     nodes: { kind: "UniqueId" },
     segments: { kind: "UniqueId" },

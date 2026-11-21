@@ -6,6 +6,7 @@ import {
   picturePose,
   stageField,
   subjectSchema,
+  targetSubject,
 } from "@pe/agent-contracts/route";
 import { schemaOf, type Domain, type DomainValue } from "@pe/agent-contracts/slots/sheet";
 import type { Immutable, RouteStatePatch } from "@pe/agent-contracts";
@@ -195,7 +196,7 @@ export const networkCalcs = contract("fans.network-calcs", {
 const fan = subjectSchema(Number.MAX_SAFE_INTEGER);
 const fields = {
   ...picturePose,
-  fan: field(fan, { kind: "ids", ids: [] }, "subject", "push"),
+  fan: targetSubject(fan, "push"),
   stage: stageField(["calc"]),
   ...listFields("input"),
   ...listFields("roster"),
