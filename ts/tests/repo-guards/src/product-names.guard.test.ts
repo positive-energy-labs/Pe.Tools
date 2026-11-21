@@ -49,7 +49,6 @@ const names = new RegExp(
 
 // Generated or hand-kept wiring: the one place generic code is handed every product.
 const registration = new Set([
-  "apps/host/src/command-registry.ts",
   "apps/host/src/routes.generated.ts",
   // The one glob over every product's routes.
   "apps/web/src/route/registry.ts",

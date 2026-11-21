@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vite-plus/test";
+import type { HostBridgeEvent } from "@pe/host-internal/bridge";
 import { CANCEL_OPERATION_KEY } from "../src/bridge.ts";
 import { mintContext, retireContext } from "../src/control.ts";
 import { hostOwnership } from "../src/host-ownership.ts";
@@ -63,7 +64,12 @@ async function harness() {
   const cancels: string[] = [];
   const raw: string[] = [];
   const identities: boolean[] = [];
+  const taps = new Set<(event: HostBridgeEvent) => void>();
   const bridge = detachedBridge({
+    subscribe: (tap) => {
+      taps.add(tap);
+      return () => void taps.delete(tap);
+    },
     list: Effect.gen(function* () {
       identities.push((yield* Effect.serviceOption(RequestIdentity))._tag === "Some");
       return [
@@ -184,7 +190,26 @@ async function harness() {
     await server.close();
     await rm(root, { recursive: true, force: true });
   };
-  return { dispatches, cancels, raw, identities, fetchSnapshot, settled, answer, close };
+  const target = { "x-pe-bridge-session-id": "session", "x-pe-open-document-id": "open-a" };
+  const status = async () =>
+    (
+      await fetch(`${server.base}/takeoffs/observations`, {
+        headers: { "x-pe-context": token, ...target },
+      })
+    ).json();
+  const emit = (event: HostBridgeEvent) => taps.forEach((tap) => tap(event));
+  return {
+    dispatches,
+    cancels,
+    raw,
+    identities,
+    fetchSnapshot,
+    settled,
+    answer,
+    close,
+    status,
+    emit,
+  };
 }
 
 test("snapshot fetches with one key share two natives; an abort removes only its requester", async () => {
@@ -247,12 +272,33 @@ test("two requesters that both finish publish the one content-addressed capture"
     const [one, two] = await Promise.all([a.response, b.response]);
     expect([one?.status, two?.status]).toEqual([200, 200]);
     expect(one?.headers.get("x-pe-capture-id")).toMatch(/^[a-f0-9]{64}$/);
-    expect(two?.headers.get("x-pe-capture-id")).toBe(
-      one?.headers.get("x-pe-capture-id"),
-    );
+    expect(two?.headers.get("x-pe-capture-id")).toBe(one?.headers.get("x-pe-capture-id"));
     expect(one?.headers.has("x-pe-takeoff-capture-id")).toBe(false);
     expect(h.dispatches).toHaveLength(2);
     expect(h.cancels).toEqual([]);
+  } finally {
+    await h.close();
+  }
+});
+
+test("a document the bridge reports changed retires its kept capture, with no product call", async () => {
+  const h = await harness();
+  try {
+    const a = h.fetchSnapshot();
+    await expect.poll(() => h.dispatches.length, { timeout: 5000 }).toBe(2);
+    for (const job of h.dispatches) await h.answer(job);
+    const captureId = (await a.response)?.headers.get("x-pe-capture-id");
+    expect(await h.status()).toMatchObject({ kind: "ready", captureId });
+    const changed = (changedOpenIds: string[]): HostBridgeEvent => ({
+      sessionId: "session",
+      kind: "event",
+      eventName: "document-changed",
+      payloadJson: JSON.stringify({ changedOpenIds }),
+    });
+    h.emit(changed(["open-b"]));
+    expect(await h.status()).toMatchObject({ kind: "ready", captureId });
+    h.emit(changed(["open-a"]));
+    expect(await h.status()).toMatchObject({ kind: "failed", previousId: captureId });
   } finally {
     await h.close();
   }

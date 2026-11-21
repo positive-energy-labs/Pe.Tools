@@ -106,17 +106,9 @@ type Native = ReturnType<typeof nativeFor>;
 export const runModel = (
   ctx: CommandContext,
   execution: ActionExecution & { readonly prepared: { process: NativeProcess } },
-  deps: Deps,
   bridge: RevitBridge["Service"],
   perform: (native: Native) => Step<unknown>,
-) => {
-  const target = modelTarget(ctx);
-  const native = nativeFor(ctx, execution, bridge, execution.prepared.process);
-  return Effect.gen(function* () {
-    takeoffs(deps).invalidate(target);
-    return yield* perform(native);
-  }).pipe(Effect.ensuring(Effect.sync(() => takeoffs(deps).invalidate(target))));
-};
+) => perform(nativeFor(ctx, execution, bridge, execution.prepared.process));
 
 /** What the plan saw of the records an apply may replace; the apply sends exactly that. */
 export const replacementEvidence = (bridge: RevitBridge["Service"], deps: Deps) => {
@@ -180,7 +172,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       seal: sealReplacement,
       bind: (ctx) => bind(ctx, "takeoffs.adopt", ctx.admission.input.views, "registry"),
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, (native) =>
+        runModel(ctx, execution, bridge, (native) =>
           Effect.gen(function* () {
             let adopted = 0;
             for (const [index, view] of ctx.admission.input.views.entries())
@@ -198,7 +190,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
       seal: sealReplacement,
       bind: (ctx) => bind(ctx, "takeoffs.partition", [{ ...input(ctx), runId: ctx.admission.id }]),
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, (native) => {
+        runModel(ctx, execution, bridge, (native) => {
           return value(ctx, native, "takeoffs.partition", {
             ...nativeRequestInput(ctx.admission.input),
             runId: ctx.admission.id,
@@ -290,7 +282,6 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         const native = nativeFor(ctx, execution, bridge, process);
         const rhvac = commandFiles(deps);
         return Effect.gen(function* () {
-          takeoffs(deps).invalidate(target);
           const selected = new Set(input.zones);
           const zones = capture!.snapshot.world.zones.filter(
             (zone) => !selected.size || selected.has(zone.zone.guid),
@@ -472,7 +463,7 @@ export function takeoffExecutors(bridge: RevitBridge["Service"], deps: Deps) {
             file: result,
             retirement,
           };
-        }).pipe(Effect.ensuring(Effect.sync(() => takeoffs(deps).invalidate(target))));
+        });
       },
     }),
   };

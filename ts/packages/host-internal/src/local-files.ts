@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { LocalOpError } from "./local-error.ts";
@@ -104,9 +102,3 @@ function isNotFound(error: unknown): boolean {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
-/** The version of a file a product declares as an `externalFile`: the hash of its bytes. */
-export const fileVersion = async (path: string) =>
-  createHash("sha256")
-    .update(await readFile(path))
-    .digest("hex");

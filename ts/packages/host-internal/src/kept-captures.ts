@@ -5,6 +5,7 @@ import { Cause, Effect, Exit } from "effect";
 import type { z } from "zod";
 import type { DocumentRef } from "@pe/agent-contracts";
 import { read as readStoredFile, stateKind, type StateDirectory } from "@pe/host-contracts/kinds";
+import { staleBy, type RevitBridge } from "./bridge.ts";
 import { writeArtifact } from "./write-artifact.ts";
 
 type Kept = { readonly id: string };
@@ -30,6 +31,18 @@ class Live {
     this.states.clear();
     this.generations.clear();
     this.refreshing.clear();
+  }
+  /** A refresh in flight for this document is fenced; what it had kept is named as replaced. */
+  invalidate(target: DocumentRef) {
+    const key = keyOf(target);
+    const state = this.states.get(key) ?? { kind: "empty", target };
+    this.generations.set(key, (this.generations.get(key) ?? 0) + 1);
+    this.states.set(key, {
+      kind: "failed",
+      target,
+      error: "The document changed after this capture was read.",
+      ...previousOf(state),
+    });
   }
 }
 const keyOf = (target: DocumentRef) => JSON.stringify([target.session, target.openId]);
@@ -60,20 +73,8 @@ export class KeptCaptures<T extends Kept> {
   status(target: DocumentRef): CaptureStatus {
     return this.live.states.get(keyOf(target)) ?? { kind: "empty", target };
   }
-  invalidate(target: DocumentRef): void {
-    const { states, generations } = this.live;
-    const key = keyOf(target);
-    const previous = previousOf(this.status(target));
-    generations.set(key, (generations.get(key) ?? 0) + 1);
-    states.set(key, {
-      kind: "failed",
-      target,
-      error: "Model changed; refresh geometry.",
-      ...previous,
-    });
-  }
 
-  /** NativeReads joins peers (ADR 0029). Only invalidation fences an in-flight refresh. */
+  /** NativeReads joins peers (ADR 0029). Only the store's own invalidation fences an in-flight refresh. */
   readonly refresh = Effect.fn("KeptCaptures.refresh")(function* <A, E, R, E2, R2>(
     this: KeptCaptures<T>,
     target: DocumentRef,
@@ -182,6 +183,18 @@ export class CaptureKinds {
   }
   clear() {
     for (const live of this.kinds.values()) live.clear();
+  }
+  /**
+   * The bridge tap `retainedReadings` uses: a changed or closed document, and a session that
+   * connects or drops, retire every kind's capture of it. No product invalidates its own.
+   */
+  follow(bridge: Pick<RevitBridge["Service"], "subscribe">) {
+    return bridge.subscribe((event) => {
+      const stale = staleBy(event);
+      for (const live of this.kinds.values())
+        for (const { target } of [...live.states.values()])
+          if (stale(target.session, target.openId)) live.invalidate(target);
+    });
   }
 }
 /** A product's declared kind in the kernel store. The kind is a key of its declaration. */

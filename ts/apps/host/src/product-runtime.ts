@@ -28,6 +28,11 @@ export function bindProducts(
 ) {
   // The explicit list: each product's retained readings and home readers, registered here once.
   for (const host of hosts) host.register();
+  // One store keeps every product's captures by kind alone, so a kind has one declaring product.
+  const kinds = merged(
+    "capture kind",
+    hosts.map(({ product }) => product.captures),
+  );
   return {
     productReads: hosts.map(({ reads }) => ({ reads })),
     /** Every declared `http` route with its body: the call route mounts each, and names none. */
@@ -56,10 +61,17 @@ export function bindProducts(
       "host file",
       hosts.map(({ product, files }) =>
         Object.fromEntries(
-          Object.keys(product.files).map((key) => {
+          Object.entries(product.files).map(([key, { emits }]) => {
             const run = files[key];
             if (!run) throw Error(`No host body for the host file ${key}`);
-            return [key, run];
+            // An emitting file's answer is kept by the kernel under its declared kind.
+            const kind = emits === undefined ? undefined : String(emits);
+            const schema = kind === undefined ? undefined : kinds[kind];
+            if (kind !== undefined && !schema) throw Error(`${key} emits no declared capture kind`);
+            return [
+              key,
+              { run, emits: kind !== undefined && schema ? { kind, schema } : undefined },
+            ];
           }),
         ),
       ),
