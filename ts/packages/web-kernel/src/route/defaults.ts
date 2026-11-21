@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   route as declareRoute,
   type Specification,
+  type RouteTargetPolicy,
   type QueryFields,
   type DrawContext,
   type Fields,
@@ -46,7 +47,7 @@ export function route<
   SubjectRead extends HostRead,
   const Q extends QueryFields = {},
   const V extends Readonly<Record<string, CommandHandle>> = {},
->(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>) {
+>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V> & RouteTargetPolicy) {
   const panes = Object.fromEntries(
     Object.entries(spec.panes).map(([id, pane]) => [id, { ...pane, read: pane.read ?? spec.core }]),
   ) as typeof spec.panes;

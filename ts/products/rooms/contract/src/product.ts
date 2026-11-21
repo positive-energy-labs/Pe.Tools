@@ -17,7 +17,7 @@ import {
   ownerBlob,
   product as define,
 } from "@pe/agent-contracts/product";
-import { field, subjectSchema, targetField, targetSubject } from "@pe/agent-contracts/route";
+import { localField, subjectSchema, targetField, targetSubject } from "@pe/agent-contracts/route";
 import {
   subjectCode,
   subjectOf,
@@ -155,7 +155,6 @@ const planImage = contract("rooms.plan-image", {
 const adoption = contract("takeoffs.adoption", {
   input: z.object({ target, views: z.array(z.string()) }),
   data: z.object({
-    missingViews: z.array(z.string()),
     /** One row per designer region on the chosen plans, with the staged choice over its default. */
     rows: z.array(
       z.object({
@@ -531,7 +530,7 @@ export const product = define({
       },
       fields: {
         views: targetField(z.array(z.string()), [], plans, planIds, "push"),
-        capture: field(z.string(), "", "query", "push"),
+        capture: localField(z.string(), "", "query", "push"),
       },
       core: ["adoption", (page: { views: readonly string[] }) => ({ views: [...page.views] })],
       reads: {

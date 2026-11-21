@@ -21,12 +21,38 @@ export const field = <S extends z.ZodType, const R extends FieldRole>(
   url: FieldHistory = "replace",
 ) => ({ schema, initial, role, url });
 
+declare const localFieldScope: unique symbol;
+type LocalFieldScope = { readonly [localFieldScope]: true };
+
+/** A query or subject whose value can be carried independently of the model. */
+export function localField<S extends z.ZodType, const R extends "query" | "subject">(
+  schema: S,
+  initial: z.input<S>,
+  role: R,
+  url?: FieldHistory,
+): ReturnType<typeof field<S, R>> & LocalFieldScope;
+export function localField<S extends z.ZodType, const R extends "query" | "subject">(
+  schema: S,
+  initial: z.input<S>,
+  role: R,
+  url?: FieldHistory,
+) {
+  return field(schema, initial, role, url);
+}
+
 export type TargetField =
   | "subject"
   | {
       read: HostRead & { args(): object };
       retain(this: void, value: unknown, roster: unknown): unknown;
     };
+export type ScopedPageField = ReturnType<typeof field> &
+  (
+    | { role: "pose" | "stage" }
+    | LocalFieldScope
+    | { role: "query"; target: Exclude<TargetField, "subject"> }
+    | { role: "subject"; target: "subject" }
+  );
 type Member<T> = T extends readonly (infer Item)[] ? Item : NonNullable<T>;
 const wholeRoster = () => ({});
 
@@ -95,8 +121,8 @@ export const listFields = <const P extends string>(prefix: P) =>
   }) as { [K in `${P}Search`]: ReturnType<typeof searchField> } & {
     [K in `${P}Sort`]: ReturnType<typeof sortField>;
   };
-const searchField = () => field(listSearchSchema, { keywords: "", pills: [], v: 1 }, "query");
-const sortField = () => field(z.enum(["", "name"]), "", "query");
+const searchField = () => localField(listSearchSchema, { keywords: "", pills: [], v: 1 }, "query");
+const sortField = () => localField(z.enum(["", "name"]), "", "query");
 export const stageField = <const S extends readonly [string, ...string[]]>(stages: S) =>
   field(z.enum(stages), stages[0], "stage", "push");
 export const read = <R extends HostRead, P>(

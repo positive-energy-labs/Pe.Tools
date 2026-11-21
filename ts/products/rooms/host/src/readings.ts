@@ -209,15 +209,13 @@ export const readings: HostBodies<typeof product, ReadContext, never>["readings"
       }
     }
     const { snapshot } = response;
-    const liveViews = new Set(candidates.map(({ view }) => view));
-    if (liveViews.size)
+    if (candidates.length)
       await ctx.read(retained, {
         target,
         snapshot: response,
         views: candidates.map(({ plan }) => plan),
       });
     return {
-      missingViews: requested.filter((view) => !liveViews.has(view)),
       rows: candidates.flatMap(({ body, view }) =>
         body.regions.map((row) => {
           const adopted = row.role === "zoning-region";

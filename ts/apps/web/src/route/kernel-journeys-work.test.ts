@@ -1074,15 +1074,16 @@ test.each(["accepted", "refused"] as const)(
   async (outcome) => {
     const { z } = await import("zod");
     const { route } = await import("@pe/web-kernel/route/typed-route");
-    const { field } = await import("@pe/agent-contracts/route");
+    const { localField } = await import("@pe/agent-contracts/route");
     const j = await journey();
     let held: ReturnType<typeof gate> | undefined;
     try {
       const module = route({
         key: "fans",
         name: "Member Work",
+        focus: null,
         directory: fans.spec.directory,
-        fields: { member: field(z.string(), "a", "query", "push") },
+        fields: { member: localField(z.string(), "a", "query", "push") },
         edits: {
           ...fans.spec.edits!,
           owners: {},

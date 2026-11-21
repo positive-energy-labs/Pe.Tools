@@ -12,13 +12,7 @@ import type {
 } from "@pe/agent-contracts";
 import { subjectOf, type SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 export { oneName, nameOf } from "@pe/agent-contracts/subject-ref";
-import {
-  picturePose,
-  type FieldHistory,
-  type FieldRole,
-  type TargetField,
-  type HostRead,
-} from "@pe/agent-contracts/route";
+import { picturePose, type HostRead } from "@pe/agent-contracts/route";
 import type { PlanHandle as importPlanHandle } from "@pe/kit/lang/write-action";
 import { z } from "zod";
 import type { Publication } from "@pe/agent-contracts/value";
@@ -45,20 +39,29 @@ import { commandCatalogAxes } from "@pe/agent-contracts/command-axes";
 import { fillBody, scrollBody } from "./body.ts";
 export { scrollBody, fillBody, type Body, type BodyKind } from "./body.ts";
 
-import type { FieldCodec } from "./field-codec.ts";
-import type { PlanCell, Presentation, RoleFields, Specification } from "./specification.ts";
-export type { Owners, Specification } from "./specification.ts";
-type Field = {
-  schema: z.ZodType;
-  initial: unknown;
-  url: FieldHistory;
-  share?: false;
-  codec?: FieldCodec;
-} & (
-  | { role: FieldRole; target?: undefined }
-  | { role: "query"; target: Exclude<TargetField, "subject"> }
-  | { role: "subject"; target: "subject" }
-);
+import type { AdmittedPage, DrawPage, Fields, Page, QueryFields } from "./page.ts";
+export {
+  focusField,
+  localPage,
+  type AdmittedPage,
+  type DrawPage,
+  type Fields,
+  type Page,
+  type QueryFields,
+} from "./page.ts";
+import type {
+  PlanCell,
+  Presentation,
+  ResolvedRouteTarget,
+  RouteTargetPolicy,
+  Specification,
+} from "./specification.ts";
+export {
+  ownsDocument,
+  type Owners,
+  type RouteTargetPolicy,
+  type Specification,
+} from "./specification.ts";
 export const whenSubject = (child: string | LayoutJson): LayoutJson => ({
   kind: "gate",
   when: "subject",
@@ -94,7 +97,7 @@ export function gateActive(
   );
 }
 /** Only panes surviving gates own demand; shared reads stay alive while any visible pane uses them. */
-export function visibleReads(spec: TypedRoute["spec"], page: Readonly<Record<string, unknown>>) {
+export function visibleReads(spec: TypedRoute["spec"], page: AdmittedPage) {
   const active = new Set<HostRead>(Object.values(spec.reads ?? {}));
   const visit = (node: LayoutJson) => {
     if (node.kind === "split") node.children.forEach(visit);
@@ -132,24 +135,6 @@ export const namesOf = (value: Many<SubjectRefCode>): string[] | "all" =>
           throw Error(`namesOf: ${id} is not a plain text-keyed subject`);
         return key;
       });
-export type Fields = Readonly<Record<string, Field>>;
-/** Route-owned Page fields no slot holds (ADR 0035 rule 1). */
-export type QueryFields = Readonly<Record<string, Field & { role: "query" }>>;
-type FieldValues<F extends Fields> = {
-  readonly [K in keyof F]: Immutable<z.output<F[K]["schema"]>>;
-};
-export type Page<F extends Fields> = FieldValues<F> & {
-  readonly selected: readonly { kind: "focus"; id: string }[];
-};
-export type DrawPage<F extends Fields> = {
-  read(): Page<F>;
-  pose(
-    patch: Partial<Pick<FieldValues<F>, RoleFields<F, "pose" | "stage">>>,
-    intent?: "gesture" | "named",
-  ): unknown;
-  query(patch: Partial<Pick<FieldValues<F>, RoleFields<F, "query">>>): unknown;
-  select(value: Page<F>["selected"]): unknown;
-};
 /** A value-less reading state: reading, refused, or not yet run. */
 export type Absent = Exclude<ReadingState<unknown>, { value: unknown }>;
 /** The value a reading state holds; undefined when it is value-less. */
@@ -247,7 +232,7 @@ export type Verbs<Run extends string = never, Plan extends string = never> = Rea
 type AnyVerbs = Readonly<Record<string, VerbHandle>>;
 type VerbScope = { page: unknown; value: unknown; doc: unknown };
 /** What a verb's `input` and `present` see: the Page, the target, the route's own Work and core Value. */
-export type VerbContext<C extends VerbScope = { page: any; value: any; doc: any }> = {
+export type VerbContext<C extends VerbScope = { page: AdmittedPage; value: any; doc: any }> = {
   readonly page: C["page"];
   readonly target: import("@pe/agent-contracts").ExecutionTarget | null;
   readonly work: import("@pe/agent-contracts").WorkHandle | null;
@@ -302,7 +287,7 @@ export function route<
   SubjectRead extends HostRead,
   const Q extends QueryFields = {},
   const V extends Readonly<Record<string, CommandHandle>> = {},
->(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V>) {
+>(spec: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V> & RouteTargetPolicy) {
   const edits = spec.edits;
   const declared = edits?.work;
   const work = !declared
@@ -409,9 +394,10 @@ export function route<
     );
   const pageFields = { ...pose, ...own };
   // `query` fields mount as Page fields: the shell reads one field table (rule 1: `query` holds what no slot does).
+  const declaration: Specification<D, F, W, Edit, Reads, SubjectRead, Q, V> = spec;
   const normalized = {
-    ...spec,
-    fields: pageFields as F & Q,
+    ...declaration,
+    fields: pageFields,
     needs: spec.needs ?? "project",
     verbs: verbTable,
     band,
@@ -563,7 +549,12 @@ export function route<
         return [h.key, { input: z.looseObject({}), output: z.unknown(), axes: declared }];
       }),
   ]);
-  return { spec: normalized, data, host, entries };
+  return {
+    spec: normalized as Omit<typeof normalized, "fields"> & { fields: F & Q } & ResolvedRouteTarget,
+    data,
+    host,
+    entries,
+  };
 }
 export type TypedRoute = ReturnType<
   typeof route<

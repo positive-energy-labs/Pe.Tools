@@ -3,7 +3,7 @@ import { listSearchSchema } from "@pe/agent-contracts";
 import { product as define, type ProductCommand } from "@pe/agent-contracts/product";
 import {
   picturePose,
-  field,
+  localField,
   stageField,
   subjectSchema,
   targetField,
@@ -31,12 +31,12 @@ const fields = {
   ),
   system: targetSubject(system, "push"),
   stage: stageField(["network"]),
-  systemSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
-  systemSort: field(z.enum(["", "name", "loss"]), "", "query"),
-  treeSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
-  treeSort: field(z.enum(["", "name"]), "", "query"),
-  rulingSearch: field(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
-  rulingSort: field(z.enum(["", "name", "status"]), "", "query"),
+  systemSearch: localField(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
+  systemSort: localField(z.enum(["", "name", "loss"]), "", "query"),
+  treeSearch: localField(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
+  treeSort: localField(z.enum(["", "name"]), "", "query"),
+  rulingSearch: localField(listSearchSchema, { v: 1, keywords: "", pills: [] }, "query"),
+  rulingSort: localField(z.enum(["", "name", "status"]), "", "query"),
 };
 const args = ({ fan, system }: { fan: FanScope | null; system: Many<SubjectRefCode> }) => ({
   system: system.kind === "all" ? [] : system.ids.map((id) => String(subjectOf(id).key)),

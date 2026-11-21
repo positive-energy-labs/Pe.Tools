@@ -11,11 +11,11 @@ import type { SubjectRefCode } from "@pe/agent-contracts/subject-ref";
 import type { Publication } from "@pe/agent-contracts/value";
 import type { z } from "zod";
 import type { Body, BodyKind } from "./body.ts";
-import type { HostRead, TargetFocus } from "@pe/agent-contracts/route";
+import type { HostRead, ScopedPageField, TargetFocus } from "@pe/agent-contracts/route";
 import type {
   DrawContext,
+  AdmittedPage,
   Fields,
-  Page,
   PaneBindings,
   PlannedVerb,
   QueryFields,
@@ -53,6 +53,33 @@ export type Owners = Readonly<Record<string, Owner>>;
 /** Layout is data (ADR 0035 rule 5, `route/body.ts`): a pane declares its body kind and `draw`
  * returns that kind's branded `Body`, so the declaration and the drawing cannot disagree. */
 type PaneBody<C> = { [B in BodyKind]: { body: B; draw(ctx: C): Body<B> } }[BodyKind];
+
+type DocumentNeed = "project" | "family" | "document";
+type RouteNeed = DocumentNeed | "host" | "browser";
+type OptionalTarget = DocumentNeed | "session";
+type ScopedPage = {
+  /** Null declares that no selection in this route belongs to the model. */
+  focus: TargetFocus | null;
+  fields: Readonly<Record<string, ScopedPageField>>;
+  query?: Readonly<Record<string, ScopedPageField>>;
+};
+
+export type RouteTargetPolicy =
+  | ({ needs?: DocumentNeed; optionalTarget?: OptionalTarget } & ScopedPage)
+  | ({ needs: "host" | "browser"; optionalTarget: OptionalTarget } & ScopedPage)
+  | { needs: "host" | "browser"; optionalTarget?: undefined; focus?: TargetFocus | null };
+
+export type ResolvedRouteTarget =
+  | { needs: DocumentNeed; optionalTarget?: OptionalTarget; focus: TargetFocus | null }
+  | { needs: "host" | "browser"; optionalTarget: OptionalTarget; focus: TargetFocus | null }
+  | { needs: "host" | "browser"; optionalTarget?: undefined; focus?: TargetFocus | null };
+
+export function ownsDocument(spec: {
+  needs?: RouteNeed;
+  optionalTarget?: OptionalTarget;
+}): boolean {
+  return !!spec.optionalTarget || (spec.needs !== "host" && spec.needs !== "browser");
+}
 export type Specification<
   D,
   F extends Fields,
@@ -74,9 +101,6 @@ export type Specification<
   /** Person-only surfaces opt out of both builtin and admitted Page leases. */
   agent?: false;
   directory: RouteGraphJson["directory"];
-  needs?: "project" | "family" | "document" | "host" | "browser";
-  optionalTarget?: "document" | "project" | "family" | "session";
-  focus?: TargetFocus;
   /** `./host.ts`, the route directory's reads; only the generated host registry imports it. */
   host?: string;
   subject?: {
@@ -94,7 +118,7 @@ export type Specification<
   };
   core?: HostRead & {
     output: z.ZodType<Publication<D>>;
-    args(page: Page<F & NoInfer<Q>>): unknown;
+    args(page: AdmittedPage<F & NoInfer<Q>>): unknown;
   };
   /*
    * ADR 0035 rule 1: the five slots are `subject` (above), `sheet`, `picture`, `goal` and `layout`
@@ -132,7 +156,7 @@ export type Specification<
   /** Slice 7: one host Read whose data is the Goal; the kernel draws its unresolved list first. */
   goal?: HostRead & {
     output: z.ZodType<Publication<Goal>>;
-    args(page: Page<NoInfer<F & NoInfer<Q>>>): unknown;
+    args(page: AdmittedPage<NoInfer<F & NoInfer<Q>>>): unknown;
   };
   /** Route-owned Page fields no slot holds; folded into `fields` for projection until slice 10 retires `fields`. */
   query?: Q;
@@ -148,7 +172,9 @@ export type Specification<
     >,
   ): string | null;
   fields: F;
-  reads?: Readonly<Record<string, HostRead & { args(page: Page<F & NoInfer<Q>>): unknown }>>;
+  reads?: Readonly<
+    Record<string, HostRead & { args(page: AdmittedPage<F & NoInfer<Q>>): unknown }>
+  >;
   panes: {
     readonly [K in keyof Reads]: {
       title: string;
@@ -182,9 +208,9 @@ export type Specification<
   };
   edits?: {
     work: W | RouteStateSpec<W>;
-    key?(page: Page<F & NoInfer<Q>>): string | null;
+    key?(page: AdmittedPage<F & NoInfer<Q>>): string | null;
     seed?(
-      page: Page<F & NoInfer<Q>>,
+      page: AdmittedPage<F & NoInfer<Q>>,
       target: import("@pe/agent-contracts").ExecutionTarget | null,
     ): z.output<W>;
     value?: keyof D & string;
@@ -197,7 +223,7 @@ export type Specification<
   /** Keyed by verb id, which is not the catalog key: two verbs may share one handle. */
   verbs?: {
     readonly [K in keyof V]: VerbDecl<
-      { page: Page<F & NoInfer<Q>>; value: Immutable<D>; doc: Immutable<z.output<W>> },
+      { page: AdmittedPage<F & NoInfer<Q>>; value: Immutable<D>; doc: Immutable<z.output<W>> },
       V[K]
     >;
   };

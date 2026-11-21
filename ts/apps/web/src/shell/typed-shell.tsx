@@ -35,6 +35,7 @@ import { HistoryBoundary, RecordedPoints } from "./history-rail";
 import { paneFrame } from "@pe/web-kernel/route/body";
 import { historyRequest, publicationPose, type HistorySnapshot } from "./history";
 import { DocumentPicker } from "./document-picker";
+import { ownsDocument } from "@pe/web-kernel/route/typed-route";
 import { RouteVisibility } from "@pe/web-kernel/route/activity";
 import { SituationBand, TimelineHead } from "./situation-band";
 import { CatalogWorkReviews } from "./catalog-work-reviews";
@@ -286,11 +287,7 @@ function TypedPlace({
       fields={fields}
       target={resolved}
       needs={module.spec.optionalTarget ?? needs}
-      enabled={
-        fixture === null &&
-        !snapshot &&
-        (!!module.spec.optionalTarget || !["browser", "host"].includes(needs))
-      }
+      enabled={fixture === null && !snapshot && ownsDocument(module.spec)}
     />
   );
   if (snapshot && !pose)

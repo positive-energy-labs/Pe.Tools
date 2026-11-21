@@ -42,6 +42,7 @@ export const module = screen(
   {
     ...declared,
     needs: "project",
+    focus: null,
     host: "@pe/rooms-host/product",
     edits: {
       work: takeoffsWork,
