@@ -15,6 +15,7 @@ export default defineConfig({
       // host-typegen owns these checked-in artifacts; codegen:check compares exact bytes
       "**/host-ops.generated.ts",
       "**/host-catalog.generated.ts",
+      "packages/host-contracts/src/generated/native-commands.generated.ts",
       "packages/host-contracts/src/generated/native-effect.generated.ts",
       // Canonical closure pins and SDK shape projections are compared byte-for-byte by their producers.
       "**/source-closure.generated.json",
@@ -30,6 +31,7 @@ export default defineConfig({
       "packages/mcps/src/pea/product-actions.generated.ts",
       "packages/mcps/src/pea/product-catalog.generated.ts",
       "packages/mcps/src/pea/product-contracts.generated.ts",
+      "packages/mcps/src/pea/product-operations.generated.ts",
       "**/pe-revit-wire.ts",
       // `pe-revit context product` writes this file ("DO NOT EDIT"); regeneration undoes any reformat
       "**/product.g.ts",

@@ -30,12 +30,7 @@ import { HostRpcCaller } from "./host-rpc-caller.ts";
 import type { HostSessionScope } from "@pe/host-contracts/operation-types";
 import type { HostOperationDefinition } from "@pe/host-contracts/contracts";
 import { readScheduleCapture } from "./schedule-client.ts";
-import {
-  actionResult,
-  submitAction,
-  controlAction,
-  recoverAction,
-} from "./action-client.ts";
+import { actionResult, submitAction, controlAction, recoverAction } from "./action-client.ts";
 import { createPeClient } from "@pe/agent-contracts/pe-api";
 import { contextFetch as fetch } from "@pe/runtime/context";
 

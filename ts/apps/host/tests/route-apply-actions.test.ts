@@ -1,25 +1,27 @@
 import { Effect } from "effect";
 import { expect, test, vi } from "vite-plus/test";
-import { commands } from "@pe/mcps/product-actions";
+import { ANY_ROUTE, type Tool } from "@pe/agent-contracts";
+import { commands, tools } from "@pe/mcps/product-actions";
 import { workWriteBoundary } from "../src/work-write-boundary.ts";
-import type { CommandExecutor, CommandContext } from "@pe/host-internal/command-executor";
-import { detachedBridge } from "./effect-test.ts";
+import type { CommandExecutor } from "@pe/host-internal/command-executor";
+import { crossingOf } from "./callers.ts";
+import { detachedBridge, testJournal } from "./effect-test.ts";
 import { z } from "zod";
-
-vi.mock("../src/document-lifetime.ts", async (actual) => ({
-  ...(await actual<typeof import("../src/document-lifetime.ts")>()),
-  lifetime: async () => ({ session: { state: { openDocuments: [] } }, process: {} }),
-}));
 
 // Payload/plan-ticket fixtures belonged to the retired caller-payload boundary.
 // Every migrated command must bind executable derivation and refuse foreign Work first.
 const writes = Object.entries(commands).filter(([, entry]) => "writeBoundary" in entry);
+const registeredTools: readonly Tool[] = Object.values(tools);
+const registeredRoute = registeredTools.find((tool) => tool.work)?.work?.route;
 test.each(writes)(
   "%s links derivation and refuses foreign Work without reading evidence",
   async (key, definition) => {
-    const entry = definition as (typeof commands)["families.apply"];
-    expect(typeof entry.writeBoundary.derive).toBe("function");
-    expect(typeof entry.writeBoundary.preview).toBe("function");
+    if (!("writeBoundary" in definition)) throw Error(`${key} has no write boundary`);
+    const hooks = definition.writeBoundary;
+    const route = hooks.route === ANY_ROUTE ? registeredRoute : hooks.route;
+    if (!route) throw Error(`${key} needs a registered Work route`);
+    expect(typeof hooks.derive).toBe("function");
+    expect(typeof hooks.preview).toBe("function");
     const executor: CommandExecutor = {
       definition,
       prepared: z.unknown(),
@@ -31,35 +33,40 @@ test.each(writes)(
       },
       run: () => Effect.fail(Error("must not dispatch foreign Work")),
     };
-    const ctx = {
-      admission: {
-        id: "foreign",
+    const bridge = detachedBridge();
+    const boundary = workWriteBoundary(executor, bridge);
+    const bind = vi.fn(boundary.bind);
+    const journal = testJournal();
+    journal.bindCommands({ probe: async () => null, resolve: () => ({ ...boundary, bind }) });
+    const id = `foreign:${key}`;
+    await journal.invoke(
+      {
+        id,
         key,
         target: { kind: "document", ref: { session: "A", openId: "A" } },
-        input: (() => {
-          const foreign = {
-            binding: "open",
-            route: entry.writeBoundary.route,
-            target: null,
-            open: { session: "A", openId: "B" },
-          };
-          return { work: { key: foreign, revision: 1 } };
-        })(),
-      },
-    } as unknown as CommandContext;
-    const boundary = workWriteBoundary(executor, detachedBridge());
-    await expect(boundary.bind(ctx)).rejects.toThrow("another document");
-    expect(() =>
-      workWriteBoundary(
-        {
-          ...executor,
-          definition: {
-            ...entry,
-            writeBoundary: { ...entry.writeBoundary, derive: undefined },
-          } as never,
+        input: {
+          work: {
+            key: {
+              binding: "open",
+              route,
+              target: null,
+              open: { session: "A", openId: "B" },
+            },
+            revision: 1,
+          },
         },
-        {} as never,
-      ),
-    ).toThrow("typed derive and preview");
+      },
+      crossingOf(),
+    );
+    expect(await journal.wait(id)).toMatchObject({
+      state: "failed",
+      notDispatched: true,
+      refusal: { code: "work.target", message: "Work belongs to another document" },
+    });
+    expect(bind).not.toHaveBeenCalled();
+    const missingDerive = { ...definition, writeBoundary: { ...hooks, derive: undefined } };
+    expect(() => workWriteBoundary({ ...executor, definition: missingDerive }, bridge)).toThrow(
+      "typed derive and preview",
+    );
   },
 );

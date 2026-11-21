@@ -82,7 +82,7 @@ vi.mock("./typed-mount", async (original) => {
 });
 
 /** Chadds and Snowdon are two files; `again` is Chadds closed and opened again, a new lifetime. */
-export const documents = {
+const documents = {
   chadds: { ref, path: address("C:/Models/Chadds.rvt"), title: "Chadds" },
   snowdon: {
     ref: { ...ref, openId: "snowdon" },
@@ -96,9 +96,9 @@ export const documents = {
   },
 } satisfies Record<string, Required<JourneyDocument>>;
 export type JourneyDoc = keyof typeof documents;
-export const pin = (doc: JourneyDoc) => JSON.stringify({ kind: "open", ref: documents[doc].ref });
+const pin = (doc: JourneyDoc) => JSON.stringify({ kind: "open", ref: documents[doc].ref });
 
-export async function targetJourney(
+async function targetJourney(
   module: TypedRoute,
   reads: string[],
   native: (doc: JourneyDoc) => Native,
@@ -321,8 +321,7 @@ export async function targetChange(product: TargetProduct, path: keyof typeof pa
       expect(page[name], name).toEqual(field.initial);
     // No reading of the old target is drawn or held. A reopened file is the same model.
     const { subject: door, core } = product.module.spec;
-    const seen = () =>
-      document.body.textContent + JSON.stringify(live.value(door?.read ?? core));
+    const seen = () => document.body.textContent + JSON.stringify(live.value(door?.read ?? core));
     if (documents[from].path !== documents[to].path)
       expect(seen()).not.toMatch(product.shows(from));
     // The new target's own controls work.

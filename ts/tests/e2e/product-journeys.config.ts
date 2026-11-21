@@ -27,4 +27,6 @@ const journeys = (include: URL) =>
 export const productJourneys = (config: string) =>
   journeys(new URL("./journeys/*.journey.test.tsx", config));
 
-export default journeys(new URL("../../products/*/web/journeys/*.journey.test.tsx", import.meta.url));
+export default journeys(
+  new URL("../../products/*/web/journeys/*.journey.test.tsx", import.meta.url),
+);

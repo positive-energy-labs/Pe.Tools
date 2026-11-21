@@ -26,9 +26,7 @@ export function admittedRouterAddress(history: {
       );
     },
     subscribe: (listener) =>
-      history.subscribe((event) =>
-        listener(/^(BACK|FORWARD|GO)$/.test(event?.action?.type ?? "")),
-      ),
+      history.subscribe((event) => listener(/^(BACK|FORWARD|GO)$/.test(event?.action?.type ?? ""))),
   };
 }
 

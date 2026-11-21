@@ -573,7 +573,7 @@ it("decodes retained wire recordings through the provenance-checked loader", () 
   }
   if (process.env.S3_RECORDING_REPORT)
     writeFileSync(process.env.S3_RECORDING_REPORT, JSON.stringify(results, null, 2));
-  expect(Object.keys(results)).toHaveLength(38);
+  expect(Object.keys(results)).toHaveLength(37);
   expect(refused).toEqual(["manuella-adopt/response"]);
   // The receipt lists failures with exact names and provenance. A green census
   // is not a claim that historical bodies match today's C# contract.

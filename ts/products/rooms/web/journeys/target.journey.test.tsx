@@ -64,5 +64,4 @@ test.each(targetPaths)("Rooms: %s leaves the old document's plan and room behind
   targetChange(rooms, path),
 );
 test("Rooms: Back restores the plan and room its entry names, and Forward the other document's", () =>
-  backRestores(rooms),
-);
+  backRestores(rooms));
