@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { z } from "zod";
 import {
   canonicalRouteInput,
@@ -341,7 +341,12 @@ export class RetainedReadings {
     }).pipe(
       Effect.tapError((error) =>
         Effect.sync(() => {
-          if (entry.envelope.revision === revision && !entry.body) {
+          // Native retirement refuses this attempt only. The last reader restores idle below.
+          if (
+            !Predicate.isTagged(error, "ReadRetiring") &&
+            entry.envelope.revision === revision &&
+            !entry.body
+          ) {
             entry.envelope = {
               ...entry.envelope,
               state: "failed",
