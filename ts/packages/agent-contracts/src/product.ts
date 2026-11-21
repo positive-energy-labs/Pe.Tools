@@ -37,6 +37,7 @@ const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
 export * from "./product-bodies.ts";
+import type { DeclaredFiles, Emits, HostFiles } from "./product-bodies.ts";
 import type { LocalFootprint, LocalOperations } from "./product-bodies.ts";
 
 /**
@@ -249,17 +250,6 @@ type Retained<R> = R extends { load: { scope: "document" } }
     ? { readonly handle: { readonly input: z.ZodType<{ kind: string; session: string }> } }
     : { readonly load: { readonly scope: "document" | "session" } };
 
-type Snapshots<R> = R extends { load: { calls: infer Calls } }
-  ? Extract<Calls[keyof Calls], { snapshot: true }>
-  : never;
-/**
- * A reading with a `snapshot` call names the kind that call produces, so the kernel can keep it; a
- * reading with none can name no kind, because nothing would emit it.
- */
-type Emits<R, Kind> = [Snapshots<R>] extends [never]
-  ? { readonly emits?: never }
-  : { readonly emits: Kind };
-
 /** A declared reading by name, alone or with the function that makes its arguments from the Page. */
 type Named<R extends string = string> = R | readonly [R, (page: never) => unknown];
 /**
@@ -368,19 +358,6 @@ export type ProductDeclaration = {
 };
 /** A declared HTTP route: the kernel mounts it at its path, so the path is rooted. */
 type HttpRoutes = Readonly<Record<string, HttpRead & { readonly path: `/${string}` }>>;
-/**
- * A declared host file: what a reading hands it and what it answers, read through `hostFile`. With
- * `emits` its body returns a value of that declared capture kind for the document its input names;
- * the kernel keeps it and answers with the kept capture, as it does for a `snapshot` call.
- */
-type HostFiles = Readonly<
-  Record<
-    string,
-    { readonly input: z.ZodType; readonly output: z.ZodType; readonly emits?: PropertyKey }
-  >
->;
-/** The host's own file inputs: a product file by one of these names would answer for the platform. */
-export const platformFiles = ["firm", "settings", "capture"] as const;
 type SheetNative = {
   readonly native?: Readonly<Partial<Record<"plan" | "apply", readonly HostOperationKey[]>>>;
 };
@@ -542,13 +519,7 @@ export function product<
   readonly guide?: Guide;
   readonly http?: Http;
   /** The product's host files by name; the host half owes one body each. */
-  readonly files?: Files & {
-    readonly [K in keyof Files & (typeof platformFiles)[number]]: never;
-  } & {
-    readonly [K in keyof Files]: Files[K] extends { readonly emits: PropertyKey }
-      ? { readonly emits: keyof Caps; readonly input: z.ZodType<{ target: DocumentRef }> }
-      : unknown;
-  };
+  readonly files?: DeclaredFiles<Files, keyof Caps>;
   /** The product's local operations by catalog key; the host half owes one body each. */
   readonly local?: Local & { readonly [K in keyof Local]: LocalFootprint<Local[K]> };
   readonly publishTool?: Publish;

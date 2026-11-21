@@ -18,7 +18,7 @@ import type { RunPods } from "./pod-runner.ts";
 import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
 import type { RequestIdentity } from "./request-contracts.d.ts";
-import { body, leaf, type Leaf, type Read, type ReadContext } from "./reads/door.ts";
+import { body, leaf, type Read, type ReadContext } from "./reads/door.ts";
 
 /** What a host always holds, so every product body takes it whole, on every path. */
 export type HostOffer = {
@@ -39,20 +39,26 @@ export type HostOffers = HostOffer & {
   runPods?: RunPods;
 };
 /** A declared host file as a read input: its name and schemas come from the declaration. */
-export const hostFile = <
-  P extends Pick<ProductDeclaration, "files">,
-  K extends keyof P["files"] & string,
->(
-  product: P,
+export const hostFile = <F extends ProductDeclaration["files"], K extends keyof F & string>(
+  product: { readonly files: F },
   key: K,
   validate = true,
-) => {
-  const { input, output } = product.files[key]!;
-  // The declaration's schemas are held erased; the key gives the leaf their types back.
-  return leaf(`file:${key}`, input, output, validate) as Leaf<
-    z.output<P["files"][K]["input"]>,
-    z.output<P["files"][K]["output"]>
-  >;
+): {
+  readonly name: string;
+  readonly input: F[K]["input"];
+  readonly output: F[K]["output"];
+  readonly leaf: true;
+  readonly validate: boolean;
+} => {
+  // Built here and not by `leaf`, so each schema keeps its declared type and a read infers from it.
+  const file: F[K] = product.files[key];
+  return Object.freeze({
+    name: `file:${key}`,
+    input: file.input,
+    output: file.output,
+    leaf: true,
+    validate,
+  });
 };
 type ProductHome<P extends Pick<ProductDeclaration, "homes">> = {
   [K in keyof P["homes"]]: P["homes"][K] extends { read: "product" } ? K : never;

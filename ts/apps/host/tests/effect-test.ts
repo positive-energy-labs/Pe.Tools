@@ -1,7 +1,9 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
-import { hostState } from "../src/host-ownership.ts";
+import { hostOffer, hostState } from "../src/host-ownership.ts";
 import { HostInputContext } from "../src/input-context.ts";
-import { stateFixture } from "../../../tests/isolated-home/storage.ts";
+import { mkdtempSync, stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { journalFixture } from "./storage.ts";
 import { PictureCaptureStore } from "../src/captures-route.ts";
 import { HomeFiles } from "@pe/host-internal/home-files";
@@ -340,6 +342,11 @@ export const pictureCaptures = (root: string) =>
   Context.get(testScoped(PictureCaptureStore.layer(stateFixture(root))), PictureCaptureStore);
 export const testDuctFiles = () =>
   Context.get(testScoped(HomeFiles.layer(hostState().home)), HomeFiles);
+/** The offer a test hands a registry or a product body: its capture store and this machine's files. */
+export const testOffer = (
+  captures: ObservationFiles = captureStore(mkdtempSync(join(tmpdir(), "pe-offer-"))),
+  files = testDuctFiles(),
+) => hostOffer(captures, files);
 
 export const testHostInputs = Layer.mergeAll(
   HomeFiles.layer(hostState().home),

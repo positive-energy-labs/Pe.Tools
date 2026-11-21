@@ -9,7 +9,7 @@ import { z } from "zod";
 import { command, StepFailure } from "@pe/host-internal/command-executor";
 import { commandRegistry } from "../src/command-registry.ts";
 import { ActionJournalService } from "../src/receipt-services.ts";
-import { settle } from "./effect-test.ts";
+import { settle, testOffer } from "./effect-test.ts";
 import { markDispatched, recordNativeTerminal } from "../src/action-dispatch.ts";
 
 // K3: a Stop that lands after Revit has replied `wrote`, before the attempt settles its row.
@@ -29,9 +29,10 @@ const bridge = {
       target: { session: "S", document: null },
     }),
 };
-const registryCancel = commandRegistry(bridge as never, {} as never, {} as never, () =>
-  Effect.fail(Error("unused")),
-)("work.start").cancel!;
+const registryCancel = () =>
+  commandRegistry(bridge as never, testOffer(), {} as never, () => Effect.fail(Error("unused")))(
+    "work.start",
+  ).cancel!;
 
 // sdk: an SDK-lane step, which carries neither `dispatchedAt` nor `touched` (sdk-dispatch.ts).
 type Shape = {
@@ -104,7 +105,7 @@ async function fixture(shape: Shape) {
                 );
               return null;
             }),
-          cancel: registryCancel,
+          cancel: registryCancel(),
         },
       ),
   });

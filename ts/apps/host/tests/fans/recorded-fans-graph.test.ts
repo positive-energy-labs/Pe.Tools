@@ -46,7 +46,7 @@ import { type ConsumerRecipe, type RecordingReader } from "@pe/host-internal/inp
 import type { ReadSetId } from "@pe/host-internal/input-occurrence";
 import { builtinEnrollments } from "../../src/builtin-enrollment.ts";
 import { workFingerprintSchema } from "../../../../packages/agent-contracts/src/route-kernel-admission.ts";
-import { settle, detachedBridge, sessionView } from "../effect-test.ts";
+import { settle, detachedBridge, sessionView, testOffer } from "../effect-test.ts";
 import { SdkSession } from "../../src/sdk-session.ts";
 import { HostInputReadSets, defaultReadSetLimits } from "../../src/input-occurrence.ts";
 import { RetainedReadings } from "@pe/host-internal/retained-readings";
@@ -638,7 +638,7 @@ test.each([
         expect(fresh.value.version).not.toBe(original.value.version);
         if (roster)
           expect(fresh.value.version).toBe(roster.headers.get(NATIVE_BODY_VERSION_HEADER));
-        const refresh = ductsExecutors(liveFactories.service!, {} as never).executors[
+        const refresh = ductsExecutors(liveFactories.service!, testOffer()).executors[
           "ducts.refresh"
         ]!;
         await run(
@@ -1358,7 +1358,7 @@ test.each([
           payloadJson: JSON.stringify({ changedOpenIds: [ref.openId] }),
         });
       await reread();
-      const refresh = ductsExecutors(liveFactories.service!, {} as never).executors[
+      const refresh = ductsExecutors(liveFactories.service!, testOffer()).executors[
         "ducts.refresh"
       ]!;
       await run(

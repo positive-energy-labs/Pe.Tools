@@ -16,7 +16,7 @@ import { RevitBridgeLive } from "../src/bridge.ts";
 import { bindCommandRuntime } from "../src/command-registry.ts";
 import { bindControl, currentCaller, workAuthorOf } from "../src/control.ts";
 import { fileRouteDocumentStore } from "../src/route-document-store.ts";
-import { captureStore, settle, testRegistry, journalAt } from "./effect-test.ts";
+import { captureStore, settle, testRegistry, journalAt, testOffer } from "./effect-test.ts";
 
 test.each([
   { later: null, pea: false, crash: true },
@@ -88,8 +88,12 @@ test.each([
         observed.revision,
       );
       if (!staged.ok) throw Error(JSON.stringify(staged));
-      bindCommandRuntime(owner, bridge, captures, { workspace: work, podsRoot: directory }, () =>
-        Effect.fail(Error("settings.write owns its writer")),
+      bindCommandRuntime(
+        owner,
+        bridge,
+        testOffer(captures),
+        { workspace: work, podsRoot: directory },
+        () => Effect.fail(Error("settings.write owns its writer")),
       );
       let crashBytes: Buffer | undefined;
       let workBytes: Array<readonly [string, Buffer]> = [];
@@ -150,7 +154,7 @@ test.each([
       bindCommandRuntime(
         restarted,
         bridge,
-        captures,
+        testOffer(captures),
         { workspace: restoredWork, podsRoot: directory },
         () => Effect.fail(Error("settings.write owns its writer")),
       );
@@ -194,7 +198,7 @@ test.each([
         bindCommandRuntime(
           restarted,
           bridge,
-          captures,
+          testOffer(captures),
           { workspace: restoredWork, podsRoot: directory },
           () => Effect.fail(Error("settings.write owns its writer")),
         );

@@ -1,6 +1,6 @@
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
 import { noticeRows } from "../src/notice-feed.ts";
-import { testHostInputs, journalAt, callRouteOver } from "./effect-test.ts";
+import { testHostInputs, journalAt, callRouteOver, testOffer } from "./effect-test.ts";
 import { Layer, Effect } from "effect";
 import { afterEach, expect, test, vi } from "vite-plus/test";
 import { existsSync, symlinkSync, unlinkSync } from "node:fs";
@@ -411,8 +411,12 @@ async function setup(
     id?: string,
   ) => {
     if (!bound) {
-      bindCommandRuntime(owner, sdkOnlyBridge, captureStore(join(dir, "captures")), deps, () =>
-        Effect.fail(Error("Instances must dispatch through the SDK")),
+      bindCommandRuntime(
+        owner,
+        sdkOnlyBridge,
+        testOffer(captureStore(join(dir, "captures"))),
+        deps,
+        () => Effect.fail(Error("Instances must dispatch through the SDK")),
       );
       bound = true;
     }

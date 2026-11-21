@@ -1,7 +1,7 @@
 import { ObservationFiles } from "@pe/host-internal/observation-files";
 import { stateFixture } from "../../../tests/isolated-home/storage.ts";
 import { mkdtemp } from "../../../tests/isolated-home/storage.ts";
-import { detachedBridge, settle, testRegistry, journalAt } from "./effect-test.ts";
+import { detachedBridge, settle, testRegistry, journalAt, testOffer } from "./effect-test.ts";
 import { mkdir, writeFile, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,7 +40,7 @@ async function files() {
   let writes = 0,
     loseResult = false;
   const compose = (owner: ActionJournal) =>
-    bindCommandRuntime(owner, bridge, captures, { podsRoot }, (key, input) =>
+    bindCommandRuntime(owner, bridge, testOffer(captures), { podsRoot }, (key, input) =>
       Effect.gen(function* () {
         if (key !== "pod.member.save") throw Error(`Unexpected local operation ${key}`);
         writes++;
