@@ -54,10 +54,7 @@ const INFRASTRUCTURE = new Set(
 );
 const HOST_CLIENT = modulePath(WEB + "index.ts", "#/host/client");
 const HOST_RUNTIME = modulePath(WEB_KERNEL + "index.ts", "./host/runtime");
-const ACTION_CLIENT = resolve(ROOT, "packages/mcps/src/shared/action-client").replaceAll(
-  "\\",
-  "/",
-);
+const ACTION_CLIENT = resolve(ROOT, "packages/mcps/src/shared/action-client").replaceAll("\\", "/");
 
 function hostImport(file: string, entry: Import): boolean {
   const path = modulePath(file, entry.module);

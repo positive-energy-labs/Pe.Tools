@@ -1,10 +1,6 @@
 /** Original retained-owner evidence; native bytes remain in the one taking store. */
 import { Effect, Option, Result, Schema } from "effect";
-import {
-  attemptFor,
-  CurrentInputAttempt,
-  CurrentInputConsumption,
-} from "./input-occurrence.ts";
+import { attemptFor, CurrentInputAttempt, CurrentInputConsumption } from "./input-occurrence.ts";
 import { z } from "zod";
 import { canonicalRouteInput as readingKey } from "@pe/agent-contracts";
 import { canonicalJson, HostNativeRead, type NativeReadInput } from "./native-read.ts";

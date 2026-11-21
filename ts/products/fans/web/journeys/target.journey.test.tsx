@@ -51,5 +51,4 @@ test.each(targetPaths)("Fans: %s leaves the old document's fan behind", (path) =
   targetChange(fans, path),
 );
 test("Fans: Back restores the fan its entry names, and Forward the other document's", () =>
-  backRestores(fans),
-);
+  backRestores(fans));

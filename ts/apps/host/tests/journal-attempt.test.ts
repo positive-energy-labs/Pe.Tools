@@ -541,10 +541,25 @@ test("closing the host scope joins the attempt; it never interrupts it", async (
 const here = { session: "s", openId: "here" };
 const savedWork = { binding: "address" as const, route: "fence", target: address("C:/model.rvt") };
 test.each([
-  ["an open lifetime's Work on another lifetime", { binding: "open" as const, route: "fence", target: null, open: { ...here, openId: "gone" } }, "C:/model.rvt", "Work belongs to another document"],
+  [
+    "an open lifetime's Work on another lifetime",
+    { binding: "open" as const, route: "fence", target: null, open: { ...here, openId: "gone" } },
+    "C:/model.rvt",
+    "Work belongs to another document",
+  ],
   ["saved Work on another file", savedWork, "C:/other.rvt", "Work belongs to another document"],
-  ["saved Work on an unsaved target", savedWork, null, "Work belongs to a saved document, and the target document is unsaved"],
-  ["saved Work where no resolver reads the target's Address", savedWork, undefined, "Work belongs to a saved document, and this host cannot read the target's Address"],
+  [
+    "saved Work on an unsaved target",
+    savedWork,
+    null,
+    "Work belongs to a saved document, and the target document is unsaved",
+  ],
+  [
+    "saved Work where no resolver reads the target's Address",
+    savedWork,
+    undefined,
+    "Work belongs to a saved document, and this host cannot read the target's Address",
+  ],
   ["saved Work on its own file", savedWork, "C:/model.rvt", null],
 ] as const)("the Work fence at admission: %s", async (_name, key, resolved, refusal) => {
   let bound = 0;
