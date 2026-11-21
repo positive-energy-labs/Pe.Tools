@@ -31,6 +31,7 @@ import {
 } from "@pe/host-internal/input-recording";
 import { createRetainedBasis } from "@pe/host-internal/retained-basis";
 import { RetainedReadings, retainedCallSubject } from "@pe/host-internal/retained-readings";
+import { ReadRetiring } from "@pe/host-internal/read-errors";
 import { retainedNativeRead } from "../src/call-route.ts";
 import { HostSessionInventory } from "../src/session-inventory.ts";
 import { httpProblems } from "../src/http-problems.ts";
@@ -730,6 +731,36 @@ test("I/O loss after native capture marks incomplete and still serves the live b
   } finally {
     await c.web.close();
   }
+});
+
+test("a retained roster can reacquire after the earlier native read retires", async () => {
+  const owner = new RetainedReadings();
+  const subject = retainedCallSubject(input);
+  await expect(
+    run(
+      owner.read(
+        subject,
+        new ReadRetiring({
+          message: "An earlier native read is settling",
+          status: 409,
+          problem: "read.retiring",
+        }),
+      ),
+    ),
+  ).rejects.toMatchObject({ _tag: "ReadRetiring" });
+
+  await expect(
+    run(
+      owner.read(
+        subject,
+        Effect.succeed({
+          value,
+          nativeRequestId: "after-terminal",
+          target: { session: ref.session, document: row.address, documentRef: ref },
+        }),
+      ),
+    ),
+  ).resolves.toMatchObject({ nativeRequestId: "after-terminal", reused: false });
 });
 
 test("invalidation during deferred basis capture fences ready publication", async () => {
