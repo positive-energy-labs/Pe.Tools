@@ -49,11 +49,11 @@ export function CatalogueActions() {
             <Button
               kind="nav"
               direction="out"
-              label="open in RHVAC"
+              label="open in Explorer"
               onClick={noop}
               reason="Leaves Pe.Tools"
             >
-              open in RHVAC
+              open in Explorer
             </Button>
           </ActionGroup>
           <ActionGroup title="stops what runs" radius="turn">

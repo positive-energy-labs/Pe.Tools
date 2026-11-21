@@ -38,10 +38,10 @@ export function bindProducts(
       "local operation",
       hosts.map(({ product, local }) =>
         Object.fromEntries(
-          Object.entries(product.local).map(([key, { request }]) => {
+          Object.entries(product.local).map(([key, { request, effects }]) => {
             const run = local[key];
             if (!run) throw Error(`No host body for the local operation ${key}`);
-            return [key, { request, run }];
+            return [key, { request, effects, run }];
           }),
         ),
       ),

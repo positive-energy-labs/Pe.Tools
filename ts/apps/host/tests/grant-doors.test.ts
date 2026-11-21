@@ -95,6 +95,24 @@ test("RHVAC launch requires journaled action admission for authenticated callers
   const anonymous = await post("/call", { key: "rhvac.launch", request: { path: "test.r10" } });
   expect(anonymous.status).toBe(403);
 });
+test("a product's local mutation is admitted with the files its declaration names", async () => {
+  const targetPath = join(root, "missing.r10");
+  const response = await post(
+    "/actions",
+    {
+      id: "sync-effects",
+      key: "rhvac.sync",
+      target: { kind: "host" },
+      input: { targetPath, inserts: [], updates: [], whatIf: true },
+    },
+    contextHeaders(),
+  );
+  expect([200, 202]).toContain(response.status);
+  // The footprint is bound at admission, whatever the sync of a missing file then answers.
+  expect((await journal.wait("sync-effects")).effects).toEqual([
+    { kind: "file", path: targetPath },
+  ]);
+});
 test("an unavailable Pod query has one typed refusal before dispatch", async () => {
   const response = await post(
     "/call",

@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import type { HostLocalCatalogEntry } from "@pe/host-contracts/operation-types";
 
 // The extract schemas mirror dotnet/Pe.Revit.Takeoff/Rhvac/extract-rhvac.ps1.
 
@@ -229,7 +228,8 @@ const rhvacTakeoffDataSchema = Schema.Struct({
 });
 export type RhvacTakeoffData = Schema.Schema.Type<typeof rhvacTakeoffDataSchema>;
 
-export const localOperationSchemas = {
+/** Each local operation once: its schemas, its catalog row, and for a mutation the files it writes. */
+export const localOperations = {
   "takeoffs.saved": {
     request: Schema.Struct({
       captureId: Schema.optional(Schema.String),
@@ -237,90 +237,38 @@ export const localOperationSchemas = {
       text: Schema.optional(Schema.Boolean),
     }),
     response: Schema.Unknown,
+    displayName: "Saved Takeoffs captures",
+    says: "Read durable geometry without Revit. With captureId, return that immutable dated capture. Otherwise list capture identities, times and documents; optional document filters the list. Migrated captures explicitly have unknown original target provenance and are never live evidence.",
+    requestTypeName: "SavedTakeoffsRequest",
+    responseTypeName: "TakeoffCapture",
+    searchTerms: ["takeoffs", "saved", "capture", "offline", "geometry", "review"],
   },
   "rhvac.open": {
     request: rhvacPathRequestSchema,
     response: rhvacExtractSchema,
-  },
-  "rhvac.assemblies": {
-    request: rhvacPathRequestSchema,
-    response: rhvacAssemblyCatalogSchema,
-  },
-  "rhvac.sync": {
-    request: rhvacSyncRequestSchema,
-    response: rhvacSyncResultSchema,
-  },
-  "rhvac.launch": {
-    request: rhvacPathRequestSchema,
-    response: rhvacLaunchResultSchema,
-  },
-  "rhvac.takeoff": {
-    request: rhvacPathRequestSchema,
-    response: rhvacTakeoffDataSchema,
-  },
-  "rhvac.list": {
-    request: rhvacListRequestSchema,
-    response: rhvacListDataSchema,
-  },
-} as const;
-
-type LocalSchemas = typeof localOperationSchemas;
-
-type CatalogEntry = HostLocalCatalogEntry<keyof LocalSchemas>;
-const catalogRow = (
-  row: Pick<
-    CatalogEntry,
-    "key" | "displayName" | "description" | "requestTypeName" | "responseTypeName" | "searchTerms"
-  > &
-    Partial<Pick<CatalogEntry, "effect" | "costTier">>,
-): CatalogEntry => ({
-  subject: "None",
-  touches: "Metadata",
-  cardinality: "One",
-  effect: "Read",
-  origin: "host-local",
-  visibility: "DefaultVisible",
-  costTier: "Cheap",
-  needs: "nothing",
-  ...row,
-});
-
-export const localOperationCatalog = [
-  catalogRow({
-    key: "takeoffs.saved",
-    displayName: "Saved Takeoffs captures",
-    description:
-      "Read durable geometry without Revit. With captureId, return that immutable dated capture. Otherwise list capture identities, times and documents; optional document filters the list. Migrated captures explicitly have unknown original target provenance and are never live evidence.",
-    requestTypeName: "SavedTakeoffsRequest",
-    responseTypeName: "TakeoffCapture",
-    searchTerms: ["takeoffs", "saved", "capture", "offline", "geometry", "review"],
-  }),
-  catalogRow({
-    key: "rhvac.open",
     displayName: "Open RHVAC Project",
-    description:
-      "Extract an Elite RHVAC .r10 Manual J project to JSON: building totals, systems, and rooms with identifiers. Runs the repo's 32-bit Jet lane; no Revit session needed.",
+    says: "Extract an Elite RHVAC .r10 Manual J project to JSON: building totals, systems, and rooms with identifiers. Runs the repo's 32-bit Jet lane; no Revit session needed.",
     costTier: "Bounded",
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacExtractData",
     searchTerms: ["rhvac", "r10", "manual j", "open", "extract", "rooms", "loads"],
-  }),
-  catalogRow({
-    key: "rhvac.assemblies",
+  },
+  "rhvac.assemblies": {
+    request: rhvacPathRequestSchema,
+    response: rhvacAssemblyCatalogSchema,
     displayName: "RHVAC Assemblies",
-    description:
-      "Distinct construction assemblies per category (floors/roofs/walls/glass/doors) used in an .r10 file, with U-values (glass: + SHGC). The editor's assembly picker source.",
+    says: "Distinct construction assemblies per category (floors/roofs/walls/glass/doors) used in an .r10 file, with U-values (glass: + SHGC). The editor's assembly picker source.",
     costTier: "Bounded",
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacAssemblyCatalogData",
     searchTerms: ["rhvac", "r10", "assemblies", "constructions", "u-value", "materials"],
-  }),
-  catalogRow({
-    key: "rhvac.sync",
+  },
+  "rhvac.sync": {
+    request: rhvacSyncRequestSchema,
+    response: rhvacSyncResultSchema,
     effect: "SessionWrite",
     displayName: "Sync RHVAC Project",
-    description:
-      "One atomic sync of an .r10 IN PLACE: seed systems, insert new rooms, update existing ones, optionally drop the template's blank seed room. Refuses while RHVAC holds the file, works on a copy, validates, then swaps with a timestamped backup. Returns each inserted room's assigned identifier plus the file identity to pair with Revit provenance.",
+    says: "One atomic sync of an .r10 IN PLACE: seed systems, insert new rooms, update existing ones, optionally drop the template's blank seed room. Refuses while RHVAC holds the file, works on a copy, validates, then swaps with a timestamped backup. Returns each inserted room's assigned identifier plus the file identity to pair with Revit provenance.",
     costTier: "Mutation",
     requestTypeName: "RhvacSyncRequest",
     responseTypeName: "RhvacSyncResult",
@@ -335,33 +283,35 @@ export const localOperationCatalog = [
       "takeoff",
       "backup",
     ],
-  }),
-  catalogRow({
-    key: "rhvac.launch",
+    effects: (input: RhvacSyncRequest) => [input.targetPath],
+  },
+  "rhvac.launch": {
+    request: rhvacPathRequestSchema,
+    response: rhvacLaunchResultSchema,
     effect: "SessionWrite",
     displayName: "Open .r10 in RHVAC",
-    description:
-      "Open an .r10 file with its Windows file association (Elite RHVAC). Fire-and-forget: the shell owns the app, and load recalculation is a manual step in RHVAC.",
+    says: "Open an .r10 file with its Windows file association (Elite RHVAC). Fire-and-forget: the shell owns the app, and load recalculation is a manual step in RHVAC.",
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacLaunchResult",
     searchTerms: ["rhvac", "r10", "launch", "open", "start", "elite", "shell"],
-  }),
-  catalogRow({
-    key: "rhvac.list",
+    effects: (input: RhvacPathRequest) => [input.path],
+  },
+  "rhvac.list": {
+    request: rhvacListRequestSchema,
+    response: rhvacListDataSchema,
     displayName: "List .r10 files",
-    description:
-      "List the .r10 Manual J project files in one host-visible folder. The legal-options source for a route's .r10 binding; a missing folder is an empty list with exists=false.",
+    says: "List the .r10 Manual J project files in one host-visible folder. The legal-options source for a route's .r10 binding; a missing folder is an empty list with exists=false.",
     requestTypeName: "RhvacListRequest",
     responseTypeName: "RhvacListData",
     searchTerms: ["rhvac", "r10", "list", "folder", "files", "manual j"],
-  }),
-  catalogRow({
-    key: "rhvac.takeoff",
+  },
+  "rhvac.takeoff": {
+    request: rhvacPathRequestSchema,
+    response: rhvacTakeoffDataSchema,
     displayName: "RHVAC Takeoff Snapshots",
-    description:
-      "Raw takeoff TSV snapshots (<dir>/takeoff/*.tsv) and room-map.json found next to an .r10 file. Empty result when none exist.",
+    says: "Raw takeoff TSV snapshots (<dir>/takeoff/*.tsv) and room-map.json found next to an .r10 file. Empty result when none exist.",
     requestTypeName: "RhvacPathRequest",
     responseTypeName: "RhvacTakeoffData",
     searchTerms: ["rhvac", "takeoff", "tsv", "room map", "plan", "polygons"],
-  }),
-];
+  },
+} as const;
