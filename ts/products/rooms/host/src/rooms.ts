@@ -37,7 +37,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         return bind(ctx, "rooms.partition", [{ view, rejected, runId: ctx.admission.id }]);
       },
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, (native) => {
+        runModel(ctx, execution, bridge, (native) => {
           const { view, rejected } = ctx.admission.input;
           return native("rooms.partition", {
             view,
@@ -56,7 +56,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         return bind(ctx, "rooms.draw", [{ view, loops, name, role }]);
       },
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, (native) => {
+        runModel(ctx, execution, bridge, (native) => {
           const { view, loops, name, role } = ctx.admission.input;
           return native("rooms.draw", {
             view,
@@ -75,7 +75,7 @@ export function roomsExecutors(bridge: RevitBridge["Service"], deps: Deps) {
         return bind(ctx, "rooms.merge", [{ view, uniqueIds: regions.map(regionId), name }]);
       },
       run: (ctx, execution) =>
-        runModel(ctx, execution, deps, bridge, (native) => {
+        runModel(ctx, execution, bridge, (native) => {
           const { view, regions, name } = ctx.admission.input;
           return native("rooms.merge", {
             view,
@@ -177,7 +177,7 @@ export const roomsSheet =
           );
         const asked = new Map(regions.map((row) => [row.uniqueId, new Map(Object.entries(row))]));
         const { key: work } = sheetInput.parse(ctx.admission.input).work;
-        return runModel(ctx, execution, deps, bridge, (native) =>
+        return runModel(ctx, execution, bridge, (native) =>
           Effect.gen(function* () {
             const value = yield* native("rooms.write", {
               regions,

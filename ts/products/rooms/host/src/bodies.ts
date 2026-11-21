@@ -66,7 +66,7 @@ export const commandFiles = ({ openFile, syncFile, roots }: Deps) => ({
 
 export const files: Bodies["files"] = {
   observation: (args, { deps }) => query(deps, observations.input.parse(args)),
-  async "takeoff-capture"(args, { deps, document, sessions }) {
+  async "takeoff-capture"(args, { document, sessions }) {
     const { target, snapshot: body, views } = takeoffSnapshotInput.parse(args);
     const { address } = await document(target);
     if (!address || !sameAddress(address, addressSchema.parse(body.reading.at)))
@@ -76,16 +76,7 @@ export const files: Bodies["files"] = {
       .find((session) => session.sessionId === target.session)
       ?.openDocuments?.find((doc) => doc.openId === target.openId)?.title;
     if (!title) throw Error("Snapshot document is no longer open");
-    // ponytail: a reading's host file keeps through the kind's handle; only the `snapshot` call is
-    // wrapped by the kernel. Give `files` an `emits` of their own when a second reading keeps.
-    return takeoffs(deps).keep(
-      live(target, projectTakeoffSnapshot(body, title, views)),
-      async () => {
-        const current = await document(target);
-        if (!current.address || !sameAddress(current.address, address))
-          throw Error("Snapshot target changed before retention");
-      },
-    );
+    return live(target, projectTakeoffSnapshot(body, title, views));
   },
 };
 

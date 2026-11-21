@@ -29,7 +29,10 @@ import {
   executionTargetSchema,
   documentRefSchema,
   NATIVE_BODY_VERSION_HEADER,
+  sameAddress,
+  type DocumentRef,
 } from "@pe/agent-contracts";
+import { z } from "zod";
 import { HostInputContext } from "./input-context.ts";
 import {
   CurrentInputConsumption,
@@ -560,15 +563,43 @@ export const makeReadOwner = Effect.fn("Reads.compose")(function* (
             })();
         return scoped(current)(effect);
       };
+      // A product's own host file: its body, with the stores and the inventory this host holds.
+      const productFile = async ({ run, emits }: (typeof productFiles)[string], args: unknown) => {
+        const host = {
+          deps: hostOffer(captureStore(), files),
+          document: (target: DocumentRef) => invoke(inventory.document(target)),
+          sessions: () => invoke(inventory.list()),
+        };
+        if (!emits) return run(args, host);
+        // The kernel keeps what an emitting file returns, as it does for a `snapshot` call: a
+        // document that moved or changed since the body began withdraws the answer.
+        const { target } = z.object({ target: documentRefSchema }).parse(args);
+        const address = async () => (await host.document(target)).address;
+        const before = await address();
+        const kept = await invoke(
+          host.deps.captures.kept.of(emits.kind, emits.schema).refresh(
+            target,
+            Effect.tryPromise({
+              try: async () => {
+                const capture = await run(args, host);
+                if (typeof capture !== "object" || capture === null)
+                  throw Error(`The host file ${emits.kind} returned nothing to keep`);
+                return { capture };
+              },
+              catch: (error) => error,
+            }),
+            Effect.promise(async () => {
+              const now = await address();
+              return !!before && !!now && sameAddress(now, before);
+            }),
+          ),
+        );
+        return kept.capture;
+      };
       const takeFile = (name: string, args: unknown, current: InputConsumption) =>
         takeOwner(current, { kind: "files", file: canonicalJson([name, json(args)]) }, () =>
-          // A product's own host file: its body, with the stores and the inventory this host holds.
           Object.hasOwn(productFiles, name)
-            ? productFiles[name]!(args, {
-                deps: hostOffer(captureStore(), files),
-                document: (target) => invoke(inventory.document(target)),
-                sessions: () => invoke(inventory.list()),
-              })
+            ? productFile(productFiles[name]!, args)
             : name === "settings"
               ? (async () => {
                   // The project tier is the home the target model's pointer names (homes freeze shape 4).

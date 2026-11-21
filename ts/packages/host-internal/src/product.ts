@@ -187,7 +187,7 @@ export function implement<D>(
         if (emits === undefined) return [];
         const run = emitting[name];
         const schema = product.captures[emits];
-        if (!run || !schema) return [];
+        if (!run || !schema) throw Error(`No host body or capture kind for the reading ${name}`);
         return Object.entries(load?.calls ?? {})
           .filter(([, policy]) => policy?.snapshot)
           .map(([key]) => [key, { kind: emits, schema, run }]);

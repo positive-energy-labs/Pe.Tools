@@ -111,6 +111,13 @@ test.each([
   },
 );
 
+test("a capture kind two products declare is refused when the products are bound", () => {
+  const bound = { ...rooms, register: () => {} };
+  expect(() =>
+    bindProducts([bound, { ...bound, product: { ...rooms.product, id: "second" } }]),
+  ).toThrow("Duplicate product capture kind takeoff");
+});
+
 test("Rooms dispatches by Work route even when the product id differs", async () => {
   const bind = vi.fn(async () => ({ prepare: async () => "product" }));
   const { sheets } = bindProducts([

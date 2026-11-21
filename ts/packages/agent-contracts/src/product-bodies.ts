@@ -92,7 +92,14 @@ export type HostBodies<
    * the answer as one taking, so the body may read host state a `ReadContext` cannot. `document`
    * resolves an open document's address.
    */
-  readonly files?: { readonly [K in keyof P["files"]]: FileBody<Deps> };
+  readonly files?: {
+    readonly [K in keyof P["files"]]: FileBody<
+      Deps,
+      P["files"][K] extends { readonly emits: infer Kind extends PropertyKey }
+        ? Omit<z.output<P["captures"][Kind & keyof P["captures"]]>, "id">
+        : unknown
+    >;
+  };
   /**
    * One body per reading that declares `emits`: it answers the reading's `snapshot` call and returns
    * the value to keep, of the declared kind. The kernel stores it; the body holds no store.
@@ -149,11 +156,11 @@ export type OwedBodies<P extends ProductDeclaration, Bodies> = Undeclared<P> &
         keyof Bodies
     >
   >;
-export type FileBody<Deps> = (
+export type FileBody<Deps, Answer = unknown> = (
   args: unknown,
   host: {
     readonly deps: Deps;
     readonly document: (target: DocumentRef) => Promise<{ readonly address: Address | null }>;
     readonly sessions: () => Promise<BridgeSessionsListData>;
   },
-) => Promise<unknown>;
+) => Promise<Answer>;

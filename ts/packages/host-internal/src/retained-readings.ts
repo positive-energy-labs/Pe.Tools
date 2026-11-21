@@ -7,7 +7,7 @@ import {
   type RetainedReadingEnvelope,
 } from "@pe/agent-contracts";
 import type { ProductDeclaration } from "@pe/agent-contracts/product";
-import { BridgeError, type HostBridgeEvent, type RevitBridge } from "./bridge.ts";
+import { BridgeError, staleBy, type HostBridgeEvent, type RevitBridge } from "./bridge.ts";
 import type { NativeReadInput } from "./native-read.ts";
 import { InvalidRead } from "./read-errors.ts";
 import type { DoorFailure } from "./request-contracts.d.ts";
@@ -49,7 +49,10 @@ export function declareRetained(product: ProductDeclaration) {
       calls: Object.keys(load.calls ?? {}),
       fixes: load.fixes ?? {},
     };
-    for (const [key, table] of [[kind, kinds] as const, ...declared.calls.map((call) => [call, calls] as const)]) {
+    for (const [key, table] of [
+      [kind, kinds] as const,
+      ...declared.calls.map((call) => [call, calls] as const),
+    ]) {
       if (table.has(key)) throw Error(`Retained reading ${key} is declared twice`);
       table.set(key, declared);
     }
@@ -71,7 +74,7 @@ export const retainedRequest = (raw: unknown): RetainedRequest | undefined =>
 export const retainedReadingOf = (key: string): Pick<Declared, "scope" | "product"> | undefined =>
   calls.get(key);
 /** One identity however a caller spelled the request: the product's schema is the only normaliser. */
-export const retainedSubject = (raw: RetainedRequest): RetainedRequest =>
+const retainedSubject = (raw: RetainedRequest): RetainedRequest =>
   requestSchema.parse(declaredFor(raw).input.parse(raw));
 /** What a retained body belongs to: its session, and its document unless the reading is session-scoped. */
 export const retainedScope = (request: RetainedRequest) => {
@@ -238,39 +241,19 @@ export class RetainedReadings {
   }
   /** Called synchronously by the bridge tap, before another response can publish. */
   changed(event: HostBridgeEvent): void {
-    let changed: unknown;
-    if (event.kind === "event" && event.eventName === "document-changed") {
-      try {
-        changed = JSON.parse(event.payloadJson ?? "{}").changedOpenIds;
-      } catch {
-        changed = null;
-      }
-    }
+    const stale = staleBy(event);
     for (const entry of this.entries.values()) {
       // A session-scoped body (`target` null) goes stale only when its session connects or drops.
       const { session, target } = retainedScope(entry.request);
-      if (session !== event.sessionId) continue;
-      if (event.kind === "disconnected")
+      const why = stale(session, target?.openId);
+      if (why === "disconnected")
         this.invalidate(
           entry,
           "failed",
           "Revit bridge disconnected; reconnect before reading again",
         );
-      else if (event.kind === "connected") this.invalidate(entry);
-      else if (
-        target &&
-        event.kind === "state-sync" &&
-        event.openDocumentIds &&
-        !event.openDocumentIds.includes(target.openId)
-      )
-        this.invalidate(entry, "closed", "The exact open document closed");
-      else if (
-        target &&
-        event.kind === "event" &&
-        event.eventName === "document-changed" &&
-        (!Array.isArray(changed) || changed.includes(target.openId))
-      )
-        this.invalidate(entry);
+      else if (why === "closed") this.invalidate(entry, "closed", "The exact open document closed");
+      else if (why) this.invalidate(entry);
     }
   }
   read = Effect.fn("RetainedReadings.read")(function* <E, R>(
@@ -348,9 +331,7 @@ export class RetainedReadings {
       if (entry.body) return { ...body, reused: false };
       while (this.bytes + bytes > this.limits.bytes)
         if (!this.evict(entry))
-          return yield* refused(
-            "Shared reading byte budget is occupied; the body was not clipped",
-          );
+          return yield* refused("Shared reading byte budget is occupied; the body was not clipped");
       entry.body = body;
       entry.bytes = bytes;
       this.bytes += bytes;

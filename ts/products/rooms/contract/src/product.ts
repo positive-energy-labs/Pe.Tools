@@ -404,7 +404,11 @@ export const product = define({
   },
   files: {
     observation: { input: observations.input, output: observations.data },
-    "takeoff-capture": { input: takeoffSnapshotInput, output: takeoffCaptureSchema },
+    "takeoff-capture": {
+      input: takeoffSnapshotInput,
+      output: takeoffCaptureSchema,
+      emits: "takeoff",
+    },
   },
   local: localOperations,
   commands: {
