@@ -58,24 +58,24 @@ export function renderProductAssembly(checkout: string) {
   const tools = ["builtinTools", ...members("tools")];
   const contractImports = imports("contract", "product");
   const hosts = declared.map((_, index) => `host${index}`);
-  const operations = rows.flatMap(({ contract }) =>
-    contract && Object.hasOwn(contract.exports ?? {}, "./local-operations") ? [contract.name] : [],
-  );
   const names = (values: (string | undefined)[]) =>
     [...new Set(values.filter((name) => name !== undefined))].sort();
   return {
     outputs: {
       [productAssemblyPaths.operations]: source(
         'import { builtinLocalCatalog, builtinLocalSchemas, isHostOperationKey, type HostLocalCatalogEntry, type HostOperationKey } from "@pe/host-contracts/operation-types";',
-        ...operations.map(
-          (name, index) =>
-            `import { localOperationCatalog as catalog${index}, localOperationSchemas as schemas${index} } from "${name}/local-operations";`,
+        'import { localCatalog } from "./assembly-checks.ts";',
+        ...contractImports,
+        "// A product key that is also a platform key would replace it in the spread below, so it fails `tsc` here.",
+        ...products.map(
+          (product) =>
+            `true satisfies keyof typeof ${product}.local & keyof typeof builtinLocalSchemas extends never ? true : never;`,
         ),
-        `export const tsOnlyOperationSchemas = { ...builtinLocalSchemas, ${spread(operations.map((_, index) => `schemas${index}`))} };`,
+        `export const tsOnlyOperationSchemas = { ...builtinLocalSchemas, ${spread(members("local"))} };`,
         "/** Every local operation key, the platform's and each product's: this table is their one declaration. */",
         "export type TsOnlyOperationKey = keyof typeof tsOnlyOperationSchemas;",
         "export type AnyOperationKey = HostOperationKey | TsOnlyOperationKey;",
-        `export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry<TsOnlyOperationKey>[] = [${spread([...operations.map((_, index) => `catalog${index}`), "builtinLocalCatalog"])}];`,
+        `export const tsOnlyOperationCatalog: readonly HostLocalCatalogEntry<TsOnlyOperationKey>[] = [${spread([...members("local").map((local) => `localCatalog(${local})`), "builtinLocalCatalog"])}];`,
         "export const isTsOnlyOperationKey = (key: string): key is TsOnlyOperationKey => Object.hasOwn(tsOnlyOperationSchemas, key);",
         "export const isAnyOperationKey = (key: string): key is AnyOperationKey => isHostOperationKey(key) || isTsOnlyOperationKey(key);",
       ),

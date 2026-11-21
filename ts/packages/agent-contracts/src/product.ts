@@ -37,7 +37,7 @@ const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
 export * from "./product-bodies.ts";
-import type { LocalOperations } from "./product-bodies.ts";
+import type { LocalFootprint, LocalOperations } from "./product-bodies.ts";
 
 /**
  * One staged value family, with its ADR 0032 value domain; the schema follows from `schemaOf`. The
@@ -533,7 +533,7 @@ export function product<
   /** The product's host files by name; the host half owes one body each. */
   readonly files?: Files & { readonly [K in keyof Files & (typeof platformFiles)[number]]: never };
   /** The product's local operations by catalog key; the host half owes one body each. */
-  readonly local?: Local;
+  readonly local?: Local & { readonly [K in keyof Local]: LocalFootprint<Local[K]> };
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
 }) {

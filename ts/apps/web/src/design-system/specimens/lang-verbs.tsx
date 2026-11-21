@@ -184,8 +184,8 @@ export function LangPressSpecimens() {
           <Button kind="nav" direction="forward" label="open" onClick={noop}>
             open
           </Button>
-          <Button kind="nav" direction="out" label="open in RHVAC" onClick={noop}>
-            open in RHVAC
+          <Button kind="nav" direction="out" label="open in Explorer" onClick={noop}>
+            open in Explorer
           </Button>
         </div>
       </SpecimenFrame>

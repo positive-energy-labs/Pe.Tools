@@ -49,6 +49,7 @@ import {
 import { commands } from "@pe/mcps/product-actions";
 import { admitScript, consentedRead } from "./control.ts";
 import { guards } from "./guards.ts";
+import { productLocal } from "./product-executors.generated.ts";
 import { type HostSessionScope } from "@pe/host-contracts/operation-types";
 import { isTsOnlyOperationKey, tsOnlyOperationSchemas } from "@pe/mcps/product-operations";
 import { checkFailure } from "./action-journal.ts";
@@ -364,12 +365,20 @@ export function gatewayExecutor(
           case "aps.auth.login":
           case "aps.auth.logout":
             break;
-          case "rhvac.launch":
-          case "rhvac.sync":
-            effects.push({ kind: "file", path: resolve(String(authored.path)) });
-            break;
-          default:
-            throw refused(`'${key}' has no declared external effect adapter`);
+          default: {
+            // A product's mutating local operation declares the files it writes.
+            const declared = Object.hasOwn(productLocal, key)
+              ? productLocal[key]?.effects
+              : undefined;
+            if (!declared) throw refused(`'${key}' has no declared external effect adapter`);
+            // `validateInput` decoded `authored` by the request schema the declaration types this by.
+            effects.push(
+              ...declared(authored).map((path) => ({
+                kind: "file" as const,
+                path: resolve(path),
+              })),
+            );
+          }
         }
       }
       return {

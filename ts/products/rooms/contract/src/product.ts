@@ -6,7 +6,7 @@ import {
   takeoffCaptureSummarySchema,
   takeoffSnapshotInput,
 } from "./takeoffs.ts";
-import { localOperationSchemas } from "./local-operations.ts";
+import { localOperations } from "./local-operations.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
   cell,
@@ -406,7 +406,7 @@ export const product = define({
     observation: { input: observations.input, output: observations.data },
     "takeoff-capture": { input: takeoffSnapshotInput, output: takeoffCaptureSchema },
   },
-  local: localOperationSchemas,
+  local: localOperations,
   commands: {
     ...workWriteCommands("rooms", "rooms.partition", {
       ...edit,

@@ -1,14 +1,39 @@
 /** The host half of the declaration grammar: the bodies a product owes for what it declares. */
 import type { z } from "zod";
 import type { Effect, Schema } from "effect";
-import type { BridgeSessionsListData } from "@pe/host-contracts/operation-types";
+import type {
+  BridgeSessionsListData,
+  HostLocalCatalogEntry,
+} from "@pe/host-contracts/operation-types";
 import type { AnyReadHandle } from "./handle.ts";
 import type { ProductDeclaration } from "./product.ts";
 import type { SHEET_COMMANDS } from "./slots/sheet.ts";
 import type { Address, DocumentRef } from "./target.ts";
 
-/** One local operation: a host body that needs no Revit, called by key through `/call`. */
-type LocalOperation = { readonly request?: Schema.Top; readonly response: Schema.Top };
+type CatalogRow = HostLocalCatalogEntry<string>;
+/**
+ * One local operation: a host body that needs no Revit, called by key through `/call`. The entry is
+ * its one declaration: the schemas, the catalog row, and for a mutation the files it writes, which
+ * the action gateway admits as its footprint.
+ */
+export type LocalOperation = {
+  readonly request?: Schema.Top;
+  readonly response: Schema.Top;
+  /** The catalog description. */
+  readonly says: string;
+  /** A read unless it says so. */
+  readonly effect?: "SessionWrite";
+  /**
+   * A method, so each entry's own request type fits the erased table and the gateway calls it with
+   * the request it has already decoded. `LocalFootprint` holds the exact type at the declaration.
+   */
+  effects?(input: unknown): readonly string[];
+} & Pick<CatalogRow, "displayName" | "requestTypeName" | "responseTypeName" | "searchTerms"> &
+  Partial<Pick<CatalogRow, "costTier">>;
+/** A mutation owes the files it writes, read from its declared request; a read can name none. */
+export type LocalFootprint<O> = O extends { readonly effect: "SessionWrite" }
+  ? { readonly effects: (input: LocalInput<O>) => readonly string[] }
+  : { readonly effects?: never };
 export type LocalOperations = Readonly<Record<string, LocalOperation>>;
 
 type Handle<
