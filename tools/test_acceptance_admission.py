@@ -91,6 +91,23 @@ class AdmissionTests(unittest.TestCase):
                 with self.assertRaises(Acquisition):
                     a.setup("guard", args)
 
+    def test_failed_frozen_install_stops_source_setup_before_acquisition(self):
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            root = Path(directory) / "run"
+            barriers(stack)
+            stack.enter_context(patch.object(a, "require_setup_admission"))
+            stack.enter_context(patch.object(a, "run_dir", return_value=root))
+            stack.enter_context(patch.object(a.shutil, "which", return_value="vp"))
+            install = stack.enter_context(patch.object(
+                a.subprocess, "run", return_value=subprocess.CompletedProcess([], 9),
+            ))
+            with self.assertRaisesRegex(SystemExit, "Frozen workspace install failed with exit 9"):
+                a.setup("guard", ["--host-only"])
+            install.assert_called_once_with(
+                ["vp", "i", "--frozen-lockfile", "--prefer-offline"], cwd=a.CHECKOUT / "ts",
+            )
+            self.assertFalse(root.exists())
+
     def test_resume_is_also_gated(self):
         with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
             root = Path(directory)

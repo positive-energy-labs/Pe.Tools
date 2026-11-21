@@ -89,7 +89,8 @@ def test_isolated_home(tmp: Path) -> None:
     a.owner_files = lambda _: {}
     try:
         try:
-            a.setup("isolated", ["--model", str(model)])
+            with patch.object(a.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)):
+                a.setup("isolated", ["--model", str(model)])
             raise AssertionError("setup did not save custody")
         except Saved:
             pass
@@ -306,6 +307,7 @@ class CustodyTests(unittest.TestCase):
                 patch.object(a, "require_setup_admission"), patch.object(a, "git", return_value="head"), \
                 patch.object(a, "processes", return_value=owner), \
                 patch.object(a, "listeners", return_value=sockets), \
+                patch.object(a.subprocess, "run", return_value=subprocess.CompletedProcess([], 0)), \
                 patch.object(a.subprocess, "Popen", side_effect=Acquired):
             with self.assertRaises(Acquired):
                 a.setup("drive", ["--host-only"])
