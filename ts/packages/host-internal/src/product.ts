@@ -12,16 +12,29 @@ import type {
 import type { AttemptHost } from "./action-execution.ts";
 import type { RevitBridge } from "./bridge.ts";
 import type { CommandExecutor } from "./command-executor.ts";
-import { declareHome, type HomeReader } from "./home-files.ts";
+import { declareHome, type HomeFiles, type HomeReader } from "./home-files.ts";
+import type { CaptureKinds } from "./kept-captures.ts";
+import type { RunPods } from "./pod-runner.ts";
 import { declareRetained } from "./retained-readings.ts";
 import type { HostNativeRead } from "./native-read.ts";
 import type { RequestIdentity } from "./request-contracts.d.ts";
 import { body, type Read, type ReadContext } from "./reads/door.ts";
 
-type Dependencies = {
+/**
+ * What a host offers every product body. The host states it once here; a product's dependency type
+ * takes the members it needs, so no host line depends on which products are registered.
+ */
+export type HostOffers = {
   nativeRead?: HostNativeRead["Service"];
   projectLifetime?: (target: DocumentRef) => Promise<NativeProcess>;
+  /** The kernel capture store: a product reads its declared kinds through `captured`. */
+  captures?: { readonly kept: CaptureKinds };
+  /** Where this host keeps its checkout and its state. */
+  roots?: { readonly sourceRoot: string | null; readonly rootPath: string };
+  runPods?: RunPods;
+  files?: HomeFiles["Service"];
 };
+type Dependencies = Pick<HostOffers, "nativeRead" | "projectLifetime">;
 
 /** A command's host body. The command registry calls it once with the services it owns. */
 export type CommandBody<D = Dependencies> = (
@@ -80,6 +93,7 @@ export function implement<P extends ProductDeclaration, D = Dependencies>(
   http: Record<string, (request: HttpRequest, deps: Partial<D>) => Promise<unknown>>;
   local: Record<string, (input: unknown, deps: Partial<D>) => LocalRun>;
   files: Record<string, FileBody<Partial<D>>>;
+  register: () => void;
   /** By the call key each emitting reading declares with a `snapshot` policy. */
   emitters: Record<string, Emitter<Partial<D>>>;
 };
@@ -91,14 +105,13 @@ export function implement<D>(
   const emitting: Readonly<Record<string, Emitter<Partial<D>>["run"] | undefined>> =
     bodies.emits ?? {};
   const readers: Readonly<Record<string, HomeReader | undefined>> = bodies.homes ?? {};
-  for (const [key, home] of Object.entries(product.homes)) {
-    if (home.read !== "product") continue;
+  const homes = Object.entries(product.homes).flatMap(([key, home]) => {
+    if (home.read !== "product") return [];
     const reader = readers[key];
     if (!reader) throw Error(`No host reader for home ${key}`);
     const place = home.place(key);
-    declareHome(key, { ...reader, directory: place.at === "setting" ? place.owner : key });
-  }
-  declareRetained(product);
+    return [[key, { ...reader, directory: place.at === "setting" ? place.owner : key }] as const];
+  });
   const reads = Object.fromEntries(
     Object.entries(product.readings).map(([key, { handle }]) => {
       const run = bodies.readings[key];
@@ -112,6 +125,11 @@ export function implement<D>(
   return {
     product,
     reads,
+    /** The host registers these from its product list; importing a product registers nothing. */
+    register() {
+      for (const [key, reader] of homes) declareHome(key, reader);
+      declareRetained(product);
+    },
     executors: (...args: Parameters<CommandBody<D>>) =>
       Object.fromEntries(
         Object.entries(bodies.commands).map(([key, make]) => [key, make(...args)]),

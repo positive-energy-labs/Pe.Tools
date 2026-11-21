@@ -755,12 +755,10 @@ export const builtinLocalSchemas = {
 } as const;
 
 /**
- * The schema tables of product local operations. A product merges its own table in from its
- * contract package (`declare module`), so this package names no product; the values are assembled
- * by import at the generated registration site, which this type checks for completeness.
+ * The platform's own local operations. A product's keys are declared by the generated operations
+ * table, which spreads each product's schemas beside these; this package names no product.
  */
-export interface ProductLocalSchemas {}
-export type TsOnlyOperationSchemas = typeof builtinLocalSchemas & ProductLocalSchemas;
+export type TsOnlyOperationSchemas = typeof builtinLocalSchemas;
 export type TsOnlyOperationKey = keyof TsOnlyOperationSchemas;
 export type AnyOperationKey = HostOperationKey | TsOnlyOperationKey;
 export type TsOnlyRequest<K extends TsOnlyOperationKey> = TsOnlyOperationSchemas[K] extends {

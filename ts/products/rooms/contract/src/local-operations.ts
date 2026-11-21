@@ -265,10 +265,6 @@ export const localOperationSchemas = {
 } as const;
 
 type LocalSchemas = typeof localOperationSchemas;
-declare module "@pe/host-contracts/operation-types" {
-  // The one declaration of these keys: `TsOnlyRequest<K>` and the assembled table both read it.
-  interface ProductLocalSchemas extends LocalSchemas {}
-}
 
 type CatalogEntry = HostLocalCatalogEntry<keyof LocalSchemas>;
 const catalogRow = (

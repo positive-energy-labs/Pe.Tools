@@ -587,6 +587,7 @@ import { hostOpCatalog } from "@pe/host-contracts/catalog";
 import {
   tsOnlyOperationCatalog,
   tsOnlyOperationSchemas,
+  type TsOnlyOperationKey,
 } from "../src/pea/product-operations.generated.ts";
 test("the assembled local catalog has one row per assembled schema key", () => {
   expect(tsOnlyOperationCatalog.map((op) => op.key).sort()).toEqual(
@@ -605,3 +606,7 @@ test("native and host-local ops select the write door by effect, regardless of i
     expect(opWrites(op), op.key).toBe(op.effect === "SessionWrite" || op.effect === "ModelWrite");
   }
 });
+
+// The generated table is the one declaration of local keys: one it does not hold fails `tsc`.
+// @ts-expect-error not a declared local operation
+void ("undeclared.operation" satisfies TsOnlyOperationKey);

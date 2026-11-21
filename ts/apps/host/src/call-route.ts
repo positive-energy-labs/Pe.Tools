@@ -1,9 +1,9 @@
+import type { HostOffers } from "@pe/host-internal/product";
 import type { ObservationFiles } from "@pe/host-internal/observation-files";
 import {
   productEmitters,
   productHttp,
   productLocal,
-  type ProductDependencies,
 } from "./product-executors.generated.ts";
 import { fileVersion } from "@pe/host-internal/local-files";
 import { HomeFiles } from "@pe/host-internal/home-files";
@@ -41,7 +41,11 @@ import {
   type TsOnlyRequest,
   type HostSessionScope,
 } from "@pe/host-contracts/operation-types";
-import { isTsOnlyOperationKey, tsOnlyOperationSchemas } from "@pe/mcps/product-operations";
+import {
+  isTsOnlyOperationKey,
+  tsOnlyOperationSchemas,
+  type TsOnlyOperationKey as LocalOperationKey,
+} from "@pe/mcps/product-operations";
 
 import { HostNativeRead } from "@pe/host-internal/native-read";
 import { NativeReads } from "./native-reads.ts";
@@ -152,7 +156,7 @@ function callRoutes(
   operations: ActionJournal,
   captures?: ObservationFiles,
   actionDeps: FamilyActionDependencies &
-    Partial<ProductDependencies> &
+    HostOffers &
     InstancesActionDependencies & {
       launchShell?: (path: string) => Promise<void>;
     } = {},
@@ -1083,7 +1087,8 @@ function unknownBodyKeyMessage(key: string): string {
 }
 
 const dispatchTsOnlyOperation = Effect.fnUntraced(function* (
-  key: TsOnlyOperationKey,
+  // Every local key, a product's included: the generated table declares them, not host-contracts.
+  key: LocalOperationKey,
   request: unknown,
   scope: HostSessionScope | undefined,
   bridge: RevitBridge["Service"],

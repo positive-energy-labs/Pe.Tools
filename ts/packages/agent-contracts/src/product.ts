@@ -249,6 +249,13 @@ type Retained<R> = R extends { load: { scope: "document" } }
     ? { readonly handle: { readonly input: z.ZodType<{ kind: string; session: string }> } }
     : { readonly load: { readonly scope: "document" | "session" } };
 
+/** A reading with a `snapshot` call names the kind that call produces, so the kernel can keep it. */
+type Emits<R, Kind> = R extends { load: { calls: infer Calls } }
+  ? { snapshot: true } extends Calls[keyof Calls]
+    ? { readonly emits: Kind }
+    : unknown
+  : unknown;
+
 /** A declared reading by name, alone or with the function that makes its arguments from the Page. */
 type Named<R extends string = string> = R | readonly [R, (page: never) => unknown];
 /**
@@ -487,7 +494,8 @@ export function product<
   /** Only for a product of several routes: each Work by its route, with the cells it holds. */
   readonly works?: Works;
   readonly readings: R & {
-    readonly [K in keyof R]: R[K] extends { load: { resource: true } } ? Retained<R[K]> : unknown;
+    readonly [K in keyof R]: (R[K] extends { load: { resource: true } } ? Retained<R[K]> : unknown) &
+      Emits<R[K], keyof Caps>;
   };
   /** Keyed by the catalog command key. */
   readonly commands: M & {
