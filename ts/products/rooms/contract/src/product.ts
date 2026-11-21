@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { route } from "@pe/host-contracts/pe-api";
 import { takeoffCaptureSchema, takeoffCaptureSummarySchema } from "./takeoffs.ts";
-import { localOperationSchemas } from "./local-operations.ts";
+import { localOperations } from "./local-operations.ts";
 import { contract } from "@pe/agent-contracts/handle";
 import {
   cell,
@@ -398,7 +398,7 @@ export const product = define({
       axes: observations.axes,
     },
   },
-  local: localOperationSchemas,
+  local: localOperations,
   commands: {
     ...workWriteCommands("rooms", "rooms.partition", {
       ...edit,

@@ -160,6 +160,7 @@
   "packages/agent-contracts/src/catalog-link.test.ts",
   "packages/agent-contracts/src/chat-state.test.ts",
   "packages/agent-contracts/src/handle.test.ts",
+  "packages/agent-contracts/src/reading.ts",
   "packages/agent-contracts/src/route-address.test.ts",
   "packages/agent-contracts/src/route-field.test.ts",
   "packages/agent-contracts/src/scene-view-generated.test.ts",

@@ -37,7 +37,7 @@ const made: unique symbol = Symbol("declared");
 
 export * from "./product-homes.ts";
 export * from "./product-bodies.ts";
-import type { LocalOperations } from "./product-bodies.ts";
+import type { LocalFootprint, LocalOperations } from "./product-bodies.ts";
 
 /**
  * One staged value family, with its ADR 0032 value domain; the schema follows from `schemaOf`. The
@@ -494,7 +494,9 @@ export function product<
   /** Only for a product of several routes: each Work by its route, with the cells it holds. */
   readonly works?: Works;
   readonly readings: R & {
-    readonly [K in keyof R]: (R[K] extends { load: { resource: true } } ? Retained<R[K]> : unknown) &
+    readonly [K in keyof R]: (R[K] extends { load: { resource: true } }
+      ? Retained<R[K]>
+      : unknown) &
       Emits<R[K], keyof Caps>;
   };
   /** Keyed by the catalog command key. */
@@ -521,7 +523,7 @@ export function product<
   readonly guide?: Guide;
   readonly http?: Http;
   /** The product's local operations by catalog key; the host half owes one body each. */
-  readonly local?: Local;
+  readonly local?: Local & { readonly [K in keyof Local]: LocalFootprint<Local[K]> };
   readonly publishTool?: Publish;
   readonly toolName?: ToolName;
 }) {

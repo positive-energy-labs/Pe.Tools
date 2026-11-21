@@ -15,7 +15,7 @@ const folders = (root: string) =>
     .map((entry) => entry.name);
 const products = folders("products");
 // A stem is a product word the folder and route names only carry in the plural: `TakeoffThing`.
-const stems = ["takeoff"];
+const stems = ["takeoff", "rhvac"];
 const ids = new Set([
   ...products,
   ...routeDirectory.flatMap(({ key, product }) => (product ? [key] : [])),
